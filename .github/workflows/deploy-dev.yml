@@ -4,8 +4,18 @@ on:
   push:
     branches:
       - dev
+    paths-ignore:
+      - 'docs/craft/evidence/**'
+      - 'docs/goals/**'
+      - 'docs/plans/**'
+      - 'progress.txt'
   workflow_dispatch:
     inputs:
+      enable_conversation_replies:
+        description: "Enable conversation replies on dev (off disables new dispatches; keeps saved messages)"
+        required: false
+        default: true
+        type: boolean
       release_legacy_alias:
         description: "Remove dev.waka.im from the existing CloudFront distribution before deploying"
         required: false
@@ -34,6 +44,7 @@ env:
   DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL_DEV }}
   OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
   DEV_DOMAIN: dev.waka.im
+  WAKA_CONVERSATION_REPLIES: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_conversation_replies == false && '0' || '1' }}
 
 jobs:
   deploy:
@@ -136,6 +147,19 @@ jobs:
 
       - name: Deploy SST development stage
         run: pnpm sst deploy --stage "$SST_STAGE"
+
+      - name: Verify deployed chat configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for output_key in apiFunctionName backgroundWorkerFunctionName; do
+            function_name="$(jq -er --arg key "$output_key" '.[$key]' .sst/outputs.json)"
+            configuration="$(aws lambda get-function-configuration --function-name "$function_name" \
+              --query '{replies:Environment.Variables.WAKA_CONVERSATION_REPLIES,chatModel:Environment.Variables.WAKA_MODEL_CHAT}' --output json)"
+            jq -e --arg enabled "$WAKA_CONVERSATION_REPLIES" \
+              '.replies == $enabled and .chatModel == "google/gemini-3.8-flash"' <<< "$configuration"
+            printf '%s chat configuration verified.\n' "$output_key"
+          done
 
       - name: Connect Route53 dev domain
         shell: bash

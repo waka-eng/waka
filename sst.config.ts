@@ -227,6 +227,9 @@ export default $config({
       DB_CONNECTION_URL: dbConnectionUrl.value,
       GEMINI_API_KEY: geminiApiKey.value,
       OPENROUTER_API_KEY: openRouterApiKey.value,
+      // Chat enablement is dev-only and shared by API/worker. A manual dev
+      // deploy can disable new requests without reverting the additive schema.
+      WAKA_CONVERSATION_REPLIES: isDevelopmentDomain && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0",
       ATTACHMENTS_BUCKET: attachmentsBucket.name,
       ATTACHMENTS_REGION: AWS_REGION,
       WAKA_VAULT_BUCKET: vaultBucket.name,
@@ -237,6 +240,7 @@ export default $config({
       ...(publicWebUrl ? { PUBLIC_WEB_URL: publicWebUrl } : {}),
       ...(isDevelopmentDomain
         ? {
+            WAKA_MODEL_CHAT: "google/gemini-3.8-flash",
             WAKA_ENABLE_ADMIN_ROUTES: "true",
             WAKA_SHOW_INTERNAL_STATUS: "true",
             WAKA_ENABLE_BACKGROUND_JOBS_ADMIN: "true",
@@ -407,6 +411,8 @@ export default $config({
     });
 
     return {
+      apiFunctionName: api.name,
+      backgroundWorkerFunctionName: backgroundWorker.name,
       apiUrl: api.url,
       webUrl: web.url,
       attachmentsBucket: attachmentsBucket.name,
