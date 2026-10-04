@@ -1,0 +1,34 @@
+{
+  "provider": "openrouter",
+  "calls": 1,
+  "costUsd": 0,
+  "maxCostUsd": 0.5,
+  "requests": [
+    {
+      "status": 400,
+      "providerError": "Reasoning is mandatory for this endpoint and cannot be disabled.",
+      "durationMs": 282,
+      "costUsd": null
+    }
+  ],
+  "results": [
+    {
+      "name": "empty-en",
+      "expectation": "No saved-memory claims or citations. Offer a useful starting point and one question about the actual decision.",
+      "input": {
+        "preferredLocale": "en-US",
+        "sources": [],
+        "history": [
+          {
+            "role": "user",
+            "content": "I have a difficult choice but do not know where to start."
+          }
+        ]
+      },
+      "output": null,
+      "error": "OpenRouter conversation reply failed: HTTP 400 Bad Request providerCode=400",
+      "semanticReview": "pending"
+    }
+  ],
+  "pricingSource": "OpenRouter returned usage.cost"
+}
