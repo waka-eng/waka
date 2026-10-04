@@ -61,9 +61,19 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.restoreAllMocks(); });
 
 describe("reflection conversation", () => {
+  it('names deletion honestly and preserves the reflection when confirmation is canceled', async () => {
+    await act(async()=>root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[saved]} locale="en-US"
+      onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
+    await act(async()=>button('Delete reflection').click());
+    expect(host.textContent).toContain('cannot be undone');
+    await act(async()=>button('Keep reflection').click());
+    expect(host.textContent).not.toContain('cannot be undone');
+    expect(deleteReflection).not.toHaveBeenCalled();expect(onRemoved).not.toHaveBeenCalled();
+    expect(host.textContent).toContain(saved.answer);
+  });
   it('resumes a question that completed while closed using only a scoped GET', async () => {
     vi.mocked(fetchReflectionQuestionStatus).mockResolvedValue({phase:'ready',question:'What would you like to explore next?'});
     await act(async()=>root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[saved]} locale="en-US"
@@ -171,6 +181,8 @@ describe("reflection conversation", () => {
     await act(async () => button("ask another question →").click());
     await act(async () => host.querySelector<HTMLElement>(".jar-reflection-turns summary")!.click());
     await act(async () => host.querySelector<HTMLButtonElement>(".jar-reflection-turn button")!.click());
+    expect(deleteReflection).not.toHaveBeenCalled();
+    await act(async () => host.querySelector<HTMLButtonElement>('.jar-reflection-delete button:last-child')!.click());
     await act(async () => finish({ phase: "ready", question: "PRIVATE_SENTINEL stale follow-up" }));
     expect(host.textContent).not.toContain("PRIVATE_SENTINEL");
     expect(host.textContent).toContain("A remaining thought");
@@ -187,7 +199,8 @@ describe("reflection conversation", () => {
     ]} locale="en-US" onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await act(async () => button("ask another question →").click());
     await writeAnswer("My unfinished words should stay.");
-    await act(async () => button("take it back").click());
+    await act(async () => button("Delete reflection").click());
+    await act(async () => button("Delete reflection").click());
     expect(host.textContent).not.toContain("PRIVATE_SENTINEL");
     expect(host.querySelector("textarea")!.value).toBe("My unfinished words should stay.");
     expect(localStorage.getItem(draftKey!)).toContain("My unfinished words should stay.");

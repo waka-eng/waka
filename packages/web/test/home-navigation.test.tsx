@@ -10,7 +10,7 @@ import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { loadInspirations, loadInspiration, type InspirationDetail } from '../src/lib/data';
-import {fetchPrinciples,updatePrinciple,type ApiPrinciple} from '../src/lib/api';
+import {fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [{ id: 'loaded', text: 'Current inspiration', daysAgo: 1 }],
   groups: [{ id: 'group-id', name: 'Renamed room', field: [] }] }));
@@ -18,7 +18,7 @@ const principleState=vi.hoisted(()=>({rows:[] as ApiPrinciple[]}));
 vi.mock('../src/lib/api/principles',async original=>({...await original<typeof import('../src/lib/api/principles')>(),fetchPrincipleRead:vi.fn(async()=>({principles:principleState.rows,status:{phase:'ready',eligible:false}}))}));
 vi.mock('../src/lib/data', async (original) => ({ ...await original<typeof import('../src/lib/data')>(),
   ...dataMockFrom(FACTS), loadInspirations: vi.fn(dataMockFrom(FACTS).loadInspirations), loadInspiration: vi.fn() }));
-vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),fetchPrinciples:vi.fn(async()=>principleState.rows),updatePrinciple:vi.fn() }));
+vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),fetchPrinciples:vi.fn(async()=>principleState.rows),updatePrinciple:vi.fn(),updateInspiration:vi.fn() }));
 vi.mock('../src/lib/auth-context', async (original) => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
     profile: { id: VIEWER_ID, name: 'You', type: 'human' }, profiles: [], refresh: async () => undefined, signOut: async () => undefined };
@@ -59,6 +59,21 @@ it('starts a review beside the personal reading and restores home through Back',
   const review=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-reading-actions button')].find(button=>button.textContent==='Review your inspirations');
   expect(review).toBeDefined();await act(async()=>review!.click());await settle();expect(location.pathname).toBe('/review/new');
   await navigate(-1);expect(location.pathname).toBe('/');
+});
+it('requires a visible audience confirmation before publishing and leaves cancel private',async()=>{
+  vi.mocked(updateInspiration).mockClear();
+  world=await mountWorld(FACTS,{initialEntries:['/inspirations/older'],routerTools:<RouterTools/>});await settle();
+  const button=(label:string)=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-panel button')].find(item=>item.textContent?.trim()===label)!;
+  await act(async()=>button('public').click());
+  expect(world.container.textContent).toContain('People in your rooms can read it and its attachments');
+  expect(updateInspiration).not.toHaveBeenCalled();
+  await act(async()=>button('Keep private').click());expect(updateInspiration).not.toHaveBeenCalled();
+  expect(button('private').getAttribute('aria-pressed')).toBe('true');
+  await act(async()=>button('public').click());
+  vi.mocked(updateInspiration).mockResolvedValue({} as Awaited<ReturnType<typeof updateInspiration>>);
+  await act(async()=>button('Make public').click());
+  expect(updateInspiration).toHaveBeenCalledExactlyOnceWith('older',{visibility:'public'});
+  expect(button('public').getAttribute('aria-pressed')).toBe('true');
 });
 
 it('records opening Capture before the observer debounce and keeps it through later restoration',async()=>{

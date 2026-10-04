@@ -28,6 +28,17 @@ async function mount(onClose = vi.fn()) {
 }
 
 describe("dialog input ownership", () => {
+  it('keeps collapsed customization controls out of the keyboard loop',async()=>{
+    await act(async()=>root.render(<DialogSurface onClose={()=>{}}><button>Save image</button><details><summary>Customize</summary><input aria-label="Hidden wording"/><details><summary>More</summary><button>Hidden action</button></details></details></DialogSurface>));
+    const first=host.querySelector('button')!,summary=host.querySelector('summary')!;
+    first.focus();await act(async()=>first.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true})));
+    expect(document.activeElement).toBe(summary);
+    await act(async()=>summary.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true})));
+    expect(document.activeElement).toBe(first);
+    host.querySelector('details')!.open=true;
+    first.focus();await act(async()=>first.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true})));
+    expect(document.activeElement).toBe(host.querySelectorAll('summary')[1]);
+  });
   it('tracks the visible keyboard area and removes viewport listeners when inactive', async () => {
     const viewport = Object.assign(new EventTarget(), { height: 760, offsetTop: 0 });
     const remove = vi.spyOn(viewport, 'removeEventListener');

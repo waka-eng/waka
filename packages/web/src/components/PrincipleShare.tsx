@@ -13,6 +13,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const [preview,setPreview]=useState<{key:string;url:string;blob:Blob;fallbackFont:boolean;words:string}|null>(null),[renderError,setRenderError]=useState<string|null>(null);
   const [renderAttempt,setRenderAttempt]=useState(0);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState<'download'|'downloadFailed'|'shared'|'unavailable'|null>(null);
+  const [editingWords,setEditingWords]=useState(false),[customizing,setCustomizing]=useState(false);
   const [statements,setStatements]=useState<ApiPrincipleStatements|null>(null),[historyFailed,setHistoryFailed]=useState(false),[historyAttempt,setHistoryAttempt]=useState(0);
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
   const source=rows?.find(row=>row.id===id);
@@ -40,6 +41,8 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
     catch{useDraft({...previous??{key:'',raw:''},value:next});setStorageFailed(true);}
   };
   const change=draft?.value.mode==='change';
+  useEffect(()=>{if(change)setCustomizing(true);},[change]);
+  useEffect(()=>{if(renderError==='empty'||renderError==='too_long')setEditingWords(true);},[renderError]);
   useEffect(()=>{
     if(!change)return;const controller=new AbortController();setStatements(null);setHistoryFailed(false);
     const timer=window.setTimeout(()=>{controller.abort();setHistoryFailed(true);},15000);
@@ -103,10 +106,21 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
       <div className="jar-share-body">
       {loadFailed?<p role="alert">{say('worldShareLoadFailed')} <button type="button" onClick={()=>setAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button></p>:
         !rows?<p role="status">{say('worldReviewChecking')}</p>:!source?<p role="status">{say('worldShareMissing')}</p>:null}
-      {rows?.length?<label>{say('worldShareChoose')}<select value={source?.id??''} disabled={busy||storageFailed} onChange={event=>onChoose(event.target.value)}>{!source?<option value=""/>:null}{rows.map(row=><option key={row.id} value={row.id}>{row.statement}</option>)}</select></label>:null}
+      {rows?.length&&!source?<label>{say('worldShareChoose')}<select value="" onChange={event=>onChoose(event.target.value)}><option value=""/>{rows.map(row=><option key={row.id} value={row.id}>{row.statement}</option>)}</select></label>:null}
       {source&&draft&&rows?<>
         <div className="jar-share-columns"><div className="jar-share-controls">
           <p className="jar-review-context">{say('worldShareSeparate')}</p>
+          {!change?<details className="jar-share-word-editor" open={editingWords} onToggle={event=>setEditingWords(event.currentTarget.open)}>
+            <summary>{say('worldPrincipleEdit')}</summary>
+            {draft.value.entries.map((entry,index)=><div className="jar-share-wording" key={entry.principleId}>
+              <label>{say('worldShareWords')}{draft.value.entries.length>1?` ${index+1}`:''}<textarea rows={4} maxLength={2000} value={entry.text} disabled={busy} onChange={event=>update({...draft.value,entries:draft.value.entries.map((item,i)=>i===index?{...item,text:event.target.value}:item)})}/></label>
+              {entry.originalStatement!==rows.find(row=>row.id===entry.principleId)?.statement?<p role="status">{say('worldShareSourceChanged')}</p>:null}
+              <button type="button" disabled={busy} onClick={()=>{const original=rows.find(row=>row.id===entry.principleId);if(original)update({...draft.value,entries:draft.value.entries.map((item,i)=>i===index?{...item,text:original.statement,originalStatement:original.statement}:item)});}}>{say('worldShareOriginal')}</button>
+              {index>0?<button type="button" disabled={busy} onClick={()=>update({...draft.value,entries:draft.value.entries.filter((_,i)=>i!==index)})}>{say('worldShareRemove')}</button>:null}
+            </div>)}
+          </details>:null}
+          <details className="jar-share-customize" open={customizing} onToggle={event=>setCustomizing(event.currentTarget.open)}><summary>{say('worldShareCustomize')}</summary>
+          {rows.length>1?<label>{say('worldShareChoose')}<select value={source.id} disabled={busy||storageFailed} onChange={event=>onChoose(event.target.value)}>{rows.map(row=><option key={row.id} value={row.id}>{row.statement}</option>)}</select></label>:null}
           <label>{say('worldShareType')}<select value={draft.value.mode??'card'} disabled={busy} onChange={event=>update({...draft.value,mode:event.target.value as 'card'|'change'})}><option value="card">{say('worldShareCard')}</option><option value="change">{say('worldShareChange')}</option></select></label>
           {drafts.length>1?<label>{say('worldShareDrafts')}<select value={draft.key} disabled={busy||storageFailed} onChange={event=>{const row=drafts.find(item=>item.key===event.target.value);if(row)useDraft(row);}}>{drafts.map((row,index)=><option key={row.key} value={row.key}>{index+1}. {row.value.entries[0].text.slice(0,45)}</option>)}</select></label>:null}
           {change?<>
@@ -116,18 +130,14 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
                 <p className="jar-review-context">{say('worldShareRecordedWords')}</p>
                 {before?<blockquote>{before.statement}</blockquote>:null}<blockquote>{after.statement}</blockquote>
               </>}
-          </>:draft.value.entries.map((entry,index)=><div className="jar-share-wording" key={entry.principleId}>
-            <label>{say('worldShareWords')}{draft.value.entries.length>1?` ${index+1}`:''}<textarea rows={4} maxLength={2000} value={entry.text} disabled={busy} onChange={event=>update({...draft.value,entries:draft.value.entries.map((item,i)=>i===index?{...item,text:event.target.value}:item)})}/></label>
-            {entry.originalStatement!==rows.find(row=>row.id===entry.principleId)?.statement?<p role="status">{say('worldShareSourceChanged')}</p>:null}
-            <button type="button" disabled={busy} onClick={()=>{const original=rows.find(row=>row.id===entry.principleId);if(original)update({...draft.value,entries:draft.value.entries.map((item,i)=>i===index?{...item,text:original.statement,originalStatement:original.statement}:item)});}}>{say('worldShareOriginal')}</button>
-            {index>0?<button type="button" disabled={busy} onClick={()=>update({...draft.value,entries:draft.value.entries.filter((_,i)=>i!==index)})}>{say('worldShareRemove')}</button>:null}
-          </div>)}
+          </>:null}
           {!change&&draft.value.entries.length<3&&rows.some(row=>!draft.value.entries.some(entry=>entry.principleId===row.id))?<label>{say('worldShareAdd')}<select value="" disabled={busy} onChange={event=>{const row=rows.find(item=>item.id===event.target.value);if(row)update({...draft.value,entries:[...draft.value.entries,{principleId:row.id,text:row.statement,originalStatement:row.statement}]});}}><option value="">{say('worldShareChoose')}</option>{rows.filter(row=>!draft.value.entries.some(entry=>entry.principleId===row.id)).map(row=><option key={row.id} value={row.id}>{row.statement}</option>)}</select></label>:null}
           <div className="jar-share-options"><label>{say('worldShareSize')}<select value={draft.value.format} disabled={busy} onChange={event=>update({...draft.value,format:event.target.value as 'square'|'portrait'})}><option value="square">{say('worldShareSquare')}</option><option value="portrait">{say('worldSharePortrait')}</option></select></label>
             <label>{say('worldShareStyle')}<select value={draft.value.appearance} disabled={busy} onChange={event=>update({...draft.value,appearance:event.target.value as 'dark'|'light'})}><option value="dark">{say('worldShareDark')}</option><option value="light">{say('worldShareLight')}</option></select></label></div>
           <label className="jar-share-name"><input type="checkbox" checked={draft.value.showName} disabled={busy||!name} onChange={event=>update({...draft.value,showName:event.target.checked})}/>{say('worldShareName')}{name?` · ${name}`:''}</label>
-          {storageFailed?<p role="alert">{say('worldShareStorageFailed')} <button type="button" onClick={()=>{try{recoverPrincipleArtifactDrafts(scope,id);update(draft.value);}catch{setStorageFailed(true);}}}>{say('worldShareKeepDraft')}</button></p>:null}
           <button type="button" disabled={busy} onClick={discard}>{say('worldReviewDiscardDraft')}</button>
+          </details>
+          {storageFailed?<p role="alert">{say('worldShareStorageFailed')} <button type="button" onClick={()=>{try{recoverPrincipleArtifactDrafts(scope,id);update(draft.value);}catch{setStorageFailed(true);}}}>{say('worldShareKeepDraft')}</button></p>:null}
         </div><div className="jar-share-preview" aria-busy={!ready&&!renderError}>
           {preview&&!renderError&&content?<img src={preview.url} alt={preview.words}/>:null}
           {!content?(change?null:<p role="status">{say('worldShareMissing')}</p>):renderError?<p role="alert">{say(renderError==='too_long'?(change?'worldShareChangeTooLong':'worldShareTooLong'):renderError==='empty'?'worldShareEmpty':'worldShareRenderFailed')}{renderError==='unavailable'?<button type="button" onClick={()=>setRenderAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button>:null}</p>:!ready?<p role="status">{say('worldShareRendering')}</p>:preview?.fallbackFont?<p className="jar-review-context">{say('worldShareFallbackFont')}</p>:null}

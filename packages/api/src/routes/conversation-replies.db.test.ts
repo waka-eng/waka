@@ -107,8 +107,13 @@ it('deletion during a call erases content but retains its dispatch budget and re
 });
 it('excludes historical replies after their memory changes and refuses stale reference access',async()=>{
   const f=await fixture();await f.request();await processBackgroundJob(await claim());const state=await f.state();
+  const before=await(await f.app.request(`/conversations/${f.id}`)).json() as any;
+  expect(before.conversation.messages[1].citations[0].preview).toBeTruthy();
+  expect(before.conversation.messages[1].citations[0].preview.length).toBeLessThanOrEqual(96);
   await t.sql`DELETE FROM inspirations WHERE id=${f.sourceId}`;
   const body=await(await f.app.request(`/conversations/${f.id}`)).json() as any;expect(body.conversation.messages[1].memoryChanged).toBe(true);
+  expect(body.conversation.messages[1].citations[0]).toMatchObject({available:false});
+  expect(body.conversation.messages[1].citations[0]).not.toHaveProperty('preview');
   expect((await f.app.request(`/conversations/${f.id}/replies/${state.requestId}/references/0`)).status).toBe(409);
   const nextId=randomUUID();await f.post(`/${f.id}/messages`,{id:nextId,content:'What could I try now?',revision:2});
   await f.post(`/${f.id}/replies`,{messageId:nextId,afterRequestId:null});await processBackgroundJob(await claim());expect(answer.mock.calls.at(-1)![0].history.every(row=>row.role==='user')).toBe(true);expect(answer.mock.calls.at(-1)![0].contextChanged).toBe(true);

@@ -36,12 +36,22 @@ const type=(content:string)=>act(async()=>{const area=host.querySelector('textar
 const tick=(ms=2000)=>act(async()=>vi.advanceTimersByTimeAsync(ms));
 function completeReply(){stored={...stored,revision:stored.revision+1,messages:[...stored.messages,{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:stored.revision+1,role:'assistant',content:'Consider the conditions of the choice.',followUpQuestion:'Which condition matters most today?',replyRequestId:replyId,memoryChanged:false,citations:[{index:0,kind:'principle',id:'principle',available:true}],createdAt:'2026-10-03T01:00:01Z'}]};replyState={...replyState,phase:'ready',revision:stored.revision};}
 it('restores the correction target with its draft and sends it as a new message',async()=>{
-  stored.generationEnabled=true;completeReply();const corrected=stored.messages[0].id;await mount();await click('That’s not quite right');await type('No, only this month.');
+  stored.generationEnabled=true;completeReply();const corrected=stored.messages[0].id;await mount();await click('Correct reply');await type('No, only this month.');
   await act(async()=>root.unmount());root=createRoot(host);await mount();expect(host.textContent).toContain('This corrects the conversation, not your Principles.');await click('Send correction');
   expect(vi.mocked(saveConversationMessage).mock.calls[0][2]).toMatchObject({content:'No, only this month.',correctsMessageId:corrected,requestReply:true});expect(stored.messages[0].content).toBe('Consider the conditions of the choice.');expect(host.textContent).toContain('Update a principle');
 });
 it('canceling correction preserves typed words without sending or editing memory',async()=>{
-  completeReply();await mount();await click('That’s not quite right');await type('Words to keep');await click('Cancel correction');expect(host.querySelector('textarea')!.value).toBe('Words to keep');expect(saveConversationMessage).not.toHaveBeenCalled();expect(readConversationDrafts(scope,id)[0].value.correctsMessageId).toBeUndefined();
+  completeReply();await mount();await click('Correct reply');await type('Words to keep');await click('Cancel correction');expect(host.querySelector('textarea')!.value).toBe('Words to keep');expect(saveConversationMessage).not.toHaveBeenCalled();expect(readConversationDrafts(scope,id)[0].value.correctsMessageId).toBeUndefined();
+});
+it('keeps compact actions and descriptive references with the reply they belong to',async()=>{
+  completeReply();stored.messages[0].citations![0].preview='Leave room for an idea.';
+  vi.mocked(fetchConversationCitation).mockResolvedValue({profileId:scope.profileId,conversationId:id,requestId:replyId,index:0,source:{kind:'principle',id:'principle',text:'Leave room for an idea.',quote:'Leave room'}});
+  await mount();
+  const actions=host.querySelector('.jar-conversation-actions')!;
+  expect(actions.textContent).toContain('Save insight');expect(actions.textContent).toContain('Correct reply');
+  const reference=host.querySelector<HTMLButtonElement>('.jar-conversation-citations button')!;
+  expect(reference.textContent).toContain('Leave room for an idea.');await act(async()=>reference.click());
+  expect(host.querySelector('.jar-conversation-reference')?.closest('li')?.getAttribute('data-role')).toBe('assistant');
 });
 it('clearly saves messages without promising an assistant reply',async()=>{
   await mount();expect(host.textContent).toContain('Replies aren’t connected yet.');await type('I want quiet mornings.');expect(host.textContent).toContain('Draft on this device');await click('Save message');

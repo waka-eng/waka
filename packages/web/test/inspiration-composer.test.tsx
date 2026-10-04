@@ -21,6 +21,16 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 const mount = () => act(async () => root.render(<InspirationComposer {...props} />));
+it('describes the selected audience visibly and accessibly without publishing on selection', async () => {
+  await mount();
+  const group=host.querySelector('[aria-label="Who can read this"]')!;
+  expect(group.getAttribute('aria-describedby')).toBe('capture-audience');
+  expect(host.querySelector('#capture-audience')?.textContent).toContain('Only you');
+  props.public=true;await mount();
+  expect(host.querySelector('#capture-audience')?.textContent).toContain('People in your rooms');
+  expect(host.querySelector('#capture-audience')?.textContent).toContain('Reflections stay private');
+  expect(props.onSubmit).not.toHaveBeenCalled();
+});
 it('keeps an unsupported browser preview saveable and gives the failed file its own retry', async () => {
   await mount();
   await act(async () => host.querySelector('img')!.dispatchEvent(new Event('error')));

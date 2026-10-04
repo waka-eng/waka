@@ -54,6 +54,12 @@ it('renders the current original and saves skip then reconsider without changing
   await click('Skip for now');expect(chooseReviewInspiration).toHaveBeenLastCalledWith(SID,{revision:0,inspirationId:SOURCE,sourceRevision:'1',choice:'skip'},scope.profileId,expect.any(AbortSignal));
   await click('Reconsider last choice');expect(vi.mocked(chooseReviewInspiration).mock.calls[1]![1].choice).toBeNull();expect(host.textContent).toContain(source.text);
 });
+it('labels a resumed review and its current stage without advancing it',async()=>{
+  current={...current!,revision:3,cursor:1,currentInspirationId:null,items:current!.items.map(item=>({...item,choice:'keep'}))};
+  await mount();expect(host.textContent).toContain('Continue where you left off.');
+  expect(host.querySelector('[aria-current="step"]')?.textContent).toContain('Reflect');
+  expect(chooseReviewInspiration).not.toHaveBeenCalled();expect(startReviewSession).not.toHaveBeenCalled();
+});
 it('uses arrows and touch swipes for the same choices but never treats mouse text selection as a swipe',async()=>{
   await mount();
   const pointer=(type:string,x:number,pointerType:string)=>{const event=new Event(type,{bubbles:true,cancelable:true});Object.assign(event,{clientX:x,clientY:20,pointerId:1,pointerType});host.querySelector('.jar-review-card')!.dispatchEvent(event);};

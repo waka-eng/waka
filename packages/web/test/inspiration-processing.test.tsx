@@ -136,7 +136,16 @@ it('waits until a known future eligibility time rather than polling continuously
   await act(async () => root.render(<Probe />)); await click('save');
   await act(async () => vi.advanceTimersByTimeAsync(120_000));
   expect(fetchInspirationProcessing).toHaveBeenCalledOnce();
-  expect(host.textContent).toContain('Queued until');
+  expect(host.textContent).toContain('Saved. WAKA will revisit this inspiration after');
+  expect(host.textContent).not.toContain('next reading');
+  expect(host.querySelector<HTMLDetailsElement>('.jar-source-details')?.open).toBe(false);
+});
+it('describes scheduled reading separately from the successful save without claiming completion',async()=>{
+  vi.mocked(fetchInspirationProcessing).mockResolvedValue({...waiting,phase:'waiting',stage:'reading',runAfter:new Date(Date.now()+3600000).toISOString()});
+  await act(async()=>root.render(<Probe/>));await click('save');
+  expect(host.textContent).toContain('Saved. The next reading is scheduled for');
+  expect(host.textContent).not.toContain('Your reading has an update');
+  expect(view).not.toHaveBeenCalled();expect(retryInspirationProcessing).not.toHaveBeenCalled();
 });
 
 it('starts a fresh observation window when a scheduled hold ends', async () => {

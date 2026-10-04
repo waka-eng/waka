@@ -40,6 +40,16 @@ const settle=()=>act(async()=>vi.advanceTimersByTimeAsync(200));
 const button=(text:string)=>[...host.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent===text)!;
 const type=(text:string)=>act(async()=>{const area=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,text);area.dispatchEvent(new Event('input',{bubbles:true}));});
 const changeMode=()=>act(async()=>{const select=[...host.querySelectorAll('select')].find(row=>[...row.options].some(option=>option.value==='change'))!;select.value='change';select.dispatchEvent(new Event('change',{bubbles:true}));});
+it('starts with an exportable preview and keeps editing and customization optional',async()=>{
+  await mount();await settle();
+  expect(host.querySelector('img')?.alt).toBe(source.statement);
+  expect(button('Save image').disabled).toBe(false);
+  const words=host.querySelector<HTMLDetailsElement>('.jar-share-word-editor')!,customize=host.querySelector<HTMLDetailsElement>('.jar-share-customize')!;
+  expect(words.open).toBe(false);expect(customize.open).toBe(false);
+  expect(words.querySelector('summary')?.textContent).toBe('Edit wording');
+  await act(async()=>words.querySelector('summary')!.click());expect(words.open).toBe(true);
+  expect(host.textContent).toContain('Edits here change the card only.');
+});
 it('edits only the card and never renders private evidence or the hidden name',async()=>{
   await mount();await settle();await type('My card words');await settle();
   expect(renderPrincipleArtifact).toHaveBeenLastCalledWith({items:[{text:'My card words'}],name:'',appearance:'dark',format:'square'});
@@ -103,6 +113,7 @@ it.each(['empty','too_long'] as const)('keeps unrenderable %s wording editable a
   const words=code==='empty'?'   ':'Long wording '.repeat(100);await type(words);await settle();
   expect(host.querySelector('textarea')!.value).toBe(words);expect(button('Save image').disabled).toBe(true);expect(host.querySelector('img')).toBeNull();
   await type('Fits again');await settle();expect(button('Save image').disabled).toBe(false);
+  expect(host.querySelector<HTMLDetailsElement>('.jar-share-word-editor')!.open).toBe(true);
 });
 it('keeps visible words after storage failure and saves them on explicit retry',async()=>{
   await mount();vi.spyOn(Storage.prototype,'setItem').mockImplementationOnce(()=>{throw new DOMException('Full','QuotaExceededError');});
