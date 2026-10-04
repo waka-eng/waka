@@ -55,7 +55,8 @@ These are approved names; rows marked planned do not claim shipped storage or UI
 | One source and choice in a review | `review_item` | Review item | choose whether to explore this inspiration in this session | implemented; deployment pending |
 | One authored answer in a review | `review_answer` | Your thought | one answer, with the inspirations it refers to | implemented; deployment pending |
 | A signal supported by a review answer | `signal_review_evidence` | From your review | your words from a review that support this | in implementation |
-| A conversation using the profile's memory | `conversation` | Talk with WAKA | think through a question with your own experiences | planned |
+| A conversation using the profile's memory | `conversation` | Talk with WAKA | think through a question with your own experiences | foundation implemented locally; replies disabled |
+| One authored message in a private conversation | `conversation_message` | Message | your words, separate from WAKA's reply | foundation implemented locally; replies disabled |
 | Exported rendering of selected principle wording | `principle_artifact` | Share a principle | choose the words that leave WAKA | planned |
 
 See [the capture foundation contract](docs/plans/2026-10-02-capture-foundation-contract.md).
