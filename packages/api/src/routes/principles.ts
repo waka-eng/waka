@@ -94,7 +94,7 @@ const declareSchema = z
   })
   .strict();
 
-const editSchema = declareSchema;
+const editSchema = declareSchema.extend({expectedStatementRevision:z.string().regex(/^[1-9][0-9]{0,18}$/).optional()});
 
 const reorderSchema = z
   .object({
@@ -540,7 +540,7 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     const now = new Date();
     const updated = await db.transaction(async (tx) => {
       const [before] = await tx
-        .select({ statement: principles.statement, lockedAt: principles.lockedAt })
+        .select({ statement: principles.statement, lockedAt: principles.lockedAt,statementRevision:principles.statementRevision })
         .from(principles)
         .where(
           and(
@@ -548,8 +548,14 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
             eq(principles.profileId, scope.profileId),
           ),
         )
-        .limit(1);
-      if (!before) return false;
+        .limit(1).for('update');
+      if (!before) return 'missing';
+      const expected=parsed.data.expectedStatementRevision?BigInt(parsed.data.expectedStatementRevision):null;
+      if(expected!==null&&before.statementRevision!==expected){
+        if(before.statementRevision===expected+1n&&before.statement===parsed.data.statement&&before.lockedAt)return 'saved';
+        return 'conflict';
+      }
+      if(before.statement===parsed.data.statement&&before.lockedAt)return 'saved';
 
       await writePrincipleStatementChain(tx, {
         profileId: scope.profileId,
@@ -568,9 +574,10 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
             eq(principles.profileId, scope.profileId),
           ),
         );
-      return true;
+      return 'saved';
     });
-    if (!updated) return c.json({ error: "Principle not found" }, 404);
+    if (updated==='missing') return c.json({ error: "Principle not found" }, 404);
+    if (updated==='conflict') return c.json({error:'This principle changed. Review its current wording before saving.',code:'principle_revision_conflict'},409);
 
     const [view] = await loadPrincipleViews(db, scope.profileId).then((views) =>
       views.filter((v) => v.id === params.data.principleId),

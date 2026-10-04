@@ -417,7 +417,7 @@ export interface ConversationReplyInput {
   preferredLocale:SupportedLocale;
   contextChanged?:boolean;
   focusSourceNumber?:number;
-  history:Array<{role:'user'|'assistant';content:string}>;
+  history:Array<{role:'user'|'assistant';content:string;correction?:boolean}>;
   sources:Array<{kind:'principle'|'top_of_mind_entry'|'inspiration';text:string;state?:string;rank?:number;locked?:boolean;supportCurrent?:boolean;truncated:boolean}>;
 }
 export const CONVERSATION_REPLY_OUTPUT_TOKENS=1200;

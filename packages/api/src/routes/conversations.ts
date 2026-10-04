@@ -13,7 +13,7 @@ import {personalPrincipleReadable} from '../lib/personal-output.js';
 import {PRINCIPLE_MIN_SIGNALS} from '../lib/principle-generation.js';
 
 const uuid=z.string().uuid().transform(value=>value.toLowerCase());
-const messageInput=z.object({id:uuid,content:z.string().min(1).max(CONVERSATION_LIMITS.inputCharacters).refine(value=>value.trim().length>0),revision:z.number().int().min(0).max(CONVERSATION_LIMITS.messages),requestReply:z.boolean().optional()}).strict();
+const messageInput=z.object({id:uuid,content:z.string().min(1).max(CONVERSATION_LIMITS.inputCharacters).refine(value=>value.trim().length>0),revision:z.number().int().min(0).max(CONVERSATION_LIMITS.messages),requestReply:z.boolean().optional(),correctsMessageId:uuid.optional()}).strict();
 type ConversationEnv=AuthEnv&{Variables:{conversationProfileId:string}};
 class ConversationError extends Error{constructor(message:string,readonly status:404|409|410|429){super(message);}}
 type Db=ReturnType<typeof getDb>;
@@ -84,10 +84,11 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     const row=await database().transaction(async tx=>{
       await tx.select({id:conversations.id}).from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id))).for('update');
       const current=await readConversation(tx,profileId,id),existing=current.messages.find(message=>message.id===input.data.id);
-      if(existing){if(existing.role!=='user'||existing.content!==input.data.content)throw new ConversationError('This message id already holds different words.',409);return current;}
+      if(existing){if(existing.role!=='user'||existing.content!==input.data.content||existing.correctsMessageId!==(input.data.correctsMessageId??null))throw new ConversationError('This message id already holds different words.',409);return current;}
       if(current.revision!==input.data.revision)throw new ConversationError('New messages arrived. Check the conversation before sending.',409);
       if(current.revision>=(input.data.requestReply&&conversationRepliesEnabled()?CONVERSATION_LIMITS.messages-1:CONVERSATION_LIMITS.messages))throw new ConversationError('This conversation is full. Start another one.',429);
-      await tx.insert(conversationMessages).values({id:input.data.id,profileId,conversationId:id,position:current.revision+1,role:'user',content:input.data.content});
+      if(input.data.correctsMessageId&&!current.messages.some(message=>message.id===input.data.correctsMessageId&&message.role==='assistant'))throw new ConversationError('Choose a reply in this conversation to correct.',409);
+      await tx.insert(conversationMessages).values({id:input.data.id,profileId,conversationId:id,position:current.revision+1,role:'user',content:input.data.content,correctsMessageId:input.data.correctsMessageId??null});
       await tx.update(conversations).set({revision:current.revision+1,updatedAt:new Date()}).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
       if(input.data.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,id,{messageId:input.data.id,afterRequestId:null});
       return readConversation(tx,profileId,id);

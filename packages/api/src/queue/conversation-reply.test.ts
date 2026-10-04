@@ -10,6 +10,10 @@ it('fences untrusted memories, preserves standing and bounds the output',()=>{
   expect(request.systemInstruction.parts[0].text).toContain('untrusted data');expect(request.systemInstruction.parts[0].text).toContain('accept disagreement');expect(request.systemInstruction.parts[0].text).toContain('never evidence');
   expect(buildConversationReplyRequest({...input,contextChanged:true}).contents[0].parts[0].text).toContain('Do not infer what a short answer affirms');
 });
+it('labels a correction and prioritizes it without claiming a principle edit',()=>{
+  const request=buildConversationReplyRequest({...input,history:[{role:'user',content:'I no longer agree with this rule.',correction:true}]});
+  expect(request.contents[0].parts[0].text).toContain('user correction');expect(request.systemInstruction.parts[0].text).toContain('only a separate explicit edit');
+});
 it('accepts one grounded answer and at most one follow-up without requiring memory when none is available',()=>{
   const answer={answer:'That principle is disputed, so it need not decide this choice.',followUpQuestion:'What would you like to learn from a small next step?',citations:[{sourceNumber:1,quote:'Leave room to reconsider'}]};
   expect(parseConversationReply(answer,input)).toEqual(answer);

@@ -55,7 +55,7 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     if(row.role==='assistant'&&row.memoryChanged)continue;
     const content=row.content+(row.followUpQuestion?'\n'+row.followUpQuestion:'');
     if(characters+content.length>8000){contextChanged=true;break;}
-    history.unshift({role:row.role,content});characters+=content.length;
+    history.unshift({role:row.role,content,...(row.correctsMessageId?{correction:true}:{})});characters+=content.length;
   }
   const context=await readConversationContext(db,profileId,anchor.content,undefined,conversation.initialPrincipleId),sources=[...context.principles,...context.reading,...context.inspirations];
   const [profile]=await db.select({locale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId));

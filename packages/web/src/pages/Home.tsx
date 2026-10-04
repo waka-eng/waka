@@ -14669,6 +14669,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'?<button type="button" className="jar-review-shortcut" hidden={Boolean(viewNavigation.view?.reviewId)||(!inField&&!inSky)} data-jar-chrome="1"
         onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
       {storageScope&&viewNavigation.view?.conversationId?<ConversationPanel key={`${storageScope.accountId}:${storageScope.profileId}:${viewNavigation.view.conversationId}`} scope={storageScope} id={viewNavigation.view.conversationId==='list'?null:viewNavigation.view.conversationId} locale={locale}
+        onPrincipleUpdated={row=>setPrinciples(current=>current.map(item=>item.id===row.id?row:item))}
         onInspirationSaved={row=>{if(row.profileId!==storageScope.profileId)return;const detail=toInspirationDetail(row);detailsRef.current.set(row.id,detail);const revision=++sourceListMutationRef.current;
           setInspirations(previous=>previous?.some(item=>item.id===row.id)?previous.map(item=>item.id===row.id?detail:item):[...(previous??[]),detail]);
           void loadInspirations(storageScope.profileId).then(field=>{if(readingMountedRef.current&&sourceListMutationRef.current===revision){setInspirations(field.inspirations);setFieldBeyond(beyondOf(field));}}).catch(()=>undefined);

@@ -49,3 +49,16 @@ it('uses the stored predecessor link when multiple wordings have the same date',
   const result=await (await f.app.request(`/principles/${f.id}/statements`)).json() as {previousStatementId:string;statements:Array<{id:string;statement:string}>};
   expect(result.statements.find(row=>row.id===result.previousStatementId)?.statement).toBe('Leave room to reconsider the plan.');
 });
+it('compares the observed revision, preserves human locks, and does not append another version on exact retry',async()=>{
+  const f=await fixture();const edit=(statement:string,expectedStatementRevision:string)=>f.app.request(`/principles/${f.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({statement,expectedStatementRevision})});
+  for(let n=0;n<2;n++){const response=await edit('Leave mornings open.','1');expect(response.status).toBe(200);expect(await response.json()).toMatchObject({principle:{statement:'Leave mornings open.',statementRevision:'2',locked:true}});}
+  expect(await t.sql`SELECT id FROM principle_statements WHERE principle_id=${f.id}`).toHaveLength(2);
+  expect((await edit('A stale overwrite.','1')).status).toBe(409);
+  expect((await edit('A more recent choice.','2')).status).toBe(200);
+  expect((await edit('Leave mornings open.','1')).status).toBe(409);
+  expect((await t.sql`SELECT statement FROM principles WHERE id=${f.id}`)[0].statement).toBe('A more recent choice.');
+});
+it('allows only one of two conflicting edits from the same observed version',async()=>{
+  const f=await fixture(),results=await Promise.all(['First intention.','Second intention.'].map(statement=>f.app.request(`/principles/${f.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({statement,expectedStatementRevision:'1'})})));
+  expect(results.map(row=>row.status).sort()).toEqual([200,409]);expect(await t.sql`SELECT id FROM principle_statements WHERE principle_id=${f.id}`).toHaveLength(2);
+});

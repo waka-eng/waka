@@ -98,12 +98,15 @@ export async function fetchPrinciples(options:ProfileScoped={},signal?:AbortSign
 export async function updatePrinciple(
   principleId: string,
   statement: string,
+  options?:{profile:string;expectedStatementRevision:string;signal?:AbortSignal},
 ): Promise<ApiPrinciple> {
   const body = await patchJson<{ principle: ApiPrinciple }>(
-    apiPath(`/principles/${encodeURIComponent(principleId)}`),
-    { statement },
+    apiPath(`/principles/${encodeURIComponent(principleId)}${options?`?profile=${encodeURIComponent(options.profile)}`:''}`),
+    { statement,...(options?{expectedStatementRevision:options.expectedStatementRevision}:{}) },
     "That principle could not be updated",
+    options?.signal,
   );
+  if(options&&(!body.principle||body.principle.id!==principleId||body.principle.statement!==statement.trim()||!body.principle.locked||!body.principle.statementRevision))throw new ApiError({status:200,message:'Could not verify the principle update.'});
   return body.principle;
 }
 

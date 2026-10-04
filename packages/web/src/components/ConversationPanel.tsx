@@ -5,11 +5,12 @@ import {startConversation} from '../lib/conversation-start';
 import {useConversationReply} from '../lib/use-conversation-reply';
 import {DialogSurface} from './DialogSurface';
 import {ConversationThought} from './ConversationThought';
-import type {ApiInspiration} from '../lib/api';
+import {ConversationPrincipleEdit} from './ConversationPrincipleEdit';
+import type {ApiInspiration,ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
 import {readConversationDrafts,storeConversationDraft,clearConversationDraft,clearConversationDrafts,type ConversationDraft as Draft,type StoredConversationDraft} from '../lib/conversation-drafts';
 
-export function ConversationPanel({scope,id,locale,onChoose,onClose,onOpenSource,onInspirationSaved}:{scope:ProfileStorageScope;id:string|null;locale:SupportedLocale;onChoose:(id:string|null)=>void;onClose:()=>void;onOpenSource?:(kind:ConversationSourceKind,id:string)=>void;onInspirationSaved?:(row:ApiInspiration)=>void}){
+export function ConversationPanel({scope,id,locale,onChoose,onClose,onOpenSource,onInspirationSaved,onPrincipleUpdated}:{scope:ProfileStorageScope;id:string|null;locale:SupportedLocale;onChoose:(id:string|null)=>void;onClose:()=>void;onOpenSource?:(kind:ConversationSourceKind,id:string)=>void;onInspirationSaved?:(row:ApiInspiration)=>void;onPrincipleUpdated?:(row:ApiPrinciple)=>void}){
   const [rows,setRows]=useState<ConversationSummary[]>([]),[conversation,setConversation]=useState<ApiConversation|null>(null),[draft,setDraft]=useState<Draft|null>(null);
   const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState<string|null>(null),[storageFailed,setStorageFailed]=useState(false),[context,setContext]=useState<ConversationContext|null>(null);
   const lifecycle=useRef(new AbortController()),draftRef=useRef<Draft|null>(null);
@@ -19,6 +20,7 @@ export function ConversationPanel({scope,id,locale,onChoose,onClose,onOpenSource
   const [generationEnabled,setGenerationEnabled]=useState<boolean|null>(null);
   const [citation,setCitation]=useState<{requestId:string;index:number;value:ConversationCitation|null;failed:boolean}|null>(null),citationSerial=useRef(0);
   const body=useRef<HTMLDivElement>(null),nearBottom=useRef(true),[newMessages,setNewMessages]=useState(false);
+  const editor=useRef<HTMLTextAreaElement>(null);
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
   const sourceName=(kind:ConversationSourceKind)=>say(kind==='principle'?'worldConversationPrincipleRef':kind==='inspiration'?'worldConversationInspirationRef':'worldConversationReadingRef');
   const run=async<T,>(work:(signal:AbortSignal)=>Promise<T>)=>{
@@ -32,7 +34,7 @@ export function ConversationPanel({scope,id,locale,onChoose,onClose,onOpenSource
     conversationRef.current=next;
     setConversation(next);setGenerationEnabled(next.generationEnabled??false);setContext(null);setCitation(null);citationSerial.current++;
     const pending=draftRef.current;
-    if(pending?.pending&&next.messages.some(message=>message.id===pending.id&&message.content===pending.content)){
+    if(pending?.pending&&next.messages.some(message=>message.id===pending.id&&message.content===pending.content&&(message.correctsMessageId??undefined)===pending.correctsMessageId)){
       try{if(receipt.current)clearConversationDraft(receipt.current);}catch{setStorageFailed(true);}
       receipt.current=undefined;
       draftRef.current=null;setDraft(null);setError(null);
@@ -65,7 +67,7 @@ export function ConversationPanel({scope,id,locale,onChoose,onClose,onOpenSource
     const intent={...draft,revision:conversation.revision,pending:true,updatedAt:Date.now()};if(!keep(intent))return;
     setBusy(true);setError(null);
     nearBottom.current=true;
-    try{const next=await run(signal=>saveConversationMessage(scope.profileId,id,{id:intent.id,content:intent.content,revision:intent.revision,...(generationEnabled?{requestReply:true}:{})},signal));if(!lifecycle.current.signal.aborted){observe(next);reply.check();}}
+    try{const next=await run(signal=>saveConversationMessage(scope.profileId,id,{id:intent.id,content:intent.content,revision:intent.revision,...(intent.correctsMessageId?{correctsMessageId:intent.correctsMessageId}:{}),...(generationEnabled?{requestReply:true}:{})},signal));if(!lifecycle.current.signal.aborted){observe(next);reply.check();}}
     catch{if(!lifecycle.current.signal.aborted)setError(say('worldConversationSaveFailed'));}finally{if(!lifecycle.current.signal.aborted)setBusy(false);}
   };
   const remove=async()=>{
@@ -100,7 +102,9 @@ export function ConversationPanel({scope,id,locale,onChoose,onClose,onOpenSource
         {conversation.initialPrinciple?<div className="jar-conversation-topic"><span className="jar-review-context">{say('worldConversationStartingFrom')}</span><blockquote>{conversation.initialPrinciple.statement}</blockquote>{conversation.initialPrinciple.state==='contested'?<p>{say('worldConversationContested')}</p>:null}</div>:null}
         <ol aria-label={say('worldConversationMessages')}>{conversation.messages.map(message=><li key={message.id} data-role={message.role}><span className="jar-review-context">{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</span>
           {message.memoryChanged?<p className="jar-review-context">{say('worldConversationMemoryChanged')}</p>:null}<p>{message.content}</p>
+          {message.correctsMessageId?<><p className="jar-review-context">{say('worldChatCorrectionSaved')}</p><ConversationPrincipleEdit scope={scope} contextId={`${id}:${message.id}`} locale={locale} onUpdated={row=>{onPrincipleUpdated?.(row);void refresh();reply.check();}}/></>:null}
           {message.followUpQuestion?<p className="jar-conversation-question">{message.followUpQuestion}</p>:null}
+          {message.role==='assistant'?<button type="button" disabled={busy||Boolean(draft?.content)||Boolean(draft?.pending)} onClick={()=>{keep({id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content:'',revision:conversation.revision,pending:false,correctsMessageId:message.id});editor.current?.focus();}}>{say('worldChatCorrectReply')}</button>:null}
           <ConversationThought scope={scope} message={message} locale={locale} onSaved={row=>{onInspirationSaved?.(row);void refresh();}} onOpen={onOpenSource?sourceId=>onOpenSource('inspiration',sourceId):undefined}/>
           {message.citations?.length&&message.replyRequestId?<div className="jar-conversation-citations" aria-label={say('worldConversationReferences')}>{message.citations.map(reference=><button key={reference.index} type="button" disabled={!reference.available} onClick={()=>void openCitation(message.replyRequestId!,reference.index)}>{sourceName(reference.kind)} {reference.index+1}{!reference.available?` · ${say('worldConversationReferenceChanged')}`:''}</button>)}</div>:null}
         </li>)}</ol>
@@ -115,6 +119,7 @@ export function ConversationPanel({scope,id,locale,onChoose,onClose,onOpenSource
       </>:null}
       </div>
       {id&&conversation?<footer>
+        {draft?.correctsMessageId?<div className="jar-review-context"><p>{say('worldChatCorrectionNote')}</p><button type="button" disabled={busy||draft.pending} onClick={()=>keep({...draft,correctsMessageId:undefined})}>{say('worldChatCancelCorrection')}</button></div>:null}
         {newMessages?<button type="button" onClick={()=>{if(body.current)body.current.scrollTop=body.current.scrollHeight;nearBottom.current=true;setNewMessages(false);}}>{say('worldConversationLatest')}</button>:null}
         {generationEnabled?<div className="jar-conversation-reply" aria-live="polite">
           {reply.error?<p>{say('worldConversationReplyCheckFailed')}</p>:reply.state?.retryAfter&&reply.state.phase!=='ready'?<p>{say('worldConversationReplyLimit')} {new Date(reply.state.retryAfter).toLocaleTimeString(locale,{hour:'numeric',minute:'2-digit'})}</p>:
@@ -125,11 +130,11 @@ export function ConversationPanel({scope,id,locale,onChoose,onClose,onOpenSource
           {reply.error||reply.waiting||reply.state?.retryAfter&&reply.state.phase!=='ready'?<button type="button" disabled={reply.busy||reply.checking} onClick={reply.check}>{say('worldConversationCheckReply')}</button>:null}
         </div>:null}
         {drafts.length>1?<label>{say('worldShareDrafts')}<select value={draft?.id??''} disabled={busy||storageFailed} onChange={event=>{const selected=drafts.find(row=>row.value.id===event.target.value);if(selected){receipt.current=selected;draftRef.current=selected.value;setDraft(selected.value);}}}><option value="" disabled/>{drafts.map(row=><option key={row.key} value={row.value.id}>{row.value.content.slice(0,50)}</option>)}</select></label>:null}
-        <label>{say('worldConversationMessage')}<textarea maxLength={4000} rows={3} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'&&!event.nativeEvent.isComposing&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>{const own=draft?.writer===writer.current;keep({id:own?draft.id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content:event.target.value,revision:conversation.revision,pending:false});}}/></label>
+        <label>{say(draft?.correctsMessageId?'worldChatCorrectionPrompt':'worldConversationMessage')}<textarea ref={editor} maxLength={4000} rows={3} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'&&!event.nativeEvent.isComposing&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>{const own=draft?.writer===writer.current;keep({id:own?draft.id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content:event.target.value,revision:conversation.revision,pending:false,...(draft?.correctsMessageId?{correctsMessageId:draft.correctsMessageId}:{})});}}/></label>
         {draft?.content?<p className="jar-review-context" role="status">{say(draft.pending?(busy?'worldSaving':'worldReviewPending'):'worldReviewDraftOnDevice')}</p>:null}
         {storageFailed?<p role="alert">{say('worldConversationDraftFailed')}</p>:null}
         {draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldConversationCheck')}</button>:null}
-        <button type="button" disabled={busy||loading||replyPending||storageFailed||!draft?.content.trim()||conversation.revision>=(generationEnabled?199:200)} onClick={()=>void save()}>{say(draft?.pending?'worldConversationRetry':generationEnabled?'worldConversationSend':'worldConversationSave')}</button>
+        <button type="button" disabled={busy||loading||replyPending||storageFailed||!draft?.content.trim()||conversation.revision>=(generationEnabled?199:200)} onClick={()=>void save()}>{say(draft?.pending?'worldConversationRetry':draft?.correctsMessageId?'worldChatSendCorrection':generationEnabled?'worldConversationSend':'worldConversationSave')}</button>
         {conversation.revision>=(generationEnabled?199:200)?<p>{say('worldConversationFull')}</p>:null}
       </footer>:null}
     </DialogSurface></>;

@@ -1,0 +1,3 @@
+ALTER TABLE "conversation_messages" ADD COLUMN "corrects_message_id" uuid;--> statement-breakpoint
+ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_correction_fk" FOREIGN KEY ("profile_id","conversation_id","corrects_message_id") REFERENCES "public"."conversation_messages"("profile_id","conversation_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_correction_role" CHECK ("conversation_messages"."corrects_message_id" IS NULL OR ("conversation_messages"."role"='user' AND "conversation_messages"."corrects_message_id"<>"conversation_messages"."id"));

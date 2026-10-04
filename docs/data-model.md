@@ -160,6 +160,16 @@ keeps the deliberately saved inspiration and authorship; deleting the inspiratio
 removes its provenance. Profile export includes provenance, and account erasure
 removes it. Ordinary inspiration editing does not relabel its historical origin.
 
+### Conversation corrections
+
+A correction is a new user message with an optional `corrects_message_id`
+pointing to an earlier assistant message in the same profile/conversation. It
+does not rewrite history, create memory or edit a Principle. Reply context labels
+the correction and prioritizes the current user view over earlier interpretations.
+Principle editing is a separate confirmation of exact wording and its observed
+`statement_revision`. A stale edit conflicts; an exact retry of the immediately
+applied revision is a no-op. Existing statement history and human locks apply.
+
 ## The four layers
 
 | | Layer 1 — **Inspiration** | Layer 2 — **Signal** | Layer 3 — **Top of mind** | Layer 4 — **Principle** |
