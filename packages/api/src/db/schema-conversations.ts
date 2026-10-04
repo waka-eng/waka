@@ -39,9 +39,11 @@ export const conversationReplyRequests=pgTable('conversation_reply_requests',{
   conversationRevision:integer('conversation_revision').notNull(),contextHash:text('context_hash').notNull(),
   status:text('status').$type<'pending'|'running'|'ready'|'failed'|'stopped'|'stale'>().notNull().default('pending'),
   references:jsonb('references').$type<ConversationReference[]>().notNull().default(sql`'[]'::jsonb`),
+  contextSources:jsonb('context_sources').$type<ConversationReference[]>(),
   followUpQuestion:text('follow_up_question'),failureCode:text('failure_code'),
   createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
   dispatchedAt:timestamp('dispatched_at',{withTimezone:true}),finishedAt:timestamp('finished_at',{withTimezone:true}),
+  retrievalDispatchedAt:timestamp('retrieval_dispatched_at',{withTimezone:true}),
 },table=>({
   conversationFk:foreignKey({columns:[table.profileId,table.conversationId],foreignColumns:[conversations.profileId,conversations.id],name:'conversation_replies_conversation_fk'}).onDelete('cascade'),
   userMessageFk:foreignKey({columns:[table.profileId,table.conversationId,table.userMessageId],foreignColumns:[conversationMessages.profileId,conversationMessages.conversationId,conversationMessages.id],name:'conversation_replies_user_message_fk'}),
@@ -51,4 +53,5 @@ export const conversationReplyRequests=pgTable('conversation_reply_requests',{
   messageIdx:index('conversation_replies_message_idx').on(table.profileId,table.userMessageId,table.createdAt),
   budgetIdx:index('conversation_replies_budget_idx').on(table.profileId,table.dispatchedAt),
   stateCheck:check('conversation_replies_status_check',sql`${table.status} IN ('pending','running','ready','failed','stopped','stale')`),
+  contextSourcesCheck:check('conversation_context_sources_bounds',sql`${table.contextSources} IS NULL OR (jsonb_typeof(${table.contextSources})='array' AND jsonb_array_length(${table.contextSources})<=21)`),
 }));

@@ -6,14 +6,15 @@ import {personalEntryReadable,personalEntrySupportCurrent,personalPrincipleReada
 import {PRINCIPLE_MIN_SIGNALS} from './principle-generation.js';
 import {CONVERSATION_REPLY_OUTPUT_TOKENS} from './model-provider.js';
 import {conversationSearchTerms,readConversationMaterial} from './conversation-material.js';
+import {rankConversationCandidates,readSemanticConversationCandidates,type ConversationRetrievalTrace} from './conversation-retrieval.js';
 export const CONVERSATION_LIMITS={conversations:100,messages:200,inputCharacters:4000,contextCharacters:16000,modelCalls:20,attemptsPerMessage:3,outputTokens:CONVERSATION_REPLY_OUTPUT_TOKENS} as const;
 export const conversationRepliesEnabled=()=>process.env.WAKA_CONVERSATION_REPLIES==='1';
 export const conversationCapabilities=()=>({generationEnabled:conversationRepliesEnabled(),limits:{...CONVERSATION_LIMITS,modelCalls:conversationRepliesEnabled()?CONVERSATION_LIMITS.modelCalls:0}});
 type Reader=Pick<ReturnType<typeof getDb>,'select'>;
 export const conversationHash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-export interface ConversationSource {kind:'principle'|'top_of_mind_entry'|'inspiration';id:string;text:string;hash:string;recordedAt?:string;state?:string;rank?:number;locked?:boolean;supportCurrent?:boolean;truncated:boolean}
+export interface ConversationSource {kind:'principle'|'top_of_mind_entry'|'inspiration';id:string;text:string;hash:string;revision?:string;recordedAt?:string;state?:string;rank?:number;locked?:boolean;supportCurrent?:boolean;truncated:boolean}
 /** Reuse exactly the serving predicates; no cached excerpts or model calls. */
-export async function readConversationContext(db:Reader,profileId:string,question:string,referenceIds?:ConversationReference[],initialPrincipleId?:string|null){
+export async function readConversationContext(db:Reader,profileId:string,question:string,referenceIds?:ConversationReference[],initialPrincipleId?:string|null,queryVector?:number[],onRetrievalTrace?:(trace:ConversationRetrievalTrace)=>void){
   const byKind=(kind:ConversationReference['kind'])=>referenceIds?.filter(row=>row.kind===kind).map(row=>row.id);
   const pIds=byKind('principle'),rIds=byKind('top_of_mind_entry'),iIds=byKind('inspiration');
   const p=await db.select({id:principles.id,text:principles.statement,revision:sql<string>`${principles.statementRevision}::text`,rank:principles.rank,state:principles.state,locked:sql<boolean>`${principles.lockedAt} IS NOT NULL`,supportCurrent:sql<boolean>`${principles.unsupportedAt} IS NULL AND ${personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)}`})
@@ -21,7 +22,13 @@ export async function readConversationContext(db:Reader,profileId:string,questio
   const r=await db.select({id:topOfMindEntries.id,text:topOfMindEntries.body,revision:sql<string>`${topOfMindEntries.bodyRevision}::text`,locked:sql<boolean>`${topOfMindEntries.lockedAt} IS NOT NULL`,supportCurrent:sql<boolean>`${personalEntrySupportCurrent(profileId)}`})
     .from(topOfMindEntries).innerJoin(topOfMinds,eq(topOfMinds.id,topOfMindEntries.topOfMindId))
     .where(and(eq(topOfMinds.profileId,profileId),eq(topOfMinds.status,'live'),isNull(topOfMindEntries.dismissedAt),personalEntryReadable(profileId),rIds?inArray(topOfMindEntries.id,rIds):undefined)).orderBy(asc(topOfMindEntries.sortOrder),asc(topOfMindEntries.id)).limit(5);
-  const i=await readConversationMaterial(db,profileId,conversationSearchTerms(question),iIds);
+  let i=await readConversationMaterial(db,profileId,conversationSearchTerms(question),iIds);
+  if(queryVector&&!referenceIds){
+    const semantic=await readSemanticConversationCandidates(db,profileId,queryVector);
+    onRetrievalTrace?.(semantic.trace);
+    const ids=rankConversationCandidates(i.map(row=>row.id),semantic.candidates);
+    i=await readConversationMaterial(db,profileId,[],ids);
+  }
   const bound=<T extends {id:string;text:string}>(kind:ConversationSource['kind'],rows:T[],allowance:number):ConversationSource[]=>rows.flatMap(row=>{
     if(allowance<=0)return [];const text=row.text.slice(0,Math.min(1600,allowance));allowance-=text.length;
     return [{...row,kind,text,hash:'hash' in row&&typeof row.hash==='string'?row.hash:conversationHash(row),truncated:text.length<row.text.length||('truncated' in row&&row.truncated===true)}];

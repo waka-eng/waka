@@ -483,3 +483,56 @@ No external calls are made by the reader or while its transaction is held.
 Semantic query embeddings, bounded hybrid ranking/diversity and their fixed
 baseline comparison remain open; this is their material/ownership foundation,
 not a substitute for that remaining work. No paid calls or deployment occurred.
+
+### Milestone 3 hybrid retrieval integration checkpoint
+
+The reply worker now performs at most one bounded query embedding outside DB
+locks, rechecks Stop/deletion/current context, then selects a hybrid context.
+Existing lexical retrieval remains the fallback for missing indexes, provider
+failure or insufficient budget for the extra call. Embedding calls use the
+existing Gemini query/document pairing and have a five-second header and
+ten-second total deadline. Reply calls remain on the existing configured model.
+
+Selection scans at most 500 most recently indexed owned personal vectors,
+validates at most 24 candidates against the indexing path's canonical input,
+then combines lexical/semantic ranks with a diversity penalty for at most six
+inspirations. It reuses the existing 0.6 recall floor pending the live comparison.
+Canonical validation is capped at 12,000 characters and 16 contributing child
+rows per type. Oversized, unavailable or stale material is excluded from the
+semantic path while lexical access remains. These are explicit coverage limits,
+not a claim to search every vector in a large archive.
+
+Migration 0065 adds nullable selection metadata, an embedding-dispatch timestamp
+and the profile/scope/model/recent index. Both embedding and answer slots count
+toward the existing twenty-per-hour account cap; stopped/failed reservations
+remain counted conservatively. A single remaining slot is used for an answer
+with lexical context, not an over-budget lookup. Selection metadata contains
+only source identities/hashes, is revalidated for the memory drawer, and is
+erased on conversation deletion. Older null selections retain the legacy read
+behavior. No real remote database has been migrated.
+
+Verification: 44 SQL tests across retrieval, material context, conversation
+routes and reply lifecycle passed. They prove owned-only/current-vector
+selection, scan and canonical bounds, no duplicate dispatch, actual unlocked
+lookup (a second SQL connection acquires the conversation and memory locks),
+Stop and source-edit handling during lookup, fallback, two-slot accounting,
+correct memory-drawer selection and metadata erasure. All 778 API unit tests
+passed (three paid benches skipped); typecheck and `pnpm db:check` passed.
+After adding the scan index and metadata-only preparation trace, the 28 retrieval/
+reply SQL tests and ten focused ranking/embedding unit tests also passed.
+
+Testing caught two useful issues. Normal raw edits delete their vector, so the
+stale-cache test now deliberately reinserts an old vector to exercise reader-side
+validation. A single-table query shortened a correlated parent ID, causing new
+reflection content to be missed; the outer identifier is now explicit, and the
+test rejects an old index then accepts reindexed reflection/image material.
+Temporary debug output was removed. Production traces contain request/profile
+IDs, selected source IDs/revisions, mode, bounded scan counts and preparation
+time, never source text or vectors.
+
+This is an integration checkpoint, not the retrieval-quality exit gate. The
+fixed labeled natural-language comparison, irrelevant-memory measurements and
+large-profile latency/cost measurements are next. These tests used synthetic
+vectors and made no paid calls. Budget use remains USD 0.05729850 of the new USD 5
+authorization. Apply migration 0065 before deploying this code; no deployment
+has been requested or performed.

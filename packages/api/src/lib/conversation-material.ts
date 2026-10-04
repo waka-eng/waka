@@ -50,7 +50,7 @@ export async function readConversationMaterial(db:Reader,profileId:string,terms:
       ORDER BY ${attachments.createdAt},${attachments.id} LIMIT 4) q),'[]'::jsonb)`,
   }).from(inspirations).innerJoin(inspirationRevisions,and(eq(inspirationRevisions.profileId,inspirations.profileId),eq(inspirationRevisions.inspirationId,inspirations.id)))
     .where(and(eq(inspirations.profileId,profileId),ids?inArray(inspirations.id,ids):or(...matches)))
-    .orderBy(...(score?[desc(score)]:[]),desc(inspirations.createdAt),asc(inspirations.id)).limit(6);
+    .orderBy(...(ids?.length?[sql`array_position(ARRAY[${sql.join(ids.map(id=>sql`${id}::uuid`),sql`, `)}],${inspirations.id})`]:score?[desc(score)]:[]),desc(inspirations.createdAt),asc(inspirations.id)).limit(6);
   return rows.map(row=>{
     const parts=[...(row.text.trim()?[{label:row.answers.length||row.media.length?'Saved text':'',text:row.text}]:[]),
       ...row.answers.slice(0,3).map(answer=>({label:'Reflection (your words)',text:answer.text})),
@@ -59,7 +59,7 @@ export async function readConversationMaterial(db:Reader,profileId:string,terms:
     const formatted=parts.map(part=>part.label?`${part.label}:\n${part.text}`:part.text);
     const text=formatted.map(part=>part.slice(0,allowance)).join('\n\n');
     const truncated=formatted.some(part=>part.length>allowance)||row.answers.length>3||row.media.length>3;
-    return {id:row.id,text,recordedAt:row.recordedAt,truncated,
+    return {id:row.id,text,revision:row.revision,recordedAt:row.recordedAt,truncated,
       hash:'material-v1:'+createHash('sha256').update(JSON.stringify({profileId,id:row.id,revision:row.revision,text,recordedAt:row.recordedAt})).digest('hex')};
   });
 }

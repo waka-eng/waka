@@ -117,10 +117,13 @@ Milestone 6 adds `conversation_reply_requests`, separate from user messages.
 One pending/running reply is allowed per conversation. An initial request or
 explicit retry compares the last request ID under the conversation lock: a
 replayed retry joins its successor instead of dispatching twice. Each attempt
-may dispatch to a provider at most once; ambiguous failures require a new,
-explicit retry, which may incur a new provider charge. Limits are three attempts
-per user message per hour and twenty provider dispatches per account per hour,
-with at most 1,200 output tokens per dispatch. Dispatch timestamps survive
+may dispatch at most one query embedding and one answer; ambiguous failures
+require a new, explicit retry, which may incur a new provider charge. Limits
+are three attempts per user message per hour and twenty reserved provider slots
+per account per hour. Both slots are reserved before a hybrid attempt; a stopped
+or failed lookup does not refund that reservation. With only one slot left,
+the answer uses lexical context rather than exceeding the limit. Answers have
+at most 1,200 output tokens. Dispatch timestamps survive
 conversation deletion until profile erasure so deletion cannot reset the budget.
 
 Stop is a publication fence, not a promise to undo provider billing. New messages,
@@ -131,6 +134,11 @@ assistant words whose references changed are labeled and excluded from future
 generation. They are conversation history, not new personal memory. Deleting
 the conversation erases those words and reference metadata. Source access is
 revalidated when opening a citation; no stale copied excerpt is served.
+`context_sources` stores only the selected source identities/hashes, separate
+from the citations actually used in the answer. It is null for older attempts
+without selection metadata; new attempts record even an empty selection.
+The memory drawer revalidates that selection. Conversation deletion erases
+both sets of reference metadata while retaining the budget timestamps.
 
 Client-generated conversation/message IDs make retry idempotent. A replay with
 different content conflicts rather than overwriting words. Deleting a
@@ -156,7 +164,19 @@ citations retain their original text-only identity and offsets. Ranking,
 contested state, human wording and unconfirmed support stay explicit; stale
 machine claims and deleted originals are not retrieved. Context is never a
 cached copy in the conversation and must be rebuilt before future generation.
-It is a deterministic retrieval foundation, not a semantic-answer quality claim.
+When current-model personal embeddings are available, the worker can combine
+lexical matches with semantic matches and a diversity penalty. Query embedding
+runs outside DB locks, with a five-second header and ten-second total deadline;
+Stop and source changes are rechecked before answering. The scan uses at most
+500 most recently indexed owned personal vectors, validates at most 24 candidates against
+current canonical input, and selects at most six inspirations. Canonical checks
+are capped at 12,000 characters and 16 contributing children per type; oversized
+or stale material is not admitted through the semantic path, but can still match
+lexically. This is a bounded selection, not a claim to inspect the entire archive.
+Embedding failure falls back to lexical context. Migration 0065 adds selection
+metadata, lookup accounting and the bounded-scan index before this worker runs.
+Natural-language retrieval quality requires the separately recorded evaluation;
+synthetic-vector tests alone do not establish it.
 
 ### Selected thoughts from a conversation
 
