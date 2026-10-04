@@ -1,6 +1,6 @@
 # Chat home and memory improvements
 
-Status: halted at the live chat quality gate after a rejected candidate (2026-10-04).
+Status: in progress — chat quality gate passed; memory milestone next (2026-10-04).
 Branch: `codex/chat-home-memory`, starting from `84cba13`.
 
 ## Objective
@@ -341,3 +341,48 @@ call allowance before that run; the total dollar ceiling can remain USD 1.
 Do not advance to Milestone 3 or claim M1 complete at this failed gate. Owner
 approval to continue was received; it does not constitute a measured home
 usability study. All remaining milestone scope is preserved.
+
+### Continuing under the owner approved five dollar cap
+
+The owner authorized all further LLM calls for this goal under a total USD 5
+cap, superseding the per-batch approval blocker. Prefer simple, friendly UI
+decisions and ask only when owner input is genuinely needed. Keep per-run
+guards and report cumulative cost; this does not authorize deployment or
+remote-account changes. The home walkthrough remains automated verification,
+not a claimed human usability study; the owner authorized continued UX judgment.
+
+Two further fixed-matrix runs were made. `candidate-concise` returned 24/24
+parseable replies for USD 0.02678625 but still inferred a stalled project and
+bundled two details into a follow-up. It was revised, not selected. The next
+`candidate-grounded` run returned 24/24 parseable replies for USD 0.03051225.
+Manual review against all 24 unchanged expectations passed: 18/18 original
+cases and 6/6 direct-answer cases. No unsupported personal claim was accepted
+in this reviewed set. Existing failures around routines, unconfirmed evidence,
+corrections, missing conditions and requested question lists were addressed.
+
+The selected response contract stays concise by default but permits useful
+requested formatting. Question artifacts can appear in answer with no extra
+follow-up; an answer containing questions plus another follow-up is still
+refused. Exact citation verification, field limits and publication checks are
+unchanged. Irrelevant memory is optional, saves are not endorsement, and an
+unstated cause must not be invented to explain a choice. No alternate prompt
+mode or model substitution was retained.
+
+Selected-run median latency was 2041.5ms and p95 was 3112ms (baseline 2031.5ms
+and 3942ms). Its cost was USD 0.03051225 versus baseline USD 0.02552025. This is
+an improvement on the target failures, not evidence of population-wide quality
+or a speed improvement. Multiple revised candidates were evaluated; a passing
+run does not erase the earlier failures. The gate is satisfied on the declared
+fixed set, with broader calibration still required by Milestone 3.
+
+Raw results are `work/conversation-eval/reply-candidate-concise-1791152221211.json`
+and `work/conversation-eval/reply-candidate-grounded-1791152311963.json`.
+Spending under the new USD 5 authorization is USD 0.05729850 (48 calls), leaving
+USD 4.94270150. Earlier approved-comparison spending was USD 0.05959125; the
+three initial wrong-model requests remain separately unpriced. No additional
+live requests are needed for the next scheduling reproduction.
+
+Selected-code verification: API typecheck passed, 771 unit tests passed with
+three paid benches skipped, and all 18 reply SQL tests passed on the disposable
+loopback database. The 24 focused prompt/provider tests also passed. Commit
+this M1 quality checkpoint separately from the next memory changes.
