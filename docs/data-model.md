@@ -98,8 +98,35 @@ on disk must not be the account's admin, however it is presented.
 A `conversation` belongs to one profile, outside the four memory layers. Its
 `conversation_messages` are ordered, immutable messages with explicit user or
 assistant authorship. Sending a message does not create an inspiration, signal,
-principle, feedback verdict or model job. Milestone 5 accepts only user messages;
-assistant generation is disabled and has a zero-call budget until milestone 6.
+principle or feedback verdict. Replies require `WAKA_CONVERSATION_REPLIES=1`;
+otherwise saving has a zero-call budget. When enabled, Send commits the user
+message and reply request in one transaction, so a lost response cannot strand
+the message between saving and enqueueing or duplicate it on replay.
+
+A conversation may start from an owned, currently readable Principle via
+`initial_principle_id`. This prioritizes the current wording in context without
+inventing a user message. Its profile-bearing foreign key clears only the source
+ID on deletion, preserving conversation history. Merely opening a conversation
+does not request a reply.
+
+Milestone 6 adds `conversation_reply_requests`, separate from user messages.
+One pending/running reply is allowed per conversation. An initial request or
+explicit retry compares the last request ID under the conversation lock: a
+replayed retry joins its successor instead of dispatching twice. Each attempt
+may dispatch to a provider at most once; ambiguous failures require a new,
+explicit retry, which may incur a new provider charge. Limits are three attempts
+per user message per hour and twenty provider dispatches per account per hour,
+with at most 1,200 output tokens per dispatch. Dispatch timestamps survive
+conversation deletion until profile erasure so deletion cannot reset the budget.
+
+Stop is a publication fence, not a promise to undo provider billing. New messages,
+memory changes, deletion and lost worker ownership prevent late publication.
+Replies cite numbered current sources with verified quotes; persisted reference
+metadata contains only source identity and a content/state hash. Historical
+assistant words whose references changed are labeled and excluded from future
+generation. They are conversation history, not new personal memory. Deleting
+the conversation erases those words and reference metadata. Source access is
+revalidated when opening a citation; no stale copied excerpt is served.
 
 Client-generated conversation/message IDs make retry idempotent. A replay with
 different content conflicts rather than overwriting words. Deleting a
@@ -202,7 +229,7 @@ independent repeated experiences.
 The approved later review/conversation/export contracts are detailed in
 [the personal capture contract](plans/2026-10-02-capture-foundation-contract.md).
 Review session storage/routes now implement the selection contract below;
-the conversation foundation is specified above; generated responses remain a later milestone. Review skipping is
+the opt-in conversation reply contract is specified above. Review skipping is
 session-local, a review selection is not a verdict on a principle, and multiple
 source references do not multiply one authored response. A selected principle
 may be explicitly exported as an image under that contract; this extends the

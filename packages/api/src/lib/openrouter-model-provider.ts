@@ -26,6 +26,8 @@ import {
   buildPrincipleRelationRequest,
   buildReflectionQuestionRequest,
   buildReviewQuestionRequest,
+  buildConversationReplyRequest,
+  parseConversationReply,
   buildReviewAnswerDerivationRequest,
   buildSignalExtractionRequest,
   buildSignalSupportRequest,
@@ -44,6 +46,7 @@ import {
 } from "../queue/gemini.js";
 import {
   DeclarationNotConsideredError,
+  CONVERSATION_REPLY_OUTPUT_TOKENS,
   MODEL_DECLINED,
   ModelDidNotAnswerError,
   type ModelProvider,
@@ -61,12 +64,12 @@ import {
 interface GeminiShapedSchema {
   type: string;
   description?: string;
-  enum?: string[];
+  enum?: readonly string[];
   nullable?: boolean;
   items?: GeminiShapedSchema;
   properties?: Record<string, GeminiShapedSchema>;
-  required?: string[];
-  anyOf?: GeminiShapedSchema[];
+  required?: readonly string[];
+  anyOf?: readonly GeminiShapedSchema[];
   minItems?: number;
   maxItems?: number;
   minimum?: number;
@@ -164,6 +167,12 @@ async function ask(
 export function createOpenRouterModelProvider(): ModelProvider {
   return {
     name: "openrouter",
+    async answerConversation(input){
+      const request=toChatRequest(buildConversationReplyRequest(input),modelFor('WAKA_MODEL_CHAT'),'conversation_reply');
+      request.max_tokens=CONVERSATION_REPLY_OUTPUT_TOKENS;
+      const payload=await callOpenRouter(request,'conversation reply');
+      if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('conversation reply');return parseConversationReply(payload,input);
+    },
     async deriveReviewAnswer(input){
       const payload=await ask(()=>buildReviewAnswerDerivationRequest(input),'review derivation','WAKA_MODEL_EXTRACT','review_derivation');
       if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('review derivation');return parseReviewAnswerDerivation(payload,input);

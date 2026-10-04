@@ -53,6 +53,12 @@ const chatReply = (content: string): Response =>
   );
 
 describe("the translation", () => {
+  it('bounds a conversation reply to one call and 1200 output tokens while validating its quote',async()=>{
+    fetchMock.mockResolvedValueOnce(chatReply(JSON.stringify({answer:'This is one possible guide, not a decision.',followUpQuestion:'What would help you compare the options?',citations:[{sourceNumber:1,quote:'Leave room for thought.'}]})));
+    const result=await createOpenRouterModelProvider().answerConversation({preferredLocale:'en-US',history:[{role:'user',content:'What could I consider?'}],sources:[{kind:'principle',text:'Leave room for thought.',state:'held',supportCurrent:true,truncated:false}]});
+    expect(result.citations).toHaveLength(1);expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request=JSON.parse(fetchMock.mock.calls[0][1].body);expect(request.max_tokens).toBe(1200);expect(request.reasoning).toEqual({enabled:false});
+  });
   it("carries a judge request losslessly onto the chat shape", () => {
     const request = buildSignalMatchJudgementRequest({
       preferredLocale: "en-US",

@@ -84,6 +84,7 @@ import { useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
 import { ConversationPanel } from '../components/ConversationPanel';
+import { ConversationStartButton } from '../components/ConversationStartButton';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
 import { ReviewEvidence } from '../components/ReviewEvidence';
@@ -12631,6 +12632,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           {pick === pr.id && !pDraft ? (
                             <div className="jar-ask jar-principle-actions">
                               {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:pr.id,sharePrinciple:true})}>{say('worldSharePrinciple')}</button>:null}
+                              {storageScope&&!offline?<ConversationStartButton key={`${storageScope.accountId}:${storageScope.profileId}:${pr.id}`} scope={storageScope} principleId={pr.id} locale={locale} onStarted={id=>viewNavigation.write({...EMPTY_VIEW,conversationId:id})}/>:null}
                               {pr.citedSignals.length > 0 ? (
                                 <>
                                   <button
@@ -14666,6 +14668,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'?<button type="button" className="jar-review-shortcut" hidden={Boolean(viewNavigation.view?.reviewId)||(!inField&&!inSky)} data-jar-chrome="1"
         onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
       {storageScope&&viewNavigation.view?.conversationId?<ConversationPanel key={`${storageScope.accountId}:${storageScope.profileId}:${viewNavigation.view.conversationId}`} scope={storageScope} id={viewNavigation.view.conversationId==='list'?null:viewNavigation.view.conversationId} locale={locale}
+        onOpenSource={(kind,id)=>viewNavigation.write(kind==='principle'?{...EMPTY_VIEW,section:'sky',principleId:id}:{...EMPTY_VIEW,section:'field',inspirationId:id})}
         onChoose={id=>viewNavigation.write({...EMPTY_VIEW,conversationId:id??'list'})} onClose={viewNavigation.closeConversation}/>:null}
       {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
         onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}

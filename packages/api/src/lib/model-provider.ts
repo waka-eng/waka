@@ -413,8 +413,19 @@ export interface ReviewAnswerDerivationResult {
   statements:Array<{statement:string;quote:string}>;
 }
 
+export interface ConversationReplyInput {
+  preferredLocale:SupportedLocale;
+  contextChanged?:boolean;
+  focusSourceNumber?:number;
+  history:Array<{role:'user'|'assistant';content:string}>;
+  sources:Array<{kind:'principle'|'top_of_mind_entry'|'inspiration';text:string;state?:string;rank?:number;locked?:boolean;supportCurrent?:boolean;truncated:boolean}>;
+}
+export const CONVERSATION_REPLY_OUTPUT_TOKENS=1200;
+export interface ConversationReplyResult {answer:string;followUpQuestion:string|null;citations:Array<{sourceNumber:number;quote:string}>}
+
 export interface ModelProvider {
   readonly name: string;
+  answerConversation(input:ConversationReplyInput):Promise<ConversationReplyResult>;
   askReflectionQuestion(input: ReflectionQuestionInput): Promise<ReflectionQuestionResult>;
   askReviewQuestion(input:ReviewQuestionInput):Promise<ReviewQuestionResult>;
   deriveReviewAnswer(input:ReviewAnswerDerivationInput):Promise<ReviewAnswerDerivationResult>;

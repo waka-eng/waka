@@ -16,6 +16,7 @@ const signalId = "00000000-0000-4000-8000-000000000101";
 function fakeProvider(): ModelProvider {
   return {
     name: "test-provider",
+    answerConversation:vi.fn(async()=>{throw new Error('Unexpected conversation call');}),
     deriveReviewAnswer:vi.fn(async()=>({assessments:[],statements:[]})),
     assessSignalSupport: vi.fn(async () => ({ assessments: [] })),
     askReflectionQuestion: vi.fn(async () => ({ question: "What did that change about your next step?" })),

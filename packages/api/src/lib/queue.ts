@@ -352,6 +352,7 @@ async function enqueueKeyedJob(input: {
     | "tend_signal_garden"
     | "generate_reflection_question"
     | "generate_review_question"
+    | "generate_conversation_reply"
     | "derive_review_answer";
   payload:
     | EnrichAttachmentPayload
@@ -363,6 +364,7 @@ async function enqueueKeyedJob(input: {
     | ReembedSignalPayload
     | GenerateReflectionQuestionPayload
     | GenerateReviewQuestionPayload
+    | {conversationId:string;replyRequestId:string}
     | {answerId:string;sessionId:string;signalIds?:string[]};
   idempotencyKey: string;
 }, transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult> {
@@ -691,6 +693,9 @@ export async function enqueueReflectionQuestion(
 }
 
 export function reviewQuestionJobPrefix(profileId:string,sessionId:string,afterAnswerId:string|null,contextHash:string){return `generate_review_question:${profileId}:${sessionId}:${afterAnswerId??'initial'}:${contextHash}:`;}
+export async function enqueueConversationReply(profileId:string,conversationId:string,replyRequestId:string,transaction:Pick<ReturnType<typeof getDb>,'execute'>){
+  return enqueueKeyedJob({profileId,type:'generate_conversation_reply',payload:{conversationId,replyRequestId},idempotencyKey:`generate_conversation_reply:${profileId}:${replyRequestId}`},transaction);
+}
 export async function enqueueReviewAnswerDerivation(profileId:string,sessionId:string,answerId:string,transaction:Pick<ReturnType<typeof getDb>,'execute'>){
   const [row]=await transaction.execute<{jobId:string;requestVersion:string;created:boolean}>(sql`
     SELECT job_id AS "jobId",request_version::text AS "requestVersion",created
@@ -1041,6 +1046,12 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       const hints=(job.payload as {signalIds?:unknown}).signalIds;
       await deriveSignalsForReviewAnswer({profileId:job.profileId,answerId,sessionId,signalIds:Array.isArray(hints)?hints.filter((id):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)):[]},{job,beforeCommit:tx=>assertBackgroundJobOwnership(tx,job,true)});
       return;
+    }
+    case 'generate_conversation_reply': {
+      const conversationId=readString(job.payload,'conversationId'),replyRequestId=readString(job.payload,'replyRequestId');
+      if(!conversationId||!replyRequestId)return dropPoisonPayload(job);
+      const {processConversationReply}=await import('./conversation-replies.js');
+      await processConversationReply(getDb(),job,conversationId,replyRequestId,tx=>assertBackgroundJobOwnership(tx,job,true));return;
     }
     case 'generate_review_question': {
       const sessionId=readString(job.payload,'sessionId');
@@ -1464,8 +1475,9 @@ async function readAccountModelUsage(
     SELECT
       count(*)::int AS started,min(meter.started_at) AS oldest
     FROM (
-      SELECT job.profile_id,job.started_at FROM background_jobs job WHERE job.type::text<>'derive_review_answer'
+      SELECT job.profile_id,job.started_at FROM background_jobs job WHERE job.type::text NOT IN ('derive_review_answer','generate_conversation_reply')
       UNION ALL SELECT r.profile_id,r.started_at FROM review_model_runs r
+      UNION ALL SELECT c.profile_id,c.dispatched_at FROM conversation_reply_requests c WHERE c.dispatched_at IS NOT NULL
     ) meter JOIN profiles AS profile ON profile.id=meter.profile_id
     WHERE profile.account_id=${accountId}::uuid AND meter.started_at>=${since.toISOString()}::timestamptz
   `);

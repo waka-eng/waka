@@ -52,6 +52,7 @@ export const backgroundJobTypeValues = [
   "tend_signal_garden",
   "generate_reflection_question",
   "generate_review_question",
+  "generate_conversation_reply",
   "derive_review_answer",
 ] as const;
 export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
@@ -154,6 +155,7 @@ export type BackgroundJobPayload =
   | GenerateReflectionQuestionPayload
   | GenerateReviewQuestionPayload
   | DeriveReviewAnswerPayload
+  | {conversationId:string;replyRequestId:string}
   | {reviewContextInvalidated:true};
 
 /** A result is not available until the final requested pass has completed. */
