@@ -1,5 +1,6 @@
 /** Real SQL proves room history, privacy and queue identity. Only the model is scripted. */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {randomUUID} from 'node:crypto';
 import { Hono } from "hono";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { createGroupForProfile } from "../routes/groups-membership.js";
@@ -11,6 +12,9 @@ import { requestPrincipleRefresh, loadPrincipleStatus, principleMaterialKey } fr
 import type { ModelProvider } from "./model-provider.js";
 import { reviewSignalSupport } from './signal-support-review.js';
 import { applySignalSupportReview } from './signal-support-apply.js';
+import {createReviewSession} from './review-sessions.js';
+import {loadReviewAnswerMaterial} from './review-answer-material.js';
+import {writeReviewEvidence} from './review-evidence.js';
 
 let t: TestDatabase;
 let owner: string;
@@ -72,6 +76,53 @@ beforeAll(async () => {
 afterAll(async () => { await t?.cleanup(); });
 
 describe("principles across personal and room profiles", () => {
+  it('changes work identity after a source edit is revalidated without changing its capture date',async()=>{
+    const profileId=await person();
+    await material(profileId,[profileId]);
+    const before=principleMaterialKey(await loadPrincipleMaterial(t.db as never,profileId));
+    const [source]=await t.sql`SELECT id,created_at FROM inspirations WHERE profile_id=${profileId} ORDER BY id LIMIT 1`;
+    await t.sql`UPDATE inspirations SET text='The edited wording now qualifies the same pattern.' WHERE id=${source.id}`;
+    // Simulate the committed support-review result, not an external model call.
+    await t.sql`UPDATE signal_evidence e SET material_revision=r.personal_revision
+      FROM inspiration_revisions r WHERE e.inspiration_id=r.inspiration_id AND e.owner_profile_id=r.profile_id
+      AND e.profile_id=${profileId} AND e.inspiration_id=${source.id}`;
+    const after=await loadPrincipleMaterial(t.db as never,profileId);
+    expect(after.eligibility.eligible).toBe(true);
+    expect(principleMaterialKey(after)).not.toBe(before);
+    const afterEdit=principleMaterialKey(after);
+    await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer)
+      VALUES(${profileId},${source.id},'What matters here?','I want to leave space for exceptions.')`;
+    await t.sql`UPDATE signal_evidence e SET material_revision=r.personal_revision
+      FROM inspiration_revisions r WHERE e.inspiration_id=r.inspiration_id AND e.owner_profile_id=r.profile_id
+      AND e.profile_id=${profileId} AND e.inspiration_id=${source.id}`;
+    expect(principleMaterialKey(await loadPrincipleMaterial(t.db as never,profileId))).not.toBe(afterEdit);
+    const [unchangedDate]=await t.sql`SELECT created_at FROM inspirations WHERE id=${source.id}`;
+    expect(unchangedDate.created_at).toEqual(source.created_at);
+  });
+  it('fingerprints an edited review answer but not a repeated support check',async()=>{
+    const profileId=await person();
+    const signalIds=await material(profileId,[profileId]);
+    const [source]=await t.sql`SELECT inspiration_id FROM signal_evidence WHERE signal_id=${signalIds[0]!} ORDER BY inspiration_id LIMIT 1`;
+    const session=(await createReviewSession(t.db as never,profileId,{id:randomUUID(),inspirationIds:[source.inspiration_id]}))!;
+    const answerId=randomUUID();
+    await t.sql`INSERT INTO review_answers(id,profile_id,session_id,question_job_id,input_hash,context_hash,question,answer,source_count)
+      VALUES(${answerId},${profileId},${session.id},${randomUUID()},'fixture','fixture','What stays with you?','I favor small steps.',1)`;
+    await t.sql`INSERT INTO review_answer_sources(profile_id,session_id,answer_id,inspiration_id,source_revision,referenced)
+      VALUES(${profileId},${session.id},${answerId},${source.inspiration_id},1,true)`;
+    const record=async()=>{
+      const current=await loadReviewAnswerMaterial(t.db as never,profileId,answerId);
+      expect(current).not.toBeNull();
+      await t.db.transaction(tx=>writeReviewEvidence(tx as never,current!,signalIds[0]!));
+    };
+    await record();
+    const before=principleMaterialKey(await loadPrincipleMaterial(t.db as never,profileId));
+    await t.sql`UPDATE review_answers SET answer='I favor small steps except when a deadline is fixed.' WHERE id=${answerId}`;
+    await record();
+    const after=principleMaterialKey(await loadPrincipleMaterial(t.db as never,profileId));
+    expect(after).not.toBe(before);
+    await record();
+    expect(principleMaterialKey(await loadPrincipleMaterial(t.db as never,profileId))).toBe(after);
+  });
   it('does not buy another principle pass for an unchanged reading audit version',async()=>{
     const profileId=await person();
     const signalIds=await material(profileId,[profileId]);

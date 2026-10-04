@@ -1,6 +1,6 @@
 # Chat home and memory improvements
 
-Status: in progress — chat quality gate passed; memory milestone next (2026-10-04).
+Status: in progress — chat quality gate passed; memory reliability underway (2026-10-04).
 Branch: `codex/chat-home-memory`, starting from `84cba13`.
 
 ## Objective
@@ -414,3 +414,35 @@ comparison work, metadata traces, generation-document reconciliation and the
 and large-profile query costs still need review; this checkpoint does not claim
 every kind of evidence edit is already represented by the old timestamp key.
 The 39 focused Principle arithmetic/prompt unit tests also pass.
+
+### Milestone 3 current evidence fingerprint checkpoint
+
+A second SQL reproduction failed before the fix: editing an inspiration and
+revalidating its support left the Principle key identical because capture dates
+were unchanged. Personal material now fingerprints current owned inspiration
+revisions and current review-answer material identities, filtered through the
+authorized witness set. Reflection and media changes participate through the
+personal inspiration revision. No raw text enters the key; support-check times
+are excluded. Witness membership lookup is linear rather than scanning every
+witness for each identity.
+
+Tests prove that revalidated text edits, a new reflection, and an edited review
+answer change the key while preserving capture dates. Repeating the exact
+review support check leaves it unchanged. The earlier no-change reading test
+continues to retain one job; locale and meaningful reading updates still
+invalidate it. Personal keys now use `principles-v3`; group keys retain their
+existing policy and do not incorporate personal review material. This can
+cause one fresh personal pass on the next ordinary scheduling event for an
+eligible profile; it does not regenerate through GETs or perform data repair.
+
+Verification: ten Principle SQL tests, 12 review-evidence SQL tests and 12
+review-derivation SQL tests passed (34 total). All 771 API unit tests passed,
+three paid benches skipped; API typecheck and diff whitespace check passed.
+The new review fixture initially passed an object to a positional-argument
+loader; that fixture call was corrected before the full tests passed.
+
+Generation documentation now describes the already-connected review producer,
+its bounded support reassessment, discovery and source/publication checks,
+rather than claiming those parts remain unimplemented. Retrieval improvements,
+large-profile limits, traces and calibration are still open. No LLM requests
+were made in this checkpoint; spend under the new cap remains USD 0.05729850.

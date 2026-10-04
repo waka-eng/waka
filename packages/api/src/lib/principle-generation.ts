@@ -18,7 +18,7 @@
 
 import { and, eq, getTableColumns, inArray, isNotNull, or, sql } from "drizzle-orm";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
 import { personalEntrySupportCurrent, personalPrincipleSupportCurrent, personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
 import { citationStatementCurrent, evidenceSupportCurrent, loadSignalStatementRevisions } from './signal-support-state.js';
@@ -99,6 +99,8 @@ export interface CitationEvidence {
   evidenceAt: Date[];
   /** Distinct meaningful reading versions; no-change audits share their anchor. */
   tomVersionIds: string[];
+  /** Current evidence identity; dates alone cannot distinguish edited sources. */
+  supportKey?: string;
 }
 
 export interface EligibilityVerdict {
@@ -214,6 +216,38 @@ async function loadCitationEvidence(
   for(const row of evidenceRows){const list=witnesses.get(row.signalId)??[];list.push({createdAt:row.createdAt,source:row.source,
     lineage:{kind:'inspiration',unitId:row.inspirationId,originIds:[row.inspirationId]}});witnesses.set(row.signalId,list);}
   for(const [id,rows] of witnesses)out.get(id)!.evidenceAt=selectIndependentEvidence(rows).map(row=>row.createdAt);
+
+  if(!profile?.groupId){
+    // Metadata only. Personal revisions include authorized reflection/media
+    // edits; review material hashes include the answer and referenced sources.
+    // Neither a support check timestamp nor an audit version belongs here.
+    const identities=await db.execute<{signalId:string;kind:string;unitId:string;sourceId:string;revision:string}>(sql`
+      SELECT e.signal_id AS "signalId",'inspiration' AS kind,e.inspiration_id::text AS "unitId",
+        e.inspiration_id::text AS "sourceId",r.personal_revision::text AS revision
+      FROM signal_evidence e
+      JOIN signals s ON s.id=e.signal_id AND s.profile_id=e.profile_id
+      JOIN inspiration_revisions r ON r.inspiration_id=e.inspiration_id AND r.profile_id=e.owner_profile_id
+      WHERE e.profile_id=${profileId}::uuid AND e.owner_profile_id=${profileId}::uuid
+        AND e.signal_id IN (${sql.join(signalIds.map(id=>sql`${id}::uuid`),sql`,`)})
+        AND ${evidenceSupportCurrent('e','s')}
+      UNION ALL
+      SELECT e.signal_id AS "signalId",'review' AS kind,e.session_id::text AS "unitId",
+        e.answer_id::text AS "sourceId",r.material_hash AS revision
+      FROM signal_review_evidence e
+      JOIN signals s ON s.id=e.signal_id AND s.profile_id=e.profile_id
+      JOIN review_signal_support r ON r.profile_id=e.profile_id AND r.signal_id=e.signal_id AND r.answer_id=e.answer_id
+      WHERE e.profile_id=${profileId}::uuid
+        AND e.signal_id IN (${sql.join(signalIds.map(id=>sql`${id}::uuid`),sql`,`)})
+        AND review_evidence_current(e.profile_id,e.signal_id,e.answer_id,s.statement_revision) IS TRUE`);
+    const currentUnits=new Map([...witnesses].map(([id,rows])=>[id,new Set(rows.map(row=>`${row.lineage!.kind}:${row.lineage!.unitId}`))]));
+    const keys=new Map<string,Set<string>>();
+    for(const row of identities){
+      if(!currentUnits.get(row.signalId)?.has(`${row.kind}:${row.unitId}`))continue;
+      const values=keys.get(row.signalId)??new Set<string>();
+      values.add(JSON.stringify([row.kind,row.sourceId,row.revision]));keys.set(row.signalId,values);
+    }
+    for(const [id,bucket] of out)bucket.supportKey=createHash('sha256').update(JSON.stringify([...(keys.get(id)??[])].sort())).digest('hex');
+  }
 
   const tomRows = await db
     .select({ signalId: topOfMindEntrySignals.signalId,

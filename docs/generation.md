@@ -286,22 +286,27 @@ Confidence (0–100) is a pure function of the evidence set and the clock —
 Identified provenance first passes through `selectIndependentEvidence` in
 `packages/api/src/lib/signal-lifecycle.ts`. Direct originals take priority;
 each counted unit needs its own available source origin. Review-session units
-are designed to group repeated replies rather than count each citation as an
+group repeated replies rather than count each citation as an
 experience. Dates belong to the supporting unit for its matched origin, not
 older context or a later retry. Anonymous legacy arithmetic inputs remain
 supported on their own but cannot be mixed with identified units. See the
 independent-support contract in [data-model.md](data-model.md).
 
-This is not yet an enabled review-to-signal producer. Migration 0057 adds owned
-review support references and assessment-time source revisions. The common
+Review-to-signal processing is connected through the durable
+`derive_review_answer` queue job and `review-answer-derivation.ts`. It first
+reassesses existing support in bounded batches, then discovers new statements
+from the saved human answer. Current-material and generation checks fence the
+writes; a failed discovery does not undo an already committed withdrawal.
+Review processing records its downstream reading request and result for the UI.
+Migration 0057 supplies owned support references and source revisions. The common
 `signal_support_edges` query includes only current witnesses in counting, while
 reporting stale relationships as pending rather than unsupported. Personal
 readers recognize raw and review support; room readers still use public raw
 material only. The database promotion guard uses the same maximum-matching
 count, stops once three witnesses are proven, and cannot count a stale material
-or statement revision as a new promotion. Extraction, reassessment, durable
-work scheduling and UI provenance remain to be connected before review support
-is automatically produced. No tuning constant changed.
+or statement revision as a new promotion. The answer stays a review answer;
+processing does not copy it into multiple inspirations. Room readers still
+exclude personal review evidence. No numerical promotion threshold changed.
 
 ```
 support = min(1, n / 6)                 n = evidence count; 6 = CONFIDENCE_SATURATION_EVIDENCE
@@ -881,7 +886,13 @@ preceding meaningful version for Principle appearances and work identity.
 Support is still checked on the actual cited row, so refreshed citations do
 not disappear merely because the reading's words stayed the same. Meaningful
 reading changes, signal wording/evidence timestamps and locale changes still
-participate in the fingerprint; no historical rows are rewritten.
+participate in the fingerprint; no historical rows are rewritten. Personal
+fingerprints also include current inspiration revisions and validated review
+material identities. These cover reflection/media edits and corrected review
+answers even when capture dates remain unchanged. Repeated support-check
+timestamps are excluded. This strengthens personal work identity to
+`principles-v3`; an eligible profile can get one fresh pass under the new key
+when the normal scheduling path next runs, not from a GET or a data repair.
 Failed jobs retry only within the worker budget or by an explicit retry.
 Each request evaluates the active profile: one cheap SQL check for clusters
 newly past the bar, and only then model calls (distill at most
