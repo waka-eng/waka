@@ -121,6 +121,17 @@ it.each(['before','during'] as const)('fences memory changes %s dispatch and ret
   if(timing==='before')await change();else during=change;
   await processBackgroundJob(await claim());expect((await f.state()).phase).toBe('stale');expect(answer).toHaveBeenCalledTimes(timing==='before'?0:1);expect(await t.sql`SELECT id FROM conversation_messages`).toHaveLength(1);
 });
+it('refuses a late reply after an owned reflection changes during generation',async()=>{
+  const f=await fixture();
+  const [reflection]=await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer)
+    VALUES(${f.profileId},${f.sourceId},'What mattered?','Quiet mornings give me room to experiment.') RETURNING id`;
+  await f.request();
+  during=async()=>{await t.sql`UPDATE reflections SET answer='I changed my view on this.' WHERE id=${reflection.id}`;};
+  await processBackgroundJob(await claim());
+  expect((await f.state()).phase).toBe('stale');expect(answer).toHaveBeenCalledTimes(1);
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE role='assistant'`).toHaveLength(0);
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE role='user'`).toHaveLength(1);
+});
 it('deletion during a call erases content but retains its dispatch budget and refuses resurrection',async()=>{
   const f=await fixture();await f.request();during=async()=>{expect((await f.app.request(`/conversations/${f.id}`,{method:'DELETE'})).status).toBe(200);};
   await processBackgroundJob(await claim());expect(await t.sql`SELECT id FROM conversation_messages`).toHaveLength(0);

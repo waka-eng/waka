@@ -142,7 +142,17 @@ Messages reference their conversation with a profile-bearing foreign key.
 The initial limits are 100 active conversations per profile, 200 messages per
 conversation and 4,000 characters per user message. Context reads are bounded to
 16,000 text characters and freshly select only that profile's current readable
-Principles, live Top of mind and keyword-matched original inspirations. Ranking,
+Principles, live Top of mind and keyword-matched owned inspiration material.
+Material includes saved reflection answers and ready link/image/audio text;
+an audio correction replaces the original transcript rather than adding a
+second account of it. Excerpts distinguish human reflections from generated
+descriptions. At most six inspiration candidates are selected, with 1,600
+characters per source and 4,000 inspiration characters in the reply context.
+The bounded reader includes at most three reflection and three attachment
+passages per source and marks omissions. Short continuation queries may reuse
+the preceding substantive human topic, never an assistant's unadopted claim.
+New citation identities include the personal material revision; old plain-text
+citations retain their original text-only identity and offsets. Ranking,
 contested state, human wording and unconfirmed support stay explicit; stale
 machine claims and deleted originals are not retrieved. Context is never a
 cached copy in the conversation and must be rebuilt before future generation.

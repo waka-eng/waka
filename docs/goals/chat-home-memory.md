@@ -446,3 +446,40 @@ its bounded support reassessment, discovery and source/publication checks,
 rather than claiming those parts remain unimplemented. Retrieval improvements,
 large-profile limits, traces and calibration are still open. No LLM requests
 were made in this checkpoint; spend under the new cap remains USD 0.05729850.
+
+### Milestone 3 owned material retrieval foundation
+
+The baseline SQL tests returned zero sources for both a one-character Korean
+concept saved in a reflection and a word present only in a corrected transcript.
+Both now retrieve the owned material. Keyword matching includes saved human
+reflection answers and ready effective attachment text; a transcript correction
+replaces the old machine text. Multi-material excerpts label their provenance.
+Plain-text-only sources keep their text unchanged, and legacy citations still
+validate their original hashes and offsets without being silently upgraded to
+enriched text.
+
+Selection is bounded to six owned inspirations and ordered by matched-term
+count, then recency and ID. SQL bounds the raw text and child snippets; at most
+three reflections and three attachments are represented (one extra bounded row
+detects omission). Every source is at most 1,600 characters and the inspiration
+share of reply context remains 4,000 characters. Citation hashes use the current
+personal revision and deterministic excerpt, so reopening does not depend on a
+later query and edited reflections/transcripts become unavailable immediately.
+Short English/Korean continuation queries may include the previous substantive
+human message, with a 1,000-character query ceiling; assistant claims are not
+used as retrieval authority. This heuristic is not a semantic-retrieval claim.
+
+Verification: five material SQL tests, 19 reply SQL tests and 11 conversation
+SQL tests passed (35 total), including foreign-profile refusal, corrected audio,
+ready image/link provenance, unavailable-text exclusion, legacy citation
+compatibility, bounds and late-publication refusal after a reflection edit.
+All 774 API unit tests passed, three paid benches skipped; API typecheck passed.
+The first compatibility run caught a label prepended to plain-text citations;
+raw-only excerpts were corrected instead of weakening that assertion. Typecheck
+required an explicit common nullable source return type, and vocabulary checks
+required renaming a new SQL helper. Those issues are resolved.
+
+No external calls are made by the reader or while its transaction is held.
+Semantic query embeddings, bounded hybrid ranking/diversity and their fixed
+baseline comparison remain open; this is their material/ownership foundation,
+not a substitute for that remaining work. No paid calls or deployment occurred.

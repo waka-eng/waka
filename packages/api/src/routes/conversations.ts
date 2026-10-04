@@ -7,6 +7,7 @@ import {requireAuth,humanSessionsOnly,type AuthEnv} from '../lib/middleware.js';
 import {resolveTargetProfile} from './inspirations-tenancy.js';
 import {profileQuerySchema} from './inspirations-validation.js';
 import {CONVERSATION_LIMITS,conversationCapabilities,conversationRepliesEnabled,readConversationContext} from '../lib/conversation-context.js';
+import {conversationSearchQuery} from '../lib/conversation-material.js';
 import {ConversationReplyError,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
 import {wakeCommittedBackgroundJobs} from '../lib/queue.js';
 import {personalPrincipleReadable} from '../lib/personal-output.js';
@@ -94,7 +95,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
   });
   routes.get('/:id/context',async c=>c.json(await database().transaction(async tx=>{
     const profileId=c.get('conversationProfileId'),row=await readConversation(tx,profileId,c.req.param('id'));
-    return readConversationContext(tx,profileId,[...row.messages].reverse().find(message=>message.role==='user')?.content??'',undefined,row.initialPrincipleId);
+    return readConversationContext(tx,profileId,conversationSearchQuery(row.messages),undefined,row.initialPrincipleId);
   },{isolationLevel:'repeatable read',accessMode:'read only'})));
   routes.post('/:id/messages',async c=>{
     const input=messageInput.safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Write a message of up to 4,000 characters.'},400);

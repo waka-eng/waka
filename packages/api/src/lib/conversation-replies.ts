@@ -5,6 +5,7 @@ import type {getDb} from './db.js';
 import {CONVERSATION_LIMITS,conversationHash,conversationRepliesEnabled,currentConversationReferences,readConversationContext} from './conversation-context.js';
 import {getDefaultModelProvider,type ConversationReplyInput} from './model-provider.js';
 import {parseConversationReply} from '../queue/gemini.js';
+import {conversationSearchQuery} from './conversation-material.js';
 import {enqueueConversationReply,STALE_LOCK_SECONDS,wakeCommittedBackgroundJobs} from './queue.js';
 type Db=ReturnType<typeof getDb>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -58,7 +59,7 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     if(characters+content.length>8000){contextChanged=true;break;}
     history.unshift({role:row.role,content,...(row.correctsMessageId?{correction:true}:{})});characters+=content.length;
   }
-  const context=await readConversationContext(db,profileId,anchor.content,undefined,conversation.initialPrincipleId),sources=[...context.principles,...context.reading,...context.inspirations];
+  const context=await readConversationContext(db,profileId,conversationSearchQuery(history),undefined,conversation.initialPrincipleId),sources=[...context.principles,...context.reading,...context.inspirations];
   const [profile]=await db.select({locale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId));
   const focusIndex=sources.findIndex(source=>source.kind==='principle'&&source.id===conversation.initialPrincipleId);
   const input:ConversationReplyInput={preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:sources.map(({kind,text,recordedAt,state,rank,locked,supportCurrent,truncated})=>({kind,text,...(recordedAt?{recordedAt}:{}),state,rank,locked,supportCurrent,truncated}))};
