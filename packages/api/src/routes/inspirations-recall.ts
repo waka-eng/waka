@@ -19,6 +19,7 @@ import type { AuthEnv } from "../lib/middleware.js";
 import { validationDetails } from "../lib/validation.js";
 import { effectiveAttachmentStatus, effectiveAttachmentText } from '../lib/attachment-material.js';
 import { attachmentSelection, serializeAttachment } from "./attachments.js";
+import {readConversationOrigin} from '../lib/conversation-capture.js';
 import {
   attachmentLabel,
   inspirationSelection,
@@ -362,10 +363,10 @@ export function registerRecallRoutes(
 
     return c.json(
       {
-        inspiration: serializeInspirationDetail(row, {
+        inspiration: {...serializeInspirationDetail(row, {
           attachments: attachmentRows.map(serializeAttachment),
           reflections: reflectionRows,
-        }),
+        }),conversationOrigin:await readConversationOrigin(db,target.profileId,row.id)},
       },
       200,
     );

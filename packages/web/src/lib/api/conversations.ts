@@ -1,6 +1,6 @@
 import {ApiError,apiPath,getJson,postJson,deleteJson} from './http';
 export type ConversationSourceKind='principle'|'top_of_mind_entry'|'inspiration';
-export interface ApiConversationMessage{id:string;profileId:string;conversationId:string;position:number;role:'user'|'assistant';content:string;createdAt:string;followUpQuestion?:string|null;memoryChanged?:boolean;replyRequestId?:string|null;citations?:Array<{index:number;kind:ConversationSourceKind;id:string;available:boolean}>}
+export interface ApiConversationMessage{id:string;profileId:string;conversationId:string;position:number;role:'user'|'assistant';content:string;createdAt:string;savedInspirationIds?:string[];followUpQuestion?:string|null;memoryChanged?:boolean;replyRequestId?:string|null;citations?:Array<{index:number;kind:ConversationSourceKind;id:string;available:boolean}>}
 export interface ApiConversation{id:string;profileId:string;revision:number;createdAt:string;updatedAt:string;messages:ApiConversationMessage[];generationEnabled?:boolean;initialPrinciple?:{id:string;statement:string;state:string}|null}
 export interface ConversationSummary{id:string;profileId:string;revision:number;updatedAt:string;preview:string}
 export interface ConversationContext{profileId:string;generationEnabled:boolean;principles:Array<{id:string;text:string;state:string;supportCurrent:boolean;truncated:boolean}>;reading:Array<{id:string;text:string;supportCurrent:boolean;truncated:boolean}>;inspirations:Array<{id:string;text:string;truncated:boolean}>}

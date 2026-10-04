@@ -1,7 +1,7 @@
 # Personal experience delivery
 
-Status: in progress (2026-10-03), M6-A and M6-B passed their local gates. The owner requested merging all current work to dev and laying out the remaining milestones. M1–M5 were merged through PR 337. Replies remain off by default; merging does not complete the M8 release gate. M7/M8 and physical-device follow-up remain, with no automatic continuation into the next milestone.
-Branch: `codex/avatar-grounded-replies` (M6 delivery to dev).
+Status: in progress (2026-10-03), the owner requested the next two checkpoints, M7-A and M7-B. M6 is merged to dev through PR 338. M7-A passed locally; M7-B is next within this request. Replies remain off by default. M8 and physical-device follow-up are outside this run.
+Branch: `codex/conversation-thoughts` (local M7-A/M7-B work).
 
 ## Objective
 
@@ -465,3 +465,15 @@ The isolated browser walkthrough verified Principle entry, Send, citations and o
 Evidence: [desktop changed-memory state](../craft/evidence/personal-capture/conversation-m6-desktop.png), [mobile conversation](../craft/evidence/personal-capture/conversation-m6-mobile.png), [empty-memory conversation](../craft/evidence/personal-capture/conversation-m6-empty.png). Six synthetic fixture calls exercised UI/lifecycle behavior; no additional paid calls were made in M6-B. M6-A's twelve-call narrow Gemini evaluation remains the only live quality evidence, not M8's full matrix.
 
 Verdict: M6-A/B and V01/V03/R02 pass within the agreed web scope; physical-device testing remains deferred. The current release includes migrations 0061/0062 with replies off by default. The normal dev workflow checks configured database separation, migrates, then deploys. Do not roll migrations back destructively: stop enabling new replies and forward-repair schema/data if needed. M8-B must wire and verify the opt-in setting for both API and queue worker before live replies are enabled, then verify the complete Avatar flow. M7-A is the next separately requested checkpoint. Older unrelated archive branches/stashes remain preserved and are not restored into this release.
+
+### 2026 10 03 milestone 7A selected thoughts
+
+Added per-message Keep a thought and Make it my own actions. The first opens editable user wording; the second starts an empty takeaway and requires explicit adoption. Neither copies an entire conversation or turns an untouched AI reply into evidence. The final text saves privately through the existing durable capture receipt and transactional learning outbox. Conversation-specific pending journals are separate from the main capture composer; scoped draft writers preserve reloads, other tabs and account boundaries. Saved thoughts open their actual inspiration and update the field list.
+
+Migration 0063 adds tenant-bearing inspiration provenance with user/adopted authorship, included in detail and export. Deleting the chat clears its source link but preserves the deliberately saved inspiration and attribution. Deleting that inspiration cascades provenance and keeps the normal anti-resurrection save receipt. Original messages and Principles are untouched.
+
+Checks: full web 667/667 and API unit 756/756 (three paid benches skipped); subsequent UI callback changes passed 19 focused cases, typecheck and build. Final local SQL 28/28 covers selected capture, ordinary bundles, conversations, export and erasure. Both typechecks and migration consistency pass. Early failures were missing view-model provenance typing and untokenized CSS sizes; both were corrected, with the existing gates retained. The test header now names its actual mocked API boundary.
+
+Real isolated browser: edited one message down to a sentence, reloaded, then lost the successful save response; one inspiration and receipt resulted. An assistant takeaway started blank, required rewriting and confirmation, then opened with Your takeaway from WAKA attribution. Final fixture counts: seed plus two private inspirations, two save receipts, and the original two chat messages unchanged. One synthetic reply call, zero paid calls. At 390×844 the editor measured 16px with no horizontal overflow; [mobile save preview](../craft/evidence/personal-capture/conversation-thought-mobile.png). This is not a real-device keyboard claim.
+
+M7-A passes; M7-B still must implement explicit correction and version-safe Principle updates. V04 remains unchecked until both checkpoints pass. No remote push, deployment, production configuration or real-account data changes occurred in this checkpoint.

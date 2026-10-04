@@ -1,7 +1,7 @@
 import {Hono} from 'hono';
 import {z} from 'zod';
 import {and,asc,desc,eq,isNull,sql} from 'drizzle-orm';
-import {conversationMessages,conversationReplyRequests,conversations,principles,profiles} from '../db/index.js';
+import {conversationMessages,conversationReplyRequests,conversations,inspirationConversationOrigins,principles,profiles} from '../db/index.js';
 import {getDb} from '../lib/db.js';
 import {requireAuth,humanSessionsOnly,type AuthEnv} from '../lib/middleware.js';
 import {resolveTargetProfile} from './inspirations-tenancy.js';
@@ -25,7 +25,9 @@ async function readConversation(db:Reader,profileId:string,id:string){
   const messages=await db.select().from(conversationMessages).where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id))).orderBy(asc(conversationMessages.position)).limit(CONVERSATION_LIMITS.messages);
   const [initialPrinciple]=row.initialPrincipleId?await db.select({id:principles.id,statement:principles.statement,state:principles.state}).from(principles)
     .where(and(eq(principles.profileId,profileId),eq(principles.id,row.initialPrincipleId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS))):[];
-  return {...row,initialPrinciple:initialPrinciple??null,messages:await projectConversationMessages(db,profileId,id,messages)};
+  const saved=await db.select({messageId:inspirationConversationOrigins.messageId,inspirationId:inspirationConversationOrigins.inspirationId}).from(inspirationConversationOrigins)
+    .where(and(eq(inspirationConversationOrigins.profileId,profileId),eq(inspirationConversationOrigins.conversationId,id)));
+  return {...row,initialPrinciple:initialPrinciple??null,messages:(await projectConversationMessages(db,profileId,id,messages)).map(message=>({...message,savedInspirationIds:saved.filter(item=>item.messageId===message.id).map(item=>item.inspirationId)}))};
 }
 
 

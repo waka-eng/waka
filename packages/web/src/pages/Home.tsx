@@ -13669,6 +13669,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               apparatus: it made a person ask what each list was instead of
               reading what they saved. */}
 
+          {panelCanReflect&&!panelIsGroup&&panel.detail?.conversationOrigin?<p className="jar-review-context">{say(panel.detail.conversationOrigin.authorship==='adopted'?'worldChatAdoptedOrigin':'worldChatUserOrigin')}</p>:null}
           {reflectOpen && panelCanReflect && !panel.detail ? <p role="status">{say('worldOpeningAttachment')}</p> : null}
           {reflectOpen && panelCanReflect && panel.detail && (panelBall?.sigId ?? panelId) ? (
             <ReflectionFlow
@@ -14668,6 +14669,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'?<button type="button" className="jar-review-shortcut" hidden={Boolean(viewNavigation.view?.reviewId)||(!inField&&!inSky)} data-jar-chrome="1"
         onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
       {storageScope&&viewNavigation.view?.conversationId?<ConversationPanel key={`${storageScope.accountId}:${storageScope.profileId}:${viewNavigation.view.conversationId}`} scope={storageScope} id={viewNavigation.view.conversationId==='list'?null:viewNavigation.view.conversationId} locale={locale}
+        onInspirationSaved={row=>{if(row.profileId!==storageScope.profileId)return;const detail=toInspirationDetail(row);detailsRef.current.set(row.id,detail);const revision=++sourceListMutationRef.current;
+          setInspirations(previous=>previous?.some(item=>item.id===row.id)?previous.map(item=>item.id===row.id?detail:item):[...(previous??[]),detail]);
+          void loadInspirations(storageScope.profileId).then(field=>{if(readingMountedRef.current&&sourceListMutationRef.current===revision){setInspirations(field.inspirations);setFieldBeyond(beyondOf(field));}}).catch(()=>undefined);
+          if(row.processing)sourceProcessing.track(row.id,row.processing);}}
         onOpenSource={(kind,id)=>viewNavigation.write(kind==='principle'?{...EMPTY_VIEW,section:'sky',principleId:id}:{...EMPTY_VIEW,section:'field',inspirationId:id})}
         onChoose={id=>viewNavigation.write({...EMPTY_VIEW,conversationId:id??'list'})} onClose={viewNavigation.closeConversation}/>:null}
       {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}

@@ -4,10 +4,12 @@ import type {ProfileStorageScope} from '../lib/profile-storage';
 import {startConversation} from '../lib/conversation-start';
 import {useConversationReply} from '../lib/use-conversation-reply';
 import {DialogSurface} from './DialogSurface';
+import {ConversationThought} from './ConversationThought';
+import type {ApiInspiration} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
 import {readConversationDrafts,storeConversationDraft,clearConversationDraft,clearConversationDrafts,type ConversationDraft as Draft,type StoredConversationDraft} from '../lib/conversation-drafts';
 
-export function ConversationPanel({scope,id,locale,onChoose,onClose,onOpenSource}:{scope:ProfileStorageScope;id:string|null;locale:SupportedLocale;onChoose:(id:string|null)=>void;onClose:()=>void;onOpenSource?:(kind:ConversationSourceKind,id:string)=>void}){
+export function ConversationPanel({scope,id,locale,onChoose,onClose,onOpenSource,onInspirationSaved}:{scope:ProfileStorageScope;id:string|null;locale:SupportedLocale;onChoose:(id:string|null)=>void;onClose:()=>void;onOpenSource?:(kind:ConversationSourceKind,id:string)=>void;onInspirationSaved?:(row:ApiInspiration)=>void}){
   const [rows,setRows]=useState<ConversationSummary[]>([]),[conversation,setConversation]=useState<ApiConversation|null>(null),[draft,setDraft]=useState<Draft|null>(null);
   const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState<string|null>(null),[storageFailed,setStorageFailed]=useState(false),[context,setContext]=useState<ConversationContext|null>(null);
   const lifecycle=useRef(new AbortController()),draftRef=useRef<Draft|null>(null);
@@ -99,6 +101,7 @@ export function ConversationPanel({scope,id,locale,onChoose,onClose,onOpenSource
         <ol aria-label={say('worldConversationMessages')}>{conversation.messages.map(message=><li key={message.id} data-role={message.role}><span className="jar-review-context">{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</span>
           {message.memoryChanged?<p className="jar-review-context">{say('worldConversationMemoryChanged')}</p>:null}<p>{message.content}</p>
           {message.followUpQuestion?<p className="jar-conversation-question">{message.followUpQuestion}</p>:null}
+          <ConversationThought scope={scope} message={message} locale={locale} onSaved={row=>{onInspirationSaved?.(row);void refresh();}} onOpen={onOpenSource?sourceId=>onOpenSource('inspiration',sourceId):undefined}/>
           {message.citations?.length&&message.replyRequestId?<div className="jar-conversation-citations" aria-label={say('worldConversationReferences')}>{message.citations.map(reference=><button key={reference.index} type="button" disabled={!reference.available} onClick={()=>void openCitation(message.replyRequestId!,reference.index)}>{sourceName(reference.kind)} {reference.index+1}{!reference.available?` · ${say('worldConversationReferenceChanged')}`:''}</button>)}</div>:null}
         </li>)}</ol>
         {citation?<section className="jar-conversation-reference" aria-label={say('worldConversationReferences')}>

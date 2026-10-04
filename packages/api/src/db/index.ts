@@ -36,6 +36,7 @@ export * from "./schema-attachments";
 export * from "./schema-reflections";
 export * from "./schema-reviews";
 export * from "./schema-conversations";
+export * from "./schema-conversation-origins";
 export * from "./schema-embeddings";
 export * from "./schema-signals";
 export * from "./schema-review-evidence";
