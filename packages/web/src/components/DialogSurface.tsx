@@ -13,6 +13,10 @@ function focusableWithin(root: HTMLElement): HTMLElement[] {
       element.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
     let at: HTMLElement | null = element;
     while (at && at !== root) {
+      if (at instanceof HTMLDetailsElement && !at.open) {
+        const summary = [...at.children].find(child => child.tagName === 'SUMMARY');
+        if (!summary?.contains(element)) return false;
+      }
       const style = window.getComputedStyle(at);
       if (style.display === "none" || style.visibility === "hidden") return false;
       at = at.parentElement;

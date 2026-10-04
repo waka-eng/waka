@@ -8,6 +8,7 @@ import { ApiError, fetchInspirationProcessing, retryInspirationProcessing, type 
 import { useInspirationProcessing } from '../src/lib/use-inspiration-processing';
 import { InspirationProcessingNotice } from '../src/components/InspirationProcessingNotice';
 import { profileStorageKey } from '../src/lib/profile-storage';
+import { isNativeSurface } from '../src/lib/surface-input';
 
 vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(),
   fetchInspirationProcessing: vi.fn(), retryInspirationProcessing: vi.fn(),
@@ -136,7 +137,30 @@ it('waits until a known future eligibility time rather than polling continuously
   await act(async () => root.render(<Probe />)); await click('save');
   await act(async () => vi.advanceTimersByTimeAsync(120_000));
   expect(fetchInspirationProcessing).toHaveBeenCalledOnce();
-  expect(host.textContent).toContain('Queued until');
+  expect(host.textContent).toContain('Saved. WAKA will revisit this inspiration after');
+  expect(host.textContent).not.toContain('next reading');
+  expect(host.querySelector<HTMLDetailsElement>('.jar-source-details')?.open).toBe(false);
+  expect(isNativeSurface(host.querySelector('.jar-source-details summary'))).toBe(true);
+});
+it('describes scheduled reading separately from the successful save without claiming completion',async()=>{
+  vi.mocked(fetchInspirationProcessing).mockResolvedValue({...waiting,phase:'waiting',stage:'reading',runAfter:new Date(Date.now()+3600000).toISOString()});
+  await act(async()=>root.render(<Probe/>));await click('save');
+  expect(host.textContent).toContain('Saved. The next reading is scheduled for');
+  expect(host.textContent).not.toContain('Your reading has an update');
+  expect(view).not.toHaveBeenCalled();expect(retryInspirationProcessing).not.toHaveBeenCalled();
+});
+it('keeps the expanded progress control and focus while rechecking a scheduled read',async()=>{
+  const scheduled={...waiting,phase:'waiting' as const,stage:'reading' as const,runAfter:new Date(Date.now()+3600000).toISOString()};
+  vi.mocked(fetchInspirationProcessing).mockResolvedValue(scheduled);
+  await act(async()=>root.render(<Probe/>));await click('save');
+  const details=host.querySelector<HTMLDetailsElement>('.jar-source-details')!;
+  await act(async()=>details.querySelector('summary')!.click());
+  const check=details.querySelector('button')!;check.focus();
+  let resolve!:(value:ApiInspirationProcessingStatus)=>void;
+  vi.mocked(fetchInspirationProcessing).mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));
+  await click('Check progress');
+  expect(host.querySelector('.jar-source-details')).toBe(details);expect(details.open).toBe(true);expect(document.activeElement).toBe(check);
+  await act(async()=>resolve(scheduled));expect(details.open).toBe(true);expect(document.activeElement).toBe(check);
 });
 
 it('starts a fresh observation window when a scheduled hold ends', async () => {

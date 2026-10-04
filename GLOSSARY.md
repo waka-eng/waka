@@ -58,7 +58,7 @@ These are approved names; rows marked planned do not claim shipped storage or UI
 | A conversation using the profile's memory | `conversation` | Talk with WAKA | think through a question with your own experiences | implemented; replies opt-in, off by default |
 | One authored message in a private conversation | `conversation_message` | Message | your words, separate from WAKA's reply | implemented; replies opt-in, off by default |
 | A deliberately saved thought's chat provenance | `inspiration_conversation_origin` | From your conversation / Your takeaway from WAKA | your words or a suggestion you rewrote and adopted | implemented locally |
-| A user message correcting an earlier reply | `corrects_message_id` | That’s not quite right | tell WAKA what to understand differently without changing a Principle | implemented locally |
+| A user message correcting an earlier reply | `corrects_message_id` | Correct reply | tell WAKA what to understand differently without changing a Principle | implemented |
 | Exported rendering of selected principle wording | `principle_artifact` | Share a principle | choose the words that leave WAKA | planned |
 
 See [the capture foundation contract](docs/plans/2026-10-02-capture-foundation-contract.md).

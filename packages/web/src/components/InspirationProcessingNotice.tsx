@@ -10,18 +10,20 @@ export function InspirationProcessingNotice({ processing, locale, onView, displa
   const hasNewReading = ready && status?.result?.topOfMindId && status.result.version > displayedVersion;
   const due = status?.runAfter ? Date.parse(status.runAfter) : NaN;
   const when = Number.isFinite(due) ? new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(due) : '';
+  const scheduled = Boolean(when && status?.phase === 'waiting' && (phase === 'waiting' || phase === 'checking'));
   const text = phase === 'checking' ? t(locale, 'worldSourceChecking') : phase === 'error' ? t(locale, 'worldSourceCheckFailed')
-    : phase === 'delayed' ? t(locale, 'worldSourceDelayed') : phase === 'waiting' && when ? t(locale, 'worldSourceWaiting').replace('{time}', when)
+    : phase === 'delayed' ? t(locale, 'worldSourceDelayed') : phase === 'waiting' && when ? t(locale, status?.stage === 'reading' ? 'worldSourceWaiting' : 'worldSourceScheduled').replace('{time}', when)
     : phase === 'failed' ? t(locale, 'worldSourceFailed') : phase === 'unknown' ? t(locale, 'worldSourceUnknown')
     : hasNewReading ? t(locale, 'worldSourceReady') : ready && status?.unavailableAttachments ? t(locale, 'worldSourcePartial')
     : ready ? t(locale, status?.result?.outcome === 'empty' ? 'worldSourceEmpty' : 'worldSourceUnchanged')
-    : t(locale, phase === 'queued' ? 'worldSourceQueued' : 'worldSourceReading');
-  return <div className="jar-source-status" role="status" data-jar-chrome="1">
+    : t(locale, phase === 'queued' || phase === 'waiting' ? 'worldSourceQueued' : 'worldSourceReading');
+  return <div className="jar-source-status" role="status" data-jar-chrome="1" data-jar-interactive="1">
     <span>{text}</span>
     {/* Keep the action focused as status changes. Native disabled blurs a
         pressed control and can strand Escape outside its surrounding dialog. */}
     {hasNewReading ? <button type="button" aria-disabled={busy || undefined} onClick={() => { if (!busy) onView(); }}>{t(locale, 'worldSourceView')}</button>
       : ready ? <button type="button" aria-label={t(locale, 'worldSourceDismiss')} aria-disabled={busy || undefined} onClick={() => { if (!busy) processing.clear(); }}>×</button>
+      : scheduled ? <details className="jar-source-details"><summary>{t(locale, 'worldSourceDetails')}</summary><button type="button" aria-disabled={busy || undefined} onClick={()=>{if(!busy)void processing.check();}}>{t(locale,'worldSourceCheck')}</button></details>
       : <button type="button" aria-disabled={busy || undefined} onClick={() => { if (!busy) void ((phase === 'failed' || phase === 'unknown') && status?.canRetry ? processing.retry() : processing.check()); }}>
         {t(locale, (phase === 'failed' || phase === 'unknown') && status?.canRetry ? 'worldSourceRetry' : 'worldSourceCheck')}
       </button>}

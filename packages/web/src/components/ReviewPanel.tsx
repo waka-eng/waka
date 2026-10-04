@@ -76,6 +76,9 @@ export function ReviewPanel({scope,id,thoughtId=null,locale,onId,onClose,onNewIn
   const [readySource,setReadySource]=useState<string|null>(null);
   const [hasDialogueDraft,setHasDialogueDraft]=useState(false);
   const session=review.session,items=session?.items??[],item=items.find(row=>row.inspirationId===session?.currentInspirationId);
+  const resumed=useRef<boolean|null>(null);
+  if(session&&resumed.current===null)resumed.current=session.revision>0&&!session.completedAt;
+  const step=session?.completedAt?'finish':session&&!item?'reflect':'browse';
   const last=items.filter(row=>row.position<(session?.cursor??0)&&row.choice!==null).at(-1);
   const disabled=review.busy||Boolean(review.pending)||review.loading;
   const dates=items.map(row=>Date.parse(row.inspirationCreatedAt)).sort((a,b)=>a-b);
@@ -86,7 +89,11 @@ export function ReviewPanel({scope,id,thoughtId=null,locale,onId,onClose,onNewIn
     <button className="jar-review-backdrop" type="button" tabIndex={-1} aria-hidden="true" onClick={()=>picker?setPicker(false):onClose()}/>
     <DialogSurface className="jar-seek jar-review" aria-label={say('worldReviewTitle')} active={!picker} onClose={onClose} data-jar-chrome="1">
       <header><h2>{say('worldReviewTitle')}</h2><button type="button" onClick={onClose}>{say('worldClose')}</button></header>
+      <ol className="jar-review-steps" aria-label={say('worldReviewSteps')}>
+        {(['browse','reflect','finish'] as const).map((value,index)=><li key={value} aria-current={step===value?'step':undefined}>{index+1} · {say(value==='browse'?'worldReviewBrowseStep':value==='reflect'?'worldReviewReflectStep':'worldReviewFinishStep')}</li>)}
+      </ol>
       <div className="jar-review-body">
+        {resumed.current&&!session?.completedAt?<p className="jar-review-context">{say('worldReviewResumed')}</p>:null}
         {review.loading?<p role="status">{say('worldReviewChecking')}</p>:null}
         {review.error?<div role="alert"><p>{say(review.error==='storage'?'worldReviewStorage':review.error==='conflict'?'worldReviewConflict':review.error==='load'?'worldReviewLoadFailed':'worldReviewSaveFailed')}</p>
           {review.error==='storage'?<button type="button" onClick={review.recoverStorage}>{say('worldReviewReset')}</button>:!review.pending?<button type="button" disabled={review.busy} onClick={review.retry}>{say('worldRoomHistoryRetry')}</button>:null}

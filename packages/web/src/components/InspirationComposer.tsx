@@ -103,13 +103,13 @@ export function InspirationComposer(props: {
     {props.error.includes('another tab') ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
     {!props.ready ? <p role="status">{say('worldComposerOpening')}</p> : null}
     </div>
-    <div className="jar-composer-footer"><div className="jar-composer-visibility" aria-label={say('worldPrivateTooltip')}>
+    <div className="jar-composer-footer"><div className="jar-composer-visibility" role="group" aria-label={say('worldAudience')} aria-describedby="capture-audience">
       <button type="button" disabled={blocked} aria-pressed={!props.public} onClick={() => props.onVisibility(false)}>{say('worldPrivate')}</button>
       <button type="button" disabled={blocked} aria-pressed={props.public} onClick={() => props.onVisibility(true)}>{say('worldPublic')}</button>
     </div><div className="jar-composer-actions">
       <button type="button" aria-label={say('worldSaveInspiration')} disabled={blocked || invalidFiles || Boolean(link.trim()) || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(false)}>{say('worldSave')}</button>
       <button type="button" aria-label={say('worldSaveAndReflect')} disabled={blocked || invalidFiles || Boolean(link.trim()) || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(true)}>{say('worldComposerThink')}</button>
-    </div></div>
+    </div><p id="capture-audience" className="jar-audience-note">{say(props.public ? 'worldAudiencePublic' : 'worldAudiencePrivate')}</p></div>
     <AuthoredSaveNotice save={props.save} locale={props.locale} />
   </DialogSurface>;
 }

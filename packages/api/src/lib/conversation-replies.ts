@@ -39,7 +39,8 @@ export async function projectConversationMessages(db:Reader,profileId:string,id:
     const current=request?await currentConversationReferences(db,profileId,request.references):[];
     const memoryChanged=!request||current.some(row=>row===null);
     return {...message,followUpQuestion:request?.followUpQuestion??null,memoryChanged,replyRequestId:request?.id??null,
-      citations:request?.references.map((reference,index)=>({index,kind:reference.kind,id:reference.id,available:current[index]!==null}))??[]};
+      citations:request?.references.map((reference,index)=>({index,kind:reference.kind,id:reference.id,available:current[index]!==null,
+        ...(current[index]?{preview:current[index]!.text.replace(/\s+/g,' ').slice(0,96)}:{})}))??[]};
   }));
 }
 async function inputFor(db:Reader,profileId:string,id:string,userMessageId:string){

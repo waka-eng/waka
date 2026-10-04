@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useRef,useState,type ReactNode} from 'react';
 import type {ApiConversationMessage} from '../lib/api/conversations';
 import type {ApiInspiration} from '../lib/api';
 import {useAuthoredSave} from '../lib/use-authored-save';
@@ -7,7 +7,7 @@ import type {ProfileStorageScope} from '../lib/profile-storage';
 import {t,type SupportedLocale} from '../lib/locales';
 
 /** AI wording prompts the person's takeaway; it is never prefilled as theirs. */
-export function ConversationThought({scope,message,locale,onSaved,onOpen}:{scope:ProfileStorageScope;message:ApiConversationMessage;locale:SupportedLocale;onSaved:(row:ApiInspiration)=>void;onOpen?:(id:string)=>void}){
+export function ConversationThought({scope,message,locale,onSaved,onOpen,actions}:{scope:ProfileStorageScope;message:ApiConversationMessage;locale:SupportedLocale;onSaved:(row:ApiInspiration)=>void;onOpen?:(id:string)=>void;actions?:ReactNode}){
   const journal=`thought:${message.conversationId}:${message.id}`,say=(key:Parameters<typeof t>[1])=>t(locale,key);
   const writer=useRef(crypto.randomUUID()),receipt=useRef<StoredConversationDraft>();
   const [draft,setDraft]=useState<ConversationDraft|null>(null),[drafts,setDrafts]=useState<StoredConversationDraft[]>([]),[open,setOpen]=useState(false),[storageFailed,setStorageFailed]=useState(false),[adopted,setAdopted]=useState(false),[savedId,setSavedId]=useState<string|null>(null);
@@ -32,8 +32,11 @@ export function ConversationThought({scope,message,locale,onSaved,onOpen}:{scope
   const cancel=()=>{if(pending||save.busy)return;try{if(receipt.current)clearConversationDraft(receipt.current);receipt.current=undefined;setDraft(null);scan();setOpen(false);setAdopted(false);setStorageFailed(false);}catch{setStorageFailed(true);}};
   const saved=[...new Set([...(message.savedInspirationIds??[]),...(savedId?[savedId]:[])])];
   return <div className="jar-conversation-thought">
+    <div className="jar-conversation-actions">
     {!open?<button type="button" onClick={()=>{setOpen(true);if(!draft)keep(assistant?'':message.content);}}>{say(assistant?'worldChatTakeaway':'worldChatKeepThought')}</button>:null}
+    {actions}
     {saved.map((id,index)=><button key={id} type="button" onClick={()=>onOpen?.(id)} disabled={!onOpen}>{say('worldChatOpenSaved')}{saved.length>1?` ${index+1}`:''}</button>)}
+    </div>
     {open?<section aria-label={say('worldChatKeepThought')}>
       <p className="jar-review-context">{say(assistant?'worldChatTakeawayNote':'worldChatOwnNote')}</p>
       {drafts.length>1&&!pending?<label>{say('worldShareDrafts')}<select value={draft?.id??''} onChange={event=>{const row=drafts.find(item=>item.value.id===event.target.value);if(row){receipt.current=row;setDraft(row.value);setAdopted(false);}}}>{drafts.map(row=><option key={row.key} value={row.value.id}>{row.value.content.slice(0,50)||say('worldChatTakeaway')}</option>)}</select></label>:null}

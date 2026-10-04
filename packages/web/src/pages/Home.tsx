@@ -83,6 +83,7 @@ import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
+import { useReviewEntry } from '../lib/use-review-entry';
 import { ConversationPanel } from '../components/ConversationPanel';
 import { ConversationStartButton } from '../components/ConversationStartButton';
 import { ReadingChanges } from '../components/ReadingChanges';
@@ -2200,6 +2201,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      minted before a language change still speaks the language of the moment
      it fires. */
   const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
+  const reviewEntry = useReviewEntry(storageScope, viewNavigation.view?.reviewId, locale);
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const say = useCallback((key: MessageKey) => t(localeRef.current, key), []);
@@ -10820,9 +10822,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       it — the mirror of delete's rule: a warning with nothing to warn
       about is friction wearing a safety costume. */
   const [unpublishAsk, setUnpublishAsk] = useState(false);
+  const [publishAsk, setPublishAsk] = useState(false);
   useEffect(() => {
     setForget({ id: null, step: "rest" });
     setUnpublishAsk(false);
+    setPublishAsk(false);
   }, [panelId]);
 
   /* ============================ ROOMS ============================
@@ -12815,10 +12819,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     ) : null}
                     {here&&w.kind==='self'&&storageScope&&!offline?<div className="jar-reading-actions" data-jar-chrome="1">
                       {!atNow?<button type="button" onClick={()=>windTo(dial?.end??Date.now())}>{say('worldReadingToday')}</button>:<>
+                        <div className="jar-reading-next">
+                          {inspirations?.length?<button type="button" className="jar-review-entry" onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
+                          <button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'list'})}>{say('worldConversationTitle')}</button>
+                        </div>
+                        <div className="jar-reading-explain">
                         {c.text?<button type="button" aria-expanded={posterAsk} onClick={()=>setPosterAsk(value=>!value)}>{say('worldReadingWhy')}</button>:null}
                         {topOfMind?.id?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale}/>:null}
-                        {inspirations?.length?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
-                        <button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'list'})}>{say('worldConversationTitle')}</button>
+                        </div>
                       </>}
                     </div>:null}
                     {here && w.kind === "group" && atNow ? <button
@@ -13583,7 +13591,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 className={panelIsPublic ? "jar-where-on" : "jar-where-off"}
                 aria-pressed={panelIsPublic}
                 title={say("worldPublicTooltip")}
-                onClick={() => (panelIsPublic ? undefined : togglePublic())}
+                onClick={() => { if (!panelIsPublic) setPublishAsk(true); }}
               >
                 {say("worldPublic")}
               </button>
@@ -13594,6 +13602,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m10 14 4-4m-7 3-2 2a4 4 0 0 0 6 6l4-4m-4-10 2-2a4 4 0 0 1 6 6l-4 4" /></svg>
           </button>
           </div>
+          {!panelIsGroup ? <p className="jar-audience-note" role="status">{say(panelIsPublic ? 'worldAudiencePublic' : 'worldAudiencePrivate')}</p> : null}
+          {publishAsk&&!panelIsPublic?<div className="jar-panel-askrow" role="group" aria-label={say('worldAudience')}>
+            <p className="jar-panel-warn">{say('worldPublishConfirm')}</p>
+            <div className="jar-ask jar-ask--row">
+              <button type="button" autoFocus onClick={()=>setPublishAsk(false)}>{say('worldKeepPrivate')}</button>
+              <button type="button" disabled={publishing} onClick={()=>{setPublishAsk(false);togglePublic();}}>{say('worldMakePublic')}</button>
+            </div>
+          </div>:null}
           {editing.open?.kind === "memory" && editing.open.id === panelId ? (
             /* THE SAME SLOT, THE SAME MEASURE, THE SAME FACE. It is the words
                you were just reading, with a caret in them — see
@@ -14544,14 +14560,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {/* The mouth belongs below the companion, but a person can also be in
           the ground, the sky, or the room's past. From there the same act is
           one quiet shortcut back to now and into the existing composer. */}
-      {phase === "ready" && (inField || inSky || !atNow || (charSay !== "" && !mouthOpen)) ? (
-        <button type="button" className={`jar-capture-shortcut jar-label${
-          !inField && !inSky && wallCount > 0 ? " jar-capture-shortcut--above-count" : ""
-        }`} data-jar-chrome="1"
-          onClick={startNewInspiration}>
-          <span aria-hidden="true">+</span> {say("worldCaptureInspiration")}
-        </button>
-      ) : null}
 
       {/* THE STRIP OF WALL NAMES IS GONE (founder, 2026-08-25: "remove").
           It listed every wall along the bottom edge and lit the one you were
@@ -14666,8 +14674,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </DialogSurface>
       ) : null}
 
-      {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'?<button type="button" className="jar-review-shortcut" hidden={Boolean(viewNavigation.view?.reviewId)||(!inField&&!inSky)} data-jar-chrome="1"
-        onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
       {storageScope&&viewNavigation.view?.conversationId?<ConversationPanel key={`${storageScope.accountId}:${storageScope.profileId}:${viewNavigation.view.conversationId}`} scope={storageScope} id={viewNavigation.view.conversationId==='list'?null:viewNavigation.view.conversationId} locale={locale}
         onPrincipleUpdated={row=>setPrinciples(current=>current.map(item=>item.id===row.id?row:item))}
         onInspirationSaved={row=>{if(row.profileId!==storageScope.profileId)return;const detail=toInspirationDetail(row);detailsRef.current.set(row.id,detail);const revision=++sourceListMutationRef.current;
@@ -14681,11 +14687,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}
         onOpenPrinciple={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id})}
         onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'field',inspirationId:id})}/>:null}
+      <div className={`jar-personal-shortcuts${!inField&&!inSky&&wallCount>0&&(!atNow||(charSay!==''&&!mouthOpen))?' jar-personal-shortcuts--above-count':''}`}
+        hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}>
+      {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'&&(inField||inSky)&&!viewNavigation.view?.reviewId?<button type="button" className="jar-review-shortcut" data-jar-chrome="1"
+        onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
+      {phase==='ready'&&(inField||inSky||!atNow||(charSay!==''&&!mouthOpen))?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
+        <span aria-hidden="true">+</span> {say('worldCaptureInspiration')}</button>:null}
       {phase === 'ready' ? <button type="button" className="jar-find-shortcut" data-jar-chrome="1"
         onClick={() => setSeek('')} aria-label={say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
         <span>{say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}</span>
       </button> : null}
+      </div>
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
           query={seek} locale={locale} label={atWall.kind === 'group' ? say('worldFindYourInspirations') : undefined}

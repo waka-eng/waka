@@ -59,6 +59,7 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
   const [error, setError] = useState("");
   const [sourceOpen, setSourceOpen] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const requestSequence = useRef(0);
   const questionRequest = useRef<AbortController | null>(null);
   const currentQuestion = useRef<HTMLDivElement>(null);
@@ -196,13 +197,14 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
   };
 
   const removeAnswer = async (id: string) => {
-    if (removingId || save.pending) return;
+    if (removingId || save.pending || deleteId !== id) return;
     setRemovingId(id);
     setError("");
     try {
       await deleteReflection(inspirationId, id);
       const remaining = turns.filter((turn) => turn.id !== id);
       setTurns(remaining);
+      setDeleteId(null);
       onRemoved(id);
       // Any removed answer may have informed the follow-up. Invalidate that
       // generated question, but preserve words the person is still drafting.
@@ -219,6 +221,13 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
 
   const latest = turns.at(-1);
   const earlier = turns.slice(0, -1);
+  const deleteControls = (id: string) => deleteId === id ? <div className="jar-reflection-delete" role="group" aria-label={t(locale,'worldReflectionDelete')}>
+    <p>{t(locale,'worldReflectionDeleteConfirm')}</p>
+    <div className="jar-reflection-delete-actions">
+    <button type="button" autoFocus disabled={Boolean(removingId)} onClick={()=>setDeleteId(null)}>{t(locale,'worldReflectionKeep')}</button>
+    <button type="button" disabled={Boolean(save.pending)||Boolean(removingId)} onClick={()=>void removeAnswer(id)}>{t(locale,'worldReflectionDelete')}</button>
+    </div>
+  </div> : <button type="button" disabled={Boolean(save.pending)||Boolean(removingId)} onClick={()=>setDeleteId(id)}>{t(locale,'worldReflectionDelete')}</button>;
   const copyLink = (id: string) => onCopyLink ? <button type="button" className="jar-copy-link"
     aria-label={t(locale, 'worldCopyReflectionLink')} title={t(locale, 'worldCopyReflectionLink')} onClick={() => onCopyLink(id)}>
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m10 14 4-4m-7 3-2 2a4 4 0 0 0 6 6l4-4m-4-10 2-2a4 4 0 0 1 6 6l-4 4" /></svg>
@@ -232,9 +241,7 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
       <p className="jar-label">{t(locale, "worldReflectionPrevious")}</p>
       <p className="jar-reflection-previous-question">{latest.question}</p>
       <p>{latest.answer}</p>
-      <button type="button" disabled={Boolean(save.pending) || removingId === latest.id} onClick={() => void removeAnswer(latest.id)}>
-        {t(locale, "worldTakeItBack")}
-      </button>
+      {deleteControls(latest.id)}
       {copyLink(latest.id)}
     </div> : null}
     {earlier.length > 0 ? <details ref={earlierTurns} className="jar-reflection-turns">
@@ -242,9 +249,7 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
       {earlier.map((turn) => <div key={turn.id} className="jar-reflection-turn" data-reflection-id={turn.id}>
         <p className="jar-reflect-q">{turn.question}</p>
         <p>{turn.answer}</p>
-        <button type="button" disabled={Boolean(save.pending) || removingId === turn.id} onClick={() => void removeAnswer(turn.id)}>
-          {t(locale, "worldTakeItBack")}
-        </button>
+        {deleteControls(turn.id)}
         {copyLink(turn.id)}
       </div>)}
     </details> : null}
