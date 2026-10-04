@@ -46,3 +46,7 @@ it('round-trips principle detail and sharing without putting the chosen wording 
   expect(viewHref(view)).toBe('/principles/principle-id/share');expect(readViewLocation(viewHref(view))).toEqual(view);
   expect(readViewLocation('/principles/principle-id')).toEqual({...view,sharePrinciple:false});
 });
+it('round-trips private conversation identity without claiming the single-segment public handle',()=>{
+  for(const conversationId of ['list','conversation-id']){const view={...EMPTY_VIEW,conversationId};expect(readViewLocation(viewHref(view))).toEqual(view);}
+  expect(readViewLocation('/chat')).toBeNull();expect(readViewLocation('/chat/conversation-id','?text=private')?.conversationId).toBe('conversation-id');
+});

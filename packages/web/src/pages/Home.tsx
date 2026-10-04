@@ -83,6 +83,7 @@ import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
+import { ConversationPanel } from '../components/ConversationPanel';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
 import { ReviewEvidence } from '../components/ReviewEvidence';
@@ -3314,7 +3315,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const requested = requestedViewRef.current;
     // An explicit route or an already-started interaction belongs to the
     // person. A returning-visitor greeting is never navigation authority.
-    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.reviewId || requested?.principleId) {
+    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.reviewId || requested?.principleId || requested?.conversationId) {
       stamp(); return undefined;
     }
     const interactionAtGreeting = navigationInteraction.current;
@@ -10166,7 +10167,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     // restoration or the world's debounced observer can close the new editor.
     const nav=viewNavigationRef.current;
     nav.write({...EMPTY_VIEW,...nav.view,section:'top',at:null,compose:true,find:false,
-      inspirationId:null,reflectionId:null,reviewId:null,reviewAnswerId:null,principleId:null,sharePrinciple:false});
+      inspirationId:null,reflectionId:null,reviewId:null,reviewAnswerId:null,principleId:null,sharePrinciple:false,conversationId:null});
   }, []);
 
   /** The shortcut returns to the present wall before putting the pen in hand. */
@@ -12308,7 +12309,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     reflectionId: reflectOn || reflectOpen ? (requestedViewRef.current?.inspirationId === (reflectOn?.id ?? selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
     find: seek !== null, compose: mouthOpen,reviewId:viewNavigation.view?.reviewId??null,reviewAnswerId:viewNavigation.view?.reviewAnswerId??null,
     principleId:atWall.kind==='self'&&inSky?pick:null,
-    sharePrinciple:atWall.kind==='self'&&inSky&&(viewNavigation.view?.sharePrinciple??false) };
+    sharePrinciple:atWall.kind==='self'&&inSky&&(viewNavigation.view?.sharePrinciple??false),conversationId:viewNavigation.view?.conversationId??null };
   const observedHref = viewHref(observedView), observedRef = useRef(observedView); observedRef.current = observedView;
   useEffect(() => {
     if (phase !== 'ready' || restoringViewRef.current || navigationProblem) return;
@@ -12815,6 +12816,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         {c.text?<button type="button" aria-expanded={posterAsk} onClick={()=>setPosterAsk(value=>!value)}>{say('worldReadingWhy')}</button>:null}
                         {topOfMind?.id?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale}/>:null}
                         {inspirations?.length?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
+                        <button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'list'})}>{say('worldConversationTitle')}</button>
                       </>}
                     </div>:null}
                     {here && w.kind === "group" && atNow ? <button
@@ -14663,6 +14665,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
       {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'?<button type="button" className="jar-review-shortcut" hidden={Boolean(viewNavigation.view?.reviewId)||(!inField&&!inSky)} data-jar-chrome="1"
         onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
+      {storageScope&&viewNavigation.view?.conversationId?<ConversationPanel key={`${storageScope.accountId}:${storageScope.profileId}:${viewNavigation.view.conversationId}`} scope={storageScope} id={viewNavigation.view.conversationId==='list'?null:viewNavigation.view.conversationId} locale={locale}
+        onChoose={id=>viewNavigation.write({...EMPTY_VIEW,conversationId:id??'list'})} onClose={viewNavigation.closeConversation}/>:null}
       {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
         onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}
         onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}

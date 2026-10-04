@@ -1298,6 +1298,7 @@ body .profile-signout-button {
 .jar-seek.jar-inspiration-search[data-visual-viewport],
 .jar-seek.jar-review[data-visual-viewport],
 .jar-seek.jar-principle-share[data-visual-viewport],
+.jar-seek.jar-conversation[data-visual-viewport],
 .jar-seek.jar-reflect-room[data-visual-viewport] {
   position: fixed;
   top: calc(var(--dialog-visible-top) + var(--dialog-visible-height) / 2);
@@ -1386,6 +1387,19 @@ body .profile-signout-button {
 .jar-reading-comparison button { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); color:var(--w-ink); background:none; border:1px solid var(--w-edge); border-radius:var(--sp-12); font:inherit; cursor:pointer; }
 .jar-seek.jar-principle-share { box-sizing:border-box; z-index:8; width:min(980px,calc(100vw - var(--sp-24))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-24)); display:flex; flex-direction:column; color:var(--w-ink); font-size:var(--t-body); line-height:1.5; text-align:left; user-select:text; touch-action:pan-y; }
 .jar-share-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+.jar-seek.jar-conversation { z-index:8; width:min(680px,calc(100vw - var(--sp-24))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-24)); display:flex; flex-direction:column; box-sizing:border-box; color:var(--w-ink); font-size:var(--t-body); text-align:left; user-select:text; }
+.jar-conversation header { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-12); }
+.jar-conversation h2 { font-size:var(--t-lead); font-weight:500; }
+.jar-conversation-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; }
+.jar-conversation button,.jar-conversation summary { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); font:inherit; color:inherit; background:transparent; border:1px solid var(--w-edge); border-radius:var(--sp-8); cursor:pointer; }
+.jar-conversation button:disabled { opacity:.45; cursor:default; }
+.jar-conversation ul,.jar-conversation ol { list-style:none; padding:0; }
+.jar-conversation li { padding-block:var(--sp-12); border-bottom:1px solid var(--w-edge); overflow-wrap:anywhere; }
+.jar-conversation li p { white-space:pre-wrap; }
+.jar-conversation time { display:block; font-size:var(--t-body); opacity:.7; }
+.jar-conversation footer { flex-shrink:0; border-top:1px solid var(--w-edge); padding-top:var(--sp-12); }
+.jar-conversation label { display:block; }
+.jar-conversation textarea,.jar-conversation select { display:block; box-sizing:border-box; width:100%; min-height:var(--sp-44); max-height:25dvh; font:inherit; font-size:var(--t-lead); color:inherit; background:var(--jar-panel); border:1px solid var(--w-edge); padding:var(--sp-8); border-radius:var(--sp-8); }
 .jar-principle-share header,.jar-principle-share footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; flex-shrink:0; gap:var(--sp-12); }
 .jar-principle-share h2 { font-size:var(--t-lead); font-weight:500; }
 .jar-principle-share label { display:flex; flex-direction:column; gap:var(--sp-6); margin-block:var(--sp-12); font-size:var(--t-body); }

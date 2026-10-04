@@ -14,8 +14,9 @@ export interface ViewLocation {
   reviewAnswerId: string|null;
   principleId:string|null;
   sharePrinciple:boolean;
+  conversationId:string|null;
 }
-export const EMPTY_VIEW: ViewLocation = { wallId: null, section: 'top', inspirationId: null, reflectionId: null, memberId: null, at: null, find: false, compose: false,reviewId:null,reviewAnswerId:null,principleId:null,sharePrinciple:false };
+export const EMPTY_VIEW: ViewLocation = { wallId: null, section: 'top', inspirationId: null, reflectionId: null, memberId: null, at: null, find: false, compose: false,reviewId:null,reviewAnswerId:null,principleId:null,sharePrinciple:false,conversationId:null };
 const id = (value: string | null) => value && /^[a-zA-Z0-9_-]{1,120}$/.test(value) ? value : null;
 
 export function readViewLocation(pathname: string, search = ''): ViewLocation | null {
@@ -29,6 +30,8 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
       view.wallId = segments[1]!; view.label = segments[2];
     } else if (segments[0] === 'inspirations' && segments.length === 2 && id(segments[1]!)) {
       view.inspirationId = segments[1]!;
+    } else if(segments[0]==='chat'&&segments.length===2&&id(segments[1]!)){
+      view.conversationId=segments[1];return view;
     } else if(segments[0]==='review' && segments.length===2 && id(segments[1]!)) {
       view.reviewId=segments[1]!;
       view.reviewAnswerId=view.reviewId==='new'?null:id(params.get('thought'));
@@ -51,6 +54,7 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
 }
 
 export function viewHref(view: ViewLocation): string {
+  if(view.conversationId)return `/chat/${encodeURIComponent(view.conversationId)}`;
   if(view.reviewId)return `/review/${encodeURIComponent(view.reviewId)}${view.reviewAnswerId&&view.reviewId!=='new'?`?thought=${encodeURIComponent(view.reviewAnswerId)}`:''}`;
   if(view.principleId)return `/principles/${encodeURIComponent(view.principleId)}${view.sharePrinciple?'/share':''}`;
   const path = view.wallId ? `/w/${encodeURIComponent(view.wallId)}${view.label ? `/${encodeURIComponent(view.label.trim().toLowerCase().replace(/\s+/g, '-'))}` : ''}` : '/';

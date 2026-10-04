@@ -93,6 +93,30 @@ on disk must not be the account's admin, however it is presented.
 
 ---
 
+## Private conversation foundation
+
+A `conversation` belongs to one profile, outside the four memory layers. Its
+`conversation_messages` are ordered, immutable messages with explicit user or
+assistant authorship. Sending a message does not create an inspiration, signal,
+principle, feedback verdict or model job. Milestone 5 accepts only user messages;
+assistant generation is disabled and has a zero-call budget until milestone 6.
+
+Client-generated conversation/message IDs make retry idempotent. A replay with
+different content conflicts rather than overwriting words. Deleting a
+conversation erases its messages and keeps only a content-free conversation
+tombstone, so delayed retries cannot recreate it. Profile/account erasure removes
+the tombstone too. Profile export includes active conversations and their messages.
+Messages reference their conversation with a profile-bearing foreign key.
+
+The initial limits are 100 active conversations per profile, 200 messages per
+conversation and 4,000 characters per user message. Context reads are bounded to
+16,000 text characters and freshly select only that profile's current readable
+Principles, live Top of mind and keyword-matched original inspirations. Ranking,
+contested state, human wording and unconfirmed support stay explicit; stale
+machine claims and deleted originals are not retrieved. Context is never a
+cached copy in the conversation and must be rebuilt before future generation.
+It is a deterministic retrieval foundation, not a semantic-answer quality claim.
+
 ## The four layers
 
 | | Layer 1 — **Inspiration** | Layer 2 — **Signal** | Layer 3 — **Top of mind** | Layer 4 — **Principle** |
@@ -178,7 +202,7 @@ independent repeated experiences.
 The approved later review/conversation/export contracts are detailed in
 [the personal capture contract](plans/2026-10-02-capture-foundation-contract.md).
 Review session storage/routes now implement the selection contract below;
-the conversation and artifact contracts do not yet claim implemented tables or routes. Review skipping is
+the conversation foundation is specified above; generated responses remain a later milestone. Review skipping is
 session-local, a review selection is not a verdict on a principle, and multiple
 source references do not multiply one authored response. A selected principle
 may be explicitly exported as an image under that contract; this extends the

@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { readViewLocation, viewHref, type ViewLocation } from './view-location';
 
-interface StoredView { scope: string; query: string; composerFrom?: string;reviewFrom?:string;shareFrom?:string }
+interface StoredView { scope: string; query: string; composerFrom?: string;reviewFrom?:string;shareFrom?:string;conversationFrom?:string }
 /** Router owns browser history; the world owns rendering and restoration. */
 export function useViewNavigation(scope: string | null) {
   const location = useLocation(), navigate = useNavigate();
@@ -27,7 +27,8 @@ export function useViewNavigation(scope: string | null) {
       : stored?.scope === current.scope ? stored.composerFrom : undefined) : undefined;
     const reviewFrom=next.reviewId ? (!before?.reviewId&&!options.replace?previous:stored?.scope===current.scope?stored.reviewFrom:undefined):undefined;
     const shareFrom=next.sharePrinciple?(!before?.sharePrinciple&&!options.replace?previous:stored?.scope===current.scope?stored.shareFrom:undefined):undefined;
-    current.navigate(to, { replace: options.replace, state: { wakaView: { scope: current.scope, query: options.query ?? '', ...(composerFrom ? { composerFrom } : {}),...(reviewFrom?{reviewFrom}:{}),...(shareFrom?{shareFrom}:{}) } } });
+    const conversationFrom=next.conversationId?(!before?.conversationId&&!options.replace?previous:stored?.scope===current.scope?stored.conversationFrom:undefined):undefined;
+    current.navigate(to, { replace: options.replace, state: { wakaView: { scope: current.scope, query: options.query ?? '', ...(composerFrom ? { composerFrom } : {}),...(reviewFrom?{reviewFrom}:{}),...(shareFrom?{shareFrom}:{}),...(conversationFrom?{conversationFrom}:{}) } } });
   }, []);
   const closeComposer = useCallback(() => {
     const current = latest.current;
@@ -54,5 +55,11 @@ export function useViewNavigation(scope: string | null) {
     if(stored?.scope===current.scope&&stored.shareFrom===to)current.navigate(-1);
     else current.navigate(to,{replace:true});
   },[]);
-  return { view, href, key: location.key, query, write, closeComposer,closeReview,closeShare, own };
+  const closeConversation=useCallback(()=>{
+    const current=latest.current,before=readViewLocation(current.location.pathname,current.location.search);
+    const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
+    own.current=null;
+    if(before)current.navigate(stored?.scope===current.scope&&stored.conversationFrom?stored.conversationFrom:viewHref({...before,conversationId:null}),{replace:true});
+  },[]);
+  return { view, href, key: location.key, query, write, closeComposer,closeReview,closeShare,closeConversation, own };
 }

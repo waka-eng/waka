@@ -25,6 +25,7 @@
  */
 
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import {conversations,conversationMessages} from '../db/schema-conversations.js';
 
 import {
   attachments,
@@ -187,6 +188,8 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
 
   return {
     profile: profile ?? null,
+    conversations:await db.select().from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt))).orderBy(asc(conversations.createdAt),asc(conversations.id)),
+    conversationMessages:await db.select().from(conversationMessages).where(eq(conversationMessages.profileId,profileId)).orderBy(asc(conversationMessages.conversationId),asc(conversationMessages.position)),
     experiences: experienceRows,
     inspirations: inspirationRows,
     attachments: attachmentRows,
