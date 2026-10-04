@@ -24,9 +24,9 @@ export async function readConversationContext(db:Reader,profileId:string,questio
     .where(and(eq(topOfMinds.profileId,profileId),eq(topOfMinds.status,'live'),isNull(topOfMindEntries.dismissedAt),personalEntryReadable(profileId),rIds?inArray(topOfMindEntries.id,rIds):undefined)).orderBy(asc(topOfMindEntries.sortOrder),asc(topOfMindEntries.id)).limit(5);
   let i=await readConversationMaterial(db,profileId,conversationSearchTerms(question),iIds);
   if(queryVector&&!referenceIds){
-    const semantic=await readSemanticConversationCandidates(db,profileId,queryVector);
+    const semantic=await readSemanticConversationCandidates(db,profileId,queryVector,undefined,i.map(row=>row.id));
     onRetrievalTrace?.(semantic.trace);
-    const ids=rankConversationCandidates(i.map(row=>row.id),semantic.candidates);
+    const ids=rankConversationCandidates(i.map(row=>row.id),semantic.candidates,semantic.similarities);
     i=await readConversationMaterial(db,profileId,[],ids);
   }
   const bound=<T extends {id:string;text:string}>(kind:ConversationSource['kind'],rows:T[],allowance:number):ConversationSource[]=>rows.flatMap(row=>{

@@ -165,7 +165,12 @@ contested state, human wording and unconfirmed support stay explicit; stale
 machine claims and deleted originals are not retrieved. Context is never a
 cached copy in the conversation and must be rebuilt before future generation.
 When current-model personal embeddings are available, the worker can combine
-lexical matches with semantic matches and a diversity penalty. Query embedding
+lexical matches with semantic matches and a diversity penalty. Selection
+abstains on weak uncorroborated similarity: the existing 0.6 floor is
+used with keyword support, otherwise 0.65. Candidates remain near the strongest
+match (within 0.03, or at least 0.75); unindexed lexical matches remain available.
+These chat-only values were selected by the recorded retrieval comparison,
+not applied to signal derivation or Principle eligibility. Query embedding
 runs outside DB locks, with a five-second header and ten-second total deadline;
 Stop and source changes are rechecked before answering. The scan uses at most
 500 most recently indexed owned personal vectors, validates at most 24 candidates against

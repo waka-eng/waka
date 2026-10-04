@@ -106,6 +106,14 @@ it('falls back to lexical context when the bounded embedding request fails',asyn
   await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>{throw new Error('Synthetic outage');}}});
   expect((await f.state()).phase).toBe('ready');expect(answer).toHaveBeenCalledOnce();
 });
+it('does not purchase a query embedding when only incompatible dimensions are indexed',async()=>{
+  const f=await fixture();
+  await t.sql`INSERT INTO inspiration_embeddings(profile_id,inspiration_id,model,input_scope,dimensions,input_hash,embedding)
+    VALUES(${f.profileId},${f.sourceId},${GEMINI_EMBEDDING_MODEL},'personal',1536,'fixture','[]'::jsonb)`;
+  await f.request();const state=await f.state(),job=await claim(),embed=vi.fn(async()=>[1,...Array<number>(767).fill(0)]);
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+  expect((await f.state()).phase).toBe('ready');expect(embed).not.toHaveBeenCalled();expect(answer).toHaveBeenCalledOnce();
+});
 it('fences source edits during lookup before dispatching the answer',async()=>{
   const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
   await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});

@@ -6,7 +6,7 @@ import {CONVERSATION_LIMITS,conversationHash,conversationRepliesEnabled,currentC
 import {getDefaultModelProvider,type ConversationReplyInput} from './model-provider.js';
 import {parseConversationReply} from '../queue/gemini.js';
 import {conversationSearchQuery} from './conversation-material.js';
-import {GEMINI_EMBEDDING_MODEL,GeminiEmbeddingHttpClient,validateEmbeddingVector,type GeminiEmbeddingClient} from './inspiration-embeddings.js';
+import {GEMINI_EMBEDDING_DIMENSIONS,GEMINI_EMBEDDING_MODEL,GeminiEmbeddingHttpClient,validateEmbeddingVector,type GeminiEmbeddingClient} from './inspiration-embeddings.js';
 import type {ConversationRetrievalTrace} from './conversation-retrieval.js';
 import {enqueueConversationReply,STALE_LOCK_SECONDS,wakeCommittedBackgroundJobs} from './queue.js';
 type Db=ReturnType<typeof getDb>;
@@ -152,7 +152,7 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
       WHERE p.account_id=${owner.accountId}::uuid AND r.dispatched_at>=now()-interval '1 hour'`);
     if(usage.count>=CONVERSATION_LIMITS.modelCalls)return refuse('failed','budget');
     const [indexed]=embeddingClient?.model===GEMINI_EMBEDDING_MODEL&&usage.count+2<=CONVERSATION_LIMITS.modelCalls
-      ?await tx.select({id:inspirationEmbeddings.id}).from(inspirationEmbeddings).where(and(eq(inspirationEmbeddings.profileId,job.profileId),eq(inspirationEmbeddings.inputScope,'personal'),eq(inspirationEmbeddings.model,GEMINI_EMBEDDING_MODEL))).limit(1):[];
+      ?await tx.select({id:inspirationEmbeddings.id}).from(inspirationEmbeddings).where(and(eq(inspirationEmbeddings.profileId,job.profileId),eq(inspirationEmbeddings.inputScope,'personal'),eq(inspirationEmbeddings.model,GEMINI_EMBEDDING_MODEL),eq(inspirationEmbeddings.dimensions,GEMINI_EMBEDDING_DIMENSIONS))).limit(1):[];
     const semantic=Boolean(indexed);
     await tx.update(conversationReplyRequests).set({status:'running',dispatchedAt:sql`clock_timestamp()`,retrievalDispatchedAt:semantic?sql`clock_timestamp()`:null,failureCode:null}).where(eq(conversationReplyRequests.id,requestId));
     return {...next,userMessageId:request.userMessageId!,semantic};

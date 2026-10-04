@@ -44,14 +44,18 @@ personal-profile scope and existing visual feel. Deployment is not included.
 
 Use explicit disposable loopback Postgres for SQL and browser fixtures, never
 implicit local-env DB settings. Model evaluations use synthetic inputs only.
-Announce each paid batch before execution; stop at its call/cost cap and on
-deterministic provider configuration/authentication failures. Current local
-env files contain a Gemini key but no OpenRouter key. The owner said the key
-exists in `.env.local`; a fresh read of this checkout still finds only the
-Gemini key. The correct local file/variable is being clarified. No test branch
-push or CI evaluation was authorized by that reply. The proposed first chat
-comparison remains bounded to 48 synthetic calls and USD 1. Continue independent
-local UI/storage work without changing the unmeasured reply prompt.
+Announce each paid batch before execution; stop at its call/cost guard and on
+deterministic provider configuration/authentication failures. The owner now
+authorizes all further LLM calls under a total USD 5 cap without per-batch
+questions. Use the Gemini key from this checkout and the OpenRouter key from
+`/Users/agi/nextsteps/waka/.env.local`, reading only the needed variable into the
+process and never printing/copying credentials. No test-branch push, deployment
+or historical repair is implied. Current budget accounting: USD 0.05729850 in
+returned chat charges plus three USD 0.50 conservative embedding-run reservations
+(USD 1.55729850 allocated, USD 3.44270150 remaining). The embedding estimate is
+much smaller, but is not an invoice. Earlier pre-cap runs remain separately
+recorded below. Prefer simple, friendly UX decisions; stop only for genuine
+missing authority, an exhausted budget or another external blocker.
 
 ## Log
 
@@ -536,3 +540,82 @@ large-profile latency/cost measurements are next. These tests used synthetic
 vectors and made no paid calls. Budget use remains USD 0.05729850 of the new USD 5
 authorization. Apply migration 0065 before deploying this code; no deployment
 has been requested or performed.
+
+### Milestone 3 measured retrieval quality checkpoint
+
+Declared 17 synthetic sources and 24 labeled queries before generating vectors.
+The gate requires at least 90% positive-query recall, three additional hits on
+semantic-target cases over expanded lexical retrieval, no out-of-topic-control
+matches, no foreign-source leakage and no increase in unexpected selected sources.
+A query hit means at least one of its predeclared alternative primary sources
+appears in the actual bounded context. Source labels permit related useful
+context separately; they were not changed to accommodate outputs.
+
+Both the original raw-text baseline and the newer reflection/media lexical
+foundation are measured, so semantic work does not take credit for lexical
+improvements. The initial hybrid selection hit all targets but selected too many
+weak neighbors. A cached-vector revision narrowed the relevance band; an initial
+holdout then found weak semantic-only overlap on an unrelated technical question.
+That policy was rejected. The failed holdout became a known regression set.
+
+The selected policy keeps the 0.6 floor for keyword-corroborated sources but
+requires 0.65 for semantic-only inclusion. It selects near the strongest match
+(within 0.03, or at least 0.75), retains lexical access for unindexed material,
+and uses current validated vector scores to avoid weak keyword matches. No
+generation-model, stored-vector format, daily cadence or Principle threshold
+was changed. Eight fresh validation queries were declared before their vectors;
+the policy was not changed after their outputs.
+
+| Set and version | Original raw-text hits | Expanded lexical hits | Hybrid hits | Unexpected hybrid sources | Negative matches |
+| --- | --- | --- | --- | --- | --- |
+| Original 24, first hybrid | 9/21 | 16/21 | 21/21 | 55 (lexical 23) | 0/3 controls |
+| Original 24, selected policy | 9/21 | 16/21 | 21/21 | 2 (lexical 23) | 0/3 controls |
+| Initial eight-query holdout, rejected policy | 0/6 | 1/6 | 6/6 | 5 (lexical 3) | 5 sources across 2 controls |
+| Same eight, now regression cases | 0/6 | 1/6 | 6/6 | 0 | 0/2 controls |
+| Fresh eight-query validation | 2/6 | 2/6 | 6/6 | 0 (lexical 1) | 0/2 controls |
+
+No foreign source was returned. The selected policy passes the original gate
+and the fresh validation gate (four additional semantic-target hits there).
+This is exact evidence for these 40 synthetic queries, not a population-quality
+guarantee. Earlier failed policies remain visible in the evidence; replaying
+known cases is not represented as fresh validation.
+
+Large-profile check: added 5,000 explicitly stale synthetic padding records
+with real-sized vector payloads, giving 5,016 owned notes. It tests bounded
+scan/validation cost, not quality over 5,000 independently embedded memories.
+The expected compound index appeared in EXPLAIN ANALYZE. Scan count stayed at
+500, validation at most 24, and the selected original-query results remained
+21/21 with two unexpected sources and no negative matches. Cached selection
+latency was 34.52ms median / 40.57ms p95, below the predeclared 1,000ms p95 guard.
+Those timings exclude query-embedding network time. Observed live embedding
+medians were 179.79ms (original set), 220.35ms (initial holdout), and 213.14ms
+(fresh validation), all in this local fixture environment.
+
+Evidence under `work/retrieval-eval/`:
+
+- `run-1791156361243.json`: initial live comparison, 41 calls.
+- `run-1791156804455.json`: rejected initial holdout, eight calls.
+- `run-1791157146956.json`: selected-policy replay of the original set, zero calls.
+- `run-1791157148782.json`: selected-policy regression replay, zero calls.
+- `run-1791157148032.json`: fresh validation, eight calls.
+- `run-1791157456058.json`: large-profile replay and query plan, zero calls.
+
+All 57 embedding calls used `gemini-embedding-001`, whose model endpoint was
+checked successfully before execution. Vectors are cached by exact input and
+task type, so ranking replays cost no additional calls. Using the
+[published Google rate](https://developers.googleblog.com/en/gemini-embedding-available-gemini-api/)
+and conservative byte-based token estimates, their estimated cost is USD
+0.00957960; this is not returned billing usage. Keep USD 1.50 reserved against
+the goal cap for the three live batches. Two setup failures (date serialization
+and the fixture's invalid `text` kind instead of `note`) occurred before any
+provider dispatch, were corrected, and left no model charges. Fixture schemas
+were removed by the harness's cleanup path.
+
+Verification: 782 API unit tests passed, three paid benches skipped; 28 retrieval/
+reply SQL tests and API typecheck passed. The fixture-integrity tests preserve
+distinct evaluation sets and unchanged gates. No deployment or remote-account
+mutation occurred. The next open work is bounded Principle material/comparison
+cost and the separate Top of Mind/Principle generation calibration.
+The worker preflight also checks vector dimensions before reserving a lookup
+slot. A new test confirms incompatible-only indexes do not purchase an embedding;
+the final retrieval/reply SQL recheck passed 29 tests.

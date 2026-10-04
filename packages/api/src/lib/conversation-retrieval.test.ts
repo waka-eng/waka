@@ -17,3 +17,12 @@ it('prefers a diverse candidate to a near duplicate at similar rank',()=>{
 it('does not inject a semantic candidate below the existing recall floor',()=>{
   expect(rankConversationCandidates([],[{id:'irrelevant',similarity:.2,vector:[1,0]}])).toEqual([]);
 });
+it('does not fill spare slots with weak semantic neighbors or contradicted keyword matches',()=>{
+  const result=rankConversationCandidates(['weak','unindexed'],[{id:'strong',similarity:.72,vector:[1,0]},{id:'weak',similarity:.62,vector:[0,1]}],new Map([['strong',.72],['weak',.62]]));
+  expect(result).toContain('strong');expect(result).toContain('unindexed');expect(result).not.toContain('weak');
+});
+it('abstains on weak semantic-only overlap while preserving keyword-corroborated matches',()=>{
+  const weak=[{id:'note',similarity:.62,vector:[1,0]}];
+  expect(rankConversationCandidates([],weak)).toEqual([]);
+  expect(rankConversationCandidates(['note'],weak)).toEqual(['note']);
+});
