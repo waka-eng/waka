@@ -415,10 +415,11 @@ export interface ReviewAnswerDerivationResult {
 
 export interface ConversationReplyInput {
   preferredLocale:SupportedLocale;
+  messageDate?:string;
   contextChanged?:boolean;
   focusSourceNumber?:number;
   history:Array<{role:'user'|'assistant';content:string;correction?:boolean}>;
-  sources:Array<{kind:'principle'|'top_of_mind_entry'|'inspiration';text:string;state?:string;rank?:number;locked?:boolean;supportCurrent?:boolean;truncated:boolean}>;
+  sources:Array<{kind:'principle'|'top_of_mind_entry'|'inspiration';text:string;recordedAt?:string;state?:string;rank?:number;locked?:boolean;supportCurrent?:boolean;truncated:boolean}>;
 }
 export const CONVERSATION_REPLY_OUTPUT_TOKENS=1200;
 export interface ConversationReplyResult {answer:string;followUpQuestion:string|null;citations:Array<{sourceNumber:number;quote:string}>}

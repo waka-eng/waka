@@ -24,7 +24,7 @@ on:
         default: false
         type: boolean
       run_avatar_evaluation:
-        description: "Run only the bounded synthetic Avatar quality matrix (16 calls, $0.50 cap)"
+        description: "Run only the bounded synthetic Avatar quality matrix (18 calls, $0.50 cap)"
         required: false
         default: false
         type: boolean
