@@ -1,6 +1,6 @@
 # Chat home and memory improvements
 
-Status: blocked at the live chat quality gate (2026-10-04).
+Status: blocked awaiting corrected evaluation approval (2026-10-04).
 Branch: `codex/chat-home-memory`, starting from `84cba13`.
 
 ## Objective
@@ -195,7 +195,7 @@ no batch has run. Semantic review stays explicitly pending, not auto-passed.
 The two new structural unit tests pass and API typecheck passes. They prove
 case count, unique names and bilingual coverage, not reply quality. Next live
 command, after local configuration is resolved, is
-`pnpm exec tsx tools/e2e/conversation-reply-quality.ts --polish --live --openrouter --label=baseline`.
+`WAKA_MODEL_CHAT=google/gemini-3.8-flash pnpm exec tsx tools/e2e/conversation-reply-quality.ts --polish --live --openrouter --label=baseline --expected-model=google/gemini-3.8-flash`.
 The current prompt, parser and model are unchanged. The home usability check
 also awaits the owner; no milestone gate was silently waived.
 
@@ -225,3 +225,25 @@ is also pending. Stop at these gates rather than advance into the next ordered
 milestone or substitute a provider. Resume after the correct local OpenRouter
 file/key is available; no secret value should be pasted into chat. All
 Milestone 3 work remains in scope and unfinished. Nothing is pushed or deployed.
+
+### OpenRouter location resolved and model preflight corrected
+
+The owner identified `/Users/agi/nextsteps/waka/.env.local`. Presence checks and
+successful authentication confirmed its `OPENROUTER_API_KEY`; only that key
+was loaded into the evaluation process. It was not copied to this checkout or
+printed. This resolves the earlier credential blocker.
+
+The first baseline attempt exposed a missed configuration prerequisite: with
+`WAKA_MODEL_CHAT` unset, the evaluator used the provider default
+`deepseek/deepseek-v4-flash-0731`, whereas `sst.config.ts` explicitly pins dev
+chat to `google/gemini-3.8-flash`. The run was interrupted after three dispatch
+log lines; two completed outputs were observed. Those outputs are not accepted
+as the declared baseline. Interruption prevented the final result file from
+being saved, so exact usage/cost for this attempt is unconfirmed.
+
+Polish evaluations now require an explicit expected model and matching
+`WAKA_MODEL_CHAT`, and verify the outgoing request's model before dispatch.
+The missing-model preflight was tested and refused execution before provider
+loading. Asked the owner to approve a corrected 48-call comparison with its
+own USD 1 cap, in addition to the three initial requests. No further paid calls
+will run pending that answer. Prompt/parser/model policy remain unchanged.

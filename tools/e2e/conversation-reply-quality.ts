@@ -17,6 +17,11 @@ if(process.argv.includes('--list')){
   process.exit(0);
 }
 assert.ok(process.argv.includes('--live'),'Pass --live for paid synthetic requests');
+const expectedModel=process.argv.find(arg=>arg.startsWith('--expected-model='))?.slice('--expected-model='.length);
+if(polish){
+  assert.ok(expectedModel,'Polish comparisons require --expected-model matching the deployed chat model.');
+  assert.equal(process.env.WAKA_MODEL_CHAT,expectedModel,'Set WAKA_MODEL_CHAT explicitly before evaluating; never fall back to another model.');
+}
 const matrix=polish||process.argv.includes('--matrix'),correctionsOnly=process.argv.includes('--corrections'),maxCalls=process.argv.includes('--first-case')?1:matrix?fixedMatrix.length:correctionsOnly?2:4,maxCostUsd=matrix ? .50 : .10;
 assert.ok(!(matrix&&correctionsOnly),'Choose a matrix or corrections-only run, not both.');
 const configured=parse(await readFile('.env.local').catch(error=>{if(error.code==='ENOENT')return '';throw error;}));
@@ -28,6 +33,7 @@ if(polish||process.argv.includes('--openrouter'))assert.equal(provider.name,'ope
 let calls=0,costUsd=0,stopped=false;const requests:unknown[]=[],results:unknown[]=[];
 globalThis.fetch=async(input,init)=>{
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+  if(expectedModel)assert.equal(JSON.parse(String(init?.body)).model,expectedModel,'Unexpected model: refused before dispatch.');
   assert.ok(['https://openrouter.ai','https://generativelanguage.googleapis.com'].includes(url.origin));assert.ok(!stopped&&calls<maxCalls&&costUsd<maxCostUsd);calls++;
   const start=performance.now(),response=await network(input,init),body=await response.clone().json() as any;
   const usage=body.usageMetadata;
