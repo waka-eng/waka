@@ -363,6 +363,13 @@
   text-wrap: balance;
   color: var(--jar-ink);
 }
+/* The personal Home reading leaves room for its actions and companion.
+   Keep the smaller reading scale and the short-window cap; other walls keep
+   their existing headline curve. */
+.jar-wallcol[data-kind="self"] .jar-poster {
+  font-size: var(--t-home-reading);
+  line-height: 1.45;
+}
 /* the ambition arrives a word at a time, the way a thought does */
 .jar-word {
   display: inline-block;
@@ -899,8 +906,8 @@
   display: block;
   width: 100%;
   text-align: left;
-  font-size: clamp(19px, 2.1vw, 25px);
-  line-height: 1.4;
+  font-size: var(--t-lead);
+  line-height: 1.6;
   text-wrap: pretty;
 }
 .jar-principles-list button.jar-values-value { min-height: 44px; }
@@ -960,7 +967,7 @@
 .jar-principle-tools button:focus-visible { color: var(--jar-ink); }
 .jar-principle-tools button:disabled { opacity: 0.3; cursor: default; }
 .jar-principle-tools button:not(:disabled) { color:var(--w-muted); }
-.jar-principle-tools svg { width:20px; height:20px; }
+.jar-principle-tools svg { width:var(--sp-16); height:var(--sp-16); }
 .jar-principles-list > li > .jar-values-value {
   max-width: 100%;
 }

@@ -31,3 +31,10 @@ it('keeps visual cues decorative and the Korean action names explicit',async()=>
   expect(host.textContent).toContain('저장한 영감을 다시 봐요.');expect(host.textContent).toContain('함께 선택을 생각해 봐요.');
   expect(host.querySelectorAll('[data-home-action-icon]')).toHaveLength(2);
 });
+it('keeps routine hints accessible without adding a second visible line, retaining the empty-state guidance',async()=>{
+  await mount();expect(host.querySelectorAll('.jar-activity-hint.sr-only')).toHaveLength(2);
+  await mount(true);expect(host.querySelectorAll('.jar-activity-hint.sr-only')).toHaveLength(2);
+  await mount(false,false);const reviewHint=host.querySelector('.jar-activity-hint')!;
+  expect(reviewHint.classList.contains('sr-only')).toBe(false);expect(reviewHint.textContent).toBe('Save an inspiration to begin.');
+  for(const button of host.querySelectorAll('button'))expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent).toBeTruthy();
+});
