@@ -108,6 +108,7 @@ jobs:
         run: |
           psql "$DB_CONNECTION_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
           pnpm db:migrate
+          node scripts/verify-memory-schema.mjs
 
       - name: API unit tests
         run: pnpm --filter @waka/api test:unit
