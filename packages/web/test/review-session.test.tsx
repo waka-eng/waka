@@ -15,7 +15,7 @@ let host:HTMLDivElement,root:Root,hook:ReturnType<typeof useReviewSession>,curre
 const onId=vi.fn();
 function session():ApiReviewSession{return {id:SID,profileId:scope.profileId,revision:0,cursor:0,currentInspirationId:SOURCE,createdAt:'2026-10-02T00:00:00Z',completedAt:null,
   items:[{inspirationId:SOURCE,position:0,sourceRevision:'1',currentRevision:'1',sourceChanged:false,reason:'unreviewed',choice:null,decidedAt:null,inspirationCreatedAt:'2026-10-01T00:00:00Z'}]};}
-function Harness({id='new',owner=scope}:{id?:string;owner?:typeof scope}){hook=useReviewSession(owner,id,onId);return null;}
+function Harness({id='new',owner=scope,includeCurrent=false}:{id?:string;owner?:typeof scope;includeCurrent?:boolean}){hook=useReviewSession(owner,id,onId,includeCurrent);return null;}
 const copy=()=>current?JSON.parse(JSON.stringify(current)) as ApiReviewSession:null;
 beforeEach(()=>{
   vi.resetAllMocks();localStorage.clear();current=null;(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
@@ -27,12 +27,43 @@ beforeEach(()=>{
   vi.mocked(finishReviewSession).mockImplementation(async()=>{current={...current!,revision:current!.revision+1,completedAt:'2026-10-02T01:00:00Z',currentInspirationId:null};return copy();});
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.useRealTimers();});
-const mount=(id='new',owner=scope)=>act(async()=>root.render(<Harness id={id} owner={owner}/>));
+const mount=(id='new',owner=scope,includeCurrent=false)=>act(async()=>root.render(<Harness id={id} owner={owner} includeCurrent={includeCurrent}/>));
 const keys=()=>Object.keys(localStorage).filter(key=>key.startsWith(prefix));
 it('only reads on opening and durably journals an explicit start before posting',async()=>{
   await mount();expect(startReviewSession).not.toHaveBeenCalled();
   vi.mocked(startReviewSession).mockImplementationOnce(async input=>{expect(keys()).toHaveLength(1);expect(localStorage.getItem(keys()[0]!)).toContain(input.id);return {...session(),id:input.id};});
   await act(async()=>hook.start());expect(startReviewSession).toHaveBeenCalledOnce();expect(keys()).toHaveLength(0);expect(onId).toHaveBeenCalled();
+});
+it('retains a committed start through replacing new with its exact ID without refetching',async()=>{
+  await mount();await act(async()=>hook.start());const id=hook.session!.id;
+  const reads=vi.mocked(fetchActiveReview).mock.calls.length+vi.mocked(fetchReviewSession).mock.calls.length;
+  await mount(id);expect(hook.session?.id).toBe(id);expect(hook.loading).toBe(false);
+  expect(vi.mocked(fetchActiveReview).mock.calls.length+vi.mocked(fetchReviewSession).mock.calls.length).toBe(reads);
+  await mount(SID);if(id!==SID)expect(fetchReviewSession).toHaveBeenCalledOnce();
+});
+it('cancels work after a retained URL transition and keeps the uncertain journal for recovery',async()=>{
+  await mount();await act(async()=>hook.start());await mount(hook.session!.id);
+  let reply!:(value:ApiReviewSession)=>void;
+  vi.mocked(chooseReviewInspiration).mockImplementationOnce(()=>new Promise(done=>{reply=done;}));
+  await act(async()=>hook.choose(hook.session!.items[0]!,'keep'));
+  const signal=vi.mocked(chooseReviewInspiration).mock.calls[0]![3]!;
+  await act(async()=>root.unmount());expect(signal.aborted).toBe(true);expect(keys()).toHaveLength(1);
+  await act(async()=>reply({...session(),revision:1}));expect(keys()).toHaveLength(1);
+  root=createRoot(host);
+});
+it('negotiates an older API with read-only fallback before a single legacy start',async()=>{
+  vi.mocked(fetchActiveReview).mockRejectedValueOnce(new ApiError({status:400,message:'Invalid profile'}));
+  await mount('new',scope,true);
+  expect(vi.mocked(fetchActiveReview).mock.calls.map(call=>call[2])).toEqual([true,undefined]);
+  await act(async()=>hook.start());expect(startReviewSession).toHaveBeenCalledOnce();
+  expect(vi.mocked(startReviewSession).mock.calls[0]![3]).toBeUndefined();
+  await mount(hook.session!.id,scope,true);expect(fetchReviewSession).not.toHaveBeenCalled();
+});
+it('does not use compatibility fallback for forbidden reads or replay a rejected write',async()=>{
+  vi.mocked(fetchActiveReview).mockRejectedValueOnce(new ApiError({status:403,message:'Forbidden'}));
+  await mount('new',scope,true);expect(fetchActiveReview).toHaveBeenCalledOnce();expect(hook.error).toBe('load');
+  await act(async()=>hook.refresh());vi.mocked(startReviewSession).mockRejectedValueOnce(new ApiError({status:400,message:'Invalid profile'}));
+  await act(async()=>hook.start());expect(startReviewSession).toHaveBeenCalledOnce();expect(hook.pending?.kind).toBe('start');expect(hook.error).toBe('save');
 });
 it('recovers a committed start after a lost response without posting again',async()=>{
   await mount();vi.mocked(startReviewSession).mockImplementationOnce(async input=>{current={...session(),id:input.id};throw new Error('Response lost');});

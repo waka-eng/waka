@@ -583,6 +583,8 @@
   "worldReflectionContextChanged": "The inspiration changed. Your thought is kept — ask again from the updated material.",
   "worldReflectionViewSource": "View saved inspiration",
   "worldReviewTitle": "Review your inspirations",
+  "worldOpeningInspirations": "Opening inspirations…",
+  "worldRetryInspirations": "Couldn’t open inspirations · Try again",
   "worldReviewOneTitle": "Review an inspiration",
   "worldReviewNextInspiration": "Next inspiration",
   "worldReviewBackToInspiration": "Back to inspiration",

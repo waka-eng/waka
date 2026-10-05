@@ -2,7 +2,7 @@
 /** WHAT THIS MOCKS, AND WHY: `lib/api` responses only. Review, single-inspiration
  * ReflectionFlow, durable save journals, confirmation and navigation run real.
  * No model calls or user data are used. SQL selection/deletion has DB tests. */
-import {act} from 'react';
+import {act,useState} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ReviewPanel} from '../src/components/ReviewPanel';
@@ -47,6 +47,11 @@ it('opens directly to one original with Reflect, Next and Remove, not stages or 
   expect(host.querySelector('.jar-review-steps')).toBeNull();expect(host.textContent).not.toMatch(/Choose inspirations|Start review|Stays with me|Selected inspirations/);
   expect(requestReviewQuestion).not.toHaveBeenCalled();expect(requestReflectionQuestion).not.toHaveBeenCalled();expect(saveReviewAnswer).not.toHaveBeenCalled();
 });
+it('uses the snapshot original without a source/session/count round trip',async()=>{
+  current={...current!,currentInspiration:{...source,materialRevision:'1'}};
+  await mount();expect(host.textContent).toContain(source.text);expect(fetchInspiration).not.toHaveBeenCalled();expect(fetchInspirationPage).not.toHaveBeenCalled();expect(fetchReviewSession).toHaveBeenCalledOnce();
+  expect(vi.mocked(fetchReviewSession).mock.calls[0]![3]).toBe(true);
+});
 it('starts a suggested single-source review on entry, with no manual manifest or model request',async()=>{
   const original=copy()!;current=null;
   vi.mocked(startReviewSession).mockImplementation(async input=>{current={...original,id:input.id};return copy();});
@@ -58,6 +63,24 @@ it('Next retains the inspiration, finishes its session and advances without a jo
   expect(chooseReviewInspiration).toHaveBeenCalledWith(SID,{revision:0,inspirationId:SOURCE,sourceRevision:'1',choice:'skip'},scope.profileId,expect.any(AbortSignal));
   expect(finishReviewSession).toHaveBeenCalledWith(SID,1,scope.profileId,expect.any(AbortSignal));expect(onId).toHaveBeenCalledWith('new');
   expect(deleteInspiration).not.toHaveBeenCalled();expect(requestReviewQuestion).not.toHaveBeenCalled();expect(saveReviewAnswer).not.toHaveBeenCalled();
+});
+it('keeps advancing across three real panel URL transitions without remounting or starting twice',async()=>{
+  const original=copy()!,ids=[SOURCE,SECOND,'44444444-4444-4444-8444-444444444444'];let starts=0;
+  current=null;
+  vi.mocked(fetchActiveReview).mockImplementation(async()=>current&&!current.completedAt?copy():null);
+  vi.mocked(startReviewSession).mockImplementation(async input=>{
+    const inspirationId=ids[starts++]!;
+    current={...original,id:input.id,currentInspirationId:inspirationId,items:[{...original.items[0]!,inspirationId}]};return copy();
+  });
+  function CyclingReview(){const[id,setId]=useState('new');return <ReviewPanel scope={scope} id={id} locale="en-US" onId={next=>{onId(next);setId(next);}} onClose={onClose} onNewInspiration={onNewInspiration} onOpen={onOpen}/>;}
+  await act(async()=>root.render(<CyclingReview/>));
+  for(let n=0;n<3;n++){
+    expect(current?.currentInspirationId).toBe(ids[n]);expect(button('reflect').disabled).toBe(false);
+    expect(startReviewSession).toHaveBeenCalledTimes(n+1);
+    if(n<2)await click('Next inspiration →');
+  }
+  expect(chooseReviewInspiration).toHaveBeenCalledTimes(2);expect(finishReviewSession).toHaveBeenCalledTimes(2);
+  expect(deleteInspiration).not.toHaveBeenCalled();expect(requestReviewQuestion).not.toHaveBeenCalled();
 });
 it('allows closing without advancing or deleting the current inspiration',async()=>{
   await mount();await click('done for now');expect(onClose).toHaveBeenCalledOnce();expect(chooseReviewInspiration).not.toHaveBeenCalled();expect(deleteInspiration).not.toHaveBeenCalled();

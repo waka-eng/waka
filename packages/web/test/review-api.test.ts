@@ -11,6 +11,14 @@ it('scopes a read and rejects a response belonging to another owner',async()=>{
   expect((await fetchActiveReview(PROFILE))?.id).toBe(SID);expect(vi.mocked(fetch).mock.calls[0]?.[0]).toContain(`profile=${PROFILE}`);
   row.profileId='other';await expect(fetchActiveReview(PROFILE)).rejects.toThrow('Could not verify');
 });
+it('requests current material explicitly and refuses a mismatched original/revision',async()=>{
+  row.currentInspirationId=SID;row.items=[{inspirationId:SID,position:0,sourceRevision:'1',currentRevision:'2',sourceChanged:true,reason:'chosen',choice:null,decidedAt:null,inspirationCreatedAt:row.createdAt}];
+  row.currentInspiration={id:SID,profileId:PROFILE,materialRevision:'1',text:'Synthetic original',kind:'note',source:'app',visibility:'private',createdAt:row.createdAt,updatedAt:row.createdAt,attachments:[],reflections:[]};
+  await expect(fetchReviewSession(SID,PROFILE,undefined,true)).rejects.toThrow('Could not verify');
+  row.currentInspiration.materialRevision='2';expect((await fetchReviewSession(SID,PROFILE,undefined,true))?.currentInspiration?.text).toBe('Synthetic original');
+  expect(vi.mocked(fetch).mock.calls.at(-1)![0]).toContain('include=current');
+  row.currentInspiration.profileId='other';await expect(fetchReviewSession(SID,PROFILE,undefined,true)).rejects.toThrow('Could not verify');
+});
 it('does not treat null as a successful choice or identified review read',async()=>{
   vi.mocked(fetch).mockImplementation(async()=>new Response('{"session":null}',{status:200,headers:{'Content-Type':'application/json'}}));
   expect(await fetchActiveReview(PROFILE)).toBeNull();await expect(fetchReviewSession(SID,PROFILE)).rejects.toThrow('Could not verify');

@@ -381,8 +381,8 @@ export function beyondOf(field: FieldLoad): number {
     walk falls back to, so a caller never has to invent a total. */
 export const EMPTY_FIELD: FieldLoad = { inspirations: [], total: 0, short: false };
 
-export async function loadInspirations(profile?:string,options?:{scope?:ProfileStorageScope;signal?:AbortSignal}):Promise<FieldLoad>{
-  if(!options?.scope)return (await loadInspirationPages(profile,options?.signal)).data;
+export async function loadInspirations(profile?:string,options?:{scope?:ProfileStorageScope;signal?:AbortSignal;onFirstPage?:(field:FieldLoad)=>void}):Promise<FieldLoad>{
+  if(!options?.scope)return (await loadInspirationPages(profile,options?.signal,options?.onFirstPage)).data;
   const target=profile??options.scope.profileId;
   return readInspirationSnapshot({scope:options.scope,profileId:target,signal:options.signal,
     validate:async signal=>{
@@ -395,11 +395,11 @@ export async function loadInspirations(profile?:string,options?:{scope?:ProfileS
         throw error;
       }
     },
-    load:signal=>loadInspirationPages(target,signal),
+    load:signal=>loadInspirationPages(target,signal,options.onFirstPage),
   });
 }
 
-async function loadInspirationPages(profile?:string,signal?:AbortSignal):Promise<{data:FieldLoad;fingerprint:string|null}>{
+async function loadInspirationPages(profile?:string,signal?:AbortSignal,onFirstPage?:(field:FieldLoad)=>void):Promise<{data:FieldLoad;fingerprint:string|null}>{
   const out: Inspiration[] = [];
   const identities:Array<{id:string;materialRevision?:string}>=[];
   let cursor: string | undefined;
@@ -410,6 +410,7 @@ async function loadInspirationPages(profile?:string,signal?:AbortSignal):Promise
     out.push(...got.inspirations.map(toInspiration));
     identities.push(...got.inspirations.map(row=>({id:row.id,materialRevision:row.materialRevision})));
     if (typeof got.total === "number") reported = got.total;
+    if(page===0&&!signal?.aborted)onFirstPage?.({inspirations:[...out].sort((a,b)=>a.capturedMs-b.capturedMs),total:Math.max(reported??0,out.length),short:Boolean(got.nextCursor)&&out.length<(reported??Infinity)});
     if (!got.nextCursor || got.inspirations.length === 0) break;
     cursor = got.nextCursor;
   }

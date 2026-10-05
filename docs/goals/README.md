@@ -30,7 +30,7 @@ Work happening now, or stopped mid-way with a recorded reason.
 
 | Goal | Status |
 | --- | --- |
-| [`performance-improvements.md`](performance-improvements.md) | In progress — milestone 1 passed at 32 requests versus 1,555; milestone 2 next. All five milestones approved. |
+| [`performance-improvements.md`](performance-improvements.md) | In progress — milestones 1 and 2 passed locally; Home median 400 ms and Review 359.7 ms. Milestone 3 next. All five milestones approved. |
 | [`ux-feature-implementation.md`](ux-feature-implementation.md) | Paused by owner after the checked feedback/room-flow batch; dev delivery requested. Later UX/algorithm slices, remaining release cases, semantic validation, historical repair and deployed verification remain open. |
 | [`everything-in-the-world.md`](everything-in-the-world.md) | Phase 2 passed (2026-08-23). Phase 3 next. |
 | [`every-workflow-works.md`](every-workflow-works.md) | Phase 2 passed (2026-08-22). Phase 3 next. |

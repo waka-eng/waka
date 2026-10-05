@@ -17,6 +17,8 @@ it('offers a simple resume label and refreshes when returning from a review',asy
   vi.mocked(fetchActiveReview).mockResolvedValue(session);await act(async()=>root.render(<Probe/>));
   expect(host.textContent).toBe('Resume review');
   vi.mocked(fetchActiveReview).mockResolvedValue(null);await act(async()=>root.render(<Probe route="review"/>));
+  expect(host.textContent).toBe('Resume review');expect(fetchActiveReview).toHaveBeenCalledTimes(1);
+  await act(async()=>root.render(<Probe route={null}/>));
   expect(host.textContent).toBe('Review your inspirations');expect(fetchActiveReview).toHaveBeenCalledTimes(2);
 });
 it('does not show another profile or a completed session as resumable',async()=>{

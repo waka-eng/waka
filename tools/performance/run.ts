@@ -34,7 +34,7 @@ const {createSessionRow}=await import('../../packages/api/src/lib/session.js');
 const {getDb}=await import('../../packages/api/src/lib/db.js');
 const {createGroupForProfile}=await import('../../packages/api/src/routes/groups-membership.js');
 const {readConversationContext}=await import('../../packages/api/src/lib/conversation-context.js');
-const {createReviewSession,completeReviewSession}=await import('../../packages/api/src/lib/review-sessions.js');
+const {createReviewSession,completeReviewSession,readActiveReview}=await import('../../packages/api/src/lib/review-sessions.js');
 const db=getDb();const fixtures=new Map<number,{id:string;token:string;firstId:string;signalId:string;groups:string[];signals:number;principles:number}>();
 stopDatabase=()=>db.$client.end();
 for(const count of sizes){
@@ -110,14 +110,29 @@ await writeFile(resolve(outputDir,'api.json'),JSON.stringify({...results,samples
 console.log(JSON.stringify({origin,schema:fixture.schemaName,apiImportMs:round(apiImportMs),results:resolve(outputDir,'api.json')}));
 let activeSize=sizes[0]!,delayMs=0;
 const httpRequests:Array<{path:string;method:string;size:number;start:number;durationMs?:number;status?:number;bytes?:number}>=[];
-const probe=`<script>(()=>{const tasks=[],frames=[];let ready=null,last=null,stopped=false;try{new PerformanceObserver(list=>list.getEntries().forEach(e=>tasks.push({start:e.startTime,duration:e.duration}))).observe({type:'longtask',buffered:true})}catch{};function sample(now){if(last!==null)frames.push(now-last);last=now;if(ready===null&&document.querySelector('.jar-home-activities button'))ready=now;if(!stopped)requestAnimationFrame(sample)}requestAnimationFrame(sample);setTimeout(()=>{stopped=true;frames.sort((a,b)=>a-b);document.documentElement.dataset.wakaPerf=JSON.stringify({readyMs:ready,longTasks:tasks.length,longTaskTotalMs:tasks.reduce((n,e)=>n+e.duration,0),longestTaskMs:Math.max(0,...tasks.map(e=>e.duration)),frames:frames.length,frameMedianMs:frames[Math.floor(frames.length*.5)],frameP95Ms:frames[Math.floor(frames.length*.95)],framesOver32:frames.filter(n=>n>32).length})},8000)})();</script>`;
+const probe=`<script>(()=>{let started=null,mode=null;document.addEventListener('click',e=>{const b=e.target.closest?.('button');if(!b)return;const text=(b.querySelector('.jar-activity-title')?.textContent||b.textContent).trim();if(/^(Review your inspirations|Resume review)$/.test(text)){started=performance.now();mode='review'}else if(text==='← Back'&&location.pathname.startsWith('/chat/')){started=performance.now();mode='return'}} ,true);new MutationObserver(()=>{if(started===null)return;const ready=mode==='review'?document.querySelector('.jar-review-item-actions button:not(:disabled)'):document.querySelector('.jar-home-activities button');if(ready){document.documentElement.dataset.wakaAction=JSON.stringify({mode,durationMs:performance.now()-started});started=null}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true})})();(()=>{const tasks=[],frames=[];let ready=null,last=null,stopped=false;try{new PerformanceObserver(list=>list.getEntries().forEach(e=>tasks.push({start:e.startTime,duration:e.duration}))).observe({type:'longtask',buffered:true})}catch{};function sample(now){if(last!==null)frames.push(now-last);last=now;if(ready===null&&document.querySelector('.jar-home-activities button')&&document.querySelector('.jar-mouth-rest')){ready=now;document.documentElement.dataset.wakaReady=String(now);}if(!stopped)requestAnimationFrame(sample)}requestAnimationFrame(sample);setTimeout(()=>{stopped=true;frames.sort((a,b)=>a-b);document.documentElement.dataset.wakaPerf=JSON.stringify({readyMs:ready,longTasks:tasks.length,longTaskTotalMs:tasks.reduce((n,e)=>n+e.duration,0),longestTaskMs:Math.max(0,...tasks.map(e=>e.duration)),frames:frames.length,frameMedianMs:frames[Math.floor(frames.length*.5)],frameP95Ms:frames[Math.floor(frames.length*.95)],framesOver32:frames.filter(n=>n>32).length})},8000)})();</script>`;
 const dist=resolve('packages/web/dist');
 const types:Record<string,string>={'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2','.png':'image/png','.svg':'image/svg+xml'};
 server=createServer(async(req,res)=>{
   try{
     const url=new URL(req.url??'/',origin);
-    if(url.pathname==='/perf/scenario'){const size=Number(url.searchParams.get('size'));assert.ok(fixtures.has(size));activeSize=size;delayMs=Number(url.searchParams.get('delay')??0);assert.ok(delayMs>=0&&delayMs<=500);httpRequests.length=0;res.writeHead(302,{Location:'/', 'Set-Cookie':buildSessionCookie(fixtures.get(size)!.token,{secure:false})});res.end();return;}
+    if(url.pathname==='/perf/scenario'){
+      const size=Number(url.searchParams.get('size'));assert.ok(fixtures.has(size));activeSize=size;
+      delayMs=Number(url.searchParams.get('delay')??0);assert.ok(delayMs>=0&&delayMs<=500);
+      // Test-only setup: close the synthetic session without making a source
+      // choice, so repeated browser samples can measure a genuinely new start.
+      if(url.searchParams.get('review')==='fresh'){
+        const active=await readActiveReview(db,fixtures.get(size)!.id);
+        if(active)await completeReviewSession(db,active.profileId,active.id,active.revision);
+      }
+      httpRequests.length=0;res.writeHead(302,{Location:'/', 'Set-Cookie':buildSessionCookie(fixtures.get(size)!.token,{secure:false})});res.end();return;
+    }
     if(url.pathname==='/perf/results'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({size:activeSize,delayMs,httpRequests}));return;}
+    if(url.pathname==='/perf/finish-review'){
+      const f=fixtures.get(activeSize)!;
+      const active=await readActiveReview(db,f.id);if(active)await completeReviewSession(db,f.id,active.id,active.revision);
+      res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({completed:Boolean(active)}));return;
+    }
     if(url.pathname.startsWith('/api/')){
       const start=performance.now(),size=activeSize;
       const path=url.pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi,'{id}')+(url.search?'?'+url.searchParams.toString().replace(/(?:profile|cursor)=[^&]+/g,'scope=…'):'');

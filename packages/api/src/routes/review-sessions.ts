@@ -7,6 +7,8 @@ import { profileQuerySchema } from './inspirations-validation.js';
 import { resolveTargetProfile } from './inspirations-tenancy.js';
 import {registerReviewDialogueRoutes} from './review-dialogue.js';
 import {loadReviewProcessingStatus,recoverReviewProcessing} from '../lib/review-processing.js';
+import {eq} from 'drizzle-orm';
+import {inspirations} from '../db/index.js';
 
 const uuid=z.string().uuid().transform(value=>value.toLowerCase());
 const revision=z.number().int().min(0).max(2147483646);
@@ -30,22 +32,26 @@ export function createReviewSessionRoutes(deps:{getDatabase?:typeof getDb;authMi
     return c.json({error:'The review could not be updated.'},500);
   });
   routes.use('*',async(c,next)=>{
-    const query=profileQuerySchema.safeParse(c.req.query());
+    const query=profileQuerySchema.extend({include:z.literal('current').optional()}).safeParse(c.req.query());
     if (!query.success) return c.json({error:'Invalid profile'},400);
     const target=await resolveTargetProfile(database(),c.get('session'),query.data.profile,c.req.method==='GET'?'read':'write');
     if (!target.ok) return c.json(target.body,target.status);
     c.set('reviewProfileId',target.profileId);
     await next();
   });
-  routes.get('/active',async c=>c.json({session:await readActiveReview(database(),c.get('reviewProfileId'))}));
+  const includeCurrent=(c:{req:{query:(key:string)=>string|undefined}})=>c.req.query('include')==='current';
+  routes.get('/active',async c=>c.json({session:await readActiveReview(database(),c.get('reviewProfileId'),includeCurrent(c))}));
   routes.post('/',async c=>{
     const input=createSchema.safeParse(await c.req.json().catch(()=>null));
     if (!input.success) return c.json({error:'Choose up to five available inspirations and a review id.'},400);
-    return c.json({session:await createReviewSession(database(),c.get('reviewProfileId'),input.data)});
+    const db=database(),profileId=c.get('reviewProfileId'),include=includeCurrent(c);
+    const session=await createReviewSession(db,profileId,input.data,include);
+    const hasInspirations=include&&!session?Boolean((await db.select({id:inspirations.id}).from(inspirations).where(eq(inspirations.profileId,profileId)).limit(1))[0]):undefined;
+    return c.json({session,...(hasInspirations!==undefined?{hasInspirations}:{})});
   });
   routes.get('/:id',async c=>{
     const id=uuid.safeParse(c.req.param('id')); if (!id.success) return c.json({error:'Invalid review id'},400);
-    const session=await readReviewSession(database(),c.get('reviewProfileId'),id.data);
+    const session=await readReviewSession(database(),c.get('reviewProfileId'),id.data,includeCurrent(c));
     return session?c.json({session}):c.json({error:'Review not found'},404);
   });
   routes.post('/:id/choices',async c=>{

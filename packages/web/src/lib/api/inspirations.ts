@@ -72,6 +72,7 @@ export interface ApiInspirationSummary {
 
 /** One capture, opened: the full text and everything hanging off it. */
 export interface ApiInspiration {
+  materialRevision?:string;
   conversationOrigin?:{conversationId:string|null;messageId:string|null;authorship:'user'|'adopted'}|null;
   saveRequest?: ApiInspirationSaveReceipt;
   processing?: ApiInspirationProcessingReceipt;

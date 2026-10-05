@@ -1,10 +1,12 @@
 import {ApiError,apiPath,getJson,postJson} from './http';
+import type {ApiInspiration} from './inspirations';
 
 export interface ApiReviewItem {
   inspirationId:string;position:number;sourceRevision:string;currentRevision:string;sourceChanged:boolean;
   reason:'unreviewed'|'revisit'|'chosen';choice:'keep'|'skip'|null;decidedAt:string|null;inspirationCreatedAt:string;
 }
 export interface ApiReviewSession {
+  currentInspiration?:ApiInspiration|null;
   id:string;profileId:string;revision:number;cursor:number;currentInspirationId:string|null;
   createdAt:string;completedAt:string|null;items:ApiReviewItem[];
 }
@@ -23,11 +25,17 @@ function checked(body:{session:ApiReviewSession|null},profileId:string,id?:strin
     (row.currentInspirationId!==null&&!row.items.some(item=>item.inspirationId===row.currentInspirationId))) {
     throw new ApiError({status:200,code:'invalid_review',message:'Could not verify this review'});
   }
+  if(row.currentInspiration){
+    const source=row.currentInspiration,item=row.items.find(item=>item.inspirationId===row.currentInspirationId);
+    if(!item||source.id!==item.inspirationId||source.profileId!==profileId||source.materialRevision!==item.currentRevision||typeof source.text!=='string'||!Array.isArray(source.attachments)||!Array.isArray(source.reflections))
+      throw new ApiError({status:200,code:'invalid_review',message:'Could not verify this review'});
+  }
   return row;
 }
-const path=(suffix:string,profileId:string)=>apiPath(`/review-sessions${suffix}?profile=${encodeURIComponent(profileId)}`);
-export async function fetchActiveReview(profileId:string,signal?:AbortSignal){return checked(await getJson<{session:ApiReviewSession|null}>(path('/active',profileId),'Could not load the review',signal),profileId);}
-export async function fetchReviewSession(id:string,profileId:string,signal?:AbortSignal){return checked(await getJson<{session:ApiReviewSession|null}>(path(`/${encodeURIComponent(id)}`,profileId),'Could not load the review',signal),profileId,id);}
-export async function startReviewSession(input:{id:string;inspirationIds?:string[]},profileId:string,signal?:AbortSignal){return checked(await postJson<{session:ApiReviewSession|null}>(path('',profileId),input,'Could not start the review',signal),profileId,input.inspirationIds?input.id:undefined);}
+const path=(suffix:string,profileId:string,includeCurrent=false)=>apiPath(`/review-sessions${suffix}?profile=${encodeURIComponent(profileId)}${includeCurrent?'&include=current':''}`);
+type ReviewResponse={session:ApiReviewSession|null;hasInspirations?:boolean};
+export async function fetchActiveReview(profileId:string,signal?:AbortSignal,includeCurrent=false){return checked(await getJson<ReviewResponse>(path('/active',profileId,includeCurrent),'Could not load the review',signal),profileId);}
+export async function fetchReviewSession(id:string,profileId:string,signal?:AbortSignal,includeCurrent=false){return checked(await getJson<ReviewResponse>(path(`/${encodeURIComponent(id)}`,profileId,includeCurrent),'Could not load the review',signal),profileId,id);}
+export async function startReviewSession(input:{id:string;inspirationIds?:string[]},profileId:string,signal?:AbortSignal,includeCurrent=false,onEmpty?:(hasInspirations:boolean)=>void){const body=await postJson<ReviewResponse>(path('',profileId,includeCurrent),input,'Could not start the review',signal);const row=checked(body,profileId,input.inspirationIds?input.id:undefined);if(!row&&typeof body.hasInspirations==='boolean')onEmpty?.(body.hasInspirations);return row;}
 export async function chooseReviewInspiration(id:string,input:ReviewChoiceInput,profileId:string,signal?:AbortSignal){return checked(await postJson<{session:ApiReviewSession|null}>(path(`/${encodeURIComponent(id)}/choices`,profileId),input,'Could not keep the review choice',signal),profileId,id);}
 export async function finishReviewSession(id:string,revision:number,profileId:string,signal?:AbortSignal){return checked(await postJson<{session:ApiReviewSession|null}>(path(`/${encodeURIComponent(id)}/complete`,profileId),{revision},'Could not finish the review',signal),profileId,id);}

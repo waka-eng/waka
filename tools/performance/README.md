@@ -27,5 +27,14 @@ in `document.documentElement.dataset.wakaPerf`. It does not measure subsequent
 SPA navigation readiness; use an explicit navigation/action timing probe for
 that measurement rather than reusing the initial-document timestamp.
 
+The probe also records early Home readiness in `dataset.wakaReady` and Review
+or Chat-return action timing in `dataset.wakaAction`. Use the same browser/build
+mode and at least twenty interleaved samples per build for a browser p95 gate.
+Adding `review=fresh` to `/perf/scenario` completes the fixture's open Review
+without choosing or deleting its original, so each sample measures a fresh
+start. `/perf/finish-review` is an equivalent test-only setup control. Neither
+control runs a model or changes real accounts. Resumed Review is measured
+separately by closing and reopening it without completing the session.
+
 Performance/browser/paid gates are manual. This runner does not add a GitHub
 workflow, schedule model requests or modify CI Browser gates.

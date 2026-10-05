@@ -41,6 +41,26 @@ async function sessionBody(response:Response){
 }
 const choose=(p:Person,session: {id:string;revision:number},inspirationId:string,choice:'keep'|'skip'|null,sourceRevision='1')=>post(p,`/${session.id}/choices`,{revision:session.revision,inspirationId,choice,sourceRevision});
 
+it('bundles only the current owned original and its matching revision when explicitly requested',async()=>{
+  const p=await person(),other=await person(),id=await source(p.id);await source(other.id);
+  await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer) VALUES (${p.id},${id},'Why?','A synthetic saved thought')`;
+  const response=await p.app.request('/reviews?include=current',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:randomUUID()})});
+  const session=await sessionBody(response);expect(session.currentInspiration).toMatchObject({id,profileId:p.id,materialRevision:session.items[0].currentRevision,reflections:[{answer:'A synthetic saved thought'}]});
+  expect((await sessionBody(await p.app.request(`/reviews/${session.id}`)))).not.toHaveProperty('currentInspiration');
+  await t.sql`UPDATE inspirations SET text='Current updated original' WHERE id=${id}`;
+  const refreshed=await sessionBody(await p.app.request(`/reviews/${session.id}?include=current`));
+  expect(refreshed.currentInspiration).toMatchObject({text:'Current updated original',materialRevision:refreshed.items[0].currentRevision});
+  expect((await other.app.request(`/reviews/${session.id}?include=current`)).status).toBe(404);
+  expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
+});
+it('distinguishes an empty archive from caught-up originals in the opt-in empty response',async()=>{
+  const p=await person();const request=()=>p.app.request('/reviews?include=current',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:randomUUID()})});
+  expect(await (await request()).json()).toEqual({session:null,hasInspirations:false});
+  const id=await source(p.id),session=await start(p),next=await sessionBody(await choose(p,session,id,'skip'));
+  await post(p,`/${session.id}/complete`,{revision:next.revision});
+  expect(await (await request()).json()).toEqual({session:null,hasInspirations:true});
+});
+
 it('reads an owned review result without creating work and refuses foreign result access',async()=>{
   const p=await person(),other=await person();await source(p.id);const session=await start(p);
   const response=await p.app.request(`/reviews/${session.id}/processing`);expect(response.status).toBe(200);expect(response.headers.get('cache-control')).toContain('no-store');
