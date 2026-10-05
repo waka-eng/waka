@@ -1,22 +1,89 @@
 # WAKA performance implementation plan
 
-Status: proposed, implementation not started. Prepared 2026-10-05 from the
-current production-build performance test and local single-inspiration Review
-implementation.
-
-Execution update: the owner has requested all milestones. Work is tracked in
-[the performance goal](../goals/performance-improvements.md), which supersedes
-the initial one-milestone recommendation and approval pauses below while
-preserving scope and acceptance gates. Deployment is not implied.
+Status: implementation in progress, updated 2026-10-05. Milestones 1 and 2
+passed locally. Milestones 3 to 5 have not started. Work is tracked in
+[the performance goal](../goals/performance-improvements.md).
 
 Make WAKA feel ready sooner and stop unnecessary work after it opens. Start
-with Home fetching and navigation, then search and Review, then memory readers.
-Keep the current visual identity and the one-inspiration Review flow. Run one
-milestone at a time, record its result, and pause for review before proceeding.
+with Home and Review loading and navigation, then search, then memory readers.
+Keep the current visual identity and the one-inspiration Review flow. Finish
+and verify one milestone before starting the next. All five milestones have
+already been requested; a failed gate requires reassessment, not a lower bar.
 
-This document authorizes no implementation, database repair, model requests,
-push, merge or deployment by itself. The existing local Review changes must
-be preserved and tracked separately from performance work.
+This plan covers local implementation and verification. It does not
+independently authorize database repair, model requests, push, merge or
+deployment. The original local Review work is preserved in a separate
+checkpoint from performance changes.
+
+## Current status and remaining priorities
+
+| Milestone | Priority | Current status | What remains |
+| --- | --- | --- | --- |
+| 1 Reduce Home request volume | Completed | Local gate passed; committed, not pushed | Recheck its budgets after later changes. |
+| 2 Make Home and Review ready sooner | Completed | Local gate passed; delivery pending | Recheck its budgets after later changes. |
+| 3 Make search scale | P1 | Not started | Optimize matching and exact counts, then prove equivalent bilingual results at 10,000 inspirations. |
+| 4 Speed up personal memory readers | P1 | Not started | Optimize Chat retrieval and artifact reads without weakening current evidence checks. |
+| 5 Validate delivery and optimize startup if needed | P2 | Not started | Run final regression and breakpoint checks, add cheap CI guards and prepare delivery evidence. |
+
+Three milestones remain. Startup bundle and font changes are conditional,
+not a prerequisite for the higher-impact database work.
+
+Milestone 1 reduced the first sixty seconds of Home API traffic from 1,555 to
+32 requests on the 2,000-inspiration fixture with 150 ms added API delay.
+Unsolicited original reads fell to zero. Initial readiness still took about
+two seconds, so removing request waste did not by itself finish the user-facing
+loading problem. The committed
+[milestone 1 receipt](../craft/evidence/performance/milestone-1.json) records
+the comparison and its limits.
+
+Milestone 2 enables Home and Capture before the full field is ready,
+keeps Review mounted while its new URL becomes a confirmed session URL, and
+optionally returns the current original with its Review response. Twenty
+interleaved local runs per build recorded Home median 1,910.6 to 400 ms and
+sample p95 1,994.6 to 432 ms. Fresh Review median fell from 842 to 359.7 ms;
+its opening uses two core requests plus Home's metadata read. Warm Chat return
+median was 215.05 ms, with a maximum 271 ms across twenty runs and no new
+archive walk. The [milestone 2 receipt](../craft/evidence/performance/milestone-2.json)
+retains the local measurements and limitations; these are not deployed or
+physical-device guarantees.
+
+### Immediate next implementation batch
+
+Implement milestone 3 before changing Chat retrieval:
+
+1. Capture fresh query plans and thirty-sample timings at 10,000 inspirations
+   for common, rare and no-result English/Korean queries. Include child-only
+   matches, transcript corrections, multiword queries and literal wildcards.
+2. Move cheap matching ahead of expensive matching where equivalent, and
+   avoid performing the full match again for an exact total. Use explicitly
+   scoped child candidates and the existing full-text index where it helps.
+3. Compare complete IDs, ordering, cursors and totals against the baseline,
+   including another account's volume and empty result pages.
+4. Add an index or versioned projection only if measurements justify it.
+   Preserve current material, correction precedence, invalidation and safe
+   resumable backfill; do not silently omit originals with missing coverage.
+5. Meet the bilingual search p95 budget, preserve failed experiments, run
+   ownership/material tests and retain a separate milestone commit and receipt.
+
+### Bug fixes required throughout
+
+Performance work is not complete if it breaks a normal workflow. Treat these
+as blocking checks within the milestone that touches them, not a separate
+open-ended bug backlog:
+
+- Preserve Capture text/media and reflection drafts through errors and Back.
+- Distinguish loading, genuinely empty, caught-up and failed states. Do not
+  display invented content, a premature failure or an indefinitely disabled
+  action while useful work is available.
+- Keep repeated clicks, interrupted saves and concurrent tabs idempotent;
+  advance Review only after a confirmed action.
+- Withdraw deleted/edited or inaccessible source context. Preserve account
+  and profile boundaries, current citations and human wording locks.
+- Test the changed flows with long Korean text, keyboard navigation and narrow
+  screens. Fix clipping, inaccessible controls and layout jumps in scope.
+
+Each confirmed bug should get a reproducible case and a regression test before
+its fix is counted as complete.
 
 ## Measured baseline
 
@@ -43,8 +110,8 @@ eight seconds, live model latency and worker contention were not measured.
 Local detailed evidence is in `work/chat-home-memory/performance-summary.json`,
 `performance-api.json`, `performance-browser.json`, `performance-sql.json`
 and `performance-search-comparison.json`. Those generated files are ignored by
-Git. The table above preserves the compact baseline in this plan; milestone 1
-must make the benchmark reproducible and retain sanitized comparison receipts.
+Git. The table above preserves the compact baseline in this plan. Milestone 1
+made the benchmark reproducible and retained a sanitized comparison receipt.
 
 ## Milestone order
 
@@ -61,40 +128,43 @@ Rebaseline with repeated samples before judging an implementation.
 
 ## Milestone 1 Reduce Home request volume
 
+Status: passed locally at `c6fee2e`; see the goal log and committed receipt.
+
 ### Implementation tasks
 
-- [ ] Promote the disposable performance probe into a supported manual command
+- [x] Promote the disposable performance probe into a supported manual command
   under `tools/`. Require an explicit disposable loopback database, disable
   provider calls by default, and register cleanup before seeding. Record build,
   fixture shape, pool configuration, request counts, bytes and timings without
   credentials, prompts or account content. Repeat cold/warm navigation and
   count both issued and completed requests.
-- [ ] Ensure benchmark API processes use current code. Add reliable local API
+- [x] Ensure benchmark API processes use current code. Add reliable local API
   watch/restart behavior with graceful shutdown, or require a fresh isolated
-  process for each run. The current local script watches the web build but
-  runs the API without watch mode; do not mistake old server code for a result.
-- [ ] Remove the all-inspiration detail sweep in `Home.tsx`. Fetch full text,
+  process for each run. The baseline local script watched only the web build;
+  it now watches API code too. Do not mistake an older running server for a
+  current-code result.
+- [x] Remove the all-inspiration detail sweep in `Home.tsx`. Fetch full text,
   reflections and media when an inspiration is opened. Default to no
   unsolicited inspiration detail warming; allow at most four explicit
   near-term prefetches if measurement later justifies them.
-- [ ] Prioritize evidence for the visible Top of Mind entry. Stop loading every
+- [x] Prioritize evidence for the visible Top of Mind entry. Stop loading every
   signal's full evidence sequentially before publishing that entry's roots.
   Keep lightweight signal metadata if the scene needs it; fetch further
   evidence on demand. Do not request more than the visible entry actually cites.
-- [ ] Load only room roster metadata on Home. Fetch wall/proposal contents on
+- [x] Load only room roster metadata on Home. Fetch wall/proposal contents on
   room approach or entry, not for every room at boot. This is a fetching change,
   not an expansion of room features or sharing permissions.
-- [ ] Move bounded summary snapshots and request deduplication outside the Home
+- [x] Move bounded summary snapshots and request deduplication outside the Home
   component so Chat navigation does not discard them. Key by account, target
   profile, wall and request scope. Clear on logout/account changes and revoke
   inaccessible wall/grant state. Start with memory-only storage, one active
   profile snapshot and the existing 2,000-summary ceiling.
-- [ ] Define invalidation for capture, edit, removal, reflection, transcript
+- [x] Define invalidation for capture, edit, removal, reflection, transcript
   correction, visibility changes and new server revisions. Cached raw text is
   not current evidence: reopening it requires an owned revision check. Reuse
   the existing material revision in DTOs if needed, not timestamp-only checks
   or a new parallel revision concept. Never feed client caches into generation.
-- [ ] Validate warm archive snapshots against server-owned source identities,
+- [x] Validate warm archive snapshots against server-owned source identities,
   material revisions and current membership before reuse. Audit revision
   coverage first: the existing generation fence is not a whole-archive change
   counter, so an unchanged Top of Mind/generation revision cannot certify an
@@ -102,7 +172,7 @@ Rebaseline with repeated samples before judging an implementation.
   to catch remote edits, deletions and new captures without reloading all full
   records. Until validation succeeds, cached geometry/chrome is only a loading
   aid, not proof that a preview or citation is current.
-- [ ] Share in-flight GETs safely: one consumer closing must not cancel another
+- [x] Share in-flight GETs safely: one consumer closing must not cancel another
   consumer's request. Do not deduplicate or automatically replay mutations.
   Evict forbidden/missing resources rather than retaining a negative result
   indefinitely. Fence late responses after identity or view changes.
@@ -125,32 +195,35 @@ Primary files: `packages/web/src/pages/Home.tsx`, `packages/web/src/lib/data.ts`
 
 ## Milestone 2 Make Home and Review ready sooner
 
+Status: passed locally; see the goal log and milestone 2 receipt. The field
+loads separately because a partial field would change the current layout.
+
 ### Implementation tasks
 
-- [ ] Separate first-page readiness from completion of the archive walk.
+- [x] Separate first-page readiness from completion of the archive walk.
   Hydrate the initial 200 summaries, use the server's real total and load older
   pages only when needed or in a bounded background continuation. Cancel that
   continuation on identity changes or when it has no active consumer.
-- [ ] Preserve positions, camera, timeline and open controls while more data
+- [x] Preserve positions, camera, timeline and open controls while more data
   arrives. Do not resort the visible field or replay the arrival animation.
   Prototype stable layout before wiring progressive updates. If that cannot
   be preserved, keep the field loading separately and enable Capture after
   authentication/draft hydration instead of forcing a visually unstable load.
-- [ ] Restore the user's prior section, date, scroll and selected state after
+- [x] Restore the user's prior section, date, scroll and selected state after
   Chat navigation. Validate current data without making a return look like an
   entirely new visit or letting stale context become authoritative.
-- [ ] Keep Review mounted through its new-session-to-confirmed-ID transition.
+- [x] Keep Review mounted through its new-session-to-confirmed-ID transition.
   Reuse the committed response instead of refetching the same session because
   the URL key changed. Real navigation to another session must still reset it.
-- [ ] Add opt-in current-inspiration data to the existing Review read/start
+- [x] Add opt-in current-inspiration data to the existing Review read/start
   response, loaded with its matching owner/material revision in one database
   snapshot. Keep Home's resume read metadata-only. Preserve the durable start
   identity, one-open-session constraint and explicit lost-response recovery.
-- [ ] Remove the always-on Review count request when a source is already
+- [x] Remove the always-on Review count request when a source is already
   present. Return enough truthful empty/caught-up information when no source
   is eligible. Refresh Home's resume label on return or a confirmed change,
   not on every internal Review URL transition.
-- [ ] Preserve single-inspiration reflection, current-original validation,
+- [x] Preserve single-inspiration reflection, current-original validation,
   deletion confirmation/revision fencing, drafts and historical review links.
   Cancel superseded reads and handle timeout/error states without indefinite
   loading or advancing the cursor before a confirmed action.
@@ -173,6 +246,8 @@ Primary files: `packages/web/src/lib/data.ts`, `use-view-navigation.ts`,
 `packages/api/src/lib/review-sessions.ts` and its routes/serialization.
 
 ## Milestone 3 Make search scale
+
+Status: not started. Begin only after milestone 2 passes.
 
 ### Implementation tasks
 
@@ -216,6 +291,8 @@ material helpers, `packages/web/src/components/InspirationSearch.tsx` and
 relevant query/schema tests.
 
 ## Milestone 4 Speed up personal memory readers
+
+Status: not started. Use milestone 3 work only where retrieval semantics match.
 
 ### Implementation tasks
 
@@ -261,6 +338,8 @@ Primary files: `packages/api/src/lib/conversation-material.ts`,
 
 ## Milestone 5 Validate delivery and optimize startup if needed
 
+Status: not started. Bundle/font work is conditional on an observed bottleneck.
+
 ### Implementation tasks
 
 - [ ] After milestones 1 to 4, repeat the complete benchmark and investigate
@@ -295,9 +374,11 @@ capture media, citations, human locks and account/profile isolation throughout.
 
 ## Execution and reporting
 
-Before implementation, record the current revision and preserve the pending
-single-inspiration Review work. Move benchmark tooling out of ignored work
-only as part of milestone 1; no private account data belongs in test fixtures.
+The original single-inspiration Review work was checkpointed at `33614ed`;
+milestone 1 and its supported benchmark were committed at `c6fee2e`.
+Milestone 2 passed its local gate and is checkpointed separately. Record the
+exact revision before comparisons or delivery; no private account data belongs
+in fixtures.
 
 For each milestone, use warmed, repeated, interleaved before/after samples on
 the same fixture and build mode. Record sample counts, median/p95, request
@@ -312,9 +393,12 @@ one cold run with a warmed candidate or extrapolate localhost timings to dev.
 Run targeted web/API checks during implementation and full existing suites
 before handoff. Migrations, if introduced, also need `pnpm db:check` and fresh
 disposable-database validation. Each handoff should state what improved, what
-failed, what remains and whether anything was pushed or deployed. Pause at
-the milestone gate; do not silently expand into the next milestone.
+failed, what remains and whether anything was pushed or deployed. Record the
+gate verdict before moving on; stop and reassess a failed or marginal gate.
+Do not silently expand the approved scope.
 
-Recommended first approval: milestone 1 only. It addresses the largest measured
-waste without a schema migration or visual redesign. Reevaluate whether all
-later work is necessary after its before/after results.
+Recommended next step: implement and accept milestone 3. Then complete memory
+readers and final regression checks. Milestones 1 and 2 needed no migration;
+search projection/index work remains conditional.
+Production deployment, native/store packaging, a visual redesign and changes
+to generation thresholds or model prompts are outside this performance plan.

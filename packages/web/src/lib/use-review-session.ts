@@ -34,11 +34,15 @@ async function limited<T>(work:Promise<T>,controller:AbortController):Promise<T>
 
 /** Reads may reconcile a committed intent but never resend one. Local storage
  * must retain the exact owner-scoped intent before a write reaches the API. */
-export function useReviewSession(scope:ProfileStorageScope,id:string,onId:(id:string)=>void){
+export function useReviewSession(scope:ProfileStorageScope,id:string,onId:(id:string)=>void,includeCurrent=false){
   const key=profileStorageKey(scope,'reviewIntent:')!;
   const [session,setSession]=useState<ApiReviewSession|null>(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
   const [pending,setPending]=useState<Intent|null>(null),[error,setError]=useState<'load'|'save'|'conflict'|'storage'|null>(null),[empty,setEmpty]=useState(false);
   const [reload,setReload]=useState(0);
+  const [hasInspirations,setHasInspirations]=useState<boolean|null>(null);
+  const retained=useRef<{owner:string;session:ApiReviewSession;reload:number}|null>(null);
+  const bundle=useRef({owner:key,requested:includeCurrent,enabled:includeCurrent});
+  if(bundle.current.owner!==key||bundle.current.requested!==includeCurrent)bundle.current={owner:key,requested:includeCurrent,enabled:includeCurrent};
   const live=useRef({scope,id,onId});live.current={scope,id,onId};
   const intent=useRef<Intent|null>(null),working=useRef(false),epoch=useRef(0),request=useRef<AbortController|null>(null);
   const storageBlocked=useRef(false);
@@ -56,8 +60,17 @@ export function useReviewSession(scope:ProfileStorageScope,id:string,onId:(id:st
     try {
       const active=live.current,waiting=intent.current;
       let row:ApiReviewSession|null;
-      if(active.id==='new') row=await limited(fetchActiveReview(active.scope.profileId,controller.signal),controller);
-      else row=await limited(fetchReviewSession(active.id,active.scope.profileId,controller.signal),controller);
+      const get=(include:boolean)=>active.id==='new'
+        ?include?fetchActiveReview(active.scope.profileId,controller.signal,true):fetchActiveReview(active.scope.profileId,controller.signal)
+        :include?fetchReviewSession(active.id,active.scope.profileId,controller.signal,true):fetchReviewSession(active.id,active.scope.profileId,controller.signal);
+      try{row=await limited(get(bundle.current.enabled),controller);}
+      catch(error){
+        // Older APIs reject the new query before handling a request. Only
+        // retry this read; later writes use the negotiated legacy shape.
+        // A failed POST is never automatically replayed for compatibility.
+        if(controller.signal.aborted||epoch.current!==serial||!bundle.current.enabled||!(error instanceof ApiError)||error.status!==400||error.message!=='Invalid profile')throw error;
+        bundle.current.enabled=false;row=await limited(get(false),controller);
+      }
       if(controller.signal.aborted||epoch.current!==serial) return;
       if(waiting&&(takeLatest||observed(waiting,row))) settle(waiting,observed(waiting,row));
       if(waiting&&intent.current&&row){
@@ -67,11 +80,18 @@ export function useReviewSession(scope:ProfileStorageScope,id:string,onId:(id:st
         if(changed)setError('conflict');
       }
       setSession(row);setEmpty(false);
+      retained.current=row?{owner:key,session:row,reload}:null;
       if(row&&active.id!==row.id&&!intent.current) active.onId(row.id);
     } catch(reason){if(epoch.current===serial){if(reason instanceof ApiError&&[401,403,404].includes(reason.status))setSession(null);setError('load');}}
     finally {if(epoch.current===serial) setLoading(false);}
-  },[key,settle]);
+  },[key,settle,includeCurrent,reload]);
   useEffect(()=>{
+    const confirmed=retained.current;
+    if(confirmed?.owner===key&&confirmed.session.id===id&&confirmed.reload===reload&&!intent.current){
+      setSession(confirmed.session);setLoading(false);
+      return()=>{epoch.current+=1;request.current?.abort();};
+    }
+    retained.current=null;setHasInspirations(null);
     working.current=false;storageBlocked.current=false;intent.current=null;setBusy(false);setPending(null);setSession(null);setEmpty(false);
     try {
       const saved:Intent[]=[];
@@ -93,11 +113,13 @@ export function useReviewSession(scope:ProfileStorageScope,id:string,onId:(id:st
     working.current=true;setBusy(true);setLoading(false);setError(null);request.current?.abort();const controller=new AbortController();request.current=controller;
     const serial=++epoch.current,profileId=scope.profileId;
     try {
-      const work=value.kind==='start'?startReviewSession({id:value.id,...(value.inspirationIds?{inspirationIds:value.inspirationIds}:{})},profileId,controller.signal)
+      const input={id:value.id,...(value.kind==='start'&&value.inspirationIds?{inspirationIds:value.inspirationIds}:{})};
+      const work=value.kind==='start'?(bundle.current.enabled?startReviewSession(input,profileId,controller.signal,true,has=>{if(epoch.current===serial&&!controller.signal.aborted)setHasInspirations(has);}):startReviewSession(input,profileId,controller.signal))
         :value.kind==='choice'?chooseReviewInspiration(value.id,value.input,profileId,controller.signal):finishReviewSession(value.id,value.revision,profileId,controller.signal);
       const row=await limited(work,controller);
       if(epoch.current!==serial) return;
       settle(value,Boolean(row));setSession(row);setEmpty(!row);setLoading(false);
+      retained.current=row?{owner:key,session:row,reload}:null;
       if(row&&live.current.id!==row.id) live.current.onId(row.id);
     } catch(reason){if(epoch.current===serial)setError(reason instanceof ApiError&&[404,409].includes(reason.status)?'conflict':'save');}
     finally {if(epoch.current===serial){working.current=false;setBusy(false);}}
@@ -111,7 +133,7 @@ export function useReviewSession(scope:ProfileStorageScope,id:string,onId:(id:st
     intent.current=value;setPending(value);void run(value);
   };
   const observeRevision=useCallback((revision:number)=>setSession(current=>current&&revision>current.revision?{...current,revision}:current),[]);
-  return {session,loading,busy,pending,error,empty,
+  return {session,loading,busy,pending,error,empty,hasInspirations,
     observeRevision,
     start:(inspirationIds?:string[],selection?:ReviewSelectionReceipt)=>write({kind:'start',id:crypto.randomUUID(),...(inspirationIds?{inspirationIds}:{}),...(selection?{selection}:{})}),
     choose:(item:ApiReviewItem,choice:'keep'|'skip'|null)=>{if(session)write({kind:'choice',id:session.id,input:{revision:session.revision,inspirationId:item.inspirationId,sourceRevision:item.currentRevision,choice}});},

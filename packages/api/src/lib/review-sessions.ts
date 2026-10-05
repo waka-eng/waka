@@ -1,5 +1,8 @@
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { inspirationRevisions, inspirations, profiles, reflections, reviewItems, reviewSessions } from '../db/index.js';
+import { attachments, inspirationRevisions, inspirations, profiles, reflections, reviewItems, reviewSessions } from '../db/index.js';
+import {attachmentSelection,serializeAttachment} from '../routes/attachments.js';
+import {inspirationSelection,reflectionSelection,serializeInspirationDetail} from '../routes/inspirations-serialization.js';
+import {readConversationOrigin} from './conversation-capture.js';
 import type { getDb } from './db.js';
 import { hashEmbeddingInput } from './inspiration-embeddings.js';
 
@@ -17,43 +20,58 @@ export async function lockReviewOwner(tx:Tx,profileId:string) {
   const [lock]=await tx.execute(sql`SELECT pg_try_advisory_xact_lock(hashtextextended(${`review-session:${profileId}`},0)) AS acquired`);
   if (lock?.acquired!==true) throw new ReviewSessionError(409,'review_busy','This review is changing. Check it again.');
 }
-async function present(db:Reader,profileId:string,id:string) {
+async function present(db:Reader,profileId:string,id:string,includeCurrent=false) {
   const [session]=await db.select().from(reviewSessions).where(and(eq(reviewSessions.profileId,profileId),eq(reviewSessions.id,id)));
   if (!session) return null;
   const rows=await db.select({item:reviewItems,currentRevision:inspirationRevisions.personalRevision,inspirationCreatedAt:inspirations.createdAt})
     .from(reviewItems).innerJoin(inspirations,and(eq(inspirations.profileId,reviewItems.profileId),eq(inspirations.id,reviewItems.inspirationId)))
     .innerJoin(inspirationRevisions,and(eq(inspirationRevisions.profileId,reviewItems.profileId),eq(inspirationRevisions.inspirationId,reviewItems.inspirationId)))
     .where(and(eq(reviewItems.profileId,profileId),eq(reviewItems.sessionId,id))).orderBy(asc(reviewItems.position));
+  const current=session.completedAt?null:rows.find(row=>row.item.position>=session.cursor)??null;
+  let currentInspiration=null;
+  if(includeCurrent&&current){
+    const sourceId=current.item.inspirationId;
+    const [source]=await db.select(inspirationSelection).from(inspirations).where(and(eq(inspirations.profileId,profileId),eq(inspirations.id,sourceId)));
+    if(source){
+      const [media,answers,origin]=await Promise.all([
+        db.select(attachmentSelection).from(attachments).where(and(eq(attachments.profileId,profileId),eq(attachments.inspirationId,sourceId))).orderBy(asc(attachments.createdAt),asc(attachments.id)),
+        db.select(reflectionSelection).from(reflections).where(and(eq(reflections.profileId,profileId),eq(reflections.inspirationId,sourceId))).orderBy(asc(reflections.createdAt),asc(reflections.id)),
+        readConversationOrigin(db,profileId,sourceId),
+      ]);
+      currentInspiration={...serializeInspirationDetail(source,{attachments:media.map(serializeAttachment),reflections:answers}),materialRevision:current.currentRevision.toString(),...(origin?{conversationOrigin:origin}:{})};
+    }
+  }
   return {id:session.id,profileId,revision:session.revision,cursor:session.cursor,
-    currentInspirationId:session.completedAt ? null : rows.find(row=>row.item.position>=session.cursor)?.item.inspirationId??null,
+    currentInspirationId:current?.item.inspirationId??null,
+    ...(includeCurrent?{currentInspiration}:{}),
     createdAt:session.createdAt.toISOString(),completedAt:session.completedAt?.toISOString()??null,
     items:rows.map(({item,currentRevision,inspirationCreatedAt})=>({inspirationId:item.inspirationId,position:item.position,
       sourceRevision:item.sourceRevision.toString(),currentRevision:currentRevision.toString(),sourceChanged:item.sourceRevision!==currentRevision,
       reason:item.reason,choice:item.choice,decidedAt:item.decidedAt?.toISOString()??null,inspirationCreatedAt:inspirationCreatedAt.toISOString()}))};
 }
-export function readReviewSession(db:Db,profileId:string,id:string) {
-  return db.transaction(tx=>present(tx,profileId,id),{isolationLevel:'repeatable read'});
+export function readReviewSession(db:Db,profileId:string,id:string,includeCurrent=false) {
+  return db.transaction(tx=>present(tx,profileId,id,includeCurrent),{isolationLevel:'repeatable read',accessMode:'read only'});
 }
-export function readActiveReview(db:Db,profileId:string) {
+export function readActiveReview(db:Db,profileId:string,includeCurrent=false) {
   return db.transaction(async tx=>{
     const [active]=await tx.select({id:reviewSessions.id}).from(reviewSessions).where(and(eq(reviewSessions.profileId,profileId),isNull(reviewSessions.completedAt)));
-    return active ? present(tx,profileId,active.id) : null;
-  },{isolationLevel:'repeatable read'});
+    return active ? present(tx,profileId,active.id,includeCurrent) : null;
+  },{isolationLevel:'repeatable read',accessMode:'read only'});
 }
 
-export function createReviewSession(db:Db,profileId:string,input:{id:string;inspirationIds?:string[]}) {
+export function createReviewSession(db:Db,profileId:string,input:{id:string;inspirationIds?:string[]},includeCurrent=false) {
   const inputHash=hashEmbeddingInput(JSON.stringify(input.inspirationIds??null));
   return db.transaction(async tx=>{
     await lockReviewOwner(tx,profileId);
     const [existing]=await tx.select().from(reviewSessions).where(and(eq(reviewSessions.profileId,profileId),eq(reviewSessions.id,input.id)));
     if (existing) {
       if (existing.inputHash!==inputHash) throw new ReviewSessionError(409,'review_request_changed','This review was started with a different selection.');
-      return present(tx,profileId,existing.id);
+      return present(tx,profileId,existing.id,includeCurrent);
     }
     const [active]=await tx.select({id:reviewSessions.id}).from(reviewSessions).where(and(eq(reviewSessions.profileId,profileId),isNull(reviewSessions.completedAt)));
     if (active) {
       if (input.inspirationIds) throw new ReviewSessionError(409,'review_already_open','Finish or resume your open review first.');
-      return present(tx,profileId,active.id);
+      return present(tx,profileId,active.id,includeCurrent);
     }
     const reviewed=sql<boolean>`EXISTS (SELECT 1 FROM ${reviewItems} WHERE ${reviewItems.profileId}=${inspirations.profileId}
       AND ${reviewItems.inspirationId}=${inspirations.id} AND ${reviewItems.choice} IS NOT NULL)
@@ -84,8 +102,8 @@ export function createReviewSession(db:Db,profileId:string,input:{id:string;insp
     await tx.insert(reviewItems).values(ids.map((inspirationId,position)=>({profileId,sessionId:input.id,inspirationId,position,
       sourceRevision:revisions.find(row=>row.inspirationId===inspirationId)!.personalRevision,
       reason:input.inspirationIds?'chosen' as const:candidates.find(row=>row.id===inspirationId)!.reviewed?'revisit' as const:'unreviewed' as const})));
-    return present(tx,profileId,input.id);
-  });
+    return present(tx,profileId,input.id,includeCurrent);
+  },{isolationLevel:'repeatable read'});
 }
 
 export function chooseReviewItem(db:Db,profileId:string,id:string,input:{revision:number;inspirationId:string;sourceRevision:string;choice:'keep'|'skip'|null}) {

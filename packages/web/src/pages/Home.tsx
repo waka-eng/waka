@@ -1386,6 +1386,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * knowing this exists.
    */
   const [fieldBeyond, setFieldBeyond] = useState<number>(0);
+  const [fieldLoading,setFieldLoading]=useState(false);
+  const [fieldFailed,setFieldFailed]=useState(false);
+  const retryFieldRef=useRef<(()=>void)|null>(null);
+  const fieldLoadingRef=useRef(false);fieldLoadingRef.current=fieldLoading;
   /**
    * THE POUR READS THIS; THE POUR DOES NOT DEPEND ON IT.
    *
@@ -2807,16 +2811,38 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     };
     /* LAYER 1 — the field. The archive is the spine, so its answer alone
        decides whether this is the real layout or the fixture. */
-    const sourceRead=sourceListMutationRef.current;
-    loadInspirations(undefined,{scope:storageScope??undefined})
+    const controller=new AbortController();let firstShown=false;
+    const readInitialField=async()=>{
+      for(let attempt=0;attempt<3;attempt++){
+        const sourceRead=sourceListMutationRef.current;
+        const field=await loadInspirations(undefined,{scope:storageScope??undefined,signal:controller.signal,onFirstPage:first=>{
+          if(firstShown||dead||controller.signal.aborted)return;firstShown=true;
+          // Rank/crowding depend on the complete field. Ready chrome and the
+          // companion first, but never paint 200 orbs then reshuffle them.
+          if(first.short){setInspirations([]);setFieldBeyond(first.total);setFieldLoading(true);}
+          else{setInspirations(first.inspirations);setFieldBeyond(beyondOf(first));}
+          setPhase('ready');
+        }});
+        if(sourceRead===sourceListMutationRef.current)return field;
+      }
+      throw new Error('The archive changed while opening. Try again.');
+    };
+    let fieldPending=false;
+    const readField=()=>{
+      if(dead||fieldPending||controller.signal.aborted)return;
+      fieldPending=true;setFieldFailed(false);
+      if(firstShown)setFieldLoading(true);
+      void readInitialField()
       .then((field) => {
-        if (dead || offlineRef.current || sourceRead!==sourceListMutationRef.current) return;
+        if (dead || offlineRef.current || controller.signal.aborted) return;
         setInspirations(field.inspirations);
         setFieldBeyond(beyondOf(field));
+        setFieldLoading(false);
+        setFieldFailed(false);
         setPhase("ready");
       })
       .catch((err: unknown) => {
-        if (dead) return;
+        if (dead||controller.signal.aborted) return;
         /* NOT SIGNED IN IS NOT A FAILURE.
            A 401 landed in the same branch as a dead network, so a production
            build — where there is no dev fixture to fall back to — met a
@@ -2843,13 +2869,16 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
            painted as their own world. It now asks `inventedDataAllowed()`,
            which is DEV alone. */
         if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-          if (!layout) {
+          if (firstShown||!layout) {
             navigate("/login", { replace: true });
             return;
           }
           goOffline(layout);
           return;
         }
+        // Home is already usable. A later archive page failing must not
+        // replace it (or an open Capture draft) with a failure/fixture world.
+        if(firstShown){setFieldLoading(false);setFieldFailed(true);return;}
         /* outside dev there is no fixture and never was: the page says what
            it has always said when the archive cannot be reached */
         if (!layout) {
@@ -2868,7 +2897,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           return;
         }
         goOffline(layout);
-      });
+      }).finally(()=>{fieldPending=false;});
+    };
+    retryFieldRef.current=readField;
+    readField();
     /* LAYER 2 — the sky. Patterns, and then in the background what each of
        them rests on: the citation index the field reads its meaning from and
        the orbit draws its satellites from. One request per pattern, off the
@@ -2933,6 +2965,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     });
     return () => {
       dead = true;
+      controller.abort();
+      retryFieldRef.current=null;
     };
   }, []);
 
@@ -8738,6 +8772,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            that happens in this layout, and the creature looks down at it.
            After the duplicate guard, so a re-render never re-celebrates. */
         simApiRef.current?.acknowledge("kept");
+        // The spark belongs to the capture now; its field orb waits for the
+        // complete initial geometry rather than being resized/repositioned.
+        if(fieldLoadingRef.current)return;
         const b = bornBall(seed);
         /* KEEPING SOMETHING HAPPENS NOW, so the dial's now is at least this
            moment. Without it the newborn is in the future of the time the
@@ -12756,7 +12793,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         {c.text?<button type="button" aria-expanded={posterAsk} onClick={()=>setPosterAsk(value=>!value)}>{say('worldReadingWhy')}</button>:null}
                       </>}
                     </div>:null}
-                    {here&&w.kind==='self'&&storageScope&&!offline&&atNow?<HomeActivities locale={locale} reviewLabel={reviewEntry.label} resuming={reviewEntry.resuming} hasInspirations={Boolean(inspirations?.length)}
+                    {here&&w.kind==='self'&&storageScope&&!offline&&atNow?<HomeActivities locale={locale} reviewLabel={reviewEntry.label} resuming={reviewEntry.resuming} hasInspirations={Boolean(inspirations?.length||fieldBeyond)}
                       onReview={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})} onChat={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new'})}/>:null}
                     {here && w.kind === "group" && atNow ? <button
                       type="button"
@@ -14463,12 +14500,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           is behind it — and from up here the ground is two sections away, so
           it was a door to somewhere you cannot get to in one step, sitting
           under a sentence about the timeless half of a mind. */}
-      {phase === "ready" && !inField && !inSky && wallCount > 0 ? (
+      {phase === "ready" && ((!inField&&!inSky&&wallCount>0)||(atWall.kind==='self'&&(fieldLoading||fieldFailed))) ? (
         <button
           type="button"
-          className="jar-saved"
+          className={atWall.kind==='self'&&fieldFailed?'jar-saved jar-saved--retry':'jar-saved'}
           data-jar-chrome="1"
-          onClick={() => simApiRef.current?.toGround()}
+          disabled={atWall.kind==='self'&&fieldLoading}
+          onClick={() => atWall.kind==='self'&&fieldFailed?retryFieldRef.current?.():simApiRef.current?.toGround()}
         >
           <span className="jar-saved-count">
             {/* TWO NUMBERS ONLY WHEN THEY DISAGREE. Under the ceiling — which
@@ -14476,14 +14514,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 what it always was: one number and the word. Past it, the door
                 stops printing the size of what arrived as though it were the
                 size of the archive. */}
-            {wallTotal > wallCount
+            {atWall.kind==='self'&&fieldFailed?say('worldRetryInspirations'):atWall.kind==='self'&&fieldLoading?say('worldOpeningInspirations'):wallTotal > wallCount
               ? formatMessage(locale, "worldInspirationCountCapped", {
                   shown: wallCount,
                   total: wallTotal,
                 })
               : formatMessage(locale, "worldInspirationCount", { count: wallCount })}
           </span>
-          <span className="jar-caret" aria-hidden="true" />
+          {!(atWall.kind==='self'&&fieldFailed)?<span className="jar-caret" aria-hidden="true" />:null}
         </button>
       ) : null}
 
@@ -14604,7 +14642,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </DialogSurface>
       ) : null}
 
-      {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
+      {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.accountId}:${storageScope.profileId}:review`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
         onSaved={reflectionSaved} onSynchronized={synchronizeReflections} onReflectionRemoved={reflectionRemoved} onInspirationRemoved={inspirationRemovedFromView}
         onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}
         onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}

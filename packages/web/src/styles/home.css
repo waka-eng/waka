@@ -1335,6 +1335,11 @@
 .jar-saved:focus-visible {
   color: var(--jar-ink);
 }
+.jar-saved--retry {
+  max-width: calc(100% - var(--sp-32));
+  white-space: normal;
+  text-align: center;
+}
 
 /* The capture act remains available when its place under the companion has
    scrolled away or gone quiet in the past. It opens the same mouth, not a

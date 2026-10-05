@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-05",
+  "kind": "interleaved synthetic production-build comparison",
+  "baselineRevision": "c6fee2e",
+  "scope": {
+    "database": "disposable loopback Postgres",
+    "inspirations": 2000,
+    "signals": 64,
+    "rooms": 12,
+    "apiDelayMs": 150,
+    "browserSamplesPerBuildAndScenario": 20,
+    "apiSamples": 30,
+    "providerCalls": 0,
+    "remoteAccountWrites": 0
+  },
+  "before": {
+    "home": {"medianMs": 1910.6, "sampleP95Ms": 1994.6, "maxMs": 2094.9},
+    "freshReview": {"medianMs": 842, "sampleP95Ms": 883.3, "maxMs": 885.7},
+    "warmChatReturn": {"medianMs": 214.5, "sampleP95Ms": 292.3, "maxMs": 292.6},
+    "reviewLoadingWindowRequests": 9
+  },
+  "after": {
+    "home": {"medianMs": 400, "sampleP95Ms": 432, "maxMs": 435},
+    "freshReview": {"medianMs": 359.7, "sampleP95Ms": 369.9, "maxMs": 381.3},
+    "resumedReview": {"medianMs": 175.9, "sampleP95Ms": 178.6, "maxMs": 178.6},
+    "warmChatReturn": {"medianMs": 215.05, "sampleP95Ms": 253.9, "maxMs": 271},
+    "coreReviewOpeningRequests": 2,
+    "homeResumeMetadataRequests": 1,
+    "originalDetailRequestsInReviewOpening": 0,
+    "reviewCountRequests": 0,
+    "snapshotChecksAcross20WarmReturns": 20,
+    "archivePageRequestsAfterFirstChat": 0
+  },
+  "homeRequestBudgetRecheck": {
+    "windowSeconds": 60,
+    "issued": 31,
+    "completed": 31,
+    "bytes": 1223221,
+    "originalDetails": 0,
+    "roomContent": 0
+  },
+  "correctness": {
+    "earlyCapture": "saved while field label still said Opening inspirations; final archive had 2001 originals and exactly one new synthetic source",
+    "fieldLayout": "complete initial geometry only; partial field never painted; captured orb deferred while initial field loads",
+    "backgroundPageFailure": "Home and Capture draft retained; explicit retry deduplicated; late completion after unmount ignored",
+    "reviewNavigation": "four consecutive Next actions advanced one original at a time; source 4 was correctly deferred because it already had a reflection",
+    "reflectionDraft": "unfinished text survived closing and resuming Review without a model request",
+    "chatReturn": "selected principle and expanded state restored; lower-list scroll was 1684.5 px before and after",
+    "compatibility": "older API query rejection negotiates a read-only fallback; start uses legacy shape; rejected POST is not automatically replayed",
+    "ownership": "bundled original identity, owner and material revision checked; server reads original and children with session in repeatable read",
+    "legacyAndRecovery": "historical review links, removal confirmation/revision checks, lost replies, concurrent journals and draft recovery retained in tests"
+  },
+  "checks": {
+    "webTests": 734,
+    "fullApiTests": 1483,
+    "paidEvaluationsSkipped": 3,
+    "types": "API, web, admin and benchmark runner passed",
+    "webProductionBuild": "passed"
+  },
+  "limits": [
+    "Sample percentiles are observed local values, not population guarantees.",
+    "Warm return was already fast after milestone 1; this milestone preserves it rather than claiming a new speedup.",
+    "The field still loads up to 2000 bounded summaries in the background; readiness does not mean every orb has arrived.",
+    "Real-device, deployed-cloud, live-provider and controlled-worker contention checks remain in later milestones."
+  ]
+}

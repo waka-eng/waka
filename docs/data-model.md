@@ -358,6 +358,18 @@ Next is never deletion or a verdict on a signal/principle. Closing preserves
 the open review and unfinished reflection drafts. Opening Home only reads the
 resume state; entering Review explicitly starts the session, with no model call.
 
+Review reads/start may opt into `include=current`. That response includes only
+the current owned inspiration and its `materialRevision`, read with the review
+cursor/revision and children in the same repeatable-read transaction. The
+client checks owner, identity and material revision before using it. Home's
+resume read stays metadata-only. Replacing `/review/new` with its committed ID
+retains that confirmed response; unrelated navigation, identities and explicit
+refreshes still revalidate. An empty start may report whether originals exist,
+without an extra client-side archive count or any generation work.
+An older API's rejection of the opt-in query may negotiate a read-only legacy
+fallback before starting. A rejected or uncertain POST is never automatically
+replayed for compatibility; its durable identity and explicit recovery remain.
+
 Removal is the existing permanent inspiration deletion, including its server
 reflections, attachments and evidence links. Review requires confirmation and
 sends the observed personal material revision. The DELETE route checks that

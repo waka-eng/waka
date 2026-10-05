@@ -583,6 +583,8 @@
   "worldReflectionContextChanged": "영감의 내용이 바뀌었어요. 남긴 생각은 그대로예요. 새 내용을 바탕으로 질문을 받아 보세요.",
   "worldReflectionViewSource": "저장한 영감 보기",
   "worldReviewTitle": "영감 돌아보기",
+  "worldOpeningInspirations": "영감을 불러오고 있어요…",
+  "worldRetryInspirations": "영감을 불러오지 못했어요 · 다시 시도",
   "worldReviewOneTitle": "영감 돌아보기",
   "worldReviewNextInspiration": "다음 영감",
   "worldReviewBackToInspiration": "영감으로 돌아가기",
