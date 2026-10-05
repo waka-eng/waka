@@ -143,7 +143,7 @@ describe("room output privacy", () => {
     const distill = vi.fn(async () => ({ candidates: [{ statement: "Protect time for shared walks.", type: "maxim", citedSignalIds: f.ids }] }));
     const judge = vi.fn(async () => ({ relation: "same" }));
     const result = await refreshPrinciplesForProfile({ profileId: f.mind }, {
-      db: t.db as never, modelProvider: { distillPrinciples: distill, judgePrincipleRelation: judge } as unknown as ModelProvider,
+      db: t.db as never, modelProvider: { assessPrincipleGrounding:async (input:Parameters<ModelProvider['assessPrincipleGrounding']>[0])=>({assessments:input.candidates.map(row=>({candidateId:row.id,supported:true}))}),distillPrinciples: distill, judgePrincipleRelation: judge } as unknown as ModelProvider,
     });
     expect(result.minted).toBe(1);
     expect(JSON.stringify(distill.mock.calls)).not.toContain("PRIVATE_SENTINEL");

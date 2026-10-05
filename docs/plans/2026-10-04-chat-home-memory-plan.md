@@ -1,6 +1,8 @@
 # Chat experience home hierarchy and memory quality
 
-Status: proposed, not implemented. Prepared 2026-10-04 against `84cba13` on dev.
+Status: approved; local implementation and measured calibration recorded in the
+goal, with final usability acceptance pending. Prepared 2026-10-04 against
+`84cba13` on dev.
 
 Execution update: the owner subsequently requested all milestones. Work is
 tracked in [the implementation goal](../goals/chat-home-memory.md). The

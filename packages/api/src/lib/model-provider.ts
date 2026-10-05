@@ -116,6 +116,8 @@ export interface SignalSupportAssessmentResult {
 export interface TopOfMindSynthesisSignal {
   id: string;
   statement: string;
+  /** Personal selection may mix new interests and established patterns. */
+  status?: 'active' | 'emerging';
   confidence: number;
   evidenceCount: number;
   lastEvidenceAt: Date | null;
@@ -188,10 +190,9 @@ export interface TopOfMindSynthesisInput {
   /** Newest first, bounded by the caller. */
   recentFeedback: TopOfMindRecentFeedback[];
   /**
-   * True when the selection had to borrow still-forming (emerging) signals to
-   * say anything at all — the cold start. The synthesis writes more
-   * tentatively, because these patterns have been seen once or twice, not
-   * confirmed by return.
+   * True when emerging signals are included, by cold-start backfill or the
+   * bounded recent-focus allowance. Status is per signal; only forming
+   * interests are tentative, not established patterns elsewhere in the read.
    */
   provisional: boolean;
   /**
@@ -284,6 +285,15 @@ export interface PrincipleCandidate {
 
 export interface DistillPrinciplesResult {
   candidates: PrincipleCandidate[];
+}
+
+export interface PrincipleGroundingInput {
+  preferredLocale: SupportedLocale;
+  signals: Array<{id:string;statement:string}>;
+  candidates: Array<{id:string;statement:string;citedSignalIds:string[]}>;
+}
+export interface PrincipleGroundingResult {
+  assessments: Array<{candidateId:string;supported:boolean}>;
 }
 
 /**
@@ -436,6 +446,7 @@ export interface ModelProvider {
   assessSignalSupport(input: SignalSupportAssessmentInput): Promise<SignalSupportAssessmentResult>;
   judgeSignalMatch(input: SignalMatchJudgementInput): Promise<SignalMatchJudgement>;
   distillPrinciples(input: DistillPrinciplesInput): Promise<DistillPrinciplesResult>;
+  assessPrincipleGrounding(input: PrincipleGroundingInput): Promise<PrincipleGroundingResult>;
   judgePrincipleRelation(input: PrincipleRelationInput): Promise<PrincipleRelation>;
   routeDeclaration(input: DeclarationRouteInput): Promise<DeclarationRoute>;
   synthesizeTopOfMind(

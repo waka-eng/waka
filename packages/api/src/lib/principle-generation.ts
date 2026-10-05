@@ -39,8 +39,8 @@ import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import { selectIndependentEvidence, type ConfidenceEvidence } from './signal-lifecycle.js';
 import {loadSignalEvidence} from './review-evidence.js';
-import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput} from './principle-input.js';
-import {GEMINI_GENERATION_MODEL,parseDistilledPrinciples,parsePrincipleRelation,PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
+import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput} from './principle-input.js';
+import {GEMINI_GENERATION_MODEL,parseDistilledPrinciples,parsePrincipleRelation,parsePrincipleGrounding,PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
 import {principleMaterialKey} from './principle-material-key.js';
 import {principleWork} from './principle-work.js';
 import {OPENROUTER_GENERATION_MODEL} from './openrouter-http.js';
@@ -427,8 +427,8 @@ export async function refreshPrinciplesForProfile(
   const inputHash=createHash('sha256').update(JSON.stringify({profileId:input.profileId,policy:'principle-work-v1',
     provider:provider.name??'injected',models:provider.name==='openrouter'
       ?[process.env.WAKA_MODEL_PRINCIPLES?.trim()||OPENROUTER_GENERATION_MODEL,process.env.WAKA_MODEL_PRINCIPLE_JUDGE?.trim()||OPENROUTER_GENERATION_MODEL]
-      :[GEMINI_GENERATION_MODEL],limits:{input:PRINCIPLE_INPUT_LIMITS,comparison:PRINCIPLE_COMPARISON_LIMITS},
-    prompts:[PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION],material:principleMaterialKey(material),distillInput,
+      :[GEMINI_GENERATION_MODEL],limits:{input:PRINCIPLE_INPUT_LIMITS,comparison:PRINCIPLE_COMPARISON_LIMITS,grounding:PRINCIPLE_GROUNDING_LIMITS},
+    prompts:[PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION],material:principleMaterialKey(material),distillInput,
     standing:existing.map(row=>({id:row.id,statement:row.statement,revision:String(row.statementRevision),rank:row.rank,state:row.state,origin:row.origin,locked:row.lockedAt!==null,supported:row.supportCurrent,conflictsWithId:row.conflictsWithId}))})).digest('hex');
   const work=principleWork({db,profileId:input.profileId,billingProfileId,inputHash,revision,jobId:deps.jobId,beforeProgress:deps.beforeProgress});
   const distilled=await work.run('distill',()=>provider.distillPrinciples(distillInput),value=>({candidates:parseDistilledPrinciples(value).candidates.slice(0,PRINCIPLE_MAX_CANDIDATES_PER_RUN)}));
@@ -441,10 +441,11 @@ export async function refreshPrinciplesForProfile(
   const activeIds = new Set(distillInput.signals.map((row) => row.id));
 
   const candidates = distilled.candidates.slice(0, PRINCIPLE_MAX_CANDIDATES_PER_RUN);
-  const valid: PrincipleCandidate[] = [];
+  let valid: PrincipleCandidate[] = [];
   for (const candidate of candidates) {
     const statement = candidate.statement.trim();
     const cited = [...new Set(candidate.citedSignalIds)].filter((id) => activeIds.has(id));
+    const distinctStatements = new Set(cited.map(id=>distillInput.signals.find(row=>row.id===id)!.statement.normalize('NFKC').trim().replace(/\s+/g,' ').toLowerCase()));
     const verdict = computeCitationEligibility(
       cited.map((id) => evidence.get(id)!).filter(Boolean),
       now,
@@ -452,12 +453,20 @@ export async function refreshPrinciplesForProfile(
     if (
       statement.length === 0 ||
       statement.length > PRINCIPLE_MAX_STATEMENT_LENGTH ||
+      distinctStatements.size < bar("SIGNALS") ||
       !verdict.eligible
     ) {
       result.dropped += 1;
       continue;
     }
     valid.push({ ...candidate, statement, citedSignalIds: cited });
+  }
+  if(valid.length){
+    const citedIds=new Set(valid.flatMap(row=>row.citedSignalIds));
+    const groundingInput={preferredLocale,signals:distillInput.signals.filter(row=>citedIds.has(row.id)).map(row=>({id:row.id,statement:row.statement})),
+      candidates:valid.map((row,index)=>({id:`candidate-${index}`,statement:row.statement,citedSignalIds:row.citedSignalIds}))};
+    const grounding=await work.run('grounding',()=>provider.assessPrincipleGrounding(groundingInput),value=>parsePrincipleGrounding(value,groundingInput));
+    valid=valid.filter((_,index)=>{const supported=grounding.assessments[index]!.supported;if(!supported)result.dropped++;return supported;});
   }
   if (valid.length === 0) {
     await db.transaction(async (tx) => {

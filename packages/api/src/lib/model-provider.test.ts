@@ -23,6 +23,7 @@ function fakeProvider(): ModelProvider {
     askReviewQuestion:vi.fn(async()=>({connection:null,question:'What would you like to explore further?',sourceNumbers:[1]})),
     judgeSignalMatch: vi.fn(async () => ({ relation: "independent" as const })),
     distillPrinciples: vi.fn(async () => ({ candidates: [] })),
+    assessPrincipleGrounding:vi.fn(async()=>({assessments:[]})),
     judgePrincipleRelation: vi.fn(async (input:Parameters<ModelProvider['judgePrincipleRelation']>[0]) => ({ relations:input.existingPrinciples.map(row=>({principleId:row.id,relation:"independent" as const})) })),
     routeDeclaration: vi.fn(async () => ({ route: "inspiration" as const, type: "maxim" as const })),
     extractSignalCandidates: vi.fn(),

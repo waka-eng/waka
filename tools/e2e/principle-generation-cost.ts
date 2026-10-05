@@ -27,8 +27,9 @@ try{
   await t.sql`INSERT INTO principles(profile_id,statement,type,origin,rank,locked_at)
     SELECT ${p.id},'Standing preference ' || n || '.','maxim','declared',n,now() FROM generate_series(1,200) n`;
   const originalWords=await t.sql`SELECT id,statement,rank,locked_at FROM principles WHERE profile_id=${p.id} AND origin='declared' ORDER BY id`;
-  let distillCalls=0,comparisonCalls=0,comparisonPairs=0,maxComparisonBatch=0,maxComparisonCharacters=0,inputSignals=0,inputPrinciples=0,promptCharacters=0,lateConflictChecked=false;
+  let distillCalls=0,groundingCalls=0,comparisonCalls=0,comparisonPairs=0,maxComparisonBatch=0,maxComparisonCharacters=0,inputSignals=0,inputPrinciples=0,promptCharacters=0,lateConflictChecked=false;
   const provider={
+    assessPrincipleGrounding:async(input)=>{groundingCalls++;return {assessments:input.candidates.map(row=>({candidateId:row.id,supported:true}))};},
     distillPrinciples:async(input)=>{
       distillCalls++;inputSignals=input.signals.length;inputPrinciples=input.currentPrinciples.length;
       promptCharacters=buildPrincipleDistillRequest(input).contents[0]!.parts[0]!.text.length;
@@ -44,24 +45,24 @@ try{
         return {principleId:standing.id,relation:conflict?'conflicting' as const:'independent' as const};
       })};
     },
-  } satisfies Pick<ModelProvider,'distillPrinciples'|'judgePrincipleRelation'>;
+  } satisfies Pick<ModelProvider,'distillPrinciples'|'judgePrincipleRelation'|'assessPrincipleGrounding'>;
   const start=performance.now();
   let result:Awaited<ReturnType<typeof refreshPrinciplesForProfile>>|undefined,passes=0,maxCallsPerPass=0;
   while(!result&&passes<100){
-    passes++;const before=distillCalls+comparisonCalls;
+    passes++;const before=distillCalls+groundingCalls+comparisonCalls;
     try{result=await refreshPrinciplesForProfile({profileId:p.id},{db:t.db as never,modelProvider:provider as ModelProvider});}
     catch(error){
       if(!(error instanceof BackgroundJobHeldError)||error.heldUntil.getTime()>Date.now()+60000)throw error;
       const [partial]=await t.sql`SELECT count(*)::int AS count FROM principles WHERE profile_id=${p.id} AND origin='minted'`;
       assert.equal(partial.count,0,'No partial candidate publication');
     }
-    maxCallsPerPass=Math.max(maxCallsPerPass,distillCalls+comparisonCalls-before);
+    maxCallsPerPass=Math.max(maxCallsPerPass,distillCalls+groundingCalls+comparisonCalls-before);
   }
   assert.ok(result,'Comparison must eventually finish');assert.ok(maxCallsPerPass<=4);
   const words=await t.sql`SELECT id,statement,rank,locked_at FROM principles WHERE profile_id=${p.id} AND origin='declared' ORDER BY id`;
   const humanWordsPreserved=JSON.stringify(words)===JSON.stringify(originalWords);
-  const report={profileSignals:400,standingPrinciples:200,inputSignals,inputPrinciples,promptCharacters,distillCalls,comparisonCalls,comparisonPairs,maxComparisonBatch,maxComparisonCharacters,
-    totalModelCalls:distillCalls+comparisonCalls,passes,maxCallsPerPass,lateConflictChecked,humanWordsPreserved,durationMs:Math.round(performance.now()-start),result,paidCalls:0};
+  const report={profileSignals:400,standingPrinciples:200,inputSignals,inputPrinciples,promptCharacters,distillCalls,groundingCalls,comparisonCalls,comparisonPairs,maxComparisonBatch,maxComparisonCharacters,
+    totalModelCalls:distillCalls+groundingCalls+comparisonCalls,passes,maxCallsPerPass,lateConflictChecked,humanWordsPreserved,durationMs:Math.round(performance.now()-start),result,paidCalls:0};
   const path=`work/principle-cost/run-${Date.now()}.json`;writeEvaluationSnapshot(path,report);console.log(JSON.stringify({path,...report}));
   assert.ok(lateConflictChecked);assert.ok(humanWordsPreserved);assert.equal(words.length,200);
 }finally{globalThis.fetch=network;await t.cleanup();}

@@ -524,7 +524,8 @@ not inherit its bypass. All starts still pass the account's model budget.
 
 ### 2. Selection: deterministic, scored, bounded
 
-Eligible personal signals are `active` (or `emerging` — see the cold start),
+Eligible personal signals are `active` (or qualified `emerging` — see current
+focus and the cold start),
 not dismissed or unsupported, with owned current evidence and no foreign-owner
 witnesses. This is the same standing predicate used by personal reading
 projection; a signal hidden there cannot immediately regenerate the conclusion.
@@ -562,25 +563,31 @@ one that never stopped — the return is the person's attention re-landing. A
 60-day gap with a return 5 days ago scores comeback = (60−21)/(90−21) ≈
 0.57, worth about 8.5 points.
 
-The top `TOP_OF_MIND_SIGNAL_LIMIT` (12) go to synthesis, ties broken by
-recency then id — identical data always selects identically.
+Up to `TOP_OF_MIND_SIGNAL_LIMIT` (12) go to synthesis. Up to
+`TOP_OF_MIND_FOCUS_LIMIT` (3) diverse signals supported within
+`TOP_OF_MIND_FOCUS_DAYS` (14) days lead, ordered by recency, score and id.
+An emerging focus needs `TOP_OF_MIND_EMERGING_MIN_EVIDENCE` (2) independent
+current units on an established profile. Ranked active patterns fill the
+remaining slots. These are selection allowances, not signal promotion or
+Principle thresholds; a single incidental save cannot displace the board.
+The automatic 24-hour shift floor is unchanged.
 
 **Cold start.** Below a floor of `TOP_OF_MIND_MIN_SIGNALS` (3) active
 signals, selection borrows the strongest emerging ones — active first, only
 enough to reach the floor — and marks the pass **provisional**, which tells
-synthesis to write tentatively: questions and hypotheses, not asserted
-patterns. At or above the floor the behavior is byte-identical to
-active-only, so an established profile is never diluted with
-single-observation noise. The rule is the pure function `chooseSelection`
+synthesis to write tentatively. Status is supplied per signal: a new interest
+does not weaken an established pattern elsewhere in the artifact. At or above
+the floor only qualified recent emerging focuses enter; there is no incidental
+single-observation backfill. The rule is the pure function `chooseSelection`
 **[checked]**.
 
 **No two voices on the board saying one thing.** After scoring, the ranked
 list takes one greedy diversity pass (`diversifyRanked`): a candidate whose
 embedding sits at or above `SELECTION_DIVERSITY_MAX_COSINE` to an
-already-accepted one yields its slot and moves to the reserve, and the
-reserve returns whenever slots are left over — so the reorder only ever
-matters when the twelve-slot limit truncates, and nothing is excluded
-outright. The bar sits inside the judge band on purpose: at 0.8 the pair is
+already-accepted one yields its slot. Empty slots are not refilled with echoes;
+the source signals remain in memory, neither deleted nor demoted. Only current
+statement hashes participate in this comparison. The bar sits inside the judge
+band on purpose: at 0.8 the pair is
 close enough that derivation would already be asking whether they are the
 same pattern, while genuinely different signals about one theme are
 untouched. Deterministic, cosine in process over the stored vectors, no
@@ -597,7 +604,14 @@ pass. Each side is then marked `contested with:` the other's id — only ever
 an id in the same delivered list, so the mark is always citable. The prompt
 tells the synthesis what the mark means: live tension material, written as
 a `tension` citing both ids when it matters now, and never one side alone
-asserted as a settled pattern or belief while the dispute stands.
+asserted as a settled pattern or belief while the dispute stands. Personal
+publication also rejects a generated entry citing a disputed side unless it
+is a tension citing both sides, and clears a separate settled belief from
+that machine tension. A no-change carry uses the same rule. Human locks/pins/dismissals still preserve exact
+words; the machine never rewrites those choices to resolve a dispute.
+Carry checks include current standing disputes outside this pass's selection.
+Its optional machine belief may repeat the body or an exact cited statement,
+but cannot add a second stronger inference; human-owned fields remain exact.
 
 ### 3. Synthesis: one call, the whole artifact
 
@@ -844,7 +858,9 @@ qualifies.
 2. **Directive** — prescribes the next choice; a fact about the person is a
    signal, not a principle.
 3. **Evidence** — cites at least `PRINCIPLE_MIN_SIGNALS` (3) distinct
-   signals from this profile's own history; uncited virtue is a horoscope.
+   signals with distinct statements from this profile's own history; duplicate
+   wording under multiple IDs does not clear the count. Uncited virtue is a
+   horoscope.
 4. **Support** — evidence spanning at least `PRINCIPLE_MIN_SPAN_DAYS` (0)
    days and selected into at least `PRINCIPLE_MIN_TOM_APPEARANCES` (1)
    top-of-mind versions; a two-week obsession is top of mind, not
@@ -855,7 +871,23 @@ qualifies.
 
 Tests 3 and 4 are hard numbers checked in SQL; tests 1, 2, and 5 are
 semantic properties no formula can check, applied by the model under
-instruction. Owner **declarations** skip evidence and time (aspirational
+instruction. Matching the current reading's theme is allowed: a Principle
+guides the next choice rather than describing current attention. Capture dates
+alone do not impose a calendar wait; explicit cross-context choices still need
+current, distinct supporting statements. Temporary intentions and saved external
+opinions do not become timeless directives.
+
+Before matching/publication, structurally eligible generated candidates receive
+one semantic grounding batch against only their cited statements. Its limits
+are three candidates, 48 statements, 18,000 characters and 512 output tokens.
+Every candidate must receive exactly one boolean verdict; a missing, duplicated,
+foreign, malformed or declined answer retries rather than accepting the claim.
+An unsupported verdict drops the candidate without touching standing human
+words. The extra step is cached, revision/lease fenced and charged to the same
+four-calls-per-pass/40-per-account-hour ledger. Both providers preserve their
+request builders' output-token limits. A model check reduces risk, not a proof
+against all possible semantic errors; the fixed live calibration is separately
+reviewed. Owner **declarations** skip evidence and time (aspirational
 until demonstrated); context, directive, and completion still apply
 internally, and a declaration failing them is quietly kept as an
 inspiration — evidence, where it belongs — with no refusal surfaced.
@@ -891,7 +923,10 @@ fingerprints also include current inspiration revisions and validated review
 material identities. These cover reflection/media edits and corrected review
 answers even when capture dates remain unchanged. Repeated support-check
 timestamps are excluded. This strengthens personal work identity to
-`principles-v3`; an eligible profile can get one fresh pass under the new key
+`principles-v4` for personal work (group work is `principles-v3`, retaining
+its public-statement-only inputs). The policy bump includes the new distinct
+wording and semantic-grounding checks so an old completed empty result cannot
+permanently suppress them. An eligible profile can get one fresh pass under the new key
 when the normal scheduling path next runs, not from a GET or a data repair.
 Failed jobs retry only within the worker budget or by an explicit retry.
 Each request evaluates the active profile: one cheap SQL check for clusters
@@ -984,6 +1019,9 @@ The authoritative values. Machine-checked against code — see
 |---|---|---|
 | `TOP_OF_MIND_SIGNAL_LIMIT` | 12 | Signals synthesis may consider |
 | `TOP_OF_MIND_MIN_SIGNALS` | 3 | Cold-start floor; below it, emerging signals backfill |
+| `TOP_OF_MIND_FOCUS_LIMIT` | 3 | Bounded recent-focus allowance before stable background |
+| `TOP_OF_MIND_FOCUS_DAYS` | 14 | Current-evidence window for that allowance |
+| `TOP_OF_MIND_EMERGING_MIN_EVIDENCE` | 2 | Independent units required for emerging focus on established profiles |
 | `TOP_OF_MIND_MIN_SHIFT_HOURS` | 24 | The board shifts at most once a day; an early automatic refresh sleeps until the floor opens |
 | `GROUP_DRAFT_MIN_AFFIRMED` | 3 | A room's first draft waits for this many shared statements affirmed by someone other than their owner |
 | `GROUP_DRAFT_SMALL_MAX_MEMBERS` | 3 | A room this size or smaller is held to the small-room bar instead |
@@ -993,7 +1031,7 @@ The authoritative values. Machine-checked against code — see
 | `SELECTION_RECENCY_WEIGHT` | 0.2 | Selection: recency term |
 | `SELECTION_COMEBACK_WEIGHT` | 0.15 | Selection: comeback term |
 | `SELECTION_DISPUTED_MULTIPLIER` | 0.4 | Damping when the latest verdict is not_true |
-| `SELECTION_DIVERSITY_MAX_COSINE` | 0.8 | Ranked near-duplicates yield their slot; they return whenever slots are left |
+| `SELECTION_DIVERSITY_MAX_COSINE` | 0.8 | Ranked near-duplicates yield their slot; empty slots stay empty |
 | `SELECTION_EVIDENCE_SATURATION` | 6 | Support saturates at this evidence count |
 | `SELECTION_RECENCY_HALF_LIFE_DAYS` | 30 | Selection recency half-life |
 | `COMEBACK_MIN_DORMANT_DAYS` | 21 | Minimum gap for a return to count |

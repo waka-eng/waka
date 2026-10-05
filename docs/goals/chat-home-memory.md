@@ -1,6 +1,6 @@
 # Chat home and memory improvements
 
-Status: in progress — chat quality gate passed; memory reliability underway (2026-10-04).
+Status: in progress — implementation and calibration checked; final human usability check pending (2026-10-04).
 Branch: `codex/chat-home-memory`, starting from `84cba13`.
 
 ## Objective
@@ -50,9 +50,9 @@ authorizes all further LLM calls under a total USD 5 cap without per-batch
 questions. Use the Gemini key from this checkout and the OpenRouter key from
 `/Users/agi/nextsteps/waka/.env.local`, reading only the needed variable into the
 process and never printing/copying credentials. No test-branch push, deployment
-or historical repair is implied. Current budget accounting: USD 0.05795414 in
+or historical repair is implied. Current budget accounting: USD 0.08019284 in
 returned OpenRouter charges plus three USD 0.50 conservative embedding-run reservations
-(USD 1.55795414 allocated, USD 3.44204586 remaining). The embedding estimate is
+(USD 1.58019284 allocated, USD 3.41980716 remaining). The embedding estimate is
 much smaller, but is not an invoice. Earlier pre-cap runs remain separately
 recorded below. Prefer simple, friendly UX decisions; stop only for genuine
 missing authority, an exhausted budget or another external blocker.
@@ -740,3 +740,196 @@ Full Top of Mind/Principle generation calibration and the final current-build
 browser walkthrough remain open. Migration 0066 has only run in disposable test
 schemas; no remote database, historical repair or deployment was touched.
 No additional paid calls occurred, and the goal budget allocation is unchanged.
+
+### Generation calibration and publication checkpoint
+
+Declared 24 journeys before changing selection/prompts, with matrix digest
+`b142bfef0b000df1c79cf2484f5c2bf0358d4c1f576bb06559bfed45e4032f94`.
+Fixtures use prevalidated layer-2 statements, independent owned source rows
+and synthetic one-hot vectors for deterministic selection arithmetic. They
+exercise real SQL, selection, generation and publication, not end-to-end
+extraction or real signal-vector quality (the retrieval evaluation separately
+used live embeddings). All paid inputs are synthetic. The journal records
+source revisions, independent units, selected signals, holds, publication,
+displayed lead and Principle outcome, plus synthetic inputs/outputs for review.
+
+The baseline made 37 calls, USD 0.00429176980, and passed 17/24 structural
+checks. It missed all four required initial-Principle cases, excluded both
+new-focus cases, and selected nine near-duplicate tool signals. Reading the
+actual text also found imagined motives, stronger certainty, a repeated photo
+interest from one save, and unilateral patterns alongside a real dispute.
+Single-agent qualitative review against the fixed rubric passed 8/24, below
+the gate; this is not an independent human study.
+
+Measured revisions, not a new save-count promise:
+
+- Up to three diverse, supported focuses from the last 14 days lead before
+  stable ranked background. On established profiles, an emerging focus needs
+  two independent current units. A single incidental save still stays out;
+  cold-start backfill remains possible. Signal status is per-item in the prompt.
+- Near-duplicates no longer refill empty selection slots. Current statement
+  hashes fence the vector comparison. Signals are neither deleted nor demoted;
+  open disputes still pull in their standing partner.
+- Personal machine disputes require a tension citing both sides. A separate
+  settled belief is cleared, not allowed to make one side win. Human decisions
+  remain exact. The optional machine-belief slot may repeat the body or an exact
+  cited statement, not introduce a second stronger claim; no-change carries
+  follow that rule too, while human fields bypass it.
+- Personal synthesis stays close to the supplied words, preserves temporary
+  scope, names a real return without inventing its cause, and favors no-change
+  over expanding an adequate summary. The daily 24-hour floor is unchanged.
+- A Principle may share a theme with the reading: its purpose is a future
+  choice constraint, not another attention summary. Duplicate statement wording
+  under different IDs no longer clears its distinct-pattern count. The three
+  active-signal/one-meaningful-reading/zero-calendar-day bars are unchanged.
+- A required semantic grounding batch now checks eligible candidates against
+  their cited statements before matching/publication. Complete ID/boolean
+  validation fails closed; rejected candidates never modify standing words.
+  It is cached and fenced under the existing four-call pass allowance and
+  hourly ledger. Provider translation now preserves the builder's actual
+  output-token caps (512 grounding, 1,600 relation); previously the OpenRouter
+  translation overwrote a supplied cap with the global default.
+
+Every iteration remains recorded under `work/generation-calibration/`:
+
+| Run | Calls | Returned USD | Structural passes | Gate result |
+| --- | ---: | ---: | ---: | --- |
+| baseline-1791174005918 | 37 | 0.00429176980 | 17/24 | Failed; qualitative 8/24 |
+| candidate-1791174640685 | 38 | 0.00476275624 | 20/24 | Failed; missing initial guides, sparse overclaim and churn |
+| candidate-purpose-1791174922319 | 39 | 0.00415277848 | 23/24 | Failed; speculative guides and lost tension after filtering |
+| candidate-grounded-1791175348782 | 38 | 0.00427645780 | 24/24 | Failed semantic gate: unearned extra-effort trade-off |
+| candidate-verified-1791176006513 | 48 | 0.00389393200 | 24/24 | Reviewed; then Korean closing and optional-belief fixes verified below |
+| korean-final-1791176369634 | 8 | 0.00081423800 | 3/4 affected cases | One conservative false negative, not accepted as success |
+| final-publication-replay-1791177071114 | 1 | 0.00002059500 | 23/24 | Final SQL replay; rubric 22/24 (91.7%), safety checks pass |
+
+The final replay uses the verified real responses, overlaid with the four
+latest Korean responses, through the final publication code. It asserts
+identical logical inputs before reusing a response; only a new opaque stored
+entry ID is normalized. The remaining relation check is live. It proves the
+final deterministic publication change, not another independent fresh model
+sample. English model requests are otherwise unchanged; Korean's final language
+instruction is again last, as the regression contract requires.
+
+The exact qualitative review is:
+
+| Scenario | Baseline | Final | Relevant finding |
+| --- | --- | --- | --- |
+| empty | pass | pass | No invented artifact or dispatch |
+| first-save-en | pass | pass | Possible interest, no settled routine |
+| first-save-ko | fail | pass | Removed imagined inner uncertainty |
+| one-origin-many-signals | fail | pass | Removed speculative purpose; no Principle from one origin |
+| durable-choices-en | fail | pass | Supported initial choice guide now appears |
+| durable-choices-ko | fail | pass | Supported initial Korean guide now appears |
+| early-strong-choices | fail | pass | No calendar wait; no extra reliability claim in belief |
+| one-day-external-burst | fail | pass | No personal endorsement inferred from saved article |
+| duplicate-dominance | fail | fail | One tool slot, but published guide still combines unrelated domains |
+| established-new-focus | fail | pass | Twice-supported drawing interest leads tentatively |
+| active-interest-shift | fail | pass | Current trials enter selection and lead |
+| unresolved-contradiction | fail | pass | Both sides remain a tension; no settled winning belief |
+| temporary-scope | fail | pass | Project scope retained, no timeless Principle or invented motive |
+| corrected-claim | pass | pass | Current enjoyment/month-only words, not old regret |
+| deleted-support | fail | pass | Withdrawn source stays out; no invented readiness claim |
+| locked-lost-support | fail | pass | Exact human words remain, without a fabricated machine tension |
+| pinned-lead | pass | pass | Exact human lead persists as the rest evolves |
+| locale-change | fail | fail | Natural-language reading changes; grounding conservatively rejects a useful guide |
+| return-after-quiet | fail | pass | Real return named without an emotional cause |
+| unchanged-reading | pass | pass | Meaningful no-change preserved, no paraphrase presented as a shift |
+| automatic-daily-hold | pass | pass | Zero calls while the daily floor holds |
+| photo-only | fail | pass | One saved image, not a recurrent belief |
+| corrected-audio-ko | pass | pass | Current painting transcript, not stale marathon content |
+| single-incidental-arrival | pass | pass | One unrelated save does not displace established patterns |
+
+No unsupported personal claim was accepted in the reviewed final set. The two
+quality misses are retained, not edited out or relabeled as successes. Both were
+already baseline failures. This passes the predefined >=90% gate and improves
+the targeted failures without a newly failing scenario, not a claim of 100%
+general quality. The compound guide is grounded clause-by-clause but less useful
+than separate focused guides. The semantic checker can false-reject a supported
+guide; it is not infallible. No fixed seven/fourteen-day Principle wait, automatic
+cadence bypass, provider change or historical repair was added.
+
+The new grounding protocol also checked two predeclared negative controls
+(the actual extra-effort mistake and saving-not-endorsement) plus a supported
+choice guide. It returned false/false/true, 3/3, one call / USD 0.00002616900:
+`work/principle-grounding-eval/run-1791176368319.json`. Malformed/incomplete
+protocol tests separately prove that a missing verdict cannot become acceptance.
+
+Observed local live journey latency was baseline median 8,173ms / p95 16,342ms;
+verified candidate median 6,686ms / p95 16,342ms, excluding scheduler waits.
+The baseline was sequential and later runs used at most three independent
+profiles concurrently, so this is not an isolated causal speed benchmark.
+Verified batch cost per rubric-passing case was approximately USD 0.000177
+(USD 0.003893932 / 22); the replay is not assigned a fake live-generation latency.
+Large-profile recheck with grounding: 400 signals, 200 standing human Principles,
+48/24 bounded distill input, one distillation + one grounding + 32 comparison
+calls, nine passes, max four calls/pass. All 603 pairs checked, late conflict
+found and all 200 human statements/ranks/locks exact. Scripted local execution
+912ms, not provider latency; `work/principle-cost/run-1791175785353.json`.
+
+Budget update includes all these priced calls: USD 0.08019284 total returned
+OpenRouter charges after the owner's cap, plus USD 1.50 conservative embedding
+reservations. Allocated USD 1.58019284 / 5, remaining USD 3.41980716. No paid call
+is currently running. Evaluation schemas were removed by their harness cleanup.
+
+Final regression/browser evidence is being finished; the short human Home
+comprehension question was sent without blocking further verification. Goal
+completion still requires that usability gate. No push or deployment occurred.
+
+### Final local acceptance checkpoint
+
+Final diff review found another no-change edge: a prior machine claim could
+survive an open dispute if neither side entered the current selection. The
+carry now checks all current standing pairs, not only the delivered model
+input. It keeps a genuine paired tension, clears a settled machine belief,
+and still bypasses all human-touched words. A real SQL regression seeds three
+established patterns that exclude the two thin disputed signals, then proves
+the unilateral legacy conclusion does not survive noChange. No paid call or
+extra model input is needed for this fix.
+
+Final verification: 803 API unit tests passed (three paid benches skipped),
+705 web tests across 100 suites passed, API/web typechecks and web build passed,
+migration check and whitespace check passed. The final targeted SQL run passed
+110 tests across ten suites: personal retrieval/context/reply lifecycle,
+Principle generation/work, generation fences, group-output privacy, Top of Mind
+refresh/contested carry and the unchanged daily shift floor. The goal-index
+recheck passed 3/3. Initial checks exposed a missing provider seam, changed
+four-call scheduling arithmetic and the lost Korean closing instruction; these
+were fixed, not waived.
+
+The current built browser fixture used disposable loopback schema
+`waka_test_18079e1b3965ace1` and an explicitly synthetic provider, not real
+account data or a live-reply quality claim. Desktop: zero canvas elements in
+chat, 16px composer, all primary/control buttons at least 44px, no horizontal
+overflow. Mobile at 390x844: one scroll region (693px viewport / 1,996px long
+transcript), readable paragraphs/list/emphasis/Korean, and literal script text
+never executed. Separate memory/history drawers preserved the draft. Resizing
+to 390x500 kept the input above the bottom; this simulates a smaller viewport,
+not a physical keyboard. Back home and browser Back into chat restored the
+exact English/Korean draft. At 320x568 the full-width chat and growing input
+fit without horizontal overflow. Compact Home, 768 and 1280 layouts were
+checked again, in addition to the earlier long/empty/error/resume checks.
+
+Screenshots in `work/chat-home-memory/`: `final-chat-desktop.png` (1280x800),
+`final-home-desktop.png` (1280x800), `final-home-320.png` (320x568). The fixture
+server received its normal shutdown signal and exited zero. Its schema's
+absence was verified, along with the earlier orphan fixture (validated as only
+the two synthetic accounts before its exact deletion). Browser viewport was
+reset and the agent's test tab closed. No real dev/production data was removed.
+
+All implementation gates now have evidence. Only the approved plan's brief
+human Home comprehension check remains: identify how to save something new,
+revisit saved inspirations, and talk through a choice from the screenshot.
+The question is pending; no formal human usability study or physical-device
+keyboard result is claimed. Keep the goal active until that acceptance evidence
+arrives. Local checkpoint only; deployment/migration rollout remain a separate
+user-authorized action, not unfinished implementation under this goal.
+
+Release audit also found that a completed old no-candidates job would otherwise
+hide the new generation policy until new material arrived. Personal work keys
+are now `principles-v4`, group keys `principles-v3` for the shared new protocol;
+group source privacy is unchanged. A SQL test starts with an old completed
+personal key, proves status reads create no jobs, then proves normal explicit/
+scheduled requests create exactly one new pending job and deduplicate repeats.
+There is no forced scan, historical repair or deployment. Old superseded keys
+still skip paid work if reclaimed, and no-change versions still share the new
+key. This adds one SQL case (111 total in the final targeted set).

@@ -53,6 +53,7 @@ import {
   signalContradictions,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
+import { hashEmbeddingInput } from "./inspiration-embeddings.js";
 import { getDb } from "./db.js";
 import { computeSignalConfidence, selectIndependentEvidence } from "./signal-lifecycle.js";
 import {loadSignalEvidence} from './review-evidence.js';
@@ -102,8 +103,8 @@ export const SELECTION_DISPUTED_MULTIPLIER = 0.4;
  * about work is not a top of MIND. At or above this cosine, two candidates
  * are close enough that the judge band would already be asking whether they
  * are the same pattern (0.70–0.86, docs/generation.md §4), so the stronger
- * one holds the slot and the other waits in reserve — and comes back in
- * whenever slots are left over, so nothing is ever excluded outright.
+ * one holds the slot. A shorter board is preferable to filling empty slots
+ * with echoes. The signals remain in memory, not deleted or demoted.
  * Deliberately conservative: genuinely different signals about one theme
  * (0.5–0.7 apart) are untouched until the funnel earns a lower bar.
  */
@@ -207,6 +208,7 @@ export interface TopOfMindRefreshResult {
 interface SelectedSignal {
   id: string;
   statement: string;
+  status: 'active' | 'emerging';
   confidence: number;
   evidenceCount: number;
   lastEvidenceAt: Date | null;
@@ -344,15 +346,20 @@ export function computeSelectionScore(input: {
  * currently matters to someone who just arrived — shown tentatively, and
  * superseded the moment real patterns cross the bar.
  *
- * The floor is also the ceiling on how far emerging reaches: once a profile
- * has this many active signals, emerging ones never appear, so an established
- * artifact is never diluted with single-observation noise.
+ * Established profiles also admit a bounded recent focus, but never a
+ * single-observation emerging signal. Status is carried per signal so the
+ * model does not weaken established patterns when one new interest arrives.
  */
 export const TOP_OF_MIND_MIN_SIGNALS = 3;
+export const TOP_OF_MIND_FOCUS_LIMIT = 3;
+export const TOP_OF_MIND_FOCUS_DAYS = 14;
+export const TOP_OF_MIND_EMERGING_MIN_EVIDENCE = 2;
 
 interface SelectionOutcome {
   signals: SelectedSignal[];
-  /** True when the selection leaned on emerging signals to fill the floor. */
+  /** All current standing disputes, including signals outside this pass. */
+  contested: ReadonlyMap<string, readonly string[]>;
+  /** True when the selection includes a still-forming interest. */
   provisional: boolean;
 }
 
@@ -382,7 +389,7 @@ async function selectSignals(
     )
     .orderBy(desc(signals.confidence), desc(signals.lastEvidenceAt));
 
-  if (rows.length === 0) return { signals: [], provisional: false };
+  if (rows.length === 0) return { signals: [], provisional: false, contested:new Map() };
 
   const {witnesses:evidenceBySignal}=await loadSignalEvidence(db,profileId,rows.map(row=>row.id));
 
@@ -480,6 +487,7 @@ async function selectSignals(
     return {
       id: s.id,
       statement: s.statement,
+      status: s.status as 'active' | 'emerging',
       confidence: s.confidence,
       evidenceCount: s.evidenceCount,
       lastEvidenceAt: s.lastEvidenceAt,
@@ -495,30 +503,29 @@ async function selectSignals(
   /* the board's twelve slots are worth one bounded read of the candidate
      vectors — jsonb rows, cosine in process, no model anywhere */
   const embeddingRows = await db
-    .select({ signalId: signalEmbeddings.signalId, embedding: signalEmbeddings.embedding })
+    .select({ signalId: signalEmbeddings.signalId, inputHash: signalEmbeddings.inputHash, embedding: signalEmbeddings.embedding })
     .from(signalEmbeddings)
     .where(
-      inArray(
+      and(eq(signalEmbeddings.profileId, profileId), inArray(
         signalEmbeddings.signalId,
         scored.map((s) => s.id),
-      ),
+      )),
     );
   const embeddingById = new Map<string, number[]>();
+  const currentHash = new Map(scored.map(row=>[row.id,hashEmbeddingInput(row.statement)]));
   for (const row of embeddingRows) {
-    if (!embeddingById.has(row.signalId)) embeddingById.set(row.signalId, row.embedding);
+    if (row.inputHash===currentHash.get(row.signalId)&&!embeddingById.has(row.signalId)) embeddingById.set(row.signalId, row.embedding);
   }
 
+  const diverse = diversifyRanked(scored, embeddingById, SELECTION_DIVERSITY_MAX_COSINE);
+  const recentFocus = diverse.filter(row=>row.lastEvidenceAt !== null &&
+    row.lastEvidenceAt.getTime()>=now.getTime()-TOP_OF_MIND_FOCUS_DAYS*MS_PER_DAY &&
+    (row.status==='active'||row.evidenceCount>=TOP_OF_MIND_EMERGING_MIN_EVIDENCE))
+    .sort((a,b)=>(b.lastEvidenceAt?.getTime()??0)-(a.lastEvidenceAt?.getTime()??0)||b.score-a.score||a.id.localeCompare(b.id));
   const chosen = chooseSelection(
-    diversifyRanked(
-      scored.filter((s) => s.status === "active"),
-      embeddingById,
-      SELECTION_DIVERSITY_MAX_COSINE,
-    ),
-    diversifyRanked(
-      scored.filter((s) => s.status === "emerging"),
-      embeddingById,
-      SELECTION_DIVERSITY_MAX_COSINE,
-    ),
+    diverse.filter((s) => s.status === "active"),
+    diverse.filter((s) => s.status === "emerging"),
+    recentFocus.slice(0,TOP_OF_MIND_FOCUS_LIMIT),
   );
 
   const finalList = keepContestedTogether(
@@ -528,7 +535,9 @@ async function selectSignals(
   );
   const inList = new Set(finalList.map((s) => s.id));
 
-  return { signals: finalList.map((s) => strip(s, inList)), provisional: chosen.provisional };
+  const standingIds=new Set(scored.map(row=>row.id));
+  const standingContested=new Map([...opposing].filter(([id])=>standingIds.has(id)).map(([id,partners])=>[id,partners.filter(partner=>standingIds.has(partner))]));
+  return { signals: finalList.map((s) => strip(s, inList)), provisional: chosen.provisional, contested:standingContested };
 }
 
 /**
@@ -564,10 +573,9 @@ export function keepContestedTogether<T extends { id: string }>(
 
 /**
  * Greedy diversity over a ranked list: walk strongest-first, hold back any
- * candidate whose embedding sits at or above `maxCosine` to one already
- * accepted, then append the held-back in their own order — so the reorder
- * only ever matters when the limit truncates, and a signal without an
- * embedding (dropped on edit, or the write raced) is never held back.
+ * candidate whose current embedding sits at or above `maxCosine` to one
+ * already accepted. Empty slots stay empty rather than repeating a theme.
+ * A signal without an embedding (dropped on edit) is not suppressed.
  * Deterministic by construction: same rows, same order, every run.
  */
 export function diversifyRanked<T extends { id: string }>(
@@ -577,7 +585,6 @@ export function diversifyRanked<T extends { id: string }>(
 ): T[] {
   const accepted: T[] = [];
   const acceptedVectors: number[][] = [];
-  const reserve: T[] = [];
   for (const candidate of ranked) {
     const vector = embeddingById.get(candidate.id) ?? null;
     let nearAccepted = false;
@@ -593,34 +600,32 @@ export function diversifyRanked<T extends { id: string }>(
       }
     }
     if (nearAccepted) {
-      reserve.push(candidate);
       continue;
     }
     accepted.push(candidate);
     if (vector !== null) acceptedVectors.push(vector);
   }
-  return [...accepted, ...reserve];
+  return accepted;
 }
 
 /**
  * The cold-start rule, isolated from the database so it can be reasoned about
  * directly. Both lists arrive already ranked, strongest first.
  *
- * With enough durable patterns, the artifact is those alone — identical to
- * the behaviour before the cold start existed, so an established profile is
- * never diluted with single-observation noise. Below the floor, the selection
- * borrows the strongest forming patterns, and only enough to reach the floor,
- * and reports itself provisional so the synthesis writes tentatively.
+ * The caller supplies at most three diverse recent focuses with current
+ * support. They lead; stable ranked patterns fill the remaining slots.
+ * Cold-start backfill still permits a first tentative read from one save.
  */
 export function chooseSelection<T>(
   active: T[],
   emerging: T[],
+  recentFocus: T[] = [],
 ): { signals: T[]; provisional: boolean } {
-  if (active.length >= TOP_OF_MIND_MIN_SIGNALS) {
-    return { signals: active.slice(0, TOP_OF_MIND_SIGNAL_LIMIT), provisional: false };
-  }
-  const backfill = emerging.slice(0, Math.max(0, TOP_OF_MIND_MIN_SIGNALS - active.length));
-  return { signals: [...active, ...backfill], provisional: backfill.length > 0 };
+  const focus=recentFocus.slice(0,TOP_OF_MIND_FOCUS_LIMIT);
+  const primary=[...focus,...active.filter(row=>!focus.includes(row))].slice(0,TOP_OF_MIND_SIGNAL_LIMIT);
+  const backfill=emerging.filter(row=>!primary.includes(row)).slice(0,Math.max(0,TOP_OF_MIND_MIN_SIGNALS-primary.length));
+  const selected=[...primary,...backfill];
+  return {signals:selected,provisional:selected.some(row=>emerging.includes(row))};
 }
 
 // ---------------------------------------------------------------------------
@@ -703,6 +708,26 @@ interface ValidationOutcome {
   droppedCitations: number;
 }
 
+function contestedEntryAllowed(entry: {type:TopOfMindEntryType;belief?:string|null;citedSignalIds:string[]},
+  contested: ReadonlyMap<string, readonly string[]>) {
+  const partners=entry.citedSignalIds.flatMap(id=>contested.get(id)??[]);
+  return !partners.length||(entry.type==='tension'&&partners.every(id=>entry.citedSignalIds.includes(id)));
+}
+
+/** The optional belief slot must not introduce a second, stronger claim.
+ * Keep a repeated body or exact cited statement; human fields bypass this. */
+function machineBelief(entry:{body:string;belief?:string|null;citedSignalIds:string[]},statements:ReadonlyMap<string,string>){
+  if(!entry.belief)return undefined;
+  return entry.belief===entry.body||entry.citedSignalIds.some(id=>statements.get(id)===entry.belief)?entry.belief:undefined;
+}
+
+function contestedCarryAllowed(entry:{type:TopOfMindEntryType;citedSignalIds:string[]},contested:ReadonlyMap<string,readonly string[]>){
+  const disputed=entry.citedSignalIds.some(id=>contested.get(id)?.length);
+  // A carried tension may describe one direct pair in a larger graph, but
+  // never carry a single disputed voice as a settled pattern.
+  return !disputed||(entry.type==='tension'&&entry.citedSignalIds.some(id=>contested.get(id)?.some(partner=>entry.citedSignalIds.includes(partner))));
+}
+
 /**
  * Keep only what the database can vouch for: citations that name a signal
  * this profile actually holds, and entries that still have at least one after
@@ -712,6 +737,8 @@ interface ValidationOutcome {
 export function validateSynthesizedEntries(
   entries: TopOfMindSynthesisEntry[],
   knownSignalIds: Set<string>,
+  contested: ReadonlyMap<string, readonly string[]> = new Map(),
+  statements?: ReadonlyMap<string,string>,
 ): ValidationOutcome {
   let droppedCitations = 0;
   const validated: TopOfMindSynthesisEntry[] = [];
@@ -723,7 +750,9 @@ export function validateSynthesizedEntries(
       return false;
     });
     if (cited.length === 0) continue;
-    validated.push({ ...entry, citedSignalIds: [...new Set(cited)] });
+    if(!contestedEntryAllowed({...entry,citedSignalIds:cited},contested))continue;
+    const belief=cited.some(id=>contested.get(id)?.length)?undefined:statements?machineBelief({...entry,citedSignalIds:cited},statements):entry.belief;
+    validated.push({ ...entry, belief, citedSignalIds: [...new Set(cited)] });
   }
 
   return { entries: validated, droppedCitations };
@@ -1094,6 +1123,8 @@ export async function refreshTopOfMindForProfile(
   let modelSaidNoChange = false;
   let droppedCitations = 0;
   let lockViolations = 0;
+  const contested = new Map(selected.map(signal=>[signal.id,signal.contestedWithIds??[]]));
+  const selectedStatements = new Map(selected.map(signal=>[signal.id,signal.statement]));
 
   if (selected.length > 0) {
     const recentFeedback = await loadRecentFeedback(db, input.profileId);
@@ -1105,6 +1136,7 @@ export async function refreshTopOfMindForProfile(
       signals: selected.map((signal) => ({
         id: signal.id,
         statement: signal.statement,
+        status: signal.status,
         confidence: signal.confidence,
         evidenceCount: signal.evidenceCount,
         lastEvidenceAt: signal.lastEvidenceAt,
@@ -1141,6 +1173,8 @@ export async function refreshTopOfMindForProfile(
     const validated = validateSynthesizedEntries(
       synthesis.entries,
       new Set(selected.map((signal) => signal.id)),
+      contested,
+      selectedStatements,
     );
     generated = validated.entries;
     droppedCitations = validated.droppedCitations;
@@ -1166,7 +1200,8 @@ export async function refreshTopOfMindForProfile(
     // has already projected that support while retaining human choices.
     const preserveCurrent = (selected.length === 0 || modelSaidNoChange) && previous !== null;
     const entries = preserveCurrent
-      ? carryEverything(previous, generated)
+      ? carryEverything({...previous,entries:previous.entries.filter(entry=>isHumanTouched(entry)||contestedCarryAllowed(entry,selection.contested))
+          .map(entry=>isHumanTouched(entry)?entry:{...entry,belief:entry.citedSignalIds.some(id=>selection.contested.get(id)?.length)?null:machineBelief(entry,selectedStatements)??null})}, generated)
       : assembleEntries({ carried: previous?.entries ?? [], generated });
 
     const unchanged =

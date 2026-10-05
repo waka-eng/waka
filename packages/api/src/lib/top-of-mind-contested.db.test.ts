@@ -91,6 +91,42 @@ afterAll(async () => {
 });
 
 describe("contested pairs reach the synthesis", () => {
+  it('checks a noChange carry against current disputes even when neither side is selected',async()=>{
+    const profileId=await seedProfile(),a=await seedSignal(profileId,'Evenings for family.'),b=await seedSignal(profileId,'Evenings for work.');
+    for(let index=0;index<3;index++){
+      const id=await seedSignal(profileId,`A current established pattern ${index}.`);
+      for(let unit=0;unit<2;unit++){
+        const [source]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${profileId},'Another independent experience') RETURNING id`;
+        await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id) VALUES(${profileId},${profileId},${id},${source.id})`;
+      }
+      await t.sql`UPDATE signals SET status='active' WHERE id=${id}`;
+    }
+    await t.sql`INSERT INTO signal_contradictions(profile_id,a_signal_id,b_signal_id) VALUES(${profileId},${a<b?a:b},${a<b?b:a})`;
+    const [tom]=await t.sql`INSERT INTO top_of_minds(profile_id) VALUES(${profileId}) RETURNING id`;
+    const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body) VALUES(${tom.id},'pattern','Family always wins.') RETURNING id`;
+    await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES(${entry.id},${a})`;
+    let seen:TopOfMindSynthesisInput|null=null;
+    setDefaultModelProviderForTests({...rememberingProvider([]),synthesizeTopOfMind:async input=>{seen=input;return {noChange:true,entries:[]};}});
+    await refreshTopOfMindForProfile({profileId,reason:'manual'});
+    expect((seen as TopOfMindSynthesisInput|null)?.signals.map(row=>row.id)).not.toContain(a);
+    const rows=await t.sql`SELECT e.body FROM top_of_mind_entries e JOIN top_of_minds m ON m.id=e.top_of_mind_id WHERE m.profile_id=${profileId} AND m.status='live'`;
+    expect(rows).toHaveLength(0);
+  });
+  it('drops unilateral generated conclusions, including a noChange carry, without rewriting a human pin',async()=>{
+    const profileId=await seedProfile(),a=await seedSignal(profileId,'Evenings for family.'),b=await seedSignal(profileId,'Evenings for work.');
+    await t.sql`INSERT INTO signal_contradictions(profile_id,a_signal_id,b_signal_id) VALUES(${profileId},${a<b?a:b},${a<b?b:a})`;
+    const [tom]=await t.sql`INSERT INTO top_of_minds(profile_id) VALUES(${profileId}) RETURNING id`;
+    const [machine]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body) VALUES(${tom.id},'pattern','Family always wins.') RETURNING id`;
+    const [human]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,locked_at,pinned_at) VALUES(${tom.id},'pattern','My exact choice.',now(),now()) RETURNING id`;
+    for(const entry of [machine,human])await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES(${entry.id},${a})`;
+    const seen:TopOfMindSynthesisInput[]=[];
+    setDefaultModelProviderForTests({...rememberingProvider(seen),synthesizeTopOfMind:async()=>({noChange:true,entries:[]})});
+    await refreshTopOfMindForProfile({profileId,reason:'manual'});
+    const rows=await t.sql`SELECT e.body,e.locked_at FROM top_of_mind_entries e JOIN top_of_minds m ON m.id=e.top_of_mind_id WHERE m.profile_id=${profileId} AND m.status='live'`;
+    expect(rows.map(row=>row.body)).toEqual(['My exact choice.']);
+    expect(rows[0]!.locked_at).not.toBeNull();
+  });
+
   it("marks both sides of an open pair with each other, and only each other", async () => {
     const profileId = await seedProfile();
     const a = await seedSignal(profileId, "Mornings are for deep work.");

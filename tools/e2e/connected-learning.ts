@@ -68,6 +68,7 @@ setDefaultModelProviderForTests({
     return { entries: [{ type: 'hypothesis', body: wording, citedSignalIds: input.signals.map((row) => row.id) }] };
   },
   distillPrinciples: async () => { throw new Error('This journey does not buy principle generation'); },
+  assessPrincipleGrounding:async()=>{throw new Error('This journey does not buy principle grounding');},
   judgePrincipleRelation: async () => { throw new Error('Unexpected principle relation'); },
   routeDeclaration: async () => { throw new Error('Unexpected declaration routing'); },
 } satisfies ModelProvider);

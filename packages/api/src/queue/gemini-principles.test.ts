@@ -17,6 +17,7 @@ import {
   parsePrincipleRelation,
   PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,
   PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,
+  buildPrincipleGroundingRequest,parsePrincipleGrounding,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION,
 } from "./gemini.js";
 
 const DISTILL_INPUT = {
@@ -35,6 +36,26 @@ const DISTILL_INPUT = {
   currentPrinciples: [{ id: "p1", statement: "Working before spending.", state: "held" }],
   currentEntries: [{ body: "Small tools are on your mind." }],
 };
+
+describe('bounded semantic grounding',()=>{
+  const input={preferredLocale:'en-US' as const,signals:[{id:'s',statement:'A saved preference.'}],candidates:[{id:'c1',statement:'A rule.',citedSignalIds:['s']},{id:'c2',statement:'Another rule.',citedSignalIds:['s']}]};
+  it('fences data, bounds output, and forbids fluent unsupported trade-offs',()=>{
+    const request=buildPrincipleGroundingRequest(input);
+    expect(request.generationConfig.maxOutputTokens).toBe(512);
+    expect(request.contents[0]!.parts[0]!.text).toContain('<<<grounding data>>>');
+    expect(PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION).toContain('cost');
+    expect(PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION).toContain('If uncertain');
+  });
+  it('requires each candidate once and restores order',()=>{
+    expect(parsePrincipleGrounding({assessments:[{candidateId:'c2',supported:false},{candidateId:'c1',supported:true}]},input).assessments)
+      .toEqual([{candidateId:'c1',supported:true},{candidateId:'c2',supported:false}]);
+  });
+  it.each([null,{}, {assessments:[]},{assessments:[{candidateId:'c1',supported:true}]},
+    {assessments:[{candidateId:'c1',supported:true},{candidateId:'c1',supported:false}]},
+    {assessments:[{candidateId:'c1',supported:true},{candidateId:'foreign',supported:true}]},
+    {assessments:[{candidateId:'c1',supported:'yes'},{candidateId:'c2',supported:false}]},
+  ])('rejects incomplete/malformed verdict %j',payload=>expect(()=>parsePrincipleGrounding(payload,input)).toThrow());
+});
 
 describe("distillation request", () => {
   it("runs at temperature zero with the candidates schema", () => {

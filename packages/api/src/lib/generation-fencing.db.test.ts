@@ -8,6 +8,7 @@ import { readGenerationRevision, assertGenerationRevision } from "./generation-r
 import { createGroupForProfile, joinGroupByCode } from "../routes/groups-membership.js";
 import { createFeedbackForProfile } from "../routes/feedback.js";
 import type { ModelProvider } from "./model-provider.js";
+import {acceptPrincipleGroundingForFixture} from '../../test/helpers/principle-grounding.js';
 type RelationInput=Parameters<ModelProvider['judgePrincipleRelation']>[0];
 const relations=(input:RelationInput,relation:'same'|'independent'|'conflicting')=>({relations:input.existingPrinciples.map(row=>({principleId:row.id,relation}))});
 
@@ -82,7 +83,7 @@ describe('generation commit fences', () => {
     let edit: Promise<unknown> | undefined;
     try {
       await expect(refreshPrinciplesForProfile({ profileId: f.profileId }, { db: t.db as never,
-        modelProvider: { distillPrinciples: async () => ({ candidates: [{ statement: 'A supported rule', type: 'maxim', citedSignalIds: f.signalIds }] }),
+        modelProvider: { assessPrincipleGrounding:acceptPrincipleGroundingForFixture,distillPrinciples: async () => ({ candidates: [{ statement: 'A supported rule', type: 'maxim', citedSignalIds: f.signalIds }] }),
           judgePrincipleRelation: async (input:RelationInput) => relations(input,'same') } as unknown as ModelProvider,
         beforeCommit: async () => {
           edit = human`UPDATE principles SET statement = 'My corrected rule', locked_at = now() WHERE id = ${principle.id}`.then(() => true);
@@ -216,7 +217,7 @@ describe('generation commit fences', () => {
   it('later candidates can match an earlier planned principle without minting duplicates', async () => {
     const f = await fixture();
     const result = await refreshPrinciplesForProfile({ profileId: f.profileId }, { db: t.db as never,
-      modelProvider: { distillPrinciples: async () => ({ candidates: [
+      modelProvider: { assessPrincipleGrounding:acceptPrincipleGroundingForFixture,distillPrinciples: async () => ({ candidates: [
         { statement: 'A useful directive', type: 'maxim', citedSignalIds: f.signalIds },
         { statement: 'The same directive reworded', type: 'maxim', citedSignalIds: f.signalIds },
       ] }), judgePrincipleRelation: async (input:RelationInput) => relations(input,'same') } as unknown as ModelProvider,
@@ -230,7 +231,7 @@ describe('generation commit fences', () => {
     const [original] = await t.sql`INSERT INTO principles(profile_id, statement, origin, state, rank, locked_at)
       VALUES (${f.profileId}, 'My rule', 'declared', 'aspirational', 1, now()) RETURNING id`;
     await expect(refreshPrinciplesForProfile({ profileId: f.profileId }, { db: t.db as never,
-      modelProvider: { distillPrinciples: async () => ({ candidates: [{ statement: 'A candidate', type: 'maxim', citedSignalIds: f.signalIds }] }),
+      modelProvider: { assessPrincipleGrounding:acceptPrincipleGroundingForFixture,distillPrinciples: async () => ({ candidates: [{ statement: 'A candidate', type: 'maxim', citedSignalIds: f.signalIds }] }),
         judgePrincipleRelation: async (input:RelationInput) => {
           await t.sql`UPDATE principles SET statement = 'My corrected rule', locked_at = now() WHERE id = ${original.id}`;
           return relations(input,'conflicting');
@@ -283,7 +284,7 @@ describe('generation commit fences', () => {
       VALUES (${f.profileId}, 'My own rule', 'declared', 'aspirational', 1, now())`;
     let comparisons = 0;
     await expect(refreshPrinciplesForProfile({ profileId: f.profileId }, { db: t.db as never,
-      modelProvider: { distillPrinciples: async () => ({ candidates: [
+      modelProvider: { assessPrincipleGrounding:acceptPrincipleGroundingForFixture,distillPrinciples: async () => ({ candidates: [
         { statement: 'Candidate one', type: 'maxim', citedSignalIds: f.signalIds },
         { statement: 'Candidate two', type: 'maxim', citedSignalIds: f.signalIds },
       ] }), judgePrincipleRelation: async (input:RelationInput) => {
