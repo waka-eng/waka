@@ -906,6 +906,14 @@ does not wait for midnight. Rooms use their own signals and top-of-mind
 versions. Every room signal must still pass the wall's current-member and
 visibility checks; principle reads expose only those signal statements.
 
+Distillation input is separately bounded: at most 48 signals, 24 standing
+Principles as advisory context, seven current entries and 16,000 serialized
+context characters. Current reading signals get up to half the signal space;
+established evidence fills the remainder. Whole items are omitted to fit, never
+rewritten or truncated. The provider boundary rejects oversized inputs. The
+24-item standing-context limit does not remove any Principle from the subsequent
+comparison set; comparison work is being bounded separately.
+
 **The canonical rendering is machine-facing:** one deterministic markdown
 document (rank-ordered, stable ids, a preamble carrying the consumption
 contract, contested pairs cross-referenced), served byte-identically via

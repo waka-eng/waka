@@ -16,7 +16,7 @@
  * qualification tests: docs/generation.md; phases: docs/goals/principles.md.
  */
 
-import { and, eq, getTableColumns, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 import { createHash, randomUUID } from "node:crypto";
 import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
@@ -37,6 +37,7 @@ import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import { selectIndependentEvidence, type ConfidenceEvidence } from './signal-lifecycle.js';
 import {loadSignalEvidence} from './review-evidence.js';
+import {selectPrincipleInput} from './principle-input.js';
 import { writePrincipleStatementChain } from "./statement-chains.js";
 import { GROUP_INPUT_POLICY } from "./group-inputs.js";
 import { groupEntrySupportCurrent, groupPrincipleReadable, groupSignalReadable, projectGroupEntries } from "./group-output.js";
@@ -363,7 +364,7 @@ export async function refreshPrinciplesForProfile(
       ? groupPrincipleReadable(groupId, PRINCIPLE_MIN_SIGNALS) : personalPrincipleSupportCurrent(input.profileId, PRINCIPLE_MIN_SIGNALS) })
     .from(principles)
     .where(and(eq(principles.profileId, input.profileId),
-      ...(groupId ? [eq(principles.inputPolicy, GROUP_INPUT_POLICY)] : [])));
+      ...(groupId ? [eq(principles.inputPolicy, GROUP_INPUT_POLICY)] : []))).orderBy(asc(principles.rank),asc(principles.id));
 
   const [liveTom] = await db
     .select({ id: topOfMinds.id })
@@ -380,7 +381,9 @@ export async function refreshPrinciplesForProfile(
     ? (await projectGroupEntries(db, groupId, storedEntries)).entries
     : (await projectPersonalEntries(db, input.profileId, storedEntries)).entries.filter((entry) => !entry.supportChanged);
 
-  const distilled = await provider.distillPrinciples({
+  const focus=currentEntries.length?await db.select({id:topOfMindEntrySignals.signalId}).from(topOfMindEntrySignals)
+    .where(inArray(topOfMindEntrySignals.entryId,currentEntries.map(row=>row.id))):[];
+  const distillInput=selectPrincipleInput({
     profileId: input.profileId,
     preferredLocale,
     signals: activeSignals.map((row) => {
@@ -401,10 +404,11 @@ export async function refreshPrinciplesForProfile(
       state: row.supportCurrent || row.state === 'contested' ? row.state : 'aspirational',
     })),
     currentEntries: currentEntries.map((row) => ({ body: row.body })),
-  });
+  },new Set(focus.flatMap(row=>row.id?[row.id]:[])));
+  const distilled = await provider.distillPrinciples(distillInput);
 
   const result: RefreshPrinciplesResult = { ...none, status: "no_candidates" };
-  const activeIds = new Set(activeSignals.map((row) => row.id));
+  const activeIds = new Set(distillInput.signals.map((row) => row.id));
 
   const candidates = distilled.candidates.slice(0, PRINCIPLE_MAX_CANDIDATES_PER_RUN);
   const valid: PrincipleCandidate[] = [];

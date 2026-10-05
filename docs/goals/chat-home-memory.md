@@ -619,3 +619,36 @@ cost and the separate Top of Mind/Principle generation calibration.
 The worker preflight also checks vector dimensions before reserving a lookup
 slot. A new test confirms incompatible-only indexes do not purchase an embedding;
 the final retrieval/reply SQL recheck passed 29 tests.
+
+### Milestone 3 Principle input cost baseline and cap
+
+Added a no-network cost fixture with 400 active signals, 200 locked declared
+Principles and three scripted candidates. It measures real SQL and prompt
+serialization, not model quality. Before the change it sent all 400 signals and
+200 standing Principles: 90,451 context characters, one distillation and 603
+pairwise comparisons (604 scripted model calls total). The comparison against
+standing preference 200 detected a conflict, proving why dropping old rows is
+not an acceptable way to cap the work.
+
+Distillation now admits at most 48 signals, 24 advisory standing Principles,
+seven current entries and 16,000 actual serialized characters. Selection reserves
+up to half the signal space for current focus and uses established evidence for
+the remainder. Owner-ranked standing context remains ordered. Whole items are
+omitted without rewriting human text, and the provider builder independently
+refuses oversized requests. Candidate citations must come from the signals
+actually provided, not merely any signal in the profile.
+
+The same fixture now sends 48 signals and 24 standing-context items in 11,067
+characters. The full standing set remains available to matching: all 200 human
+wordings are preserved and the last-row conflict is still found. The 603
+comparison calls remain unchanged, so this is only an input-bound checkpoint,
+not completion of the comparison-work requirement. Resumable bounded comparison
+batches are the next implementation step; do not mark the broader gate passed.
+
+Evidence: `work/principle-cost/run-1791158311720.json` (baseline) and
+`work/principle-cost/run-1791159133141.json` (bounded input). Measured local fixture
+execution was 67ms and 105ms respectively with an immediate scripted model, not
+real provider latency. Tests: 27 input/prompt unit tests and 40 Principle,
+generation-fencing and group-privacy SQL tests passed; API typecheck passed.
+No paid calls, migrations, historical repair or deployment occurred in this
+checkpoint. Budget reservations remain unchanged.

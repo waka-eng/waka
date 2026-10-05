@@ -80,6 +80,7 @@
  */
 
 import { z } from "zod";
+import {PRINCIPLE_INPUT_LIMITS,renderPrincipleDistillContext} from '../lib/principle-input.js';
 
 import { topOfMindEntryTypeValues } from "../db/index.js";
 import {
@@ -1204,53 +1205,15 @@ const principleDistillResponseSchema: ResponseSchema = {
   required: ["candidates"],
 };
 
-export function buildPrincipleDistillRequest(
-  input: DistillPrinciplesInput,
-): GenerateContentRequest {
-  const sections: string[] = [];
-  sections.push(`Locale: ${input.preferredLocale}.`);
-
-  sections.push("The person's long-lived signals (id · statement · stats):");
-  for (const signal of input.signals) {
-    sections.push(
-      [
-        "<<<signal>>>",
-        `id: ${signal.id}`,
-        `statement: ${signal.statement}`,
-        `evidence: ${signal.evidenceCount} captures, first ${
-          signal.firstEvidenceAt?.toISOString().slice(0, 10) ?? "unknown"
-        }, last ${signal.lastEvidenceAt?.toISOString().slice(0, 10) ?? "unknown"}, selected into ${
-          signal.tomAppearances
-        } top-of-mind versions`,
-        "<<<end>>>",
-      ].join("\n"),
-    );
-  }
-
-  if (input.currentPrinciples.length > 0) {
-    sections.push("Principles the person already holds (do not restate):");
-    for (const principle of input.currentPrinciples) {
-      sections.push(["<<<principle>>>", principle.statement, "<<<end>>>"].join("\n"));
-    }
-  }
-
-  if (input.currentEntries.length > 0) {
-    sections.push(
-      "Current top-of-mind entries (a principle must generalize beyond these, never echo one):",
-    );
-    for (const entry of input.currentEntries) {
-      sections.push(["<<<entry>>>", entry.body, "<<<end>>>"].join("\n"));
-    }
-  }
-
+export function buildPrincipleDistillRequest(input: DistillPrinciplesInput): GenerateContentRequest {
+  const prompt=renderPrincipleDistillContext(input);
+  if(input.signals.length>PRINCIPLE_INPUT_LIMITS.signals||input.currentPrinciples.length>PRINCIPLE_INPUT_LIMITS.standingContext||
+    input.currentEntries.length>PRINCIPLE_INPUT_LIMITS.entries||prompt.length>PRINCIPLE_INPUT_LIMITS.characters)
+    throw new ModelDidNotAnswerError("principle input bounds");
   return {
     systemInstruction: { parts: [{ text: PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION }] },
-    contents: [{ role: "user", parts: [{ text: sections.join("\n\n") }] }],
-    generationConfig: {
-      temperature: 0,
-      responseMimeType: "application/json",
-      responseSchema: principleDistillResponseSchema,
-    },
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {temperature:0,responseMimeType:"application/json",responseSchema:principleDistillResponseSchema},
   };
 }
 
