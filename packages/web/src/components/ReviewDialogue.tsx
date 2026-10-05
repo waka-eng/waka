@@ -12,7 +12,7 @@ function ReviewReference({id,profileId,locale,onOpen}:{id:string;profileId:strin
     return()=>{controller.abort();window.clearTimeout(timer);};},[id,profileId]);
   return <button type="button" className="jar-review-reference" onClick={()=>onOpen(id)} disabled={!label}>{label??t(locale,'worldReviewSourceUnavailable')} ↗</button>;
 }
-export function ReviewDialogue({scope,id,thoughtId=null,completed,locale,onOpen,onRevision,onDraftChange}:{scope:ProfileStorageScope;id:string;thoughtId?:string|null;completed:boolean;locale:SupportedLocale;
+export function ReviewDialogue({scope,id,thoughtId=null,completed,historical=false,locale,onOpen,onRevision,onDraftChange}:{scope:ProfileStorageScope;id:string;thoughtId?:string|null;completed:boolean;historical?:boolean;locale:SupportedLocale;
   onOpen:(id:string)=>void;onRevision:(revision:number)=>void;onDraftChange:(hasDraft:boolean)=>void}){
   const review=useReviewDialogue(scope,id,onRevision),{state,draft}=review;
   const history=useRef<HTMLDetailsElement>(null),focused=useRef<string|null>(null);
@@ -27,7 +27,7 @@ export function ReviewDialogue({scope,id,thoughtId=null,completed,locale,onOpen,
   useEffect(()=>setCopyState(null),[draft?.id,draft?.answer]);
   useEffect(()=>{if(draft?.kind==='edit')editor.current?.focus();},[draft?.kind,draft?.id]);
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
-  const q=completed?{phase:'closed' as const}:state?.question,answer=draft?.kind!=='create'?state?.answers.find(row=>row.id===draft?.answerId):null;
+  const q=completed||historical?{phase:'closed' as const}:state?.question,answer=draft?.kind!=='create'?state?.answers.find(row=>row.id===draft?.answerId):null;
   const questionLimited=Boolean(q&&(q.phase==='idle'||q.phase==='failed')&&q.retryAfter&&Date.parse(q.retryAfter)>Date.now());
   const currentDraft=!draft||(draft.kind==='create'?q?.phase==='ready'&&q.jobId===draft.questionJobId&&q.contextHash===draft.contextHash:answer?.revision===draft.revision);
   const canSubmit=Boolean(draft&&(draft.kind==='remove'||draft.answer.trim())&&!review.busy&&!review.loading&&review.error!=='storage');
@@ -61,7 +61,7 @@ export function ReviewDialogue({scope,id,thoughtId=null,completed,locale,onOpen,
       {q?.phase==='ready'&&!draft||q?.phase==='ready'&&draft?.kind==='create'&&currentDraft?<>
         {q.connection?<p className="jar-review-connection">{q.connection}</p>:null}<h3 className="jar-review-question">{q.question}</h3>{references(q.sourceIds)}
       </>:draft?.kind==='edit'&&answer?.contextValid?<h3>{answer.question}</h3>:null}
-      {draft&&!currentDraft?<p role="status">{say(q?.phase==='closed'?'worldReviewClosedDraft':'worldReviewDraftChanged')}</p>:null}
+      {draft&&!currentDraft?<p role="status">{say(q?.phase==='closed'?(historical?'worldReviewLegacyDraft':'worldReviewClosedDraft'):'worldReviewDraftChanged')}</p>:null}
       {(q?.phase==='ready'&&!draft)||draft?<div className="jar-review-reply">
         <label htmlFor={`review-answer-${id}`}>{say('worldReviewYourThought')}</label>
         <textarea ref={editor} id={`review-answer-${id}`} value={draft?.answer??''} rows={4} maxLength={16000} disabled={review.busy} readOnly={Boolean(draft?.submitted)} placeholder={say('worldReviewAnswerPlaceholder')} onChange={event=>review.update(event.target.value)} onKeyDown={onReplyKey}/>

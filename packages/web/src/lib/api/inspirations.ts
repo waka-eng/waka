@@ -275,12 +275,13 @@ export async function updateInspiration(
  * links. A signal that loses all of its evidence is retired unless a human
  * edit locked it, in which case its text stays and it is marked unsupported.
  */
-export async function deleteInspiration(id: string): Promise<void> {
+export async function deleteInspiration(id: string, options: ProfileScoped & { sourceRevision?: string; signal?: AbortSignal } = {}): Promise<void> {
   await requestVoid(
-    apiPath(`/inspirations/${encodeURIComponent(id)}`),
+    apiPath(`/inspirations/${encodeURIComponent(id)}${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
     "DELETE",
-    undefined,
+    options.sourceRevision ? { sourceRevision: options.sourceRevision } : undefined,
     "Failed to delete this capture",
+    options.signal,
   );
 }
 

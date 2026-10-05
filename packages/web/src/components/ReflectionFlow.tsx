@@ -31,7 +31,7 @@ function savedDraft(draftKey: string | null, afterId: string | null): string {
   } catch { return ""; }
 }
 
-export function ReflectionFlow({ inspirationId, scope, processing, source, initialTurns, locale, onSaved, onRemoved, onDone, onSynchronized, focusReflectionId, onCopyLink }: {
+export function ReflectionFlow({ inspirationId, scope, processing, source, initialTurns, locale, onSaved, onRemoved, onDone, onSynchronized, focusReflectionId, onCopyLink, doneLabel, saveAndDoneLabel }: {
   inspirationId: string;
   scope: ProfileStorageScope | null;
   processing?: ReactNode;
@@ -44,6 +44,8 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
   onSynchronized?: (inspiration: ApiInspiration | null) => void;
   focusReflectionId?: string | null;
   onCopyLink?: (reflectionId: string) => void;
+  doneLabel?: string;
+  saveAndDoneLabel?: string;
 }) {
   const draftKey = profileStorageKey(scope, `reflectionDraft:${inspirationId}`);
   const restored = useRef(readReflectionDraft(draftKey));
@@ -256,7 +258,7 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
     {phase === "answering" ? <div ref={currentQuestion} className="jar-reflection-current">
       <p className="jar-label">{latest ? t(locale, "worldReflectionFollowup") : t(locale, "worldReflect")}</p>
       <p className="jar-reflect-q">{question}</p>
-      <textarea className="jar-reflect-box" rows={4} value={answer} readOnly={Boolean(save.pending)}
+      <textarea className="jar-reflect-box" rows={4} value={answer} readOnly={Boolean(save.pending)} aria-label={question || t(locale, 'worldInYourOwnWords')}
         placeholder={t(locale, "worldInYourOwnWords")}
         onChange={(event) => { draftRef.current.answer = event.target.value; keepDraft(draftRef.current); setAnswer(event.target.value); }} />
       <p className="jar-reflection-hint">{t(locale, "worldReflectionNextHint")}</p>
@@ -265,7 +267,7 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
           onClick={() => void saveAnswer(true)}>{t(locale, "worldReflectionNext")}</button>
         <button type="button" className="jar-reflection-secondary"
           onClick={() => answer.trim() ? void saveAnswer(false) : onDone()}>
-          {answer.trim() ? t(locale, "worldReflectionSaveAndFinish") : t(locale, "worldReflectionDone")}
+          {answer.trim() ? saveAndDoneLabel ?? t(locale, "worldReflectionSaveAndFinish") : doneLabel ?? t(locale, "worldReflectionDone")}
         </button>
       </div> : null}
     </div> : null}
@@ -276,7 +278,7 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
         <p>{t(locale, "worldReflectionNextLoading")}</p>
       </div>
       <button type="button" className="jar-reflection-secondary" onClick={onDone}>
-        {t(locale, "worldReflectionDone")}
+        {doneLabel ?? t(locale, "worldReflectionDone")}
       </button>
     </div> : null}
     {phase === "saved" || phase === "question_failed" ? <div className="jar-reflection-actions">
@@ -285,12 +287,12 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
         {phase === "question_failed" ? t(locale, "worldReflectionRetry") : t(locale, "worldReflectionGoDeeper")}
       </button> : null}
       <button type="button" className="jar-reflection-secondary" onClick={onDone}>
-        {t(locale, "worldReflectionDone")}
+        {doneLabel ?? t(locale, "worldReflectionDone")}
       </button>
     </div> : null}
     {error ? <p className="jar-settings-warn" role="alert">{error}</p> : null}
     <AuthoredSaveNotice save={save} locale={locale} />
-    {save.pending ? <button type="button" className="jar-reflection-secondary" onClick={onDone}>{t(locale, 'worldReflectionDone')}</button> : null}
+    {save.pending ? <button type="button" className="jar-reflection-secondary" onClick={onDone}>{doneLabel ?? t(locale, 'worldReflectionDone')}</button> : null}
     {!save.pending && phase !== 'saving' && phase !== 'asking' ? processing : null}
   </div>;
 }

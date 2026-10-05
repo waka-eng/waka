@@ -1377,6 +1377,20 @@ body .profile-signout-button {
 .jar-review-context { color:var(--w-muted); font-size:var(--t-note); line-height:1.5; }
 .jar-review-card-heading { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-8); }
 .jar-review-card-heading p { margin:0; }
+.jar-review-single .jar-review-body { padding-bottom:0; }
+.jar-review-single .jar-review-text { font-size:var(--t-lead); margin-block:var(--sp-20); }
+.jar-review-item-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-8); margin-top:var(--sp-22); padding-top:var(--sp-16); border-top:1px solid var(--w-edge); }
+.jar-review-item-actions button { margin:0; font-size:var(--t-body); }
+.jar-review button.jar-review-primary { background:var(--w-raised); }
+.jar-review-item-actions .jar-review-remove { margin-left:auto; border-color:transparent; color:var(--w-muted); }
+.jar-review-delete { margin-top:var(--sp-20); padding:var(--sp-16); border:1px solid var(--w-edge); border-radius:var(--sp-12); line-height:1.6; }
+.jar-review-delete h3 { margin-top:0; font-size:var(--t-body); }
+.jar-review-delete-actions { display:flex; flex-wrap:wrap; gap:var(--sp-8); }
+.jar-review-delete-actions button { margin:0; }
+.jar-review button.jar-review-destructive { color:var(--w-ink); border-color:var(--w-muted); }
+.jar-review-item-thoughts { margin-top:var(--sp-16); }
+/* The lead step has a 16px floor, avoiding iOS input zoom. */
+.jar-review-single .jar-reflect-box { font-size:var(--t-lead); }
 .jar-review summary { min-height:var(--sp-44); cursor:pointer; }
 .jar-review-choices { display:flex; gap:var(--sp-12); margin-top:var(--sp-16); }
 .jar-review-choices button { flex:1; }

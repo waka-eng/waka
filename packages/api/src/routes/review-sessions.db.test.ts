@@ -69,11 +69,11 @@ it('has an honest empty state and no orphan session, then admits a single source
   const id=await source(p.id);const session=await start(p);expect(session.items.map((row:{inspirationId:string})=>row.inspirationId)).toEqual([id]);
   const active=await p.app.request('/reviews/active');expect(active.headers.get('cache-control')).toContain('no-store');expect((await sessionBody(active)).id).toBe(session.id);
 });
-it('prioritizes unreviewed sources, bounds five, and does not change order when new material arrives',async()=>{
+it('suggests one unreviewed source and does not replace it when new material arrives',async()=>{
   const p=await person(),newest=await source(p.id);
   await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer) VALUES (${p.id},${newest},'Why?','Already reflected')`;
   const ids=[];for(let days=1;days<=6;days++) ids.push(await source(p.id,days));
-  const session=await start(p);expect(session.items.map((row:{inspirationId:string})=>row.inspirationId)).toEqual(ids.slice(0,5));
+  const session=await start(p);expect(session.items.map((row:{inspirationId:string})=>row.inspirationId)).toEqual(ids.slice(0,1));
   expect(session.items.every((row:{reason:string})=>row.reason==='unreviewed')).toBe(true);
   await source(p.id);const read=await sessionBody(await p.app.request(`/reviews/${session.id}`));
   expect(read.items).toEqual(session.items);expect((await start(p)).id).toBe(session.id);
@@ -113,7 +113,7 @@ it('source deletion removes only its item and never fills the gap with a new sou
   expect(read.items).toHaveLength(1);expect(read.items[0]).toMatchObject({inspirationId:b,position:1});expect(read.currentInspirationId).toBe(b);
   expect((await choose(p,session,a,'keep')).status).toBe(404);
 });
-it('permits finishing early, resumes no completed session and reuses reviewed sources only as revisits',async()=>{
+it('permits finishing early and holds recently reviewed sources for 24 hours',async()=>{
   const p=await person(),a=await source(p.id),session=await start(p,[a]);
   const picked=await sessionBody(await choose(p,session,a,'skip'));
   expect((await post(p,`/${session.id}/complete`,{revision:0})).status).toBe(409);
@@ -121,7 +121,20 @@ it('permits finishing early, resumes no completed session and reuses reviewed so
   expect((await sessionBody(await post(p,`/${session.id}/complete`,{revision:picked.revision}))).revision).toBe(2);
   expect(await (await p.app.request('/reviews/active')).json()).toEqual({session:null});
   expect((await choose(p,picked,a,null)).status).toBe(409);
+  expect(await (await post(p,'/',{id:randomUUID()})).json()).toEqual({session:null});
+  await t.sql`UPDATE review_items SET decided_at=now()-interval '25 hours' WHERE session_id=${session.id}`;
   expect((await start(p)).items[0]).toMatchObject({reason:'revisit',choice:null});
+});
+it('rotates older reviews before recent eligible reviews and never treats Next as deletion',async()=>{
+  const p=await person(),a=await source(p.id),b=await source(p.id,1);
+  for(const [id,hours] of [[a,25],[b,48]] as const){
+    const session=await start(p,[id]);const next=await sessionBody(await choose(p,session,id,'skip'));
+    await post(p,`/${session.id}/complete`,{revision:next.revision});
+    await t.sql`UPDATE review_items SET decided_at=now()-${hours}::int*interval '1 hour' WHERE session_id=${session.id}`;
+  }
+  expect((await start(p)).items[0]).toMatchObject({inspirationId:b,reason:'revisit'});
+  expect(await t.sql`SELECT id FROM inspirations WHERE profile_id=${p.id}`).toHaveLength(2);
+  expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
 });
 it('rejects cross-account reads/choices/manual sources and cross-tenant SQL links',async()=>{
   const p=await person(),other=await person(),a=await source(p.id),b=await source(other.id),session=await start(p,[a]);

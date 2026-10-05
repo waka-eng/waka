@@ -12077,6 +12077,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       .finally(() => setPublishing(false));
   }, [panelBall, panelId, panelIsPublic, publishing]);
 
+  const inspirationRemovedFromView = useCallback((serverId: string, visualId = serverId) => {
+    sourceListMutationRef.current += 1;
+    setSelectedId(null);
+    simApiRef.current?.unborn(visualId);
+    bornRef.current = bornRef.current.filter(row => row.id !== visualId && row.sigId !== serverId);
+    inspirationsRef.current = inspirationsRef.current?.filter(row => row.id !== visualId && row.id !== serverId) ?? null;
+    setInspirations(rows => rows?.filter(row => row.id !== visualId && row.id !== serverId) ?? rows);
+    detailsRef.current.delete(serverId);
+    for (const [signalId, rows] of evidenceBySignalRef.current) evidenceBySignalRef.current.set(signalId, rows.filter(row => row.inspirationId !== serverId));
+    setCitations(rows => new Map([...rows].map(([key, evidence]) => [key, evidence.filter(row => row.inspirationId !== serverId)])));
+    setProv(current => current ? {...current, rows: current.rows.filter(row => row.inspirationId !== serverId)} : null);
+    setProvFull(current => current?.id === serverId ? null : current);
+    setProvenance(current => {const next = new Map(current); next.delete(serverId); return next;});
+    skyReadSequence.current += 1;
+    void readSkyRef.current().catch(() => undefined);
+  }, []);
+
   const forgetIt = useCallback(() => {
     simApiRef.current?.acknowledge("let-go");
     const id = panelId;
@@ -12091,13 +12108,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const serverId = panelBall?.sigId ?? id;
     deleteInspiration(serverId)
       .then(() => {
-        sourceListMutationRef.current += 1;
-        setSelectedId(null);
-        simApiRef.current?.unborn(id);
-        bornRef.current = bornRef.current.filter((s) => s.id !== id && s.sigId !== serverId);
-        setInspirations((prev) =>
-          prev ? prev.filter((c) => c.id !== id && c.id !== serverId) : prev,
-        );
+        inspirationRemovedFromView(serverId, id);
         setForget({ id: null, step: "rest" });
       })
       .catch(() => {
@@ -12106,7 +12117,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            about this failure is that. Its own state, its own line. */
         setForget({ id, step: "failed" });
       });
-  }, [panelId, panelBall, forget.step]);
+  }, [panelId, panelBall, forget.step, inspirationRemovedFromView]);
 
   const askToReflect = useCallback(() => {
     if (!panelId || !panelBall) return;
@@ -14694,6 +14705,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       ) : null}
 
       {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
+        onSaved={reflectionSaved} onSynchronized={synchronizeReflections} onReflectionRemoved={reflectionRemoved} onInspirationRemoved={inspirationRemovedFromView}
         onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}
         onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}
         onOpenPrinciple={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id})}
