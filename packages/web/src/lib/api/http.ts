@@ -31,6 +31,7 @@
 // ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
+import {invalidateSourceRequest} from '../inspiration-snapshots';
 
 /**
  * Field-level validation errors as emitted by Hono handlers via zod's
@@ -200,6 +201,7 @@ export async function writeJson<T>(
      the odd one out (`close this room`, on `requestVoid`) was the one that read
      correctly. Two shapes of the same failure, one wrapped and one not. */
   let res: Response;
+  invalidateSourceRequest(path);
   try {
     res = await fetch(path, {
       method,
@@ -254,6 +256,7 @@ export async function requestVoid(
   signal?: AbortSignal,
 ): Promise<void> {
   let res: Response;
+  invalidateSourceRequest(path);
   try {
     res = await fetch(path, {
       method,

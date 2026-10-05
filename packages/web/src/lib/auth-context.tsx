@@ -40,6 +40,7 @@ import {
   useRef,
   useState,
 } from "react";
+import {setInspirationSnapshotOwner} from './inspiration-snapshots';
 import type { ReactNode } from "react";
 
 import {
@@ -267,6 +268,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         authMutationRef.current += 1;
       }
       setViewer(next);
+      setInspirationSnapshotOwner(next?{accountId:next.account.id,profileId:next.profile.id}:null);
       writeCachedViewer(next);
       if (next) {
         writeStoredLocale(normalizeSupportedLocale(next.profile.preferredLocale));

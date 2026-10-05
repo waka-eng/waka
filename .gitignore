@@ -53,6 +53,7 @@ snap.json
 # Regenerable synthetic memory calibration and local browser evidence.
 # Source fixtures/runners and the measured gate results live in tools/docs.
 /work/chat-home-memory/
+/work/performance/
 /work/generation-calibration/
 /work/retrieval-eval/
 /work/principle-cost/

@@ -1622,52 +1622,51 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * invalidate old responses so an earlier quote cannot return after deletion.
    */
   const readSkyRef = useRef<() => Promise<void>>(async () => {});
-  readSkyRef.current = async () => {
-    const sequence = ++skyReadSequence.current;
-    const current = () => sequence === skyReadSequence.current && !offlineRef.current;
-    const rows = await loadSignals();
-    if (!current()) return;
-    setSignals(rows);
-    const index = new Map<string, Evidence[]>();
-    const bySignal = new Map<string, Evidence[]>();
-    const reviewsBySignal = new Map<string, ApiSignalReviewEvidence[]>();
-    for (const p of rows) {
-      if (!current()) return;
-      if (p.evidenceCount === 0) continue;
-      try {
-        const full = await loadSignal(p.id);
-        if (!current()) return;
-        for (const e of full.evidence) {
-          const have = index.get(e.inspirationId);
-          if (have) have.push(e);
-          else index.set(e.inspirationId, [e]);
-        }
-        bySignal.set(p.id, full.evidence);
-        reviewsBySignal.set(p.id, full.reviewEvidence);
-      } catch {
-        /* this signal draws no orbit; the statement still stands */
-      }
+  const signalIndex = (rows:Signal[]) => {
+    const index=new Map<string,Evidence[]>();
+    for(const row of rows)for(const id of row.inspirationIds??[]){
+      const list=index.get(id)??[];
+      // Identity-only membership preserves field meaning without fabricating
+      // a quote/reason or copying evidence into a lightweight read.
+      list.push({signalId:row.id,inspirationId:id,preview:'',quote:null,quoteSource:null,reason:null,createdMs:0});
+      index.set(id,list);
     }
-    if (!current()) return;
-    evidenceBySignalRef.current = bySignal;
-    setReviewEvidenceBySignal(reviewsBySignal);
-    setCitations(index);
-    /* AND NOW THE PEEK ROW CAN BE BUILT. The board's statement cites signals;
-       those signals cite memories; the row beneath the poster is those
-       memories, with the words each of them was quoted on. This is the only
-       place both halves of the chain are in hand. */
-    setNotes((cur) => {
-      const board = cur ?? [];
-      const lead = board.find((e) => e.pinned) ?? board[0];
-      if (!lead) return cur;
-      const prov: Provenance = new Map();
-      for (const c of lead.citedSignals)
-        for (const e of evidenceBySignalRef.current.get(c.id) ?? [])
-          if (!prov.has(e.inspirationId)) prov.set(e.inspirationId, e.quote);
-      if (prov.size > 0) setProvenance(prov);
-      return cur;
-    });
+    return index;
   };
+  readSkyRef.current = async () => {
+    const sequence=++skyReadSequence.current;
+    const rows=await loadSignals(undefined,true);
+    if(sequence!==skyReadSequence.current||offlineRef.current)return;
+    evidenceBySignalRef.current=new Map();
+    setReviewEvidenceBySignal(new Map());setProvenance(new Map());
+    setSignals(rows);setCitations(signalIndex(rows));
+  };
+  const evidenceLead=(notes??[]).find(row=>row.pinned)??notes?.[0];
+  const evidenceIds=[...new Set(evidenceLead?.citedSignals.map(row=>row.id)??[])];
+  const evidenceKey=JSON.stringify([evidenceLead?.id??null,evidenceIds]);
+  useEffect(()=>{
+    evidenceBySignalRef.current=new Map();setReviewEvidenceBySignal(new Map());setProvenance(new Map());
+    if(signals)setCitations(signalIndex(signals));
+    if(!evidenceIds.length||!signals||offlineRef.current)return;
+    const sequence=skyReadSequence.current,controller=new AbortController();
+    const timer=window.setTimeout(()=>controller.abort(),15000);
+    const current=()=>!controller.signal.aborted&&sequence===skyReadSequence.current&&!offlineRef.current;
+    void Promise.all(evidenceIds.map(id=>loadSignal(id,controller.signal).catch(()=>null))).then(details=>{
+      if(!current())return;
+      const index=signalIndex(signals??[]),bySignal=new Map<string,Evidence[]>(),reviews=new Map<string,ApiSignalReviewEvidence[]>();
+      for(const detail of details){
+        if(!detail)continue;
+        bySignal.set(detail.id,detail.evidence);reviews.set(detail.id,detail.reviewEvidence??[]);
+        for(const [id,rows] of index)index.set(id,rows.filter(row=>row.signalId!==detail.id));
+        for(const evidence of detail.evidence){const rows=index.get(evidence.inspirationId)??[];rows.push(evidence);index.set(evidence.inspirationId,rows);}
+      }
+      evidenceBySignalRef.current=bySignal;setReviewEvidenceBySignal(reviews);setCitations(index);
+      const provenance:Provenance=new Map();
+      for(const rows of bySignal.values())for(const evidence of rows)if(!provenance.has(evidence.inspirationId))provenance.set(evidence.inspirationId,evidence.quote);
+      setProvenance(provenance);
+    }).finally(()=>window.clearTimeout(timer));
+    return()=>{controller.abort();window.clearTimeout(timer);};
+  },[evidenceKey,signals,topOfMind?.id,topOfMind?.generationRevision]);
 
   /** room id → the statements hanging on its wall, with whose they are. */
   const wallSignalsRef = useRef<Map<string, ApiGroupWallSignal[]>>(new Map());
@@ -2808,9 +2807,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     };
     /* LAYER 1 — the field. The archive is the spine, so its answer alone
        decides whether this is the real layout or the fixture. */
-    loadInspirations()
+    const sourceRead=sourceListMutationRef.current;
+    loadInspirations(undefined,{scope:storageScope??undefined})
       .then((field) => {
-        if (dead || offlineRef.current) return;
+        if (dead || offlineRef.current || sourceRead!==sourceListMutationRef.current) return;
         setInspirations(field.inspirations);
         setFieldBeyond(beyondOf(field));
         setPhase("ready");
@@ -2928,73 +2928,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           ),
         );
       }
-      for (const g of rows) {
-        if (offlineRef.current || dead) return;
-        try {
-          /* A room's board is NOT fetched here. `loadGroup` fetches it on
-             arrival and stores it per room in `groupChromeRef`, which is where
-             `wallChromeNow` reads a room's poster from. Fetching it at boot
-             too was one request per room for a value nothing read. */
-          const [wall, proposals] = await Promise.all([
-            fetchGroupWall(g.id).catch(() => [] as ApiGroupWallSignal[]),
-            fetchGroupProposals(g.id).catch(() => [] as ApiGroupProposal[]),
-          ]);
-          if (dead || offlineRef.current) return;
-          wallSignalsRef.current.set(g.id, wall);
-          /* An open proposal is a change to the room's board that has not been
-             affirmed yet. It is not drawn here — it is what the forming line
-             overhead is reporting the existence of. */
-          const open = proposals.find((p) => p.status === "open" && p.body);
-          if (open) {
-            setProposal((prev) =>
-              prev ?? {
-                groupId: g.id,
-                proposalId: open.id,
-                ambition: open.body ?? "",
-                changeSummary: open.rationale,
-                createdMs: Date.parse(open.createdAt) || 0,
-                /* Who stands behind it, not what it was made of: the room can
-                   name its contributors and must not name their memories.
-                   Only the yeses stand behind a sentence — a recorded no
-                   (the counted-stance ruling) is an answer, not backing. */
-                evidence: open.stances.filter((a) => a.value === "affirmed").map((a) => ({
-                  signalId: `${open.id}:${a.profileId}`,
-                  groupId: g.id,
-                  authorUserId: a.profileId,
-                  authorName: a.name,
-                  textPreview: "",
-                  quote: null,
-                  kind: null,
-                  createdMs: Date.parse(a.createdAt) || 0,
-                  dated: false,
-                  resonance: 0,
-                })),
-                spanMs: null,
-              },
-            );
-          }
-          /* A ROOM'S AMBITION IS NOT YOURS, AND MUST NOT BE WRITTEN WHERE
-             YOURS IS READ.
-             This block used to take the first room that had a board and call
-             `setAdopted` with it. `adopted` is read in exactly one place —
-             `wallChromeNow`'s `else` branch, which is YOUR wall (a room reads
-             `groupChromeRef`, an agent reads `deriveAgentChrome`). So a room's
-             sentence, carrying the room's name as its eyebrow, landed on the
-             poster over your own headquarters. It won every time rather than
-             only when yours was missing, because this loop awaits
-             `fetchGroups()` and therefore always resolves after your own board
-             has loaded: the poster painted your ambition on arrival and was
-             overwritten seconds later, while you were reading it. That also
-             breaks the law that the layout never moves unless you moved it.
-
-             The `return` that went with it exited the whole loop, so every
-             room after the first with a board was never fetched at all — no
-             wall signals, no open proposal. One block, two bugs; both go by
-             deleting it and letting the loop finish. */
-        } catch {
-          /* this room stays silent; try the next */
-        }
-      }
     })().catch(() => {
       /* no rooms; your own wall is the whole axis */
     });
@@ -3102,7 +3035,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          business making three requests that will all 401 */
       if (offlineRef.current) return;
       void Promise.allSettled([
-        loadInspirations().then((field) => {
+        loadInspirations(undefined,{scope:storageScope??undefined}).then((field) => {
           setInspirations(field.inspirations);
           setFieldBeyond(beyondOf(field));
         }),
@@ -3139,8 +3072,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * sweep below, is the common case by the time anything is tapped.
    */
   const loadDetail = useCallback((id: string): Promise<InspirationDetail | null> => {
-    const have = detailsRef.current.get(id);
-    if (have) return Promise.resolve(have);
+    // A remembered original is not a current read: reflections, permissions
+    // or the source itself may have changed since the previous opening.
     const inFlight = detailPendingRef.current.get(id);
     if (inFlight) return inFlight;
     const active = atWallRef.current;
@@ -3381,39 +3314,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     return () => timers.forEach((id) => window.clearTimeout(id));
   }, [inspirations, phase]);
 
-  /* ------------- the background sweep: newest first, four at a time -------------
-     The peek orbs are the likeliest first tap, so the newest are fetched
-     first. Four in flight keeps it off the critical path of the pour. */
-  useEffect(() => {
-    if (!inspirations) return undefined;
-    /* There is no reading behind a fixture memory and there is no server to
-       ask for one. Every word of it is already here — the same fact a memory
-       kept at the mouth carries — so the sweep would be twenty-four requests
-       that can only fail, and the panel would print a degradation notice over
-       content that is not degraded. */
-    if (offlineRef.current) return undefined;
-    let dead = false;
-    const queue = [...inspirations].sort((a, b) => b.capturedMs - a.capturedMs).map((s) => s.id);
-    let next = 0;
-    const pump = (): Promise<void> => {
-      if (dead || next >= queue.length) return Promise.resolve();
-      const id = queue[next++];
-      return loadDetail(id).then(() => pump());
-    };
-    /* let the pour have the first beat to itself */
-    const start = window.setTimeout(() => {
-      /* SINGLE APPEARANCE. The images live on the details, so they only exist
-         once the whole sweep has landed — and they are published in ONE step
-         when it does. Publishing per arrival would pop pictures into orbs one
-         at a time under a reader's eyes, which is the mid-read swap the layout
-         forbids everywhere else. */
-      void Promise.all(Array.from({ length: 4 }, () => pump()));
-    }, 400);
-    return () => {
-      dead = true;
-      window.clearTimeout(start);
-    };
-  }, [inspirations, loadDetail]);
 
   /* ------------- derived data (changes only when data changes) ------------- */
 
@@ -9704,7 +9604,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         out.push(e);
       }
     return out;
-  }, [atWall, agents, notes, wokenGroups]);
+  }, [atWall, agents, notes, wokenGroups, citations]);
 
   /**
    * THE GROUNDS THEMSELVES, AND WHOSE LIGHT EACH HOLDS.

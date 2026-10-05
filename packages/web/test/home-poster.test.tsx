@@ -238,6 +238,7 @@ vi.mock("../src/lib/data", async (importOriginal) => {
     status: "active" as const,
     confidence: 60,
     evidenceCount: BEHIND[id].length,
+    inspirationIds:BEHIND[id],
     lastEvidenceMs: at(3),
     createdMs: at(4),
     locked: false,

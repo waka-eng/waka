@@ -53,6 +53,7 @@ These are approved names; rows marked planned do not claim shipped storage or UI
 | A person's correction of the transcript | `transcript_correction` | Edit transcript | correct what was heard without replacing the recording | implemented; deployment pending |
 | One private review of an inspiration | `review_session` | Review | revisit one thing you kept | one-at-a-time reflection and removal implemented locally; historical multi-source sessions retained |
 | One source and progress marker in a review | `review_item` | Review item | your place in the review, not a verdict | implemented; deployment pending |
+| Validated private archive summary read | `inspiration_snapshot` | No new public name | a read optimization, not a memory artifact | in implementation; material revisions remain canonical |
 | One authored answer in a review | `review_answer` | Your thought | one answer, with the inspirations it refers to | implemented; deployment pending |
 | A signal supported by a review answer | `signal_review_evidence` | From your review | your words from a review that support this | in implementation |
 | A conversation using the profile's memory | `conversation` | Talk with WAKA | think through a question with your own experiences | implemented; replies opt-in, off by default |

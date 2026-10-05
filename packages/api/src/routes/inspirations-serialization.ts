@@ -121,6 +121,7 @@ export type InspirationSummaryRow = Pick<
 > & {
   previewSource: string;
   textLength: number;
+  materialRevision?: string|null;
 };
 
 export type AttachmentSummaryEntry = {
@@ -140,6 +141,7 @@ export function serializeInspirationSummary(
   return {
     id: row.id,
     textPreview: buildTextPreview(row.previewSource, Number(row.textLength)),
+    ...(row.materialRevision?{materialRevision:row.materialRevision}:{}),
     kind: row.kind,
     source: row.source,
     visibility: row.visibility,

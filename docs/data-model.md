@@ -51,6 +51,31 @@ An unfinished re-recording keeps the existing clip and a separate owned
 second uploaded attachment. Choosing a clip atomically replaces or discards
 the candidate; only the chosen recording enters the immutable save manifest.
 
+### Archive summary snapshots
+
+Personal archive summary snapshots are an in-memory read optimization, not a
+memory layer or generation input. `GET /api/inspirations/snapshot` authorizes
+the target profile exactly like archive reads and returns a fingerprint of the
+exact total and newest 2,000 source identity/personal-material-revision pairs
+from one repeatable-read snapshot. It returns no raw words or evidence. A
+missing material revision refuses cache reuse. Summary DTOs carry the same
+`materialRevision`; no second revision counter is introduced.
+
+The `inspiration-snapshot-v1` digest binds profile, total, wire order and
+material revisions, never a Top of Mind/generation revision alone: uncited
+originals can change without affecting that generation fence. Browser caches
+are bounded, account/profile-scoped and memory-only, revalidated before reuse,
+and cleared on identity changes and attempted source mutations, including lost
+write responses. Full originals are fetched again when opened. Cached wording
+is never proof of current machine evidence, authorization or public sharing.
+
+Signal lists may opt into `include=inspirations` to receive current supporting
+`inspirationIds` from the already-validated support edges. This is identity-only
+metadata for private human/agent profiles, never quotes, reasons or group
+members' source identities. Group profiles omit it. It lets the field preserve
+its relationships without fetching every signal's full evidence; the visible
+reading's full roots are fetched and validated separately.
+
 ### Credentials bind to a profile
 
 Every session acts *as* exactly one profile:

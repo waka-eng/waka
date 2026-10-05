@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-05",
+  "kind": "fresh synthetic production-build comparison",
+  "scope": {
+    "database": "disposable loopback Postgres",
+    "inspirations": 2000,
+    "signals": 64,
+    "rooms": 12,
+    "apiDelayMs": 150,
+    "requestWindowSeconds": 60,
+    "providerCalls": 0,
+    "remoteAccountWrites": 0
+  },
+  "before": {
+    "totalRequestsFirst60Seconds": 1555,
+    "inspirationDetails": 1436,
+    "signalDetails": 64,
+    "roomContentReads": 24,
+    "initialReadyMs": 1957.2
+  },
+  "after": {
+    "totalRequestsFirst60Seconds": 32,
+    "inspirationDetails": 0,
+    "signalDetails": 1,
+    "roomContentReads": 0,
+    "initialReadyMs": 2013.1
+  },
+  "warmChatReturn": {
+    "snapshotValidation": 1,
+    "archivePages": 0,
+    "inspirationDetails": 0
+  },
+  "uncitedSourceMutationWhileAway": {
+    "fingerprintChanged": true,
+    "freshArchivePagesAfterInvalidation": 10,
+    "unsolicitedInspirationDetails": 0
+  },
+  "checks": {
+    "webTests": 723,
+    "apiUnitTests": 803,
+    "fullApiTestsAtCheckpoint": 1480,
+    "types": "API, web, admin and benchmark runner passed",
+    "readingRootsAndOriginal": "inspected in the built browser; original fetched on demand"
+  },
+  "limits": [
+    "Initial readiness is still approximately two seconds; milestone 2 remains required.",
+    "Browser timings are individual exploratory passes, not release percentiles.",
+    "Physical devices, cloud DB latency, live model time and worker contention were not measured here.",
+    "One additional missing-lineage test was added after the full API checkpoint and is verified separately."
+  ]
+}

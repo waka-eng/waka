@@ -55,6 +55,8 @@ export interface ApiReflection {
 /** One row of the archive: whatever the list needs, and nothing more. */
 export interface ApiInspirationSummary {
   id: string;
+  /** Current owned material, including reflections and effective media. */
+  materialRevision?:string;
   textPreview: string;
   kind: ApiInspirationKind | null;
   source: ApiInspirationSource;
@@ -133,6 +135,12 @@ export interface ApiInspirationPage {
       Absent from an older server, which is why every reader treats a missing
       total as "no better information than the length of what arrived". */
   total?: number;
+}
+
+export async function fetchInspirationSnapshot(profileId:string,signal?:AbortSignal):Promise<{profileId:string;total:number;fingerprint:string|null}>{
+  const row=await getJson<{profileId:string;total:number;fingerprint:string|null}>(apiPath(`/inspirations/snapshot?profile=${encodeURIComponent(profileId)}`),'Could not validate the archive',signal);
+  if(!row||row.profileId!==profileId||!Number.isSafeInteger(row.total)||row.total<0||row.fingerprint!==null&&!/^[a-f0-9]{64}$/.test(row.fingerprint))throw new ApiError({status:200,code:'invalid_snapshot',message:'Could not validate the archive'});
+  return row;
 }
 
 // ---------------------------------------------------------------------------
