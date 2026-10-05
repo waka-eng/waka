@@ -2,8 +2,9 @@
 
 Local implementation and acceptance are ready for review. On 2026-10-05 the
 owner authorized opening and merging all milestone PRs and updating the dev
-schema where needed. The six PRs are pushed and open; merge/deploy verification
-is in progress. Production is excluded. The
+schema where needed. All six PRs merged into dev; deployment at `223bbbf`,
+migration 0067 and actual dev bindings were verified. Search backfill updated
+153 historical projections and left zero remaining. Production is excluded. The
 [implementation plan](2026-10-05-performance-implementation-plan.md) remains
 the full task/gate record.
 
@@ -38,14 +39,14 @@ Record the final deployed revision, not just the PR merge status.
 - [x] Confirm push/open-PR authority and the exact milestone diffs.
 - [x] Confirm merge/deploy authority separately. Check that the automatic dev
   deployment workflow is still the intended route; no production workflow run.
-- [ ] Verify the actual dev API and worker database targets independently from
+- [x] Verify the actual dev API and worker database targets independently from
   the env filename. Record only a sanitized target comparison, no credentials.
-- [ ] Apply migration 0067 before deploying the API that reads its columns.
+- [x] Apply migration 0067 before deploying the API that reads its columns.
   The migration is additive and does not backfill historical text or call a model.
-- [ ] Run `node scripts/verify-memory-schema.mjs` against the verified dev
+- [x] Run `node scripts/verify-memory-schema.mjs` against the verified dev
   target after migration and before API delivery; require the actual migration
   receipt, nullable columns and text-write/source-fencing triggers.
-- [ ] Confirm deployed API and web revisions match. A green PR check or
+- [x] Confirm deployed API and web revisions match. A green PR check or
   successful upload alone is not proof of the deployed revision.
 
 ## Historical search coverage
@@ -64,6 +65,11 @@ and verifies that both actual development Lambda bindings match before any
 mutation. It requires the migrated schema, defaults to a dry run and invokes
 the existing bounded CLI. Run it only after the final dev deployment completes;
 there is no automatic or scheduled backfill and no provider call.
+
+Delivery verification is recorded in the
+[PR receipt](https://github.com/waka-eng/waka/pull/348#issuecomment-6000775334).
+The later loading/Review continuity fixes are a separate local follow-up;
+this completed delivery does not claim those new changes are deployed.
 
 ## Deployed acceptance
 

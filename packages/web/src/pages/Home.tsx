@@ -1556,6 +1556,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** LAYER 3 — the one artifact this profile stands on. Null before the first
       synthesis, which the layout says in words rather than leaving blank. */
   const [topOfMind, setTopOfMind] = useState<TopOfMind | null>(null);
+  // Null is a confirmed empty reading only after an owned read completes.
+  // Home/Capture can be ready before this independent request has finished.
+  const [readingLoadPhase, setReadingLoadPhase] = useState<"loading" | "ready" | "failed">("loading");
+  const retryReadingLoadRef = useRef<() => void>(() => {});
   const sourceProcessing = useInspirationProcessing(storageScope);
   const inspirationSaveHandlers = useRef<Pick<Parameters<typeof useAuthoredSave>[0], 'onResolved' | 'onRemoved' | 'onEditRejected'> | null>(null);
   const inspirationSave = useAuthoredSave({ scope: storageScope, operation: 'inspiration', enabled: phase === 'ready' && !offline && composerDraft.ready,
@@ -2705,6 +2709,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /* ---------------- data: all four fetches in parallel ---------------- */
   useEffect(() => {
     let dead = false;
+    let readingRequest: { controller: AbortController; timeout: number } | null = null;
     /**
      * ONE SOURCE OR THE OTHER, DECIDED BY THE ARCHIVE FETCH ALONE.
      *
@@ -2916,14 +2921,33 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       });
     /* LAYER 3 — headquarters. Exactly one artifact per profile, so this is a
        single object and null is a real state rather than an error. */
-    loadPersonalReading()
-      .then((tom) => {
-        if (dead || offlineRef.current) return;
-        if (absorbBoard(tom)) setProvenance(new Map());
-      })
-      .catch(() => {
-        /* no board — the world still pours, and headquarters says so */
-      });
+    const readInitialReading = () => {
+      if (dead || offlineRef.current || readingRequest) return;
+      setReadingLoadPhase("loading");
+      const request = { controller: new AbortController(), timeout: 0 };
+      readingRequest = request;
+      request.timeout = window.setTimeout(() => {
+        request.controller.abort();
+        if (readingRequest !== request) return;
+        readingRequest = null;
+        if (!dead && !offlineRef.current) setReadingLoadPhase(current => current === "ready" ? current : "failed");
+      }, 15_000);
+      void loadPersonalReading(request.controller.signal)
+        .then((tom) => {
+          if (dead || offlineRef.current || request.controller.signal.aborted) return;
+          if (absorbBoard(tom)) setProvenance(new Map());
+        })
+        .catch(() => {
+          if (!dead && !offlineRef.current && !request.controller.signal.aborted)
+            setReadingLoadPhase(current => current === "ready" ? current : "failed");
+        })
+        .finally(() => {
+          window.clearTimeout(request.timeout);
+          if (readingRequest === request) readingRequest = null;
+        });
+    };
+    retryReadingLoadRef.current = readInitialReading;
+    readInitialReading();
     /* THE WALLS TO THE LEFT — identities now, memories on approach. An
        outright failure means no agents, which is exactly what a person with
        no agents sees. */
@@ -2967,6 +2991,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       dead = true;
       controller.abort();
       retryFieldRef.current=null;
+      readingRequest?.controller.abort();
+      if (readingRequest) window.clearTimeout(readingRequest.timeout);
+      readingRequest = null;
+      retryReadingLoadRef.current = () => {};
     };
   }, []);
 
@@ -3023,6 +3051,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     latestReadingRef.current = tom;
     readingNeedsLatestRef.current = false;
     setReadingCheckFailed(false);
+    setReadingLoadPhase("ready");
     setTopOfMind(tom);
     setNotes(tom?.entries ?? []);
     /* AND THE CLOCK HAS TO KNOW THE ENTRY EXISTS.
@@ -12776,9 +12805,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          for a wall that has not worked yet would teach the
                          reader that the poster is generated copy and destroy
                          the credibility of every wall they read afterwards. */
-                      <p className={`jar-forming${w.kind === "self" && topOfMind?.supportChanged ? " jar-forming--attention" : ""}${w.kind==='self'&&!offline?' jar-forming--personal':''}`}>
+                      <p className={`jar-forming${w.kind === "self" && topOfMind?.supportChanged ? " jar-forming--attention" : ""}${w.kind==='self'&&!offline?' jar-forming--personal':''}${here&&w.kind==='self'&&atNow&&!offline&&readingLoadPhase==='failed'?' jar-reading-status':''}`}
+                        role={here&&w.kind==='self'&&atNow&&!offline&&readingLoadPhase!=='ready'?(readingLoadPhase==='failed'?'alert':'status'):undefined}>
                         {here&&w.kind==='self'&&atNow&&!offline&&!topOfMind?.supportChanged
-                          ?say(inspirations?.length?'worldPersonalReadingNotReady':'worldPersonalReadingEmpty')
+                          ?readingLoadPhase==='loading'?say('worldPersonalReadingLoading')
+                            :readingLoadPhase==='failed'?<>{say('worldPersonalReadingLoadFailed')} <button type="button" className="jar-board-act" onClick={()=>retryReadingLoadRef.current()}>{say('worldRoomHistoryRetry')}</button></>
+                            :say(inspirations?.length?'worldPersonalReadingNotReady':'worldPersonalReadingEmpty')
                           :c.formingAlt ?? say("worldFormingNothingAdopted")}
                       </p>
                     )}

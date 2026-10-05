@@ -1,0 +1,90 @@
+// @vitest-environment jsdom
+/** WHAT THIS MOCKS, AND WHY: `lib/data` holds the owned reading response pending;
+ * `lib/api` supplies unrelated reads and refuses regeneration. `lib/auth-context`
+ * states the owner. `helpers/canvas-stub` and `helpers/render-home` replace
+ * drawing/time, not Home's loader or UI. Timeout cases fake only timers.
+ * Assertions use the current personal wall, not the hidden agent's column.
+ * No database, model or real account is used. */
+import {act} from 'react';
+import {afterEach,beforeAll,beforeEach,expect,it,vi} from 'vitest';
+import {installCanvasStub,setViewport} from './helpers/canvas-stub';
+import {apiMockFrom,dataMockFrom,mountWorld,VIEWER_ID,type MountedWorld} from './helpers/render-home';
+import type {TopOfMind} from '../src/lib/data';
+const facts=vi.hoisted(()=>({inspirations:[{id:'source-one',text:'A synthetic source',daysAgo:0}],groups:[]}));
+const reads=vi.hoisted(()=>({owner:'profile-viewer',requests:[] as Array<{profile?:string;signal?:AbortSignal;resolve:(value:TopOfMind|null)=>void;reject:(reason:Error)=>void}>}));
+vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),...apiMockFrom(facts),refreshTopOfMind:vi.fn()}));
+vi.mock('../src/lib/auth-context',async original=>({...await original<typeof import('../src/lib/auth-context')>(),useOptionalAuth:()=>({status:'authenticated',account:{id:'owner',email:'owner@example.test'},profile:{id:reads.owner,name:'Owner',type:'human'},profiles:[]})}));
+vi.mock('../src/lib/data',async original=>({...await original<typeof import('../src/lib/data')>(),...dataMockFrom(facts),
+  loadTopOfMind:(profile?:string,signal?:AbortSignal)=>new Promise<TopOfMind|null>((resolve,reject)=>reads.requests.push({profile,signal,resolve,reject}))}));
+import {refreshTopOfMind} from '../src/lib/api';
+let world:MountedWorld|undefined;
+beforeAll(()=>{installCanvasStub();setViewport(1280,900);(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;});
+beforeEach(()=>{reads.owner=VIEWER_ID;reads.requests=[];facts.inspirations=[{id:'source-one',text:'A synthetic source',daysAgo:0}];localStorage.clear();sessionStorage.clear();vi.mocked(refreshTopOfMind).mockClear();});
+afterEach(()=>{world?.unmount();world=undefined;vi.useRealTimers();});
+const board=(body='Leave room for a small experiment.',profileId=reads.owner):TopOfMind=>({id:'reading-'+profileId,profileId,version:1,reason:'regenerated',createdMs:Date.now(),
+  entries:[{id:'entry-one',type:'hypothesis',body,belief:null,prompt:null,locked:false,pinned:false,dismissed:false,sortOrder:0,citedSignals:[],createdMs:Date.now()}]});
+const forming=()=>world!.container.querySelector('.jar-hq-inner--activities .jar-forming');
+const poster=()=>world!.container.querySelector('h1.jar-poster[data-jar-chrome="1"]');
+const retry=()=>[...world!.container.querySelectorAll<HTMLButtonElement>('.jar-hq-inner--activities .jar-forming button')].find(row=>row.textContent==='Try again')!;
+const expectLoading=()=>{
+  expect(forming()?.textContent).toContain('Loading your top of mind');
+  expect(forming()?.getAttribute('role')).toBe('status');
+  expect(world!.container.textContent).not.toContain('No reading yet');
+  expect(world!.container.textContent).not.toContain('Capture your first inspiration');
+  expect(world!.container.querySelector('.jar-home-activities')).not.toBeNull();
+};
+it('keeps Home usable while a delayed reading loads, without claiming it is empty',async()=>{
+  world=await mountWorld(facts);expectLoading();expect(reads.requests).toHaveLength(1);expect(reads.requests[0]!.profile).toBe(VIEWER_ID);
+  await act(async()=>reads.requests[0]!.resolve(board()));await world.step(2);
+  expect(poster()?.textContent).toContain('Leave room for a small experiment.');
+  expect(world.container.textContent).not.toContain('Loading your top of mind');expect(refreshTopOfMind).not.toHaveBeenCalled();
+});
+it('shows the real empty state only after the owned response confirms no reading',async()=>{
+  world=await mountWorld(facts);expectLoading();await act(async()=>reads.requests[0]!.resolve(null));
+  expect(forming()?.textContent).toContain('No reading yet');
+  expect(world.container.textContent).not.toContain('Loading your top of mind');expect(refreshTopOfMind).not.toHaveBeenCalled();
+});
+it('does not tell someone to capture their first inspiration until both reads confirm the empty state',async()=>{
+  facts.inspirations=[];world=await mountWorld(facts);expectLoading();
+  await act(async()=>reads.requests[0]!.resolve(null));
+  expect(forming()?.textContent).toContain('Capture your first inspiration to begin.');
+  expect(forming()?.textContent).not.toContain('Loading your top of mind');
+});
+it('shows a read failure, preserves a Capture draft, and coalesces explicit read-only retries',async()=>{
+  world=await mountWorld(facts);
+  await act(async()=>reads.requests[0]!.reject(new Error('Unavailable')));
+  expect(forming()?.textContent).toContain('Couldn’t load your top of mind');
+  expect(forming()?.getAttribute('role')).toBe('alert');
+  expect(world.container.textContent).not.toContain('No reading yet');
+  const capture=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent?.trim()==='Capture inspiration')!;
+  await act(async()=>capture.click());const textarea=world.container.querySelector<HTMLTextAreaElement>('[aria-label="Capture inspiration"] textarea')!;
+  await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(textarea,'Keep my unfinished spark');textarea.dispatchEvent(new Event('input',{bubbles:true}));});
+  const close=[...world.container.querySelectorAll<HTMLButtonElement>('[aria-label="Capture inspiration"] button')].find(row=>row.textContent==='close')!;
+  await act(async()=>close.click());
+  await act(async()=>{retry().click();retry().click();});expect(reads.requests).toHaveLength(2);
+  await act(async()=>reads.requests[1]!.resolve(board()));await world.step(2);
+  const resume=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent?.trim()==='Continue your draft')!;
+  await act(async()=>resume.click());
+  expect(world.container.querySelector<HTMLTextAreaElement>('[aria-label="Capture inspiration"] textarea')?.value).toBe('Keep my unfinished spark');
+  expect(world.container.textContent).not.toContain('Couldn’t load your top of mind');expect(refreshTopOfMind).not.toHaveBeenCalled();
+});
+it('aborts a stalled read, permits retry and refuses its late completion',async()=>{
+  vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});world=await mountWorld(facts);
+  await act(async()=>{vi.advanceTimersByTime(15000);});expect(reads.requests[0]!.signal?.aborted).toBe(true);expect(retry()).toBeDefined();
+  await act(async()=>retry().click());expect(reads.requests).toHaveLength(2);expectLoading();
+  await act(async()=>reads.requests[0]!.resolve(board('Superseded reading.')));expectLoading();
+  await act(async()=>reads.requests[1]!.resolve(board('The current reading.')));await world.step(2);
+  expect(poster()?.textContent).toContain('The current reading.');expect(world.container.textContent).not.toContain('Superseded reading.');
+});
+it('does not carry a prior profile reading across an identity change',async()=>{
+  world=await mountWorld(facts);const old=reads.requests[0]!;
+  reads.owner='profile-other';await world.rerender();expect(old.signal?.aborted).toBe(true);expectLoading();expect(reads.requests).toHaveLength(2);
+  await act(async()=>old.resolve(board('The first profile’s private reading.',VIEWER_ID)));expectLoading();
+  await act(async()=>reads.requests[1]!.resolve(board('The second profile’s reading.')));await world.step(2);
+  expect(poster()?.textContent).toContain('The second profile’s reading.');expect(world.container.textContent).not.toContain('first profile');
+});
+it('shows loading again on a Home remount instead of flashing an empty or unvalidated reading',async()=>{
+  world=await mountWorld(facts);await act(async()=>reads.requests[0]!.resolve(board()));await world.step(2);world.unmount();world=undefined;
+  world=await mountWorld(facts);expect(reads.requests).toHaveLength(2);expectLoading();
+  await act(async()=>reads.requests[1]!.resolve(board()));await world.step(2);expect(poster()).not.toBeNull();
+});

@@ -84,6 +84,11 @@ These controls exist only in the disposable loopback fixture, not the app API:
   The archive/Review controls reject the matching read once. Capture commits
   through the real handler and then drops the response; verify a durable replay
   creates exactly one source, rather than expecting only one POST.
+- `readingDelay=0..5000` on `/perf/scenario` delays only the initial reading
+  endpoint, keeping early Home/Capture readiness independently measurable.
+  `fault=reading-read-once` rejects that GET once; retry must remain read-only.
+  `review=checkpoint` prepares one decided synthetic source in an open session
+  so the saved checkpoint and its next-inspiration transition can be inspected.
 - `/perf/worker?action=start`, `stop` and `status` control one bounded worker.
   Concurrent starts refuse the second request. The worker claims and completes
   a real queue job, repeatedly reads owned material/context and validates its

@@ -1,8 +1,8 @@
 # Performance improvements
 
-Status: in progress (2026-10-05), all five milestones implemented and accepted locally; PR delivery and deployed verification remain open.
-Branch: `codex/performance-improvements`, based on the separately checkpointed
-single-inspiration Review implementation at `33614ed`.
+Status: in progress (2026-10-05), all five milestones delivered to dev; loading and Review continuity follow-up accepted locally. Exact deployed timing verification remains open.
+Branch: `codex/loading-review-continuity`, based on deployed dev `223bbbf`.
+The original milestone stack began with single-inspiration Review at `33614ed`.
 
 ## Objective
 
@@ -353,3 +353,40 @@ are prepared, not executed. No new provider spending, dev migration/backfill,
 push, PR, merge or deployment. Actual cloud configuration access was denied;
 deployed stage timing and physical-device claims remain unproven. The full goal
 stays active pending authorized PR delivery and dev verification.
+
+### Dev delivery and loading follow-up on 2026 10 05
+
+The owner authorized PR creation, all dev merges and needed dev schema work.
+Review PR 346 and performance PRs 344, 345, 347, 343 and 348 merged into dev
+after successful normal CI. Deployment at `223bbbf` succeeded; its verifier
+confirmed 0067 and actual API/worker database bindings. The guarded manual
+backfill updated 153 historical search projections, with zero remaining and
+no model calls. Production was untouched. The
+[delivery receipt](https://github.com/waka-eng/waka/pull/348#issuecomment-6000775334)
+records the deployment and maintenance runs.
+
+The owner then approved fixing the warm-return empty-state flash and clarifying
+saved Review continuation. Initial reading state now distinguishes a pending
+read from confirmed null and failure. Reads have a fifteen-second abortable
+deadline; retry performs GET only, coalesces repeated clicks and fences late
+responses/unmount/profile changes. Home/Capture remains independently ready.
+The saved checkpoint says “Your progress is saved” and “Review another
+inspiration”; ordinary cards retain “Next inspiration.” Unconfirmed actions
+do not show a successful checkpoint. English and Korean copy are covered.
+
+Gate: 749 web tests, web and fixture types, and production build pass. Twenty
+local production-build samples at 2,000 sources/150 ms added API delay give
+Home median 385.35/p95 401.6 ms, Review 359.25/372.5 ms, and warm-return
+median 192.1/p95 203.4/max 205.1 ms. The sixty-second Home request budget remains
+passed: 31 issued/completed requests, zero original details and zero room
+contents. The [follow-up receipt](../craft/evidence/performance/loading-review-continuity.json)
+records counts, timings and environment.
+Built-browser fault recovery made one failed and one successful GET, with
+zero mutations. A synthetic saved checkpoint continued to one readable next
+original. Tests also cover empty archives, timeout/retry, late responses,
+profile changes, preserved Capture drafts and legacy Review drafts/links.
+
+Verdict: these two follow-up fixes pass locally, not yet pushed or deployed.
+No new schema or AI calls. Exact deployed request timing and queue/provider
+stage attribution remain open because runtime-log access is denied; viewport
+tests remain distinct from physical-device validation.

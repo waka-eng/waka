@@ -134,7 +134,7 @@ export function ReviewPanel({scope,id,thoughtId=null,locale,onId,onClose,onNewIn
           onNext={reflected=>{setAdvance(true);review.choose(item,reflected?'keep':'skip');}} onRefresh={()=>void review.refresh()}
           onDeleted={removedId=>{onInspirationRemoved?.(removedId);setAdvance(true);void review.refresh();}}
           onSaved={onSaved} onSynchronized={onSynchronized} onReflectionRemoved={onReflectionRemoved} onOpen={onOpen}/>:null}
-        {session&&!item&&!advance&&!thoughtId?<><p>{say('worldReviewDone')}</p><button type="button" className="jar-review-primary" disabled={disabled} onClick={()=>setAdvance(true)}>{say('worldReviewNextInspiration')} →</button></>:null}
+        {session&&!item&&!advance&&!thoughtId&&!disabled&&!review.error&&!review.pending?<><p>{say('worldReviewDone')}</p><button type="button" className="jar-review-primary" onClick={()=>setAdvance(true)}>{say('worldReviewAnotherInspiration')} →</button></>:null}
         {/* Preserve historical multi-source answers and deep links without
             reintroducing a collective reflection path in new reviews. */}
         {session&&(thoughtId||!item&&!advance)?<>

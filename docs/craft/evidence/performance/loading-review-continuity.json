@@ -1,0 +1,78 @@
+{
+  "date": "2026-10-05",
+  "baseRevision": "223bbbfc69488745d3f48feb93c52cd8e1735c85",
+  "branch": "codex/loading-review-continuity",
+  "localAcceptance": "passed",
+  "pushedOrDeployed": false,
+  "scope": [
+    "Separate initial reading loading, confirmed empty and failed states",
+    "Abortable fifteen-second initial read deadline and explicit read-only retry",
+    "Clarify saved Review checkpoint continuation without changing source choices or generation"
+  ],
+  "verification": {
+    "webTests": 749,
+    "webSuites": 106,
+    "webTypes": "passed",
+    "performanceFixtureTypes": "passed",
+    "productionWebBuild": "passed",
+    "locale": "English and Korean checkpoint regression cases",
+    "newSchema": false,
+    "productionApiCodeChanged": false,
+    "newProviderCalls": 0,
+    "newProviderCostUsd": 0
+  },
+  "browserBudget": {
+    "environment": "local production web build, disposable loopback Postgres, synthetic account",
+    "originals": 2000,
+    "signals": 64,
+    "rooms": 12,
+    "addedApiDelayMs": 150,
+    "samplesPerScenario": 20,
+    "homeMs": {"median": 385.35, "p95": 401.6, "max": 419.1},
+    "freshReviewMs": {"median": 359.25, "p95": 372.5, "max": 373.8},
+    "warmReturnMs": {"median": 192.1, "p95": 203.4, "max": 205.1},
+    "homeFirstSixtySeconds": {
+      "issued": 31,
+      "completed": 31,
+      "originalDetails": 0,
+      "roomContents": 0,
+      "responseBytes": 1222777,
+      "postWindowReceiptConfirmed": true
+    }
+  },
+  "correctness": {
+    "delayedReading": "Loading shown while Home/Capture remains ready; no false empty claim",
+    "failedReading": "Clear failure and one Try again action",
+    "retryHttp": {"readingGetStatuses": [500, 200], "writeRequests": 0},
+    "timeoutAndLateResponses": "covered by mounted Home regression tests",
+    "identityChange": "old read aborted; foreign/late reading cannot appear",
+    "emptyArchive": "first-capture copy waits for confirmed no-reading response",
+    "captureDraft": "preserved through read failure, close, retry and reopen",
+    "savedCheckpoint": "progress receipt and Review another inspiration; continuation opens one next original",
+    "normalReviewCards": "Next inspiration retained; no automatic collective question",
+    "uncertainReviewWrite": "no successful checkpoint announcement before confirmation",
+    "historicalLinksAndDrafts": "existing tests retained",
+    "retryHeightPx": 44,
+    "narrowCheckpointButton": {"viewportWidthPx": 390, "widthPx": 207.875, "heightPx": 44}
+  },
+  "testRepairNotes": [
+    "A hoisted mock initially referenced an uninitialized fixture; corrected fixture initialization.",
+    "The first DOM selector described a hidden agent column rather than the current personal wall; assertions now scope to the actual personal actions/poster.",
+    "The test declaration now names every mocked seam, preserving the repository verification gate.",
+    "A browser locator deadline was shorter than the deliberately injected five-second delay; observed the same pending request to completion without replaying it."
+  ],
+  "generatedEvidence": [
+    "work/performance/loading-review-continuity/browser.json",
+    "work/performance/loading-review-continuity/home-60.json",
+    "work/performance/loading-review-continuity/retry.json",
+    "work/performance/loading-review-continuity/home-loading.png",
+    "work/performance/loading-review-continuity/home-failed.png",
+    "work/performance/loading-review-continuity/review-checkpoint.png",
+    "work/performance/loading-review-continuity/review-checkpoint-narrow.png"
+  ],
+  "limits": [
+    "Local desktop-browser and viewport measurements are not deployed or physical-device performance.",
+    "The previously merged milestone stack is deployed separately; this follow-up remains local.",
+    "Exact deployed latency and queue/provider attribution remain unverified because runtime-log access is denied."
+  ]
+}
