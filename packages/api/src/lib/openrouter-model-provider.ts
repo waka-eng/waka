@@ -9,12 +9,13 @@
  * is written once and cannot drift between providers; what changes per road
  * is transport and model id, nothing else.
  *
- * Model selection: `deepseek/deepseek-v4-flash` for every task (founder
- * ruling, 2026-08-30), overridable per task by env so a future eval can move
+ * Model selection: `deepseek/deepseek-v4.1-flash` for every task (owner
+ * request, 2026-10-05), overridable per task by env so a future eval can move
  * one task without moving the rest:
  *
  *   WAKA_MODEL_EXTRACT · WAKA_MODEL_JUDGE · WAKA_MODEL_SYNTHESIZE
  *   WAKA_MODEL_PRINCIPLES · WAKA_MODEL_PRINCIPLE_JUDGE · WAKA_MODEL_ROUTE
+ *   WAKA_MODEL_SUPPORT · WAKA_MODEL_REFLECT · WAKA_MODEL_CHAT
  *
  * Embeddings are NOT here and must never be: stored vectors and the four
  * calibrated cosine thresholds live in gemini-embedding-001's space, and a
@@ -152,9 +153,9 @@ export function toChatRequest(
   };
 }
 
-function modelFor(envName: string, fallback = OPENROUTER_GENERATION_MODEL): string {
+function modelFor(envName: string): string {
   const fromEnv = process.env[envName]?.trim();
-  return fromEnv && fromEnv.length > 0 ? fromEnv : fallback;
+  return fromEnv && fromEnv.length > 0 ? fromEnv : OPENROUTER_GENERATION_MODEL;
 }
 
 async function ask(
@@ -171,7 +172,7 @@ export function createOpenRouterModelProvider(): ModelProvider {
   return {
     name: "openrouter",
     async answerConversation(input){
-      const request=toChatRequest(buildConversationReplyRequest(input),modelFor('WAKA_MODEL_CHAT','deepseek/deepseek-v4.1-flash'),'conversation_reply');
+      const request=toChatRequest(buildConversationReplyRequest(input),modelFor('WAKA_MODEL_CHAT'),'conversation_reply');
       // The pinned route returned truncated strings/decoder errors for this
       // schema in the M8 baseline. Ask for JSON structure only; the same strict
       // application parser still enforces every field, bound and citation.

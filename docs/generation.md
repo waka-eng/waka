@@ -1090,24 +1090,26 @@ claims or claim full source completion. Discovery runs only after current
 coverage is complete. Reading dependencies created by a batch attach to the
 matching unfinished source receipts, without marking those receipts derived.
 
-One prompt, two roads: generation defaults to OpenRouter on the pinned
-DeepSeek snapshot when `OPENROUTER_API_KEY` is present, and falls back
+One prompt, two roads: generation defaults to DeepSeek V4.1 Flash on
+OpenRouter when `OPENROUTER_API_KEY` is present, and falls back
 to Gemini without it. Embeddings never switch roads — the stored vectors and
 every cosine threshold above live in `gemini-embedding-001`'s space.
 
-Talk with WAKA defaults to `deepseek/deepseek-v4.1-flash` on OpenRouter, also
-explicitly set through `WAKA_MODEL_CHAT` in the dev API and worker.
-The manual chat evaluation and
-deployment verification check that exact model. Other generation tasks retain
-the default V4 Flash 0731 snapshot. Per-task model overrides
+Top of Mind, Principles, signal extraction/support/judging, reflection,
+Review questions/derivation, declaration routing, and Talk with WAKA all
+default to `deepseek/deepseek-v4.1-flash`. Deployment configuration explicitly
+sets `OPENROUTER_GENERATION_MODEL` for API and worker; dev also sets `WAKA_MODEL_CHAT` to the
+same model. Deployment verification checks both. Per-task model overrides
 remain available; no OpenRouter key still selects the Gemini provider rather
 than interpreting an OpenRouter model ID as a direct Gemini model. The chat
 switch does not enable production replies or change the 1,200-token output cap,
-source validation, or request budget.
+source validation, or request budget. Image descriptions and audio
+transcription keep their direct Gemini models; changing those media clients
+is not part of this text-generation switch.
 
 | Constant | Value | One line |
 |---|---|---|
-| `OPENROUTER_GENERATION_MODEL` | deepseek/deepseek-v4-flash-0731 | Extraction, judges, synthesis, routing — the default road |
+| `OPENROUTER_GENERATION_MODEL` | deepseek/deepseek-v4.1-flash | All OpenRouter generation tasks — the default road |
 | `OPENROUTER_MAX_OUTPUT_TOKENS` | 8192 | Bound on every answer — a small JSON artifact, never an essay; with reasoning declined, a truncated verdict cannot masquerade as "nothing here" |
 | `OPENROUTER_CHAT_URL` | https://openrouter.ai/api/v1/chat/completions | The second road's endpoint |
 | `GEMINI_GENERATION_MODEL` | gemini-3.1-flash-lite | Vision, and the whole road when no OpenRouter key is set |

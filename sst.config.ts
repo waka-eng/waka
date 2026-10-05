@@ -227,6 +227,7 @@ export default $config({
       DB_CONNECTION_URL: dbConnectionUrl.value,
       GEMINI_API_KEY: geminiApiKey.value,
       OPENROUTER_API_KEY: openRouterApiKey.value,
+      OPENROUTER_GENERATION_MODEL: "deepseek/deepseek-v4.1-flash",
       // Chat enablement is dev-only and shared by API/worker. A manual dev
       // deploy can disable new requests without reverting the additive schema.
       WAKA_CONVERSATION_REPLIES: isDevelopmentDomain && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0",

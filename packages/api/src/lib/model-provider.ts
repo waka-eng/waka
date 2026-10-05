@@ -464,8 +464,8 @@ let defaultProvider: ModelProvider | null = null;
  */
 export async function getDefaultModelProvider(): Promise<ModelProvider> {
   if (!defaultProvider) {
-    /* OpenRouter when its key is present (founder ruling, 2026-08-30:
-       deepseek-v4-flash everywhere); Gemini otherwise, so an environment
+    /* OpenRouter when its key is present (owner request, 2026-10-05:
+       DeepSeek V4.1 Flash for generation); Gemini otherwise, so an environment
        without the new key — CI before the secret lands, a fresh checkout —
        keeps generating instead of failing. Rollback anywhere is deleting
        one env var. Embeddings are untouched by this switch: they are pinned

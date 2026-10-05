@@ -7,7 +7,7 @@ import {OPENROUTER_GENERATION_MODEL} from '../../packages/api/src/lib/openrouter
 import {writeEvaluationSnapshot} from './evaluation-journal.js';
 assert.ok(process.argv.includes('--live'));
 process.env.OPENROUTER_API_KEY=parse(await readFile('/Users/agi/nextsteps/waka/.env.local','utf8')).OPENROUTER_API_KEY;
-assert.ok(process.env.OPENROUTER_API_KEY);assert.equal(OPENROUTER_GENERATION_MODEL,'deepseek/deepseek-v4-flash-0731');
+assert.ok(process.env.OPENROUTER_API_KEY);assert.equal(OPENROUTER_GENERATION_MODEL,'deepseek/deepseek-v4.1-flash');
 const input={preferredLocale:'en-US' as const,signals:[
   {id:'tools',statement:'You keep choosing local tools with portable files.'},
   {id:'family',statement:'You have protected family evenings even when extra work was offered.'},

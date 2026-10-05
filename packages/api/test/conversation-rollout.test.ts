@@ -14,6 +14,8 @@ it('pins the deployed and evaluated chat model to the same DeepSeek version',()=
   expect(workflow).toContain('.chatModel == "deepseek/deepseek-v4.1-flash"');
   expect(ci).toContain('WAKA_MODEL_CHAT: deepseek/deepseek-v4.1-flash');
   expect(ci).toContain('--expected-model=deepseek/deepseek-v4.1-flash');
+  expect(sst).toContain('OPENROUTER_GENERATION_MODEL: "deepseek/deepseek-v4.1-flash"');
+  expect(workflow).toContain('.generationModel == "deepseek/deepseek-v4.1-flash"');
   expect(workflow).not.toContain('google/gemini-3.8-flash');
 });
 it('uses the same environment for API and background worker',()=>{
