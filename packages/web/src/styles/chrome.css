@@ -1488,6 +1488,41 @@ body .profile-signout-button {
 .jar-mouth-rest:not(.jar-mouth-rest--said) svg,.jar .jar-capture-shortcut svg { flex-shrink:0; }
 .jar-mouth-rest:not(.jar-mouth-rest--said):hover,.jar .jar-capture-shortcut:hover { background:color-mix(in srgb,var(--w-ink) 90%,var(--w-ground)); }
 .jar-mouth-rest:not(.jar-mouth-rest--said):focus-visible,.jar .jar-capture-shortcut:focus-visible { outline:2px solid var(--w-ink); outline-offset:var(--sp-4); }
+/* A new idea catches light. Only the tiny mark moves; the action and its
+   hit area stay still. Opening the composer carries one flare forward. */
+.jar-mouth .jar-mouth-rest:not(.jar-mouth-rest--said),.jar .jar-capture-shortcut {
+  position:relative; isolation:isolate;
+  background:linear-gradient(110deg,var(--w-warm),var(--w-ink) 65%,var(--w-warm));
+  border-color:var(--w-warm);
+}
+.jar .jar-capture-shortcut { inset:auto; transform:none; }
+.jar-mouth-rest:not(.jar-mouth-rest--said)::before,.jar .jar-capture-shortcut::before {
+  content:""; position:absolute; inset:calc(-1 * var(--sp-12)) calc(-1 * var(--sp-18));
+  z-index:-1; pointer-events:none; border-radius:50%; opacity:.35;
+  background:radial-gradient(ellipse,color-mix(in srgb,var(--w-warm) 30%,transparent),transparent 70%);
+  transition:opacity 180ms ease,transform 180ms ease;
+}
+.jar-mouth-rest:not(.jar-mouth-rest--said):hover::before,.jar-mouth-rest:not(.jar-mouth-rest--said):focus-visible::before,
+.jar .jar-capture-shortcut:hover::before,.jar .jar-capture-shortcut:focus-visible::before { opacity:.75; transform:scale(1.04); }
+.jar-mouth-rest:not(.jar-mouth-rest--said):hover,.jar .jar-capture-shortcut:hover { background:linear-gradient(110deg,var(--w-warm),var(--w-ink) 65%,var(--w-warm)); }
+.jar-spark-core,.jar-spark-rays { transform-box:view-box; transform-origin:center; transition:opacity 180ms ease,transform 180ms ease; }
+.jar-spark-rays { opacity:.6; }
+.jar-mouth-rest:not(.jar-mouth-rest--said):hover .jar-spark-rays,.jar-mouth-rest:not(.jar-mouth-rest--said):focus-visible .jar-spark-rays,.jar-mouth-rest:not(.jar-mouth-rest--said):active .jar-spark-rays,
+.jar .jar-capture-shortcut:hover .jar-spark-rays,.jar .jar-capture-shortcut:focus-visible .jar-spark-rays,.jar .jar-capture-shortcut:active .jar-spark-rays { opacity:1; transform:scale(1.12); }
+.jar-mouth-rest:not(.jar-mouth-rest--said):active .jar-spark-core,.jar .jar-capture-shortcut:active .jar-spark-core { transform:scale(1.1); }
+.jar-composer-heading h2 { display:flex; align-items:center; gap:var(--sp-8); min-width:0; }
+.jar-composer-spark { display:inline-grid; place-items:center; flex-shrink:0; width:var(--sp-24); height:var(--sp-24); position:relative; isolation:isolate; color:var(--w-warm); }
+.jar-composer-spark::before { content:""; position:absolute; inset:calc(-1 * var(--sp-12)); border-radius:50%; pointer-events:none; z-index:-1; background:radial-gradient(circle,color-mix(in srgb,var(--w-warm) 30%,transparent),transparent 70%); animation:jar-capture-light 620ms ease-out both; }
+.jar-composer-spark .jar-spark-core { animation:jar-capture-ignite 420ms ease-out both; }
+.jar-composer-spark .jar-spark-rays { animation:jar-capture-burst 620ms ease-out both; }
+@keyframes jar-capture-ignite { from { opacity:.45; transform:scale(.7); } 45% { opacity:1; transform:scale(1.15); } to { opacity:1; transform:scale(1); } }
+@keyframes jar-capture-burst { from { opacity:0; transform:scale(.35); } 30% { opacity:1; transform:scale(.9); } to { opacity:.6; transform:scale(1); } }
+@keyframes jar-capture-light { from { opacity:.1; transform:scale(.6); } 35% { opacity:.7; transform:scale(1); } to { opacity:.3; transform:scale(1.1); } }
+@media (prefers-reduced-motion:reduce) {
+  .jar-spark-core,.jar-spark-rays,.jar-composer-spark::before,
+  .jar-mouth-rest:not(.jar-mouth-rest--said)::before,.jar .jar-capture-shortcut::before { animation:none !important; transition:none !important; transform:none !important; }
+  .jar-composer-spark::before { opacity:.3; }
+}
 .jar-values { min-height:var(--sp-44); color:var(--w-ink); --t-label-size:var(--t-body); }
 .jar-here,.jar-when,.jar-account,.jar-saved { min-height:var(--sp-44); }
 .jar-way { min-height:var(--sp-44); display:flex; align-items:center; }

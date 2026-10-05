@@ -1,6 +1,6 @@
 # Chat home and memory improvements
 
-Status: blocked at Home usability acceptance — owner feedback addressed with visual action cues; revised preview awaiting review (2026-10-04).
+Status: done (2026-10-04) — all approved milestones implemented, measured and accepted locally; deployment excluded.
 Branch: `codex/chat-home-memory`, starting from `84cba13`.
 
 ## Objective
@@ -1006,3 +1006,65 @@ fixture content, not a changed real account. Disposable loopback fixture
 viewport reset and agent tab closed. No LLM requests or extra spending, no
 push/deployment. The revised visual treatment is ready for owner review; no
 positive usability result is inferred from automated checks alone.
+
+### Owner acceptance and Capture spark final checkpoint
+
+The owner said “Feels clear” about the revised Home. This resolves the remaining
+human clarity gate; it is owner qualitative acceptance, not a formal independent
+usability study. They additionally requested Capture feel like a moment that
+shows a spark. Kept the same visible label, target, destinations and immediate
+input behavior, adding a four-point spark mark, warm ivory light and a small
+hover/focus response. Opening the composer carries a single 420ms core/620ms
+ray flare into its heading. No looping glitter, delayed input, button movement,
+new public state, save-success claim or LLM request. Reduced-motion rules retain
+the static mark/light while disabling animations/transitions/transforms.
+
+Final web check: 709/709 across 101 suites, web typecheck/build and whitespace
+check passed. The new composer test proves the marker is decorative, labels
+unchanged, autofocus retained and no implicit save. Two motion-contract tests
+pin short finite effects and the reduced-motion guard. The CSS-scope test first
+rejected comma-separated `:is` branches; expanded fully scoped selectors rather
+than adding exceptions. Browser inspection also found the relative shortcut
+inherited `left:50%`; reset insets so its footprint remains fixed.
+
+Actual built-browser 320/390/1280 checks: 44px Capture target within the viewport,
+button transform none, 16px mobile input, no horizontal overflow, immediate
+input focus after opening. Computed header effects were 0.42/0.62 seconds with
+one iteration. The browser's inspection API lacks `document.getAnimations` and
+offers no media-emulation capability; computed styles plus source/contract tests
+verify the authored motion, not a live OS reduced-motion or physical-device run.
+Screenshots: `work/chat-home-memory/capture-spark-home.png` and
+`capture-spark-composer.png`, synthetic data only. Fixture
+`waka_test_607c1e5a57bd33b1` exited normally and its absence was checked; viewport
+reset and agent tab closed. No additional model spending.
+
+Completion audit against the original gates:
+
+- M1: dedicated protected chat, atomic first Send, drafts/retry/stop/current
+  citations/adoption, readable responsive/IME-safe input and whole-response
+  delivery with validation/fences; 24/24 live chat safety/direct-answer cases.
+- M2: distinct activity cards, Capture and Principles destinations, attached
+  Changes/Why, all four viewport/long/empty/resume/error checks and owner clarity
+  acceptance. Requested Capture spark refinement implemented and checked too.
+- M3 reliability: no-change job churn fixed with meaningful invalidation,
+  owned reflection/media/review material, bounded hybrid retrieval with original
+  and fresh holdouts, current citation checks, bounded/resumable Principle input,
+  comparisons and semantic grounding, metadata-only journey traces and corrected
+  documentation. Large-profile, locks, privacy, conflicts and erasure checked.
+- M3 calibration: fixed 24-scenario baseline/candidate comparison, all final
+  reviewed safety cases pass, no unsupported personal claim accepted, 22/24
+  rubric pass (91.7%) versus 8/24 baseline. The two known quality misses remain
+  documented, not erased or passed by a lower bar. Daily cadence unchanged.
+- Final acceptance: 803 API unit tests (three paid benches skipped), 111 distinct
+  targeted SQL cases and final 709 web tests; API/web types, web build, migration
+  and documentation checks; real local browser walks, exact fixture cleanup and
+  per-checkpoint commits. Physical hardware/OS preferences, streaming, remote
+  deployment, historical repair and room/native expansion remain outside this
+  accepted implementation scope, not quietly claimed as verified.
+
+All required work under this goal is complete. Returned OpenRouter charges
+remain USD 0.08019284; with USD 1.50 conservative embedding reservations,
+USD 1.58019284 / the owner's USD 5 cap. No tests/model requests/server remains
+running. Code and documentation are committed locally; `work/` contains retained
+evidence artifacts. No PR push, dev merge, migration rollout or deployment was
+requested/performed for this goal. Those require a separate delivery request.
