@@ -1,6 +1,6 @@
 # Chat home and memory improvements
 
-Status: in progress — implementation and calibration checked; final human usability check pending (2026-10-04).
+Status: blocked — implementation and calibration checked; awaiting the human Home usability check (2026-10-04).
 Branch: `codex/chat-home-memory`, starting from `84cba13`.
 
 ## Objective
@@ -957,3 +957,18 @@ passed. No application behavior, generation rubric, paid-call allocation or
 deployment state changed. The Home comprehension question is still unanswered;
 it is the only remaining acceptance requirement, not grounds to repeat model
 evaluations or add unrelated features.
+
+### Blocked acceptance audit
+
+The same missing Home comprehension answer remains across three consecutive
+goal turns: the implementation/publication checkpoint, the trace-completeness
+audit, and this final authoritative-state check. The first two made concrete
+progress; that does not substitute for a person's answer. Current HEAD is
+`41d23db`, all code/docs are committed, and only saved `work/` artifacts remain
+untracked. No paid call or test server is running. The approved plan explicitly
+requires a person to choose the actions for saving, revisiting and chatting.
+There is no remaining safe implementation step that can supply that evidence.
+Mark the runtime goal blocked on that one input, not complete and not paused.
+The pending question/preview remains available; a human answer or an explicit
+change to this acceptance requirement can unblock it. Budget allocation stays
+USD 1.58019284/5, and no push/deployment is authorized or performed.
