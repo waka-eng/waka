@@ -14,6 +14,7 @@ import {
   deriveReviewAnswer,
   assessSignalSupport,
   distillPrinciples,
+  assessPrincipleGrounding,
   extractSignalCandidates,
   judgePrincipleRelation,
   judgeSignalMatch,
@@ -34,6 +35,7 @@ export function createGeminiModelProvider(): ModelProvider {
     judgeSignalMatch,
     synthesizeTopOfMind,
     distillPrinciples,
+    assessPrincipleGrounding,
     judgePrincipleRelation,
     routeDeclaration,
   };

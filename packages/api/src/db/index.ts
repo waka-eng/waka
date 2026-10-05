@@ -43,6 +43,7 @@ export * from "./schema-review-evidence";
 export * from "./schema-review-processing";
 export * from "./schema-signal-support-reviews";
 export * from "./schema-generation-revisions";
+export * from "./schema-principle-work";
 export * from "./schema-top-of-mind";
 export * from "./schema-groups";
 export * from "./schema-group-coedit";

@@ -26,6 +26,7 @@
 
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {conversations,conversationMessages,conversationReplyRequests} from '../db/schema-conversations.js';
+import {principleGenerationSteps} from '../db/schema-principle-work.js';
 
 import {
   attachments,
@@ -192,6 +193,7 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
     conversations:await db.select().from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt))).orderBy(asc(conversations.createdAt),asc(conversations.id)),
     conversationMessages:await db.select().from(conversationMessages).where(eq(conversationMessages.profileId,profileId)).orderBy(asc(conversationMessages.conversationId),asc(conversationMessages.position)),
     conversationReplyRequests:await db.select().from(conversationReplyRequests).where(eq(conversationReplyRequests.profileId,profileId)).orderBy(asc(conversationReplyRequests.createdAt),asc(conversationReplyRequests.id)),
+    principleGenerationSteps:await db.select().from(principleGenerationSteps).where(eq(principleGenerationSteps.profileId,profileId)).orderBy(asc(principleGenerationSteps.startedAt),asc(principleGenerationSteps.id)),
     experiences: experienceRows,
     inspirations: inspirationRows,
     inspirationConversationOrigins:await db.select().from(inspirationConversationOrigins).where(eq(inspirationConversationOrigins.profileId,profileId)).orderBy(asc(inspirationConversationOrigins.createdAt),asc(inspirationConversationOrigins.inspirationId)),

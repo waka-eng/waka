@@ -48,7 +48,9 @@
 .jar {
   position: fixed;
   inset: 0;
-  overflow: hidden;
+  /* The camera owns world movement. Hidden still permits focus restoration
+     to scroll this root and shift every fixed-looking control off screen. */
+  overflow: clip;
   /* the same volume, viewport-sized: it carries the skeleton state and any
      overshoot at either end of the descent */
   background: var(--jar-atmos);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import { DialogSurface } from './DialogSurface';
 import { AuthoredSaveNotice } from './AuthoredSaveNotice';
+import { HomeActionIcon } from './HomeActionIcon';
 import { t, type SupportedLocale } from '../lib/locales';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { useAuthoredSave } from '../lib/use-authored-save';
@@ -59,7 +60,7 @@ export function InspirationComposer(props: {
   return <DialogSurface className="jar-seek jar-inspiration-composer" aria-label={say('worldCaptureInspiration')} onClose={props.onClose} data-jar-chrome="1"
     onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
     onDrop={event => { if (event.dataTransfer.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.dataTransfer.files]); } }}>
-    <div className="jar-composer-heading"><h2>{say('worldCaptureInspiration')}</h2><button type="button" onClick={props.onClose}>{say('worldClose')}</button></div>
+    <div className="jar-composer-heading"><h2><span className="jar-composer-spark" aria-hidden="true"><HomeActionIcon kind="capture"/></span>{say('worldCaptureInspiration')}</h2><button type="button" onClick={props.onClose}>{say('worldClose')}</button></div>
     <div className="jar-composer-body">
     <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={4} value={props.text} readOnly={props.busy || !props.ready || props.recording.phase !== 'idle'}
       aria-label={say('worldCaptureInspiration')} placeholder={say('worldCapturePrompt')}

@@ -1,8 +1,11 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): `authMiddleware` supplies owned
  * sessions and `ModelProvider` returns controlled replies. Real routes,
  * queue claims, dispatch accounting, memory fences and SQL transactions run.
+ * Semantic lookup cases also inject query vectors and a no-op lease callback;
+ * the existing processBackgroundJob cases retain real lease-fence coverage.
  * No remote database or paid provider is used. */
 import {randomUUID} from 'node:crypto';
+import postgres from 'postgres';
 import {Hono} from 'hono';
 import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/index.js';
@@ -12,6 +15,8 @@ import {getDb} from '../lib/db.js';
 import {setDefaultModelProviderForTests,type ConversationReplyInput,type ConversationReplyResult,type ModelProvider} from '../lib/model-provider.js';
 import {postgresBackgroundJobStore,processBackgroundJob} from '../lib/queue.js';
 import {assembleProfileExport} from '../lib/profile-export.js';
+import {processConversationReply} from '../lib/conversation-replies.js';
+import {ensureInspirationEmbedding,GEMINI_EMBEDDING_MODEL} from '../lib/inspiration-embeddings.js';
 let t:TestDatabase,during:(()=>Promise<void>)|null=null;
 const connection=process.env.DB_CONNECTION_URL!;
 const answer=vi.fn<(input:ConversationReplyInput)=>Promise<ConversationReplyResult>>(async(input)=>{await during?.();return {answer:'A small experiment may help you compare these priorities.',followUpQuestion:'What would you most like that experiment to clarify?',citations:input.sources.length?[{sourceNumber:1,quote:input.sources[0].text.slice(0,80)}]:[]};});
@@ -62,12 +67,108 @@ it('coalesces initial requests, stores one grounded reply, and replays without a
   await t.sql`DELETE FROM background_jobs WHERE id=${job.id}`;
   expect(await postgresBackgroundJobStore.usageForAccount(f.accountId,new Date(Date.now()-3600000))).toMatchObject({startedInWindow:1});
 });
+it('looks up semantic context outside locks, records the selected sources and does not replay its embedding',async()=>{
+  const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
+  const [extra]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'Unstructured time invites creative noticing.') RETURNING id`;
+  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:extra.id,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await f.request();const state=await f.state(),job=await claim();
+  const peer=postgres(process.env.DB_CONNECTION_URL!,{max:1,prepare:false,onnotice:()=>{}});
+  const embed=vi.fn(async()=>{
+    await peer`SELECT id FROM conversations WHERE id=${f.id} FOR UPDATE NOWAIT`;
+    await peer`SELECT profile_id FROM generation_revisions WHERE profile_id=${f.profileId} FOR UPDATE NOWAIT`;
+    return vector;
+  });
+  try{
+    await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+    expect((await f.state()).phase).toBe('ready');expect(embed).toHaveBeenCalledOnce();
+    expect(answer.mock.calls[0]![0].sources.some(source=>source.text.includes('Unstructured time'))).toBe(true);
+    const context=await(await f.app.request(`/conversations/${f.id}/context`)).json() as any;
+    expect(context.inspirations[0].id).toBe(extra.id);
+    const [request]=await t.sql`SELECT context_sources,retrieval_dispatched_at FROM conversation_reply_requests WHERE id=${state.requestId}`;
+    expect(request.retrieval_dispatched_at).not.toBeNull();expect(request.context_sources.some((source:{id:string})=>source.id===extra.id)).toBe(true);
+    await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+    expect(embed).toHaveBeenCalledOnce();expect(answer).toHaveBeenCalledOnce();
+  }finally{await peer.end();}
+});
+it('honors Stop during semantic lookup before calling the reply model',async()=>{
+  const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
+  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await f.request();const state=await f.state(),job=await claim();
+  const embed=vi.fn(async()=>{await f.post(`/${f.id}/replies/${state.requestId}/stop`,{});return vector;});
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+  expect((await f.state()).phase).toBe('stopped');expect(answer).not.toHaveBeenCalled();
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE role='user'`).toHaveLength(1);
+});
+it('falls back to lexical context when the bounded embedding request fails',async()=>{
+  const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
+  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await f.request();const state=await f.state(),job=await claim();
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>{throw new Error('Synthetic outage');}}});
+  expect((await f.state()).phase).toBe('ready');expect(answer).toHaveBeenCalledOnce();
+});
+it('does not purchase a query embedding when only incompatible dimensions are indexed',async()=>{
+  const f=await fixture();
+  await t.sql`INSERT INTO inspiration_embeddings(profile_id,inspiration_id,model,input_scope,dimensions,input_hash,embedding)
+    VALUES(${f.profileId},${f.sourceId},${GEMINI_EMBEDDING_MODEL},'personal',1536,'fixture','[]'::jsonb)`;
+  await f.request();const state=await f.state(),job=await claim(),embed=vi.fn(async()=>[1,...Array<number>(767).fill(0)]);
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+  expect((await f.state()).phase).toBe('ready');expect(embed).not.toHaveBeenCalled();expect(answer).toHaveBeenCalledOnce();
+});
+it('fences source edits during lookup before dispatching the answer',async()=>{
+  const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
+  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await f.request();const state=await f.state(),job=await claim();
+  const embed=async()=>{await t.sql`UPDATE inspirations SET text='A different current view.' WHERE id=${f.sourceId}`;return vector;};
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+  expect((await f.state()).phase).toBe('stale');expect(answer).not.toHaveBeenCalled();
+});
+it('uses the last available provider slot for an answer rather than exceeding the budget with lookup',async()=>{
+  const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
+  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await t.sql`INSERT INTO conversation_reply_requests(id,profile_id,conversation_id,conversation_revision,context_hash,status,dispatched_at)
+    SELECT gen_random_uuid(),${f.profileId}::uuid,${f.id}::uuid,1,'','failed',now() FROM generate_series(1,19)`;
+  await f.request();const state=await f.state(),job=await claim(),embed=vi.fn(async()=>vector);
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+  expect((await f.state()).phase).toBe('ready');expect(embed).not.toHaveBeenCalled();expect(answer).toHaveBeenCalledOnce();
+  const [request]=await t.sql`SELECT retrieval_dispatched_at FROM conversation_reply_requests WHERE id=${state.requestId}`;
+  expect(request.retrieval_dispatched_at).toBeNull();
+});
+it('counts both reserved provider slots of earlier hybrid attempts',async()=>{
+  const f=await fixture();
+  await t.sql`INSERT INTO conversation_reply_requests(id,profile_id,conversation_id,conversation_revision,context_hash,status,dispatched_at,retrieval_dispatched_at)
+    SELECT gen_random_uuid(),${f.profileId}::uuid,${f.id}::uuid,1,'','failed',now(),now() FROM generate_series(1,10)`;
+  await f.request();const state=await f.state(),job=await claim(),embed=vi.fn(async()=>[1,...Array<number>(767).fill(0)]);
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+  expect(await f.state()).toMatchObject({phase:'failed',failureCode:'budget'});expect(embed).not.toHaveBeenCalled();expect(answer).not.toHaveBeenCalled();
+});
 it('commits Send and the reply outbox atomically, including an exact lost-response replay',async()=>{
   const f=await fixture(),messageId=randomUUID();const input={id:messageId,content:'What is a useful next step?',revision:1,requestReply:true};
   expect((await f.post(`/${f.id}/messages`,input)).status).toBe(200);expect((await f.post(`/${f.id}/messages`,input)).status).toBe(200);
   expect(await t.sql`SELECT id FROM conversation_reply_requests WHERE user_message_id=${messageId}`).toHaveLength(1);
   expect(await t.sql`SELECT id FROM conversation_messages WHERE id=${messageId}`).toHaveLength(1);
   expect(await f.state()).toMatchObject({phase:'pending',messageId});await processBackgroundJob(await claim());expect(answer).toHaveBeenCalledTimes(1);
+});
+it('first Send creates one conversation, message and reply request without an empty intermediate row',async()=>{
+  const f=await fixture(),id=randomUUID(),firstMessage={id:randomUUID(),content:'How can a quiet morning leave room for ideas?',requestReply:true};
+  for(let n=0;n<2;n++)expect((await f.post('',{id,firstMessage})).status).toBe(200);
+  expect(await t.sql`SELECT id FROM conversations WHERE id=${id}`).toHaveLength(1);
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${id}`).toHaveLength(1);
+  expect(await t.sql`SELECT id FROM conversation_reply_requests WHERE conversation_id=${id}`).toHaveLength(1);
+  expect(answer).not.toHaveBeenCalled();
+  const result=await(await f.app.request(`/conversations/${id}/reply`)).json() as any;
+  expect(result).toMatchObject({phase:'pending',messageId:firstMessage.id,revision:1});
+  await processBackgroundJob(await claim());expect(answer).toHaveBeenCalledOnce();
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${id}`).toHaveLength(2);
+});
+it('recovers the first Send after its starting principle was deleted without restoring it',async()=>{
+  const f=await fixture(),id=randomUUID();
+  const [principle]=await t.sql`INSERT INTO principles(profile_id,statement,origin,rank,locked_at) VALUES(${f.profileId},'Keep room for thought.','declared',0,now()) RETURNING id`;
+  const input={id,principleId:principle.id,firstMessage:{id:randomUUID(),content:'How might this guide today?',requestReply:true}};
+  expect((await f.post('',input)).status).toBe(200);
+  await t.sql`DELETE FROM principles WHERE id=${principle.id}`;
+  const retry=await f.post('',input);expect(retry.status).toBe(200);
+  const body=await retry.json() as any;expect(body.conversation.initialPrinciple).toBeNull();expect(body.conversation.messages).toHaveLength(1);
+  expect(await t.sql`SELECT id FROM conversation_reply_requests WHERE conversation_id=${id}`).toHaveLength(1);
 });
 it('starts from a current owned principle even below the default rank window, without asserting it as a user message',async()=>{
   const f=await fixture(),other=await fixture();
@@ -99,10 +200,21 @@ it.each(['before','during'] as const)('fences memory changes %s dispatch and ret
   if(timing==='before')await change();else during=change;
   await processBackgroundJob(await claim());expect((await f.state()).phase).toBe('stale');expect(answer).toHaveBeenCalledTimes(timing==='before'?0:1);expect(await t.sql`SELECT id FROM conversation_messages`).toHaveLength(1);
 });
+it('refuses a late reply after an owned reflection changes during generation',async()=>{
+  const f=await fixture();
+  const [reflection]=await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer)
+    VALUES(${f.profileId},${f.sourceId},'What mattered?','Quiet mornings give me room to experiment.') RETURNING id`;
+  await f.request();
+  during=async()=>{await t.sql`UPDATE reflections SET answer='I changed my view on this.' WHERE id=${reflection.id}`;};
+  await processBackgroundJob(await claim());
+  expect((await f.state()).phase).toBe('stale');expect(answer).toHaveBeenCalledTimes(1);
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE role='assistant'`).toHaveLength(0);
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE role='user'`).toHaveLength(1);
+});
 it('deletion during a call erases content but retains its dispatch budget and refuses resurrection',async()=>{
   const f=await fixture();await f.request();during=async()=>{expect((await f.app.request(`/conversations/${f.id}`,{method:'DELETE'})).status).toBe(200);};
   await processBackgroundJob(await claim());expect(await t.sql`SELECT id FROM conversation_messages`).toHaveLength(0);
-  const [row]=await t.sql`SELECT dispatched_at,"references",follow_up_question,context_hash FROM conversation_reply_requests`;expect(row.dispatched_at).not.toBeNull();expect(row.references).toEqual([]);expect(row.follow_up_question).toBeNull();expect(row.context_hash).toBe('');
+  const [row]=await t.sql`SELECT dispatched_at,"references",context_sources,follow_up_question,context_hash FROM conversation_reply_requests`;expect(row.dispatched_at).not.toBeNull();expect(row.references).toEqual([]);expect(row.context_sources).toEqual([]);expect(row.follow_up_question).toBeNull();expect(row.context_hash).toBe('');
   expect((await f.request()).status).toBe(410);expect(await postgresBackgroundJobStore.usageForAccount(f.accountId,new Date(Date.now()-3600000))).toMatchObject({startedInWindow:1});
 });
 it('excludes historical replies after their memory changes and refuses stale reference access',async()=>{

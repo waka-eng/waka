@@ -1105,7 +1105,9 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
           .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.profileId, job.profileId))).limit(1);
         if (!member) throw new Error("Room principles require a current member");
       }
-      await refreshPrinciplesForProfile({ profileId }, { beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job) });
+      await refreshPrinciplesForProfile({ profileId }, {jobId:job.id,billingProfileId:job.profileId,
+        expectedMaterialKey:job.idempotencyKey?.startsWith(`refresh_principles:${profileId}:`)?job.idempotencyKey.slice(`refresh_principles:${profileId}:`.length):undefined,
+        beforeProgress:tx=>assertBackgroundJobOwnership(tx,job,true),beforeCommit:tx=>assertBackgroundJobOwnership(tx,job,true)});
       return;
     }
     case "enrich_attachment": {

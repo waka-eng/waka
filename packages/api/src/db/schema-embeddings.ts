@@ -61,6 +61,7 @@ export const inspirationEmbeddings = pgTable(
     ),
     inputScopeCheck: check("inspiration_embeddings_input_scope_check", sql`${table.inputScope} IN ('personal', 'public')`),
     profileIdx: index("inspiration_embeddings_profile_idx").on(table.profileId),
+    profileScopeRecentIdx: index("inspiration_embeddings_profile_scope_recent_idx").on(table.profileId,table.inputScope,table.model,table.updatedAt.desc(),table.id.desc()),
     inspirationFk: foreignKey({
       columns: [table.profileId, table.inspirationId],
       foreignColumns: [inspirations.profileId, inspirations.id],

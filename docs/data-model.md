@@ -102,6 +102,10 @@ principle or feedback verdict. Replies require `WAKA_CONVERSATION_REPLIES=1`;
 otherwise saving has a zero-call budget. When enabled, Send commits the user
 message and reply request in one transaction, so a lost response cannot strand
 the message between saving and enqueueing or duplicate it on replay.
+The first Send may create the conversation, its first authored message and
+that reply request in the same transaction. Opening a new-chat composer does
+not create an empty conversation. Client-generated conversation/message IDs
+survive uncertain outcomes; a changed first-message replay conflicts.
 
 A conversation may start from an owned, currently readable Principle via
 `initial_principle_id`. This prioritizes the current wording in context without
@@ -113,10 +117,13 @@ Milestone 6 adds `conversation_reply_requests`, separate from user messages.
 One pending/running reply is allowed per conversation. An initial request or
 explicit retry compares the last request ID under the conversation lock: a
 replayed retry joins its successor instead of dispatching twice. Each attempt
-may dispatch to a provider at most once; ambiguous failures require a new,
-explicit retry, which may incur a new provider charge. Limits are three attempts
-per user message per hour and twenty provider dispatches per account per hour,
-with at most 1,200 output tokens per dispatch. Dispatch timestamps survive
+may dispatch at most one query embedding and one answer; ambiguous failures
+require a new, explicit retry, which may incur a new provider charge. Limits
+are three attempts per user message per hour and twenty reserved provider slots
+per account per hour. Both slots are reserved before a hybrid attempt; a stopped
+or failed lookup does not refund that reservation. With only one slot left,
+the answer uses lexical context rather than exceeding the limit. Answers have
+at most 1,200 output tokens. Dispatch timestamps survive
 conversation deletion until profile erasure so deletion cannot reset the budget.
 
 Stop is a publication fence, not a promise to undo provider billing. New messages,
@@ -127,6 +134,11 @@ assistant words whose references changed are labeled and excluded from future
 generation. They are conversation history, not new personal memory. Deleting
 the conversation erases those words and reference metadata. Source access is
 revalidated when opening a citation; no stale copied excerpt is served.
+`context_sources` stores only the selected source identities/hashes, separate
+from the citations actually used in the answer. It is null for older attempts
+without selection metadata; new attempts record even an empty selection.
+The memory drawer revalidates that selection. Conversation deletion erases
+both sets of reference metadata while retaining the budget timestamps.
 
 Client-generated conversation/message IDs make retry idempotent. A replay with
 different content conflicts rather than overwriting words. Deleting a
@@ -138,11 +150,38 @@ Messages reference their conversation with a profile-bearing foreign key.
 The initial limits are 100 active conversations per profile, 200 messages per
 conversation and 4,000 characters per user message. Context reads are bounded to
 16,000 text characters and freshly select only that profile's current readable
-Principles, live Top of mind and keyword-matched original inspirations. Ranking,
+Principles, live Top of mind and keyword-matched owned inspiration material.
+Material includes saved reflection answers and ready link/image/audio text;
+an audio correction replaces the original transcript rather than adding a
+second account of it. Excerpts distinguish human reflections from generated
+descriptions. At most six inspiration candidates are selected, with 1,600
+characters per source and 4,000 inspiration characters in the reply context.
+The bounded reader includes at most three reflection and three attachment
+passages per source and marks omissions. Short continuation queries may reuse
+the preceding substantive human topic, never an assistant's unadopted claim.
+New citation identities include the personal material revision; old plain-text
+citations retain their original text-only identity and offsets. Ranking,
 contested state, human wording and unconfirmed support stay explicit; stale
 machine claims and deleted originals are not retrieved. Context is never a
 cached copy in the conversation and must be rebuilt before future generation.
-It is a deterministic retrieval foundation, not a semantic-answer quality claim.
+When current-model personal embeddings are available, the worker can combine
+lexical matches with semantic matches and a diversity penalty. Selection
+abstains on weak uncorroborated similarity: the existing 0.6 floor is
+used with keyword support, otherwise 0.65. Candidates remain near the strongest
+match (within 0.03, or at least 0.75); unindexed lexical matches remain available.
+These chat-only values were selected by the recorded retrieval comparison,
+not applied to signal derivation or Principle eligibility. Query embedding
+runs outside DB locks, with a five-second header and ten-second total deadline;
+Stop and source changes are rechecked before answering. The scan uses at most
+500 most recently indexed owned personal vectors, validates at most 24 candidates against
+current canonical input, and selects at most six inspirations. Canonical checks
+are capped at 12,000 characters and 16 contributing children per type; oversized
+or stale material is not admitted through the semantic path, but can still match
+lexically. This is a bounded selection, not a claim to inspect the entire archive.
+Embedding failure falls back to lexical context. Migration 0065 adds selection
+metadata, lookup accounting and the bounded-scan index before this worker runs.
+Natural-language retrieval quality requires the separately recorded evaluation;
+synthetic-vector tests alone do not establish it.
 
 ### Selected thoughts from a conversation
 
@@ -827,6 +866,15 @@ agent's distilled working memory.
   accepted changes create new versions.
 
 ## Principle (layer 4)
+
+`principle_generation_steps` holds private processing receipts. Each model
+dispatch records its target profile, billing profile, input/step identity and
+outcome; the job link carries the billing tenant in its composite foreign key.
+Completed results support bounded resumption and are not new human evidence.
+A publication receipt commits with the Principle changes and supports recovery
+without rewriting later human edits. Old result bodies are cleared while recent
+dispatch timestamps preserve account limits. Profile erasure removes the rows;
+owned profile export includes them. Reading a page does not create these steps.
 
 **How the profile chooses, stripped of context.** A **rule** binds a
 context ("≤$100 for LLM testing") and is checkable; a **principle**

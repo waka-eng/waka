@@ -16,9 +16,9 @@
  * qualification tests: docs/generation.md; phases: docs/goals/principles.md.
  */
 
-import { and, eq, getTableColumns, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, isNotNull, or, sql } from "drizzle-orm";
 
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
 import { personalEntrySupportCurrent, personalPrincipleSupportCurrent, personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
 import { citationStatementCurrent, evidenceSupportCurrent, loadSignalStatementRevisions } from './signal-support-state.js';
@@ -32,11 +32,18 @@ import {
   topOfMindEntries,
   topOfMinds,
   profiles,
+  groupMembers,
+  principleGenerationSteps,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import { selectIndependentEvidence, type ConfidenceEvidence } from './signal-lifecycle.js';
 import {loadSignalEvidence} from './review-evidence.js';
+import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput} from './principle-input.js';
+import {GEMINI_GENERATION_MODEL,parseDistilledPrinciples,parsePrincipleRelation,parsePrincipleGrounding,PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
+import {principleMaterialKey} from './principle-material-key.js';
+import {principleWork} from './principle-work.js';
+import {OPENROUTER_GENERATION_MODEL} from './openrouter-http.js';
 import { writePrincipleStatementChain } from "./statement-chains.js";
 import { GROUP_INPUT_POLICY } from "./group-inputs.js";
 import { groupEntrySupportCurrent, groupPrincipleReadable, groupSignalReadable, projectGroupEntries } from "./group-output.js";
@@ -97,8 +104,10 @@ export interface CitationEvidence {
   signalId: string;
   /** Evidence timestamps of the signal itself. */
   evidenceAt: Date[];
-  /** Distinct top-of-mind version ids this signal was selected into. */
+  /** Distinct meaningful reading versions; no-change audits share their anchor. */
   tomVersionIds: string[];
+  /** Current evidence identity; dates alone cannot distinguish edited sources. */
+  supportKey?: string;
 }
 
 export interface EligibilityVerdict {
@@ -215,8 +224,53 @@ async function loadCitationEvidence(
     lineage:{kind:'inspiration',unitId:row.inspirationId,originIds:[row.inspirationId]}});witnesses.set(row.signalId,list);}
   for(const [id,rows] of witnesses)out.get(id)!.evidenceAt=selectIndependentEvidence(rows).map(row=>row.createdAt);
 
+  if(!profile?.groupId){
+    // Metadata only. Personal revisions include authorized reflection/media
+    // edits; review material hashes include the answer and referenced sources.
+    // Neither a support check timestamp nor an audit version belongs here.
+    const identities=await db.execute<{signalId:string;kind:string;unitId:string;sourceId:string;revision:string}>(sql`
+      SELECT e.signal_id AS "signalId",'inspiration' AS kind,e.inspiration_id::text AS "unitId",
+        e.inspiration_id::text AS "sourceId",r.personal_revision::text AS revision
+      FROM signal_evidence e
+      JOIN signals s ON s.id=e.signal_id AND s.profile_id=e.profile_id
+      JOIN inspiration_revisions r ON r.inspiration_id=e.inspiration_id AND r.profile_id=e.owner_profile_id
+      WHERE e.profile_id=${profileId}::uuid AND e.owner_profile_id=${profileId}::uuid
+        AND e.signal_id IN (${sql.join(signalIds.map(id=>sql`${id}::uuid`),sql`,`)})
+        AND ${evidenceSupportCurrent('e','s')}
+      UNION ALL
+      SELECT e.signal_id AS "signalId",'review' AS kind,e.session_id::text AS "unitId",
+        e.answer_id::text AS "sourceId",r.material_hash AS revision
+      FROM signal_review_evidence e
+      JOIN signals s ON s.id=e.signal_id AND s.profile_id=e.profile_id
+      JOIN review_signal_support r ON r.profile_id=e.profile_id AND r.signal_id=e.signal_id AND r.answer_id=e.answer_id
+      WHERE e.profile_id=${profileId}::uuid
+        AND e.signal_id IN (${sql.join(signalIds.map(id=>sql`${id}::uuid`),sql`,`)})
+        AND review_evidence_current(e.profile_id,e.signal_id,e.answer_id,s.statement_revision) IS TRUE`);
+    const currentUnits=new Map([...witnesses].map(([id,rows])=>[id,new Set(rows.map(row=>`${row.lineage!.kind}:${row.lineage!.unitId}`))]));
+    const keys=new Map<string,Set<string>>();
+    for(const row of identities){
+      if(!currentUnits.get(row.signalId)?.has(`${row.kind}:${row.unitId}`))continue;
+      const values=keys.get(row.signalId)??new Set<string>();
+      values.add(JSON.stringify([row.kind,row.sourceId,row.revision]));keys.set(row.signalId,values);
+    }
+    for(const [id,bucket] of out)bucket.supportKey=createHash('sha256').update(JSON.stringify([...(keys.get(id)??[])].sort())).digest('hex');
+  }
+
   const tomRows = await db
-    .select({ signalId: topOfMindEntrySignals.signalId, topOfMindId: topOfMindEntries.topOfMindId })
+    .select({ signalId: topOfMindEntrySignals.signalId,
+      // Validate support on the actual cited row below, but do not count an
+      // unchanged audit copy as a new appearance or a new paid-work identity.
+      // Keeping this separate from filtering rows preserves current support
+      // when the latest copy refreshed citations to a new signal revision.
+      topOfMindId: sql<string>`CASE WHEN ${topOfMinds.reason} = 'no_change' THEN COALESCE((
+        SELECT meaningful.id FROM top_of_minds meaningful
+        WHERE meaningful.profile_id IS NOT DISTINCT FROM ${topOfMinds.profileId}
+          AND meaningful.group_id IS NOT DISTINCT FROM ${topOfMinds.groupId}
+          AND meaningful.version <= ${topOfMinds.version}
+          AND meaningful.reason <> 'no_change'
+        ORDER BY meaningful.version DESC, meaningful.created_at DESC LIMIT 1
+      ), ${topOfMinds.id}) ELSE ${topOfMinds.id} END`,
+    })
     .from(topOfMindEntrySignals)
     .innerJoin(signals, eq(signals.id, topOfMindEntrySignals.signalId))
     .innerJoin(topOfMindEntries, eq(topOfMindEntries.id, topOfMindEntrySignals.entryId))
@@ -247,7 +301,7 @@ async function loadCitationEvidence(
 // ---------------------------------------------------------------------------
 
 export interface RefreshPrinciplesResult {
-  status: "below_bar" | "no_candidates" | "evaluated";
+  status: "below_bar" | "no_candidates" | "evaluated" | "superseded";
   minted: number;
   attached: number;
   conflicts: number;
@@ -261,6 +315,10 @@ export interface PrincipleGenerationDependencies {
   now?: Date;
   /** No network calls: verify the worker still owns its claim at commit. */
   beforeCommit?: (tx: Pick<WakaTx, "select">) => Promise<void>;
+  beforeProgress?: (tx:WakaTx)=>Promise<void>;
+  jobId?:string;
+  billingProfileId?:string;
+  expectedMaterialKey?:string;
 }
 
 /** Room signals must pass the same current-member visibility gate as the wall. */
@@ -292,12 +350,19 @@ export async function refreshPrinciplesForProfile(
     redeemed: 0,
     dropped: 0,
   };
+  if(deps.jobId){
+    const [done]=await db.select({response:principleGenerationSteps.response}).from(principleGenerationSteps)
+      .where(and(eq(principleGenerationSteps.profileId,input.profileId),eq(principleGenerationSteps.jobId,deps.jobId),eq(principleGenerationSteps.kind,'publication'),eq(principleGenerationSteps.status,'ready'))).limit(1);
+    if(done?.response)return done.response as RefreshPrinciplesResult;
+  }
   const revision = await readGenerationRevision(db, { profileId: input.profileId });
   if (!revision) return none;
 
   // The cheap gate: active signals with their longevity stats. Nearly every
   // night ends here, with zero model calls.
-  const { activeSignals, evidence, groupId } = await loadPrincipleMaterial(db, input.profileId);
+  const material=await loadPrincipleMaterial(db,input.profileId);
+  const { activeSignals, evidence, groupId } = material;
+  if(deps.expectedMaterialKey&&deps.expectedMaterialKey!==principleMaterialKey(material))return {...none,status:'superseded'};
   if (activeSignals.length < bar("SIGNALS")) return none;
 
   const overall = computeCitationEligibility([...evidence.values()], now);
@@ -316,7 +381,7 @@ export async function refreshPrinciplesForProfile(
       ? groupPrincipleReadable(groupId, PRINCIPLE_MIN_SIGNALS) : personalPrincipleSupportCurrent(input.profileId, PRINCIPLE_MIN_SIGNALS) })
     .from(principles)
     .where(and(eq(principles.profileId, input.profileId),
-      ...(groupId ? [eq(principles.inputPolicy, GROUP_INPUT_POLICY)] : [])));
+      ...(groupId ? [eq(principles.inputPolicy, GROUP_INPUT_POLICY)] : []))).orderBy(asc(principles.rank),asc(principles.id));
 
   const [liveTom] = await db
     .select({ id: topOfMinds.id })
@@ -333,7 +398,9 @@ export async function refreshPrinciplesForProfile(
     ? (await projectGroupEntries(db, groupId, storedEntries)).entries
     : (await projectPersonalEntries(db, input.profileId, storedEntries)).entries.filter((entry) => !entry.supportChanged);
 
-  const distilled = await provider.distillPrinciples({
+  const focus=currentEntries.length?await db.select({id:topOfMindEntrySignals.signalId}).from(topOfMindEntrySignals)
+    .where(inArray(topOfMindEntrySignals.entryId,currentEntries.map(row=>row.id))):[];
+  const distillInput=selectPrincipleInput({
     profileId: input.profileId,
     preferredLocale,
     signals: activeSignals.map((row) => {
@@ -354,16 +421,31 @@ export async function refreshPrinciplesForProfile(
       state: row.supportCurrent || row.state === 'contested' ? row.state : 'aspirational',
     })),
     currentEntries: currentEntries.map((row) => ({ body: row.body })),
-  });
+  },new Set(focus.flatMap(row=>row.id?[row.id]:[])));
+  const [member]=groupId&&!deps.billingProfileId?await db.select({id:groupMembers.profileId}).from(groupMembers).where(eq(groupMembers.groupId,groupId)).orderBy(asc(groupMembers.profileId)).limit(1):[];
+  const billingProfileId=deps.billingProfileId??member?.id??input.profileId;
+  const inputHash=createHash('sha256').update(JSON.stringify({profileId:input.profileId,policy:'principle-work-v1',
+    provider:provider.name??'injected',models:provider.name==='openrouter'
+      ?[process.env.WAKA_MODEL_PRINCIPLES?.trim()||OPENROUTER_GENERATION_MODEL,process.env.WAKA_MODEL_PRINCIPLE_JUDGE?.trim()||OPENROUTER_GENERATION_MODEL]
+      :[GEMINI_GENERATION_MODEL],limits:{input:PRINCIPLE_INPUT_LIMITS,comparison:PRINCIPLE_COMPARISON_LIMITS,grounding:PRINCIPLE_GROUNDING_LIMITS},
+    prompts:[PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION],material:principleMaterialKey(material),distillInput,
+    standing:existing.map(row=>({id:row.id,statement:row.statement,revision:String(row.statementRevision),rank:row.rank,state:row.state,origin:row.origin,locked:row.lockedAt!==null,supported:row.supportCurrent,conflictsWithId:row.conflictsWithId}))})).digest('hex');
+  const work=principleWork({db,profileId:input.profileId,billingProfileId,inputHash,revision,jobId:deps.jobId,beforeProgress:deps.beforeProgress});
+  const distilled=await work.run('distill',()=>provider.distillPrinciples(distillInput),value=>({candidates:parseDistilledPrinciples(value).candidates.slice(0,PRINCIPLE_MAX_CANDIDATES_PER_RUN)}));
+  const recordPublication=async(tx:WakaTx,result:RefreshPrinciplesResult)=>{
+    if(deps.jobId)await tx.insert(principleGenerationSteps).values({profileId:input.profileId,billingProfileId,jobId:deps.jobId,inputHash,stepKey:'publication',kind:'publication',status:'ready',response:result,finishedAt:new Date()});
+    await tx.update(principleGenerationSteps).set({response:null}).where(and(eq(principleGenerationSteps.profileId,input.profileId),eq(principleGenerationSteps.kind,'model')));
+  };
 
   const result: RefreshPrinciplesResult = { ...none, status: "no_candidates" };
-  const activeIds = new Set(activeSignals.map((row) => row.id));
+  const activeIds = new Set(distillInput.signals.map((row) => row.id));
 
   const candidates = distilled.candidates.slice(0, PRINCIPLE_MAX_CANDIDATES_PER_RUN);
-  const valid: PrincipleCandidate[] = [];
+  let valid: PrincipleCandidate[] = [];
   for (const candidate of candidates) {
     const statement = candidate.statement.trim();
     const cited = [...new Set(candidate.citedSignalIds)].filter((id) => activeIds.has(id));
+    const distinctStatements = new Set(cited.map(id=>distillInput.signals.find(row=>row.id===id)!.statement.normalize('NFKC').trim().replace(/\s+/g,' ').toLowerCase()));
     const verdict = computeCitationEligibility(
       cited.map((id) => evidence.get(id)!).filter(Boolean),
       now,
@@ -371,6 +453,7 @@ export async function refreshPrinciplesForProfile(
     if (
       statement.length === 0 ||
       statement.length > PRINCIPLE_MAX_STATEMENT_LENGTH ||
+      distinctStatements.size < bar("SIGNALS") ||
       !verdict.eligible
     ) {
       result.dropped += 1;
@@ -378,10 +461,18 @@ export async function refreshPrinciplesForProfile(
     }
     valid.push({ ...candidate, statement, citedSignalIds: cited });
   }
+  if(valid.length){
+    const citedIds=new Set(valid.flatMap(row=>row.citedSignalIds));
+    const groundingInput={preferredLocale,signals:distillInput.signals.filter(row=>citedIds.has(row.id)).map(row=>({id:row.id,statement:row.statement})),
+      candidates:valid.map((row,index)=>({id:`candidate-${index}`,statement:row.statement,citedSignalIds:row.citedSignalIds}))};
+    const grounding=await work.run('grounding',()=>provider.assessPrincipleGrounding(groundingInput),value=>parsePrincipleGrounding(value,groundingInput));
+    valid=valid.filter((_,index)=>{const supported=grounding.assessments[index]!.supported;if(!supported)result.dropped++;return supported;});
+  }
   if (valid.length === 0) {
     await db.transaction(async (tx) => {
       await assertGenerationRevision(tx, revision);
       await deps.beforeCommit?.(tx);
+      await recordPublication(tx,result);
     });
     return result;
   }
@@ -393,30 +484,31 @@ export async function refreshPrinciplesForProfile(
   const standingSet = existing.filter((row) => row.supportCurrent || row.lockedAt !== null || row.origin === 'declared')
     .map((row) => ({ id: row.id, statement: row.statement }));
   const planned: Array<{ candidate: PrincipleCandidate; matchedId: string | null; conflictingId: string | null; mintedId: string }> = [];
-  for (const candidate of valid) {
+  for (const [candidateIndex,candidate] of valid.entries()) {
     // Compare against the standing set, including earlier planned candidates.
     // An unavailable comparison aborts the entire batch before any write.
-    let matchedId: string | null = existing.find((row) => !row.supportCurrent && row.statement === candidate.statement)?.id ?? null;
+    let matchedId: string | null = existing.find((row) => row.statement === candidate.statement)?.id ?? null;
     let conflictingId: string | null = null;
-    for (const standing of standingSet) {
+    for (let offset=0;offset<standingSet.length;offset+=PRINCIPLE_COMPARISON_LIMITS.items) {
       if (matchedId) break;
       /* An unreachable judge used to mean "independent for this pair" —
          which minted near-duplicate principles on layer 4, the ranked,
          visible surface, whenever the road was down. It propagates now:
          the nightly job attempt fails and retries, and the candidate is
          judged against the whole standing set or not at all. */
-      const { relation } = await provider.judgePrincipleRelation({
+      const comparisonInput={
         preferredLocale,
         candidateStatement: candidate.statement,
-        existingStatement: standing.statement,
-      });
-      if (relation === "same") {
-        matchedId = standing.id;
-        break;
+        existingPrinciples: standingSet.slice(offset,offset+PRINCIPLE_COMPARISON_LIMITS.items),
+      };
+      const {relations}=await work.run(`relation:${candidateIndex}:${offset}`,()=>provider.judgePrincipleRelation(comparisonInput),value=>parsePrincipleRelation(value,comparisonInput));
+      for(const {principleId,relation} of relations){
+        if (relation === "same") { matchedId = principleId; break; }
+        if (relation === "conflicting" && !conflictingId) conflictingId = principleId;
       }
-      if (relation === "conflicting" && !conflictingId) conflictingId = standing.id;
     }
-    const mintedId = randomUUID();
+    const hex=createHash('sha256').update(`${inputHash}:${candidateIndex}`).digest('hex');
+    const mintedId=`${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-8${hex.slice(17,20)}-${hex.slice(20,32)}`;
     planned.push({ candidate, matchedId, conflictingId, mintedId });
     if (!matchedId) standingSet.push({ id: mintedId, statement: candidate.statement });
   }
@@ -499,6 +591,7 @@ export async function refreshPrinciplesForProfile(
       }
     }
 
+    await recordPublication(tx,result);
     return result;
   });
 }

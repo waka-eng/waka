@@ -6,7 +6,8 @@ import {getDb} from '../lib/db.js';
 import {requireAuth,humanSessionsOnly,type AuthEnv} from '../lib/middleware.js';
 import {resolveTargetProfile} from './inspirations-tenancy.js';
 import {profileQuerySchema} from './inspirations-validation.js';
-import {CONVERSATION_LIMITS,conversationCapabilities,conversationRepliesEnabled,readConversationContext} from '../lib/conversation-context.js';
+import {CONVERSATION_LIMITS,conversationCapabilities,conversationRepliesEnabled,currentConversationReferences,readConversationContext,type ConversationSource} from '../lib/conversation-context.js';
+import {conversationSearchQuery} from '../lib/conversation-material.js';
 import {ConversationReplyError,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
 import {wakeCommittedBackgroundJobs} from '../lib/queue.js';
 import {personalPrincipleReadable} from '../lib/personal-output.js';
@@ -56,17 +57,35 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     return c.json({profileId,conversations:rows,...conversationCapabilities()});
   });
   routes.post('/',async c=>{
-    const input=z.object({id:uuid,principleId:uuid.optional()}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
+    const input=z.object({id:uuid,principleId:uuid.optional(),firstMessage:messageInput.omit({revision:true,correctsMessageId:true}).optional()}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
     const profileId=c.get('conversationProfileId');
     const row=await database().transaction(async tx=>{
       await tx.select({id:profiles.id}).from(profiles).where(eq(profiles.id,profileId)).for('update');
       const [existing]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,input.data.id)));
-      if(existing)return readConversation(tx,profileId,input.data.id);
+      if(existing){
+        const current=await readConversation(tx,profileId,input.data.id);
+        if(input.data.firstMessage){
+          const first=current.messages[0];
+          // Source deletion clears its FK, but cannot make a committed first
+          // message impossible to recover. A replay never restores that source.
+          if(current.initialPrincipleId!==null&&current.initialPrincipleId!==(input.data.principleId??null)||!first||first.role!=='user'||first.id!==input.data.firstMessage.id||first.content!==input.data.firstMessage.content)
+            throw new ConversationError('This conversation already began with different words.',409);
+        }
+        return current;
+      }
       const [count]=await tx.select({n:sql<number>`count(*)::int`}).from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt)));
       if(count.n>=CONVERSATION_LIMITS.conversations)throw new ConversationError('Conversation limit reached. Delete an old conversation first.',429);
       if(input.data.principleId){const [source]=await tx.select({id:principles.id}).from(principles).where(and(eq(principles.profileId,profileId),eq(principles.id,input.data.principleId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)));if(!source)throw new ConversationError('This principle is not available.',404);}
-      await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null});return readConversation(tx,profileId,input.data.id);
-    });return c.json({conversation:row,...conversationCapabilities()});
+      const first=input.data.firstMessage;
+      await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null,revision:first?1:0});
+      if(first){
+        await tx.insert(conversationMessages).values({id:first.id,profileId,conversationId:input.data.id,position:1,role:'user',content:first.content});
+        if(first.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,input.data.id,{messageId:first.id,afterRequestId:null});
+      }
+      return readConversation(tx,profileId,input.data.id);
+    });
+    if(input.data.firstMessage?.requestReply&&conversationRepliesEnabled())await wakeCommittedBackgroundJobs();
+    return c.json({conversation:row,...conversationCapabilities()});
   });
   routes.use('/:id/*',async(c,next)=>{if(!uuid.safeParse(c.req.param('id')).success)return c.json({error:'Invalid conversation'},400);await next();});
   routes.get('/:id',async c=>{
@@ -76,7 +95,19 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
   });
   routes.get('/:id/context',async c=>c.json(await database().transaction(async tx=>{
     const profileId=c.get('conversationProfileId'),row=await readConversation(tx,profileId,c.req.param('id'));
-    return readConversationContext(tx,profileId,[...row.messages].reverse().find(message=>message.role==='user')?.content??'',undefined,row.initialPrincipleId);
+    const lastUser=[...row.messages].reverse().find(message=>message.role==='user');
+    const [request]=lastUser?await tx.select({sources:conversationReplyRequests.contextSources}).from(conversationReplyRequests)
+      .where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,row.id),eq(conversationReplyRequests.userMessageId,lastUser.id)))
+      .orderBy(desc(conversationReplyRequests.createdAt),desc(conversationReplyRequests.id)).limit(1):[];
+    if(request?.sources){
+      const sources=(await currentConversationReferences(tx,profileId,request.sources)).filter((source):source is ConversationSource=>source!==null);
+      const bound=(kind:ConversationSource['kind'],remaining:number)=>sources.filter(source=>source.kind===kind).flatMap(source=>{
+        if(remaining<=0)return [];const text=source.text.slice(0,remaining);remaining-=text.length;
+        return [{...source,text,truncated:source.truncated||text.length<source.text.length}];
+      });
+      return {profileId,principles:bound('principle',8000),reading:bound('top_of_mind_entry',4000),inspirations:bound('inspiration',4000),...conversationCapabilities()};
+    }
+    return readConversationContext(tx,profileId,conversationSearchQuery(row.messages),undefined,row.initialPrincipleId);
   },{isolationLevel:'repeatable read',accessMode:'read only'})));
   routes.post('/:id/messages',async c=>{
     const input=messageInput.safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Write a message of up to 4,000 characters.'},400);
@@ -115,7 +146,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     await database().transaction(async tx=>{
       const [row]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id.data))).for('update');
       if(!row)throw new ConversationError('Conversation not found.',404);
-      await tx.update(conversationReplyRequests).set({status:'stopped',userMessageId:null,assistantMessageId:null,references:[],followUpQuestion:null,contextHash:'',failureCode:null,finishedAt:new Date()})
+      await tx.update(conversationReplyRequests).set({status:'stopped',userMessageId:null,assistantMessageId:null,references:[],contextSources:[],followUpQuestion:null,contextHash:'',failureCode:null,finishedAt:new Date()})
         .where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,id.data)));
       await tx.delete(conversationMessages).where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id.data)));
       await tx.update(conversations).set({deletedAt:row.deletedAt??new Date(),updatedAt:new Date()}).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id.data)));

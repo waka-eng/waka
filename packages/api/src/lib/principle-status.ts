@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import {principleMaterialKey} from './principle-material-key.js';
 import { and, eq, sql } from "drizzle-orm";
 import { backgroundJobs, principles } from "../db/index.js";
 import { getDb } from "./db.js";
@@ -11,17 +11,6 @@ type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 type Db = Database | Transaction;
 
-/** Stable evidence identity: opening a page cannot purchase another model pass. */
-export function principleMaterialKey(material: Awaited<ReturnType<typeof loadPrincipleMaterial>>): string {
-  return createHash("sha256").update(JSON.stringify({
-    policy: "principles-v2", groupId: material.groupId, locale: material.preferredLocale,
-    signals: material.activeSignals.map((signal) => ({
-      id: signal.id, statement: signal.statement,
-      evidence: material.evidence.get(signal.id)?.evidenceAt.map((at) => at.toISOString()).sort(),
-      versions: material.evidence.get(signal.id)?.tomVersionIds.slice().sort(),
-    })).sort((a, b) => a.id.localeCompare(b.id)),
-  })).digest("hex");
-}
 
 export async function loadPrincipleStatus(db: Db, profileId: string) {
   const material = await loadPrincipleMaterial(db, profileId);

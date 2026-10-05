@@ -23,6 +23,8 @@
 import {
   buildDeclarationRouteRequest,
   buildPrincipleDistillRequest,
+  buildPrincipleGroundingRequest,
+  parsePrincipleGrounding,
   buildPrincipleRelationRequest,
   buildReflectionQuestionRequest,
   buildReviewQuestionRequest,
@@ -83,6 +85,7 @@ interface GeminiShapedRequest {
   contents: Array<{ role?: string; parts: Array<{ text: string }> }>;
   generationConfig: {
     temperature?: number;
+    maxOutputTokens?: number;
     responseSchema?: GeminiShapedSchema;
   };
 }
@@ -141,7 +144,7 @@ export function toChatRequest(
     model,
     messages,
     temperature: request.generationConfig.temperature ?? 0,
-    max_tokens: OPENROUTER_MAX_OUTPUT_TOKENS,
+    max_tokens: request.generationConfig.maxOutputTokens ?? OPENROUTER_MAX_OUTPUT_TOKENS,
     reasoning: { enabled: false },
     response_format: schema
       ? { type: "json_schema", json_schema: { name: schemaName, schema: toJsonSchema(schema) } }
@@ -268,9 +271,13 @@ export function createOpenRouterModelProvider(): ModelProvider {
         "WAKA_MODEL_PRINCIPLE_JUDGE",
         "principle_relation",
       );
-      if (payload === MODEL_DECLINED) return { relation: "independent" };
-      if (payload === null) throw new ModelDidNotAnswerError("principle relation judgement");
-      return parsePrincipleRelation(payload);
+      if (payload === null || payload === MODEL_DECLINED) throw new ModelDidNotAnswerError("principle relation judgement");
+      return parsePrincipleRelation(payload,input);
+    },
+    async assessPrincipleGrounding(input) {
+      const payload=await ask(()=>buildPrincipleGroundingRequest(input),'principle grounding','WAKA_MODEL_PRINCIPLES','principle_grounding');
+      if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('principle grounding');
+      return parsePrincipleGrounding(payload,input);
     },
     async routeDeclaration(input) {
       const payload = await ask(

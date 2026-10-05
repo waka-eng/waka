@@ -56,7 +56,8 @@ it('keeps the selected principle and its route after editing, so Back returns to
 it('starts a review beside the personal reading and restores home through Back',async()=>{
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
   expect(world.container.querySelector('.jar-reading-heading')?.textContent).toContain('Top of mind');
-  const review=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-reading-actions button')].find(button=>button.textContent==='Review your inspirations');
+  const review=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-home-activities button')].find(button=>button.textContent?.startsWith('Review your inspirations'));
+  expect(world.container.querySelector('.jar-reading-actions')?.textContent).not.toContain('Review your inspirations');
   expect(review).toBeDefined();await act(async()=>review!.click());await settle();expect(location.pathname).toBe('/review/new');
   await navigate(-1);expect(location.pathname).toBe('/');
 });

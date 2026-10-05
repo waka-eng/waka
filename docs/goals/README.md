@@ -47,6 +47,7 @@ Shipped, and kept for the measurements.
 
 | Goal | Status |
 | --- | --- |
+| [`chat-home-memory.md`](chat-home-memory.md) | Done 2026-10-04 — all chat/home/memory milestones implemented and accepted locally, including visual cues and Capture spark. 709 web, 803 API unit, 111 SQL cases; calibration 22/24 (91.7%), known misses retained. Not pushed/deployed. |
 | [`personal-ux-clarity.md`](personal-ux-clarity.md) | Done 2026-10-04 — all eight UX improvements verified locally; 689 web, 766 API unit and 16 SQL tests. Not pushed or deployed. |
 | [`personal-experience-delivery.md`](personal-experience-delivery.md) | Done 2026-10-04 — all 31 tasks/M1–M8 in the approved web/simulator scope, deployed and verified on dev through PRs 339/340. Production and native/store deployment excluded. |
 | [`personal-capture-foundation.md`](personal-capture-foundation.md) | Done 2026-10-04 — first bundle accepted with simulator substitution; physical microphone and device behavior remain unverified. |

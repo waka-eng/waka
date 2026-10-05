@@ -29,7 +29,7 @@ import {
   toChatRequest,
   toJsonSchema,
 } from "./openrouter-model-provider.js";
-import { buildSignalMatchJudgementRequest, buildReviewQuestionRequest } from "../queue/gemini.js";
+import { buildSignalMatchJudgementRequest, buildReviewQuestionRequest,buildPrincipleRelationRequest,buildPrincipleGroundingRequest } from "../queue/gemini.js";
 
 const fetchMock = vi.fn();
 
@@ -54,6 +54,10 @@ const chatReply = (content: string): Response =>
   );
 
 describe("the translation", () => {
+  it('preserves the actual comparison and grounding output-token bounds',()=>{
+    expect(toChatRequest(buildPrincipleRelationRequest({preferredLocale:'en-US',candidateStatement:'A rule.',existingPrinciples:[{id:'p',statement:'Another rule.'}]}),'model','principle_relation').max_tokens).toBe(1600);
+    expect(toChatRequest(buildPrincipleGroundingRequest({preferredLocale:'en-US',signals:[],candidates:[]}), 'model','principle_grounding').max_tokens).toBe(512);
+  });
   it('requests the lowest supported reasoning only for the endpoint that requires it, without changing its token cap',async()=>{
     process.env.WAKA_MODEL_CHAT='google/gemini-3.8-flash';fetchMock.mockResolvedValueOnce(chatReply(JSON.stringify({answer:'We can examine the choice.',followUpQuestion:'What matters in this choice?',citations:[]})));
     await createOpenRouterModelProvider().answerConversation({preferredLocale:'en-US',history:[{role:'user',content:'A choice.'}],sources:[]});

@@ -69,6 +69,7 @@ import "./styles/chrome.css";
   down, and the next person reads it as the current shape of the product.
 */
 const HomePage = lazy(() => import("./pages/Home"));
+const ChatPage = lazy(() => import('./pages/Chat'));
 
 /**
  * THE WORLD CAN BE LOOKED AT WITHOUT A SESSION, IN DEV ONLY.
@@ -171,12 +172,12 @@ ReactDOM.createRoot(root).render(
               - authenticated    → render the underlying page.
           */}
           {/* Home is the layout. */}
+          <Route path="/chat/:conversationId" element={<RequireAuth><SurfaceBoundary surface="chat"><Suspense fallback={null}><ChatPage/></Suspense></SurfaceBoundary></RequireAuth>}/>
           <Route element={<ProtectedHome />}>
             <Route path="/" element={<></>} />
             <Route path="/w/:wall/:label?" element={<></>} />
             <Route path="/inspirations/:inspirationId" element={<></>} />
             <Route path="/review/:reviewId" element={<></>} />
-            <Route path="/chat/:conversationId" element={<></>} />
             <Route path="/principles/:principleId" element={<></>} />
             <Route path="/principles/:principleId/share" element={<></>} />
           </Route>

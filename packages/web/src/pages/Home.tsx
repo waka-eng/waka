@@ -75,6 +75,7 @@ import { InspirationSearch } from '../components/InspirationSearch';
 import { hueCss } from "../lib/appearance";
 import { useDismissAway } from "../lib/dismiss";
 import { isEditableTarget, isNativeSurface } from "../lib/surface-input";
+import {homeActivityLayout} from "../lib/home-activity-layout";
 import { profileStorageKey, readProfileText, writeProfileText, type ProfileStorageScope } from "../lib/profile-storage";
 import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
 import { useInspirationProcessing } from '../lib/use-inspiration-processing';
@@ -84,8 +85,8 @@ import { useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
 import { useReviewEntry } from '../lib/use-review-entry';
-import { ConversationPanel } from '../components/ConversationPanel';
-import { ConversationStartButton } from '../components/ConversationStartButton';
+import { HomeActivities } from '../components/HomeActivities';
+import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
 import { ReviewEvidence } from '../components/ReviewEvidence';
@@ -5786,6 +5787,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         const last = ink[ink.length - 1];
         if (last) hqH = last.getBoundingClientRect().bottom - hqEl.getBoundingClientRect().top;
       }
+      const activityHome = hqEl?.classList.contains('jar-hq-inner--activities');
+      // scrollHeight includes overflow; unlike the visible last child's bottom
+      // it cannot make the mode flip as a person scrolls through the reading.
+      const alreadyCompact=hqEl?.classList.contains('jar-hq-inner--compact');
+      const activityInset=hqEl?parseFloat(getComputedStyle(hqEl)[alreadyCompact?'marginTop':'paddingTop'])||0:0;
+      const naturalActivityHeight=hqEl?(hqEl.scrollHeight+(alreadyCompact?activityInset:0)):hqH;
+      const activityLayout = homeActivityLayout(view.h, naturalActivityHeight, view.dialH, CHAR_SIZE);
+      const compactHome = Boolean(activityHome && activityLayout.compact);
+      if(compactHome) view.layout.fieldTop = view.h + 8;
+      if(hqEl){
+        hqEl.classList.toggle('jar-hq-inner--compact',compactHome);
+        if(compactHome){
+          hqEl.style.maxHeight=`${Math.max(0,activityLayout.contentLimit-activityInset)}px`;
+          hqEl.setAttribute('data-jar-surface','home-reading');
+          hqEl.setAttribute('tabindex','0');
+        }else{
+          hqEl.style.removeProperty('max-height');
+          hqEl.removeAttribute('data-jar-surface');
+          hqEl.removeAttribute('tabindex');
+        }
+      }
       /* THE CHARACTER IS ONE SIZE, EVERYWHERE (founder, 2026-08-28: "character
          shouldnt be responsive to screensize. it should always be consistent
          size").
@@ -5851,7 +5873,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * overlap. When the slot is roomy — which is most of the time — the
        * preference wins and the body is where the eye expects it.
        */
-      companion.y = hi >= lo ? clamp(view.h / 2, lo, hi) : (lo + hi) / 2;
+      companion.y = compactHome ? -view.h * 3 : hi >= lo ? clamp(view.h / 2, lo, hi) : (lo + hi) / 2;
       /* WHAT SITS UNDER THE COMPANION, AND IN WHAT ORDER (founder, 2026-08-25:
          "keep something should be shown right below the character").
          The mouth first, directly beneath the body, because keeping something
@@ -5860,7 +5882,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          reports what the loop did, and it says so in the mouth's own slot
          rather than in a row of its own — one place, one line. */
       const chin = Math.round(companion.y + companion.size * 0.62);
-      root!.style.setProperty("--jar-mouth-top", `${chin + 18}px`);
+      root!.style.setProperty("--jar-mouth-top", `${compactHome ? activityLayout.composerTop : chin + 18}px`);
       /* AND THE CHARACTER STATES ITS SIZE, rather than being guessed at.
          The same rule as the seam and the mouth's top: chrome states its
          place, nothing guesses at it. It is a constant now (CHAR_SIZE), and
@@ -12636,7 +12658,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           {pick === pr.id && !pDraft ? (
                             <div className="jar-ask jar-principle-actions">
                               {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:pr.id,sharePrinciple:true})}>{say('worldSharePrinciple')}</button>:null}
-                              {storageScope&&!offline?<ConversationStartButton key={`${storageScope.accountId}:${storageScope.profileId}:${pr.id}`} scope={storageScope} principleId={pr.id} locale={locale} onStarted={id=>viewNavigation.write({...EMPTY_VIEW,conversationId:id})}/>:null}
+                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new',principleId:pr.id})}>{say('worldConversationFromPrinciple')}</button>:null}
                               {pr.citedSignals.length > 0 ? (
                                 <>
                                   <button
@@ -12750,15 +12772,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 ) : null}
                 {ready && c ? (
                   <div
-                    className="jar-hq-inner"
+                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}`}
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
                     {/* R01 makes the personal reading explicit while keeping
                         the existing field, headline and companion layout. */}
-                    {here&&w.kind==='self'?<p className="jar-reading-heading">
+                    {here&&w.kind==='self'?<div className="jar-reading-heading" data-jar-chrome="1">
                       <span>{say(atNow?'worldReadingTitle':'worldReadingEarlier')}</span>
                       {atNow&&topOfMind&&topOfMind.createdMs>0?<time dateTime={new Date(topOfMind.createdMs).toISOString()}>{new Date(topOfMind.createdMs).toLocaleDateString(locale,{month:'short',day:'numeric'})}</time>:null}
-                    </p>:null}
+                      {atNow&&topOfMind?.id&&storageScope&&!offline?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale} compact/>:null}
+                    </div>:null}
                     {c.text ? (
                       /* A STABLE KEY, AND A CARRIED/NEW SPLIT INSIDE IT.
                          The whole h1 used to be keyed by its words, so every
@@ -12819,16 +12842,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     ) : null}
                     {here&&w.kind==='self'&&storageScope&&!offline?<div className="jar-reading-actions" data-jar-chrome="1">
                       {!atNow?<button type="button" onClick={()=>windTo(dial?.end??Date.now())}>{say('worldReadingToday')}</button>:<>
-                        <div className="jar-reading-next">
-                          {inspirations?.length?<button type="button" className="jar-review-entry" onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
-                          <button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'list'})}>{say('worldConversationTitle')}</button>
-                        </div>
-                        <div className="jar-reading-explain">
                         {c.text?<button type="button" aria-expanded={posterAsk} onClick={()=>setPosterAsk(value=>!value)}>{say('worldReadingWhy')}</button>:null}
-                        {topOfMind?.id?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale}/>:null}
-                        </div>
                       </>}
                     </div>:null}
+                    {here&&w.kind==='self'&&storageScope&&!offline&&atNow?<HomeActivities locale={locale} reviewLabel={reviewEntry.label} resuming={reviewEntry.resuming} hasInspirations={Boolean(inspirations?.length)}
+                      onReview={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})} onChat={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new'})}/>:null}
                     {here && w.kind === "group" && atNow ? <button
                       type="button"
                       className="jar-room-shape"
@@ -13463,6 +13481,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             className={'jar-mouth-rest jar-label' + (charSay ? ' jar-mouth-rest--said' : '')}
             style={mouthOpen ? { visibility: 'hidden' } : undefined}
             onClick={() => { setCharSay(''); openMouth(); }}>
+            {!charSay?<HomeActionIcon kind="capture"/>:null}
             {charSay || (draft.trim() || composerDraft.draft.media.length ? say('worldContinueDraft') : say('worldCaptureInspiration'))}
           </button>
           {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
@@ -14674,14 +14693,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </DialogSurface>
       ) : null}
 
-      {storageScope&&viewNavigation.view?.conversationId?<ConversationPanel key={`${storageScope.accountId}:${storageScope.profileId}:${viewNavigation.view.conversationId}`} scope={storageScope} id={viewNavigation.view.conversationId==='list'?null:viewNavigation.view.conversationId} locale={locale}
-        onPrincipleUpdated={row=>setPrinciples(current=>current.map(item=>item.id===row.id?row:item))}
-        onInspirationSaved={row=>{if(row.profileId!==storageScope.profileId)return;const detail=toInspirationDetail(row);detailsRef.current.set(row.id,detail);const revision=++sourceListMutationRef.current;
-          setInspirations(previous=>previous?.some(item=>item.id===row.id)?previous.map(item=>item.id===row.id?detail:item):[...(previous??[]),detail]);
-          void loadInspirations(storageScope.profileId).then(field=>{if(readingMountedRef.current&&sourceListMutationRef.current===revision){setInspirations(field.inspirations);setFieldBeyond(beyondOf(field));}}).catch(()=>undefined);
-          if(row.processing)sourceProcessing.track(row.id,row.processing);}}
-        onOpenSource={(kind,id)=>viewNavigation.write(kind==='principle'?{...EMPTY_VIEW,section:'sky',principleId:id}:{...EMPTY_VIEW,section:'field',inspirationId:id})}
-        onChoose={id=>viewNavigation.write({...EMPTY_VIEW,conversationId:id??'list'})} onClose={viewNavigation.closeConversation}/>:null}
       {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
         onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}
         onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}
@@ -14692,7 +14703,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'&&(inField||inSky)&&!viewNavigation.view?.reviewId?<button type="button" className="jar-review-shortcut" data-jar-chrome="1"
         onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
       {phase==='ready'&&(inField||inSky||!atNow||(charSay!==''&&!mouthOpen))?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
-        <span aria-hidden="true">+</span> {say('worldCaptureInspiration')}</button>:null}
+        <HomeActionIcon kind="capture"/> {say('worldCaptureInspiration')}</button>:null}
       {phase === 'ready' ? <button type="button" className="jar-find-shortcut" data-jar-chrome="1"
         onClick={() => setSeek('')} aria-label={say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>

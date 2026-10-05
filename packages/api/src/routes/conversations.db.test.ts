@@ -30,6 +30,24 @@ it('stores ordered words once, rejects changed replay and never requests an assi
   const history=await (await f.app.request('/conversations')).json() as any;expect(history.conversations).toHaveLength(1);expect(history.conversations[0].preview).toBe(message.content);
   expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
 });
+it('creates the first message atomically and joins concurrent exact first-send replays',async()=>{
+  const f=await fixture(),firstMessage={id:randomUUID(),content:'My first question.',requestReply:false};
+  const responses=await Promise.all([f.send('',{id:f.id,firstMessage}),f.send('',{id:f.id,firstMessage})]);
+  expect(responses.map(row=>row.status)).toEqual([200,200]);
+  expect(await t.sql`SELECT id FROM conversations`).toHaveLength(1);expect(await t.sql`SELECT id FROM conversation_messages`).toHaveLength(1);
+  expect((await responses[0].json() as any).conversation).toMatchObject({revision:1,messages:[{content:firstMessage.content}]});
+  expect((await f.send('',{id:f.id,firstMessage:{...firstMessage,content:'Changed'}})).status).toBe(409);
+  expect((await f.send('',{id:f.id,firstMessage:{...firstMessage,id:randomUUID()}})).status).toBe(409);
+  expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
+});
+it('rolls back an initial conversation when its message cannot be committed',async()=>{
+  const f=await fixture(),firstMessage={id:randomUUID(),content:'One question.'};
+  await f.send('',{id:f.id,firstMessage});
+  expect((await f.send('',{id:randomUUID(),firstMessage})).status).toBe(409);
+  expect((await f.send('',{id:randomUUID(),firstMessage:{id:randomUUID(),content:' '}})).status).toBe(400);
+  expect(await t.sql`SELECT id FROM conversations`).toHaveLength(1);
+  expect(await t.sql`SELECT id FROM conversation_messages`).toHaveLength(1);
+});
 it('includes the original capture date so old interests cannot silently look recent',async()=>{
   const f=await fixture();await f.send('',{id:f.id});await f.send(`/${f.id}/messages`,{id:randomUUID(),content:'marathon training',revision:0});
   await t.sql`INSERT INTO inspirations(profile_id,text,created_at) VALUES(${f.profileId},'I want to try marathon training.','2021-06-01T00:00:00Z')`;

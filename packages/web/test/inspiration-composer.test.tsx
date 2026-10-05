@@ -21,6 +21,17 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 const mount = () => act(async () => root.render(<InspirationComposer {...props} />));
+it('opens with a decorative spark without changing focus, the action name or save semantics',async()=>{
+  await mount();
+  const heading=host.querySelector('h2')!;
+  expect(heading.textContent).toBe('Capture inspiration');
+  expect(heading.querySelector('[data-home-action-icon="capture"]')).not.toBeNull();
+  expect(heading.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+  expect(heading.querySelector('svg')?.getAttribute('focusable')).toBe('false');
+  expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('Capture inspiration');
+  expect(document.activeElement).toBe(host.querySelector('textarea'));
+  expect(props.onSubmit).not.toHaveBeenCalled();
+});
 it('describes the selected audience visibly and accessibly without publishing on selection', async () => {
   await mount();
   const group=host.querySelector('[aria-label="Who can read this"]')!;

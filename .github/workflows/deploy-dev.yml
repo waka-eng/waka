@@ -145,6 +145,9 @@ jobs:
         # (goal/principles cutover, 2026-08-21) — hence this step.
         run: pnpm db:migrate
 
+      - name: Verify development memory schema
+        run: node scripts/verify-memory-schema.mjs
+
       - name: Deploy SST development stage
         run: pnpm sst deploy --stage "$SST_STAGE"
 
@@ -155,10 +158,10 @@ jobs:
           for output_key in apiFunctionName backgroundWorkerFunctionName; do
             function_name="$(jq -er --arg key "$output_key" '.[$key]' .sst/outputs.json)"
             configuration="$(aws lambda get-function-configuration --function-name "$function_name" \
-              --query '{replies:Environment.Variables.WAKA_CONVERSATION_REPLIES,chatModel:Environment.Variables.WAKA_MODEL_CHAT}' --output json)"
-            jq -e --arg enabled "$WAKA_CONVERSATION_REPLIES" \
-              '.replies == $enabled and .chatModel == "google/gemini-3.8-flash"' <<< "$configuration"
-            printf '%s chat configuration verified.\n' "$output_key"
+              --query '{replies:Environment.Variables.WAKA_CONVERSATION_REPLIES,chatModel:Environment.Variables.WAKA_MODEL_CHAT,database:Environment.Variables.DB_CONNECTION_URL}' --output json)"
+            jq -e --arg enabled "$WAKA_CONVERSATION_REPLIES" --arg database "$DB_CONNECTION_URL" \
+              '.replies == $enabled and .chatModel == "google/gemini-3.8-flash" and .database == $database' <<< "$configuration"
+            printf '%s chat configuration and migrated database target verified.\n' "$output_key"
           done
 
       - name: Connect Route53 dev domain

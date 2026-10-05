@@ -103,6 +103,33 @@ describe("locked entries are reproduced from the stored row", () => {
   });
 });
 
+describe('unresolved disputes do not publish as one-sided conclusions',()=>{
+  it('does not introduce a stronger personal claim through the optional belief field',()=>{
+    const input=[{type:'pattern' as const,body:'You try small experiments.',belief:'Small experiments always work for you.',citedSignalIds:['a']},
+      {type:'pattern' as const,body:'You try small experiments.',belief:'You prefer a small trial before committing.',citedSignalIds:['a']},
+      {type:'pattern' as const,body:'You try small experiments.',belief:'You try small experiments.',citedSignalIds:['a']}];
+    const entries=validateSynthesizedEntries(input,new Set(['a']),new Map(),new Map([['a','You prefer a small trial before committing.']])).entries;
+    expect(entries.map(row=>row.belief)).toEqual([undefined,'You prefer a small trial before committing.','You try small experiments.']);
+    expect(entries.map(row=>row.body)).toEqual(input.map(row=>row.body));
+  });
+  const contested=new Map([['a',['b']],['b',['a']]]);
+  it('requires a tension and both citations, and removes a separate settled belief',()=>{
+    const entries=validateSynthesizedEntries([
+      {type:'pattern',body:'A wins.',citedSignalIds:['a']},
+      {type:'tension',body:'Only A.',citedSignalIds:['a']},
+      {type:'tension',body:'A and B both pull.',belief:'A wins.',citedSignalIds:['a','b']},
+      {type:'tension',body:'A and B pull differently.',citedSignalIds:['a','b']},
+      {type:'pattern',body:'A separate supported interest.',citedSignalIds:['c']},
+    ],new Set(['a','b','c']),contested).entries;
+    expect(entries.map(row=>row.body)).toEqual(['A and B both pull.','A and B pull differently.','A separate supported interest.']);
+    expect(entries[0]!.belief).toBeUndefined();
+  });
+  it('does not let a dropped foreign partner make a one-sided tension valid',()=>{
+    expect(validateSynthesizedEntries([{type:'tension',body:'A vs foreign.',citedSignalIds:['a','foreign']}],
+      new Set(['a','b']),contested).entries).toEqual([]);
+  });
+});
+
 describe("citations are checked against what the profile holds", () => {
   const owned = new Set(["signal-a", "signal-b"]);
 
@@ -280,8 +307,7 @@ describe("cold start: the artifact appears before patterns have recurred", () =>
     expect(chosen.signals[0]).toBe("active-0");
   });
 
-  /** The whole point of the floor: an established profile is never diluted. */
-  it("uses durable signals alone once there are enough of them", () => {
+  it("uses durable signals alone when no qualified recent focus is supplied", () => {
     const chosen = chooseSelection(a(TOP_OF_MIND_MIN_SIGNALS), e(20));
     expect(chosen.provisional).toBe(false);
     expect(chosen.signals.every((id) => id.startsWith("active"))).toBe(true);
@@ -295,6 +321,15 @@ describe("cold start: the artifact appears before patterns have recurred", () =>
 
   it("stays empty when the profile has nothing", () => {
     expect(chooseSelection([], [])).toEqual({ signals: [], provisional: false });
+  });
+
+  it('reserves a bounded lead for qualified current focus without duplicating active rows',()=>{
+    const active=a(20),emerging=e(3);
+    const chosen=chooseSelection(active,emerging,[emerging[0]!,active[5]!,active[7]!,emerging[1]!]);
+    expect(chosen.signals.slice(0,3)).toEqual([emerging[0],active[5],active[7]]);
+    expect(chosen.signals).toHaveLength(TOP_OF_MIND_SIGNAL_LIMIT);
+    expect(new Set(chosen.signals).size).toBe(TOP_OF_MIND_SIGNAL_LIMIT);
+    expect(chosen.provisional).toBe(true);
   });
 });
 
@@ -420,14 +455,12 @@ describe("diversifyRanked — no two voices on the board saying one thing", () =
 
   it("holds a near-duplicate back so a distinct voice rises", () => {
     const out = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
-    expect(out.map((s) => s.id)).toEqual(["a", "c", "b"]);
+    expect(out.map((s) => s.id)).toEqual(["a", "c"]);
   });
 
-  it("the reserve returns whenever there is room — nothing is excluded outright", () => {
+  it("keeps the board shorter instead of refilling it with echoes", () => {
     const out = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
-    /* all three survive; only the ORDER moved, so a limit of three still
-       seats everyone and only a limit of two feels the reorder */
-    expect(out).toHaveLength(3);
+    expect(out).toHaveLength(2);
     expect(out.slice(0, 2).map((s) => s.id)).toEqual(["a", "c"]);
   });
 
@@ -437,7 +470,7 @@ describe("diversifyRanked — no two voices on the board saying one thing", () =
       vectors,
       SELECTION_DIVERSITY_MAX_COSINE,
     );
-    expect(out.map((s) => s.id)).toEqual(["a", "ghost", "b"]);
+    expect(out.map((s) => s.id)).toEqual(["a", "ghost"]);
   });
 
   it("is deterministic over identical input", () => {

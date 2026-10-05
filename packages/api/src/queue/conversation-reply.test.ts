@@ -23,6 +23,11 @@ it('accepts one grounded answer and at most one follow-up without requiring memo
   expect(parseConversationReply(answer,input)).toEqual(answer);
   expect(parseConversationReply({...answer,citations:[]},{...input,sources:[]}).citations).toEqual([]);
 });
+it('accepts a requested list of questions without an additional follow-up',()=>{
+  const reply={answer:'1. What caught your attention?\n2. What does it connect to?\n3. What might you try?',followUpQuestion:null,citations:[]};
+  expect(parseConversationReply(reply,{...input,sources:[]})).toEqual(reply);
+  expect(buildConversationReplyRequest(input).generationConfig.responseSchema.properties!.answer).not.toHaveProperty('pattern');
+});
 it.each([
   {answer:'A statement.',followUpQuestion:null,citations:[{sourceNumber:2,quote:'Leave room'}]},
   {answer:'A statement.',followUpQuestion:null,citations:[{sourceNumber:1,quote:'Invented quote'}]},

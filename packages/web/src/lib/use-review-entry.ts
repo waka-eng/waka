@@ -18,5 +18,5 @@ export function useReviewEntry(scope:ProfileStorageScope|null,refreshKey:string|
   },[owner,refreshKey]);
   const session=entry?.owner===owner?entry?.session:null;
   const selected=session?.items.filter(item=>item.choice==='keep').length??0;
-  return {label:session?t(locale,'worldReviewResume')+(selected?` · ${t(locale,'worldReviewSelectedCount').replace('{count}',String(selected))}`:''):t(locale,'worldReviewTitle')};
+  return {resuming:Boolean(session),label:session?t(locale,'worldReviewResume')+(selected?` · ${t(locale,'worldReviewSelectedCount').replace('{count}',String(selected))}`:''):t(locale,'worldReviewTitle')};
 }

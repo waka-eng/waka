@@ -202,7 +202,7 @@ export interface GeminiEmbeddingClient {
 export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
   readonly model: string;
 
-  constructor(model = GEMINI_EMBEDDING_MODEL) {
+  constructor(model = GEMINI_EMBEDDING_MODEL, private readonly deadlines?:{timeoutMs:number;exchangeTimeoutMs:number}) {
     this.model = model;
   }
 
@@ -220,7 +220,7 @@ export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
         taskType,
         outputDimensionality: GEMINI_EMBEDDING_DIMENSIONS,
       }),
-    });
+    },this.deadlines?.timeoutMs,this.deadlines?.exchangeTimeoutMs);
 
     if (!response.ok) {
       throw new Error(
