@@ -24,6 +24,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check",
+    "backfill:inspiration-search": "tsx tools/ops/backfill-inspiration-search.ts",
     "report:group-input-impact": "tsx tools/ops/report-group-input-impact.ts",
     "review:signal-support": "tsx tools/ops/review-signal-support.ts",
     "apply:signal-support": "tsx tools/ops/apply-signal-support.ts",

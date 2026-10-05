@@ -1,7 +1,7 @@
 # WAKA performance implementation plan
 
-Status: implementation in progress, updated 2026-10-05. Milestones 1 and 2
-passed locally. Milestones 3 to 5 have not started. Work is tracked in
+Status: implementation in progress, updated 2026-10-05. Milestones 1 to 3
+passed locally. Milestones 4 and 5 have not started. Work is tracked in
 [the performance goal](../goals/performance-improvements.md).
 
 Make WAKA feel ready sooner and stop unnecessary work after it opens. Start
@@ -21,11 +21,11 @@ checkpoint from performance changes.
 | --- | --- | --- | --- |
 | 1 Reduce Home request volume | Completed | Local gate passed; committed, not pushed | Recheck its budgets after later changes. |
 | 2 Make Home and Review ready sooner | Completed | Local gate passed; delivery pending | Recheck its budgets after later changes. |
-| 3 Make search scale | P1 | Not started | Optimize matching and exact counts, then prove equivalent bilingual results at 10,000 inspirations. |
+| 3 Make search scale | Completed | Local gate passed; migration/backfill delivery pending | Apply migration before API delivery to an independently verified dev target; recheck budgets later. |
 | 4 Speed up personal memory readers | P1 | Not started | Optimize Chat retrieval and artifact reads without weakening current evidence checks. |
 | 5 Validate delivery and optimize startup if needed | P2 | Not started | Run final regression and breakpoint checks, add cheap CI guards and prepare delivery evidence. |
 
-Three milestones remain. Startup bundle and font changes are conditional,
+Two milestones remain. Startup bundle and font changes are conditional,
 not a prerequisite for the higher-impact database work.
 
 Milestone 1 reduced the first sixty seconds of Home API traffic from 1,555 to
@@ -47,23 +47,31 @@ archive walk. The [milestone 2 receipt](../craft/evidence/performance/milestone-
 retains the local measurements and limitations; these are not deployed or
 physical-device guarantees.
 
+Milestone 3 passes across twenty query classes at 10,000 originals: interleaved
+local HTTP p95 is 23.18–46.03 ms versus 416.9–530.21 ms. Complete cursor walks
+preserve membership/order/totals. A nullable, policy-tagged raw-text projection
+is needed for dense multiword queries; it uses current-text fallback until
+backfilled. Migration 0067 and its explicit bounded backfill are local-tested,
+not applied to dev. The [milestone 3 receipt](../craft/evidence/performance/milestone-3.json)
+records all values and the rejected query-only experiment.
+
 ### Immediate next implementation batch
 
-Implement milestone 3 before changing Chat retrieval:
+Implement milestone 4 before final delivery work:
 
-1. Capture fresh query plans and thirty-sample timings at 10,000 inspirations
-   for common, rare and no-result English/Korean queries. Include child-only
-   matches, transcript corrections, multiword queries and literal wildcards.
-2. Move cheap matching ahead of expensive matching where equivalent, and
-   avoid performing the full match again for an exact total. Use explicitly
-   scoped child candidates and the existing full-text index where it helps.
-3. Compare complete IDs, ordering, cursors and totals against the baseline,
-   including another account's volume and empty result pages.
-4. Add an index or versioned projection only if measurements justify it.
-   Preserve current material, correction precedence, invalidation and safe
-   resumable backfill; do not silently omit originals with missing coverage.
-5. Meet the bilingual search p95 budget, preserve failed experiments, run
-   ownership/material tests and retain a separate milestone commit and receipt.
+1. Capture current Chat lexical-context and artifact-reader baselines with
+   local pool five and Lambda-like pool one. Count auth and transaction work
+   consistently; separate SQL preparation from provider/queue time.
+2. Match and score owned source/child candidates once, preserving the same
+   ranking, identities, revisions, hashes, excerpts and abstention behavior.
+   Do not substitute search's whole-word semantics for Chat's current recall.
+3. Batch independent artifact/support reads without dropping tenant, current
+   material, wording-lock, publication or privacy checks.
+4. Verify the established bilingual retrieval corpus and source edit/removal
+   races. Run a paid synthetic check only if a real ranking/context change
+   requires it, within the remaining approved cumulative budget.
+5. Meet Chat median/p95 and artifact SQL-count targets, record content-free
+   stage timing and retain a separate milestone commit and receipt.
 
 ### Bug fixes required throughout
 
@@ -247,27 +255,30 @@ Primary files: `packages/web/src/lib/data.ts`, `use-view-navigation.ts`,
 
 ## Milestone 3 Make search scale
 
-Status: not started. Begin only after milestone 2 passes.
+Status: passed locally. Migration 0067 and bounded operator backfill are needed
+before delivery; dev/production have not been mutated. Query-only matching
+missed dense English multiword at 212.787 ms, so a stored projection was needed
+to meet the original complete query-set gate. No additional index was added.
 
 ### Implementation tasks
 
-- [ ] Reproduce result and count plans with matching, rare and no-result
+- [x] Reproduce result and count plans with matching, rare and no-result
   queries. Include English/Korean, multiword input, literal `%`, `_` and `!`,
   reflection-only matches, link/image text and corrected audio transcripts.
   Include several accounts so another account's data volume is represented.
-- [ ] Apply and test the cheaper-predicate-first optimization without changing
+- [x] Apply and test the cheaper-predicate-first optimization without changing
   membership, result order, cursor handling or exact totals. Compare full
   returned IDs/totals, not just elapsed time. The one English experiment is
   evidence for trying it, not proof that all queries get nine times faster.
-- [ ] Avoid evaluating expensive matching twice just to return an exact count.
+- [x] Avoid evaluating expensive matching twice just to return an exact count.
   Measure a shared matched set or equivalent query arrangement; handle empty
   pages correctly. Do not silently remove totals or mislabel partial results.
-- [ ] Explicitly constrain child matching to the requested profile before
+- [x] Explicitly constrain child matching to the requested profile before
   scanning reflections/media. The serving permission checks and composite
   ownership boundaries remain mandatory.
-- [ ] Inspect use of the existing full-text GIN index before adding another
+- [x] Inspect use of the existing full-text GIN index before adding another
   index. Do not assume a UNION rewrite is faster; it was not in the tested case.
-- [ ] If rare/no-result or Korean cases still miss the budget, propose a
+- [x] If rare/no-result or Korean cases still miss the budget, propose a
   versioned, tenant-scoped search projection or justified indexes. Document the
   schema concept first. Preserve audio-correction precedence and current
   enrichment rules; synchronize invalidation on every source/child change and
@@ -397,8 +408,9 @@ failed, what remains and whether anything was pushed or deployed. Record the
 gate verdict before moving on; stop and reassess a failed or marginal gate.
 Do not silently expand the approved scope.
 
-Recommended next step: implement and accept milestone 3. Then complete memory
-readers and final regression checks. Milestones 1 and 2 needed no migration;
-search projection/index work remains conditional.
+Recommended next step: implement and accept milestone 4, then final regression
+and delivery checks. Milestones 1 and 2 needed no migration; milestone 3 requires
+the additive migration 0067 and verified, explicit bounded backfill before
+claiming deployed search performance.
 Production deployment, native/store packaging, a visual redesign and changes
 to generation thresholds or model prompts are outside this performance plan.

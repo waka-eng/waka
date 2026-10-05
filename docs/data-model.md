@@ -76,6 +76,35 @@ members' source identities. Group profiles omit it. It lets the field preserve
 its relationships without fetching every signal's full evidence; the visible
 reading's full roots are fetched and validated separately.
 
+### Archive search
+
+Archive search matches the requested profile's original text, non-skipped
+saved answers and current effective attachment material. A corrected recording
+replaces its machine transcript. Storage object URLs are not searchable words;
+original link URLs remain searchable. Matching never broadens profile access.
+
+`inspirations.text_search_vector` is an internal projection of that row's raw
+text, with `text_search_vector_policy` identifying the parser policy. Policy 1
+is PostgreSQL `to_tsvector('simple', text)`. It is not a memory layer, a second
+source identifier, a material revision or evidence. No vector is exposed in a
+summary/detail DTO, shared to a group or fed to generation as source wording.
+
+A database trigger synchronizes the projection on insert and text writes in
+the same transaction. Old rows may have no projection; an unsupported policy
+also refuses reuse. Both cases fall back to matching current raw text rather
+than omitting an original. Reflection/media candidates are read from current
+owned child rows, not cached into this raw-text projection, so their edits,
+removal, pending enrichment and transcript corrections take effect directly.
+
+The additive migration leaves historical vectors empty instead of rewriting
+the archive under a long migration lock. An explicit operator command fills
+them in bounded, resumable batches against a verified local/dev target.
+Backfill changes only search metadata: it must not advance material/generation
+revisions, queue model work, rewrite human words or change generation policy.
+There is no repair work on reads. Source removal removes its projection with
+the original row. Keyset cursors retain PostgreSQL timestamp precision so
+captures sharing a microsecond timestamp do not disappear between pages.
+
 ### Credentials bind to a profile
 
 Every session acts *as* exactly one profile:

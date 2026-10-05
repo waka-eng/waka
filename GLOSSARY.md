@@ -54,6 +54,7 @@ These are approved names; rows marked planned do not claim shipped storage or UI
 | One private review of an inspiration | `review_session` | Review | revisit one thing you kept | one-at-a-time reflection and removal implemented locally; historical multi-source sessions retained |
 | One source and progress marker in a review | `review_item` | Review item | your place in the review, not a verdict | implemented; deployment pending |
 | Validated private archive summary read | `inspiration_snapshot` | No new public name | a read optimization, not a memory artifact | in implementation; material revisions remain canonical |
+| Internal raw text search projection | `inspirations.text_search_vector`, `text_search_vector_policy` | No new public name | faster matching of current source text, not another memory or revision | implemented locally; migration/backfill delivery pending; historical rows retain fallback matching |
 | One authored answer in a review | `review_answer` | Your thought | one answer, with the inspirations it refers to | implemented; deployment pending |
 | A signal supported by a review answer | `signal_review_evidence` | From your review | your words from a review that support this | in implementation |
 | A conversation using the profile's memory | `conversation` | Talk with WAKA | think through a question with your own experiences | implemented; replies opt-in, off by default |
