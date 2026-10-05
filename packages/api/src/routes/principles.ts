@@ -29,7 +29,7 @@
  */
 
 import { recordConsultation } from "../lib/consultations.js";
-import { and, asc, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { personalPrincipleReadable, personalPrincipleSupportCurrent, personalSignalReadable } from '../lib/personal-output.js';
 import { citationBodyCurrent, citationStatementCurrent, evidenceSupportCurrent } from '../lib/signal-support-state.js';
 import { Hono, type MiddlewareHandler } from "hono";
@@ -45,7 +45,6 @@ import {
   principleStatements,
   principleTypeValues,
   signals,
-  signalEvidence,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { feedbackWordingCurrent } from '../lib/feedback-revisions.js';
@@ -126,117 +125,61 @@ export interface PrincipleView {
 }
 
 export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise<PrincipleView[]> {
-  const [profile] = await db.select({ groupId: profiles.groupId }).from(profiles)
-    .where(eq(profiles.id, profileId)).limit(1);
-  const rows = await db
-    .select({ ...getTableColumns(principles), supportCurrent: profile?.groupId
-      ? groupPrincipleReadable(profile.groupId, PRINCIPLE_MIN_SIGNALS) : personalPrincipleSupportCurrent(profileId, PRINCIPLE_MIN_SIGNALS) })
-    .from(principles)
-    .where(and(eq(principles.profileId, profileId),
-      ...(profile?.groupId ? [groupPrincipleReadable(profile.groupId, PRINCIPLE_MIN_SIGNALS)]
-        : [personalPrincipleReadable(profileId, PRINCIPLE_MIN_SIGNALS)])))
-    .orderBy(asc(principles.rank));
-  if (rows.length === 0) return [];
-
-  const citationRows = await db
-    .select({
-      principleId: principleSignals.principleId,
-      signalId: principleSignals.signalId,
-      statement: signals.statement,
-      current: sql<boolean>`${citationStatementCurrent('principle_signals')} AND ${profile?.groupId
-        ? groupSignalReadable(profile.groupId) : personalSignalReadable(profileId)}
-        AND ${citationBodyCurrent('principle_signals', 'principles', 'principle_statement_revision', 'statement_revision')}`,
-    })
-    .from(principleSignals)
-    .innerJoin(signals, eq(signals.id, principleSignals.signalId))
-    .innerJoin(principles, eq(principles.id, principleSignals.principleId))
-    .where(
-      inArray(
-        principleSignals.principleId,
-        rows.map((row) => row.id),
-      ),
-    );
-  const citationsByPrinciple = new Map<string, Array<{ id: string; statement: string }>>();
-  const changedSupport = new Set<string>();
-  for (const row of citationRows) {
-    if (!row.current) { changedSupport.add(row.principleId); continue; }
-    const cited = { id: row.signalId, statement: row.statement };
-    const bucket = citationsByPrinciple.get(row.principleId);
-    if (bucket) bucket.push(cited);
-    else citationsByPrinciple.set(row.principleId, [cited]);
-  }
-
-  const verdicts = await db.select({ id: feedback.id, targetId: feedback.targetId, value: feedback.value })
-    .from(feedback).where(and(eq(feedback.profileId, profileId), eq(feedback.targetType, "principle"),
-      feedbackWordingCurrent(),
-      inArray(feedback.targetId, rows.map((row) => row.id))))
-    .orderBy(desc(feedback.createdAt), desc(feedback.id));
-  const latest = new Map<string, typeof verdicts[number]>();
-  for (const verdict of verdicts) if (!latest.has(verdict.targetId)) latest.set(verdict.targetId, verdict);
-
-  // Personal source excerpts only. Group profiles own no inspirations, and
-  // the owner equality below prevents members' captures leaking through here.
-  const examples = await db.execute(sql<{ signalId: string; text: string; createdAt: string }>`
-    SELECT source.signal_id AS "signalId", source.text, source.created_at AS "createdAt"
-    FROM (
-      SELECT ${signalEvidence.signalId} AS signal_id, left(${inspirations.text}, 240) AS text,
-        ${inspirations.createdAt} AS created_at,
-        row_number() OVER (PARTITION BY ${signalEvidence.signalId} ORDER BY ${inspirations.createdAt} DESC, ${inspirations.id}) AS position
-      FROM ${signalEvidence}
-      JOIN ${signals} ON ${signals.id} = ${signalEvidence.signalId}
-      JOIN ${inspirations} ON ${inspirations.id} = ${signalEvidence.inspirationId}
-      WHERE ${signalEvidence.profileId} = ${profileId}::uuid
-        AND ${inspirations.profileId} = ${profileId}::uuid
-        AND ${evidenceSupportCurrent()}
-        AND ${signalEvidence.signalId} IN (
-          SELECT ${principleSignals.signalId} FROM ${principleSignals}
-          WHERE ${principleSignals.profileId} = ${profileId}::uuid
-        )
-    ) AS source WHERE source.position <= 2
-  `);
-  const examplesBySignal = new Map<string, Array<{ text: string; createdAt: string }>>();
-  for (const example of examples as unknown as Array<{ signalId: string; text: string; createdAt: string }>) {
-    const bucket = examplesBySignal.get(example.signalId) ?? [];
-    bucket.push({ text: example.text, createdAt: new Date(example.createdAt).toISOString() });
-    examplesBySignal.set(example.signalId, bucket);
-  }
-
-  const reviewRows=await db.execute<{signalId:string;answerId:string;sessionId:string;preview:string;createdAt:string}>(sql`
-    SELECT source.signal_id AS "signalId",source.answer_id AS "answerId",source.session_id AS "sessionId",source.preview,source.created_at AS "createdAt"
-    FROM (
-      SELECT e.signal_id,a.id AS answer_id,a.session_id,
-        CASE WHEN length(a.answer)>240 THEN left(a.answer,237)||'…' ELSE a.answer END AS preview,a.created_at,
-        row_number() OVER(PARTITION BY e.signal_id ORDER BY a.created_at DESC,a.id) AS position
-      FROM signal_review_evidence e JOIN review_answers a ON a.profile_id=e.profile_id AND a.id=e.answer_id
-      WHERE e.profile_id=${profileId}::uuid AND review_evidence_current(e.profile_id,e.signal_id,e.answer_id)
-        AND EXISTS(SELECT 1 FROM principle_signals p WHERE p.profile_id=e.profile_id AND p.signal_id=e.signal_id)
-    ) source WHERE source.position<=2 ORDER BY source.signal_id,source.position`);
-  const reviewsBySignal=new Map<string,NonNullable<PrincipleView['citedSignals'][number]['reviewExamples']>>();
-  for(const row of reviewRows){
-    const bucket=reviewsBySignal.get(row.signalId)??[];
-    bucket.push({answerId:row.answerId,sessionId:row.sessionId,preview:row.preview,createdAt:new Date(row.createdAt).toISOString()});
-    reviewsBySignal.set(row.signalId,bucket);
-  }
-
-  return rows.map((row) => ({
-    id: row.id,
-    statement: row.statement,
-    statementRevision: row.statementRevision.toString(),
-    type: row.type,
-    state: row.state,
-    origin: row.origin,
-    rank: row.rank,
-    locked: row.lockedAt !== null,
-    unsupported: row.unsupportedAt != null,
-    supportChanged: changedSupport.has(row.id) || (!row.supportCurrent && row.heldSince !== null),
-    heldSince: row.heldSince?.toISOString() ?? null,
-    conflictsWithId: row.conflictsWithId,
-    citedSignals: (changedSupport.has(row.id) ? [] : citationsByPrinciple.get(row.id) ?? []).map((signal) => ({
-      ...signal, examples: examplesBySignal.get(signal.id) ?? [],reviewExamples:reviewsBySignal.get(signal.id)??[],
-    })),
-    createdAt: row.createdAt.toISOString(),
-    disputeId: latest.get(row.id)?.value === "not_true" ? latest.get(row.id)!.id : null,
-  }));
+  // One statement owns wording, support, verdict and examples. Besides saving
+  // round trips, this cannot stamp old wording with newer citations.
+  const groupId=sql`${profiles.groupId}`;
+  const support=sql<boolean>`CASE WHEN ${profiles.groupId} IS NULL
+    THEN ${personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)}
+    ELSE ${groupPrincipleReadable(groupId,PRINCIPLE_MIN_SIGNALS)} END`;
+  const readable=sql<boolean>`CASE WHEN ${profiles.groupId} IS NULL
+    THEN ${personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)}
+    ELSE ${groupPrincipleReadable(groupId,PRINCIPLE_MIN_SIGNALS)} END`;
+  type Citation={id:string;statement:string;current:boolean|null;examples:Array<{text:string;createdAt:string}>;
+    reviewExamples:Array<{answerId:string;sessionId:string;preview:string;createdAt:string}>};
+  const rows=await db.select({...getTableColumns(principles),supportCurrent:support,
+    disputeId:sql<string|null>`(SELECT CASE WHEN ${feedback.value}='not_true' THEN ${feedback.id} END
+      FROM ${feedback} WHERE ${feedback.profileId}=${profileId}::uuid AND ${feedback.targetType}='principle'
+        AND ${feedback.targetId}=${principles.id} AND ${feedbackWordingCurrent()}
+      ORDER BY ${feedback.createdAt} DESC,${feedback.id} DESC LIMIT 1)`,
+    citations:sql<Citation[]>`COALESCE((SELECT jsonb_agg(c) FROM (
+      SELECT ${signals.id} AS id,${signals.statement} AS statement,
+        (${citationStatementCurrent('principle_signals')} AND
+          CASE WHEN ${profiles.groupId} IS NULL THEN ${personalSignalReadable(profileId)}
+            ELSE ${groupSignalReadable(groupId)} END
+          AND ${citationBodyCurrent('principle_signals','principles','principle_statement_revision','statement_revision')}) AS current,
+        COALESCE((SELECT jsonb_agg(x) FROM (
+          SELECT left(i.text,240) AS text,i.created_at AS "createdAt"
+          FROM signal_evidence e JOIN inspirations i ON i.id=e.inspiration_id AND i.profile_id=e.owner_profile_id
+          WHERE e.profile_id=${profileId}::uuid AND i.profile_id=${profileId}::uuid
+            AND e.signal_id=${signals.id} AND ${evidenceSupportCurrent('e')}
+          ORDER BY i.created_at DESC,i.id LIMIT 2
+        ) x),'[]'::jsonb) AS examples,
+        COALESCE((SELECT jsonb_agg(x) FROM (
+          SELECT a.id AS "answerId",a.session_id AS "sessionId",
+            CASE WHEN length(a.answer)>240 THEN left(a.answer,237)||'…' ELSE a.answer END AS preview,a.created_at AS "createdAt"
+          FROM signal_review_evidence e JOIN review_answers a ON a.profile_id=e.profile_id AND a.id=e.answer_id
+          WHERE e.profile_id=${profileId}::uuid AND e.signal_id=${signals.id}
+            AND review_evidence_current(e.profile_id,e.signal_id,e.answer_id)
+          ORDER BY a.created_at DESC,a.id LIMIT 2
+        ) x),'[]'::jsonb) AS "reviewExamples"
+      FROM ${principleSignals} JOIN ${signals} ON ${signals.id}=${principleSignals.signalId}
+      WHERE ${principleSignals.principleId}=${principles.id}
+    ) c),'[]'::jsonb)`,
+  }).from(principles).innerJoin(profiles,eq(profiles.id,principles.profileId))
+    .where(and(eq(principles.profileId,profileId),readable)).orderBy(asc(principles.rank));
+  return rows.map(row=>{
+    const changed=row.citations.some(c=>c.current!==true);
+    return {
+      id:row.id,statement:row.statement,statementRevision:row.statementRevision.toString(),
+      type:row.type,state:row.state,origin:row.origin,rank:row.rank,locked:row.lockedAt!==null,
+      unsupported:row.unsupportedAt!=null,supportChanged:changed||(!row.supportCurrent&&row.heldSince!==null),
+      heldSince:row.heldSince?.toISOString()??null,conflictsWithId:row.conflictsWithId,
+      citedSignals:(changed?[]:row.citations).map(c=>({id:c.id,statement:c.statement,
+        examples:c.examples.map(x=>({...x,createdAt:new Date(x.createdAt).toISOString()})),
+        reviewExamples:c.reviewExamples.map(x=>({...x,createdAt:new Date(x.createdAt).toISOString()}))})),
+      createdAt:row.createdAt.toISOString(),disputeId:row.disputeId,
+    };
+  });
 }
 
 /** Undo exactly the selected user verdict, preserving model-detected conflicts. */

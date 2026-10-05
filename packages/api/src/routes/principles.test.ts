@@ -190,7 +190,6 @@ describe("declaring", () => {
     mockState.db = makeDb([
       [], // rank query inside transaction
       [], // statement-chain writer: current-row lookup (none — chained from birth)
-      [{ groupId: null }], // view scope: this is a personal profile
       [
         {
           id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
@@ -204,9 +203,9 @@ describe("declaring", () => {
           heldSince: null,
           conflictsWithId: null,
           createdAt: new Date("2026-08-18T00:00:00Z"),
+          supportCurrent:false,citations:[],disputeId:null,
         },
-      ], // reload views: principles
-      [], // reload views: citations — pruned by empty guard? rows exist so needed
+      ], // reload views: one snapshot includes current citations and verdict
     ]);
     const res = await createApp().request("/api/principles", {
       method: "POST",

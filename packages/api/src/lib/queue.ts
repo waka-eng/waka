@@ -151,6 +151,7 @@ import {
   signalEvidence,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import {recordPerformanceStage} from './performance-stages.js';
 import { z } from 'zod';
 import { BackgroundJobHeldError } from './background-job-hold.js';
 import { loadPendingSignalSupportSources } from './signal-support-state.js';
@@ -1006,6 +1007,8 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
 }
 
 export async function processBackgroundJob(job: BackgroundJob): Promise<BackgroundJobResult | void> {
+  const claimed=coerceNullableDate(job.lockedAt)?.getTime();
+  if(claimed!==undefined)recordPerformanceStage('queue_wait',job.type,claimed-Math.max(coerceDate(job.runAfter).getTime(),coerceDate(job.createdAt).getTime()));
   const onReadingPublished: NonNullable<TopOfMindRefreshDependencies['onPublished']> = async (tx, publication) => {
     await recordInspirationReadingResult(tx, { ...publication, jobId: job.id, requestVersion: job.requestVersion.toString() });
     if(job.type==='refresh_top_of_mind')await (await import('./review-processing.js')).recordReviewReadingResult(tx,{...publication,jobId:job.id,requestVersion:job.requestVersion.toString()});

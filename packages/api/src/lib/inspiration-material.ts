@@ -6,6 +6,7 @@ import { quoteForEvidence } from "./salience.js";
 import type { RelatedInspirationContext } from "./model-provider.js";
 import { readInspirationRevision } from "./inspiration-processing.js";
 import { effectiveAttachmentKind, effectiveAttachmentStatus, effectiveAttachmentText } from './attachment-material.js';
+import {measurePerformanceStage} from './performance-stages.js';
 
 type Db = Pick<ReturnType<typeof getDb>, "select">;
 export interface InspirationMaterialIdentity {
@@ -27,6 +28,7 @@ export function relatedMaterialIdentity(source: RelatedInspirationContext, scope
 
 /** Exact source material, ordered consistently. Lock mode is for the final commit check only. */
 export async function loadInspirationMaterial(db: Db, profileId: string, inspirationId: string, scope: InspirationEmbeddingScope, lock = false) {
+  return measurePerformanceStage('material_read','inspiration',async()=>{
   const revision = await readInspirationRevision(db, profileId, inspirationId, scope);
   const parentQuery = db.select().from(inspirations)
     .where(and(eq(inspirations.profileId, profileId), eq(inspirations.id, inspirationId))).limit(1);
@@ -55,6 +57,7 @@ export async function loadInspirationMaterial(db: Db, profileId: string, inspira
   if (await readInspirationRevision(db, profileId, inspirationId, scope) !== revision) throw new Error("Source material changed while loading");
   return { inspiration, reflectionRows, attachmentRows,
     identity: { ...identity(scope, "inspiration-material-v1", sources), revision: revision.toString() } };
+  });
 }
 export type InspirationMaterial = NonNullable<Awaited<ReturnType<typeof loadInspirationMaterial>>>;
 
@@ -74,6 +77,7 @@ export function resolveMaterialQuote(quote: string | null | undefined, material:
 }
 
 export async function assertMaterialCurrent(db: Db, snapshot: InspirationMaterial, related: RelatedInspirationContext[]) {
+  return measurePerformanceStage('publication_validation','inspiration',async()=>{
   const ids = [...new Set([snapshot.inspiration.id, ...related.map((row) => row.id)])].sort();
   // Consistent parent lock order also prevents new child FK links until commit.
   for (const id of ids) await db.select({ id: inspirations.id }).from(inspirations)
@@ -90,4 +94,5 @@ export async function assertMaterialCurrent(db: Db, snapshot: InspirationMateria
       throw new Error("Related material changed; retry current inputs");
     }
   }
+  });
 }

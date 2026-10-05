@@ -19,23 +19,18 @@
  */
 
 import { recordConsultation } from "../lib/consultations.js";
-import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import {
-  feedback,
-  signals,
   topOfMindEntries,
-  topOfMindEntrySignals,
   topOfMinds,
   type TopOfMindEntryType,
   type TopOfMindRevisionReason,
   type TopOfMindStatus,
-  signalContradictions,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
-import { feedbackWordingCurrent } from '../lib/feedback-revisions.js';
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh } from "../lib/queue.js";
 import { loadTopOfMindRefreshStatus } from "../lib/top-of-mind-refresh-status.js";
@@ -169,85 +164,11 @@ async function loadEntries(
   const selected = includeDismissed
     ? entryRows
     : entryRows.filter((row) => row.dismissedAt === null);
-  const projected = await projectPersonalEntries(db, profileId, selected, includeWithheld);
+  const projected = await projectPersonalEntries(db, profileId, selected, includeWithheld,true);
   const visible = projected.entries;
   if (visible.length === 0) return { entries: [], supportChanged: projected.supportChanged };
 
-  const citationRows = await db
-    .select({
-      entryId: topOfMindEntrySignals.entryId,
-      signalId: topOfMindEntrySignals.signalId,
-      statement: signals.statement,
-      statementRevision: signals.statementRevision,
-      // The star half of the ratified standing rides the join it needs no
-      // extra query for: the owner's locked words are their answer.
-      lockedAt: signals.lockedAt,
-    })
-    .from(topOfMindEntrySignals)
-    .innerJoin(signals, eq(signals.id, topOfMindEntrySignals.signalId))
-    .where(
-      inArray(
-        topOfMindEntrySignals.entryId,
-        visible.map((row) => row.id),
-      ),
-    );
-
-  // The verdict half: which of these grounds the owner has answered. Read
-  // from the feedback rows at serve time — computed, never stored — so a
-  // verdict given a second ago already moves the light on this serve. Any
-  // verdict counts, not_true included: ratified means "we have spoken about
-  // this", not "it is true".
-  const citedIds = [
-    ...new Set(
-      citationRows
-        .map((row) => row.signalId)
-        .filter((id): id is string => id !== null),
-    ),
-  ];
-  const answeredIds = new Set<string>();
-  if (citedIds.length > 0) {
-    const verdictRows = await db
-      .selectDistinct({ targetId: feedback.targetId })
-      .from(feedback)
-      .where(
-        and(
-          eq(feedback.profileId, profileId),
-          eq(feedback.targetType, "signal"),
-          feedbackWordingCurrent(),
-          inArray(feedback.targetId, citedIds),
-        ),
-      );
-    for (const row of verdictRows) answeredIds.add(row.targetId);
-  }
-
-  /* CONTESTED, CARRIED TO THE LIGHT. A signal standing in an open pair the
-     owner has not arbitrated must not render like a settled one — the world
-     is where the owner learns there is anything to arbitrate, and the
-     verdict gesture on this very row is what resolves the pair. Open pairs
-     only; a resolved row is the record of an arbitration, not a state. */
-  const contestedIds = new Set<string>();
-  if (citedIds.length > 0) {
-    const pairRows = await db
-      .select({
-        aSignalId: signalContradictions.aSignalId,
-        bSignalId: signalContradictions.bSignalId,
-      })
-      .from(signalContradictions)
-      .where(
-        and(
-          eq(signalContradictions.profileId, profileId),
-          isNull(signalContradictions.resolvedAt),
-          or(
-            inArray(signalContradictions.aSignalId, citedIds),
-            inArray(signalContradictions.bSignalId, citedIds),
-          ),
-        ),
-      );
-    for (const pair of pairRows) {
-      contestedIds.add(pair.aSignalId);
-      contestedIds.add(pair.bSignalId);
-    }
-  }
+  const citationRows=projected.citations;
 
   const citationsByEntry = new Map<
     string,
@@ -256,13 +177,13 @@ async function loadEntries(
   for (const row of citationRows) {
     // The inner join already excludes citations whose signal was deleted;
     // this narrows the type to match.
-    if (row.signalId === null) continue;
+    if (row.signalId === null||row.statement===null||row.statementRevision===null) continue;
     if (!projected.citationsByEntry.get(row.entryId)?.includes(row.signalId)) continue;
     const cited = {
       id: row.signalId,
       statement: row.statement,
       statementRevision: row.statementRevision.toString(),
-      answered: row.lockedAt !== null || answeredIds.has(row.signalId),
+      answered: row.lockedAt !== null || row.answered===true,
       /* `answered` CONFLATES TWO DIFFERENT THINGS, deliberately — a verdict and
          a rewrite both mean the person has dealt with this sentence, and the
          poster only asks about the ones they have not. But the WORLD needs to
@@ -272,7 +193,7 @@ async function loadEntries(
          letting people walk through in one direction. The value is already in
          hand a line above; nothing extra is read for it. */
       locked: row.lockedAt !== null,
-      contested: contestedIds.has(row.signalId),
+      contested: row.contested===true,
     };
     const bucket = citationsByEntry.get(row.entryId);
     if (bucket) bucket.push(cited);

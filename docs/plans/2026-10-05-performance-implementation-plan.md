@@ -1,7 +1,7 @@
 # WAKA performance implementation plan
 
-Status: implementation in progress, updated 2026-10-05. Milestones 1 to 3
-passed locally. Milestones 4 and 5 have not started. Work is tracked in
+Status: implementation in progress, updated 2026-10-05. Milestones 1 to 4
+passed locally. Milestone 5 is next. Work is tracked in
 [the performance goal](../goals/performance-improvements.md).
 
 Make WAKA feel ready sooner and stop unnecessary work after it opens. Start
@@ -22,10 +22,10 @@ checkpoint from performance changes.
 | 1 Reduce Home request volume | Completed | Local gate passed; committed, not pushed | Recheck its budgets after later changes. |
 | 2 Make Home and Review ready sooner | Completed | Local gate passed; delivery pending | Recheck its budgets after later changes. |
 | 3 Make search scale | Completed | Local gate passed; migration/backfill delivery pending | Apply migration before API delivery to an independently verified dev target; recheck budgets later. |
-| 4 Speed up personal memory readers | P1 | Not started | Optimize Chat retrieval and artifact reads without weakening current evidence checks. |
+| 4 Speed up personal memory readers | Completed | Local gate passed with pool five and one | Recheck full regression and deployed behavior during authorized delivery. |
 | 5 Validate delivery and optimize startup if needed | P2 | Not started | Run final regression and breakpoint checks, add cheap CI guards and prepare delivery evidence. |
 
-Two milestones remain. Startup bundle and font changes are conditional,
+One milestone remains. Startup bundle and font changes are conditional,
 not a prerequisite for the higher-impact database work.
 
 Milestone 1 reduced the first sixty seconds of Home API traffic from 1,555 to
@@ -55,23 +55,30 @@ backfilled. Migration 0067 and its explicit bounded backfill are local-tested,
 not applied to dev. The [milestone 3 receipt](../craft/evidence/performance/milestone-3.json)
 records all values and the rejected query-only experiment.
 
+Milestone 4 passes with interleaved Chat context median 54.76 ms/p95 75.43 ms
+at pool five and 51.59/68.3 ms at pool one. Artifact reads use ten/four SQL
+statements versus fourteen/nine. All forty cached retrieval queries retain the
+existing quality gate with no new provider spending. Principles trades slightly
+more local CPU for five fewer round trips; no cloud speedup is claimed. The
+[milestone 4 receipt](../craft/evidence/performance/milestone-4.json) records
+these results, rejected approaches and content-free timing instrumentation.
+
 ### Immediate next implementation batch
 
-Implement milestone 4 before final delivery work:
+Complete milestone 5 before declaring the full performance goal finished:
 
-1. Capture current Chat lexical-context and artifact-reader baselines with
-   local pool five and Lambda-like pool one. Count auth and transaction work
-   consistently; separate SQL preparation from provider/queue time.
-2. Match and score owned source/child candidates once, preserving the same
-   ranking, identities, revisions, hashes, excerpts and abstention behavior.
-   Do not substitute search's whole-word semantics for Chat's current recall.
-3. Batch independent artifact/support reads without dropping tenant, current
-   material, wording-lock, publication or privacy checks.
-4. Verify the established bilingual retrieval corpus and source edit/removal
-   races. Run a paid synthetic check only if a real ranking/context change
-   requires it, within the remaining approved cumulative budget.
-5. Meet Chat median/p95 and artifact SQL-count targets, record content-free
-   stage timing and retain a separate milestone commit and receipt.
+1. Repeat prior budgets on the final production build, including controlled
+   worker contention and current-schema migration/backfill regression.
+2. Verify desktop/mobile-breakpoint Home, Capture, Review, Chat and Back with
+   long Korean text, slow/failing requests, draft recovery and layout stability.
+3. Add only inexpensive structural/regression CI checks. Browser/load/paid
+   checks stay manual; optional font/chunk changes require a measured benefit.
+4. Prepare milestone delivery evidence and PRs within confirmed authority.
+   Apply 0067 before a new API only when deployment is requested, then run the
+   bounded backfill against the independently verified actual dev target.
+5. Observe authorized signed-in dev traces and existing jobs without claiming
+   localhost timings prove cloud/device performance. Physical devices remain
+   explicitly unverified when unavailable; production/native/store are excluded.
 
 ### Bug fixes required throughout
 
@@ -303,28 +310,30 @@ relevant query/schema tests.
 
 ## Milestone 4 Speed up personal memory readers
 
-Status: not started. Use milestone 3 work only where retrieval semantics match.
+Status: passed locally with both pool settings. Literal substring recall and
+the existing quality gate are preserved; search's whole-word semantics were
+not substituted. Signed-in dev job/provider observation remains delivery work.
 
 ### Implementation tasks
 
-- [ ] Optimize lexical Chat candidate lookup before model dispatch. Avoid
+- [x] Optimize lexical Chat candidate lookup before model dispatch. Avoid
   repeated child scans/scoring across the whole archive where indexed matching
   or shared work can preserve the same candidates. Select candidates before
   assembling bounded excerpts. Reuse milestone 3's search work only where its
   retrieval semantics match Chat's current contract.
-- [ ] Compare old/new context output on the existing bilingual retrieval
+- [x] Compare old/new context output on the existing bilingual retrieval
   corpus, including older relevant material, short follow-ups, unrelated
   questions, reflections, enriched media, transcript corrections, contested
   Principles and deleted/edited originals. Preserve source IDs, ordering,
   revisions, hashes, excerpt limits, abstention and citation reopening behavior.
-- [ ] Batch independent Top of Mind/Principle projection reads and reuse
+- [x] Batch independent Top of Mind/Principle projection reads and reuse
   current support calculations within a request. Reduce statements and serial
   round trips without skipping auth, tenant, statement, body or material checks.
   Do not add a long-lived cache of supposedly current machine conclusions.
-- [ ] Measure both local pool settings and the deployed single-connection
+- [x] Measure both local pool settings and the deployed single-connection
   Lambda configuration. Do not increase global connection concurrency as a
   substitute for removing redundant work.
-- [ ] Record content-free stage timings for queue wait, material/context reads,
+- [x] Record content-free stage timings for queue wait, material/context reads,
   embeddings, model execution and publication validation. Observe existing dev
   jobs before attributing delay to a model. Avoid prompt/source/credential logs.
   Any new live evaluation is manual, synthetic and bounded by the remaining
@@ -408,8 +417,8 @@ failed, what remains and whether anything was pushed or deployed. Record the
 gate verdict before moving on; stop and reassess a failed or marginal gate.
 Do not silently expand the approved scope.
 
-Recommended next step: implement and accept milestone 4, then final regression
-and delivery checks. Milestones 1 and 2 needed no migration; milestone 3 requires
+Recommended next step: complete milestone 5's final regression and authorized
+delivery checks. Milestones 1, 2 and 4 needed no migration; milestone 3 requires
 the additive migration 0067 and verified, explicit bounded backfill before
 claiming deployed search performance.
 Production deployment, native/store packaging, a visual redesign and changes

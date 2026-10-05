@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql,type SQL } from "drizzle-orm";
 import { groupTopOfMindProposals, principles, signals, topOfMindEntries, topOfMindEntrySignals } from "../db/index.js";
 import { getDb } from "./db.js";
 import { GROUP_INPUT_POLICY } from "./group-inputs.js";
@@ -8,7 +8,7 @@ import { citationBodyCurrent, citationStatementCurrent, evidenceSupportCurrent }
 type Db = Pick<ReturnType<typeof getDb>, "select">;
 
 /** A reusable predicate on the outer signals row. No bounded wall scan. */
-export function groupSignalReadable(groupId: string) {
+export function groupSignalReadable(groupId: string|SQL) {
   return sql`(
     ${signals.inputPolicy} = ${GROUP_INPUT_POLICY}
     AND ${signals.status} <> 'retired' AND ${signals.dismissedAt} IS NULL
@@ -25,7 +25,7 @@ export function groupSignalReadable(groupId: string) {
 }
 
 /** All citations, not a safe subset of a possibly unsafe conclusion. */
-export function groupPrincipleReadable(groupId: string, minimumSignals: number) {
+export function groupPrincipleReadable(groupId: string|SQL, minimumSignals: number) {
   return sql`(
     ${principles.inputPolicy} = ${GROUP_INPUT_POLICY}
     AND (SELECT count(*) FROM principle_signals ps WHERE ps.principle_id = "principles"."id") >= ${minimumSignals}

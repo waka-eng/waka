@@ -7,6 +7,7 @@ import {PRINCIPLE_MIN_SIGNALS} from './principle-generation.js';
 import {CONVERSATION_REPLY_OUTPUT_TOKENS} from './model-provider.js';
 import {conversationSearchTerms,readConversationMaterial} from './conversation-material.js';
 import {rankConversationCandidates,readSemanticConversationCandidates,type ConversationRetrievalTrace} from './conversation-retrieval.js';
+import {measurePerformanceStage} from './performance-stages.js';
 export const CONVERSATION_LIMITS={conversations:100,messages:200,inputCharacters:4000,contextCharacters:16000,modelCalls:20,attemptsPerMessage:3,outputTokens:CONVERSATION_REPLY_OUTPUT_TOKENS} as const;
 export const conversationRepliesEnabled=()=>process.env.WAKA_CONVERSATION_REPLIES==='1';
 export const conversationCapabilities=()=>({generationEnabled:conversationRepliesEnabled(),limits:{...CONVERSATION_LIMITS,modelCalls:conversationRepliesEnabled()?CONVERSATION_LIMITS.modelCalls:0}});
@@ -15,6 +16,7 @@ export const conversationHash=(value:unknown)=>createHash('sha256').update(JSON.
 export interface ConversationSource {kind:'principle'|'top_of_mind_entry'|'inspiration';id:string;text:string;hash:string;revision?:string;recordedAt?:string;state?:string;rank?:number;locked?:boolean;supportCurrent?:boolean;truncated:boolean}
 /** Reuse exactly the serving predicates; no cached excerpts or model calls. */
 export async function readConversationContext(db:Reader,profileId:string,question:string,referenceIds?:ConversationReference[],initialPrincipleId?:string|null,queryVector?:number[],onRetrievalTrace?:(trace:ConversationRetrievalTrace)=>void){
+  return measurePerformanceStage('context_read','conversation',async()=>{
   const byKind=(kind:ConversationReference['kind'])=>referenceIds?.filter(row=>row.kind===kind).map(row=>row.id);
   const pIds=byKind('principle'),rIds=byKind('top_of_mind_entry'),iIds=byKind('inspiration');
   const p=await db.select({id:principles.id,text:principles.statement,revision:sql<string>`${principles.statementRevision}::text`,rank:principles.rank,state:principles.state,locked:sql<boolean>`${principles.lockedAt} IS NOT NULL`,supportCurrent:sql<boolean>`${principles.unsupportedAt} IS NULL AND ${personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)}`})
@@ -34,6 +36,7 @@ export async function readConversationContext(db:Reader,profileId:string,questio
     return [{...row,kind,text,hash:'hash' in row&&typeof row.hash==='string'?row.hash:conversationHash(row),truncated:text.length<row.text.length||('truncated' in row&&row.truncated===true)}];
   });
   return {profileId,principles:bound('principle',p,referenceIds?16000:8000),reading:bound('top_of_mind_entry',r,referenceIds?8000:4000),inspirations:bound('inspiration',i,referenceIds?9600:4000),...conversationCapabilities()};
+  });
 }
 export async function currentConversationReferences(db:Reader,profileId:string,references:ConversationReference[]):Promise<Array<ConversationSource|null>>{
   if(!references.length)return [];

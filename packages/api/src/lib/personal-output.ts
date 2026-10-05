@@ -1,8 +1,9 @@
-import { and, inArray, sql } from "drizzle-orm";
-import { principles, signals, topOfMindEntries, topOfMindEntrySignals } from "../db/index.js";
+import { inArray, sql } from "drizzle-orm";
+import { feedback,principles, signals, signalContradictions,topOfMindEntries, topOfMindEntrySignals } from "../db/index.js";
 import { getDb } from "./db.js";
 import { citationBodyCurrent, citationStatementCurrent, evidenceSupportCurrent } from './signal-support-state.js';
 import {reviewEvidenceCurrent} from './review-evidence.js';
+import {feedbackWordingCurrent} from './feedback-revisions.js';
 
 type Db = Pick<ReturnType<typeof getDb>, "select">;
 
@@ -69,22 +70,25 @@ interface EntryForProjection {
 /** Shared by private/public reads and generator context. A safe subset of a
  * conclusion's citations is not proof of the whole conclusion. Kept wording
  * survives with changed support; stale machine explanation does not. */
-export async function projectPersonalEntries<T extends EntryForProjection>(db: Db, profileId: string, rows: T[], includeWithheld = false) {
+export async function projectPersonalEntries<T extends EntryForProjection>(db: Db, profileId: string, rows: T[], includeWithheld = false,citationViews=false) {
   const citationsByEntry = new Map<string, string[]>();
-  if (!rows.length) return { entries: [] as Array<T & { supportChanged: boolean }>, citationsByEntry, supportChanged: false };
-  const citations = await db.select({ entryId: topOfMindEntrySignals.entryId, signalId: topOfMindEntrySignals.signalId,
+  const citations = rows.length?await db.select({ entryId: topOfMindEntrySignals.entryId, signalId: topOfMindEntrySignals.signalId,
+    statement:citationViews?sql<string|null>`CASE WHEN ${signals.profileId}=${profileId}::uuid THEN ${signals.statement} END`:sql<string|null>`NULL`,
+    statementRevision:signals.statementRevision,lockedAt:signals.lockedAt,
+    answered:citationViews?sql<boolean>`EXISTS(SELECT 1 FROM ${feedback} WHERE ${feedback.profileId}=${profileId}::uuid
+      AND ${feedback.targetType}='signal' AND ${feedback.targetId}=${signals.id} AND ${feedbackWordingCurrent()})`:sql<boolean>`false`,
+    contested:citationViews?sql<boolean>`EXISTS(SELECT 1 FROM ${signalContradictions} WHERE ${signalContradictions.profileId}=${profileId}::uuid
+      AND ${signalContradictions.resolvedAt} IS NULL AND (${signalContradictions.aSignalId}=${signals.id} OR ${signalContradictions.bSignalId}=${signals.id}))`:sql<boolean>`false`,
     current: sql<boolean>`${citationStatementCurrent('top_of_mind_entry_signals')}
-      AND ${citationBodyCurrent('top_of_mind_entry_signals', 'top_of_mind_entries', 'entry_body_revision', 'body_revision')}` })
+      AND ${citationBodyCurrent('top_of_mind_entry_signals', 'top_of_mind_entries', 'entry_body_revision', 'body_revision')}
+      AND ${personalSignalReadable(profileId)}` })
     .from(topOfMindEntrySignals).leftJoin(signals, sql`${signals.id} = ${topOfMindEntrySignals.signalId}`)
     .leftJoin(topOfMindEntries, sql`${topOfMindEntries.id} = ${topOfMindEntrySignals.entryId}`)
-    .where(inArray(topOfMindEntrySignals.entryId, rows.map((row) => row.id)));
-  const ids = [...new Set(citations.flatMap((row) => row.signalId ? [row.signalId] : []))];
-  const allowed = new Set(ids.length ? (await db.select({ id: signals.id }).from(signals)
-    .where(and(inArray(signals.id, ids), personalSignalReadable(profileId)))).map((row) => row.id) : []);
+    .where(inArray(topOfMindEntrySignals.entryId, rows.map((row) => row.id))):[];
   let supportChanged = false;
   const entries = rows.flatMap((row) => {
     const links = citations.filter((link) => link.entryId === row.id);
-    const current = links.flatMap((link) => link.current === true && link.signalId && allowed.has(link.signalId) ? [link.signalId] : []);
+    const current = links.flatMap((link) => link.current === true && link.signalId ? [link.signalId] : []);
     const changed = links.length === 0 || current.length !== links.length;
     if (changed && row.dismissedAt === null) supportChanged = true;
     if (changed && !includeWithheld && !row.lockedAt && !row.pinnedAt && !row.dismissedAt) return [];
@@ -92,5 +96,5 @@ export async function projectPersonalEntries<T extends EntryForProjection>(db: D
     return [{ ...row, supportChanged: changed,
       ...(changed ? { belief: null, prompt: null } : {}) }];
   });
-  return { entries, citationsByEntry, supportChanged };
+  return { entries, citationsByEntry, supportChanged,citations };
 }

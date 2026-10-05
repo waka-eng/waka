@@ -1,0 +1,298 @@
+{
+  "date": "2026-10-05",
+  "baselineRevision": "beb31b0",
+  "kind": "interleaved synthetic reader comparison",
+  "scope": {
+    "database": "disposable loopback Postgres",
+    "inspirations": 10000,
+    "samplesPerReaderPerBuildPerPool": 30,
+    "providerCalls": 0,
+    "remoteAccountWrites": 0
+  },
+  "pools": {
+    "1": {
+      "interleaved": [
+        {
+          "label": "context",
+          "before": {
+            "medianMs": 131.5,
+            "p95Ms": 142.4,
+            "maxMs": 159.56
+          },
+          "after": {
+            "medianMs": 51.59,
+            "p95Ms": 68.3,
+            "maxMs": 68.95
+          },
+          "normalizedContextParity": true
+        },
+        {
+          "label": "top_of_mind",
+          "before": {
+            "medianMs": 4.01,
+            "p95Ms": 5.28,
+            "maxMs": 7.24
+          },
+          "after": {
+            "medianMs": 3.45,
+            "p95Ms": 4.81,
+            "maxMs": 5.19
+          }
+        },
+        {
+          "label": "principles",
+          "before": {
+            "medianMs": 5.81,
+            "p95Ms": 8.93,
+            "maxMs": 9.91
+          },
+          "after": {
+            "medianMs": 7.37,
+            "p95Ms": 11.39,
+            "maxMs": 15.32
+          }
+        }
+      ],
+      "sql": [
+        {
+          "label": "principles",
+          "sqlQueries": 4
+        },
+        {
+          "label": "top_of_mind",
+          "sqlQueries": 10
+        },
+        {
+          "label": "chat_context_without_model",
+          "sqlQueries": 3
+        }
+      ]
+    },
+    "5": {
+      "interleaved": [
+        {
+          "label": "context",
+          "before": {
+            "medianMs": 145.9,
+            "p95Ms": 197.8,
+            "maxMs": 197.92
+          },
+          "after": {
+            "medianMs": 54.76,
+            "p95Ms": 75.43,
+            "maxMs": 76.79
+          },
+          "normalizedContextParity": true
+        },
+        {
+          "label": "top_of_mind",
+          "before": {
+            "medianMs": 3.95,
+            "p95Ms": 6.13,
+            "maxMs": 8.51
+          },
+          "after": {
+            "medianMs": 3.44,
+            "p95Ms": 4.92,
+            "maxMs": 5.51
+          }
+        },
+        {
+          "label": "principles",
+          "before": {
+            "medianMs": 5.98,
+            "p95Ms": 8.35,
+            "maxMs": 10.24
+          },
+          "after": {
+            "medianMs": 7.49,
+            "p95Ms": 8.04,
+            "maxMs": 8.3
+          }
+        }
+      ],
+      "sql": [
+        {
+          "label": "principles",
+          "sqlQueries": 4
+        },
+        {
+          "label": "top_of_mind",
+          "sqlQueries": 10
+        },
+        {
+          "label": "chat_context_without_model",
+          "sqlQueries": 3
+        }
+      ]
+    }
+  },
+  "retrievalQuality": [
+    {
+      "set": "original",
+      "scores": {
+        "original": {
+          "hits": 9,
+          "total": 21,
+          "unexpected": 24,
+          "negativeMatches": 0
+        },
+        "lexical": {
+          "hits": 16,
+          "total": 21,
+          "unexpected": 23,
+          "negativeMatches": 0
+        },
+        "hybrid": {
+          "hits": 21,
+          "total": 21,
+          "unexpected": 2,
+          "negativeMatches": 0
+        }
+      },
+      "semanticGain": 5,
+      "passed": true,
+      "latency": {
+        "lexicalMedianMs": 4.961207999999942,
+        "hybridMedianMs": 7.194666999999868,
+        "hybridP95Ms": 12.825124999999844,
+        "embeddingMedianMs": 0.006499999999959982
+      },
+      "newCalls": 0,
+      "estimatedUsd": 0
+    },
+    {
+      "set": "holdout",
+      "scores": {
+        "original": {
+          "hits": 0,
+          "total": 6,
+          "unexpected": 11,
+          "negativeMatches": 0
+        },
+        "lexical": {
+          "hits": 1,
+          "total": 6,
+          "unexpected": 3,
+          "negativeMatches": 0
+        },
+        "hybrid": {
+          "hits": 6,
+          "total": 6,
+          "unexpected": 0,
+          "negativeMatches": 0
+        }
+      },
+      "semanticGain": 5,
+      "passed": true,
+      "latency": {
+        "lexicalMedianMs": 5.185458999999923,
+        "hybridMedianMs": 7.172167000000059,
+        "hybridP95Ms": 10.308750000000032,
+        "embeddingMedianMs": 0.01804200000003675
+      },
+      "newCalls": 0,
+      "estimatedUsd": 0
+    },
+    {
+      "set": "validation",
+      "scores": {
+        "original": {
+          "hits": 2,
+          "total": 6,
+          "unexpected": 9,
+          "negativeMatches": 0
+        },
+        "lexical": {
+          "hits": 2,
+          "total": 6,
+          "unexpected": 1,
+          "negativeMatches": 0
+        },
+        "hybrid": {
+          "hits": 6,
+          "total": 6,
+          "unexpected": 0,
+          "negativeMatches": 0
+        }
+      },
+      "semanticGain": 4,
+      "passed": true,
+      "latency": {
+        "lexicalMedianMs": 4.702625000000012,
+        "hybridMedianMs": 6.440625000000068,
+        "hybridP95Ms": 8.304165999999896,
+        "embeddingMedianMs": 0.013083999999935259
+      },
+      "newCalls": 0,
+      "estimatedUsd": 0
+    }
+  ],
+  "correctness": {
+    "sqlOracleQueries": 20,
+    "sourceOrderHashesRevisionsExcerpts": "identical to pre-optimization scoring on the same fixture",
+    "sourceChangesAndDeletion": "existing context/reference and semantic tests passed",
+    "wordingLocksSupportPrivacy": "personal-output and contested-artifact tests passed",
+    "principlesSnapshot": "one statement for wording/support/feedback/citations/examples",
+    "topOfMindSnapshot": "existing repeatable-read artifact/token snapshot preserved"
+  },
+  "experiments": {
+    "candidateSetsOnly": {
+      "contextMedianMs": 106.48,
+      "verdict": "missed 60 ms"
+    },
+    "materializedFoldedText": {
+      "contextMedianMs": 64.56,
+      "sqlMs": 71.496,
+      "tempReadBlocks": 1593,
+      "tempWrittenBlocks": 531,
+      "verdict": "missed 60 ms; spilled passages"
+    },
+    "streamingFoldedText": {
+      "sqlMs": 48.858,
+      "tempReadBlocks": 0,
+      "tempWrittenBlocks": 0
+    },
+    "childAntiJoin": {
+      "sqlMs": 51.44,
+      "verdict": "slower; removed"
+    },
+    "bitMaskDistinctTerms": {
+      "sqlMs": 45.345,
+      "tempReadBlocks": 0,
+      "tempWrittenBlocks": 0
+    }
+  },
+  "timingTelemetry": {
+    "stages": [
+      "queue_wait",
+      "material_read",
+      "context_read",
+      "embedding",
+      "model",
+      "publication_validation"
+    ],
+    "fields": [
+      "stage",
+      "operation",
+      "durationMs",
+      "outcome"
+    ],
+    "contentOrIdentifiersLogged": false,
+    "operationLabels": "closed vocabulary",
+    "transportOrRetryChanges": false
+  },
+  "checks": {
+    "fullApiTests": 1518,
+    "webTests": 734,
+    "paidEvaluationsSkipped": 3,
+    "types": "API/web/admin/runner passed",
+    "webBuild": "passed",
+    "diffCheck": "passed"
+  },
+  "limits": [
+    "Local sample percentiles do not establish cloud/device guarantees.",
+    "Principles uses slightly more local CPU while removing five round trips; deployed impact remains to be measured.",
+    "Controlled-worker and signed-in dev observation remain milestone 5; no model-delay claim is made."
+  ]
+}

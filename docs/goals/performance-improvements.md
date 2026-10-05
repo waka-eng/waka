@@ -1,6 +1,6 @@
 # Performance improvements
 
-Status: in progress (2026-10-05), milestones 1 to 3 passed locally; milestone 4 next.
+Status: in progress (2026-10-05), milestones 1 to 4 passed locally; milestone 5 next.
 Branch: `codex/performance-improvements`, based on the separately checkpointed
 single-inspiration Review implementation at `33614ed`.
 
@@ -231,3 +231,67 @@ No remote migration, backfill, source mutation, provider call, push or deploymen
 Dev rollout must apply 0067 before the new API; rollback can retain additive
 columns and use the old reader. Pool-one, worker contention and deployed/device
 verification remain later work. Milestone 4 is next.
+
+### Milestone 4 gate on 2026 10 05
+
+Criterion: Chat context median below 60 ms and p95 below 100 ms at 10,000
+originals with unchanged retrieval/evidence; Top of Mind at most ten SQL
+statements and Principles at most six, including the same auth/transaction work.
+
+Fresh pre-change baseline at `beb31b0`, pool five: context median 122.62 ms,
+p95 143.88 ms; artifact statement counts fourteen/nine. Pool one baseline was
+124.54/131.36 ms with the same counts. Candidate sets alone still took 106.48
+ms median; materializing folded passages took 64.56 ms and spilled 1,593 read
+and 531 written temporary blocks in the 71.496 ms SQL probe. Both missed the
+original bar. Streaming passage folds removed the spill; lightweight owned
+identity/date rows avoid full-text buffering, and a term-position bit mask
+deduplicates witnesses without a second aggregate. A child anti-join was slower
+at 51.44 ms SQL and was removed. Final SQL probe was 45.345 ms, no temporary I/O.
+
+Final interleaved thirty-sample comparison: pool five context median 145.9 to
+54.76 ms and p95 197.8 to 75.43 ms; pool one median 131.5 to 51.59 ms and
+p95 142.4 to 68.3 ms. Both compare identical normalized synthetic context.
+Top of Mind uses ten statements and Principles four. Verdict: the memory-reader
+gate passes locally with both pool settings. No global connection increase.
+
+Top of Mind combines current citation projection, feedback and conflict flags
+in one query inside its existing repeatable-read artifact/token snapshot.
+Principles reads wording, support, current verdict, citations and bounded
+personal/review examples in one statement, preventing mixed-version projection.
+It saves five round trips, but local HTTP median rose 5.98 to 7.49 ms at pool
+five and 5.81 to 7.37 ms at pool one: record the CPU tradeoff, not a claim of a
+measured cloud speedup. Declared/human-locked wording and withholding rules stay.
+
+Chat preserves literal substring scoring, source/term uniqueness, timestamp/id
+tie order, owned revision filtering before its six-source limit, original text,
+labels, hashes and excerpt limits. UTF8 passage case folding is performed once
+using the same lower-and-match operation as PostgreSQL's ILIKE implementation;
+other encodings retain native ILIKE. Reference SQL tests compare twenty queries
+on the same fixture, including English/Korean, Unicode case, repeated terms,
+wildcards, duplicate children, stale/missing lineage and corrected media.
+Primary implementation reference:
+[PostgreSQL like.c](https://raw.githubusercontent.com/postgres/postgres/REL_16_STABLE/src/backend/utils/adt/like.c).
+
+Replayed all forty existing queries with cached vectors and zero new provider
+calls/cost. Original set: hybrid 21/21, semantic gain five, unexpected two,
+negative matches zero. Holdout: 6/6, gain five, unexpected/negative zero.
+Validation: 6/6, gain four, unexpected/negative zero. All predeclared quality
+gates passed with the prior lexical results retained. No ranking/model/prompt,
+generation threshold, daily floor, human lock or publication policy changed.
+
+Added closed-label content-free stage timing for queue wait (excluding intended
+run-after delay), material/context reads, embeddings, models and publication
+validation. Logs contain only stage, operation, duration and outcome; no source,
+identifier, exception text or credential. Tests retain original results/errors,
+this binding, one transport call and log-sink failure isolation. Existing dev
+jobs/provider timings are not yet observed; no model-delay attribution is made.
+
+Verification: 1,518 full API tests and 734 web tests passed; three paid evals
+skipped. API/web/admin and runner types, web build and diff checks passed.
+Early checks caught unused imports, a unit mock missing the new projection,
+an ambiguous raw-subquery ID, an untyped term index and a reserved test variable;
+all were fixed without dropping behavior assertions. Compact
+[milestone 4 evidence](../craft/evidence/performance/milestone-4.json) retains
+paired values, rejected experiments, quality results and limits. No new schema,
+provider spending, remote mutation, push or deployment. Milestone 5 remains:
+full regression/breakpoint/worker checks and authorized delivery observation.
