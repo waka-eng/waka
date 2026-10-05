@@ -867,6 +867,15 @@ agent's distilled working memory.
 
 ## Principle (layer 4)
 
+`principle_generation_steps` holds private processing receipts. Each model
+dispatch records its target profile, billing profile, input/step identity and
+outcome; the job link carries the billing tenant in its composite foreign key.
+Completed results support bounded resumption and are not new human evidence.
+A publication receipt commits with the Principle changes and supports recovery
+without rewriting later human edits. Old result bodies are cleared while recent
+dispatch timestamps preserve account limits. Profile erasure removes the rows;
+owned profile export includes them. Reading a page does not create these steps.
+
 **How the profile chooses, stripped of context.** A **rule** binds a
 context ("≤$100 for LLM testing") and is checkable; a **principle**
 survives having its context removed ("have something working before you

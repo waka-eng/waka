@@ -912,13 +912,25 @@ context characters. Current reading signals get up to half the signal space;
 established evidence fills the remainder. Whole items are omitted to fit, never
 rewritten or truncated. The provider boundary rejects oversized inputs. The
 24-item standing-context limit does not remove any Principle from the subsequent
-comparison set; comparison work is being bounded separately.
+comparison set.
 Each comparison request is capped at 12,000 context characters and 1,600 output
 tokens. It must return exactly one verdict for every supplied ID; missing,
 duplicate, foreign or malformed results fail the batch rather than silently
 becoming `independent`. Genuine semantic uncertainty may still be judged
 independent. The complete candidate plan is validated before any Principle is
 written, including comparisons against earlier provisional candidates.
+Generation yields after at most four model calls per worker pass and resumes
+from private `principle_generation_steps` receipts. The account allowance is
+40 actual Principle model dispatches per hour across its profiles; failed calls
+remain counted when the queue returns an attempt. A current pending dispatch
+blocks duplicate work for ten minutes. Completed responses are reused, and
+provisional IDs are deterministic for the input snapshot. Changed evidence,
+standing wording, locale, prompts or model configuration invalidate that
+snapshot. Unchanged reading audits do not. Publication and its completion
+receipt commit together, so a reclaimed job returns the prior result without
+restoring words edited later. Obsolete response bodies are cleared; recent
+billing receipts remain. These processing rows are separate from memory and
+are removed on profile erasure. Migration 0066 is required before rollout.
 
 **The canonical rendering is machine-facing:** one deterministic markdown
 document (rank-ordered, stable ids, a preamble carrying the consumption

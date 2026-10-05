@@ -18,7 +18,7 @@
 
 import { and, asc, eq, getTableColumns, inArray, isNotNull, or, sql } from "drizzle-orm";
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
 import { personalEntrySupportCurrent, personalPrincipleSupportCurrent, personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
 import { citationStatementCurrent, evidenceSupportCurrent, loadSignalStatementRevisions } from './signal-support-state.js';
@@ -32,13 +32,18 @@ import {
   topOfMindEntries,
   topOfMinds,
   profiles,
+  groupMembers,
+  principleGenerationSteps,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import { selectIndependentEvidence, type ConfidenceEvidence } from './signal-lifecycle.js';
 import {loadSignalEvidence} from './review-evidence.js';
-import {PRINCIPLE_COMPARISON_LIMITS,selectPrincipleInput} from './principle-input.js';
-import {parsePrincipleRelation} from '../queue/gemini.js';
+import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput} from './principle-input.js';
+import {GEMINI_GENERATION_MODEL,parseDistilledPrinciples,parsePrincipleRelation,PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
+import {principleMaterialKey} from './principle-material-key.js';
+import {principleWork} from './principle-work.js';
+import {OPENROUTER_GENERATION_MODEL} from './openrouter-http.js';
 import { writePrincipleStatementChain } from "./statement-chains.js";
 import { GROUP_INPUT_POLICY } from "./group-inputs.js";
 import { groupEntrySupportCurrent, groupPrincipleReadable, groupSignalReadable, projectGroupEntries } from "./group-output.js";
@@ -296,7 +301,7 @@ async function loadCitationEvidence(
 // ---------------------------------------------------------------------------
 
 export interface RefreshPrinciplesResult {
-  status: "below_bar" | "no_candidates" | "evaluated";
+  status: "below_bar" | "no_candidates" | "evaluated" | "superseded";
   minted: number;
   attached: number;
   conflicts: number;
@@ -310,6 +315,10 @@ export interface PrincipleGenerationDependencies {
   now?: Date;
   /** No network calls: verify the worker still owns its claim at commit. */
   beforeCommit?: (tx: Pick<WakaTx, "select">) => Promise<void>;
+  beforeProgress?: (tx:WakaTx)=>Promise<void>;
+  jobId?:string;
+  billingProfileId?:string;
+  expectedMaterialKey?:string;
 }
 
 /** Room signals must pass the same current-member visibility gate as the wall. */
@@ -341,12 +350,19 @@ export async function refreshPrinciplesForProfile(
     redeemed: 0,
     dropped: 0,
   };
+  if(deps.jobId){
+    const [done]=await db.select({response:principleGenerationSteps.response}).from(principleGenerationSteps)
+      .where(and(eq(principleGenerationSteps.profileId,input.profileId),eq(principleGenerationSteps.jobId,deps.jobId),eq(principleGenerationSteps.kind,'publication'),eq(principleGenerationSteps.status,'ready'))).limit(1);
+    if(done?.response)return done.response as RefreshPrinciplesResult;
+  }
   const revision = await readGenerationRevision(db, { profileId: input.profileId });
   if (!revision) return none;
 
   // The cheap gate: active signals with their longevity stats. Nearly every
   // night ends here, with zero model calls.
-  const { activeSignals, evidence, groupId } = await loadPrincipleMaterial(db, input.profileId);
+  const material=await loadPrincipleMaterial(db,input.profileId);
+  const { activeSignals, evidence, groupId } = material;
+  if(deps.expectedMaterialKey&&deps.expectedMaterialKey!==principleMaterialKey(material))return {...none,status:'superseded'};
   if (activeSignals.length < bar("SIGNALS")) return none;
 
   const overall = computeCitationEligibility([...evidence.values()], now);
@@ -406,7 +422,20 @@ export async function refreshPrinciplesForProfile(
     })),
     currentEntries: currentEntries.map((row) => ({ body: row.body })),
   },new Set(focus.flatMap(row=>row.id?[row.id]:[])));
-  const distilled = await provider.distillPrinciples(distillInput);
+  const [member]=groupId&&!deps.billingProfileId?await db.select({id:groupMembers.profileId}).from(groupMembers).where(eq(groupMembers.groupId,groupId)).orderBy(asc(groupMembers.profileId)).limit(1):[];
+  const billingProfileId=deps.billingProfileId??member?.id??input.profileId;
+  const inputHash=createHash('sha256').update(JSON.stringify({profileId:input.profileId,policy:'principle-work-v1',
+    provider:provider.name??'injected',models:provider.name==='openrouter'
+      ?[process.env.WAKA_MODEL_PRINCIPLES?.trim()||OPENROUTER_GENERATION_MODEL,process.env.WAKA_MODEL_PRINCIPLE_JUDGE?.trim()||OPENROUTER_GENERATION_MODEL]
+      :[GEMINI_GENERATION_MODEL],limits:{input:PRINCIPLE_INPUT_LIMITS,comparison:PRINCIPLE_COMPARISON_LIMITS},
+    prompts:[PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION],material:principleMaterialKey(material),distillInput,
+    standing:existing.map(row=>({id:row.id,statement:row.statement,revision:String(row.statementRevision),rank:row.rank,state:row.state,origin:row.origin,locked:row.lockedAt!==null,supported:row.supportCurrent,conflictsWithId:row.conflictsWithId}))})).digest('hex');
+  const work=principleWork({db,profileId:input.profileId,billingProfileId,inputHash,revision,jobId:deps.jobId,beforeProgress:deps.beforeProgress});
+  const distilled=await work.run('distill',()=>provider.distillPrinciples(distillInput),value=>({candidates:parseDistilledPrinciples(value).candidates.slice(0,PRINCIPLE_MAX_CANDIDATES_PER_RUN)}));
+  const recordPublication=async(tx:WakaTx,result:RefreshPrinciplesResult)=>{
+    if(deps.jobId)await tx.insert(principleGenerationSteps).values({profileId:input.profileId,billingProfileId,jobId:deps.jobId,inputHash,stepKey:'publication',kind:'publication',status:'ready',response:result,finishedAt:new Date()});
+    await tx.update(principleGenerationSteps).set({response:null}).where(and(eq(principleGenerationSteps.profileId,input.profileId),eq(principleGenerationSteps.kind,'model')));
+  };
 
   const result: RefreshPrinciplesResult = { ...none, status: "no_candidates" };
   const activeIds = new Set(distillInput.signals.map((row) => row.id));
@@ -434,6 +463,7 @@ export async function refreshPrinciplesForProfile(
     await db.transaction(async (tx) => {
       await assertGenerationRevision(tx, revision);
       await deps.beforeCommit?.(tx);
+      await recordPublication(tx,result);
     });
     return result;
   }
@@ -445,10 +475,10 @@ export async function refreshPrinciplesForProfile(
   const standingSet = existing.filter((row) => row.supportCurrent || row.lockedAt !== null || row.origin === 'declared')
     .map((row) => ({ id: row.id, statement: row.statement }));
   const planned: Array<{ candidate: PrincipleCandidate; matchedId: string | null; conflictingId: string | null; mintedId: string }> = [];
-  for (const candidate of valid) {
+  for (const [candidateIndex,candidate] of valid.entries()) {
     // Compare against the standing set, including earlier planned candidates.
     // An unavailable comparison aborts the entire batch before any write.
-    let matchedId: string | null = existing.find((row) => !row.supportCurrent && row.statement === candidate.statement)?.id ?? null;
+    let matchedId: string | null = existing.find((row) => row.statement === candidate.statement)?.id ?? null;
     let conflictingId: string | null = null;
     for (let offset=0;offset<standingSet.length;offset+=PRINCIPLE_COMPARISON_LIMITS.items) {
       if (matchedId) break;
@@ -462,13 +492,14 @@ export async function refreshPrinciplesForProfile(
         candidateStatement: candidate.statement,
         existingPrinciples: standingSet.slice(offset,offset+PRINCIPLE_COMPARISON_LIMITS.items),
       };
-      const {relations}=parsePrincipleRelation(await provider.judgePrincipleRelation(comparisonInput),comparisonInput);
+      const {relations}=await work.run(`relation:${candidateIndex}:${offset}`,()=>provider.judgePrincipleRelation(comparisonInput),value=>parsePrincipleRelation(value,comparisonInput));
       for(const {principleId,relation} of relations){
         if (relation === "same") { matchedId = principleId; break; }
         if (relation === "conflicting" && !conflictingId) conflictingId = principleId;
       }
     }
-    const mintedId = randomUUID();
+    const hex=createHash('sha256').update(`${inputHash}:${candidateIndex}`).digest('hex');
+    const mintedId=`${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-8${hex.slice(17,20)}-${hex.slice(20,32)}`;
     planned.push({ candidate, matchedId, conflictingId, mintedId });
     if (!matchedId) standingSet.push({ id: mintedId, statement: candidate.statement });
   }
@@ -551,6 +582,7 @@ export async function refreshPrinciplesForProfile(
       }
     }
 
+    await recordPublication(tx,result);
     return result;
   });
 }

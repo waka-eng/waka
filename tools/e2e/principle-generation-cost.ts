@@ -5,6 +5,7 @@ import {refreshPrinciplesForProfile} from '../../packages/api/src/lib/principle-
 import {buildPrincipleDistillRequest,buildPrincipleRelationRequest} from '../../packages/api/src/queue/gemini.js';
 import type {ModelProvider} from '../../packages/api/src/lib/model-provider.js';
 import {writeEvaluationSnapshot} from './evaluation-journal.js';
+import {BackgroundJobHeldError} from '../../packages/api/src/lib/background-job-hold.js';
 const url=new URL(process.env.DB_CONNECTION_URL??'');
 assert.ok(['localhost','127.0.0.1'].includes(url.hostname)&&/test|disposable/i.test(url.pathname));
 assert.equal(url.searchParams.has('options'),false);
@@ -45,11 +46,22 @@ try{
     },
   } satisfies Pick<ModelProvider,'distillPrinciples'|'judgePrincipleRelation'>;
   const start=performance.now();
-  const result=await refreshPrinciplesForProfile({profileId:p.id},{db:t.db as never,modelProvider:provider as ModelProvider});
+  let result:Awaited<ReturnType<typeof refreshPrinciplesForProfile>>|undefined,passes=0,maxCallsPerPass=0;
+  while(!result&&passes<100){
+    passes++;const before=distillCalls+comparisonCalls;
+    try{result=await refreshPrinciplesForProfile({profileId:p.id},{db:t.db as never,modelProvider:provider as ModelProvider});}
+    catch(error){
+      if(!(error instanceof BackgroundJobHeldError)||error.heldUntil.getTime()>Date.now()+60000)throw error;
+      const [partial]=await t.sql`SELECT count(*)::int AS count FROM principles WHERE profile_id=${p.id} AND origin='minted'`;
+      assert.equal(partial.count,0,'No partial candidate publication');
+    }
+    maxCallsPerPass=Math.max(maxCallsPerPass,distillCalls+comparisonCalls-before);
+  }
+  assert.ok(result,'Comparison must eventually finish');assert.ok(maxCallsPerPass<=4);
   const words=await t.sql`SELECT id,statement,rank,locked_at FROM principles WHERE profile_id=${p.id} AND origin='declared' ORDER BY id`;
   const humanWordsPreserved=JSON.stringify(words)===JSON.stringify(originalWords);
   const report={profileSignals:400,standingPrinciples:200,inputSignals,inputPrinciples,promptCharacters,distillCalls,comparisonCalls,comparisonPairs,maxComparisonBatch,maxComparisonCharacters,
-    totalModelCalls:distillCalls+comparisonCalls,lateConflictChecked,humanWordsPreserved,durationMs:Math.round(performance.now()-start),result,paidCalls:0};
+    totalModelCalls:distillCalls+comparisonCalls,passes,maxCallsPerPass,lateConflictChecked,humanWordsPreserved,durationMs:Math.round(performance.now()-start),result,paidCalls:0};
   const path=`work/principle-cost/run-${Date.now()}.json`;writeEvaluationSnapshot(path,report);console.log(JSON.stringify({path,...report}));
   assert.ok(lateConflictChecked);assert.ok(humanWordsPreserved);assert.equal(words.length,200);
 }finally{globalThis.fetch=network;await t.cleanup();}

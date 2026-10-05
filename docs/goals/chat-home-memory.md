@@ -692,3 +692,51 @@ Total comparison calls still grow with the standing set. The next step is
 durable resumable progress with a per-worker-run allowance, preserving completed
 comparisons and preventing partial publication. Do not treat batching alone as
 completion of the bounded-work gate.
+
+### Milestone 3 durable bounded work checkpoint
+
+Added migration 0066 and private processing receipts. Each worker pass makes at
+most four actual model calls; completed distillation/comparison results are
+loaded together and reused. All standing Principles remain in the comparison
+set across passes. Stable provisional IDs keep cached comparisons against
+earlier candidates valid. A separate account ledger caps Principle model
+dispatches at 40/hour, including failed calls and group work billed to a current
+member. Returning a queue attempt does not erase these receipts. Pending steps
+prevent concurrent duplicate dispatch; expired pending steps can retry within
+the same recorded allowance. No provider call holds database locks.
+
+Cache identity includes the meaningful evidence key, selected prompt input,
+standing statements/revisions/ranks/state, locale, prompts, resolved model
+configuration and input/comparison limits. A no-change audit version preserves
+it; a human wording edit invalidates it. Superseded queued material is skipped
+before dispatch. Exact existing wording can match without a model comparison.
+Publication records its completion in the same transaction. A reclaimed job
+therefore returns the committed result without regenerating or restoring a
+Principle edited afterward. Cache results are processing data, not inspirations
+or independent evidence. Export/erasure are profile-scoped, with tenant-bearing
+job links and checks against cross-account billing.
+
+The 400-signal/200-standing-Principle fixture completes in nine passes, at most
+four calls each. It makes one distillation and 32 comparison calls, checks all
+603 pairs, finds the last-row conflict, publishes only at completion, and
+preserves all 200 statements/ranks/locks exactly. Local scripted execution was
+531ms excluding real model latency and scheduler waits. Evidence:
+`work/principle-cost/run-1791162696771.json`.
+
+Verification: 50 SQL tests across work receipts, Principle flow, generation
+fences and group privacy passed. They include unlocked model calls, cached
+resume, failed-step retry, hourly-budget retention, cross-account refusal,
+erasure, no-change resume, human-edit invalidation, committed-publication
+recovery and the real queue hold/reclaim path. All 787 API unit tests passed,
+three paid benches skipped; API typecheck, migration check and whitespace check
+passed. The queue test first used an immediately due server timestamp that was
+ahead of its millisecond client claim time; placing the test due time explicitly
+in the past resolved it while retaining assertions for pending state and the
+same reclaimed job. A patch context and an unused import were also corrected
+before verification.
+
+This completes the bounded Principle input/comparison implementation checkpoint.
+Full Top of Mind/Principle generation calibration and the final current-build
+browser walkthrough remain open. Migration 0066 has only run in disposable test
+schemas; no remote database, historical repair or deployment was touched.
+No additional paid calls occurred, and the goal budget allocation is unchanged.

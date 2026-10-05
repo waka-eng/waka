@@ -8,13 +8,18 @@ import { createGroupsRoutes } from "../routes/groups.js";
 import { loadPrincipleViews, renderPrinciplesMarkdown, undoPrincipleDispute } from "../routes/principles.js";
 import { createFeedbackForProfile } from "../routes/feedback.js";
 import { loadPrincipleMaterial, promoteIfDemonstrated, refreshPrinciplesForProfile, reconcilePrinciplesAfterSignalLoss } from "./principle-generation.js";
-import { requestPrincipleRefresh, loadPrincipleStatus, principleMaterialKey } from "./principle-status.js";
+import { requestPrincipleRefresh, loadPrincipleStatus } from "./principle-status.js";
+import {principleMaterialKey} from './principle-material-key.js';
 import type { ModelProvider } from "./model-provider.js";
 import { reviewSignalSupport } from './signal-support-review.js';
 import { applySignalSupportReview } from './signal-support-apply.js';
 import {createReviewSession} from './review-sessions.js';
 import {loadReviewAnswerMaterial} from './review-answer-material.js';
 import {writeReviewEvidence} from './review-evidence.js';
+import {BackgroundJobHeldError} from './background-job-hold.js';
+import {postgresBackgroundJobStore,processBackgroundJob} from './queue.js';
+import {getDb} from './db.js';
+import {setDefaultModelProviderForTests} from './model-provider.js';
 
 let t: TestDatabase;
 let owner: string;
@@ -73,9 +78,81 @@ beforeAll(async () => {
   const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id=${groupId}`;
   mindId = mind.id as string;
 });
-afterAll(async () => { await t?.cleanup(); });
+afterAll(async () => { await getDb().$client.end();await t?.cleanup(); });
 
 describe("principles across personal and room profiles", () => {
+  it('resumes through the real queue without resetting paid-step receipts',async()=>{
+    const profileId=await person(),ids=await material(profileId,[profileId]);
+    await t.sql`INSERT INTO principles(profile_id,statement,origin,rank,locked_at) SELECT ${profileId},'Standing ' || n,'declared',n,now() FROM generate_series(1,80) n`;
+    let distills=0,comparisons=0;
+    setDefaultModelProviderForTests({name:'queue-fixture',distillPrinciples:async()=>{distills++;return {candidates:[{statement:'A queued directive.',type:'maxim',citedSignalIds:ids}]};},
+      judgePrincipleRelation:async(input:Parameters<ModelProvider['judgePrincipleRelation']>[0])=>{comparisons++;return {relations:input.existingPrinciples.map(row=>({principleId:row.id,relation:'independent'}))};}} as unknown as ModelProvider);
+    try{
+      await requestPrincipleRefresh(t.db as never,profileId);
+      await t.sql`UPDATE background_jobs SET run_after=now()+interval '1 day' WHERE type<>'refresh_principles' OR profile_id<>${profileId}`;
+      const first=await postgresBackgroundJobStore.claimNext(new Date());expect(first).not.toBeNull();
+      let held:BackgroundJobHeldError|undefined;
+      try{await processBackgroundJob(first!);}catch(error){expect(error).toBeInstanceOf(BackgroundJobHeldError);held=error as BackgroundJobHeldError;}
+      expect(held).toBeDefined();await postgresBackgroundJobStore.holdJob(first!,held!.heldUntil,'support');
+      const [receipt]=await t.sql`SELECT count(*)::int AS count FROM principle_generation_steps WHERE profile_id=${profileId} AND kind='model'`;
+      expect(receipt.count).toBe(4);
+      expect((await t.sql`SELECT status FROM background_jobs WHERE id=${first!.id}`)[0].status).toBe('pending');
+      await t.sql`UPDATE background_jobs SET run_after=now()-interval '1 second' WHERE id=${first!.id}`;
+      const second=await postgresBackgroundJobStore.claimNext(new Date());expect(second?.id).toBe(first!.id);
+      await processBackgroundJob(second!);await postgresBackgroundJobStore.markSucceeded(second!,null);
+      expect(distills).toBe(1);expect(comparisons).toBe(4);
+      expect((await loadPrincipleStatus(t.db as never,profileId)).phase).toBe('ready');
+    }finally{setDefaultModelProviderForTests(null);}
+  });
+  it('resumes all comparisons across an unchanged reading without another distillation',async()=>{
+    const profileId=await person(),ids=await material(profileId,[profileId]);
+    await t.sql`INSERT INTO principles(profile_id,statement,origin,rank,locked_at) SELECT ${profileId},'Standing ' || n,'declared',n,now() FROM generate_series(1,80) n`;
+    let distills=0,comparisons=0;
+    const model={distillPrinciples:async()=>{distills++;return {candidates:[{statement:'A new directive.',type:'maxim',citedSignalIds:ids}]};},
+      judgePrincipleRelation:async(input:Parameters<ModelProvider['judgePrincipleRelation']>[0])=>{comparisons++;return {relations:input.existingPrinciples.map(row=>({principleId:row.id,relation:'independent'}))};}} as unknown as ModelProvider;
+    await expect(refreshPrinciplesForProfile({profileId},{db:t.db as never,modelProvider:model})).rejects.toBeInstanceOf(BackgroundJobHeldError);
+    expect(distills).toBe(1);expect(comparisons).toBe(3);
+    expect(await t.sql`SELECT id FROM principles WHERE profile_id=${profileId} AND origin='minted'`).toHaveLength(0);
+    await t.sql`UPDATE top_of_minds SET status='superseded' WHERE profile_id=${profileId}`;
+    const [tom]=await t.sql`INSERT INTO top_of_minds(profile_id,version,reason) VALUES(${profileId},2,'no_change') RETURNING id`;
+    const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body) VALUES(${tom.id},'pattern','A present focus') RETURNING id`;
+    for(const id of ids)await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES(${entry.id},${id})`;
+    expect((await refreshPrinciplesForProfile({profileId},{db:t.db as never,modelProvider:model})).minted).toBe(1);
+    expect(distills).toBe(1);expect(comparisons).toBe(4);
+  });
+  it('recovers a committed publication without restoring words edited afterward',async()=>{
+    const profileId=await person(),ids=await material(profileId,[profileId]);
+    await requestPrincipleRefresh(t.db as never,profileId);
+    const [job]=await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_principles'`;
+    let calls=0;
+    const model={distillPrinciples:async()=>{calls++;return {candidates:[{statement:'Initial generated words.',type:'maxim',citedSignalIds:ids}]};}} as unknown as ModelProvider;
+    const options={db:t.db as never,modelProvider:model,jobId:job.id as string};
+    const result=await refreshPrinciplesForProfile({profileId},options);expect(result.minted).toBe(1);
+    await t.sql`UPDATE principles SET statement='The exact words I chose.',locked_at=now() WHERE profile_id=${profileId}`;
+    expect(await refreshPrinciplesForProfile({profileId},options)).toEqual(result);expect(calls).toBe(1);
+    expect((await t.sql`SELECT statement FROM principles WHERE profile_id=${profileId}`)[0].statement).toBe('The exact words I chose.');
+  });
+  it('invalidates paused comparisons after a human edits standing wording',async()=>{
+    const profileId=await person(),ids=await material(profileId,[profileId]);
+    await t.sql`INSERT INTO principles(profile_id,statement,origin,rank,locked_at) SELECT ${profileId},'Standing ' || n,'declared',n,now() FROM generate_series(1,80) n`;
+    let distills=0,sawEdit=false;
+    const model={distillPrinciples:async()=>{distills++;return {candidates:[{statement:'A new directive.',type:'maxim',citedSignalIds:ids}]};},
+      judgePrincipleRelation:async(input:Parameters<ModelProvider['judgePrincipleRelation']>[0])=>({relations:input.existingPrinciples.map(row=>{
+        const edited=row.statement==='My edited human wording.';sawEdit ||= edited;
+        return {principleId:row.id,relation:edited?'conflicting':'independent'};
+      })})} as unknown as ModelProvider;
+    await expect(refreshPrinciplesForProfile({profileId},{db:t.db as never,modelProvider:model})).rejects.toBeInstanceOf(BackgroundJobHeldError);
+    await t.sql`UPDATE principles SET statement='My edited human wording.' WHERE profile_id=${profileId} AND rank=79`;
+    await expect(refreshPrinciplesForProfile({profileId},{db:t.db as never,modelProvider:model})).rejects.toBeInstanceOf(BackgroundJobHeldError);
+    const result=await refreshPrinciplesForProfile({profileId},{db:t.db as never,modelProvider:model});
+    expect(distills).toBe(2);expect(sawEdit).toBe(true);expect(result.conflicts).toBe(1);
+    expect((await t.sql`SELECT statement FROM principles WHERE profile_id=${profileId} AND rank=79`)[0].statement).toBe('My edited human wording.');
+  });
+  it('does not spend model calls on a superseded queued material key',async()=>{
+    const profileId=await person();await material(profileId,[profileId]);
+    const result=await refreshPrinciplesForProfile({profileId},{db:t.db as never,expectedMaterialKey:'obsolete',modelProvider:{distillPrinciples:async()=>{throw new Error('Must not dispatch');}} as unknown as ModelProvider});
+    expect(result.status).toBe('superseded');
+  });
   it('changes work identity after a source edit is revalidated without changing its capture date',async()=>{
     const profileId=await person();
     await material(profileId,[profileId]);
