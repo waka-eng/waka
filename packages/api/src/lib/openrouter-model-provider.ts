@@ -152,9 +152,9 @@ export function toChatRequest(
   };
 }
 
-function modelFor(envName: string): string {
+function modelFor(envName: string, fallback = OPENROUTER_GENERATION_MODEL): string {
   const fromEnv = process.env[envName]?.trim();
-  return fromEnv && fromEnv.length > 0 ? fromEnv : OPENROUTER_GENERATION_MODEL;
+  return fromEnv && fromEnv.length > 0 ? fromEnv : fallback;
 }
 
 async function ask(
@@ -171,7 +171,7 @@ export function createOpenRouterModelProvider(): ModelProvider {
   return {
     name: "openrouter",
     async answerConversation(input){
-      const request=toChatRequest(buildConversationReplyRequest(input),modelFor('WAKA_MODEL_CHAT'),'conversation_reply');
+      const request=toChatRequest(buildConversationReplyRequest(input),modelFor('WAKA_MODEL_CHAT','deepseek/deepseek-v4.1-flash'),'conversation_reply');
       // The pinned route returned truncated strings/decoder errors for this
       // schema in the M8 baseline. Ask for JSON structure only; the same strict
       // application parser still enforces every field, bound and citation.

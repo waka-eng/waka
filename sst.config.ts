@@ -240,7 +240,7 @@ export default $config({
       ...(publicWebUrl ? { PUBLIC_WEB_URL: publicWebUrl } : {}),
       ...(isDevelopmentDomain
         ? {
-            WAKA_MODEL_CHAT: "google/gemini-3.8-flash",
+            WAKA_MODEL_CHAT: "deepseek/deepseek-v4.1-flash",
             WAKA_ENABLE_ADMIN_ROUTES: "true",
             WAKA_SHOW_INTERNAL_STATUS: "true",
             WAKA_ENABLE_BACKGROUND_JOBS_ADMIN: "true",

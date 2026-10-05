@@ -160,7 +160,7 @@ jobs:
             configuration="$(aws lambda get-function-configuration --function-name "$function_name" \
               --query '{replies:Environment.Variables.WAKA_CONVERSATION_REPLIES,chatModel:Environment.Variables.WAKA_MODEL_CHAT,database:Environment.Variables.DB_CONNECTION_URL}' --output json)"
             jq -e --arg enabled "$WAKA_CONVERSATION_REPLIES" --arg database "$DB_CONNECTION_URL" \
-              '.replies == $enabled and .chatModel == "google/gemini-3.8-flash" and .database == $database' <<< "$configuration"
+              '.replies == $enabled and .chatModel == "deepseek/deepseek-v4.1-flash" and .database == $database' <<< "$configuration"
             printf '%s chat configuration and migrated database target verified.\n' "$output_key"
           done
 

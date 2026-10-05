@@ -1090,10 +1090,20 @@ claims or claim full source completion. Discovery runs only after current
 coverage is complete. Reading dependencies created by a batch attach to the
 matching unfinished source receipts, without marking those receipts derived.
 
-One prompt, two roads: every generation task runs through OpenRouter on the
-pinned DeepSeek snapshot when `OPENROUTER_API_KEY` is present, and falls back
+One prompt, two roads: generation defaults to OpenRouter on the pinned
+DeepSeek snapshot when `OPENROUTER_API_KEY` is present, and falls back
 to Gemini without it. Embeddings never switch roads — the stored vectors and
 every cosine threshold above live in `gemini-embedding-001`'s space.
+
+Talk with WAKA defaults to `deepseek/deepseek-v4.1-flash` on OpenRouter, also
+explicitly set through `WAKA_MODEL_CHAT` in the dev API and worker.
+The manual chat evaluation and
+deployment verification check that exact model. Other generation tasks retain
+the default V4 Flash 0731 snapshot. Per-task model overrides
+remain available; no OpenRouter key still selects the Gemini provider rather
+than interpreting an OpenRouter model ID as a direct Gemini model. The chat
+switch does not enable production replies or change the 1,200-token output cap,
+source validation, or request budget.
 
 | Constant | Value | One line |
 |---|---|---|
