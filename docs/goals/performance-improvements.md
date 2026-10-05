@@ -1,6 +1,6 @@
 # Performance improvements
 
-Status: in progress (2026-10-05), milestones 1 to 4 passed locally; milestone 5 next.
+Status: in progress (2026-10-05), all five milestones implemented and accepted locally; PR delivery and deployed verification remain open.
 Branch: `codex/performance-improvements`, based on the separately checkpointed
 single-inspiration Review implementation at `33614ed`.
 
@@ -295,3 +295,61 @@ all were fixed without dropping behavior assertions. Compact
 paired values, rejected experiments, quality results and limits. No new schema,
 provider spending, remote mutation, push or deployment. Milestone 5 remains:
 full regression/breakpoint/worker checks and authorized delivery observation.
+
+### Milestone 5 planning checkpoint on 2026 10 05
+
+The owner requested a plan of remaining implementation. Reviewed the committed
+milestones, pending candidate diff and existing generated measurements; updated
+the existing plan rather than beginning another implementation batch. Milestone
+5 already has uncommitted input-size, schema-verifier, cheap CI-contract and
+synthetic fault/worker harness changes. It is in progress, not unstarted or
+accepted. Twenty candidate desktop runs show Home/Review medians 392.2/364.5
+ms; narrow-viewport runs show 390.2/371.55 ms. These are local desktop-browser
+measurements, not deployed or physical-device proof.
+
+The remaining work is organized as batch A final local acceptance and receipt,
+batch B separately authorized dev delivery/migration/backfill, and batch C
+deployed workflow/stage verification. Actual Lambda configuration inspection
+was denied; local pool-one tests do not establish deployed configuration.
+Corrected the plan's checkbox to preserve that open verification item. No app
+code, database, provider call, commit, push, merge or deployment was performed
+for this planning checkpoint. No final milestone 5 gate is claimed.
+
+### Milestone 5 local acceptance on 2026 10 05
+
+Continued after the planning checkpoint and finished batch A. This is local
+acceptance, not the full delivery/deployed gate. Final production-build Home
+medians are 385.05/386.7 ms and Review 377.75/380.4 ms at desktop/narrow width,
+twenty samples each with 150 ms added API delay. Twenty final uncontended warm
+returns per width have medians 196.2/197.3 ms and maxima 198.7/201.1 ms. The
+post-Capture fixture has 2,001 actual sources with a 2,000-summary ceiling.
+Across eighty measured warm returns, eighty snapshot reads and only the initial
+ten archive pages occurred. One earlier narrow return took 423 ms while the
+full API suite ran concurrently; retained that extra-load batch, then repeated
+under the intended uncontended conditions without claiming general CPU immunity.
+
+Final API benchmark retains thirty samples across twenty search query classes,
+all complete cursor walks; worst p95 49.84 ms. Context median 50.3/p95 54.49 ms,
+artifact readers ten/four statements. The prior controlled model-free worker
+completed a real claim with 509 iterations and twenty overlapping browser runs;
+its setup failure remains recorded. New runner reserves the controlled worker
+before setup awaits, refusing concurrent starts. A small fresh fixture proved
+one completion, explicit stop, failed-start cleanup on an occupied port, and
+SIGTERM with an active worker removing only its own schema.
+
+Verified Capture/reflection/Chat computed 16 px. The first full web run caught
+the design-system literal-size ceiling: added a shared input token, preserving
+that ceiling instead of raising it. Final 737 web and 1,518 full API tests pass;
+three paid evaluations skipped. Types, production build, runner types,
+db:check and two real fresh-migration tests pass. The deployment verifier now
+requires 0067, its ledger receipt, columns and synchronous/source-fencing
+triggers. Cheap CI guards preserve manual browser/provider gates.
+
+Verdict: local batch A passes. Optional chunk/font changes are deferred without
+a measured gain. The sanitized [milestone 5 receipt](../craft/evidence/performance/milestone-5.json)
+retains final source hashes, failed experiments and local/cloud/device limits.
+[Dev delivery descriptions and checklist](../plans/2026-10-05-performance-dev-delivery.md)
+are prepared, not executed. No new provider spending, dev migration/backfill,
+push, PR, merge or deployment. Actual cloud configuration access was denied;
+deployed stage timing and physical-device claims remain unproven. The full goal
+stays active pending authorized PR delivery and dev verification.

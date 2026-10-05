@@ -1,0 +1,159 @@
+{
+  "milestone": 5,
+  "date": "2026-10-05",
+  "localAcceptance": "passed",
+  "fullMilestoneAcceptance": "pending delivery and deployed verification",
+  "baseRevision": "42d9901",
+  "environment": {
+    "database": "explicit disposable loopback Postgres",
+    "web": "production build",
+    "browser": "desktop in-app browser, desktop and narrow viewport",
+    "addedApiDelayMs": 150,
+    "actualBrowserOriginals": 2001,
+    "loadedSummaryCeiling": 2000,
+    "physicalDevicesVerified": false,
+    "newProviderCalls": 0,
+    "newProviderCostUsd": 0
+  },
+  "finalWebBuild": {
+    "homeJs": "Home-B3iD1apm.js",
+    "chatJs": "Chat-bxxvwhMW.js",
+    "indexJs": "index-DSkDeE7g.js",
+    "homeCss": "Home-Bx2_k_NN.css",
+    "indexCss": "index-kScas2id.css"
+  },
+  "finalBrowserSamples": {
+    "samplesPerScenario": 20,
+    "desktop": {
+      "homeMs": {"median": 385.05, "p95": 388.2, "max": 399.6},
+      "freshReviewMs": {"median": 377.75, "p95": 392, "max": 393.5},
+      "warmReturnMs": {"median": 196.2, "p95": 198.5, "max": 198.7}
+    },
+    "narrow": {
+      "homeMs": {"median": 386.7, "p95": 389, "max": 393.5},
+      "freshReviewMs": {"median": 380.4, "p95": 392.3, "max": 392.8},
+      "warmReturnMs": {"median": 197.3, "p95": 199.9, "max": 201.1}
+    },
+    "traceAcross80WarmReturns": {
+      "snapshotReads": 80,
+      "archivePages": 10,
+      "archivePagesExplanation": "One initial archive walk; no additional walk on the eighty returns."
+    }
+  },
+  "earlierHome60SecondWindow": {
+    "issued": 31,
+    "completed": 31,
+    "originalDetails": 1,
+    "originalDetailExplanation": "Prior synthetic Capture recovery, not archive-wide warming",
+    "roomContents": 0,
+    "responseBytes": 1060279,
+    "limitation": "Before literal input minimum was factored into an equivalent shared token; application JavaScript and API behavior unchanged."
+  },
+  "finalApi": {
+    "samplesPerQuery": 30,
+    "originals": 10000,
+    "poolMax": 5,
+    "searchQueryClasses": 20,
+    "completeIdsOrderTotalsCursorsVerified": true,
+    "worstSearchP95Ms": 49.84,
+    "chatContextMs": {"median": 50.3, "p95": 54.49},
+    "topOfMindSqlStatements": 10,
+    "principlesSqlStatements": 4,
+    "limitation": "API benchmark precedes final CSS/token and test-harness changes; API reader/query implementation is unchanged."
+  },
+  "controlledWorker": {
+    "kind": "model-free real queue claim, material/context/validation SQL",
+    "workerOriginals": 10000,
+    "uiActualOriginals": 2001,
+    "uiSummaryCeiling": 2000,
+    "browserSamplesWhileActive": 20,
+    "iterations": 509,
+    "claimed": 1,
+    "succeeded": 1,
+    "retried": 0,
+    "failed": 0,
+    "homeMs": {"median": 369, "p95": 373.6, "max": 388.7},
+    "reviewMs": {"median": 353.75, "p95": 356.6, "max": 360.8},
+    "limitation": "Does not model actual provider transport or a complete production generation workload."
+  },
+  "startupExploration": {
+    "windowSeconds": 8,
+    "readyMs": 401,
+    "longTasks": 2,
+    "longTaskTotalMs": 166,
+    "longestTaskMs": 107,
+    "unexpectedLayoutShiftScore": 0.0000008259817336996396,
+    "frameMedianMs": 16.7,
+    "frameP95Ms": 18,
+    "optionalBundleFontOptimization": "deferred; no measured benefit justifies extra changes",
+    "limitation": "One exploratory startup run before equivalent token factoring, not physical-mobile or a population guarantee."
+  },
+  "correctness": {
+    "minimumComputedCaptureReflectionChatFontPx": 16,
+    "reviewPrimaryTargetHeightPx": 44,
+    "longKoreanCaptureDraftAfterCloseAndReadFailure": "preserved",
+    "longKoreanReflectionDraftAfterCloseAndResume": "preserved",
+    "longKoreanChatDraftAfterBackAndReopen": "preserved",
+    "archiveTailFailure": "ready Home/Capture retained, explicit retry recovered",
+    "reviewReadFailure": "retry recovered current original and enabled actions",
+    "captureLostResponse": {
+      "committedStatus": 201,
+      "idempotentReplayStatus": 200,
+      "createdSources": 1
+    },
+    "simultaneousWorkerStarts": "one accepted, second refused; one queue completion",
+    "workerClaimIsolationAfterOtherFixtureWork": "older pending other-profile fixture job preserved and deferred; intended worker completed once",
+    "failedStartupCleanup": "own schema removed, both unrelated live fixture schemas preserved",
+    "activeWorkerSigtermCleanup": "worker stopped, own schema removed, other live fixture preserved",
+    "sourceSchemaVerification": "real fresh migrator and same deployment verifier accept 0065/0066/0067"
+  },
+  "retainedFailures": [
+    "Initial worker claim setup selected another fixture profile; failed attempt retained. Other synthetic profiles are now deferred explicitly for deterministic worker isolation.",
+    "The first desktop input fix was overridden by the more-specific Capture rule; fixed the winning rule and verified computed 16 px.",
+    "First final web run passed 736 and failed the literal type-scale ceiling. Added one shared input token; retained the ceiling; final 737 passed.",
+    "A narrow warm-return sample took 423 ms while the full API suite ran concurrently. That unplanned-load batch is retained separately; uncontended repeat max is 201.1 ms. No general CPU-load guarantee is claimed."
+  ],
+  "verification": {
+    "webTestsPassed": 737,
+    "webSuitesPassed": 105,
+    "fullApiTestsPassed": 1518,
+    "fullApiSuitesPassed": 150,
+    "paidEvaluationsSkipped": 3,
+    "freshMigrationTestsPassed": 2,
+    "apiWebAdminTypes": "passed",
+    "performanceRunnerTypes": "passed",
+    "productionWebBuild": "passed",
+    "migrationCorpusCheck": "passed",
+    "heavyBrowserLoadPaidCi": "remain manual; no new automatic performance job"
+  },
+  "remaining": [
+    "Push and open milestone PRs only with confirmed authority; none exists yet.",
+    "Merge/deploy only when separately requested; verify actual dev API/worker database binding first.",
+    "Apply 0067 before new API delivery and perform an explicitly authorized bounded dev backfill.",
+    "Verify deployed request timings and generation stage delays; unique resource inventory alone does not establish latency.",
+    "Actual cloud configuration inspection returned AccessDeniedException; deployed connection configuration remains unverified.",
+    "Real iPhone/Android device performance and native microphone behavior remain deferred."
+  ],
+  "generatedEvidence": [
+    "work/performance/m5-qa/token-build-browser.json",
+    "work/performance/m5-qa/browser-final.json",
+    "work/performance/m5-qa/home-60.json",
+    "work/performance/m5-qa/failure-http.json",
+    "work/performance/m5-qa/startup.json",
+    "work/performance/m5-qa/worker-valid-completion.json",
+    "work/performance/m5-final/api.json",
+    "work/performance/m5-harness/worker-controls.json",
+    "work/performance/m5-harness/failed-start-cleanup.json",
+    "work/performance/m5-harness/active-worker-cleanup.json",
+    "work/performance/m5-harness-claim/claim-isolation.json"
+  ],
+  "sourceSha256": {
+    "packages/web/src/styles/home.css": "6c466d74d805bf896fe303e079afa59a609b7025e01b730f9499a3501a5f32a4",
+    "packages/web/src/styles/chrome.css": "c666df1ed83698f8f533385ab5538447a600c0871906e3065a68273b85ed3a3d",
+    "packages/web/src/styles/system.css": "5924b0fde93a19aa4be24e1ccf4a1aaa20d3d46fdd404a99f2fc6c5afd4c28a5",
+    "packages/web/test/performance-ci-contract.test.ts": "702501a7d179d5262b11a89f605629c769fd67bf1fc34ae36061eac1980a1c0e",
+    "packages/api/src/lib/fresh-migrate.db.test.ts": "5d6ab5f53e8077957075e69f9d5edf20ceadbaa8c3facedb34c4f5b74bec4406",
+    "scripts/verify-memory-schema.mjs": "2b71f86095cec36b710b72ec6db9fc1622254d1ba809ffd4e62c401a845d64b5",
+    "tools/performance/run.ts": "477c3db5ce2af0f7b2688a6e3a2adfa06995b2307004ac55c82ededf15cbfd45"
+  }
+}

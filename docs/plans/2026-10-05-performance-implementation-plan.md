@@ -1,7 +1,8 @@
 # WAKA performance implementation plan
 
 Status: implementation in progress, updated 2026-10-05. Milestones 1 to 4
-passed locally. Milestone 5 is next. Work is tracked in
+passed locally. Milestone 5 local acceptance passed; PR delivery and deployed
+verification remain open. Work is tracked in
 [the performance goal](../goals/performance-improvements.md).
 
 Make WAKA feel ready sooner and stop unnecessary work after it opens. Start
@@ -23,10 +24,10 @@ checkpoint from performance changes.
 | 2 Make Home and Review ready sooner | Completed | Local gate passed; delivery pending | Recheck its budgets after later changes. |
 | 3 Make search scale | Completed | Local gate passed; migration/backfill delivery pending | Apply migration before API delivery to an independently verified dev target; recheck budgets later. |
 | 4 Speed up personal memory readers | Completed | Local gate passed with pool five and one | Recheck full regression and deployed behavior during authorized delivery. |
-| 5 Validate delivery and optimize startup if needed | P2 | Not started | Run final regression and breakpoint checks, add cheap CI guards and prepare delivery evidence. |
+| 5 Validate delivery and optimize startup if needed | P1 | Local acceptance passed; full milestone open | Authorized PR delivery, dev rollout and deployed verification remain. |
 
-One milestone remains. Startup bundle and font changes are conditional,
-not a prerequisite for the higher-impact database work.
+One milestone remains, split into three bounded work batches below. Startup
+bundle and font changes are conditional, not a prerequisite for delivery.
 
 Milestone 1 reduced the first sixty seconds of Home API traffic from 1,555 to
 32 requests on the 2,000-inspiration fixture with 150 ms added API delay.
@@ -65,20 +66,21 @@ these results, rejected approaches and content-free timing instrumentation.
 
 ### Immediate next implementation batch
 
-Complete milestone 5 before declaring the full performance goal finished:
+Batch A is locally accepted. The next action is delivery under separately
+confirmed authority, not additional speculative optimization. Nothing in this
+document independently authorizes push, merge, deploy, dev backfill or model calls.
 
-1. Repeat prior budgets on the final production build, including controlled
-   worker contention and current-schema migration/backfill regression.
-2. Verify desktop/mobile-breakpoint Home, Capture, Review, Chat and Back with
-   long Korean text, slow/failing requests, draft recovery and layout stability.
-3. Add only inexpensive structural/regression CI checks. Browser/load/paid
-   checks stay manual; optional font/chunk changes require a measured benefit.
-4. Prepare milestone delivery evidence and PRs within confirmed authority.
-   Apply 0067 before a new API only when deployment is requested, then run the
-   bounded backfill against the independently verified actual dev target.
-5. Observe authorized signed-in dev traces and existing jobs without claiming
-   localhost timings prove cloud/device performance. Physical devices remain
-   explicitly unverified when unavailable; production/native/store are excluded.
+| Batch | Deliverable | Completion condition |
+| --- | --- | --- |
+| A Finish local acceptance | Complete locally; see milestone 5 receipt | Existing budgets and correctness pass; failed experiments, final source hashes and limits are retained. |
+| B Prepare and deliver dev safely | Reviewed milestone changes, migration 0067 and bounded search backfill | Separate delivery authority is confirmed; actual dev target is verified; migration verification succeeds before new API deployment. |
+| C Verify deployed experience | Signed-in cold/warm performance and workflow checks | Confirm deployed revision and schema, measure real latency and stage delays, and fix reproducible regressions before calling the rollout complete. |
+
+The verified implementation contains desktop-readable inputs, schema-verification
+updates, a cheap CI contract guard and synthetic fault/worker test controls.
+The full milestone is not delivered. Follow the prepared
+[dev delivery checklist and PR descriptions](2026-10-05-performance-dev-delivery.md)
+for the exact next steps.
 
 ### Bug fixes required throughout
 
@@ -138,8 +140,8 @@ made the benchmark reproducible and retained a sanitized comparison receipt.
 | 4 Speed up personal memory readers | Faster Chat context and fewer artifact-reader round trips | Index changes only when query plans justify them |
 | 5 Validate delivery and optimize startup if needed | Dev verification, mobile follow-up and selective bundle/font work | No migration expected |
 
-The budgets below are proposed acceptance targets, not results already achieved.
-Rebaseline with repeated samples before judging an implementation.
+The budgets below are the acceptance targets. Each milestone's status and
+receipt distinguish measured results from remaining verification.
 
 ## Milestone 1 Reduce Home request volume
 
@@ -330,9 +332,12 @@ not substituted. Signed-in dev job/provider observation remains delivery work.
   current support calculations within a request. Reduce statements and serial
   round trips without skipping auth, tenant, statement, body or material checks.
   Do not add a long-lived cache of supposedly current machine conclusions.
-- [x] Measure both local pool settings and the deployed single-connection
-  Lambda configuration. Do not increase global connection concurrency as a
+- [x] Measure both local pool settings, including pool one as a model of the
+  Lambda connection budget. Do not increase global connection concurrency as a
   substitute for removing redundant work.
+- [ ] Independently verify the deployed API/worker connection configuration
+  during authorized dev verification. A pool-one local run is not proof of
+  actual Lambda configuration or latency.
 - [x] Record content-free stage timings for queue wait, material/context reads,
   embeddings, model execution and publication validation. Observe existing dev
   jobs before attributing delay to a model. Avoid prompt/source/credential logs.
@@ -358,32 +363,149 @@ Primary files: `packages/api/src/lib/conversation-material.ts`,
 
 ## Milestone 5 Validate delivery and optimize startup if needed
 
-Status: not started. Bundle/font work is conditional on an observed bottleneck.
+Status: local acceptance passed; delivery and deployed verification pending.
+Bundle/font work is deferred without a demonstrated benefit. The
+[milestone 5 receipt](../craft/evidence/performance/milestone-5.json) distinguishes
+final measurements, earlier exploration and remaining scope.
 
-### Implementation tasks
+### Current local evidence
 
-- [ ] After milestones 1 to 4, repeat the complete benchmark and investigate
-  remaining startup long tasks. Split noncritical settings/share/reflection
-  modules and defer unnecessary font families/weights only when profiling
-  shows a meaningful gain. Retain the existing typography and atmosphere;
-  avoid a renderer/framework rewrite or cosmetic redesign.
-- [ ] Verify cold and warm Home, Capture, Review, Chat and return navigation at
-  desktop and mobile breakpoints, with slow/failing requests and long Korean
-  text. Measure layout shifts and interaction timing, not only bundle bytes.
-  Keep input text at least 16 px and touch targets at least 44 px.
-- [ ] Add inexpensive request-count, cache-isolation, cancellation and loader
-  regression tests to existing CI. Keep browser performance runs, load tests
-  and paid quality evaluations manual. Do not restore CI Browser gates or add
-  recurring performance jobs without a separate request.
-- [ ] Prepare one small PR per approved milestone, with before/after numbers,
-  correctness results and recovery notes. Deploy only when requested. Verify
-  the actual dev database target before migrations/backfills; production is
-  excluded. Prefer additive changes and preserve compatibility during API/web
-  rollout. Reverting a client optimization must not require deleting memory.
-- [ ] Compare signed-in dev cold/warm traces with local results and separate
-  network, database, queue and provider delays. Real-device performance remains
-  a follow-up if iPhone/Android devices are unavailable; viewport/simulator
-  checks must not be reported as physical-device performance.
+The final token-based build has twenty local desktop runs with Home median
+385.05 ms and Review median 377.75 ms; twenty narrow-viewport runs recorded
+386.7 and 380.4 ms. Final warm return maxima are 198.7/201.1 ms for desktop/narrow.
+The viewport is a desktop
+browser at a mobile width, not a physical phone. The final thirty-sample API
+run is retained separately in `work/performance/m5-final/api.json`.
+
+A sixty-second Home window recorded 31 issued/completed requests, one original
+detail read associated with a prior synthetic capture and zero room-content
+reads. A controlled model-free worker completed one real queue claim with 509
+material/context/validation iterations; twenty browser samples were taken
+while that worker was active. These contention tests do not measure provider
+latency or a production generation workload. Keep the earlier failed worker
+claim setup in the evidence rather than counting it as a successful load test.
+
+Schema-verifier updates require migration 0067, and a fresh-database test calls
+that same verifier. The verified CI guard preserves manual browser/model
+checks. Capture and reflection input rules now enforce at least 16 px on
+desktop as well as narrow screens, including the more-specific Capture rule
+that originally overrode the minimum. The shared input-size token preserves
+the design-system ceiling. Final checks pass: 737 web and 1,518 full API tests,
+all application/runner types, production build and migration checks. Three
+paid evaluations remain skipped. The first literal-size failure and a 423 ms
+warm-return sample under simultaneous full-API-test load are retained in the
+receipt; the later uncontended repeat is reported separately.
+
+### Batch A Finish local acceptance
+
+Completed without remote data changes:
+
+- [x] A1 Finalize the test harness. Document one-off archive-read, Review-read
+  and lost-Capture-response controls, worker start/stop/status and cleanup.
+  Verify deterministic synthetic queue selection after earlier Capture/Review
+  tests have queued jobs. Prove failure cleanup stops its worker/server and
+  removes only its own disposable schema. Provider networking stays disabled.
+- [x] A2 Finalize the readable-input fix. Verify the winning computed styles
+  in Capture, reflection and Chat at desktop and narrow widths, with long
+  Korean text and keyboard focus. Input text must be at least 16 px and
+  primary interaction targets at least 44 px. Preserve surrounding typography,
+  layout and the current visual feel.
+- [x] A3 Finalize rollout regression checks. Verify 0067 columns, migration
+  receipt and synchronous text-write trigger before API deployment. Prove
+  search metadata backfill does not bump material/generation revisions or
+  schedule regeneration. Keep cheap loader/cache/request/schema guards in
+  normal CI; browser/load/provider evaluations remain manual.
+- [x] A4 Close workflow bug cases. Retain drafts on later archive failure,
+  failed Review opening and Back/reopen. Confirm retry does not duplicate
+  Review sessions or skip an original. A lost Capture response may replay its
+  durable idempotent request, but must create exactly one inspiration; record
+  both the committed response and replay rather than claiming no mutation
+  retry occurs. Preserve deletion, account/profile and stale-citation fences.
+- [x] A5 Consolidate final verification. Record the exact code/build revision,
+  fixture size, pool, sample count and worker overlap. Use at least twenty
+  browser and thirty API samples for sample p95 gates. Separate unchanged
+  2,000-source fixtures from the post-Capture 2,001-source fixture with a
+  2,000-summary ceiling. Check existing test/type/build results against the
+  final candidate and run only checks missing after the last change.
+- [x] A6 Commit a sanitized milestone 5 receipt and local implementation.
+  Include before/after budgets, reproduced bugs, failed experiments, recovery
+  checks and measurement limits. Review the diff for unrelated edits and
+  content/credential leakage. Update the goal/index with the actual gate
+  result, not the intended result.
+
+Batch A gate: Home median at most 800 ms and sample p95 at most 1.2 s under
+150 ms added API delay; Review median at most 500 ms with at most three core
+requests; warm Home return within 400 ms; at most forty Home API requests in
+sixty seconds, no unrelated room reads and no broad detail sweep. Search p95
+must remain below 100 ms at 10,000 sources, Chat context median below 60 ms and
+p95 below 100 ms, and Top of Mind/Principles readers at most ten/six statements.
+Existing correctness, migration and isolation checks must still pass.
+
+### Batch B Prepare and deliver dev safely
+
+These are delivery tasks, not new product features. Start only with the
+corresponding push, merge/deploy and database authority:
+
+- [ ] B1 Prepare milestone PR descriptions and separate the earlier
+  single-inspiration Review checkpoint. Keep the existing dependency order
+  and include each milestone's measurements, correctness and recovery notes.
+  Confirm the current remote base before choosing separate or stacked PRs.
+  Do not include unrelated local work or silently merge a dependent PR early.
+- [ ] B2 Verify the actual development database and API/worker bindings.
+  Compare configured targets without exposing credentials. Do not infer
+  isolation from `.env.local`, a branch name or a stage label. Production
+  schema, source data and deployment are excluded.
+- [ ] B3 Rehearse and execute migration 0067 before the new API reads its
+  columns. Run the read-only schema verifier and fresh-migration checks.
+  Nullable coverage must continue to use current-text fallback during rollout;
+  the API must not silently repair data or call a model on a read.
+- [ ] B4 Run an explicitly authorized, bounded search backfill against the
+  verified dev target. Dry-run first; use resumable small batches and record
+  remaining rows, lock contention and revision/job invariants. Stop and
+  investigate if the target is ambiguous or source revisions change.
+- [ ] B5 Verify deployed API and web revisions match the intended changes.
+  Keep a documented revert path: additive search columns can remain, and
+  reverting a client/API optimization must not delete memory or human wording.
+
+Batch B gate: the reviewed revision is deployed to the verified dev target;
+0067 verification passes, historical coverage is reported honestly, and no
+production data or deployment is touched. PR approval alone is not deployment
+proof. Push/open PRs and merge/deploy remain separate actions.
+
+### Batch C Verify deployed experience
+
+- [ ] C1 Measure authorized signed-in dev cold/warm Home, Capture, single-item
+  Review, Chat and Back after confirming the deployed revision. Record actual
+  request counts and timings, not only an inventory of unique resource URLs.
+  Compare with local results without promising localhost latency in the cloud.
+- [ ] C2 Observe existing content-free timing events for queue wait,
+  material/context reads, embeddings, provider execution and publication
+  validation. Verify actual connection settings before proposing pool changes.
+  Do not attribute a pending UI to the model without stage measurements.
+- [ ] C3 Fix reproducible deployed bugs exposed by the rollout, each with a
+  regression case. Prioritize duplicate saves, lost drafts, stale/deleted
+  evidence, wrong-user context and permanently stuck loading before cosmetic
+  changes. Re-run the affected budget after each fix.
+- [ ] C4 Record unavailable checks explicitly. Current local cloud-config
+  inspection returned `AccessDeniedException`; that is an access limitation,
+  not proof of a deployment failure. Real iPhone/Android microphone, keyboard
+  and CPU behavior remain a follow-up under the owner's prior device deferral.
+
+Batch C gate: report measured deployed behavior and any unresolved failures.
+Do not claim cloud/provider or physical-device performance from viewport tests.
+If required diagnostics remain inaccessible, report the precise access needed
+and retain that acceptance item as open.
+
+### Conditional follow-up
+
+Only propose extra optimization after final profiling identifies a remaining
+bottleneck. Candidate startup evidence has two long tasks totaling 166 ms in
+the first eight seconds, with the longest 107 ms, while readiness already meets
+the local budget. That alone does not justify a large bundle/font rewrite.
+Split noncritical code or reduce font loading only after a matched comparison
+shows a user-visible gain without changing typography or losing interactions.
+Cache or connection-pool changes likewise need deployed evidence and the same
+freshness/isolation gates.
 
 ### Acceptance gate
 
@@ -417,8 +539,8 @@ failed, what remains and whether anything was pushed or deployed. Record the
 gate verdict before moving on; stop and reassess a failed or marginal gate.
 Do not silently expand the approved scope.
 
-Recommended next step: complete milestone 5's final regression and authorized
-delivery checks. Milestones 1, 2 and 4 needed no migration; milestone 3 requires
+Recommended next step: authorize delivery under batch B. Milestones 1, 2 and 4
+needed no migration; milestone 3 requires
 the additive migration 0067 and verified, explicit bounded backfill before
 claiming deployed search performance.
 Production deployment, native/store packaging, a visual redesign and changes

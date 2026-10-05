@@ -74,6 +74,37 @@ stage, elapsed milliseconds and outcome. Queue wait excludes intended run-after
 delay. Separate these stages when diagnosing waiting; never log source wording
 or infer provider latency from a pending UI state alone.
 
+## Recovery and controlled worker checks
+
+These controls exist only in the disposable loopback fixture, not the app API:
+
+- Add `fault=archive-tail-once`, `fault=review-read-once` or
+  `fault=capture-lost-once` to `/perf/scenario`. Alternatively,
+  `/perf/fault?name=<fault>` arms one failure without reloading the page.
+  The archive/Review controls reject the matching read once. Capture commits
+  through the real handler and then drops the response; verify a durable replay
+  creates exactly one source, rather than expecting only one POST.
+- `/perf/worker?action=start`, `stop` and `status` control one bounded worker.
+  Concurrent starts refuse the second request. The worker claims and completes
+  a real queue job, repeatedly reads owned material/context and validates its
+  revision, with no provider or source rewrite. Status reports whether it is
+  active, completed iteration count and queue result. Its maximum is 120 seconds;
+  stop it explicitly when the measurement is finished.
+- The worker prefers the 10,000-source profile. Other synthetic profiles'
+  pending jobs are deferred three minutes to keep claim selection deterministic
+  after Capture/Review checks. This is fixture isolation, not production queue
+  scheduling or a measurement of provider latency.
+- SIGINT/SIGTERM stops the worker before closing its database and dropping
+  only the schema allocated by this process. Failed startup also cleans its
+  schema; an occupied port must not remove the other running fixture's schema.
+
+For timing, inspect the DOM probe's action mode as well as its value. Wait for
+the Chat mode before measuring Back, then wait for the return mode; do not reuse
+an earlier action receipt. Record request volume across the full window, and
+do not run the full test suite concurrently with an uncontended benchmark.
+Record that extra load separately if it occurs. Fixtures changed by Capture
+must report their actual source count, not just the configured summary ceiling.
+
 ## Search migration and backfill
 
 Migration 0067 must precede deployment of an API that reads its new columns.

@@ -132,6 +132,9 @@
   --t-reading: clamp(21px, 2.2vw, 30px);
   --t-lead: clamp(16px, 1.2vw, 19px);
   --t-body: 15px;
+  /* Editing needs a readable minimum on desktop and avoids focus zoom on
+     phones, without enlarging the surrounding reading/body scale. */
+  --t-input: max(16px, var(--t-body));
   /* TWO STEPS NAMED BECAUSE THE PRODUCT REALLY USES THEM (2026-08-25).
      `14px` appears at twenty sites and `12px` at thirteen, across three
      stylesheets, and neither had a name. Folding them into `--t-ui` or
