@@ -3570,23 +3570,12 @@
 /* one column on a narrow screen: the chosen memory reads UNDER its own row
    rather than beside it, which is the same object in the only order that
    fits */
-/* SIXTEEN PIXELS ON A TOUCH DEVICE, FOR EVERY FIELD IN THE WORLD.
-   Mobile Safari zooms the whole page when a text field under 16px takes focus
-   and does not zoom back out. Measured 2026-08-25: the capture field, the
-   card's editor and the reflection box were all 15px, so on a phone the ONE
-   ACT THIS PRODUCT EXISTS FOR threw the world into a zoomed state the moment
-   you touched it. `.jar-roomform-box` was already 16px and is left alone.
-
-   It is written as one rule for all three rather than a line remembered per
-   field, so the next field added to the world does not have to know about
-   this. The pixel only lands where a coarse pointer says it is needed, so the
-   reading measure the card was designed at is untouched everywhere else. */
-@media (pointer: coarse) {
-  .jar-mouth-field,
-  .jar-panel-edit,
-  .jar-reflect-box {
-    font-size: 16px;
-  }
+/* Editing stays readable on desktop too. This minimum only changes fields,
+   not the surrounding reading ramp or the app's typography/atmosphere. */
+.jar-mouth-field,
+.jar-panel-edit,
+.jar-reflect-box {
+  font-size: var(--t-input);
 }
 
 /* ═══════════════ WHAT A THUMB CAN ACTUALLY HIT ═══════════════

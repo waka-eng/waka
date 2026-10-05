@@ -42,6 +42,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import {execFileSync} from 'node:child_process';
 
 /** `waka_freshmig_<random>` — created here, dropped in afterAll. */
 const DATABASE = `waka_freshmig_${Math.random().toString(36).slice(2, 10)}`;
@@ -103,6 +104,11 @@ describe("the first migration on an empty database", () => {
       const checks = await sql<{ conname: string }[]>`
         SELECT conname FROM pg_constraint WHERE conname = 'profiles_mind_shape_check'`;
       expect(checks, "the mind's shape is pinned").toHaveLength(1);
+      // The same read-only verifier used by dev rollout must accept a real
+      // migrator receipt, including nullable search storage and its triggers.
+      const verifier=resolve(migrationsFolder(),'../../scripts/verify-memory-schema.mjs');
+      const output=execFileSync(process.execPath,[verifier],{env:{...process.env,DB_CONNECTION_URL:freshUrl},encoding:'utf8'});
+      expect(output).toContain('0065/0066/0067');expect(output).toContain('search triggers');
     } finally {
       await sql.end();
     }

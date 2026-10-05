@@ -271,6 +271,7 @@ describe("the type scale is one scale", () => {
       "--t-reading",
       "--t-lead",
       "--t-body",
+      "--t-input",
       "--t-note",
       "--t-ui",
       "--t-fine",

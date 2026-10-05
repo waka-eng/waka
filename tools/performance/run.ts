@@ -23,8 +23,10 @@ globalThis.fetch=async()=>{throw new Error('Performance fixture refuses provider
 const fixture=await createTestDatabase();configured.searchParams.set('options',`-c search_path=${fixture.schemaName}`);process.env.DB_CONNECTION_URL=configured.toString();
 console.log(JSON.stringify({stage:'allocated',schema:fixture.schemaName}));
 let server:ReturnType<typeof createServer>|null=null,closing=false,stopDatabase:(()=>Promise<unknown>)|null=null;
+let workerStop=false,workerRun:Promise<void>|null=null,workerIterations=0,workerResult:unknown=null;
 async function close(code=0){
   if(closing)return;closing=true;
+  workerStop=true;await workerRun;
   if(server){server.closeAllConnections();await new Promise<void>(done=>server!.close(()=>done()));}
   await stopDatabase?.();await fixture.cleanup();process.exit(code);
 }
@@ -37,6 +39,8 @@ const {getDb}=await import('../../packages/api/src/lib/db.js');
 const {createGroupForProfile}=await import('../../packages/api/src/routes/groups-membership.js');
 const {readConversationContext}=await import('../../packages/api/src/lib/conversation-context.js');
 const {createReviewSession,completeReviewSession,readActiveReview}=await import('../../packages/api/src/lib/review-sessions.js');
+const {drainBackgroundJobs}=await import('../../packages/api/src/lib/queue.js');
+const {loadInspirationMaterial,assertMaterialCurrent}=await import('../../packages/api/src/lib/inspiration-material.js');
 const db=getDb();const fixtures=new Map<number,{id:string;token:string;firstId:string;signalId:string;groups:string[];signals:number;principles:number}>();
 stopDatabase=()=>db.$client.end();
 for(const count of sizes){
@@ -149,17 +153,19 @@ for(const name of await readdir(resolve('packages/web/dist/assets'))){const byte
 const results={kind:'local synthetic production-build baseline',createdAt:new Date().toISOString(),apiImportMs:round(apiImportMs),database:'disposable loopback only',modelCalls:0,searchCorpus,fixtures:[...fixtures].map(([size,f])=>({size,signals:f.signals,principles:f.principles,rooms:f.groups.length})),measured,assets,reviewSelectionExplain:explain};
 await writeFile(resolve(outputDir,'api.json'),JSON.stringify({...results,samples,poolMax:process.env.WAKA_DB_POOL_MAX??5},null,2));
 console.log(JSON.stringify({origin,schema:fixture.schemaName,apiImportMs:round(apiImportMs),results:resolve(outputDir,'api.json')}));
-let activeSize=sizes[0]!,delayMs=0;
+let activeSize=sizes[0]!,delayMs=0,fault:string|null=null;
 const httpRequests:Array<{path:string;method:string;size:number;start:number;durationMs?:number;status?:number;bytes?:number}>=[];
-const probe=`<script>(()=>{let started=null,mode=null;document.addEventListener('click',e=>{const b=e.target.closest?.('button');if(!b)return;const text=(b.querySelector('.jar-activity-title')?.textContent||b.textContent).trim();if(/^(Review your inspirations|Resume review)$/.test(text)){started=performance.now();mode='review'}else if(text==='← Back'&&location.pathname.startsWith('/chat/')){started=performance.now();mode='return'}} ,true);new MutationObserver(()=>{if(started===null)return;const ready=mode==='review'?document.querySelector('.jar-review-item-actions button:not(:disabled)'):document.querySelector('.jar-home-activities button');if(ready){document.documentElement.dataset.wakaAction=JSON.stringify({mode,durationMs:performance.now()-started});started=null}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true})})();(()=>{const tasks=[],frames=[];let ready=null,last=null,stopped=false;try{new PerformanceObserver(list=>list.getEntries().forEach(e=>tasks.push({start:e.startTime,duration:e.duration}))).observe({type:'longtask',buffered:true})}catch{};function sample(now){if(last!==null)frames.push(now-last);last=now;if(ready===null&&document.querySelector('.jar-home-activities button')&&document.querySelector('.jar-mouth-rest')){ready=now;document.documentElement.dataset.wakaReady=String(now);}if(!stopped)requestAnimationFrame(sample)}requestAnimationFrame(sample);setTimeout(()=>{stopped=true;frames.sort((a,b)=>a-b);document.documentElement.dataset.wakaPerf=JSON.stringify({readyMs:ready,longTasks:tasks.length,longTaskTotalMs:tasks.reduce((n,e)=>n+e.duration,0),longestTaskMs:Math.max(0,...tasks.map(e=>e.duration)),frames:frames.length,frameMedianMs:frames[Math.floor(frames.length*.5)],frameP95Ms:frames[Math.floor(frames.length*.95)],framesOver32:frames.filter(n=>n>32).length})},8000)})();</script>`;
+const probe=`<script>(()=>{let started=null,mode=null;document.addEventListener('click',e=>{const b=e.target.closest?.('button');if(!b)return;const text=(b.querySelector('.jar-activity-title')?.textContent||b.textContent).trim();if(/^(Review your inspirations|Resume review)$/.test(text)){started=performance.now();mode='review'}else if(text==='Capture inspiration'){started=performance.now();mode='capture'}else if(text==='Talk with WAKA'){started=performance.now();mode='chat'}else if(text==='← Back'&&location.pathname.startsWith('/chat/')){started=performance.now();mode='return'}} ,true);new MutationObserver(()=>{if(started===null)return;const ready=mode==='review'?document.querySelector('.jar-review-item-actions button:not(:disabled)'):mode==='capture'?document.querySelector('[aria-label="Capture inspiration"] textarea'):mode==='chat'?document.querySelector('[aria-label="Your message"]'):document.querySelector('.jar-home-activities button');if(ready){document.documentElement.dataset.wakaAction=JSON.stringify({mode,durationMs:performance.now()-started});started=null}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true})})();(()=>{const tasks=[],frames=[];let ready=null,last=null,stopped=false,layoutShiftScore=0;try{new PerformanceObserver(list=>list.getEntries().forEach(e=>{if(!e.hadRecentInput)layoutShiftScore+=e.value})).observe({type:'layout-shift',buffered:true})}catch{};try{new PerformanceObserver(list=>list.getEntries().forEach(e=>tasks.push({start:e.startTime,duration:e.duration}))).observe({type:'longtask',buffered:true})}catch{};function sample(now){if(last!==null)frames.push(now-last);last=now;if(ready===null&&document.querySelector('.jar-home-activities button')&&document.querySelector('.jar-mouth-rest')){ready=now;document.documentElement.dataset.wakaReady=String(now);}if(!stopped)requestAnimationFrame(sample)}requestAnimationFrame(sample);setTimeout(()=>{stopped=true;frames.sort((a,b)=>a-b);document.documentElement.dataset.wakaPerf=JSON.stringify({readyMs:ready,layoutShiftScore,longTasks:tasks.length,longTaskTotalMs:tasks.reduce((n,e)=>n+e.duration,0),longestTaskMs:Math.max(0,...tasks.map(e=>e.duration)),frames:frames.length,frameMedianMs:frames[Math.floor(frames.length*.5)],frameP95Ms:frames[Math.floor(frames.length*.95)],framesOver32:frames.filter(n=>n>32).length})},8000)})();</script>`;
 const dist=resolve('packages/web/dist');
 const types:Record<string,string>={'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2','.png':'image/png','.svg':'image/svg+xml'};
 server=createServer(async(req,res)=>{
   try{
+    if(closing){res.writeHead(503);res.end();return;}
     const url=new URL(req.url??'/',origin);
     if(url.pathname==='/perf/scenario'){
       const size=Number(url.searchParams.get('size'));assert.ok(fixtures.has(size));activeSize=size;
       delayMs=Number(url.searchParams.get('delay')??0);assert.ok(delayMs>=0&&delayMs<=500);
+      fault=url.searchParams.get('fault');assert.ok(fault===null||['archive-tail-once','review-read-once','capture-lost-once'].includes(fault));
       // Test-only setup: close the synthetic session without making a source
       // choice, so repeated browser samples can measure a genuinely new start.
       if(url.searchParams.get('review')==='fresh'){
@@ -169,6 +175,47 @@ server=createServer(async(req,res)=>{
       httpRequests.length=0;res.writeHead(302,{Location:'/', 'Set-Cookie':buildSessionCookie(fixtures.get(size)!.token,{secure:false})});res.end();return;
     }
     if(url.pathname==='/perf/results'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({size:activeSize,delayMs,httpRequests}));return;}
+    if(url.pathname==='/perf/fault'){
+      const next=url.searchParams.get('name');assert.ok(next===null||['archive-tail-once','review-read-once','capture-lost-once'].includes(next));fault=next;
+      res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({fault}));return;
+    }
+    if(url.pathname==='/perf/worker'){
+      const action=url.searchParams.get('action');assert.ok(['start','stop','status'].includes(action??''));
+      if(action==='stop')workerStop=true;
+      if(action==='start'){
+        assert.equal(workerRun,null,'One controlled worker at a time');workerStop=false;workerIterations=0;workerResult=null;
+        const f=fixtures.get(10000)??fixtures.get(activeSize)!;
+        // Keep the synthetic claim deterministic even after Capture/Review
+        // tests have queued work for another fixture account. This only
+        // defers rows in this disposable schema; no production queue policy.
+        // Real claim/lease/completion and real material/context/validation SQL.
+        // Only transport is replaced: one bounded synthetic processor, no
+        // model, no source rewrite, no global connection/budget change.
+        workerRun=(async()=>{
+          try{
+            // Reserve workerRun before setup awaits, so concurrent start
+            // requests cannot create a second worker or race shutdown.
+            await fixture.sql`UPDATE background_jobs SET run_after=GREATEST(run_after,now()+${'3 minutes'}::interval)
+              WHERE profile_id<>${f.id} AND status='pending'`;
+            if(workerStop)return;
+            await fixture.sql`INSERT INTO background_jobs(profile_id,type,payload,max_attempts) VALUES (${f.id},'tend_signal_garden','{}'::jsonb,1)`;
+            workerResult=await drainBackgroundJobs({limit:1,processor:async job=>{
+            assert.equal(job.profileId,f.id);const until=Date.now()+120000;
+            while(!workerStop&&Date.now()<until){
+              const [lease]=await fixture.sql`SELECT id FROM background_jobs WHERE id=${job.id} AND profile_id=${job.profileId}
+                AND status='running' AND locked_at=${job.lockedAt} AND attempts=${job.attempts}`;assert.ok(lease,'Controlled claim changed');
+              await db.transaction(async tx=>{
+                const material=await loadInspirationMaterial(tx,f.id,f.firstId,'personal');assert.ok(material);
+                await readConversationContext(tx,f.id,'How can I leave space for walking and experiments?');
+                await assertMaterialCurrent(tx,material,[]);
+              });workerIterations++;
+              await new Promise(done=>setTimeout(done,100));
+            }
+          }});}catch{workerResult={error:'Controlled worker failed'};}finally{workerRun=null;}
+        })();
+      }
+      res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({active:workerRun!==null,iterations:workerIterations,result:workerResult,providerCalls:0,maxDurationMs:120000}));return;
+    }
     if(url.pathname==='/perf/context'){
       const question=(url.searchParams.get('question')??'How can I leave space for walking and experiments?').slice(0,1000);
       const f=fixtures.get(activeSize)!;queries=[];recording=true;const started=performance.now();
@@ -193,9 +240,15 @@ server=createServer(async(req,res)=>{
       const receipt:{path:string;method:string;size:number;start:number;durationMs?:number;status?:number;bytes?:number}={path,method:req.method??'GET',size,start};httpRequests.push(receipt);
       const dataPromise=new Promise<Buffer>((done,reject)=>{const parts:Buffer[]=[];let size=0;req.on('data',c=>{size+=c.length;if(size>1024*1024)reject(new Error('Fixture body limit'));else parts.push(c);});req.on('end',()=>done(Buffer.concat(parts)));req.on('aborted',()=>reject(new Error('Fixture request aborted')));});
       const data=await dataPromise;if(delayMs)await new Promise(done=>setTimeout(done,delayMs));
+      const rejected=fault==='archive-tail-once'&&req.method==='GET'&&url.pathname==='/api/inspirations'&&url.searchParams.has('cursor')
+        ||fault==='review-read-once'&&req.method==='GET'&&url.pathname==='/api/review-sessions/active'&&url.searchParams.get('include')==='current';
+      if(rejected){fault=null;const bytes=Buffer.from('{"error":"Synthetic one-off failure"}');Object.assign(receipt,{durationMs:round(performance.now()-start),status:500,bytes:bytes.length});res.writeHead(500,{'Content-Type':'application/json'});res.end(bytes);return;}
       const headers:Record<string,string>={};for(const [key,value] of Object.entries(req.headers))if(value!==undefined)headers[key]=Array.isArray(value)?value.join(','):value;
       const response=await app.fetch(new Request(url,{method:req.method,headers,...(data.length?{body:data}:{} )}));const bytes=Buffer.from(await response.arrayBuffer());
       Object.assign(receipt,{durationMs:round(performance.now()-start),status:response.status,bytes:bytes.length});
+      if(fault==='capture-lost-once'&&req.method==='POST'&&url.pathname==='/api/inspirations'){
+        fault=null;res.destroy();return;
+      }
       res.writeHead(response.status,Object.fromEntries(response.headers));res.end(bytes);return;
     }
     const asset=url.pathname.startsWith('/assets/');const file=asset?resolve(dist,`.${url.pathname}`):resolve(dist,'index.html');assert.ok(file.startsWith(dist+'/'));let bytes=await readFile(file);
