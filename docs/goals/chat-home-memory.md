@@ -933,3 +933,27 @@ scheduled requests create exactly one new pending job and deduplicate repeats.
 There is no forced scan, historical repair or deployment. Old superseded keys
 still skip paid work if reclaimed, and no-change versions still share the new
 key. This adds one SQL case (111 total in the final targeted set).
+
+### Final trace completeness audit
+
+The requirement-by-requirement audit caught missing explicit trace fields:
+the cadence scenario had `held: true` but no reason/wake time, and forming
+signals' independent counts were absent because Principle material contains
+only active signals. The evaluator now records the actual hold reason/until,
+current signal revisions/status, and independent counts for selected forming
+signals. It does not invent Principle appearances for those signals. The
+large-cost fixture also records each resumable hold and completed-call count.
+These are developer evidence only, not new public states.
+
+Verification used `--no-network`, which removes model keys and refuses provider
+traffic. `trace-floor-1791178702776.json` records cadence / 2026-10-05T15:00Z;
+`trace-forming-1791178703829.json` records one independent unit each and the
+corrected audio signal's revision 2. Both under `work/generation-calibration/`,
+zero calls/cost. The recorded-response replay asserts unchanged logical inputs.
+`work/principle-cost/run-1791178705807.json` records eight four-call holds,
+nine passes, 34 scripted calls, all 603 pairs, late conflict and 200 exact human
+words/ranks/locks. Four evaluation-journal/matrix tests and whitespace check
+passed. No application behavior, generation rubric, paid-call allocation or
+deployment state changed. The Home comprehension question is still unanswered;
+it is the only remaining acceptance requirement, not grounds to repeat model
+evaluations or add unrelated features.

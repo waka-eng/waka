@@ -26,11 +26,13 @@ const overlayPath=process.argv.find(arg=>arg.startsWith('--overlay='))?.slice(10
 const overlay=overlayPath?JSON.parse(await readFile(overlayPath,'utf8')):null;
 if(overlay){assert.ok(replay);assert.equal(overlay.digest,digest);assert.equal(overlay.finished,true);}
 assert.ok(process.argv.includes('--live'),'Pass --live for synthetic generation requests');
+const noNetwork=process.argv.includes('--no-network');
 const label=process.argv.find(arg=>arg.startsWith('--label='))?.slice(8)??'baseline';assert.match(label,/^[a-z0-9-]+$/);
 const url=new URL(process.env.DB_CONNECTION_URL??'');assert.ok(['localhost','127.0.0.1'].includes(url.hostname)&&/test|disposable/i.test(url.pathname));assert.equal(url.searchParams.has('options'),false);
 process.env.NODE_ENV='test';process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';delete process.env.WAKA_BACKGROUND_WORKER_FUNCTION;delete process.env.AWS_LAMBDA_FUNCTION_NAME;
-const env=parse(await readFile('/Users/agi/nextsteps/waka/.env.local','utf8'));assert.ok(env.OPENROUTER_API_KEY);
-process.env.OPENROUTER_API_KEY=env.OPENROUTER_API_KEY;assert.equal(OPENROUTER_GENERATION_MODEL,'deepseek/deepseek-v4-flash-0731');
+if(!noNetwork){const env=parse(await readFile('/Users/agi/nextsteps/waka/.env.local','utf8'));assert.ok(env.OPENROUTER_API_KEY);process.env.OPENROUTER_API_KEY=env.OPENROUTER_API_KEY;}
+else{delete process.env.OPENROUTER_API_KEY;delete process.env.GEMINI_API_KEY;}
+assert.equal(OPENROUTER_GENERATION_MODEL,'deepseek/deepseek-v4-flash-0731');
 let calls=0,costUsd=0,stopped=false;const requests:Array<Record<string,unknown>>=[],journeys:Array<Record<string,any>>=[];
 const caseContext=new AsyncLocalStorage<string>();
 const concurrency=Number(process.argv.find(arg=>arg.startsWith('--concurrency='))?.slice(14)??'1');
@@ -40,6 +42,7 @@ const implementationHashes=Object.fromEntries(await Promise.all(['packages/api/s
 const save=(finished=false)=>writeEvaluationSnapshot(path,{label,digest,replayPath:replayPath??null,overlayPath:overlayPath??null,matrixCount:cases.length,evaluatedIds:selectedCases.map(row=>row.id),implementationHashes,model:OPENROUTER_GENERATION_MODEL,calls,costUsd,maxCostUsd:.5,finished,requests,journeys});
 save();const network=globalThis.fetch;
 globalThis.fetch=async(input,init)=>{
+  assert.equal(noNetwork,false,'This trace check forbids provider traffic');
   const target=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);assert.equal(target.origin,'https://openrouter.ai');
   const body=JSON.parse(String(init?.body));assert.equal(body.model,OPENROUTER_GENERATION_MODEL);assert.ok(!stopped&&calls<120&&costUsd<.5);
   const row:Record<string,unknown>={caseId:caseContext.getStore(),phase:'dispatching',costUsd:null};requests.push(row);calls++;save();const start=performance.now();
@@ -108,13 +111,16 @@ try{
       distillPrinciples:async input=>request('principles',input,()=>real.distillPrinciples(input)) as ReturnType<ModelProvider['distillPrinciples']>,
       assessPrincipleGrounding:async input=>request('grounding',input,()=>real.assessPrincipleGrounding(input)) as ReturnType<ModelProvider['assessPrincipleGrounding']>};
     const start=performance.now();let reading:unknown=null,principles:unknown=null,held=false,error:string|null=null;
+    let hold:{reason:string;until:string}|null=null;
     try{reading=await refreshTopOfMindForProfile({profileId,reason:item.automatic?'signals_changed':'manual'},{db:fixture.db as never,modelProvider:provider,now});
       principles=await refreshPrinciplesForProfile({profileId},{db:fixture.db as never,modelProvider:provider,now});
-    }catch(reason){if(reason instanceof ShiftFloorHeldError)held=true;else error=reason instanceof Error?reason.message:String(reason);}
+    }catch(reason){if(reason instanceof ShiftFloorHeldError){held=true;hold={reason:reason.reason,until:reason.heldUntil.toISOString()};}else error=reason instanceof Error?reason.message:String(reason);}
     const entries=await fixture.sql`SELECT e.id,e.type,e.body,e.belief,e.locked_at,e.pinned_at,e.sort_order FROM top_of_mind_entries e JOIN top_of_minds m ON m.id=e.top_of_mind_id WHERE m.profile_id=${profileId} AND m.status='live' AND e.dismissed_at IS NULL ORDER BY e.sort_order,e.id`;
     const standing=await fixture.sql`SELECT id,statement,type,state,origin,locked_at FROM principles WHERE profile_id=${profileId} ORDER BY rank,id`;
     const material=await loadPrincipleMaterial(fixture.db as never,profileId);
-    const selection=(inputs.topOfMind as {signals?:Array<{id:string}>}|undefined)?.signals??[];
+    const selection=(inputs.topOfMind as {signals?:Array<{id:string;evidenceCount:number}>}|undefined)?.signals??[];
+    const independentEvidence=new Map<string,{signalId:string;units:number;appearances?:number}>([...material.evidence.values()].map(row=>[row.signalId,{signalId:row.signalId,units:row.evidenceAt.length,appearances:row.tomVersionIds.length}]));
+    for(const row of selection)if(!independentEvidence.has(row.id))independentEvidence.set(row.id,{signalId:row.id,units:row.evidenceCount});
     const selectedLabels=selection.map(row=>item.signals.find(s=>ids.get(s.label)===row.id)!.label);
     const lead=entries.find(row=>row.pinned_at)?.body??entries[0]?.body??null;
     const structural:string[]=[];
@@ -128,7 +134,8 @@ try{
     const caseRequests=requests.filter(row=>row.caseId===item.id),caseCost=caseRequests.reduce((sum,row)=>sum+(typeof row.costUsd==='number'?row.costUsd:0),0);
     journeys.push({id:item.id,expected:item.expected,inputs,outputs,entries,standing,lead,reading,principles,held,error,structural,semanticReview:'pending',calls:caseRequests.length,costUsd:caseCost,durationMs:Math.round(performance.now()-start),
       trace:{sourceRevisions:await fixture.sql`SELECT inspiration_id,personal_revision::text FROM inspiration_revisions WHERE profile_id=${profileId}`,
-        fixtureSignals:item.signals.map(s=>({id:ids.get(s.label),label:s.label,status:s.status??'active'})),independentEvidence:[...material.evidence.values()].map(row=>({signalId:row.signalId,units:row.evidenceAt.length,appearances:row.tomVersionIds.length})),selectedLabels,publication:reading,headline:lead,principleOutcome:principles}});
+        signalRevisions:await fixture.sql`SELECT id,statement_revision::text AS revision,status::text FROM signals WHERE profile_id=${profileId} ORDER BY id`,
+        fixtureSignals:item.signals.map(s=>({id:ids.get(s.label),label:s.label,status:s.status??'active'})),independentEvidence:[...independentEvidence.values()],selectedLabels,hold,publication:reading,headline:lead,principleOutcome:principles}});
     journeys.sort((a,b)=>cases.findIndex(row=>row.id===a.id)-cases.findIndex(row=>row.id===b.id));
     save();console.log(JSON.stringify({id:item.id,calls:caseRequests.length,structural,principles:standing.map(row=>row.statement),lead}));
   };

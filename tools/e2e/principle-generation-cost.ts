@@ -48,11 +48,13 @@ try{
   } satisfies Pick<ModelProvider,'distillPrinciples'|'judgePrincipleRelation'|'assessPrincipleGrounding'>;
   const start=performance.now();
   let result:Awaited<ReturnType<typeof refreshPrinciplesForProfile>>|undefined,passes=0,maxCallsPerPass=0;
+  const holds:Array<{pass:number;reason:string;detail:string;until:string;completedCalls:number}>=[];
   while(!result&&passes<100){
     passes++;const before=distillCalls+groundingCalls+comparisonCalls;
     try{result=await refreshPrinciplesForProfile({profileId:p.id},{db:t.db as never,modelProvider:provider as ModelProvider});}
     catch(error){
       if(!(error instanceof BackgroundJobHeldError)||error.heldUntil.getTime()>Date.now()+60000)throw error;
+      holds.push({pass:passes,reason:error.reason,detail:error.message,until:error.heldUntil.toISOString(),completedCalls:distillCalls+groundingCalls+comparisonCalls});
       const [partial]=await t.sql`SELECT count(*)::int AS count FROM principles WHERE profile_id=${p.id} AND origin='minted'`;
       assert.equal(partial.count,0,'No partial candidate publication');
     }
@@ -62,7 +64,7 @@ try{
   const words=await t.sql`SELECT id,statement,rank,locked_at FROM principles WHERE profile_id=${p.id} AND origin='declared' ORDER BY id`;
   const humanWordsPreserved=JSON.stringify(words)===JSON.stringify(originalWords);
   const report={profileSignals:400,standingPrinciples:200,inputSignals,inputPrinciples,promptCharacters,distillCalls,groundingCalls,comparisonCalls,comparisonPairs,maxComparisonBatch,maxComparisonCharacters,
-    totalModelCalls:distillCalls+groundingCalls+comparisonCalls,passes,maxCallsPerPass,lateConflictChecked,humanWordsPreserved,durationMs:Math.round(performance.now()-start),result,paidCalls:0};
+    totalModelCalls:distillCalls+groundingCalls+comparisonCalls,passes,holds,maxCallsPerPass,lateConflictChecked,humanWordsPreserved,durationMs:Math.round(performance.now()-start),result,paidCalls:0};
   const path=`work/principle-cost/run-${Date.now()}.json`;writeEvaluationSnapshot(path,report);console.log(JSON.stringify({path,...report}));
   assert.ok(lateConflictChecked);assert.ok(humanWordsPreserved);assert.equal(words.length,200);
 }finally{globalThis.fetch=network;await t.cleanup();}
