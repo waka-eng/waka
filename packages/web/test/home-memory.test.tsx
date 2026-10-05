@@ -243,6 +243,7 @@ vi.mock("../src/lib/data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/data")>();
   const row = (s: (typeof SIGNALS)[number]) => ({
     id: s.id,
+    inspirationIds:s.cites,
     statement: s.statement,
     /* `emerging` is the whole reason these appear overhead: an `active` signal
        is what headquarters already stands on and a `retired` one has sunk. */

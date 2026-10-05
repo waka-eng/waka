@@ -110,6 +110,7 @@ const listSignalsQuerySchema = z
     /** Only the signals evidenced by memories kept during this experience. */
     experience: z.string().trim().min(1).max(80).optional(),
     limit: limitSchema.optional(),
+    include: z.literal('inspirations').optional(),
     /** Read another profile in the same account, per the permission matrix. */
     profile: z.string().uuid("profile must be a uuid").optional(),
   })
@@ -139,6 +140,7 @@ const updateSignalBodySchema = z
 
 export interface SignalSummary {
   id: string;
+  inspirationIds?:string[];
   statement: string;
   status: SignalStatus;
   confidence: number;
@@ -192,6 +194,7 @@ export interface ListSignalsInput {
   /** Only signals evidenced from this named experience's memories. */
   experience?: string;
   limit: number;
+  includeInspirationIds?:boolean;
 }
 
 export interface GetSignalInput {
@@ -233,6 +236,7 @@ async function decorateSignals(
     dismissedAt: Date | null;
     createdAt: Date;
   }>,
+  includeInspirationIds=false,
 ): Promise<SignalSummary[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((row) => row.id);
@@ -301,6 +305,7 @@ async function decorateSignals(
   // the truth about now; the snapshot remains for the group wall, whose query
   // must not reach these private tables.
   const evidenceBySignal = evidenceSnapshot.witnesses;
+  const origins=new Map([...evidenceBySignal].map(([id,witnesses])=>[id,[...new Set(witnesses.flatMap(row=>row.lineage?.originIds??[]))]]));
   for(const [id,rows] of evidenceBySignal)evidenceBySignal.set(id,selectIndependentEvidence(rows));
   const now = new Date();
   const liveConfidence = new Map(
@@ -337,6 +342,7 @@ async function decorateSignals(
 
   return ordered.map((row) => ({
     id: row.id,
+    ...(includeInspirationIds?{inspirationIds:origins.get(row.id)??[]}:{}),
     statement: row.statement,
     status: row.status,
     confidence: liveConfidence.get(row.id) ?? 0,
@@ -413,7 +419,13 @@ export async function listProfileSignals(
     .orderBy(desc(signals.confidence), desc(signals.lastEvidenceAt), desc(signals.createdAt))
     .limit(input.limit);
 
-  return decorateSignals(db, input.profileId, rows);
+  let includeOrigins=false;
+  if(input.includeInspirationIds){
+    const [profile]=await db.select({type:profiles.type}).from(profiles).where(eq(profiles.id,input.profileId)).limit(1);
+    // Group sharing exposes statements, never members' original identities.
+    includeOrigins=profile?.type==='human'||profile?.type==='agent';
+  }
+  return decorateSignals(db, input.profileId, rows,includeOrigins);
 }
 
 export async function getProfileSignal(
@@ -815,6 +827,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
       profileId: scope.profileId,
       status: parsedQuery.data.status,
       limit: parsedQuery.data.limit ?? DEFAULT_SIGNAL_LIMIT,
+      ...(parsedQuery.data.include?{includeInspirationIds:true}:{}),
     });
     /* the read side answers for itself: this serve is on the record before
        the response leaves — goals/no-quiet-corners.md Phase 1 */

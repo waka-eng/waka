@@ -30,6 +30,7 @@ export type ApiSignalStatus = "emerging" | "active" | "retired";
  */
 export interface ApiSignal {
   id: string;
+  inspirationIds?:string[];
   statement: string;
   status: ApiSignalStatus;
   confidence: number;
@@ -81,6 +82,7 @@ export interface ApiSignalDetail extends ApiSignal {
 export interface FetchSignalsOptions extends ProfileScoped {
   status?: ApiSignalStatus;
   limit?: number;
+  includeInspirationIds?:boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,6 +97,7 @@ export async function fetchSignals(
   if (options.profile) params.set("profile", options.profile);
   if (options.status) params.set("status", options.status);
   if (typeof options.limit === "number") params.set("limit", String(options.limit));
+  if(options.includeInspirationIds)params.set('include','inspirations');
   const query = params.toString();
   const body = await getJson<{ signals: ApiSignal[] }>(
     apiPath(`/signals${query ? `?${query}` : ""}`),
@@ -104,10 +107,11 @@ export async function fetchSignals(
 }
 
 /** GET /signals/:id — the same statement, plus what it rests on. */
-export async function fetchSignal(id: string): Promise<ApiSignalDetail> {
+export async function fetchSignal(id: string,signal?:AbortSignal): Promise<ApiSignalDetail> {
   const body = await getJson<{ signal: ApiSignalDetail }>(
     apiPath(`/signals/${encodeURIComponent(id)}`),
     "Failed to load this signal",
+    signal,
   );
   if (!body.signal) {
     throw new ApiError({ status: 200, message: "Malformed signal response" });
@@ -165,4 +169,3 @@ export async function restoreSignal(id: string): Promise<ApiSignal> {
   );
   return body.signal;
 }
-

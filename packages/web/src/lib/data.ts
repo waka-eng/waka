@@ -57,6 +57,10 @@ import {
 } from "./api";
 
 import { inspirationPreview } from './inspiration-preview';
+import {fetchInspirationSnapshot} from './api/inspirations';
+import {ApiError} from './api';
+import {inspirationSnapshotFingerprint,readInspirationSnapshot} from './inspiration-snapshots';
+import type {ProfileStorageScope} from './profile-storage';
 
 const ms = (iso: string | null | undefined): number => {
   if (!iso) return 0;
@@ -142,6 +146,7 @@ export interface InspirationDetail extends Inspiration {
  */
 export interface Signal {
   id: string;
+  inspirationIds?:string[];
   statement: string;
   status: ApiSignal["status"];
   confidence: number;
@@ -249,6 +254,7 @@ export function toInspiration(row: {
 export function toSignal(row: ApiSignal): Signal {
   return {
     id: row.id,
+    ...(row.inspirationIds?{inspirationIds:row.inspirationIds}:{}),
     statement: row.statement,
     status: row.status,
     confidence: typeof row.confidence === "number" ? row.confidence : 0,
@@ -375,13 +381,34 @@ export function beyondOf(field: FieldLoad): number {
     walk falls back to, so a caller never has to invent a total. */
 export const EMPTY_FIELD: FieldLoad = { inspirations: [], total: 0, short: false };
 
-export async function loadInspirations(profile?: string): Promise<FieldLoad> {
+export async function loadInspirations(profile?:string,options?:{scope?:ProfileStorageScope;signal?:AbortSignal}):Promise<FieldLoad>{
+  if(!options?.scope)return (await loadInspirationPages(profile,options?.signal)).data;
+  const target=profile??options.scope.profileId;
+  return readInspirationSnapshot({scope:options.scope,profileId:target,signal:options.signal,
+    validate:async signal=>{
+      try{return (await fetchInspirationSnapshot(target,signal)).fingerprint;}
+      catch(error){
+        // A rolling-back API may not have the additive snapshot endpoint.
+        // A fresh canonical list still authorizes the target; never reuse
+        // the remembered data after a failed metadata check.
+        if(error instanceof ApiError&&(error.status===400||error.status===404))return null;
+        throw error;
+      }
+    },
+    load:signal=>loadInspirationPages(target,signal),
+  });
+}
+
+async function loadInspirationPages(profile?:string,signal?:AbortSignal):Promise<{data:FieldLoad;fingerprint:string|null}>{
   const out: Inspiration[] = [];
+  const identities:Array<{id:string;materialRevision?:string}>=[];
   let cursor: string | undefined;
   let reported: number | undefined;
   for (let page = 0; page < FIELD_MAX_PAGES; page++) {
-    const got = await fetchInspirationPage({ limit: FIELD_PAGE, profile, cursor });
+    const pageOptions={limit:FIELD_PAGE,profile,cursor};
+    const got=await (signal?fetchInspirationPage(pageOptions,signal):fetchInspirationPage(pageOptions));
     out.push(...got.inspirations.map(toInspiration));
+    identities.push(...got.inspirations.map(row=>({id:row.id,materialRevision:row.materialRevision})));
     if (typeof got.total === "number") reported = got.total;
     if (!got.nextCursor || got.inspirations.length === 0) break;
     cursor = got.nextCursor;
@@ -390,18 +417,19 @@ export async function loadInspirations(profile?: string): Promise<FieldLoad> {
      is worse than no sentence at all — across a server too old to report a
      total, and across a capture or an erasure landing mid-walk. */
   const total = Math.max(reported ?? 0, out.length);
-  return {
+  const data={
     inspirations: out.sort((a, b) => a.capturedMs - b.capturedMs),
     total,
     short: total > out.length,
   };
+  return {data,fingerprint:profile?await inspirationSnapshotFingerprint(profile,total,identities):null};
 }
 
 /** THE SKY. Patterns, brightest-first is decided by the sky's own layout;
     here they arrive as the server ranked them. Retired ones are included —
     nothing that exists pops out of existence, it sinks. */
-export async function loadSignals(profile?: string): Promise<Signal[]> {
-  const rows = await fetchSignals({ limit: 200, profile });
+export async function loadSignals(profile?: string,includeInspirationIds=false): Promise<Signal[]> {
+  const rows = await fetchSignals({ limit: 200, profile,...(includeInspirationIds?{includeInspirationIds:true}:{}) });
   return rows.map(toSignal);
 }
 
@@ -474,8 +502,8 @@ export function toInspirationDetail(row: Awaited<ReturnType<typeof fetchInspirat
 
 
 /** One signal opened: the same statement, plus what it rests on. */
-export async function loadSignal(id: string): Promise<SignalDetail> {
-  const row = await fetchSignal(id);
+export async function loadSignal(id: string,signal?:AbortSignal): Promise<SignalDetail> {
+  const row = await (signal?fetchSignal(id,signal):fetchSignal(id));
   return { ...toSignal(row), evidence: (row.evidence ?? []).map((e) => toEvidence(row.id, e)), reviewEvidence: row.reviewEvidence ?? [] };
 }
 

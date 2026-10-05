@@ -13,7 +13,8 @@
 import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
-import { attachments, experiences, inspirations, reflections } from "../db/index.js";
+import { attachments, experiences, inspirations, inspirationRevisions, reflections } from "../db/index.js";
+import {readInspirationSnapshot} from '../lib/inspiration-snapshots.js';
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import { validationDetails } from "../lib/validation.js";
@@ -81,6 +82,12 @@ export function registerRecallRoutes(
   routes: Hono<AuthEnv>,
   getDatabase: typeof getDb,
 ): void {
+  routes.get('/snapshot',async c=>{
+    const query=profileQuerySchema.safeParse(c.req.query());if(!query.success)return c.json({error:'Invalid query'},400);
+    const db=getDatabase(),target=await resolveTargetProfile(db,c.get('session'),query.data.profile,'read');
+    if(!target.ok)return c.json(target.body,target.status);
+    return c.json(await readInspirationSnapshot(db,target.profileId));
+  });
   /**
    * GET /api/inspirations
    *
@@ -183,8 +190,10 @@ export function registerRecallRoutes(
         visibility: inspirations.visibility,
         previewSource: sql<string>`left(${inspirations.text}, ${sql.raw(String(PREVIEW_SOURCE_CHARS))})`,
         textLength: sql<number>`char_length(${inspirations.text})`,
+        materialRevision: sql<string|null>`${inspirationRevisions.personalRevision}::text`,
       })
       .from(inspirations)
+      .leftJoin(inspirationRevisions,and(eq(inspirationRevisions.profileId,inspirations.profileId),eq(inspirationRevisions.inspirationId,inspirations.id)))
       .where(and(...filters))
       // The id breaks ties so the keyset cursor cannot loop on captures that
       // share a timestamp.

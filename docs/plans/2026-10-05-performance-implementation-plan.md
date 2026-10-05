@@ -4,6 +4,11 @@ Status: proposed, implementation not started. Prepared 2026-10-05 from the
 current production-build performance test and local single-inspiration Review
 implementation.
 
+Execution update: the owner has requested all milestones. Work is tracked in
+[the performance goal](../goals/performance-improvements.md), which supersedes
+the initial one-milestone recommendation and approval pauses below while
+preserving scope and acceptance gates. Deployment is not implied.
+
 Make WAKA feel ready sooner and stop unnecessary work after it opens. Start
 with Home fetching and navigation, then search and Review, then memory readers.
 Keep the current visual identity and the one-inspiration Review flow. Run one

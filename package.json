@@ -10,6 +10,7 @@
     "test": "pnpm typecheck && pnpm --filter @waka/api test:unit && pnpm --filter @waka/web test && pnpm --filter @waka/admin test && pnpm --filter @waka/web build",
     "dev": "sst dev",
     "dev:local": "bash scripts/dev-local.sh",
+    "perf:local": "pnpm --filter @waka/web build && tsx tools/performance/run.ts",
     "dev:drain": "bash scripts/dev-drain.sh",
     "dev:admin": "pnpm --filter @waka/admin dev",
     "build:admin": "pnpm --filter @waka/admin build",

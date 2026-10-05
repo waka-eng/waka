@@ -7,15 +7,16 @@
  * laws, and a memory a pattern rests on is supposed to have a floor under it
  * (`FIELD_FLOOR_CITED`) and a lift above it (`FIELD_CITED_LIFT`) so it cannot
  * sink to dark like an untended one. That fact does not arrive with the memory.
- * It arrives with the SKY, and the sky is two requests deep: `loadSignals`,
- * then a `loadSignal` per signal. On a real page load every one of those lands
+ * It arrives with the SKY's lightweight membership metadata in `loadSignals`.
+ * Full signal evidence is now loaded only for a visible reading. On a real
+ * page load the membership read can still land
  * after the archive, the agents and the walls have settled — which is after the
  * field was poured, and the pour is what bakes `hasNotes` into a ball.
  *
  * So the whole bug lives in WHEN, and a test that lets both requests resolve in
  * the same microtask cannot see it: the sky is already in hand when the last
  * pour runs and every orb comes out correctly lit. `sky.arrived` below is the
- * network, made exact — the second request is held open until the case says
+ * network, made exact — the membership request is held open until the case says
  * otherwise, which is the only difference between the two cases here.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6). The three seams are the ones
@@ -132,6 +133,7 @@ vi.mock("../src/lib/data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/data")>();
   const row = {
     id: SIGNAL.id,
+    inspirationIds:[CITED],
     statement: SIGNAL.statement,
     /* `emerging` is a pattern still forming overhead — the ordinary state for
        something derived in the background while the page is open. */
@@ -147,7 +149,7 @@ vi.mock("../src/lib/data", async (importOriginal) => {
   return {
     ...actual,
     ...dataMockFrom(FACTS),
-    loadSignals: async () => [row],
+    loadSignals: async () => {await sky.arrived;return [row];},
     loadSignal: async (id: string) => {
       if (id !== SIGNAL.id) throw new Error(`no such signal ${id}`);
       /* THE NETWORK, MADE EXACT — see the gate above. */

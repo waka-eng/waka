@@ -1,0 +1,137 @@
+/** Disposable current-build performance probe. No remote DB or model calls.
+ * Only synthetic fixtures are mutated; shutdown drops this exact test schema. */
+import assert from 'node:assert/strict';
+import {createServer} from 'node:http';
+import {readFile,writeFile,readdir,mkdir} from 'node:fs/promises';
+import {resolve,extname} from 'node:path';
+import {gzipSync,brotliCompressSync} from 'node:zlib';
+import {createTestDatabase} from '../../packages/api/test/helpers/db.js';
+
+const configured=new URL(process.env.DB_CONNECTION_URL??'');
+assert.ok(['localhost','127.0.0.1'].includes(configured.hostname));assert.match(configured.pathname,/(?:^|[_/\-])(test|disposable)(?:$|[_\-])/i);assert.equal(configured.searchParams.has('options'),false);
+const sizes=(process.env.WAKA_PERFORMANCE_SIZES??'25,250,2000,10000').split(',').map(Number);
+const samples=Number(process.env.WAKA_PERFORMANCE_SAMPLES??30),port=Number(process.env.WAKA_PERFORMANCE_PORT??3017);
+assert.ok(sizes.length<=4&&sizes.every(n=>Number.isInteger(n)&&n>=3&&n<=10000)&&new Set(sizes).size===sizes.length);
+assert.ok(Number.isInteger(samples)&&samples>=5&&samples<=60);assert.ok(Number.isInteger(port)&&port>1024&&port<65536);
+const outputDir=resolve(process.env.WAKA_PERFORMANCE_OUTPUT??'work/performance');await mkdir(outputDir,{recursive:true});
+process.env.NODE_ENV='test';process.env.JWT_SECRET='disposable-performance-probe-only';
+process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';process.env.WAKA_CONVERSATION_REPLIES='0';
+delete process.env.OPENROUTER_API_KEY;delete process.env.GEMINI_API_KEY;delete process.env.AWS_LAMBDA_FUNCTION_NAME;delete process.env.WAKA_BACKGROUND_WORKER_FUNCTION;
+globalThis.fetch=async()=>{throw new Error('Performance fixture refuses provider network');};
+const fixture=await createTestDatabase();configured.searchParams.set('options',`-c search_path=${fixture.schemaName}`);process.env.DB_CONNECTION_URL=configured.toString();
+console.log(JSON.stringify({stage:'allocated',schema:fixture.schemaName}));
+let server:ReturnType<typeof createServer>|null=null,closing=false,stopDatabase:(()=>Promise<unknown>)|null=null;
+async function close(code=0){
+  if(closing)return;closing=true;
+  if(server){server.closeAllConnections();await new Promise<void>(done=>server!.close(()=>done()));}
+  await stopDatabase?.();await fixture.cleanup();process.exit(code);
+}
+process.once('SIGTERM',()=>void close());process.once('SIGINT',()=>void close());
+process.once('uncaughtException',error=>{console.error(error.message);void close(1);});
+const importStart=performance.now();const {app}=await import('../../packages/api/src/index.js');const apiImportMs=performance.now()-importStart;
+const {signSessionToken,buildSessionCookie}=await import('../../packages/api/src/lib/auth.js');
+const {createSessionRow}=await import('../../packages/api/src/lib/session.js');
+const {getDb}=await import('../../packages/api/src/lib/db.js');
+const {createGroupForProfile}=await import('../../packages/api/src/routes/groups-membership.js');
+const {readConversationContext}=await import('../../packages/api/src/lib/conversation-context.js');
+const {createReviewSession,completeReviewSession}=await import('../../packages/api/src/lib/review-sessions.js');
+const db=getDb();const fixtures=new Map<number,{id:string;token:string;firstId:string;signalId:string;groups:string[];signals:number;principles:number}>();
+stopDatabase=()=>db.$client.end();
+for(const count of sizes){
+  const [account]=await fixture.sql`INSERT INTO accounts(email,onboarding_completed_at) VALUES (${`performance-${count}@example.test`},now()) RETURNING id`;
+  const [profile]=await fixture.sql`INSERT INTO profiles(account_id,type,name) VALUES (${account.id},'human',${`Synthetic ${count} inspirations`}) RETURNING id`;
+  await fixture.sql`INSERT INTO inspirations(profile_id,text,created_at)
+    SELECT ${profile.id},'Synthetic performance inspiration '||i||'. I want space for walking and thoughtful experiments. '||repeat('A calm morning gives me room to notice an idea before turning it into a task. ',4),
+      now()-i*interval '1 hour' FROM generate_series(1,${count}::int) i`;
+  await fixture.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer)
+    SELECT ${profile.id},id,'Why did you keep this?','Synthetic reflection: space to think is important to me.'
+      FROM (SELECT id,row_number() OVER(ORDER BY created_at DESC) rn FROM inspirations WHERE profile_id=${profile.id}) x WHERE rn%4=0`;
+  await fixture.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,title,enrichment_status,enrichment_kind,enrichment_text)
+    SELECT ${profile.id},id,'link','https://example.test/synthetic/'||rn,'Synthetic source','ready','page_body',repeat('Synthetic article text. ',50)
+      FROM (SELECT id,row_number() OVER(ORDER BY created_at DESC) rn FROM inspirations WHERE profile_id=${profile.id}) x WHERE rn%5=0`;
+  const signalCount=count===25?4:count===250?16:64;
+  const signalRows=await fixture.sql`INSERT INTO signals(profile_id,statement,status,confidence,created_at,last_evidence_at)
+    SELECT ${profile.id},'Synthetic pattern '||i||': I leave space to explore before committing.','emerging',85,now()-interval '30 days',now() FROM generate_series(1,${signalCount}::int) i RETURNING id`;
+  await fixture.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id,statement_revision,material_revision)
+    SELECT ${profile.id},${profile.id},s.id,i.id,1,r.personal_revision FROM signals s
+    CROSS JOIN (SELECT id FROM inspirations WHERE profile_id=${profile.id} ORDER BY created_at DESC LIMIT 3) i
+    JOIN inspiration_revisions r ON r.inspiration_id=i.id AND r.profile_id=${profile.id} WHERE s.profile_id=${profile.id}`;
+  await fixture.sql`UPDATE signals SET status='active' WHERE profile_id=${profile.id}`;
+  const principleCount=count===25?3:count===250?6:12;
+  const principleRows=await fixture.sql`INSERT INTO principles(profile_id,statement,type,origin,rank,locked_at)
+    SELECT ${profile.id},'Synthetic principle '||i||': Try a small experiment before a large commitment.','maxim','declared',i-1,now() FROM generate_series(1,${principleCount}::int) i RETURNING id`;
+  for(const p of principleRows)await fixture.sql`INSERT INTO principle_signals(profile_id,principle_id,signal_id,statement_revision,principle_statement_revision)
+    SELECT ${profile.id},${p.id},id,1,1 FROM signals WHERE profile_id=${profile.id} ORDER BY id LIMIT 3`;
+  const [reading]=await fixture.sql`INSERT INTO top_of_minds(profile_id) VALUES (${profile.id}) RETURNING id`;
+  const [entry]=await fixture.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,sort_order) VALUES (${reading.id},'pattern','Synthetic reading: leave space for thoughtful experiments.',0) RETURNING id`;
+  await fixture.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id,statement_revision,entry_body_revision) VALUES (${entry.id},${signalRows[0].id},1,1)`;
+  const groups:string[]=[];
+  if(count===2000)for(let i=0;i<12;i++)groups.push((await createGroupForProfile(fixture.db as never,{profileId:profile.id,name:`Synthetic room ${i+1}`})).id);
+  const token=await signSessionToken({profileId:profile.id,email:`performance-${count}@example.test`});await createSessionRow({profileId:profile.id,token});
+  const [first]=await fixture.sql`SELECT id FROM inspirations WHERE profile_id=${profile.id} ORDER BY created_at DESC LIMIT 1`;
+  fixtures.set(count,{id:profile.id,token,firstId:first.id,signalId:signalRows[0].id,groups,signals:signalCount,principles:principleCount});
+}
+await fixture.sql`ANALYZE`;
+let recording=false;let queries:Array<{query:string;params:unknown[]}>=[];
+(db.$client.options as unknown as {debug:unknown}).debug=(_connection:unknown,query:string,params:unknown[])=>{if(recording)queries.push({query,params});};
+const round=(n:number)=>Math.round(n*100)/100;
+const summary=(values:number[])=>{const sorted=[...values].sort((a,b)=>a-b);return {medianMs:round(sorted[Math.floor(sorted.length*.5)]!),p95Ms:round(sorted[Math.ceil(sorted.length*.95)-1]!),minMs:round(sorted[0]!),maxMs:round(sorted.at(-1)!)};};
+const origin=`http://127.0.0.1:${port}`;
+async function request(size:number,path:string){
+  const token=fixtures.get(size)!.token;return app.fetch(new Request(origin+path,{headers:{Authorization:`Bearer ${token}`}}));
+}
+const measured:Array<Record<string,unknown>>=[];
+let reviewQuery:{query:string;params:unknown[]}|undefined;
+for(const [size,f] of fixtures){
+  for(const [label,path] of [['health','/api/health'],['auth','/api/auth/me'],['archive_page','/api/inspirations?limit=200'],['search','/api/inspirations?limit=40&q=walking'],['inspiration_detail',`/api/inspirations/${f.firstId}`],['signals','/api/signals?limit=200'],['signal_detail',`/api/signals/${f.signalId}`],['principles','/api/principles'],['top_of_mind','/api/top-of-mind'],['review_active','/api/review-sessions/active'],['chat_list','/api/conversations']] as const){
+    await (await request(size,path)).arrayBuffer();const times:number[]=[],counts:number[]=[];let bytes=0,status=0;
+    for(let i=0;i<samples;i++){queries=[];recording=true;const started=performance.now();const response=await request(size,path);bytes=(await response.arrayBuffer()).byteLength;times.push(performance.now()-started);recording=false;counts.push(queries.length);status=response.status;assert.equal(status,200,`Unexpected ${label} status`);}
+    measured.push({size,label,status,bytes,sqlQueries:counts.at(-1),...summary(times)});
+  }
+  const chatTimes:number[]=[],reviewTimes:number[]=[];let chatQueries=0,reviewQueries=0;
+  for(let i=0;i<samples;i++){
+    queries=[];recording=true;let start=performance.now();await readConversationContext(db,f.id,'How can I leave space for walking and experiments?');chatTimes.push(performance.now()-start);recording=false;chatQueries=queries.length;
+    queries=[];recording=true;start=performance.now();const session=await createReviewSession(db,f.id,{id:crypto.randomUUID()});reviewTimes.push(performance.now()-start);recording=false;reviewQueries=queries.length;
+    if(size===10000)reviewQuery=queries.find(q=>q.query.startsWith('select')&&q.query.includes('max(')&&q.query.includes('inspirations'));
+    if(session)await completeReviewSession(db,f.id,session.id,session.revision);
+  }
+  measured.push({size,label:'chat_context_without_model',sqlQueries:chatQueries,...summary(chatTimes)});
+  measured.push({size,label:'review_selection',sqlQueries:reviewQueries,...summary(reviewTimes)});
+  const concurrency:number[]=[];
+  for(let batch=0;batch<3;batch++)await Promise.all(Array.from({length:10},async()=>{const start=performance.now();const response=await request(size,'/api/inspirations?limit=200');await response.arrayBuffer();concurrency.push(performance.now()-start);}));
+  measured.push({size,label:'archive_10_concurrent',...summary(concurrency)});
+}
+let explain:unknown=null;
+if(reviewQuery){const result=await db.$client.unsafe('EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) '+reviewQuery.query,reviewQuery.params as never);explain=result[0]?.['QUERY PLAN'];}
+const assets=[];
+for(const name of await readdir(resolve('packages/web/dist/assets'))){const bytes=await readFile(resolve('packages/web/dist/assets',name));assets.push({name,raw:bytes.length,gzip:gzipSync(bytes).length,brotli:brotliCompressSync(bytes).length});}
+const results={kind:'local synthetic production-build baseline',createdAt:new Date().toISOString(),apiImportMs:round(apiImportMs),database:'disposable loopback only',modelCalls:0,fixtures:[...fixtures].map(([size,f])=>({size,signals:f.signals,principles:f.principles,rooms:f.groups.length})),measured,assets,reviewSelectionExplain:explain};
+await writeFile(resolve(outputDir,'api.json'),JSON.stringify({...results,samples,poolMax:process.env.WAKA_DB_POOL_MAX??5},null,2));
+console.log(JSON.stringify({origin,schema:fixture.schemaName,apiImportMs:round(apiImportMs),results:resolve(outputDir,'api.json')}));
+let activeSize=sizes[0]!,delayMs=0;
+const httpRequests:Array<{path:string;method:string;size:number;start:number;durationMs?:number;status?:number;bytes?:number}>=[];
+const probe=`<script>(()=>{const tasks=[],frames=[];let ready=null,last=null,stopped=false;try{new PerformanceObserver(list=>list.getEntries().forEach(e=>tasks.push({start:e.startTime,duration:e.duration}))).observe({type:'longtask',buffered:true})}catch{};function sample(now){if(last!==null)frames.push(now-last);last=now;if(ready===null&&document.querySelector('.jar-home-activities button'))ready=now;if(!stopped)requestAnimationFrame(sample)}requestAnimationFrame(sample);setTimeout(()=>{stopped=true;frames.sort((a,b)=>a-b);document.documentElement.dataset.wakaPerf=JSON.stringify({readyMs:ready,longTasks:tasks.length,longTaskTotalMs:tasks.reduce((n,e)=>n+e.duration,0),longestTaskMs:Math.max(0,...tasks.map(e=>e.duration)),frames:frames.length,frameMedianMs:frames[Math.floor(frames.length*.5)],frameP95Ms:frames[Math.floor(frames.length*.95)],framesOver32:frames.filter(n=>n>32).length})},8000)})();</script>`;
+const dist=resolve('packages/web/dist');
+const types:Record<string,string>={'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2','.png':'image/png','.svg':'image/svg+xml'};
+server=createServer(async(req,res)=>{
+  try{
+    const url=new URL(req.url??'/',origin);
+    if(url.pathname==='/perf/scenario'){const size=Number(url.searchParams.get('size'));assert.ok(fixtures.has(size));activeSize=size;delayMs=Number(url.searchParams.get('delay')??0);assert.ok(delayMs>=0&&delayMs<=500);httpRequests.length=0;res.writeHead(302,{Location:'/', 'Set-Cookie':buildSessionCookie(fixtures.get(size)!.token,{secure:false})});res.end();return;}
+    if(url.pathname==='/perf/results'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({size:activeSize,delayMs,httpRequests}));return;}
+    if(url.pathname.startsWith('/api/')){
+      const start=performance.now(),size=activeSize;
+      const path=url.pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi,'{id}')+(url.search?'?'+url.searchParams.toString().replace(/(?:profile|cursor)=[^&]+/g,'scope=…'):'');
+      const receipt:{path:string;method:string;size:number;start:number;durationMs?:number;status?:number;bytes?:number}={path,method:req.method??'GET',size,start};httpRequests.push(receipt);
+      const dataPromise=new Promise<Buffer>((done,reject)=>{const parts:Buffer[]=[];let size=0;req.on('data',c=>{size+=c.length;if(size>1024*1024)reject(new Error('Fixture body limit'));else parts.push(c);});req.on('end',()=>done(Buffer.concat(parts)));req.on('aborted',()=>reject(new Error('Fixture request aborted')));});
+      const data=await dataPromise;if(delayMs)await new Promise(done=>setTimeout(done,delayMs));
+      const headers:Record<string,string>={};for(const [key,value] of Object.entries(req.headers))if(value!==undefined)headers[key]=Array.isArray(value)?value.join(','):value;
+      const response=await app.fetch(new Request(url,{method:req.method,headers,...(data.length?{body:data}:{} )}));const bytes=Buffer.from(await response.arrayBuffer());
+      Object.assign(receipt,{durationMs:round(performance.now()-start),status:response.status,bytes:bytes.length});
+      res.writeHead(response.status,Object.fromEntries(response.headers));res.end(bytes);return;
+    }
+    const asset=url.pathname.startsWith('/assets/');const file=asset?resolve(dist,`.${url.pathname}`):resolve(dist,'index.html');assert.ok(file.startsWith(dist+'/'));let bytes=await readFile(file);
+    if(!asset)bytes=Buffer.from(bytes.toString().replace('<head>','<head>'+probe));
+    res.writeHead(200,{'Content-Type':types[extname(file)]??'application/octet-stream','Cache-Control':'no-store',...(!asset?{'Set-Cookie':buildSessionCookie(fixtures.get(activeSize)!.token,{secure:false})}:{})});res.end(bytes);
+  }catch(error){console.error(error);if(!res.headersSent)res.writeHead(500);res.end('Synthetic performance fixture failed');}
+});
+await new Promise<void>(done=>server!.listen(port,'127.0.0.1',done));console.log('Performance fixture ready at '+origin);

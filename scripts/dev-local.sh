@@ -185,7 +185,11 @@ fi
 
 echo "Starting monolithic local server. Press Ctrl+C to stop."
 
-pnpm --filter @waka/api exec tsx src/server.ts &
+if [[ "${WAKA_NO_WATCH:-}" == "1" ]]; then
+  pnpm --filter @waka/api exec tsx src/server.ts &
+else
+  pnpm --filter @waka/api exec tsx watch src/server.ts &
+fi
 api_pid=$!
 
 # THE CLOCK THE CLOUD HAS AND THIS STACK DID NOT. Deployed stages run the

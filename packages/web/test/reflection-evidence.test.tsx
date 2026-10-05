@@ -11,7 +11,7 @@ import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
 import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 
 const FACTS = { inspirations: [{ id: "kept-1", text: "An original capture", daysAgo: 3 }], groups: [] };
-const signal = { id: "pattern-1", statement: "You prefer reversible steps.", status: "active" as const,
+const signal = { id: "pattern-1", inspirationIds:['kept-1'], statement: "You prefer reversible steps.", status: "active" as const,
   confidence: 60, evidenceCount: 1, lastEvidenceMs: 1, createdMs: 1, locked: false, unsupported: false, sharedGroupIds: [] };
 
 vi.mock("../src/lib/api", async (original) => ({ ...await original<typeof import("../src/lib/api")>(), ...apiMockFrom(FACTS) }));
