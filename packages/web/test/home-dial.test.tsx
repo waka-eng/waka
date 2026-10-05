@@ -625,6 +625,7 @@ describe("the mouth while the dial is away from now", () => {
     expect(one(".jar-mouth-slot").hasAttribute("inert")).toBe(true);
     const shortcut = one(".jar-capture-shortcut");
     expect(shortcut.textContent).toContain("Capture inspiration");
+    expect(shortcut.querySelector('[data-home-action-icon="capture"]')).not.toBeNull();
     await act(async () => shortcut.click());
     await layout.step(40);
     expect(one(".jar-when").textContent).toBe("now");

@@ -1,6 +1,6 @@
 # Chat home and memory improvements
 
-Status: blocked — implementation and calibration checked; awaiting the human Home usability check (2026-10-04).
+Status: blocked at Home usability acceptance — owner feedback addressed with visual action cues; revised preview awaiting review (2026-10-04).
 Branch: `codex/chat-home-memory`, starting from `84cba13`.
 
 ## Objective
@@ -972,3 +972,37 @@ Mark the runtime goal blocked on that one input, not complete and not paused.
 The pending question/preview remains available; a human answer or an explicit
 change to this acceptance requirement can unblock it. Budget allocation stays
 USD 1.58019284/5, and no push/deployment is authorized or performed.
+
+### Home visual-cue revision after owner feedback
+
+The owner answered that Home was confusing and needed visual indications.
+That is a failed usability verdict, not acceptance; the previous text-only
+card treatment is superseded. Added familiar decorative SVG shapes alongside
+the visible action labels: saved cards for Review, speech bubbles for Chat,
+and a plus-in-circle for Capture. Review/Chat now have a distinct icon surface
+and internal-navigation chevrons instead of identical external-link arrows.
+Capture is the brighter primary action, including its shortcut in the archive.
+Kept the monochrome moonlight palette, companion and existing destinations;
+no arbitrary category colors, added public states or extra buttons. Shorter
+English/Korean hints name the activity plainly rather than explain the system.
+
+Verification: 23 targeted UI/navigation/layout tests, all 706 web tests across
+100 suites, web typecheck, build and whitespace check passed. Icons are hidden
+from assistive technology and unfocusable; visible localized labels still name
+the same buttons. Actual built-browser clicks resumed the saved review, opened
+`/chat/new` without sending, and opened the existing Capture composer. At
+320x568 the revised cards are 65px high, end at y416, and Capture starts at
+y442 (44px target), with no horizontal overflow. At 768x1024 the 83px cards
+are side by side. 390x844 and 1280x800 inspected too. An initial mobile padding
+made the second card's bottom clip; reduced padding/gap without reducing font
+or icon sizes fixed it. Increased shortcut specificity prevents the lazy Home
+stylesheet from restoring the old dark hover background over its dark text;
+the real archive shortcut measured 44px / 15px text with high contrast.
+
+Screenshots: `work/chat-home-memory/home-visual-cues-390.png`,
+`home-visual-cues-320.png`, `home-visual-cues-desktop.png`. They show synthetic
+fixture content, not a changed real account. Disposable loopback fixture
+`waka_test_a34421d00208d8d0` shut down normally and its absence was verified;
+viewport reset and agent tab closed. No LLM requests or extra spending, no
+push/deployment. The revised visual treatment is ready for owner review; no
+positive usability result is inferred from automated checks alone.

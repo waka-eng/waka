@@ -12,6 +12,10 @@ const mount=(resuming=false,hasInspirations=true)=>act(async()=>root.render(<Hom
 it('gives review and chat their own named activity cards and distinct destinations',async()=>{
   await mount();const buttons=host.querySelectorAll('button');expect(buttons).toHaveLength(2);
   for(const button of buttons){expect(document.getElementById(button.getAttribute('aria-labelledby')!)).not.toBeNull();expect(document.getElementById(button.getAttribute('aria-describedby')!)).not.toBeNull();}
+  expect(buttons[0].querySelector('[data-home-action-icon="review"]')).not.toBeNull();
+  expect(buttons[1].querySelector('[data-home-action-icon="chat"]')).not.toBeNull();
+  for(const icon of host.querySelectorAll('svg')){expect(icon.getAttribute('aria-hidden')).toBe('true');expect(icon.getAttribute('focusable')).toBe('false');}
+  expect(host.textContent).not.toContain('↗');expect(host.textContent).toContain('Revisit saved ideas.');expect(host.textContent).toContain('Think through a choice.');
   expect(review).not.toHaveBeenCalled();expect(chat).not.toHaveBeenCalled();
   await act(async()=>buttons[0].click());expect(review).toHaveBeenCalledOnce();expect(chat).not.toHaveBeenCalled();
   await act(async()=>buttons[1].click());expect(chat).toHaveBeenCalledOnce();
@@ -19,4 +23,11 @@ it('gives review and chat their own named activity cards and distinct destinatio
 it('shows resume state without implying a new review, and leaves empty review understandable',async()=>{
   await mount(true);expect(host.textContent).toContain('Resume review · 3 selected');expect(host.textContent).toContain('Continue where you left off.');
   await mount(false,false);expect(host.textContent).toContain('Save an inspiration to begin.');expect(host.querySelector('button')!.disabled).toBe(false);
+});
+it('keeps visual cues decorative and the Korean action names explicit',async()=>{
+  await act(async()=>root.render(<HomeActivities locale="ko-KR" reviewLabel="영감 돌아보기" resuming={false} hasInspirations onReview={review} onChat={chat}/>));
+  const titles=[...host.querySelectorAll('.jar-activity-title')].map(element=>element.textContent);
+  expect(titles).toEqual(['영감 돌아보기','WAKA와 대화']);
+  expect(host.textContent).toContain('저장한 영감을 다시 봐요.');expect(host.textContent).toContain('함께 선택을 생각해 봐요.');
+  expect(host.querySelectorAll('[data-home-action-icon]')).toHaveLength(2);
 });

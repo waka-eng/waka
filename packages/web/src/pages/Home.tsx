@@ -86,6 +86,7 @@ import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
 import { useReviewEntry } from '../lib/use-review-entry';
 import { HomeActivities } from '../components/HomeActivities';
+import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
 import { ReviewEvidence } from '../components/ReviewEvidence';
@@ -13480,6 +13481,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             className={'jar-mouth-rest jar-label' + (charSay ? ' jar-mouth-rest--said' : '')}
             style={mouthOpen ? { visibility: 'hidden' } : undefined}
             onClick={() => { setCharSay(''); openMouth(); }}>
+            {!charSay?<HomeActionIcon kind="capture"/>:null}
             {charSay || (draft.trim() || composerDraft.draft.media.length ? say('worldContinueDraft') : say('worldCaptureInspiration'))}
           </button>
           {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
@@ -14701,7 +14703,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'&&(inField||inSky)&&!viewNavigation.view?.reviewId?<button type="button" className="jar-review-shortcut" data-jar-chrome="1"
         onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
       {phase==='ready'&&(inField||inSky||!atNow||(charSay!==''&&!mouthOpen))?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
-        <span aria-hidden="true">+</span> {say('worldCaptureInspiration')}</button>:null}
+        <HomeActionIcon kind="capture"/> {say('worldCaptureInspiration')}</button>:null}
       {phase === 'ready' ? <button type="button" className="jar-find-shortcut" data-jar-chrome="1"
         onClick={() => setSeek('')} aria-label={say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
