@@ -6,6 +6,7 @@ import {readFile,writeFile,readdir,mkdir} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
 import {gzipSync,brotliCompressSync} from 'node:zlib';
 import {createTestDatabase} from '../../packages/api/test/helpers/db.js';
+import {searchCases} from './search-cases.js';
 
 const configured=new URL(process.env.DB_CONNECTION_URL??'');
 assert.ok(['localhost','127.0.0.1'].includes(configured.hostname));assert.match(configured.pathname,/(?:^|[_/\-])(test|disposable)(?:$|[_\-])/i);assert.equal(configured.searchParams.has('options'),false);
@@ -14,6 +15,7 @@ const samples=Number(process.env.WAKA_PERFORMANCE_SAMPLES??30),port=Number(proce
 assert.ok(sizes.length<=4&&sizes.every(n=>Number.isInteger(n)&&n>=3&&n<=10000)&&new Set(sizes).size===sizes.length);
 assert.ok(Number.isInteger(samples)&&samples>=5&&samples<=60);assert.ok(Number.isInteger(port)&&port>1024&&port<65536);
 const outputDir=resolve(process.env.WAKA_PERFORMANCE_OUTPUT??'work/performance');await mkdir(outputDir,{recursive:true});
+const searchCorpus=process.env.WAKA_PERFORMANCE_SEARCH_CORPUS==='1';
 process.env.NODE_ENV='test';process.env.JWT_SECRET='disposable-performance-probe-only';
 process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';process.env.WAKA_CONVERSATION_REPLIES='0';
 delete process.env.OPENROUTER_API_KEY;delete process.env.GEMINI_API_KEY;delete process.env.AWS_LAMBDA_FUNCTION_NAME;delete process.env.WAKA_BACKGROUND_WORKER_FUNCTION;
@@ -41,13 +43,26 @@ for(const count of sizes){
   const [account]=await fixture.sql`INSERT INTO accounts(email,onboarding_completed_at) VALUES (${`performance-${count}@example.test`},now()) RETURNING id`;
   const [profile]=await fixture.sql`INSERT INTO profiles(account_id,type,name) VALUES (${account.id},'human',${`Synthetic ${count} inspirations`}) RETURNING id`;
   await fixture.sql`INSERT INTO inspirations(profile_id,text,created_at)
-    SELECT ${profile.id},'Synthetic performance inspiration '||i||'. I want space for walking and thoughtful experiments. '||repeat('A calm morning gives me room to notice an idea before turning it into a task. ',4),
+    SELECT ${profile.id},'Synthetic performance inspiration '||i||'. I want space for walking and thoughtful experiments. '||repeat('A calm morning gives me room to notice an idea before turning it into a task. ',4)
+      ||CASE WHEN ${searchCorpus} AND i%7=0 THEN ' 여백 생각 느긋한 하루.' ELSE '' END
+      ||CASE WHEN ${searchCorpus} AND i=${count} THEN ' marmalade 한낮의별빛 literal%_! anchor' ELSE '' END,
       now()-i*interval '1 hour' FROM generate_series(1,${count}::int) i`;
-  await fixture.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer)
-    SELECT ${profile.id},id,'Why did you keep this?','Synthetic reflection: space to think is important to me.'
+  await fixture.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer,skipped)
+    SELECT ${profile.id},id,'Why did you keep this?',
+      CASE WHEN ${searchCorpus} AND rn=4 THEN 'SKIPPED_SENTINEL'
+        ELSE 'Synthetic reflection: space to think is important to me.'||CASE WHEN ${searchCorpus} AND rn=8 THEN ' rare reflection mark' ELSE '' END END,
+      ${searchCorpus} AND rn=4
       FROM (SELECT id,row_number() OVER(ORDER BY created_at DESC) rn FROM inspirations WHERE profile_id=${profile.id}) x WHERE rn%4=0`;
-  await fixture.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,title,enrichment_status,enrichment_kind,enrichment_text)
-    SELECT ${profile.id},id,'link','https://example.test/synthetic/'||rn,'Synthetic source','ready','page_body',repeat('Synthetic article text. ',50)
+  await fixture.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,name,title,enrichment_status,enrichment_kind,enrichment_text,transcript_correction)
+    SELECT ${profile.id},id,
+      (CASE WHEN ${searchCorpus} AND rn IN (5,10) THEN 'audio' WHEN ${searchCorpus} AND rn%25=0 THEN 'image' ELSE 'link' END)::attachment_type,
+      CASE WHEN ${searchCorpus} AND (rn IN (5,10) OR rn%25=0) THEN 'https://storage.test/private-object/'||rn ELSE 'https://example.test/synthetic/'||rn END,
+      CASE WHEN ${searchCorpus} AND rn%25=0 THEN 'synthetic-photo.jpg' ELSE NULL END,
+      'Synthetic source',
+      (CASE WHEN ${searchCorpus} AND rn IN (5,10) THEN 'failed' ELSE 'ready' END)::attachment_enrichment_status,
+      (CASE WHEN ${searchCorpus} AND rn IN (5,10) THEN 'audio_transcription' WHEN ${searchCorpus} AND rn%25=0 THEN 'image_description' ELSE 'page_body' END)::attachment_enrichment_kind,
+      CASE WHEN ${searchCorpus} AND rn IN (5,10) THEN 'Superseded machine text' WHEN ${searchCorpus} AND rn%25=0 THEN '사진 속 작은 정원' ELSE repeat('Synthetic article text. ',50) END,
+      CASE WHEN ${searchCorpus} AND rn IN (5,10) THEN '고친 목소리 garden' ELSE NULL END
       FROM (SELECT id,row_number() OVER(ORDER BY created_at DESC) rn FROM inspirations WHERE profile_id=${profile.id}) x WHERE rn%5=0`;
   const signalCount=count===25?4:count===250?16:64;
   const signalRows=await fixture.sql`INSERT INTO signals(profile_id,statement,status,confidence,created_at,last_evidence_at)
@@ -100,12 +115,38 @@ for(const [size,f] of fixtures){
   const concurrency:number[]=[];
   for(let batch=0;batch<3;batch++)await Promise.all(Array.from({length:10},async()=>{const start=performance.now();const response=await request(size,'/api/inspirations?limit=200');await response.arrayBuffer();concurrency.push(performance.now()-start);}));
   measured.push({size,label:'archive_10_concurrent',...summary(concurrency)});
+  if(searchCorpus&&size===10000){
+    const identities=await fixture.sql`SELECT id FROM inspirations WHERE profile_id=${f.id} ORDER BY created_at DESC,id DESC`;
+    const ordinal=new Map(identities.map((row,index)=>[row.id,index+1]));
+    for(const entry of searchCases){
+      const path='/api/inspirations?limit=40&q='+encodeURIComponent(entry.query),times:number[]=[];
+      await(await request(size,path)).arrayBuffer();
+      for(let i=0;i<samples;i++){
+        const started=performance.now(),response=await request(size,path);assert.equal(response.status,200);
+        await response.arrayBuffer();times.push(performance.now()-started);
+      }
+      const expected:number[]=Array.from({length:size},(_,index)=>index+1).filter(n=>entry.contains(n,size));
+      const found:number[]=[],seenCursors=new Set<string>();let cursor:string|undefined;
+      do{
+        const response=await request(size,'/api/inspirations?limit=200&q='+encodeURIComponent(entry.query)+(cursor?'&cursor='+encodeURIComponent(cursor):''));
+        assert.equal(response.status,200);
+        const body=await response.json() as {inspirations:Array<{id:string}>;total?:number;nextCursor?:string};
+        if(!cursor)assert.equal(body.total,expected.length,entry.label+' exact total');else assert.equal(body.total,undefined);
+        for(const row of body.inspirations){assert.ok(ordinal.has(row.id),entry.label+' foreign identity');found.push(ordinal.get(row.id)!);}
+        cursor=body.nextCursor;
+        if(cursor){assert.equal(seenCursors.has(cursor),false,'Cursor loop');seenCursors.add(cursor);}
+      }while(cursor);
+      assert.deepEqual(found,expected,entry.label+' complete membership/order');
+      const result={size,label:'search_'+entry.label,matchingOriginals:found.length,allIdsAndCursorsVerified:true,...summary(times)};
+      measured.push(result);console.log(JSON.stringify({stage:'search_case',...result}));
+    }
+  }
 }
 let explain:unknown=null;
 if(reviewQuery){const result=await db.$client.unsafe('EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) '+reviewQuery.query,reviewQuery.params as never);explain=result[0]?.['QUERY PLAN'];}
 const assets=[];
 for(const name of await readdir(resolve('packages/web/dist/assets'))){const bytes=await readFile(resolve('packages/web/dist/assets',name));assets.push({name,raw:bytes.length,gzip:gzipSync(bytes).length,brotli:brotliCompressSync(bytes).length});}
-const results={kind:'local synthetic production-build baseline',createdAt:new Date().toISOString(),apiImportMs:round(apiImportMs),database:'disposable loopback only',modelCalls:0,fixtures:[...fixtures].map(([size,f])=>({size,signals:f.signals,principles:f.principles,rooms:f.groups.length})),measured,assets,reviewSelectionExplain:explain};
+const results={kind:'local synthetic production-build baseline',createdAt:new Date().toISOString(),apiImportMs:round(apiImportMs),database:'disposable loopback only',modelCalls:0,searchCorpus,fixtures:[...fixtures].map(([size,f])=>({size,signals:f.signals,principles:f.principles,rooms:f.groups.length})),measured,assets,reviewSelectionExplain:explain};
 await writeFile(resolve(outputDir,'api.json'),JSON.stringify({...results,samples,poolMax:process.env.WAKA_DB_POOL_MAX??5},null,2));
 console.log(JSON.stringify({origin,schema:fixture.schemaName,apiImportMs:round(apiImportMs),results:resolve(outputDir,'api.json')}));
 let activeSize=sizes[0]!,delayMs=0;

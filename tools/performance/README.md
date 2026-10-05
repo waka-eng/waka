@@ -38,3 +38,52 @@ separately by closing and reopening it without completing the session.
 
 Performance/browser/paid gates are manual. This runner does not add a GitHub
 workflow, schedule model requests or modify CI Browser gates.
+
+## Search comparisons
+
+Set `WAKA_PERFORMANCE_SEARCH_CORPUS=1` to add the bilingual/material fixture.
+The 10,000-source account runs twenty query classes with repeated endpoint
+timings and a complete cursor walk against known matching source ordinals.
+Other accounts contain the same terms so a missing tenant predicate is visible.
+The ordinary fixture remains unchanged when this flag is omitted.
+
+For an interleaved comparison, keep the old and candidate fixture processes
+on separate loopback ports, then run:
+
+```bash
+WAKA_PERFORMANCE_BASELINE_ORIGIN=http://127.0.0.1:3017 \
+WAKA_PERFORMANCE_CANDIDATE_ORIGIN=http://127.0.0.1:3018 \
+WAKA_PERFORMANCE_SAMPLES=30 \
+pnpm tsx tools/performance/compare-search.ts
+```
+
+This command requires both fixtures to have the search corpus enabled. It
+selects the 10,000-source account with zero added delay, alternates request
+order, validates page membership/totals and records observed median/p95.
+It rejects remote origins and keeps fixture cookies in memory, not output.
+
+## Search migration and backfill
+
+Migration 0067 must precede deployment of an API that reads its new columns.
+It adds nullable search metadata and a text-write trigger; it does not rewrite
+historical rows or run a model. Missing or unsupported coverage falls back to
+current text. Reverting the API optimization does not require deleting memory
+or removing the additive columns. The original full-text index is retained.
+
+`pnpm backfill:inspiration-search --help` describes explicit operator
+maintenance. It loads no env file and defaults to reporting remaining rows.
+For a disposable local schema, rehearse one bounded batch:
+
+```bash
+DB_CONNECTION_URL=postgresql://agi@127.0.0.1:5432/waka_capture_a03_test \
+pnpm backfill:inspiration-search --apply --stage local \
+  --expected-host 127.0.0.1 --schema waka_test_REPLACE_WITH_OWN_SCHEMA \
+  --batch-size 250 --max-batches 1
+```
+
+Use the schema allocated for that test, not a guessed or another task's schema.
+Rerun against the same verified target to resume. Busy originals are skipped;
+zero updates does not imply completion when the reported remaining count is
+nonzero. Repair does not change wording, material/generation revisions or jobs.
+For dev, verify the actual stage database URL independently before an explicit
+`--stage dev --expected-host <actual-host>` apply. Production apply is excluded.

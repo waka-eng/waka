@@ -15,6 +15,7 @@ import { Hono } from "hono";
 
 import { attachments, experiences, inspirations, inspirationRevisions, reflections } from "../db/index.js";
 import {readInspirationSnapshot} from '../lib/inspiration-snapshots.js';
+import {currentInspirationTextSearchVector} from '../lib/inspiration-search.js';
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import { validationDetails } from "../lib/validation.js";
@@ -49,8 +50,8 @@ interface ListCursor {
  * offset would quietly skip or repeat rows whenever a capture lands mid-scroll.
  * Opaque so the ordering can change without breaking a client that stored one.
  */
-function encodeCursor(row: { createdAt: Date; id: string }): string {
-  return Buffer.from(`${row.createdAt.toISOString()}|${row.id}`, "utf8").toString("base64url");
+function encodeCursor(row: { createdAt: Date; cursorCreatedAt: string; id: string }): string {
+  return Buffer.from(`${row.cursorCreatedAt}|${row.id}`, "utf8").toString("base64url");
 }
 
 function decodeCursor(raw: string): ListCursor | null {
@@ -125,18 +126,21 @@ export function registerRecallRoutes(
     const filters = [eq(inspirations.profileId, target.profileId)];
 
     if (search) {
+      // Cheap literal matching first. Candidate subqueries are uncorrelated
+      // and explicitly owned, so children are matched once rather than once
+      // per source. IN preserves one original even with multiple witnesses.
       const matches = or(
-        sql`to_tsvector('simple', ${inspirations.text}) @@ plainto_tsquery('simple', ${search})`,
         sql`${inspirations.text} ilike ${buildLikePattern(search)} escape '!'`,
-        sql`EXISTS (SELECT 1 FROM ${reflections} WHERE ${reflections.profileId} = ${inspirations.profileId}
-          AND ${reflections.inspirationId} = ${inspirations.id} AND ${reflections.skipped} = false
-          AND ${reflections.answer} ilike ${buildLikePattern(search)} escape '!')`,
-        sql`EXISTS (SELECT 1 FROM ${attachments} WHERE ${attachments.profileId} = ${inspirations.profileId}
-          AND ${attachments.inspirationId} = ${inspirations.id} AND (
-            (${effectiveAttachmentStatus} = 'ready' AND ${effectiveAttachmentText} ilike ${buildLikePattern(search)} escape '!')
-            OR ${attachments.name} ilike ${buildLikePattern(search)} escape '!'
-            OR (${attachments.type} = 'link' AND (${attachments.title} ilike ${buildLikePattern(search)} escape '!'
-              OR ${attachments.url} ilike ${buildLikePattern(search)} escape '!'))))`,
+        inArray(inspirations.id,db.select({id:inspirations.id}).from(inspirations).where(and(
+          eq(inspirations.profileId,target.profileId),sql`${currentInspirationTextSearchVector} @@ plainto_tsquery('simple',${search})`))),
+        inArray(inspirations.id,db.select({id:reflections.inspirationId}).from(reflections).where(and(
+          eq(reflections.profileId,target.profileId),eq(reflections.skipped,false),sql`${reflections.answer} ilike ${buildLikePattern(search)} escape '!'`))),
+        inArray(inspirations.id,db.select({id:attachments.inspirationId}).from(attachments).where(and(
+          eq(attachments.profileId,target.profileId),sql`(
+          (${effectiveAttachmentStatus}='ready' AND ${effectiveAttachmentText} ilike ${buildLikePattern(search)} escape '!')
+          OR ${attachments.name} ilike ${buildLikePattern(search)} escape '!'
+          OR (${attachments.type}='link' AND (${attachments.title} ilike ${buildLikePattern(search)} escape '!'
+            OR ${attachments.url} ilike ${buildLikePattern(search)} escape '!')))`))),
       );
       if (matches) filters.push(matches);
     }
@@ -180,18 +184,29 @@ export function registerRecallRoutes(
       );
     }
 
-    const rows = await db
-      .select({
+    const selection={
         id: inspirations.id,
         kind: inspirations.kind,
         source: inspirations.source,
         createdAt: inspirations.createdAt,
+        cursorCreatedAt:sql<string>`to_char(${inspirations.createdAt} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
         updatedAt: inspirations.updatedAt,
         visibility: inspirations.visibility,
         previewSource: sql<string>`left(${inspirations.text}, ${sql.raw(String(PREVIEW_SOURCE_CHARS))})`,
         textLength: sql<number>`char_length(${inspirations.text})`,
         materialRevision: sql<string|null>`${inspirationRevisions.personalRevision}::text`,
-      })
+      };
+    // Count matching identities once, before LIMIT, then fetch only the page's
+    // previews/revisions. WindowAgg is a subquery barrier: long text and child
+    // summaries are not materialized for the entire matching archive.
+    const firstSearch=search&&!query.data.cursor?db.select({id:inspirations.id,
+      total:sql<number>`cast(count(*) over() as int)`.as('total')}).from(inspirations)
+      .where(and(...contentFilters)).orderBy(desc(inspirations.createdAt),desc(inspirations.id)).limit(limit).as('matched_inspirations'):null;
+    const rows=firstSearch?await db.select({...selection,total:firstSearch.total}).from(firstSearch)
+      .innerJoin(inspirations,and(eq(inspirations.profileId,target.profileId),eq(inspirations.id,firstSearch.id)))
+      .leftJoin(inspirationRevisions,and(eq(inspirationRevisions.profileId,inspirations.profileId),eq(inspirationRevisions.inspirationId,inspirations.id)))
+      .orderBy(desc(inspirations.createdAt),desc(inspirations.id))
+      :await db.select({...selection,total:sql<number|null>`NULL`})
       .from(inspirations)
       .leftJoin(inspirationRevisions,and(eq(inspirationRevisions.profileId,inspirations.profileId),eq(inspirationRevisions.inspirationId,inspirations.id)))
       .where(and(...filters))
@@ -226,8 +241,8 @@ export function registerRecallRoutes(
        page one; a page asked for with a cursor is by definition not the first.
        This matters because the route was fast before the total existed, and
        an addition has no business taxing a walk that predates it. */
-    let total: number | undefined;
-    if (!query.data.cursor) {
+    let total: number | undefined=firstSearch?Number(rows[0]?.total??0):undefined;
+    if (!query.data.cursor&&!firstSearch) {
       const [totals] = await db
         .select({ total: sql<number>`cast(count(*) as int)` })
         .from(inspirations)

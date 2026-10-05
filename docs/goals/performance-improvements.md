@@ -1,6 +1,6 @@
 # Performance improvements
 
-Status: in progress (2026-10-05), milestones 1 and 2 passed locally; milestone 3 next.
+Status: in progress (2026-10-05), milestones 1 to 3 passed locally; milestone 4 next.
 Branch: `codex/performance-improvements`, based on the separately checkpointed
 single-inspiration Review implementation at `33614ed`.
 
@@ -170,3 +170,64 @@ push, merge or deployment. Compact
 results. Browser percentiles are local samples; physical devices, cloud latency
 and controlled-worker contention remain later validation work. Milestone 3
 starts next under the existing all-milestones approval.
+
+### Milestone 3 gate on 2026 10 05
+
+Criterion: local search p95 below 100 ms at 10,000 inspirations across the
+representative bilingual/material queries, with complete membership, ordering,
+cursors and exact totals preserved. Conditional storage must support safe
+source updates, partial coverage and bounded resumable backfill.
+
+Fresh baseline at `5796d4e`: common search median 416.77 ms, p95 471.17 ms.
+Expanded four-account corpus (25, 250, 2,000 and 10,000 originals) covered
+twenty query classes, thirty samples each and a full cursor walk. Every
+baseline class returned the expected complete set, but p95 ranged 444.75 to
+640.61 ms. English/Korean, rare/no-result, multiword, literal percent/underscore/
+escape, reflection, link/image and corrected/superseded speech were included.
+
+The query-only experiment used cheap literal matching first, owned candidate
+sets and a single window count. SQL was 31.506 ms for common English, 22.962
+for rare English, 22.157 for no result and 23.601 for Korean multiword, but
+212.787 ms for dense English multiword. EXPLAIN showed the existing GIN index
+working for rare cases; dense text still reparsed per row. This failed the
+original multiword budget and justified storage, not a claim of a missing index.
+
+Added policy-tagged, nullable raw-text vectors with a synchronous text-write
+trigger in migration 0067. Child matches remain current owned reads. Missing or
+unsupported vectors fall back to raw text; readers perform no repair/model
+work. No new index was needed. A window over identities counts once before
+LIMIT, then joins only the page's previews/material revisions in the same SQL
+statement. All original visibility, tenant and effective-material rules remain.
+
+Final interleaved HTTP comparison alternated request order, thirty samples per
+class per build. Across twenty classes, baseline p95 ranged 416.9 to 530.21 ms
+and candidate p95 23.18 to 46.03 ms. Each pair checked page membership/totals;
+both independent complete cursor walks checked every matching owned identity
+and order. Verdict: the search gate passes locally. Compact
+[milestone 3 evidence](../craft/evidence/performance/milestone-3.json) retains
+the unsuccessful experiment, all paired values and measurement limits.
+
+Also reproduced a real cursor bug: a limit-one page over three originals tied
+at a microsecond timestamp returned only one. New opaque cursors preserve exact
+UTC PostgreSQL precision; existing strings still decode. Searched/unsearched
+tie and empty-tail tests now pass. No visible timestamp format changed.
+
+Rehearsed migration/backfill on 12,275 historical disposable rows: dry-run
+reported 12,275, a 250-row batch left 12,025, a subsequent bounded resume left
+zero. Material revision sum stayed 17,794, generation sum 900 and jobs zero.
+Tests cover busy rows/concurrent text edits, scoped repairs, unsupported/missing
+coverage, removal, current child edits, exact source/material hashes and unchanged
+embedding input. List/detail DTOs expose neither vector nor parser policy.
+Production stage and wrong-host apply commands were refused before DB work.
+
+Verification: 1,494 full API tests and 734 web tests passed; three paid evals
+skipped. Sixteen focused SQL cases, including the final hash/DTO assertions and
+real fresh migration, passed. API/web/admin/benchmark types, web production build,
+db:check, offline migration integrity and diff checks passed. A test response
+needed an explicit type annotation before the final typecheck passed. The new
+snapshot captures existing manually-authored 0065/0066 schema additions; their
+duplicate generated DDL was removed from the new migration, not older history.
+No remote migration, backfill, source mutation, provider call, push or deployment.
+Dev rollout must apply 0067 before the new API; rollback can retain additive
+columns and use the old reader. Pool-one, worker contention and deployed/device
+verification remain later work. Milestone 4 is next.

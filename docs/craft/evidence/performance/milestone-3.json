@@ -1,0 +1,366 @@
+{
+  "date": "2026-10-05",
+  "kind": "synthetic interleaved HTTP comparison",
+  "scope": {
+    "database": "disposable loopback Postgres",
+    "inspirations": 10000,
+    "otherAccountSizes": [
+      25,
+      250,
+      2000
+    ],
+    "queryClasses": 20,
+    "samplesPerQueryPerBuild": 30,
+    "apiDelayMs": 0,
+    "providerCalls": 0,
+    "remoteAccountWrites": 0
+  },
+  "results": [
+    {
+      "case": "common_english",
+      "matchingOriginals": 10000,
+      "before": {
+        "medianMs": 399.07,
+        "p95Ms": 466.83,
+        "maxMs": 482.34
+      },
+      "after": {
+        "medianMs": 21.65,
+        "p95Ms": 23.18,
+        "maxMs": 26.8
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "rare_english",
+      "matchingOriginals": 1,
+      "before": {
+        "medianMs": 420.74,
+        "p95Ms": 530.21,
+        "maxMs": 562.05
+      },
+      "after": {
+        "medianMs": 31.51,
+        "p95Ms": 34.11,
+        "maxMs": 34.18
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "no_result",
+      "matchingOriginals": 0,
+      "before": {
+        "medianMs": 429.29,
+        "p95Ms": 485.23,
+        "maxMs": 488.51
+      },
+      "after": {
+        "medianMs": 31.54,
+        "p95Ms": 45.17,
+        "maxMs": 45.98
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "multiword_english",
+      "matchingOriginals": 10000,
+      "before": {
+        "medianMs": 393.86,
+        "p95Ms": 416.9,
+        "maxMs": 428.88
+      },
+      "after": {
+        "medianMs": 28.33,
+        "p95Ms": 30.4,
+        "maxMs": 30.56
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "common_korean",
+      "matchingOriginals": 1428,
+      "before": {
+        "medianMs": 420.55,
+        "p95Ms": 427.17,
+        "maxMs": 427.66
+      },
+      "after": {
+        "medianMs": 33.24,
+        "p95Ms": 35.86,
+        "maxMs": 39.07
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "partial_korean",
+      "matchingOriginals": 1428,
+      "before": {
+        "medianMs": 423.65,
+        "p95Ms": 430.66,
+        "maxMs": 433.5
+      },
+      "after": {
+        "medianMs": 33.52,
+        "p95Ms": 35.27,
+        "maxMs": 35.66
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "multiword_korean",
+      "matchingOriginals": 1428,
+      "before": {
+        "medianMs": 426.43,
+        "p95Ms": 468.05,
+        "maxMs": 501.53
+      },
+      "after": {
+        "medianMs": 33.9,
+        "p95Ms": 37.75,
+        "maxMs": 38.39
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "rare_korean",
+      "matchingOriginals": 1,
+      "before": {
+        "medianMs": 424.41,
+        "p95Ms": 430.18,
+        "maxMs": 430.93
+      },
+      "after": {
+        "medianMs": 32.64,
+        "p95Ms": 34.47,
+        "maxMs": 34.54
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "literal_percent",
+      "matchingOriginals": 1,
+      "before": {
+        "medianMs": 422.98,
+        "p95Ms": 429.95,
+        "maxMs": 431.26
+      },
+      "after": {
+        "medianMs": 30.26,
+        "p95Ms": 31.47,
+        "maxMs": 32.21
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "literal_underscore",
+      "matchingOriginals": 1,
+      "before": {
+        "medianMs": 420.77,
+        "p95Ms": 428.87,
+        "maxMs": 429.47
+      },
+      "after": {
+        "medianMs": 30.15,
+        "p95Ms": 31.52,
+        "maxMs": 32.12
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "literal_escape",
+      "matchingOriginals": 1,
+      "before": {
+        "medianMs": 422.47,
+        "p95Ms": 427.8,
+        "maxMs": 427.81
+      },
+      "after": {
+        "medianMs": 30.09,
+        "p95Ms": 32.72,
+        "maxMs": 32.79
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "reflection_only",
+      "matchingOriginals": 2499,
+      "before": {
+        "medianMs": 435.23,
+        "p95Ms": 443.5,
+        "maxMs": 443.61
+      },
+      "after": {
+        "medianMs": 36.27,
+        "p95Ms": 38.1,
+        "maxMs": 38.81
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "rare_reflection",
+      "matchingOriginals": 1,
+      "before": {
+        "medianMs": 428.79,
+        "p95Ms": 433.86,
+        "maxMs": 434.85
+      },
+      "after": {
+        "medianMs": 32.54,
+        "p95Ms": 34.57,
+        "maxMs": 35.95
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "link_body",
+      "matchingOriginals": 1598,
+      "before": {
+        "medianMs": 427.79,
+        "p95Ms": 431.99,
+        "maxMs": 432.48
+      },
+      "after": {
+        "medianMs": 33.59,
+        "p95Ms": 35.21,
+        "maxMs": 35.43
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "image_text",
+      "matchingOriginals": 400,
+      "before": {
+        "medianMs": 428.93,
+        "p95Ms": 433.61,
+        "maxMs": 433.68
+      },
+      "after": {
+        "medianMs": 34.13,
+        "p95Ms": 37.52,
+        "maxMs": 38.04
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "corrected_audio",
+      "matchingOriginals": 2,
+      "before": {
+        "medianMs": 423.1,
+        "p95Ms": 430.56,
+        "maxMs": 434.25
+      },
+      "after": {
+        "medianMs": 31.43,
+        "p95Ms": 34.06,
+        "maxMs": 36.53
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "corrected_korean",
+      "matchingOriginals": 2,
+      "before": {
+        "medianMs": 427.51,
+        "p95Ms": 432.62,
+        "maxMs": 442.45
+      },
+      "after": {
+        "medianMs": 32.45,
+        "p95Ms": 35.8,
+        "maxMs": 35.86
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "superseded_audio",
+      "matchingOriginals": 0,
+      "before": {
+        "medianMs": 420.33,
+        "p95Ms": 424.62,
+        "maxMs": 424.71
+      },
+      "after": {
+        "medianMs": 30.89,
+        "p95Ms": 45.72,
+        "maxMs": 46.05
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "private_storage_locator",
+      "matchingOriginals": 0,
+      "before": {
+        "medianMs": 425.55,
+        "p95Ms": 507.13,
+        "maxMs": 513.31
+      },
+      "after": {
+        "medianMs": 31.43,
+        "p95Ms": 44.06,
+        "maxMs": 44.88
+      },
+      "firstPageParityVerified": true
+    },
+    {
+      "case": "skipped_reflection",
+      "matchingOriginals": 0,
+      "before": {
+        "medianMs": 423.36,
+        "p95Ms": 431.49,
+        "maxMs": 432.61
+      },
+      "after": {
+        "medianMs": 32,
+        "p95Ms": 46.03,
+        "maxMs": 46.31
+      },
+      "firstPageParityVerified": true
+    }
+  ],
+  "completeCursorWalks": {
+    "before": true,
+    "after": true
+  },
+  "queryOnlyExperiment": {
+    "commonEnglishSqlMs": 31.506,
+    "multiwordEnglishSqlMs": 212.787,
+    "rareEnglishSqlMs": 22.962,
+    "noResultSqlMs": 22.157,
+    "koreanMultiwordSqlMs": 23.601,
+    "verdict": "Common multiword text still misses the 100 ms gate; existing GIN is used for rare queries but the planner reparses dense text."
+  },
+  "projection": {
+    "migration": "0067_inspiration_text_search",
+    "newIndex": false,
+    "parserPolicy": 1,
+    "triggerMaintained": true,
+    "missingOrUnsupportedCoverage": "current raw-text fallback; no read-time repair",
+    "legacyRowsRehearsed": 12275,
+    "firstBatchUpdated": 250,
+    "remainingAfterFirstBatch": 12025,
+    "remainingAfterResume": 0,
+    "materialRevisionSumBeforeAndAfter": "17794",
+    "generationRevisionSumBeforeAndAfter": "900",
+    "jobsBeforeAndAfter": 0,
+    "materialHashesAndEmbeddingInput": "unchanged in DB regression test"
+  },
+  "pagination": {
+    "bug": "Millisecond cursor serialization skipped originals tied at microsecond precision.",
+    "fix": "Encode exact UTC PostgreSQL timestamp; legacy cursor strings still decode.",
+    "searchedAndUnsearchedTies": "passed"
+  },
+  "checks": {
+    "fullApiTests": 1494,
+    "paidEvaluationsSkipped": 3,
+    "webTests": 734,
+    "freshMigration": "passed",
+    "types": "API, web, admin and performance runner passed",
+    "migrationFiles": "db:check and offline integrity passed",
+    "dtoMetadata": "not exposed by list/detail responses"
+  },
+  "limits": [
+    "Observed local sample percentiles, not cloud/device or population guarantees.",
+    "Backfill rehearsal touched only owned disposable schemas; dev migration/backfill remains separately authorized delivery work.",
+    "Pool-one and controlled-worker checks remain in later milestones."
+  ]
+}

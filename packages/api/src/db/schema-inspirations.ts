@@ -25,6 +25,8 @@
 import { relations, sql } from "drizzle-orm";
 import {
   index,
+  customType,
+  integer,
   pgEnum,
   pgTable,
   text,
@@ -34,6 +36,8 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { profiles } from "./schema-profiles";
+
+const tsvector=customType<{data:string;driverData:string}>({dataType:()=> 'tsvector'});
 
 /** Shape of what arrived. Advisory: extraction reads the content regardless. */
 /**
@@ -77,6 +81,10 @@ export const inspirations = pgTable(
       .references(() => profiles.id, { onDelete: "cascade" }),
 
     text: text("text").notNull(),
+    /** Internal raw-text projection. Trigger-maintained; historical rows may
+     * be unfilled and search must use current text in that case. No DTO field. */
+    textSearchVector:tsvector('text_search_vector'),
+    textSearchVectorPolicy:integer('text_search_vector_policy'),
     kind: inspirationKindEnum("kind"),
     source: inspirationSourceEnum("source").notNull().default("app"),
     visibility: inspirationVisibilityEnum("visibility").notNull().default("private"),
