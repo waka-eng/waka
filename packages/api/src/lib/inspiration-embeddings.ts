@@ -30,6 +30,7 @@ import {
   type Reflection,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import {measurePerformanceStage} from './performance-stages.js';
 import { effectiveAttachmentText } from './attachment-material.js';
 import {
   buildGeminiJsonHeaders,
@@ -210,6 +211,7 @@ export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
     input: string,
     taskType: EmbeddingTaskType = "RETRIEVAL_DOCUMENT",
   ): Promise<number[]> {
+    return measurePerformanceStage('embedding','gemini',async()=>{
     const apiKey = getGeminiApiKey();
     const response = await fetchModelWithTimeout(fetch, buildEmbedContentUrl(this.model), {
       method: "POST",
@@ -248,6 +250,7 @@ export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
     }
 
     return validateEmbeddingVector(parsed.data.embedding.values);
+    });
   }
 }
 

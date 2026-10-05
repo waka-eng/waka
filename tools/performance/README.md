@@ -62,6 +62,18 @@ selects the 10,000-source account with zero added delay, alternates request
 order, validates page membership/totals and records observed median/p95.
 It rejects remote origins and keeps fixture cookies in memory, not output.
 
+`tools/performance/compare-readers.ts` accepts the same origin/sample/output
+settings and compares Chat context plus Top of Mind/Principles reads. Its
+test-only `/perf/context` measures context preparation without a provider and
+checks normalized fixture output; exact source hashes/order are covered by the
+SQL oracle tests. Repeat with `WAKA_DB_POOL_MAX=1` to model Lambda's connection
+budget. This is not a cloud latency or worker-contention measurement.
+
+Runtime `[performance-stage]` events contain only a closed operation label,
+stage, elapsed milliseconds and outcome. Queue wait excludes intended run-after
+delay. Separate these stages when diagnosing waiting; never log source wording
+or infer provider latency from a pending UI state alone.
+
 ## Search migration and backfill
 
 Migration 0067 must precede deployment of an API that reads its new columns.

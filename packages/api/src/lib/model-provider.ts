@@ -24,6 +24,7 @@
 
 import type { PrincipleType, TopOfMindEntryType } from "../db/index.js";
 import type { SupportedLocale } from "./locales.js";
+import {timeModelProvider} from './performance-stages.js';
 
 // ---------------------------------------------------------------------------
 // Layer 2 — signal candidate extraction
@@ -473,10 +474,10 @@ export async function getDefaultModelProvider(): Promise<ModelProvider> {
       const { createOpenRouterModelProvider } = await import(
         "./openrouter-model-provider.js"
       );
-      defaultProvider = createOpenRouterModelProvider();
+      defaultProvider = timeModelProvider(createOpenRouterModelProvider());
     } else {
       const { createGeminiModelProvider } = await import("./gemini-model-provider.js");
-      defaultProvider = createGeminiModelProvider();
+      defaultProvider = timeModelProvider(createGeminiModelProvider());
     }
   }
   return defaultProvider;

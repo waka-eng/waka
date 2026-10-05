@@ -169,6 +169,19 @@ server=createServer(async(req,res)=>{
       httpRequests.length=0;res.writeHead(302,{Location:'/', 'Set-Cookie':buildSessionCookie(fixtures.get(size)!.token,{secure:false})});res.end();return;
     }
     if(url.pathname==='/perf/results'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({size:activeSize,delayMs,httpRequests}));return;}
+    if(url.pathname==='/perf/context'){
+      const question=(url.searchParams.get('question')??'How can I leave space for walking and experiments?').slice(0,1000);
+      const f=fixtures.get(activeSize)!;queries=[];recording=true;const started=performance.now();
+      let context;
+      try{context=await readConversationContext(db,f.id,question);}finally{recording=false;}
+      const durationMs=performance.now()-started,sqlQueries=queries.length;
+      // Stable synthetic labels/contents permit before/after comparison across
+      // independently seeded schemas. IDs/date-sensitive hashes are checked
+      // against the SQL oracle in DB tests, not normalized into authority here.
+      const normalized=(rows:typeof context.inspirations)=>rows.map(({id,hash,recordedAt,...row})=>row);
+      res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({durationMs,sqlQueries,
+        context:{principles:normalized(context.principles),reading:normalized(context.reading),inspirations:normalized(context.inspirations)}}));return;
+    }
     if(url.pathname==='/perf/finish-review'){
       const f=fixtures.get(activeSize)!;
       const active=await readActiveReview(db,f.id);if(active)await completeReviewSession(db,f.id,active.id,active.revision);
