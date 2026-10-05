@@ -540,6 +540,14 @@ describe("inspirations", () => {
       message: "Inspiration not found",
     } satisfies Partial<ApiError>);
   });
+  it('scopes review deletion and sends its observed material revision', async () => {
+    stubFetch(Response.json({id:'inspiration-1'}));const controller=new AbortController();
+    await deleteInspiration('inspiration-1',{profile:'owner-profile',sourceRevision:'7',signal:controller.signal});
+    expect(fetch).toHaveBeenCalledWith('/api/inspirations/inspiration-1?profile=owner-profile',{
+      method:'DELETE',credentials:'include',signal:controller.signal,
+      headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({sourceRevision:'7'}),
+    });
+  });
 });
 
 describe("signals", () => {

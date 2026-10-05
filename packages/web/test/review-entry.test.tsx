@@ -13,9 +13,9 @@ const session={id:'review',profileId:'profile',completedAt:null,items:[{choice:'
 function Probe({owner=scope,route=null}:{owner?:typeof scope;route?:string|null}){const entry=useReviewEntry(owner,route,'en-US');return <button>{entry.label}</button>;}
 beforeEach(()=>{vi.resetAllMocks();(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;host=document.createElement('div');root=createRoot(host);});
 afterEach(async()=>{await act(async()=>root.unmount());vi.useRealTimers();});
-it('offers resume with the selected count and refreshes when returning from a review',async()=>{
+it('offers a simple resume label and refreshes when returning from a review',async()=>{
   vi.mocked(fetchActiveReview).mockResolvedValue(session);await act(async()=>root.render(<Probe/>));
-  expect(host.textContent).toBe('Resume review · 2 selected');
+  expect(host.textContent).toBe('Resume review');
   vi.mocked(fetchActiveReview).mockResolvedValue(null);await act(async()=>root.render(<Probe route="review"/>));
   expect(host.textContent).toBe('Review your inspirations');expect(fetchActiveReview).toHaveBeenCalledTimes(2);
 });

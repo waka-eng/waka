@@ -59,9 +59,16 @@ export function createReviewSession(db:Db,profileId:string,input:{id:string;insp
       AND ${reviewItems.inspirationId}=${inspirations.id} AND ${reviewItems.choice} IS NOT NULL)
       OR EXISTS (SELECT 1 FROM ${reflections} WHERE ${reflections.profileId}=${inspirations.profileId}
         AND ${reflections.inspirationId}=${inspirations.id} AND ${reflections.skipped}=false AND length(trim(${reflections.answer}))>0)`;
+    const lastReviewed=sql`(SELECT max(${reviewItems.decidedAt}) FROM ${reviewItems}
+      WHERE ${reviewItems.profileId}=${inspirations.profileId} AND ${reviewItems.inspirationId}=${inspirations.id}
+        AND ${reviewItems.choice} IS NOT NULL)`;
     const candidates=await tx.select({id:inspirations.id,reviewed}).from(inspirations)
-      .where(and(eq(inspirations.profileId,profileId),input.inspirationIds?inArray(inspirations.id,input.inspirationIds):undefined))
-      .orderBy(asc(reviewed),desc(inspirations.createdAt),desc(inspirations.id)).limit(MAX_REVIEW_ITEMS);
+      .where(and(eq(inspirations.profileId,profileId),input.inspirationIds?inArray(inspirations.id,input.inspirationIds)
+        :sql`(${lastReviewed} IS NULL OR ${lastReviewed}<now()-interval '24 hours')`))
+      .orderBy(asc(reviewed),sql`${lastReviewed} ASC NULLS FIRST`,desc(inspirations.createdAt),desc(inspirations.id))
+      // Old explicit manifests remain readable/replayable. New suggested
+      // reviews own exactly one inspiration, never a cross-source dialogue.
+      .limit(input.inspirationIds?MAX_REVIEW_ITEMS:1);
     if (input.inspirationIds && candidates.length!==input.inspirationIds.length) throw new ReviewSessionError(404,'inspiration_not_found','An inspiration is no longer available.');
     if (!candidates.length) return null;
     const ids=input.inspirationIds??candidates.map(row=>row.id);

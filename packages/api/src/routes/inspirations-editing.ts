@@ -24,10 +24,12 @@ import {
 import { makeAttachmentsS3Client } from "../lib/s3-client.js";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
+import { z } from 'zod';
 
 import {
   attachments,
   inspirations,
+  inspirationRevisions,
   reflections,
   signalEvidence,
   signals,
@@ -271,6 +273,12 @@ export function registerEditingRoutes(
       );
     }
 
+    const raw = await c.req.text();
+    let body: unknown = {};
+    try { if (raw) body = JSON.parse(raw); } catch { return c.json({ error: 'Invalid deletion request' }, 400); }
+    const input = z.object({ sourceRevision: z.string().regex(/^[1-9]\d{0,18}$/).optional() }).strict().safeParse(body);
+    if (!input.success) return c.json({ error: 'Invalid deletion request' }, 400);
+
     const session = c.get("session");
     const db = getDatabase();
     const target = await resolveTargetProfile(db, session, query.data.profile, "write");
@@ -298,6 +306,12 @@ export function registerEditingRoutes(
       const [parent] = await tx.select({ id: inspirations.id }).from(inspirations)
         .where(and(eq(inspirations.id, idCheck.data), eq(inspirations.profileId, target.profileId))).for("update");
       if (!parent) return [];
+
+      if (input.data.sourceRevision) {
+        const [revision] = await tx.select({ value: inspirationRevisions.personalRevision }).from(inspirationRevisions)
+          .where(and(eq(inspirationRevisions.profileId, target.profileId), eq(inspirationRevisions.inspirationId, idCheck.data)));
+        if (revision?.value.toString() !== input.data.sourceRevision) return null;
+      }
 
       const citingRows = await tx
         .selectDistinct({ signalId: signalEvidence.signalId, profileId: signalEvidence.profileId })
@@ -339,6 +353,9 @@ export function registerEditingRoutes(
       return removed;
     });
 
+    if (deleted === null) {
+      return c.json({ error: 'This inspiration changed. Read it again before removing it.', code: 'inspiration_changed' }, 409);
+    }
     if (deleted.length === 0) {
       return c.json({ error: "Inspiration not found" }, 404);
     }

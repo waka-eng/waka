@@ -251,11 +251,13 @@ export async function requestVoid(
   method: "POST" | "PATCH" | "DELETE",
   payload: unknown,
   fallbackMessage: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   let res: Response;
   try {
     res = await fetch(path, {
       method,
+      ...(signal ? { signal } : {}),
       credentials: "include",
       headers:
         payload === undefined

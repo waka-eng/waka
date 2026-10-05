@@ -315,11 +315,36 @@ written; stale tabs cannot overwrite a newer session decision. A repeated
 create uses the same session id and input hash rather than creating a second
 review. Review metadata is exported and cascades with the profile.
 
-Suggested sessions contain at most five sources, prioritizing those without a
-saved reflection or prior review choice, then newest first. Explicit selection
-preserves the person's order. Selection and cursor writes queue no model work,
-create no feedback and change no source/signal/principle. Cross-source answers
-are a separate later R05 contract, not multiple per-item reflections.
+The current Review UI opens one inspiration at a time, with reflection,
+Next inspiration and explicit removal, without a selection or batch-reflection
+stage. New suggested sessions contain one source, prioritizing those without a
+saved reflection or prior review choice, then newest first. Sources with a
+confirmed review choice in the last 24 hours are held back; eligible revisits
+rotate by oldest review choice first. Explicit legacy manifests retain their
+five-source bound and original order so old sessions and request replays remain
+valid. A new inspiration never changes an open session's fixed manifest.
+
+Single-inspiration reflection uses the existing `reflections` rows and their
+owner-scoped save/recovery protocol, not a cross-source `review_answers` row.
+Follow-up questions use only that inspiration and its reflection thread. Next
+records session progress (`keep` when a saved reflection exists, otherwise
+`skip`), completes an exhausted session and opens the next suggested original.
+Next is never deletion or a verdict on a signal/principle. Closing preserves
+the open review and unfinished reflection drafts. Opening Home only reads the
+resume state; entering Review explicitly starts the session, with no model call.
+
+Removal is the existing permanent inspiration deletion, including its server
+reflections, attachments and evidence links. Review requires confirmation and
+sends the observed personal material revision. The DELETE route checks that
+revision under the source lock and rejects a changed original before mutation.
+Unversioned existing delete clients remain compatible. A lost delete response
+is reconciled with an owned GET, never an automatic second DELETE. This is not
+a recoverable archive; the UI must not offer an undo it cannot honor.
+
+Historical cross-source answers, their cited links and unfinished device drafts
+remain accessible/copyable; they are not rewritten into per-item reflections.
+The following R05/R08 contracts describe that retained historical pipeline,
+not the default Review interaction.
 
 R05 uses one profile-owned `review_answers` row per authored response and
 `review_answer_sources` links to the reviewed items and their material revisions.

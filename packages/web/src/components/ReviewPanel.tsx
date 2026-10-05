@@ -1,129 +1,143 @@
-import {useCallback,useEffect,useRef,useState} from 'react';
-import {ApiError,fetchInspiration,fetchInspirationPage,fetchReviewSession,type ApiInspiration,type ApiReviewItem} from '../lib/api';
+import {useEffect,useRef,useState} from 'react';
+import {ApiError,deleteInspiration,fetchInspiration,fetchInspirationPage,fetchReviewSession,type ApiInspiration,type ApiReflection,type ApiReviewItem} from '../lib/api';
 import {useReviewSession} from '../lib/use-review-session';
-import {useReviewSelection} from '../lib/use-review-selection';
 import type {ProfileStorageScope} from '../lib/profile-storage';
+import {profileStorageKey} from '../lib/profile-storage';
+import {readReflectionDraft} from '../lib/authored-save-drafts';
 import {t,type SupportedLocale} from '../lib/locales';
 import {toInspirationDetail} from '../lib/data';
 import {DialogSurface} from './DialogSurface';
 import {InspirationAttachments} from './InspirationAttachments';
-import {InspirationSearch} from './InspirationSearch';
+import {ReflectionFlow} from './ReflectionFlow';
 import {ReviewDialogue} from './ReviewDialogue';
 import {ReviewResult} from './ReviewResult';
 
-function ReviewChosenItem({id,profileId,locale,onOpen,onMissing,onReady,onRemove}:{id:string;profileId:string;locale:SupportedLocale;onOpen:(id:string)=>void;onMissing?:()=>void;onReady?:(id:string,ready:boolean)=>void;onRemove?:()=>void}){
-  const [label,setLabel]=useState(t(locale,'worldReviewChecking')),[ready,setReady]=useState(false);
-  const [attempt,setAttempt]=useState(0);
-  const callbacks=useRef({onMissing,onReady});callbacks.current={onMissing,onReady};
-  useEffect(()=>{setReady(false);callbacks.current.onReady?.(id,false);setLabel(t(locale,'worldReviewChecking'));
-    const controller=new AbortController();const timer=window.setTimeout(()=>{setLabel(t(locale,'worldReviewSourceUnavailable'));controller.abort();},15000);
-    void fetchInspiration(id,{profile:profileId},controller.signal).then(row=>{
-      if(controller.signal.aborted)return;if(row.id!==id||row.profileId!==profileId)throw new Error('Source owner changed');
-      const preview=toInspirationDetail(row).preview;setLabel(preview.length>180?`${preview.slice(0,177)}…`:preview);setReady(true);callbacks.current.onReady?.(id,true);
-    }).catch(reason=>{if(!controller.signal.aborted){setLabel(t(locale,'worldReviewSourceUnavailable'));if(reason instanceof ApiError&&reason.status===404)callbacks.current.onMissing?.();}})
-      .finally(()=>window.clearTimeout(timer));return()=>{controller.abort();window.clearTimeout(timer);};},[id,profileId,locale,attempt]);
-  return <li><button type="button" disabled={!ready} aria-label={`${t(locale,'worldReviewOpen')}: ${label}`} onClick={()=>onOpen(id)}>{label}</button>{!ready&&label===t(locale,'worldReviewSourceUnavailable')&&onRemove?<button type="button" onClick={()=>setAttempt(value=>value+1)}>{t(locale,'worldRoomHistoryRetry')}</button>:null}{onRemove?<button type="button" aria-label={`${t(locale,'worldRemoveLower')} ${label}`} onClick={onRemove}>×</button>:null}</li>;
-}
-
-function ReviewCard({item,sessionId,profileId,locale,disabled,focusOnLoad=true,onChoice,onRefresh,onReady,onOpen}:{
-  item:ApiReviewItem;sessionId:string;profileId:string;locale:SupportedLocale;disabled:boolean;focusOnLoad?:boolean;
-  onChoice:(choice:'keep'|'skip')=>void;onRefresh:()=>void;onReady:(key:string|null)=>void;onOpen:(id:string)=>void;
+function ReviewCard({item,sessionId,scope,locale,disabled,onNext,onRefresh,onDeleted,onSaved,onSynchronized,onReflectionRemoved,onOpen}:{
+  item:ApiReviewItem;sessionId:string;scope:ProfileStorageScope;locale:SupportedLocale;disabled:boolean;
+  onNext:(reflected:boolean)=>void;onRefresh:()=>void;onDeleted:(id:string)=>void;onOpen:(id:string)=>void;
+  onSaved?:(row:ApiReflection)=>void;onSynchronized?:(id:string,row:ApiInspiration|null)=>void;onReflectionRemoved?:(id:string,owner:string)=>void;
 }){
-  const [read,setRead]=useState<{id:string;revision:string;source:ApiInspiration}|null>(null),[failed,setFailed]=useState(false);
-  const root=useRef<HTMLDivElement>(null),swipe=useRef<{x:number;y:number;pointerId:number}|null>(null);
+  const [source,setSource]=useState<ApiInspiration|null>(null),[failed,setFailed]=useState(false),[attempt,setAttempt]=useState(0);
+  const [reflecting,setReflecting]=useState(()=>Boolean(readReflectionDraft(profileStorageKey(scope,`reflectionDraft:${item.inspirationId}`))?.answer));
+  const [confirm,setConfirm]=useState(false),[removing,setRemoving]=useState(false),[removeError,setRemoveError]=useState(false);
+  const alive=useRef(true),working=useRef(false),deletion=useRef<AbortController|null>(null),root=useRef<HTMLDivElement>(null),keep=useRef<HTMLButtonElement>(null);
+  const say=(key:Parameters<typeof t>[1])=>t(locale,key);
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false;deletion.current?.abort();};},[]);
   useEffect(()=>{
-    const controller=new AbortController();setRead(null);setFailed(false);
+    const controller=new AbortController();setSource(null);setFailed(false);
     const timer=window.setTimeout(()=>{setFailed(true);controller.abort();},15000);
     void (async()=>{
       try{
-        const source=await fetchInspiration(item.inspirationId,{profile:profileId},controller.signal);
-        const latest=await fetchReviewSession(sessionId,profileId,controller.signal);
+        const original=await fetchInspiration(item.inspirationId,{profile:scope.profileId},controller.signal);
+        const latest=await fetchReviewSession(sessionId,scope.profileId,controller.signal);
         if(controller.signal.aborted)return;
         const current=latest?.items.find(row=>row.inspirationId===item.inspirationId);
-        if(source.id!==item.inspirationId||source.profileId!==profileId||!current||current.currentRevision!==item.currentRevision){setFailed(true);onRefresh();return;}
-        setRead({id:source.id,revision:current.currentRevision,source});
+        if(original.id!==item.inspirationId||original.profileId!==scope.profileId||!current||current.currentRevision!==item.currentRevision){setFailed(true);onRefresh();return;}
+        setSource(original);
       }catch(reason){if(!controller.signal.aborted){setFailed(true);if(reason instanceof ApiError&&reason.status===404)onRefresh();}}
       finally{window.clearTimeout(timer);}
     })();
-    return ()=>{controller.abort();window.clearTimeout(timer);};
-  },[item.inspirationId,item.currentRevision,sessionId,profileId]);
-  const source=read?.id===item.inspirationId&&read.revision===item.currentRevision?read.source:null;
-  useEffect(()=>{onReady(source&&!failed?`${item.inspirationId}:${item.currentRevision}`:null);},[source,failed,item.inspirationId,item.currentRevision,onReady]);
-  useEffect(()=>{if(source&&focusOnLoad)root.current?.focus({preventScroll:true});},[source?.id,focusOnLoad]);
-  const interactive=(target:EventTarget|null)=>target instanceof Element&&Boolean(target.closest('button,a,input,textarea,audio,summary'));
-  return <div className="jar-review-card" ref={root} tabIndex={0} aria-label={t(locale,'worldReviewTitle')}
-    onKeyDown={event=>{if(disabled||!source||interactive(event.target)||event.repeat)return;if(event.key==='ArrowRight'||event.key==='ArrowLeft'){event.preventDefault();event.stopPropagation();onChoice(event.key==='ArrowRight'?'keep':'skip');}}}
-    onPointerDown={event=>{if(event.isPrimary===false){swipe.current=null;return;}if(event.pointerType==='touch'&&!disabled&&source&&!interactive(event.target))swipe.current={x:event.clientX,y:event.clientY,pointerId:event.pointerId};}}
-    onPointerCancel={()=>{swipe.current=null;}}
-    onPointerUp={event=>{const start=swipe.current;swipe.current=null;if(!start||start.pointerId!==event.pointerId||disabled||!source)return;const dx=event.clientX-start.x,dy=event.clientY-start.y;if(Math.abs(dx)>=60&&Math.abs(dy)<Math.abs(dx)*.6){event.preventDefault();event.stopPropagation();onChoice(dx>0?'keep':'skip');}}}>
-    <div className="jar-review-card-heading"><p className="jar-review-context">{t(locale,item.reason==='unreviewed'?'worldReviewUnreviewed':item.reason==='chosen'?'worldReviewChosen':'worldReviewRevisit')} · {new Intl.DateTimeFormat(locale,{dateStyle:'medium'}).format(new Date(item.inspirationCreatedAt))}</p><button type="button" disabled={disabled||!source} aria-label={t(locale,'worldReviewOpen')} title={t(locale,'worldReviewOpen')} onClick={()=>onOpen(item.inspirationId)}>↗</button></div>
-    {item.sourceChanged?<p role="status">{t(locale,'worldReviewChanged')}</p>:null}
-    {failed?<p role="alert">{t(locale,'worldReviewSourceUnavailable')} <button type="button" onClick={onRefresh}>{t(locale,'worldRoomHistoryRetry')}</button></p>
-      :!source?<p role="status">{t(locale,'worldReviewChecking')}</p>:<>
-        <p className="jar-review-text">{toInspirationDetail(source).preview}</p>
-        {source.attachments.length?<InspirationAttachments items={toInspirationDetail(source).attachments} locale={locale} readOnly/>:null}
-        {source.reflections.some(row=>!row.skipped&&row.answer)?<details><summary>{t(locale,'worldReflectionHistory')}</summary>{source.reflections.filter(row=>!row.skipped&&row.answer).map(row=><p key={row.id}>{row.answer}</p>)}</details>:null}
+    return()=>{controller.abort();window.clearTimeout(timer);};
+  },[item.inspirationId,item.currentRevision,sessionId,scope.profileId,attempt]);
+  useEffect(()=>{if(source&&!reflecting)root.current?.focus({preventScroll:true});},[Boolean(source),reflecting]);
+  useEffect(()=>{if(confirm)keep.current?.focus({preventScroll:true});},[confirm]);
+  const refreshed=()=>{setSource(null);setAttempt(value=>value+1);onRefresh();};
+  const removed=()=>{if(!alive.current)return;setSource(null);onDeleted(item.inspirationId);};
+  const remove=async()=>{
+    if(!confirm||disabled||!source||working.current)return;
+    working.current=true;setRemoving(true);setRemoveError(false);
+    const controller=new AbortController();deletion.current=controller;
+    const timer=window.setTimeout(()=>controller.abort(),15000);
+    try{
+      await deleteInspiration(item.inspirationId,{profile:scope.profileId,sourceRevision:item.currentRevision,signal:controller.signal});
+      removed();
+    }catch(reason){
+      if(!alive.current)return;
+      if(reason instanceof ApiError&&reason.status===404){removed();return;}
+      if(reason instanceof ApiError&&reason.status===409){setConfirm(false);refreshed();return;}
+      // A lost DELETE response is checked with an owned GET, never silently
+      // retried. A second click still carries the original revision fence.
+      const check=new AbortController();deletion.current=check;
+      const checkTimer=window.setTimeout(()=>check.abort(),15000);
+      try{await fetchInspiration(item.inspirationId,{profile:scope.profileId},check.signal);if(alive.current)setRemoveError(true);}
+      catch(error){if(alive.current){if(error instanceof ApiError&&error.status===404)removed();else setRemoveError(true);}}
+      finally{window.clearTimeout(checkTimer);}
+    }finally{window.clearTimeout(timer);working.current=false;if(alive.current)setRemoving(false);}
+  };
+  const detail=source?toInspirationDetail(source):null;
+  const turns=source?.reflections.filter(row=>!row.skipped&&row.answer).map(row=>({id:row.id,question:row.question,answer:row.answer!}))??[];
+  return <div className="jar-review-card" ref={root} tabIndex={-1}>
+    <div className="jar-review-card-heading"><p className="jar-review-context">{say(turns.length?'worldReflected':item.reason==='unreviewed'?'worldReviewUnreviewed':'worldReviewRevisit')} · {new Intl.DateTimeFormat(locale,{dateStyle:'medium'}).format(new Date(item.inspirationCreatedAt))}</p>
+      <button type="button" disabled={disabled||!source||removing} aria-label={say('worldReviewOpen')} title={say('worldReviewOpen')} onClick={()=>onOpen(item.inspirationId)}>↗</button></div>
+    {item.sourceChanged?<p role="status">{say('worldReviewChanged')}</p>:null}
+    {failed?<p role="alert">{say('worldReviewSourceUnavailable')} <button type="button" onClick={refreshed}>{say('worldRoomHistoryRetry')}</button></p>
+      :!source?<p role="status">{say('worldReviewChecking')}</p>:<>
+        <p className="jar-review-text">{detail!.preview}</p>
+        {source.attachments.length?<InspirationAttachments items={detail!.attachments} locale={locale} readOnly/>:null}
+        {reflecting?<ReflectionFlow inspirationId={source.id} scope={scope} initialTurns={turns} locale={locale}
+          doneLabel={say('worldReviewBackToInspiration')} saveAndDoneLabel={say('worldReviewKeepAndReturn')}
+          onSaved={row=>onSaved?.(row)} onRemoved={id=>onReflectionRemoved?.(id,source.id)}
+          onSynchronized={row=>{if(row?.id===source.id&&row.profileId===scope.profileId)setSource(row);onSynchronized?.(source.id,row);}}
+          onDone={()=>{setReflecting(false);refreshed();}}/>:<>
+          {turns.length?<details className="jar-review-item-thoughts"><summary>{say('worldReflectionHistory')} ({turns.length})</summary>{turns.map(row=><div key={row.id}><p className="jar-review-context">{row.question}</p><p className="jar-review-answer">{row.answer}</p></div>)}</details>:null}
+          {confirm?<div className="jar-review-delete" role="group" aria-label={say('worldReviewRemoveConfirmTitle')}>
+            <h3>{say('worldReviewRemoveConfirmTitle')}</h3><p>{say('worldReviewRemoveConfirm')}</p>
+            {removeError?<p role="alert">{say('worldReviewRemoveUnconfirmed')}</p>:null}
+            <div className="jar-review-delete-actions"><button ref={keep} type="button" disabled={removing} onClick={()=>{setConfirm(false);setRemoveError(false);}}>{say('worldReviewKeepInspiration')}</button>
+              <button type="button" className="jar-review-destructive" disabled={disabled||removing} onClick={()=>void remove()}>{say(removing?'worldReviewRemoving':'worldReviewDeleteInspiration')}</button></div>
+          </div>:<div className="jar-review-item-actions">
+            <button type="button" className="jar-review-primary" disabled={disabled} onClick={()=>setReflecting(true)}>{say('worldReflect')}</button>
+            <button type="button" disabled={disabled} onClick={()=>onNext(turns.length>0)}>{say('worldReviewNextInspiration')} →</button>
+            <button type="button" className="jar-review-remove" disabled={disabled} onClick={()=>setConfirm(true)}>{say('worldReviewRemoveInspiration')}</button>
+          </div>}
+        </>}
       </>}
   </div>;
 }
 
-export function ReviewPanel({scope,id,thoughtId=null,locale,onId,onClose,onNewInspiration,onOpen,onOpenPrinciple}:{scope:ProfileStorageScope;id:string;thoughtId?:string|null;locale:SupportedLocale;
+export function ReviewPanel({scope,id,thoughtId=null,locale,onId,onClose,onNewInspiration,onOpen,onOpenPrinciple,onSaved,onSynchronized,onReflectionRemoved,onInspirationRemoved}:{scope:ProfileStorageScope;id:string;thoughtId?:string|null;locale:SupportedLocale;
   onId:(id:string)=>void;onClose:()=>void;onNewInspiration:()=>void;onOpen:(id:string)=>void;onOpenPrinciple?:(id:string|null)=>void;
+  onSaved?:(row:ApiReflection)=>void;onSynchronized?:(id:string,row:ApiInspiration|null)=>void;onReflectionRemoved?:(id:string,owner:string)=>void;onInspirationRemoved?:(id:string)=>void;
 }){
-  const review=useReviewSession(scope,id,onId),selection=useReviewSelection(scope),[picker,setPicker]=useState(false);
-  const [count,setCount]=useState<number|null>(null),[selectionReady,setSelectionReady]=useState<Record<string,boolean>>({});
-  const onSelectionReady=useCallback((sourceId:string,ready:boolean)=>setSelectionReady(current=>({...current,[`${scope.profileId}:${sourceId}`]:ready})),[scope.profileId]);
-  const [readySource,setReadySource]=useState<string|null>(null);
-  const [hasDialogueDraft,setHasDialogueDraft]=useState(false);
-  const session=review.session,items=session?.items??[],item=items.find(row=>row.inspirationId===session?.currentInspirationId);
-  const resumed=useRef<boolean|null>(null);
-  if(session&&resumed.current===null)resumed.current=session.revision>0&&!session.completedAt;
-  const step=session?.completedAt?'finish':session&&!item?'reflect':'browse';
-  const last=items.filter(row=>row.position<(session?.cursor??0)&&row.choice!==null).at(-1);
+  const review=useReviewSession(scope,id,onId),[count,setCount]=useState<number|null>(null),[advance,setAdvance]=useState(false);
+  const started=useRef(false),forwarded=useRef(false);
+  const session=review.session,item=session?.items.find(row=>row.inspirationId===session.currentInspirationId);
   const disabled=review.busy||Boolean(review.pending)||review.loading;
-  const dates=items.map(row=>Date.parse(row.inspirationCreatedAt)).sort((a,b)=>a-b);
-  const formatDate=(value:number)=>new Intl.DateTimeFormat(locale,{dateStyle:'medium'}).format(new Date(value));
-  useEffect(()=>{const controller=new AbortController();void fetchInspirationPage({profile:scope.profileId,limit:1},controller.signal).then(page=>{if(!controller.signal.aborted)setCount(page.total??page.inspirations.length);}).catch(()=>{});return()=>controller.abort();},[scope.profileId]);
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
+  useEffect(()=>{const controller=new AbortController();void fetchInspirationPage({profile:scope.profileId,limit:1},controller.signal).then(page=>{if(!controller.signal.aborted)setCount(page.total??page.inspirations.length);}).catch(()=>{});return()=>controller.abort();},[scope.profileId]);
+  // Clicking Review is the start action. Home's entry read still creates no
+  // session/model work. The durable start journal handles uncertain outcomes.
+  useEffect(()=>{
+    if(id==='new'&&!started.current&&!session&&!disabled&&!review.error&&!review.empty){started.current=true;review.start();}
+  },[id,session,disabled,review.error,review.empty]);
+  useEffect(()=>{
+    if(!advance||!session||item||disabled||review.error)return;
+    if(!session.completedAt)review.finish();
+    else if(!forwarded.current){forwarded.current=true;onId('new');}
+  },[advance,session,item,disabled,review.error]);
   return <>
-    <button className="jar-review-backdrop" type="button" tabIndex={-1} aria-hidden="true" onClick={()=>picker?setPicker(false):onClose()}/>
-    <DialogSurface className="jar-seek jar-review" aria-label={say('worldReviewTitle')} active={!picker} onClose={onClose} data-jar-chrome="1">
-      <header><h2>{say('worldReviewTitle')}</h2><button type="button" onClick={onClose}>{say('worldClose')}</button></header>
-      <ol className="jar-review-steps" aria-label={say('worldReviewSteps')}>
-        {(['browse','reflect','finish'] as const).map((value,index)=><li key={value} aria-current={step===value?'step':undefined}>{index+1} · {say(value==='browse'?'worldReviewBrowseStep':value==='reflect'?'worldReviewReflectStep':'worldReviewFinishStep')}</li>)}
-      </ol>
+    <button className="jar-review-backdrop" type="button" tabIndex={-1} aria-hidden="true" onClick={onClose}/>
+    <DialogSurface className="jar-seek jar-review jar-review-single" aria-label={say('worldReviewOneTitle')} onClose={onClose} data-jar-chrome="1">
+      <header><h2>{say('worldReviewOneTitle')}</h2><button type="button" onClick={onClose}>{say('worldReflectionDone')}</button></header>
       <div className="jar-review-body">
-        {resumed.current&&!session?.completedAt?<p className="jar-review-context">{say('worldReviewResumed')}</p>:null}
-        {review.loading?<p role="status">{say('worldReviewChecking')}</p>:null}
+        {review.loading||review.busy?<p role="status">{say('worldReviewChecking')}</p>:null}
         {review.error?<div role="alert"><p>{say(review.error==='storage'?'worldReviewStorage':review.error==='conflict'?'worldReviewConflict':review.error==='load'?'worldReviewLoadFailed':'worldReviewSaveFailed')}</p>
           {review.error==='storage'?<button type="button" onClick={review.recoverStorage}>{say('worldReviewReset')}</button>:!review.pending?<button type="button" disabled={review.busy} onClick={review.retry}>{say('worldRoomHistoryRetry')}</button>:null}
         </div>:null}
         {review.pending&&!review.busy?<div role="status">{!review.error?<p>{say('worldReviewPending')}</p>:null}{review.error!=='conflict'?<button type="button" onClick={review.retry}>{say('worldRoomHistoryRetry')}</button>:null}<button type="button" onClick={()=>void review.useLatest()}>{say('worldReviewUseLatest')}</button></div>:null}
-        {!session&&!review.loading&&!review.pending&&!review.error?<>
-          {selection.error?<p role="alert">{say('worldReviewStorage')} <button type="button" onClick={selection.recover}>{say('worldReviewReset')}</button></p>:null}
-          {(review.empty||count===0)&&!selection.ids.length?<><p>{say('worldReviewEmpty')}</p><button type="button" onClick={onNewInspiration}>{say('worldCaptureInspiration')}</button></>:<>
-            <p>{say('worldReviewIntro')}</p><p>{say('worldReviewPickHint')}</p>
-            {selection.drafts.length>1?<label>{say('worldReviewSelectionDrafts')}<select value={selection.receipt?.id??''} onChange={event=>{const row=selection.drafts.find(row=>row.id===event.target.value);if(row)selection.select(row);}}>{selection.drafts.map((row,index)=><option key={row.id} value={row.id}>{index+1} · {row.value.ids.length} / 5</option>)}</select></label>:null}
-            {selection.ids.length?<ul>{selection.ids.map(sourceId=><ReviewChosenItem key={sourceId} id={sourceId} profileId={scope.profileId} locale={locale} onOpen={onOpen} onReady={onSelectionReady} onRemove={()=>selection.remove(sourceId)}/>)}</ul>:null}
-            <button type="button" disabled={selection.ids.length>=5||selection.error} onClick={()=>setPicker(true)}>{say('worldReviewChoose')}{selection.ids.length?` (${selection.ids.length}/5)`:''}</button>
-            <button type="button" disabled={selection.error||selection.ids.some(sourceId=>!selectionReady[`${scope.profileId}:${sourceId}`])} onClick={()=>review.start(selection.ids.length?selection.ids:undefined,selection.receipt)}>{say('worldReviewStart')}</button>
-          </>}
-        </>:null}
-        {session&&!review.loading?<>
-          {dates.length>1&&formatDate(dates[0]!)!==formatDate(dates.at(-1)!)?<p className="jar-review-context">{formatDate(dates[0]!)} – {formatDate(dates.at(-1)!)}</p>:null}
-          {!session.completedAt&&item?<><p role="status">{items.indexOf(item)+1} / {items.length}</p>
-            <ReviewCard key={`${item.inspirationId}:${item.currentRevision}`} item={item} sessionId={session.id} profileId={scope.profileId} locale={locale} disabled={disabled} focusOnLoad={!thoughtId} onChoice={choice=>review.choose(item,choice)} onRefresh={()=>void review.refresh()} onReady={setReadySource} onOpen={onOpen}/>
-            <p className="jar-review-context">{say('worldReviewHint')}</p>
-          </>:<>{session.completedAt?<h3>{say('worldReviewDone')}</h3>:null}{items.some(row=>row.choice==='keep')?<details><summary>{say('worldReviewSelected')} ({items.filter(row=>row.choice==='keep').length})</summary><ul>{items.filter(row=>row.choice==='keep').map(row=><ReviewChosenItem key={row.inspirationId} id={row.inspirationId} profileId={scope.profileId} locale={locale} onOpen={onOpen} onMissing={()=>void review.refresh()}/>)}</ul></details>:<p>{say('worldReviewNone')}</p>}</>}
-          {!item||session.completedAt||thoughtId?<ReviewDialogue key={`${scope.accountId}:${scope.profileId}:${session.id}`} scope={scope} id={session.id} thoughtId={thoughtId} completed={Boolean(session.completedAt)} locale={locale} onOpen={onOpen} onRevision={review.observeRevision} onDraftChange={setHasDialogueDraft}/>:null}
-          {session.completedAt?<ReviewResult key={`result:${scope.accountId}:${scope.profileId}:${session.id}`} profileId={scope.profileId} id={session.id} revision={session.revision} locale={locale} onOpenPrinciple={onOpenPrinciple}/>:null}
+        {review.empty&&!disabled&&!review.error?<><p>{say(count===0?'worldReviewEmpty':'worldReviewCaughtUp')}</p>{count===0?<button type="button" onClick={onNewInspiration}>{say('worldCaptureInspiration')}</button>:null}</>:null}
+        {session&&item&&!review.loading&&!thoughtId?<ReviewCard key={`${item.inspirationId}:${item.currentRevision}`} item={item} sessionId={session.id} scope={scope} locale={locale} disabled={disabled}
+          onNext={reflected=>{setAdvance(true);review.choose(item,reflected?'keep':'skip');}} onRefresh={()=>void review.refresh()}
+          onDeleted={removedId=>{onInspirationRemoved?.(removedId);setAdvance(true);void review.refresh();}}
+          onSaved={onSaved} onSynchronized={onSynchronized} onReflectionRemoved={onReflectionRemoved} onOpen={onOpen}/>:null}
+        {session&&!item&&!advance&&!thoughtId?<><p>{say('worldReviewDone')}</p><button type="button" className="jar-review-primary" disabled={disabled} onClick={()=>setAdvance(true)}>{say('worldReviewNextInspiration')} →</button></>:null}
+        {/* Preserve historical multi-source answers and deep links without
+            reintroducing a collective reflection path in new reviews. */}
+        {session&&(thoughtId||!item&&!advance)?<>
+          <ReviewDialogue key={`${scope.accountId}:${scope.profileId}:${session.id}`} scope={scope} id={session.id} thoughtId={thoughtId} completed={Boolean(session.completedAt)} historical locale={locale} onOpen={onOpen} onRevision={review.observeRevision} onDraftChange={()=>{}}/>
+          {session.completedAt?<ReviewResult profileId={scope.profileId} id={session.id} revision={session.revision} locale={locale} onOpenPrinciple={onOpenPrinciple}/>:null}
         </>:null}
       </div>
-      {session&&!session.completedAt?<footer>
-        {item?<div className="jar-review-choices"><button type="button" disabled={disabled||readySource!==`${item.inspirationId}:${item.currentRevision}`} onClick={()=>review.choose(item,'skip')}>{say('worldReviewSkip')}</button><button type="button" disabled={disabled||readySource!==`${item.inspirationId}:${item.currentRevision}`} onClick={()=>review.choose(item,'keep')}>{say('worldReviewKeep')}</button></div>:null}
-        <div className="jar-review-footer-actions">{last?<button type="button" disabled={disabled||hasDialogueDraft} onClick={()=>review.choose(last,null)}>{say('worldReviewUndo')}</button>:null}<button type="button" disabled={disabled||hasDialogueDraft} onClick={review.finish}>{say('worldReviewFinish')}</button></div>
-        {review.busy?<span role="status">{say('worldKeeping')}</span>:null}</footer>:null}
     </DialogSurface>
-    {picker?<InspirationSearch profileId={scope.profileId} locale={locale} query={selection.query} onQuery={selection.setQuery} onClose={()=>setPicker(false)} onPick={row=>{selection.add(row.id);setPicker(false);}}/>:null}
   </>;
 }
