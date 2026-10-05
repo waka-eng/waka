@@ -1,8 +1,9 @@
 # WAKA performance dev delivery
 
-Local implementation and acceptance are ready for review. This checklist keeps
-delivery separate from local proof: none of these performance commits has been
-pushed, merged or deployed. Production is excluded. The
+Local implementation and acceptance are ready for review. On 2026-10-05 the
+owner authorized opening and merging all milestone PRs and updating the dev
+schema where needed. The six PRs are pushed and open; merge/deploy verification
+is in progress. Production is excluded. The
 [implementation plan](2026-10-05-performance-implementation-plan.md) remains
 the full task/gate record.
 
@@ -23,15 +24,19 @@ Verify the remote base immediately before preparing branches; it was
 | 4 | Streamline personal memory reads | `42d9901` | Preserve literal recall/citations while reducing repeated SQL work. Context median 54.76 ms at pool five and 51.59 ms at pool one; Top of Mind/Principles use ten/four statements. Forty cached retrieval queries retain quality gates, no new model calls. Content-free stage timing added; no generation-policy change. [Receipt](../craft/evidence/performance/milestone-4.json). |
 | 5 | Verify performance rollout and readable inputs | Final local milestone 5 commit | Use the shared input-size token, require 0067 in deployment verification, preserve manual browser/model CI checks and document fault/worker controls. Final local web/API suites pass; Home/Review median about 385–387/378–380 ms, warm return worst 199/201 ms. [Receipt](../craft/evidence/performance/milestone-5.json). |
 
-These are prepared descriptions, not created PRs. Opening PRs does not authorize
-merging them. Dev currently auto-deploys on a dev push, so merge authority also
-needs to cover that deployment consequence. Attach every created PR to this
-Codex chat and record the final delivery revision.
+Created PRs, in dependency order: Review [346](https://github.com/waka-eng/waka/pull/346),
+Home reads [344](https://github.com/waka-eng/waka/pull/344), readiness
+[345](https://github.com/waka-eng/waka/pull/345), search
+[347](https://github.com/waka-eng/waka/pull/347), memory readers
+[343](https://github.com/waka-eng/waka/pull/343), final acceptance
+[348](https://github.com/waka-eng/waka/pull/348). All are attached to this chat.
+Dev auto-deploys on a dev push; the owner's merge request covers that consequence.
+Record the final deployed revision, not just the PR merge status.
 
 ## Before dev deployment
 
-- [ ] Confirm push/open-PR authority and the exact milestone diffs.
-- [ ] Confirm merge/deploy authority separately. Check that the automatic dev
+- [x] Confirm push/open-PR authority and the exact milestone diffs.
+- [x] Confirm merge/deploy authority separately. Check that the automatic dev
   deployment workflow is still the intended route; no production workflow run.
 - [ ] Verify the actual dev API and worker database targets independently from
   the env filename. Record only a sanitized target comparison, no credentials.
@@ -52,6 +57,13 @@ one batch per initial run. Verify remaining count and resume deliberately.
 Busy rows are skipped, so zero updates with nonzero remaining rows is not
 completion. Preserve source wording, material/generation revisions and queue
 counts. Reads continue using current-text fallback until coverage is ready.
+
+The manual-only `Backfill dev inspiration search` workflow uses the protected
+dev secret, compares production's configured endpoint without connecting to it,
+and verifies that both actual development Lambda bindings match before any
+mutation. It requires the migrated schema, defaults to a dry run and invokes
+the existing bounded CLI. Run it only after the final dev deployment completes;
+there is no automatic or scheduled backfill and no provider call.
 
 ## Deployed acceptance
 

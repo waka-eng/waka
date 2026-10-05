@@ -1,0 +1,93 @@
+name: Backfill dev inspiration search
+
+# Operator maintenance only. Never run on a capture, push or schedule.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply bounded search-metadata batches (false reports counts only)"
+        type: boolean
+        default: false
+      batch_size:
+        description: "Rows per committed batch, 1 to 1000"
+        type: number
+        default: 250
+      max_batches:
+        description: "Maximum committed batches, 1 to 100"
+        type: number
+        default: 20
+
+concurrency:
+  group: dev-search-maintenance
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  AWS_REGION: us-west-2
+  AWS_DEFAULT_REGION: us-west-2
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_APP }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_APP }}
+  DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL_DEV }}
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "9.12.0"
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify separate configured database targets
+        env:
+          # Only parsed for comparison; never used for a connection.
+          PRODUCTION_DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
+        run: node scripts/check-deployment-databases.mjs
+
+      - name: Verify deployed dev database binding
+        run: |
+          node --input-type=module <<'JS'
+          import {execFileSync} from 'node:child_process';
+          import assert from 'node:assert/strict';
+          try {
+            assert.ok(process.env.DB_CONNECTION_URL);
+            const run=args=>execFileSync('aws',args,{encoding:'utf8',stdio:['ignore','pipe','pipe']});
+            const functions=JSON.parse(run(['lambda','list-functions','--query','Functions[].FunctionName','--output','json']));
+            for(const prefix of ['waka-development-ApiFunction-','waka-development-BackgroundWorkerFunction-']){
+              const matches=functions.filter(name=>name.startsWith(prefix));
+              assert.equal(matches.length,1,'Ambiguous development function');
+              const configured=JSON.parse(run(['lambda','get-function-configuration','--function-name',matches[0],
+                '--query','Environment.Variables.DB_CONNECTION_URL','--output','json']));
+              assert.equal(configured,process.env.DB_CONNECTION_URL,'Development binding differs');
+            }
+            console.log('Actual development API and worker database targets match the maintenance target.');
+          } catch {
+            console.error('Development binding validation failed; no database mutation attempted.');
+            process.exitCode=1;
+          }
+          JS
+
+      - name: Verify migrated search schema
+        run: node scripts/verify-memory-schema.mjs
+
+      - name: Report or backfill bounded search metadata
+        env:
+          APPLY: ${{ inputs.apply }}
+          BATCH_SIZE: ${{ inputs.batch_size }}
+          MAX_BATCHES: ${{ inputs.max_batches }}
+        run: |
+          node --input-type=module <<'JS'
+          import {execFileSync} from 'node:child_process';
+          const args=['backfill:inspiration-search','--batch-size',process.env.BATCH_SIZE,'--max-batches',process.env.MAX_BATCHES];
+          if(process.env.APPLY==='true')args.push('--apply','--stage','dev','--expected-host',new URL(process.env.DB_CONNECTION_URL).hostname);
+          execFileSync('pnpm',args,{stdio:'inherit'});
+          JS

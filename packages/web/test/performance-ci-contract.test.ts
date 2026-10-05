@@ -30,3 +30,14 @@ it('keeps the minimum editing size outside a phone-only media query',()=>{
   expect(chrome).toMatch(/body textarea\s*\{[^}]*font-size: var\(--t-input\);/);
   expect(chrome).toMatch(/\.jar-inspiration-composer \.jar-composer-text\s*\{[^}]*font-size: var\(--t-input\);/);
 });
+it('keeps dev search maintenance manual, dry by default and fenced by actual deployed bindings',()=>{
+  const workflow=read('../../../.github/workflows/maintain-dev-search.yml');
+  expect(workflow).toMatch(/on:\s+workflow_dispatch:/);
+  expect(workflow).not.toMatch(/^\s+(push|pull_request|schedule):/m);
+  expect(workflow).toMatch(/apply:[\s\S]*?default: false/);
+  expect(workflow).toContain('secrets.DB_CONNECTION_URL_DEV');
+  expect(workflow).toContain("assert.equal(configured,process.env.DB_CONNECTION_URL");
+  expect(workflow.indexOf('Verify deployed dev database binding')).toBeLessThan(workflow.indexOf('Report or backfill bounded search metadata'));
+  expect(workflow.indexOf('Verify migrated search schema')).toBeLessThan(workflow.indexOf('Report or backfill bounded search metadata'));
+  expect(workflow).toContain("'--apply','--stage','dev','--expected-host'");
+});
