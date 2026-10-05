@@ -287,18 +287,18 @@ export interface DistillPrinciplesResult {
 }
 
 /**
- * Asked per candidate against each standing principle. Conservative toward
+ * Asked per candidate against a bounded batch of standing principles. Conservative toward
  * `independent`: a duplicate is visible and mergeable; a silent merge or a
  * phantom conflict is not.
  */
 export interface PrincipleRelationInput {
   preferredLocale: SupportedLocale;
   candidateStatement: string;
-  existingStatement: string;
+  existingPrinciples: Array<{id:string;statement:string}>;
 }
 
 export interface PrincipleRelation {
-  relation: "same" | "independent" | "conflicting";
+  relations: Array<{principleId:string;relation:"same" | "independent" | "conflicting"}>;
 }
 
 /**

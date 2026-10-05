@@ -57,7 +57,7 @@ const provider = {
   distillPrinciples: async (input: { signals: Array<{ id: string }> }) => ({ candidates: [{
     statement: "Prefer small, reversible experiments.", type: "maxim", citedSignalIds: input.signals.map((s) => s.id),
   }] }),
-  judgePrincipleRelation: async () => ({ relation: "same" }),
+  judgePrincipleRelation: async (input:Parameters<ModelProvider['judgePrincipleRelation']>[0]) => ({ relations:input.existingPrinciples.map(row=>({principleId:row.id,relation:"same" as const})) }),
 } as unknown as ModelProvider;
 
 beforeAll(async () => {

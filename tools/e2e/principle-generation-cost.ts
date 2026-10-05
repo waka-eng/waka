@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {createTestDatabase} from '../../packages/api/test/helpers/db.js';
 import {refreshPrinciplesForProfile} from '../../packages/api/src/lib/principle-generation.js';
-import {buildPrincipleDistillRequest} from '../../packages/api/src/queue/gemini.js';
+import {buildPrincipleDistillRequest,buildPrincipleRelationRequest} from '../../packages/api/src/queue/gemini.js';
 import type {ModelProvider} from '../../packages/api/src/lib/model-provider.js';
 import {writeEvaluationSnapshot} from './evaluation-journal.js';
 const url=new URL(process.env.DB_CONNECTION_URL??'');
@@ -25,7 +25,8 @@ try{
   await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) SELECT ${entry.id},id FROM signals WHERE profile_id=${p.id}`;
   await t.sql`INSERT INTO principles(profile_id,statement,type,origin,rank,locked_at)
     SELECT ${p.id},'Standing preference ' || n || '.','maxim','declared',n,now() FROM generate_series(1,200) n`;
-  let distillCalls=0,comparisonCalls=0,inputSignals=0,inputPrinciples=0,promptCharacters=0,lateConflictChecked=false;
+  const originalWords=await t.sql`SELECT id,statement,rank,locked_at FROM principles WHERE profile_id=${p.id} AND origin='declared' ORDER BY id`;
+  let distillCalls=0,comparisonCalls=0,comparisonPairs=0,maxComparisonBatch=0,maxComparisonCharacters=0,inputSignals=0,inputPrinciples=0,promptCharacters=0,lateConflictChecked=false;
   const provider={
     distillPrinciples:async(input)=>{
       distillCalls++;inputSignals=input.signals.length;inputPrinciples=input.currentPrinciples.length;
@@ -34,16 +35,21 @@ try{
     },
     judgePrincipleRelation:async(input)=>{
       comparisonCalls++;
-      const conflict=input.candidateStatement==='Protect open time.'&&input.existingStatement==='Standing preference 200.';
-      if(conflict)lateConflictChecked=true;
-      return {relation:conflict?'conflicting' as const:'independent' as const};
+      comparisonPairs+=input.existingPrinciples.length;maxComparisonBatch=Math.max(maxComparisonBatch,input.existingPrinciples.length);
+      maxComparisonCharacters=Math.max(maxComparisonCharacters,buildPrincipleRelationRequest(input).contents[0]!.parts[0]!.text.length);
+      return {relations:input.existingPrinciples.map(standing=>{
+        const conflict=input.candidateStatement==='Protect open time.'&&standing.statement==='Standing preference 200.';
+        if(conflict)lateConflictChecked=true;
+        return {principleId:standing.id,relation:conflict?'conflicting' as const:'independent' as const};
+      })};
     },
   } satisfies Pick<ModelProvider,'distillPrinciples'|'judgePrincipleRelation'>;
   const start=performance.now();
   const result=await refreshPrinciplesForProfile({profileId:p.id},{db:t.db as never,modelProvider:provider as ModelProvider});
-  const [words]=await t.sql`SELECT count(*)::int AS count FROM principles WHERE profile_id=${p.id} AND origin='declared' AND statement LIKE 'Standing preference %.' AND locked_at IS NOT NULL`;
-  const report={profileSignals:400,standingPrinciples:200,inputSignals,inputPrinciples,promptCharacters,distillCalls,comparisonCalls,
-    totalModelCalls:distillCalls+comparisonCalls,lateConflictChecked,humanWordsPreserved:words.count===200,durationMs:Math.round(performance.now()-start),result,paidCalls:0};
+  const words=await t.sql`SELECT id,statement,rank,locked_at FROM principles WHERE profile_id=${p.id} AND origin='declared' ORDER BY id`;
+  const humanWordsPreserved=JSON.stringify(words)===JSON.stringify(originalWords);
+  const report={profileSignals:400,standingPrinciples:200,inputSignals,inputPrinciples,promptCharacters,distillCalls,comparisonCalls,comparisonPairs,maxComparisonBatch,maxComparisonCharacters,
+    totalModelCalls:distillCalls+comparisonCalls,lateConflictChecked,humanWordsPreserved,durationMs:Math.round(performance.now()-start),result,paidCalls:0};
   const path=`work/principle-cost/run-${Date.now()}.json`;writeEvaluationSnapshot(path,report);console.log(JSON.stringify({path,...report}));
-  assert.ok(lateConflictChecked);assert.equal(words.count,200);
+  assert.ok(lateConflictChecked);assert.ok(humanWordsPreserved);assert.equal(words.length,200);
 }finally{globalThis.fetch=network;await t.cleanup();}

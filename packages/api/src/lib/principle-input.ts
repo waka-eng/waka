@@ -1,6 +1,7 @@
 import type {DistillPrinciplesInput} from './model-provider.js';
 
 export const PRINCIPLE_INPUT_LIMITS={signals:48,standingContext:24,entries:7,characters:16000} as const;
+export const PRINCIPLE_COMPARISON_LIMITS={items:20,characters:12000,outputTokens:1600} as const;
 
 /** Shared with the provider builder so the budget measures actual prompt
  * text rather than an optimistic estimate. Human wording is never truncated. */

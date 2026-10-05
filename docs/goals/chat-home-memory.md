@@ -50,9 +50,9 @@ authorizes all further LLM calls under a total USD 5 cap without per-batch
 questions. Use the Gemini key from this checkout and the OpenRouter key from
 `/Users/agi/nextsteps/waka/.env.local`, reading only the needed variable into the
 process and never printing/copying credentials. No test-branch push, deployment
-or historical repair is implied. Current budget accounting: USD 0.05729850 in
-returned chat charges plus three USD 0.50 conservative embedding-run reservations
-(USD 1.55729850 allocated, USD 3.44270150 remaining). The embedding estimate is
+or historical repair is implied. Current budget accounting: USD 0.05795414 in
+returned OpenRouter charges plus three USD 0.50 conservative embedding-run reservations
+(USD 1.55795414 allocated, USD 3.44204586 remaining). The embedding estimate is
 much smaller, but is not an invoice. Earlier pre-cap runs remain separately
 recorded below. Prefer simple, friendly UX decisions; stop only for genuine
 missing authority, an exhausted budget or another external blocker.
@@ -652,3 +652,43 @@ real provider latency. Tests: 27 input/prompt unit tests and 40 Principle,
 generation-fencing and group-privacy SQL tests passed; API typecheck passed.
 No paid calls, migrations, historical repair or deployment occurred in this
 checkpoint. Budget reservations remain unchanged.
+
+### Milestone 3 bounded comparison protocol
+
+Principle relation requests now compare one candidate against at most 20
+standing statements, with 12,000 context characters and 1,600 output tokens per
+request. Every requested ID must receive exactly one valid verdict. Missing,
+duplicated, foreign, declined or malformed responses abort rather than acting
+as an independent verdict. The parser restores standing-set order before
+matching. Both provider implementations use the same prompt and parser; there
+is no silent single-pair fallback or model swap.
+
+The large fixture still checks all 603 required pairs, including the conflict
+at standing preference 200, but uses 32 comparison calls plus one distillation
+instead of 604 total calls. Largest comparison batch: 20 items / 2,134 context
+characters in this fixture. Exact snapshots of all 200 human statements, ranks
+and locks remain unchanged. The scripted run is not a claim about real latency:
+81ms locally with an immediate fake model. Evidence is
+`work/principle-cost/run-1791160747049.json`.
+
+A live protocol check declared 28 bilingual relation labels, including
+negation, disjoint time scopes and an embedded-instruction case. It first ran
+28 single-pair requests using the baseline prompt frozen from `006b9ad`, then
+two candidate batches (20 and eight items). The baseline passed 27/28, falsely
+calling next year's scheduled mornings a conflict with this month's free
+morning. The batched judge passed 28/28 and returned every requested ID. This
+is a fixed protocol check, not the still-pending full generation calibration.
+All 30 calls used the configured `deepseek/deepseek-v4-flash-0731` and cost
+USD 0.00065563888 in returned usage. Evidence:
+`work/principle-relation-eval/run-1791160179408.json`.
+
+Verification: 52 focused provider/prompt tests, 787 API unit tests (three paid
+benches skipped), 40 Principle/fencing/group-privacy SQL tests and API typecheck
+passed. The old test providers were updated to the complete-batch contract;
+the first typecheck exposed those old shapes before they were corrected. No
+database migration, historical repair or deployment occurred in this step.
+
+Total comparison calls still grow with the standing set. The next step is
+durable resumable progress with a per-worker-run allowance, preserving completed
+comparisons and preventing partial publication. Do not treat batching alone as
+completion of the bounded-work gate.

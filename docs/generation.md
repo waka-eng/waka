@@ -897,7 +897,7 @@ Failed jobs retry only within the worker budget or by an explicit retry.
 Each request evaluates the active profile: one cheap SQL check for clusters
 newly past the bar, and only then model calls (distill at most
 `PRINCIPLE_MAX_CANDIDATES_PER_RUN` (3) candidates; judge each against the
-standing set as `same | independent | conflicting`, conservative toward
+standing set in batches of at most 20 as `same | independent | conflicting`, conservative toward
 independent — the same recoverable-mistake stance as match-or-mint, one
 level up). Statements are capped at `PRINCIPLE_MAX_STATEMENT_LENGTH` (200)
 characters: a principle is a directive, not an essay. State maintenance
@@ -913,6 +913,12 @@ established evidence fills the remainder. Whole items are omitted to fit, never
 rewritten or truncated. The provider boundary rejects oversized inputs. The
 24-item standing-context limit does not remove any Principle from the subsequent
 comparison set; comparison work is being bounded separately.
+Each comparison request is capped at 12,000 context characters and 1,600 output
+tokens. It must return exactly one verdict for every supplied ID; missing,
+duplicate, foreign or malformed results fail the batch rather than silently
+becoming `independent`. Genuine semantic uncertainty may still be judged
+independent. The complete candidate plan is validated before any Principle is
+written, including comparisons against earlier provisional candidates.
 
 **The canonical rendering is machine-facing:** one deterministic markdown
 document (rank-ordered, stable ids, a preamble carrying the consumption

@@ -1,8 +1,7 @@
 /**
  * The layer-4 model calls: request shapes and the reading of answers. Every
  * failure direction is asymmetric — a malformed distillation mints nothing, a
- * malformed relation lands on independent (the visible duplicate over the
- * silent merge or phantom conflict), and a malformed route keeps the words as
+ * malformed/incomplete relation batches are rejected, and a malformed route keeps the words as
  * a capture rather than wrongly enshrining them.
  */
 
@@ -84,14 +83,11 @@ describe("reading distillation", () => {
 });
 
 describe("the relation judge", () => {
+  const input={preferredLocale:'en-US' as const,candidateStatement:'A',existingPrinciples:[{id:'p1',statement:'B'},{id:'p2',statement:'C'}]};
   it("asks a three-way comparison at temperature zero", () => {
-    const request = buildPrincipleRelationRequest({
-      preferredLocale: "en-US",
-      candidateStatement: "A",
-      existingStatement: "B",
-    });
+    const request = buildPrincipleRelationRequest(input);
     expect(request.generationConfig.temperature).toBe(0);
-    expect(request.generationConfig.responseSchema.properties?.relation?.enum).toEqual([
+    expect(request.generationConfig.responseSchema.properties?.relations?.items?.properties?.relation?.enum).toEqual([
       "same",
       "independent",
       "conflicting",
@@ -102,15 +98,16 @@ describe("the relation judge", () => {
     expect(PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION).toMatch(/uncertain, answer "independent"/);
   });
 
-  it.each([
-    [{ relation: "same" }, "same"],
-    [{ relation: "conflicting" }, "conflicting"],
-    [{ relation: "INDEPENDENT" }, "independent"],
-    [{ relation: 3 }, "independent"],
-    [{}, "independent"],
-    [null, "independent"],
-  ])("reads %j as %s", (payload, expected) => {
-    expect(parsePrincipleRelation(payload).relation).toBe(expected);
+  it('requires one verdict per supplied ID and restores input order',()=>{
+    expect(parsePrincipleRelation({relations:[{principleId:'p2',relation:'conflicting'},{principleId:'p1',relation:'same'}]},input).relations)
+      .toEqual([{principleId:'p1',relation:'same'},{principleId:'p2',relation:'conflicting'}]);
+  });
+  it.each([null,{}, {relations:[]},{relations:[{principleId:'p1',relation:'same'}]},
+    {relations:[{principleId:'p1',relation:'same'},{principleId:'p1',relation:'independent'}]},
+    {relations:[{principleId:'p1',relation:'same'},{principleId:'foreign',relation:'independent'}]},
+    {relations:[{principleId:'p1',relation:'SAME'},{principleId:'p2',relation:'independent'}]},
+  ])('refuses incomplete or malformed comparisons %#',payload=>{
+    expect(()=>parsePrincipleRelation(payload,input)).toThrow();
   });
 });
 

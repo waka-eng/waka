@@ -268,9 +268,8 @@ export function createOpenRouterModelProvider(): ModelProvider {
         "WAKA_MODEL_PRINCIPLE_JUDGE",
         "principle_relation",
       );
-      if (payload === MODEL_DECLINED) return { relation: "independent" };
-      if (payload === null) throw new ModelDidNotAnswerError("principle relation judgement");
-      return parsePrincipleRelation(payload);
+      if (payload === null || payload === MODEL_DECLINED) throw new ModelDidNotAnswerError("principle relation judgement");
+      return parsePrincipleRelation(payload,input);
     },
     async routeDeclaration(input) {
       const payload = await ask(

@@ -37,7 +37,8 @@ import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import { selectIndependentEvidence, type ConfidenceEvidence } from './signal-lifecycle.js';
 import {loadSignalEvidence} from './review-evidence.js';
-import {selectPrincipleInput} from './principle-input.js';
+import {PRINCIPLE_COMPARISON_LIMITS,selectPrincipleInput} from './principle-input.js';
+import {parsePrincipleRelation} from '../queue/gemini.js';
 import { writePrincipleStatementChain } from "./statement-chains.js";
 import { GROUP_INPUT_POLICY } from "./group-inputs.js";
 import { groupEntrySupportCurrent, groupPrincipleReadable, groupSignalReadable, projectGroupEntries } from "./group-output.js";
@@ -449,23 +450,23 @@ export async function refreshPrinciplesForProfile(
     // An unavailable comparison aborts the entire batch before any write.
     let matchedId: string | null = existing.find((row) => !row.supportCurrent && row.statement === candidate.statement)?.id ?? null;
     let conflictingId: string | null = null;
-    for (const standing of standingSet) {
+    for (let offset=0;offset<standingSet.length;offset+=PRINCIPLE_COMPARISON_LIMITS.items) {
       if (matchedId) break;
       /* An unreachable judge used to mean "independent for this pair" —
          which minted near-duplicate principles on layer 4, the ranked,
          visible surface, whenever the road was down. It propagates now:
          the nightly job attempt fails and retries, and the candidate is
          judged against the whole standing set or not at all. */
-      const { relation } = await provider.judgePrincipleRelation({
+      const comparisonInput={
         preferredLocale,
         candidateStatement: candidate.statement,
-        existingStatement: standing.statement,
-      });
-      if (relation === "same") {
-        matchedId = standing.id;
-        break;
+        existingPrinciples: standingSet.slice(offset,offset+PRINCIPLE_COMPARISON_LIMITS.items),
+      };
+      const {relations}=parsePrincipleRelation(await provider.judgePrincipleRelation(comparisonInput),comparisonInput);
+      for(const {principleId,relation} of relations){
+        if (relation === "same") { matchedId = principleId; break; }
+        if (relation === "conflicting" && !conflictingId) conflictingId = principleId;
       }
-      if (relation === "conflicting" && !conflictingId) conflictingId = standing.id;
     }
     const mintedId = randomUUID();
     planned.push({ candidate, matchedId, conflictingId, mintedId });
