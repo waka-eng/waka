@@ -48,12 +48,22 @@
 .chat-page .jar-conversation-adopt input { width:var(--sp-20); height:var(--sp-20); flex:none; }
 .chat-citations { display:flex; flex-wrap:wrap; gap:var(--sp-8); }
 .chat-citations button { max-width:100%; border:1px solid var(--w-edge); text-align:left; font-size:var(--t-note); }
+.chat-reading-choices { display:grid; gap:var(--sp-8); margin-block:var(--sp-16); }
+.chat-reading-choices > p { margin:0; }
+.chat-page .chat-reading-choice { display:flex; flex-direction:column; gap:var(--sp-6); width:100%; text-align:left; border:1px solid var(--w-edge); padding:var(--sp-12); }
+.chat-reading-choice-heading { display:flex; justify-content:space-between; gap:var(--sp-12); width:100%; color:var(--w-muted); font-size:var(--t-note); }
+.chat-reading-choice-text { line-height:1.6; overflow-wrap:anywhere; }
 .chat-page .jar-conversation-reference { border:1px solid var(--w-edge); border-radius:var(--sp-12); padding:var(--sp-12); }
 .chat-page blockquote { margin-inline:0; line-height:1.6; }
 .chat-muted { color:var(--w-muted); font-size:var(--t-note); }
 .chat-notice { margin:var(--sp-8) var(--sp-24); font-size:var(--t-note); }
 .chat-thinking { display:flex; align-items:center; gap:var(--sp-12); color:var(--w-muted); min-height:var(--sp-44); }
-.chat-thinking > span { letter-spacing:.3em; }
+.chat-thinking-dots { display:flex; gap:var(--sp-4); align-items:center; }
+.chat-thinking-dots i { width:var(--sp-4); height:var(--sp-4); border-radius:50%; background:currentColor; animation:chat-thinking-pulse 1.2s ease-in-out infinite; }
+.chat-thinking-dots i:nth-child(2) { animation-delay:160ms; }
+.chat-thinking-dots i:nth-child(3) { animation-delay:320ms; }
+@keyframes chat-thinking-pulse { 0%,70%,100% { opacity:.3; transform:translateY(0); } 35% { opacity:1; transform:translateY(calc(-1 * var(--sp-2))); } }
+@media (prefers-reduced-motion:reduce) { .chat-thinking-dots i { animation:none; opacity:.6; } }
 .chat-composer { flex-shrink:0; width:100%; max-width:768px; box-sizing:border-box; margin-inline:auto; padding:var(--sp-12) var(--sp-24) calc(var(--sp-16) + env(safe-area-inset-bottom)); }
 .chat-input-row { display:flex; align-items:flex-end; gap:var(--sp-8); padding:var(--sp-8); border:1px solid var(--w-edge); border-radius:var(--sp-16); background:var(--w-raised); }
 .chat-input-label { flex:1; min-width:0; }

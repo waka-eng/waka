@@ -17,7 +17,8 @@ assert.ok(Number.isInteger(samples)&&samples>=5&&samples<=60);assert.ok(Number.i
 const outputDir=resolve(process.env.WAKA_PERFORMANCE_OUTPUT??'work/performance');await mkdir(outputDir,{recursive:true});
 const searchCorpus=process.env.WAKA_PERFORMANCE_SEARCH_CORPUS==='1';
 process.env.NODE_ENV='test';process.env.JWT_SECRET='disposable-performance-probe-only';
-process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';process.env.WAKA_CONVERSATION_REPLIES='0';
+const chatScenario=process.env.WAKA_PERFORMANCE_CHAT_SCENARIO==='1';
+process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';process.env.WAKA_CONVERSATION_REPLIES=chatScenario?'1':'0';
 delete process.env.OPENROUTER_API_KEY;delete process.env.GEMINI_API_KEY;delete process.env.AWS_LAMBDA_FUNCTION_NAME;delete process.env.WAKA_BACKGROUND_WORKER_FUNCTION;
 globalThis.fetch=async()=>{throw new Error('Performance fixture refuses provider network');};
 const fixture=await createTestDatabase();configured.searchParams.set('options',`-c search_path=${fixture.schemaName}`);process.env.DB_CONNECTION_URL=configured.toString();
@@ -41,7 +42,7 @@ const {readConversationContext}=await import('../../packages/api/src/lib/convers
 const {createReviewSession,completeReviewSession,readActiveReview,chooseReviewItem}=await import('../../packages/api/src/lib/review-sessions.js');
 const {drainBackgroundJobs}=await import('../../packages/api/src/lib/queue.js');
 const {loadInspirationMaterial,assertMaterialCurrent}=await import('../../packages/api/src/lib/inspiration-material.js');
-const db=getDb();const fixtures=new Map<number,{id:string;token:string;firstId:string;signalId:string;groups:string[];signals:number;principles:number}>();
+const db=getDb();const fixtures=new Map<number,{id:string;token:string;firstId:string;signalId:string;groups:string[];signals:number;principles:number;conversationId?:string}>();
 stopDatabase=()=>db.$client.end();
 for(const count of sizes){
   const [account]=await fixture.sql`INSERT INTO accounts(email,onboarding_completed_at) VALUES (${`performance-${count}@example.test`},now()) RETURNING id`;
@@ -89,6 +90,22 @@ for(const count of sizes){
   const token=await signSessionToken({profileId:profile.id,email:`performance-${count}@example.test`});await createSessionRow({profileId:profile.id,token});
   const [first]=await fixture.sql`SELECT id FROM inspirations WHERE profile_id=${profile.id} ORDER BY created_at DESC LIMIT 1`;
   fixtures.set(count,{id:profile.id,token,firstId:first.id,signalId:signalRows[0].id,groups,signals:signalCount,principles:principleCount});
+}
+if(chatScenario)for(const f of fixtures.values()){
+  const [reading]=await fixture.sql`SELECT id FROM top_of_minds WHERE profile_id=${f.id}`;
+  const [entry]=await fixture.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,sort_order)
+    VALUES (${reading.id},'pattern','I leave time to notice what changes before deciding what comes next.',1) RETURNING id`;
+  await fixture.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id,statement_revision,entry_body_revision) VALUES (${entry.id},${f.signalId},1,1)`;
+  const context=await readConversationContext(db,f.id,'What has changed in how I think?');assert.equal(context.reading.length,2);
+  const conversationId=crypto.randomUUID(),userId=crypto.randomUUID(),assistantId=crypto.randomUUID(),requestId=crypto.randomUUID();
+  const references=context.reading.map(source=>({kind:source.kind,id:source.id,hash:source.hash,quoteStart:0,quoteLength:Math.min(40,source.text.length)}));
+  await fixture.sql`INSERT INTO conversations(id,profile_id,revision) VALUES (${conversationId},${f.id},2)`;
+  await fixture.sql`INSERT INTO conversation_messages(id,profile_id,conversation_id,position,role,content) VALUES
+    (${userId},${f.id},${conversationId},1,'user','What has changed in how I think?'),
+    (${assistantId},${f.id},${conversationId},2,'assistant','Two themes stand out: trying small experiments, and leaving space to notice. Which top of mind would you like to explore?')`;
+  await fixture.sql`INSERT INTO conversation_reply_requests(id,profile_id,conversation_id,user_message_id,assistant_message_id,conversation_revision,context_hash,status,"references",context_sources,finished_at)
+    VALUES (${requestId},${f.id},${conversationId},${userId},${assistantId},1,'synthetic-fixture','ready',${JSON.stringify(references)}::jsonb,${JSON.stringify(references)}::jsonb,now())`;
+  f.conversationId=conversationId;
 }
 await fixture.sql`ANALYZE`;
 let recording=false;let queries:Array<{query:string;params:unknown[]}>=[];
@@ -162,6 +179,11 @@ server=createServer(async(req,res)=>{
   try{
     if(closing){res.writeHead(503);res.end();return;}
     const url=new URL(req.url??'/',origin);
+    if(url.pathname==='/perf/chat'){
+      assert.ok(chatScenario);const size=Number(url.searchParams.get('size')??sizes[0]);assert.ok(fixtures.has(size));activeSize=size;delayMs=150;readingDelayMs=0;fault=null;
+      const f=fixtures.get(size)!;assert.ok(f.conversationId);httpRequests.length=0;
+      res.writeHead(302,{Location:'/chat/'+f.conversationId,'Set-Cookie':buildSessionCookie(f.token,{secure:false})});res.end();return;
+    }
     if(url.pathname==='/perf/scenario'){
       const size=Number(url.searchParams.get('size'));assert.ok(fixtures.has(size));activeSize=size;
       delayMs=Number(url.searchParams.get('delay')??0);assert.ok(delayMs>=0&&delayMs<=500);

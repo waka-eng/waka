@@ -74,6 +74,16 @@ stage, elapsed milliseconds and outcome. Queue wait excludes intended run-after
 delay. Separate these stages when diagnosing waiting; never log source wording
 or infer provider latency from a pending UI state alone.
 
+## Interactive Chat fixture
+
+Set `WAKA_PERFORMANCE_CHAT_SCENARIO=1` to seed one synthetic conversation with
+two currently valid Top of Mind references, then open `/perf/chat?size=25`
+(or another seeded size). Source reopening and one-click follow-up writes use
+the real owned API and durable client journals. Replies may be queued, but
+autodrain and provider networking remain disabled and keys are removed. The
+seeded assistant response is a known fixture, not a generated quality result.
+Stop the process normally to remove only its own disposable schema.
+
 ## Recovery and controlled worker checks
 
 These controls exist only in the disposable loopback fixture, not the app API:
