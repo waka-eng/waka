@@ -228,6 +228,8 @@ export default $config({
       GEMINI_API_KEY: geminiApiKey.value,
       OPENROUTER_API_KEY: openRouterApiKey.value,
       OPENROUTER_GENERATION_MODEL: "deepseek/deepseek-v4.1-flash",
+      ...(process.env.WAKA_OPENROUTER_DATA_COLLECTION ? { WAKA_OPENROUTER_DATA_COLLECTION: process.env.WAKA_OPENROUTER_DATA_COLLECTION } : {}),
+      ...(process.env.WAKA_OPENROUTER_REQUIRE_ZDR ? { WAKA_OPENROUTER_REQUIRE_ZDR: process.env.WAKA_OPENROUTER_REQUIRE_ZDR } : {}),
       // Chat enablement is dev-only and shared by API/worker. A manual dev
       // deploy can disable new requests without reverting the additive schema.
       WAKA_CONVERSATION_REPLIES: isDevelopmentDomain && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0",
@@ -235,6 +237,7 @@ export default $config({
       ATTACHMENTS_REGION: AWS_REGION,
       WAKA_VAULT_BUCKET: vaultBucket.name,
       NODE_ENV: "production",
+      WAKA_STAGE: $app.stage,
       WAKA_VAULT_PREFIX: "vault/",
       WAKA_VAULT_REGION: AWS_REGION,
       ...(publicApiUrl ? { PUBLIC_API_URL: publicApiUrl } : {}),
@@ -382,6 +385,37 @@ export default $config({
       enabled: true,
       function: backgroundWorker.arn,
     });
+
+    // Dev recovery checks metadata at most 96 times/day, not every minute.
+    // Existing leases, due times, account budgets and daily sweep remain.
+    // The worker takes one normal pass of at most five claims when overdue.
+    new sst.aws.Cron("QueueRecovery", {
+      schedule: "rate(15 minutes)",
+      enabled: isDevelopmentDomain,
+      function: backgroundWorker.arn,
+      event: { mode: "recovery" },
+    });
+
+    // Console alarms exist without a notification recipient. An explicit SNS
+    // topic is required before any alert is sent outside CloudWatch.
+    if (isDevelopmentDomain) {
+      const topic = process.env.WAKA_ALERT_SNS_TOPIC_ARN;
+      if (topic && !/^arn:aws:sns:us-west-2:\d{12}:[A-Za-z0-9_-]{1,256}(?:\.fifo)?$/.test(topic)) {
+        throw new Error("WAKA_ALERT_SNS_TOPIC_ARN must be an explicit us-west-2 SNS topic ARN.");
+      }
+      for (const [name, metricName, comparisonOperator, threshold, treatMissingData] of [
+        ["QueueOverdue", "OverdueJobs", "GreaterThanThreshold", 0, "notBreaching"],
+        ["QueueExhausted", "ExhaustedLeases", "GreaterThanThreshold", 0, "notBreaching"],
+        ["QueueRecoveryMissing", "RecoveryChecks", "LessThanThreshold", 1, "breaching"],
+      ] as const) {
+        new aws.cloudwatch.MetricAlarm(name, {
+          namespace: "WAKA/QueueRecovery", metricName, dimensions: { Stage: $app.stage },
+          comparisonOperator, threshold, period: 900, evaluationPeriods: 2,
+          statistic: metricName === "RecoveryChecks" ? "Sum" : "Maximum", treatMissingData,
+          alarmActions: topic ? [topic] : [], okActions: topic ? [topic] : [],
+        });
+      }
+    }
 
     // -----------------------------------------------------------------------
     // Frontend (Vite + React)

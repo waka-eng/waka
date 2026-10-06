@@ -105,7 +105,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
       <header><h2>{say('worldSharePrinciple')}</h2><button type="button" onClick={onClose}>{say('worldClose')}</button></header>
       <div className="jar-share-body">
       {loadFailed?<p role="alert">{say('worldShareLoadFailed')} <button type="button" onClick={()=>setAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button></p>:
-        !rows?<p role="status">{say('worldReviewChecking')}</p>:!source?<p role="status">{say('worldShareMissing')}</p>:null}
+        !rows?<p role="status">{say('worldShareLoading')}</p>:!source?<p role="status">{say('worldShareMissing')}</p>:null}
       {rows?.length&&!source?<label>{say('worldShareChoose')}<select value="" onChange={event=>onChoose(event.target.value)}><option value=""/>{rows.map(row=><option key={row.id} value={row.id}>{row.statement}</option>)}</select></label>:null}
       {source&&draft&&rows?<>
         <div className="jar-share-columns"><div className="jar-share-controls">

@@ -114,6 +114,20 @@ it('reconciles a committed first Send after reload using GET only',async()=>{
   expect(createConversation).toHaveBeenCalledOnce();expect(choose).toHaveBeenCalledWith(stored.id);
   expect(readConversationDrafts(scope,'new:general')).toEqual([]);
 });
+it('expands a later tail to confirm an old uncertain first Send without resending',async()=>{
+  vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:true});
+  vi.mocked(createConversation).mockImplementationOnce(async(_profile,conversationId,_signal,_principle,first)=>{
+    stored={...stored,id:conversationId,revision:1,generationEnabled:true,messages:[{id:first!.id,content:first!.content,profileId:scope.profileId,conversationId,position:1,role:'user',createdAt:stored.createdAt}]};throw new Error('Response lost');
+  });
+  await mount(null);await type('My original question');await click('Send');
+  const conversationId=stored.id,first=stored.messages[0];
+  const all=[first,...Array.from({length:79},(_,i)=>({...first,id:`later-${i}`,position:i+2,content:`Later words ${i+2}`}))];
+  stored={...stored,revision:80,messages:all};
+  vi.mocked(fetchConversation).mockImplementation(async(_profile,_id,_signal,from)=>({...stored,messageWindowStart:from??51,messages:all.filter(message=>message.position>=(from??51))}));
+  await act(async()=>root.unmount());root=createRoot(host);await mount(null);
+  expect(fetchConversation).toHaveBeenLastCalledWith(scope.profileId,conversationId,expect.any(AbortSignal),1);
+  expect(createConversation).toHaveBeenCalledOnce();expect(readConversationDrafts(scope,'new:general')).toEqual([]);
+});
 it('keeps a new-chat draft private and does not create a conversation on opening',async()=>{
   await mount(null);expect(host.querySelector('textarea')).not.toBeNull();expect(createConversation).not.toHaveBeenCalled();
   await type('My unfinished first message');await act(async()=>root.unmount());root=createRoot(host);await mount(null);
@@ -136,6 +150,7 @@ it('restores a scoped non-bottom transcript position after reopening',async()=>{
   Object.defineProperties(body,{scrollHeight:{configurable:true,value:1500},clientHeight:{configurable:true,value:300}});body.scrollTop=120;
   await act(async()=>body.dispatchEvent(new Event('scroll',{bubbles:true})));
   await act(async()=>root.unmount());root=createRoot(host);await mount();expect(host.querySelector<HTMLElement>('.jar-conversation-body')!.scrollTop).toBe(120);
+  expect(fetchConversation).toHaveBeenLastCalledWith(scope.profileId,id,expect.any(AbortSignal),1);
 });
 it('keeps mobile drawers mutually exclusive and preserves the composer behind their backdrop',async()=>{
   const media=Object.assign(new EventTarget(),{matches:true});vi.stubGlobal('matchMedia',()=>media);
@@ -187,6 +202,35 @@ it('does not jump away from older messages when a new reply arrives',async()=>{
   await act(async()=>body.dispatchEvent(new Event('scroll',{bubbles:true})));completeReply();await tick();
   expect(body.scrollTop).toBe(10);expect(host.textContent).toContain('New messages ↓');await click('New messages ↓');expect(body.scrollTop).toBe(1500);
 });
+function windowedThread(){
+  const messages=Array.from({length:60},(_,i)=>({id:`window-${i+1}`,role:'user' as const,profileId:scope.profileId,conversationId:id,position:i+1,content:`Owned message ${i+1}`,createdAt:stored.createdAt}));
+  stored={...stored,revision:60,messageWindowStart:31,preview:'The original human topic',messages:messages.slice(30)};
+  return messages;
+}
+it('loads earlier words while preserving the visible scroll anchor and original topic',async()=>{
+  const messages=windowedThread();await mount();const scroll=host.querySelector<HTMLElement>('.chat-scroll')!;
+  Object.defineProperties(scroll,{scrollHeight:{configurable:true,get:()=>host.querySelectorAll('.chat-messages > li').length*100},clientHeight:{configurable:true,value:300}});
+  scroll.scrollTop=10;await act(async()=>scroll.dispatchEvent(new Event('scroll',{bubbles:true})));
+  vi.mocked(fetchConversation).mockResolvedValueOnce({...stored,messageWindowStart:1,messages});
+  await click('Load earlier messages');expect(fetchConversation).toHaveBeenLastCalledWith(scope.profileId,id,expect.any(AbortSignal),1);
+  expect(host.querySelectorAll('.chat-messages > li')).toHaveLength(60);expect(scroll.scrollTop).toBe(3010);
+  expect(host.querySelector('.chat-sidebar nav')?.textContent).toContain('The original human topic');
+  expect(host.textContent).not.toContain('Load earlier messages');expect(saveConversationMessage).not.toHaveBeenCalled();
+});
+it('an earlier-read failure preserves current messages and the unfinished draft',async()=>{
+  windowedThread();await mount();await type('Keep my unfinished thought');
+  vi.mocked(fetchConversation).mockRejectedValueOnce(new Error('Read failed'));await click('Load earlier messages');
+  expect(host.querySelectorAll('.chat-messages > li')).toHaveLength(30);expect(host.querySelector('textarea')!.value).toBe('Keep my unfinished thought');
+  expect(host.textContent).toContain('Earlier messages couldn’t be loaded.');expect(saveConversationMessage).not.toHaveBeenCalled();
+});
+it('reopens the same scoped loaded window before restoring an older scroll position',async()=>{
+  windowedThread();await mount();const scroll=host.querySelector<HTMLElement>('.chat-scroll')!;
+  Object.defineProperties(scroll,{scrollHeight:{configurable:true,value:3000},clientHeight:{configurable:true,value:300}});scroll.scrollTop=120;
+  await act(async()=>scroll.dispatchEvent(new Event('scroll',{bubbles:true})));
+  await act(async()=>root.unmount());root=createRoot(host);vi.mocked(fetchConversation).mockClear();await mount();
+  expect(fetchConversation).toHaveBeenCalledWith(scope.profileId,id,expect.any(AbortSignal),31);
+  expect(host.querySelector<HTMLElement>('.chat-scroll')!.scrollTop).toBe(120);
+});
 it('treats the first reply-read failure as transient rather than flashing an error',async()=>{
   stored.generationEnabled=true;vi.mocked(fetchConversationReply).mockRejectedValueOnce(new Error('Transient'));await mount();
   expect(host.textContent).not.toContain('Couldn’t check reply progress.');await tick(1000);expect(host.textContent).not.toContain('Couldn’t check reply progress.');expect(requestConversationReply).not.toHaveBeenCalled();
@@ -198,6 +242,44 @@ function readingReply(){
   stored.messages[0].citations=[{index:0,kind:'top_of_mind_entry',id:'reading-one',available:true,preview:'Try a small experiment.'},{index:1,kind:'top_of_mind_entry',id:'reading-two',available:true,preview:'Leave time to notice.'}];
 }
 const readingReference=(index=1):ConversationCitation=>({profileId:scope.profileId,conversationId:id,requestId:replyId,index,source:{kind:'top_of_mind_entry',id:index===1?'reading-two':'reading-one',text:index===1?'Leave time to notice what changes before making a commitment.':'Try a small experiment before making a commitment.',quote:index===1?'Leave time to notice':'Try a small experiment'}});
+it('lets an older reading preview continue the chat with its verified words once',async()=>{
+  readingReply();stored.messages.push({id:'later',role:'assistant',profileId:scope.profileId,conversationId:id,position:2,content:'Choose whichever topic matters now.',createdAt:stored.createdAt});stored.revision=2;replyState.revision=2;
+  vi.mocked(fetchConversationCitation).mockResolvedValue(readingReference(0));await mount();
+  expect(host.querySelector('.chat-reading-choices')).toBeNull();
+  await act(async()=>host.querySelector<HTMLButtonElement>('.chat-citations button')!.click());
+  await click('Discuss this');expect(saveConversationMessage).toHaveBeenCalledOnce();
+  expect(vi.mocked(saveConversationMessage).mock.calls[0][2].content).toContain('Try a small experiment before making a commitment.');
+  expect(requestConversationReply).not.toHaveBeenCalled();
+});
+it('labels an earlier record and carries its date into the selected follow-up',async()=>{
+  readingReply();stored.messages.push({id:'later',role:'assistant',profileId:scope.profileId,conversationId:id,position:2,content:'You can compare with an earlier reading.',createdAt:stored.createdAt});stored.revision=2;replyState.revision=2;
+  stored.messages[0].citations![0]={...stored.messages[0].citations![0],historical:true,recordedAt:'2026-09-01T12:00:00Z'};
+  vi.mocked(fetchConversationCitation).mockResolvedValue({...readingReference(0),source:{...readingReference(0).source,historical:true,recordedAt:'2026-09-01T12:00:00Z',artifactVersion:1}});
+  await mount();expect(host.querySelector('.chat-citations button')?.textContent).toContain('Earlier reading · Sep 1, 2026');
+  await act(async()=>host.querySelector<HTMLButtonElement>('.chat-citations button')!.click());
+  expect(host.textContent).toContain('Earlier reading');expect(host.textContent).toContain('Sep 1, 2026');
+  await click('Discuss this');expect(vi.mocked(saveConversationMessage).mock.calls[0][2].content).toContain('from the record dated (Sep 1, 2026)');
+});
+it('discloses the earlier date on a reading choice before it is opened',async()=>{
+  readingReply();stored.messages[0].citations![0]={...stored.messages[0].citations![0],historical:true,recordedAt:'2026-09-01T12:00:00Z'};
+  await mount();expect(host.querySelector('.chat-reading-choice')?.textContent).toContain('Earlier reading · Sep 1, 2026');
+  expect(host.querySelector('.chat-reading-choice')?.getAttribute('aria-label')).toContain('Earlier reading · Sep 1, 2026');
+  expect(fetchConversationCitation).not.toHaveBeenCalled();expect(saveConversationMessage).not.toHaveBeenCalled();
+});
+it.each(['principle','inspiration'] as const)('continues from a verified %s preview and never overwrites a draft',async kind=>{
+  stored.generationEnabled=true;completeReply();stored.messages[0].citations![0].kind=kind;
+  const source={kind,id:'principle',text:'Verified words for this topic.',quote:'Verified words'};
+  vi.mocked(fetchConversationCitation).mockResolvedValue({profileId:scope.profileId,conversationId:id,requestId:replyId,index:0,source});
+  await mount();await act(async()=>host.querySelector<HTMLButtonElement>('.chat-citations button')!.click());
+  await type('Keep my unfinished words');expect([...host.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent==='Discuss this')!.disabled).toBe(true);
+  expect(host.querySelector('textarea')!.value).toBe('Keep my unfinished words');expect(saveConversationMessage).not.toHaveBeenCalled();
+  await type('');await click('Discuss this');expect(saveConversationMessage).toHaveBeenCalledOnce();
+  expect(vi.mocked(saveConversationMessage).mock.calls[0][2]).toMatchObject({content:'“Verified words for this topic.”\n\nLet’s explore this idea further.',requestReply:true});
+});
+it('keeps the local sidebar title aligned with the actual human topic',async()=>{
+  stored.messages=[{id:'first',role:'user',profileId:scope.profileId,conversationId:id,position:1,content:'Help me think through a choice.',createdAt:stored.createdAt},{id:'second',role:'user',profileId:scope.profileId,conversationId:id,position:2,content:'Should I take the evening course?',createdAt:stored.createdAt}];
+  await mount();expect(host.querySelector('.chat-sidebar nav')?.textContent).toContain('Should I take the evening course?');
+});
 it('sends a starter in one click instead of requiring another Send',async()=>{
   stored.generationEnabled=true;await mount();await click('What has changed in how I think?');
   expect(saveConversationMessage).toHaveBeenCalledExactlyOnceWith(scope.profileId,id,expect.objectContaining({content:'What has changed in how I think?',requestReply:true}),expect.any(AbortSignal));

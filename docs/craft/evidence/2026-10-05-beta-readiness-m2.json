@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-05",
+  "milestone": 2,
+  "technicalAcceptance": "passed locally",
+  "humanComprehensionGate": "pending first-time participants",
+  "deployed": false,
+  "remoteDataWrites": 0,
+  "providerCalls": 0,
+  "fixtureCleanup": "Both owned fixture schemas removed after normal shutdown; screenshots retained",
+  "environment": "Production web build and real API on a disposable loopback Postgres schema; 25 synthetic inspirations and three Principles",
+  "checks": {
+    "webTestsPassed": 771,
+    "apiUnitTestsPassed": 843,
+    "paidBenchTestsSkipped": 3,
+    "conversationSqlTestsPassed": 12,
+    "apiWebAdminTypes": "passed",
+    "webBuild": "passed",
+    "gitDiffCheck": "passed"
+  },
+  "ui": {
+    "widthsChecked": [1280, 320],
+    "principlesShortcut": "Visible named counted pill, no false zero before data is known",
+    "capture": "Only me selected by default; Share with rooms is explicit; typed draft survived close/reopen",
+    "review": "Not yet reviewed reason and Next keeps this inspiration hint; Next advanced to source 2 while 25 originals remained",
+    "principles": "Readable named actions and distinct edit/reorder icons; existing route opens selected guide",
+    "share": "Selected Principle route and rendered card preview at 320px, with card-only edit note; no export/shared transmission attempted",
+    "chat": "Actual human topic shown in sidebar; older source preview exposes Discuss this and saved one verified follow-up",
+    "continuationMessagePosts": 1,
+    "continuationMessageStatus": 200,
+    "dispatchedConversationRequests": 0
+  },
+  "limitations": [
+    "This does not establish first-time human comprehension or physical-device behavior.",
+    "The assistant records used in the browser scenario were explicitly seeded synthetic responses, not generated quality results.",
+    "No new deployed latency, billing, or AI quality claim is made by this UI acceptance."
+  ],
+  "retainedRepairs": [
+    "Initial test selectors still used old action labels; updated selectors while retaining rewrite, privacy, source and recovery assertions.",
+    "A duplicate bare-class CSS override failed the structural stylesheet gate; consolidated it into the original rule.",
+    "The count initially used t instead of formatMessage; the new regression caught the unexpanded localized placeholder.",
+    "Concurrent full suites caused two 5-second timeouts in real cost-10 crypto checks; retained hashing cost/assertions, bounded those tests at 15 seconds, and standalone full API rerun passed."
+  ],
+  "screenshots": [
+    "work/performance/beta-m2-baseline/home.png",
+    "work/performance/beta-m2-current/home-desktop.png",
+    "work/performance/beta-m2-current/capture-narrow.png",
+    "work/performance/beta-m2-current/review-narrow.png",
+    "work/performance/beta-m2-current/share-narrow.png",
+    "work/performance/beta-m2-current/older-reference-continued.png"
+  ]
+}

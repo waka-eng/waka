@@ -6,6 +6,8 @@
  * as a safety net, for the error paths a push cannot cover: a job whose
  * backoff outlived the invocation that failed it, a row still locked by a
  * worker that died, an enqueue whose wake-up call never landed.
+ * A dev-only recovery event checks overdue work every fifteen minutes, taking
+ * one normal pass of five claims after grace; daily and push drains remain.
  *
  * Because nothing polls behind it, this drains until the queue is *dry*
  * rather than running a single batch. The pipeline enqueues as it goes — a
@@ -15,7 +17,8 @@
  * re-arming itself is a Lambda that runs until its timeout, every time.
  */
 
-import { runBackgroundJobWorker } from "./lib/queue.js";
+import { runBackgroundJobWorker,readBackgroundJobRecoveryState } from "./lib/queue.js";
+import {QUEUE_RECOVERY_LIMITS,recordQueueRecovery} from './lib/queue-recovery.js';
 
 const DEFAULT_CRON_LIMIT = 5;
 const MAX_CRON_LIMIT = 25;
@@ -34,7 +37,14 @@ function parseCronLimit(raw: string | undefined): number {
   return Math.min(parsed, MAX_CRON_LIMIT);
 }
 
-export async function handler() {
+export async function handler(event?:unknown) {
+  if(event&&typeof event==='object'&&(event as {mode?:unknown}).mode==='recovery'){
+    const state=await readBackgroundJobRecoveryState();recordQueueRecovery(state);
+    if(!state.overdue)return {claimed:0,succeeded:0,retried:0,failed:0,deferred:0,passes:0,exhaustedPasses:false,recovery:state};
+    const result=await runBackgroundJobWorker({limit:QUEUE_RECOVERY_LIMITS.claims,overdueOnly:true});
+    try{console.info('[queue-recovery-result]',JSON.stringify({claimed:result.claimed,succeeded:result.succeeded,retried:result.retried,failed:result.failed,deferred:result.deferred}));}catch{/* Logging cannot retry completed work. */}
+    return {...result,passes:1,exhaustedPasses:false,recovery:state};
+  }
   const limit = parseCronLimit(process.env.WAKA_BACKGROUND_JOB_CRON_LIMIT);
   const total = { claimed: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
   let passes = 0;

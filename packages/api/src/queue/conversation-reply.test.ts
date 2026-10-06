@@ -9,10 +9,28 @@ it('fences untrusted memories, preserves standing and bounds the output',()=>{
   expect(request.contents[0].parts[0].text).toContain('<<<source 1>>>');expect(request.contents[0].parts[0].text).toContain('"supportCurrent":false');
   expect(request.systemInstruction.parts[0].text).toContain('untrusted data');expect(request.systemInstruction.parts[0].text).toContain('Accept disagreement');expect(request.systemInstruction.parts[0].text).toContain('never evidence');
   expect(buildConversationReplyRequest({...input,contextChanged:true}).contents[0].parts[0].text).toContain('Do not infer what a short answer affirms');
+  expect(request.systemInstruction.parts[0].text).toContain('give no switch/keep recommendation');
+  expect(request.systemInstruction.parts[0].text).toContain('a neutral question');
 });
 it('labels a correction and prioritizes it without claiming a principle edit',()=>{
   const request=buildConversationReplyRequest({...input,history:[{role:'user',content:'I no longer agree with this rule.',correction:true}]});
-  expect(request.contents[0].parts[0].text).toContain('user correction');expect(request.systemInstruction.parts[0].text).toContain('Only a separate explicit edit');
+  expect(request.contents[0].parts[0].text).toContain('user correction');expect(request.systemInstruction.parts[0].text).toContain('This chat never edits or creates');
+  expect(request.systemInstruction.parts[0].text).toContain('Principles can emerge automatically');
+});
+it('omits saved wording and its focus for a deliberate correction, without mutating the caller',()=>{
+  const correction:ConversationReplyInput={...input,focusSourceNumber:1,history:[{role:'user',content:'No, I still enjoy work. This month only I want one family day.',correction:true}]};
+  const request=buildConversationReplyRequest(correction),text=request.contents[0].parts[0].text;
+  expect(text).not.toContain('<<<source 1>>>');
+  expect(text).not.toContain('began this conversation from source');
+  expect(correction.sources).toEqual(input.sources);expect(correction.focusSourceNumber).toBe(1);
+  expect(parseConversationReply({answer:'This is a change for this month, not a new long-term rule.',followUpQuestion:null,citations:[]},correction).citations).toEqual([]);
+  expect(()=>parseConversationReply({answer:'The old principle still applies.',followUpQuestion:null,citations:[{sourceNumber:1,quote:'Leave room to reconsider'}]},correction)).toThrow('conversation grounding');
+});
+it.each(['Compare this with my saved principle.','이전 원칙과 이번 선택을 비교해 주세요.'])('retains saved sources for an explicitly requested correction comparison: %s',content=>{
+  const correction:ConversationReplyInput={...input,history:[{role:'user',content,correction:true}]};
+  expect(buildConversationReplyRequest(correction).contents[0].parts[0].text).toContain('<<<source 1>>>');
+  const answer={answer:'The recorded principle leaves room to reconsider.',followUpQuestion:null,citations:[{sourceNumber:1,quote:'Leave room to reconsider'}]};
+  expect(parseConversationReply(answer,correction)).toEqual(answer);
 });
 it('carries capture dates separately from exact source text and explains their limit',()=>{
   const request=buildConversationReplyRequest({...input,messageDate:'2026-10-03',sources:[{kind:'inspiration',text:'Marathon training.',recordedAt:'2021-06-01T00:00:00Z',truncated:false}]});

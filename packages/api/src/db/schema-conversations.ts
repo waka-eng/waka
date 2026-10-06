@@ -32,7 +32,7 @@ export const conversationMessages=pgTable('conversation_messages',{
   bounds:check('conversation_messages_bounds',sql`${table.position} BETWEEN 1 AND 200 AND ${table.role} IN ('user','assistant') AND length(trim(${table.content})) > 0 AND length(${table.content}) <= 4000`),
 }));
 
-export type ConversationReference={kind:'principle'|'top_of_mind_entry'|'inspiration';id:string;hash:string;quoteStart?:number;quoteLength?:number};
+export type ConversationReference={kind:'principle'|'top_of_mind_entry'|'inspiration';id:string;hash:string;quoteStart?:number;quoteLength?:number;historical?:boolean};
 export const conversationReplyRequests=pgTable('conversation_reply_requests',{
   id:uuid('id').primaryKey(),profileId:uuid('profile_id').notNull().references(()=>profiles.id,{onDelete:'cascade'}),conversationId:uuid('conversation_id').notNull(),
   userMessageId:uuid('user_message_id'),assistantMessageId:uuid('assistant_message_id'),jobId:uuid('job_id'),

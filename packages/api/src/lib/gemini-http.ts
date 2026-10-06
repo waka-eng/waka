@@ -1,3 +1,4 @@
+import {recordModelUsage} from './model-usage.js';
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 25_000;
 
@@ -59,7 +60,11 @@ export async function fetchModelWithTimeout(
   init: RequestInit = {},
   timeoutMs = getModelRequestTimeoutMs(),
   exchangeTimeoutMs = Math.max(getModelExchangeTimeoutMs(), getModelRequestTimeoutMs()),
+  label?:string,
 ): Promise<Response> {
+  const started=performance.now();let google=false,usageRecorded=false,operation=label??'other';
+  try{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);google=url.hostname==='generativelanguage.googleapis.com';
+    if(!label&&url.pathname.endsWith(':embedContent'))operation='embedding';}catch{/* Unknown destinations carry no provider attribution. */}
   const controller = new AbortController();
   const upstreamSignal = init.signal;
   const abortFromUpstream = () => controller.abort(upstreamSignal?.reason);
@@ -89,12 +94,14 @@ export async function fetchModelWithTimeout(
     ]);
     if (headerTimer) clearTimeout(headerTimer);
     const body = await Promise.race([response.arrayBuffer(), exchangeDeadline]);
+    if(google){let usage:unknown=null;try{usage=JSON.parse(new TextDecoder().decode(body));}catch{/* Unpriced remains explicit. */}
+      recordModelUsage('gemini',operation,usage,performance.now()-started,response.ok?'received':'http_error');usageRecorded=true;}
     return new Response(NULL_BODY_STATUSES.has(response.status) ? null : body, {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,
     });
-  } finally {
+  } catch(error){if(google&&!usageRecorded)recordModelUsage('gemini',operation,null,performance.now()-started,'unknown');throw error;} finally {
     if (headerTimer) clearTimeout(headerTimer);
     if (exchangeTimer) clearTimeout(exchangeTimer);
     upstreamSignal?.removeEventListener("abort", abortFromUpstream);

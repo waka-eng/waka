@@ -30,6 +30,7 @@ Work happening now, or stopped mid-way with a recorded reason.
 
 | Goal | Status |
 | --- | --- |
+| [`beta-readiness.md`](beta-readiness.md) | Incomplete — milestones 1 and 3 passed locally; milestone 2 technically checked, first-time-user comprehension pending. Operational milestone 4 remains open; dev delivery approved, PR 350 awaits CI and merge. |
 | [`performance-improvements.md`](performance-improvements.md) | In progress — five milestones delivered to dev; loading/Review follow-up accepted locally. Exact deployed timing verification remains open. |
 | [`ux-feature-implementation.md`](ux-feature-implementation.md) | Paused by owner after the checked feedback/room-flow batch; dev delivery requested. Later UX/algorithm slices, remaining release cases, semantic validation, historical repair and deployed verification remain open. |
 | [`everything-in-the-world.md`](everything-in-the-world.md) | Phase 2 passed (2026-08-23). Phase 3 next. |

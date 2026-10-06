@@ -22,6 +22,7 @@ import {
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
 import { MODEL_DECLINED } from "./model-provider.js";
+import {recordModelUsage} from './model-usage.js';
 
 export const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -56,6 +57,7 @@ export interface OpenRouterChatRequest {
   /** OpenRouter's unified reasoning control; providers that cannot honor it
       ignore it, which is the behavior we want */
   reasoning?: { enabled?: boolean; effort?: 'low'; exclude?: boolean };
+  provider?:{data_collection?:'deny';zdr?:true};
   response_format?:
     | { type: "json_object" }
     | { type: "json_schema"; json_schema: { name: string; strict?: boolean; schema: unknown } };
@@ -103,6 +105,15 @@ export function stripJsonFence(text: string): string {
   return fenced ? fenced[1]!.trim() : trimmed;
 }
 
+/** Only restrictive overrides are supported; omission retains account policy.
+ * A request never disables an account-level privacy requirement. */
+export function openRouterPrivacyPreferences(){
+  const collection=process.env.WAKA_OPENROUTER_DATA_COLLECTION,zdr=process.env.WAKA_OPENROUTER_REQUIRE_ZDR;
+  if(collection!==undefined&&collection!==''&&collection!=='deny')throw new Error('OpenRouter data-collection policy must be deny or unset');
+  if(zdr!==undefined&&zdr!==''&&zdr!=='0'&&zdr!=='1')throw new Error('OpenRouter retention policy must be 0, 1 or unset');
+  return {...(collection==='deny'||zdr==='1'?{data_collection:'deny' as const}:{}),...(zdr==='1'?{zdr:true as const}:{})};
+}
+
 export async function callOpenRouter(
   request: OpenRouterChatRequest,
   label: string,
@@ -111,16 +122,20 @@ export async function callOpenRouter(
   if (!apiKey) {
     throw new Error("OpenRouter API key is not configured (OPENROUTER_API_KEY).");
   }
+  const privacy=openRouterPrivacyPreferences();
+  const dispatched=Object.keys(privacy).length?{...request,provider:{...request.provider,...privacy}}:request;
 
   /* one quiet line per call while the road is new — which task, which model */
   console.log(`[openrouter] ${label} → ${request.model}`);
-  const response = await fetchModelWithTimeout(fetch, OPENROUTER_CHAT_URL, {
+  const started=performance.now();let response:Response;
+  try{response=await fetchModelWithTimeout(fetch, OPENROUTER_CHAT_URL, {
     method: "POST",
     headers: buildOpenRouterHeaders(apiKey),
-    body: JSON.stringify(request),
-  });
+    body: JSON.stringify(dispatched),
+  });}catch(error){recordModelUsage('openrouter',label,null,performance.now()-started,'unknown');throw error;}
 
   if (!response.ok) {
+    const billing=await response.clone().json().catch(()=>null);recordModelUsage('openrouter',label,billing,performance.now()-started,'http_error');
     throw new Error(
       formatSafeGeminiError(
         `OpenRouter ${label} failed`,
@@ -133,10 +148,13 @@ export async function callOpenRouter(
   try {
     rawJson = await response.json();
   } catch (err) {
+    recordModelUsage('openrouter',label,null,performance.now()-started,'unknown');
     throw new Error(
       `OpenRouter ${label} returned non-JSON body: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+
+  recordModelUsage('openrouter',label,rawJson,performance.now()-started,'received');
 
   const envelope = chatResponseSchema.safeParse(rawJson);
   if (!envelope.success) {

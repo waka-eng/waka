@@ -18,6 +18,10 @@ const outputDir=resolve(process.env.WAKA_PERFORMANCE_OUTPUT??'work/performance')
 const searchCorpus=process.env.WAKA_PERFORMANCE_SEARCH_CORPUS==='1';
 process.env.NODE_ENV='test';process.env.JWT_SECRET='disposable-performance-probe-only';
 const chatScenario=process.env.WAKA_PERFORMANCE_CHAT_SCENARIO==='1';
+const chatHistory=process.env.WAKA_PERFORMANCE_CHAT_HISTORY==='1';
+const chatMessages=Number(process.env.WAKA_PERFORMANCE_CHAT_MESSAGES??2);
+assert.ok(Number.isInteger(chatMessages)&&chatMessages>=2&&chatMessages<=200&&chatMessages%2===0);
+assert.ok(!chatHistory||chatScenario,'Dated history fixture requires the interactive Chat fixture.');
 process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';process.env.WAKA_CONVERSATION_REPLIES=chatScenario?'1':'0';
 delete process.env.OPENROUTER_API_KEY;delete process.env.GEMINI_API_KEY;delete process.env.AWS_LAMBDA_FUNCTION_NAME;delete process.env.WAKA_BACKGROUND_WORKER_FUNCTION;
 globalThis.fetch=async()=>{throw new Error('Performance fixture refuses provider network');};
@@ -96,15 +100,30 @@ if(chatScenario)for(const f of fixtures.values()){
   const [entry]=await fixture.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,sort_order)
     VALUES (${reading.id},'pattern','I leave time to notice what changes before deciding what comes next.',1) RETURNING id`;
   await fixture.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id,statement_revision,entry_body_revision) VALUES (${entry.id},${f.signalId},1,1)`;
-  const context=await readConversationContext(db,f.id,'What has changed in how I think?');assert.equal(context.reading.length,2);
+  if(chatHistory){
+    await fixture.sql`UPDATE top_of_minds SET version=2,created_at='2026-10-01T12:00:00Z' WHERE id=${reading.id}`;
+    const [past]=await fixture.sql`INSERT INTO top_of_minds(profile_id,version,status,created_at) VALUES (${f.id},1,'superseded','2026-09-01T12:00:00Z') RETURNING id`;
+    await fixture.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,locked_at) VALUES (${past.id},'pattern','I prefer a detailed plan before starting.','2026-09-01T12:00:00Z')`;
+  }
+  const context=await readConversationContext(db,f.id,'What has changed in how I think?');assert.equal(context.reading.length,chatHistory?3:2);
   const conversationId=crypto.randomUUID(),userId=crypto.randomUUID(),assistantId=crypto.randomUUID(),requestId=crypto.randomUUID();
-  const references=context.reading.map(source=>({kind:source.kind,id:source.id,hash:source.hash,quoteStart:0,quoteLength:Math.min(40,source.text.length)}));
+  const references=context.reading.map(source=>({kind:source.kind,id:source.id,hash:source.hash,quoteStart:0,quoteLength:Math.min(40,source.text.length),historical:source.historical===true}));
+  const assistantText=chatHistory?'The earlier reading favored a detailed plan; the current reading leaves space for experiments. These dated records describe a contrast in wording, not when a belief changed.':'Two themes stand out: trying small experiments, and leaving space to notice. Which top of mind would you like to explore?';
   await fixture.sql`INSERT INTO conversations(id,profile_id,revision) VALUES (${conversationId},${f.id},2)`;
   await fixture.sql`INSERT INTO conversation_messages(id,profile_id,conversation_id,position,role,content) VALUES
     (${userId},${f.id},${conversationId},1,'user','What has changed in how I think?'),
-    (${assistantId},${f.id},${conversationId},2,'assistant','Two themes stand out: trying small experiments, and leaving space to notice. Which top of mind would you like to explore?')`;
+    (${assistantId},${f.id},${conversationId},2,'assistant',${assistantText})`;
   await fixture.sql`INSERT INTO conversation_reply_requests(id,profile_id,conversation_id,user_message_id,assistant_message_id,conversation_revision,context_hash,status,"references",context_sources,finished_at)
     VALUES (${requestId},${f.id},${conversationId},${userId},${assistantId},1,'synthetic-fixture','ready',${JSON.stringify(references)}::jsonb,${JSON.stringify(references)}::jsonb,now())`;
+  for(let turn=1;turn<chatMessages/2;turn++){
+    const user=crypto.randomUUID(),assistant=crypto.randomUUID();
+    await fixture.sql`INSERT INTO conversation_messages(id,profile_id,conversation_id,position,role,content) VALUES
+      (${user},${f.id},${conversationId},${turn*2+1},'user',${`Synthetic question ${turn+1}.`}),
+      (${assistant},${f.id},${conversationId},${turn*2+2},'assistant',${`Synthetic reply ${turn+1}: the selected records remain available to explore.`})`;
+    await fixture.sql`INSERT INTO conversation_reply_requests(id,profile_id,conversation_id,user_message_id,assistant_message_id,conversation_revision,context_hash,status,"references",context_sources,finished_at)
+      VALUES (${crypto.randomUUID()},${f.id},${conversationId},${user},${assistant},${turn*2+1},'synthetic-fixture','ready',${JSON.stringify(references)}::jsonb,${JSON.stringify(references)}::jsonb,now())`;
+  }
+  await fixture.sql`UPDATE conversations SET revision=${chatMessages} WHERE id=${conversationId}`;
   f.conversationId=conversationId;
 }
 await fixture.sql`ANALYZE`;

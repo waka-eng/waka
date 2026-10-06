@@ -436,7 +436,7 @@ async function press(selector: string, name: RegExp): Promise<void> {
  */
 async function rewriteTo(next: string): Promise<void> {
   const was = posterText();
-  await press(".jar-board-act", /say it in my words/i);
+  await press(".jar-board-act", /edit wording/i);
   const box = layout.container.querySelector<HTMLTextAreaElement>("textarea.jar-reflect-box");
   if (!box) throw new Error("the edit box never opened — 'Say it in my words' did nothing");
   const nativeValue = Object.getOwnPropertyDescriptor(
@@ -644,7 +644,7 @@ describe("what the poster is standing on", () => {
     const leads = [...layout.container.querySelectorAll(".jar-prov--poster .jar-prov-lead")].map(
       (n) => (n.textContent ?? "").trim(),
     );
-    expect(leads, "the poster was asked and answered with nothing").toContain("built from");
+    expect(leads, "the poster was asked and answered with nothing").toContain("View inspirations");
 
     /* AND "BUILT FROM" IS A DOOR NOW, NOT A LABEL OVER A LIST. The rows used
        to sit here and to TRAVEL — pressing one left headquarters for the
@@ -652,7 +652,7 @@ describe("what the poster is standing on", () => {
        nothing away from you (founder, 2026-08-25). The memories under the
        ambition are the same memories; this follows them through the door. */
     const door = [...layout.container.querySelectorAll<HTMLElement>(".jar-prov-open")].find(
-      (n) => (n.textContent ?? "").trim() === "built from",
+      (n) => (n.textContent ?? "").trim() === "View inspirations",
     );
     if (!door) throw new Error("`built from` is not pressable — the grounds have no way in");
     await act(async () => door.click());
@@ -702,7 +702,7 @@ describe("board acts leave receipts", () => {
     expect(refreshState.requests).toBe(0);
   });
   it("does not call queued work a completed redraw", async () => {
-    await press(".jar-board-act", /read it again/i);
+    await press(".jar-board-act", /refresh reading/i);
     await press(".jar-board-act", /^read again$/i);
     expect(refreshState.requests).toBe(1);
     expect(posterText()).toBe(FIRST);
@@ -712,7 +712,7 @@ describe("board acts leave receipts", () => {
   it("shows the completed current headline instead of the boot-time override", async () => {
     refreshState.body = "We now test assumptions with a small experiment";
     refreshState.status = "succeeded";
-    await press(".jar-board-act", /read it again/i);
+    await press(".jar-board-act", /refresh reading/i);
     await press(".jar-board-act", /^read again$/i);
     await layout.step(20);
     expect(posterText()).toBe(refreshState.body);
@@ -720,7 +720,7 @@ describe("board acts leave receipts", () => {
 
   it("keeps an empty completion visible after the old headline disappears", async () => {
     refreshState.empty = true; refreshState.status = "succeeded";
-    await press(".jar-board-act", /read it again/i);
+    await press(".jar-board-act", /refresh reading/i);
     await press(".jar-board-act", /^read again$/i);
     await layout.step(10);
     expect(layout.container.textContent).not.toContain(FIRST);
@@ -733,7 +733,7 @@ describe("board acts leave receipts", () => {
    * these two cases close the loop from press to law.
    */
   it("pinning says it will be held through rewrites", async () => {
-    await press(".jar-board-act", /keep this one up/i);
+    await press(".jar-board-act", /keep on top/i);
     const toast = layout.container.querySelector('[role="status"]');
     expect(
       toast?.textContent,

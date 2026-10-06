@@ -177,8 +177,8 @@ function destination(): { private: boolean; public: boolean } {
   if (!row) throw new Error("the composer did not open");
   const buttons = Array.from(row.querySelectorAll("button"));
   const find = (word: RegExp) => buttons.find((b) => word.test(b.textContent ?? ""));
-  const priv = find(/^private$/i);
-  const pub = find(/^public$/i);
+  const priv = find(/^Only me$/i);
+  const pub = find(/^Share with rooms$/i);
   if (!priv || !pub) throw new Error(`the row offers ${buttons.map((b) => b.textContent).join("/")}`);
   return {
     private: priv.getAttribute("aria-pressed") === "true",
@@ -280,10 +280,10 @@ describe("the capture remembers where it last went", () => {
 
   it("writes the choice down, and takes it back the same way", async () => {
     await worldWithTheMouthOpen();
-    await press(/^public$/i);
+    await press(/^Share with rooms$/i);
     expect(destination().public).toBe(true);
     expect(window.localStorage.getItem(KEY)).toBe("1");
-    await press(/^private$/i);
+    await press(/^Only me$/i);
     expect(destination().private).toBe(true);
     /* removed rather than set to "0": absent IS private, and one spelling of
        a state is the whole reason this reads a single key */

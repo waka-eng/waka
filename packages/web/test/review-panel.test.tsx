@@ -14,6 +14,11 @@ vi.mock('../src/lib/api',async original=>({...await original<typeof import('../s
 const SID='11111111-1111-4111-8111-111111111111',SOURCE='22222222-2222-4222-8222-222222222222',SECOND='33333333-3333-4333-8333-333333333333',scope={accountId:'account',profileId:'profile'};
 let host:HTMLDivElement,root:Root,current:ApiReviewSession|null,source:ApiInspiration,missing:boolean;
 const onId=vi.fn(),onClose=vi.fn(),onNewInspiration=vi.fn(),onOpen=vi.fn(),onSaved=vi.fn(),onSynchronized=vi.fn(),onInspirationRemoved=vi.fn();
+it('makes Next a keep-and-continue action rather than implying deletion',async()=>{
+  await mount();expect(host.querySelector('#review-next-hint')?.textContent).toBe('Next keeps this inspiration.');
+  const next=[...host.querySelectorAll('button')].find(button=>button.textContent==='Next inspiration →')!;
+  expect(next.getAttribute('aria-describedby')).toBe('review-next-hint');expect(deleteInspiration).not.toHaveBeenCalled();
+});
 const copy=()=>structuredClone(current);
 beforeEach(()=>{
   vi.resetAllMocks();localStorage.clear();missing=false;(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;

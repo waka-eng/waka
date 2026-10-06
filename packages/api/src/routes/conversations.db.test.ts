@@ -30,6 +30,42 @@ it('stores ordered words once, rejects changed replay and never requests an assi
   const history=await (await f.app.request('/conversations')).json() as any;expect(history.conversations).toHaveLength(1);expect(history.conversations[0].preview).toBe(message.content);
   expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
 });
+it('names starter-led threads after the first human topic without copying assistant text',async()=>{
+  const f=await fixture(),other=await fixture();await f.send('',{id:f.id});
+  await f.send(`/${f.id}/messages`,{id:randomUUID(),content:'Help me think through a choice.',revision:0});
+  await f.send(`/${f.id}/messages`,{id:randomUUID(),content:'Should I take the evening course?',revision:1});
+  await other.send('',{id:other.id,firstMessage:{id:randomUUID(),content:'PRIVATE_OTHER_TOPIC'}});
+  const body=await (await f.app.request('/conversations')).json() as {conversations:Array<{preview:string}>};
+  expect(body.conversations).toHaveLength(1);expect(body.conversations[0].preview).toBe('Should I take the evening course?');
+  expect(JSON.stringify(body)).not.toContain('PRIVATE_OTHER_TOPIC');
+  expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
+});
+it('delivers an explicit contiguous tail and expanded history without losing legacy access or ownership',async()=>{
+  const f=await fixture(),other=await fixture();await f.send('',{id:f.id});
+  await t.sql`INSERT INTO conversation_messages(id,profile_id,conversation_id,position,role,content)
+    SELECT gen_random_uuid(),${f.profileId},${f.id},i,'user','Owned message '||i FROM generate_series(1,80) i`;
+  await t.sql`UPDATE conversations SET revision=80 WHERE id=${f.id}`;
+  const tail=await(await f.app.request(`/conversations/${f.id}?limit=30`)).json() as any;
+  expect(tail.conversation).toMatchObject({revision:80,messageWindowStart:51,preview:'Owned message 1'});
+  expect(tail.conversation.messages.map((row:any)=>row.position)).toEqual(Array.from({length:30},(_,i)=>i+51));
+  const older=await(await f.app.request(`/conversations/${f.id}?from=21`)).json() as any;
+  expect(older.conversation.messages).toHaveLength(60);expect(older.conversation.messageWindowStart).toBe(21);
+  const legacy=await(await f.app.request(`/conversations/${f.id}`)).json() as any;expect(legacy.conversation.messages).toHaveLength(80);expect(legacy.conversation).not.toHaveProperty('messageWindowStart');
+  expect((await other.app.request(`/conversations/${f.id}?limit=30`)).status).toBe(404);
+  for(const suffix of ['limit=0','from=81','from=1&limit=30','limit=1000'])expect((await f.app.request(`/conversations/${f.id}?${suffix}`)).status).toBe(400);
+});
+it('windowed old-message replay includes its confirmation and invalid write windows roll back',async()=>{
+  const f=await fixture();await f.send('',{id:f.id});const first={id:randomUUID(),content:'Old confirmed words.',revision:0};
+  await f.send(`/${f.id}/messages`,first);
+  await t.sql`INSERT INTO conversation_messages(id,profile_id,conversation_id,position,role,content)
+    SELECT gen_random_uuid(),${f.profileId},${f.id},i,'user','Later message '||i FROM generate_series(2,80) i`;
+  await t.sql`UPDATE conversations SET revision=80 WHERE id=${f.id}`;
+  const replay=await(await f.send(`/${f.id}/messages?limit=30`,first)).json() as any;
+  expect(replay.conversation.messageWindowStart).toBe(1);expect(replay.conversation.messages[0].id).toBe(first.id);
+  expect((await f.send(`/${f.id}/messages?from=199`,{id:randomUUID(),content:'Must roll back.',revision:80})).status).toBe(400);
+  expect((await t.sql`SELECT revision FROM conversations WHERE id=${f.id}`)[0].revision).toBe(80);
+  expect((await t.sql`SELECT count(*)::int AS n FROM conversation_messages WHERE conversation_id=${f.id}`)[0].n).toBe(80);
+});
 it('creates the first message atomically and joins concurrent exact first-send replays',async()=>{
   const f=await fixture(),firstMessage={id:randomUUID(),content:'My first question.',requestReply:false};
   const responses=await Promise.all([f.send('',{id:f.id,firstMessage}),f.send('',{id:f.id,firstMessage})]);

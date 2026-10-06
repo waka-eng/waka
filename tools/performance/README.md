@@ -74,6 +74,29 @@ stage, elapsed milliseconds and outcome. Queue wait excludes intended run-after
 delay. Separate these stages when diagnosing waiting; never log source wording
 or infer provider latency from a pending UI state alone.
 
+## Long conversation reads
+
+Run `pnpm tsx tools/performance/long-conversation.ts --label=current` with the
+same explicit disposable loopback database. It creates 20-, 100- and 200-message
+threads with repeated or varied citations, measures one read-only transaction
+at pool one, and cleans its own schema before exiting. `WAKA_PERFORMANCE_SAMPLES`
+sets 5 to 60 samples; the default is 20. Provider traffic is refused.
+
+The oracle includes current/legacy inspiration proofs, earlier readings,
+changed hashes and other-profile references. Output contains timing, statement
+counts and normalized projection digests, not source IDs or raw account words.
+`--diagnose` adds sanitized SQL plan costs and times for one warmup; it does not
+write data or print query parameters. This measures projection, not HTTP/auth,
+large-body delivery, cold starts or deployed latency. The temporary old-reader
+snapshot used for the recorded matched comparison was removed after selection.
+
+`--large-messages` uses maximum-length Korean placeholder messages (4,000 user
+and 3,000 assistant characters). It records serialization and projected JSON
+bytes, plus the actual API's thirty-message initial response. Placeholder text
+is highly compressible, so these are uncompressed payload bounds, not mobile
+transfer-time or realistic compression measurements. Do not time it alongside
+test suites; record overlapping load separately when it occurs.
+
 ## Interactive Chat fixture
 
 Set `WAKA_PERFORMANCE_CHAT_SCENARIO=1` to seed one synthetic conversation with
@@ -83,6 +106,15 @@ the real owned API and durable client journals. Replies may be queued, but
 autodrain and provider networking remain disabled and keys are removed. The
 seeded assistant response is a known fixture, not a generated quality result.
 Stop the process normally to remove only its own disposable schema.
+
+Add `WAKA_PERFORMANCE_CHAT_HISTORY=1` alongside that flag to include an earlier
+kept reading dated September 1 and a current reading dated October 1. It exercises
+date disclosure and source-based continuation through the real API, without
+claiming the seeded answer is model quality evidence. The history flag requires
+the interactive Chat fixture and changes only its owned synthetic schema.
+`WAKA_PERFORMANCE_CHAT_MESSAGES=80` adds a longer synthetic thread for built
+window/scroll tests (even values 2 to 200). Ready replies and references are
+seeded fixtures; no model or background drain is enabled.
 
 ## Recovery and controlled worker checks
 

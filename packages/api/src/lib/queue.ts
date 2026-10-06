@@ -154,6 +154,7 @@ import { getDb } from "./db.js";
 import {recordPerformanceStage} from './performance-stages.js';
 import { z } from 'zod';
 import { BackgroundJobHeldError } from './background-job-hold.js';
+import {QUEUE_RECOVERY_LIMITS,type QueueRecoveryState} from './queue-recovery.js';
 import { loadPendingSignalSupportSources } from './signal-support-state.js';
 import { reviewSignalSupport, SUPPORT_REVIEW_BATCH_SIZE } from './signal-support-review.js';
 import { applySignalSupportReview } from './signal-support-apply.js';
@@ -219,6 +220,8 @@ export interface EnqueueResult {
 export interface DrainBackgroundJobsOptions {
   limit?: number;
   now?: Date;
+  /** Recovery observes only work past grace; ordinary wake-ups remain immediate. */
+  overdueOnly?:boolean;
   processor?: (job: BackgroundJob) => Promise<BackgroundJobResult | void>;
   /**
    * Where the loop reads and writes its rows. Defaults to Postgres; a test
@@ -291,9 +294,9 @@ export interface DeferAccountBacklogInput {
  */
 export interface BackgroundJobStore {
   /** Whose work is next, without taking it. Null when nothing is runnable. */
-  headOfQueue(now: Date): Promise<RunnableJobHead | null>;
+  headOfQueue(now: Date,overdueBefore?:Date): Promise<RunnableJobHead | null>;
   /** Take the next runnable job and mark it started. */
-  claimNext(now: Date): Promise<BackgroundJob | null>;
+  claimNext(now: Date,overdueBefore?:Date): Promise<BackgroundJob | null>;
   /** What this account has already started since `since`. */
   usageForAccount(accountId: string, since: Date): Promise<AccountModelUsage>;
   /** Push this account's due, unstarted work out to `until`. Returns rows moved. */
@@ -878,6 +881,7 @@ export async function drainBackgroundJobs(
   let processed = 0;
   while (processed < limit) {
     const now = clock();
+    const overdueBefore=options.overdueOnly?new Date(now.getTime()-QUEUE_RECOVERY_LIMITS.overdueMs):undefined;
 
     /*
      * Ask whose job is next before taking it.
@@ -898,7 +902,7 @@ export async function drainBackgroundJobs(
      * corrected on the next pass; the alternative is a lock across the whole
      * queue, which is the thing SKIP LOCKED exists to avoid.
      */
-    const head = await store.headOfQueue(now);
+    const head = overdueBefore?await store.headOfQueue(now,overdueBefore):await store.headOfQueue(now);
     if (!head) break;
 
     if (!head.reclaimed) {
@@ -927,7 +931,7 @@ export async function drainBackgroundJobs(
       }
     }
 
-    const job = await store.claimNext(now);
+    const job = overdueBefore?await store.claimNext(now,overdueBefore):await store.claimNext(now);
     if (!job) break;
     processed += 1;
     result.claimed += 1;
@@ -1372,7 +1376,9 @@ function parseRefreshGroupTopOfMindPayload(
  * else's WHERE: the day a caller adds one AND beside it, unparenthesized
  * precedence would quietly claim rows that are not runnable.
  */
-function runnableBackgroundJobPredicate(nowIso: string) {
+function backgroundJobDueTime(){return sql`CASE WHEN candidate.status='pending'::background_job_status THEN candidate.run_after
+  ELSE candidate.locked_at+(${STALE_LOCK_SECONDS}||' seconds')::interval END`;}
+function runnableBackgroundJobPredicate(nowIso: string,overdueBeforeIso?:string) {
   return sql`
     (
       (
@@ -1394,29 +1400,37 @@ function runnableBackgroundJobPredicate(nowIso: string) {
     -- worker must leave it queued, not claim it and spend unsupported retries.
     -- Peek and claim share this predicate, including stale-lease reclamation.
     AND candidate.type::text IN (${sql.join(backgroundJobTypeValues.map((type) => sql`${type}`), sql`, `)})
+    ${overdueBeforeIso?sql`AND ${backgroundJobDueTime()}<=${overdueBeforeIso}::timestamptz`:sql``}
   `;
 }
 
+/** One counts-only read. The exact claim predicate defines eligibility; grace
+ * is measured from run_after or lease expiry, never from capture creation. */
+export async function readBackgroundJobRecoveryState(database:Pick<ReturnType<typeof getDb>,'execute'>=getDb(),now=new Date()):Promise<QueueRecoveryState>{
+  const nowIso=now.toISOString(),cutoff=new Date(now.getTime()-QUEUE_RECOVERY_LIMITS.overdueMs).toISOString();
+  const due=backgroundJobDueTime(),eligible=runnableBackgroundJobPredicate(nowIso,cutoff);
+  const rows=await database.execute(sql`
+    SELECT count(*) FILTER(WHERE ${eligible})::int AS overdue,
+      COALESCE(extract(epoch FROM (${nowIso}::timestamptz-min(${due}) FILTER(WHERE ${eligible})))*1000,0)::float8 AS "oldestOverdueMs",
+      count(*) FILTER(WHERE candidate.status='running'::background_job_status
+        AND candidate.locked_at<${nowIso}::timestamptz-(${STALE_LOCK_SECONDS}||' seconds')::interval
+        AND candidate.attempts>=candidate.max_attempts)::int AS "exhaustedLeases"
+    FROM background_jobs candidate WHERE candidate.status IN ('pending'::background_job_status,'running'::background_job_status)
+      AND candidate.type::text IN (${sql.join(backgroundJobTypeValues.map(type=>sql`${type}`),sql`, `)})`);
+  const [row]=rows as unknown as QueueRecoveryState[];
+  if(!row||!Number.isSafeInteger(row.overdue)||row.overdue<0||!Number.isSafeInteger(row.exhaustedLeases)||row.exhaustedLeases<0||
+    !Number.isFinite(row.oldestOverdueMs)||row.oldestOverdueMs<0)throw new Error('Invalid queue recovery counts');
+  return row;
+}
+
 /**
- * The runnable rows, RANKED FAIRLY BY KIND — the one ordering both readers
- * share, written once for the same reason the predicate is.
- *
- * `last_started` is when a row's own (profile, kind) line last got a turn —
- * read off `started_at`, the meter the claim stamps and never clears, so
- * the fairness carries across claims instead of recomputing itself away: a
- * snapshot rank (first-of-each-kind first) looked right and was not,
- * because the moment a derivation is claimed the NEXT derivation becomes
- * first-of-its-kind again and the lone enrichment never surfaces. Ordering
- * by longest-unserved kind first is a genuine round-robin: claim a
- * derivation and that whole line steps behind the enrichment that has
- * never run. Measured live on 2026-08-23: two hundred and five bulk
- * derivations starved two enrichment jobs for the account's whole budget
- * window, indistinguishable from breakage. Within one kind, oldest due
- * first, then oldest made, exactly as before; the per-account budget's
- * totals are untouched — fairness decides only WHICH due job spends the
- * budget next.
+ * Rank by longest-unserved profile/kind, never-served first, then oldest due
+ * and created. Claim and budget peek share both order and eligibility.
+ * `started_at` survives completion so a just-served kind steps behind another
+ * instead of its next row immediately becoming first again. That fairness
+ * fixes the measured August bulk-derivation starvation without changing caps.
  */
-function rankedRunnableJobs(nowIso: string) {
+function rankedRunnableJobs(nowIso: string,overdueBeforeIso?:string) {
   return sql`
     SELECT
       candidate.id,
@@ -1432,7 +1446,7 @@ function rankedRunnableJobs(nowIso: string) {
       GROUP BY prior.profile_id, prior.type
     ) AS turn
       ON turn.profile_id = candidate.profile_id AND turn.type = candidate.type
-    WHERE ${runnableBackgroundJobPredicate(nowIso)}
+    WHERE ${runnableBackgroundJobPredicate(nowIso,overdueBeforeIso)}
   `;
 }
 
@@ -1447,14 +1461,14 @@ const RUNNABLE_JOB_ORDER = sql`ORDER BY fair.last_started ASC NULLS FIRST, fair.
  * is per account — an account holds its human profile and its agents, and a
  * cap that counted per profile would be lifted by creating another agent.
  */
-async function readBackgroundJobQueueHead(now: Date): Promise<RunnableJobHead | null> {
+async function readBackgroundJobQueueHead(now: Date,overdueBefore?:Date): Promise<RunnableJobHead | null> {
   const nowIso = now.toISOString();
   const rows = await getDb().execute(sql<RunnableJobHead>`
     SELECT
       fair.id AS "jobId",
       profile.account_id AS "accountId",
       fair.reclaimed AS "reclaimed"
-    FROM (${rankedRunnableJobs(nowIso)}) AS fair
+    FROM (${rankedRunnableJobs(nowIso,overdueBefore?.toISOString())}) AS fair
     JOIN profiles AS profile ON profile.id = fair.profile_id
     ${RUNNABLE_JOB_ORDER}
     LIMIT 1
@@ -1563,7 +1577,7 @@ async function deferAccountBacklogForBudget(
  * `locked_at`. It is the meter the per-account budget reads, and a meter that
  * a successful job erases measures nothing.
  */
-async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob | null> {
+async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Promise<BackgroundJob | null> {
   const nowIso = now.toISOString();
   const rows = await getDb().execute(sql<BackgroundJob>`
     UPDATE background_jobs AS job
@@ -1581,7 +1595,7 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
       -- base row it joins back to. Same snapshot, same predicate, same
       -- order as the head peek — the coherence fact the header relies on.
       SELECT locked.id
-      FROM (${rankedRunnableJobs(nowIso)}) AS fair
+      FROM (${rankedRunnableJobs(nowIso,overdueBefore?.toISOString())}) AS fair
       JOIN background_jobs AS locked ON locked.id = fair.id
       ${RUNNABLE_JOB_ORDER}
       LIMIT 1

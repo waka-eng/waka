@@ -205,6 +205,51 @@ The initial limits are 100 active conversations per profile, 200 messages per
 conversation and 4,000 characters per user message. Context reads are bounded to
 16,000 text characters and freshly select only that profile's current readable
 Principles, live Top of mind and keyword-matched owned inspiration material.
+Questions about changes in thinking can additionally read earlier Top of Mind
+records. The reader uses up to three live entries plus one different entry from
+each of at most two earlier versions, scanning at most three superseded
+meaningful artifacts and fourteen earlier entries. Ordinary questions remain
+live-only. No-change audits and exact copies of current wording do not become
+evidence of a change. Earlier records obey the same owned, current-support and
+human-wording policy as the private history surface; unsupported machine words,
+dismissed entries and deleted evidence are not revived.
+
+An earlier record carries its artifact publication date and version. That date
+does not prove when a belief changed or when a later human edit happened.
+Chat compares supplied earlier/current wording tentatively, and abstains when
+the selected records cannot support the requested comparison. The UI labels
+earlier sources with their record date before selection and on reopening.
+New reading-reference proofs use `reading-v2`, binding complete wording,
+revision, entry identity, human lock, current support, publication date and
+artifact version before excerpting. Supersession alone preserves that proof;
+old text-only proofs remain valid only against the same currently readable
+owned words. Reply references record whether they were already historical when
+cited, so deliberate use of history is not immediately marked changed. A
+formerly current source becoming historical still marks the old reply changed.
+These are optional fields in existing JSON metadata, not a new memory layer or
+a database migration. Historical date labels and selected-source messages use
+the UTC record date, matching the supplied model dates across device timezones.
+
+Conversation reads validate unique source identities once per read rather than
+once per assistant message. Three-identity chunks preserve the original excerpt
+allowances; each citation still checks its own current or legacy proof. Legacy
+inspiration references retain both original-text and enriched projections where
+needed. No source cache survives the request, and per-message historical/stale
+status is preserved. At most 200 message groups and three citations per group
+are accepted. The 200-message conversation limit remains. Browser reads request
+the latest thirty messages initially, then expand the loaded span by thirty
+positions on explicit request. Every refresh revalidates the loaded span.
+`messageWindowStart` is a response boundary over immutable message positions,
+not another message identity or stored revision. Total `revision` remains the
+write fence; partial DTOs must be contiguous through that total revision.
+Legacy requests without window parameters still receive the complete thread.
+Writes validate against the full conversation, and a replay response includes
+its original message confirmation even outside the requested tail. Invalid
+write windows roll back. Uncertain-write recovery first checks current state,
+then expands only when later messages hide its expected confirmation position.
+Session scroll metadata remembers the account/profile/conversation-scoped
+loaded boundary, never raw words; legacy scroll records restore the full span.
+
 Material includes saved reflection answers and ready link/image/audio text;
 an audio correction replaces the original transcript rather than adding a
 second account of it. Excerpts distinguish human reflections from generated
@@ -259,9 +304,54 @@ A correction is a new user message with an optional `corrects_message_id`
 pointing to an earlier assistant message in the same profile/conversation. It
 does not rewrite history, create memory or edit a Principle. Reply context labels
 the correction and prioritizes the current user view over earlier interpretations.
+For an ordinary deliberate correction, the provider and citation parser omit
+saved sources rather than rearguing them. An explicit comparison request keeps
+those sources. This does not erase memory, rewrite earlier messages or change
+past receipts. The current reply records no selected saved sources and skips
+query embedding; an explicit comparison retains normal retrieval.
 Principle editing is a separate confirmation of exact wording and its observed
 `statement_revision`. A stale edit conflicts; an exact retry of the immediately
 applied revision is a no-op. Existing statement history and human locks apply.
+
+## Operational monitoring
+
+Queue recovery observes counts, not another memory layer. Dev's fifteen-minute
+check uses the claim predicate and a five-minute grace from `run_after` or the
+fifteen-minute lease expiry. It takes at most five overdue claims in one pass,
+retaining normal fairness, account budgets, request identities and attempt
+ceilings. It does not reenqueue jobs, reset attempts or bypass scheduled waits.
+The daily sweep and ordinary immediate wake-ups remain; production's schedule
+does not change. Exhausted stale leases are reported for operator intervention,
+not automatically revived.
+
+Raw JSON metrics contain stage-level overdue counts, oldest overdue age,
+exhausted leases and a recovery heartbeat. Dev console alarms watch backlog,
+exhausted work and two missing heartbeat periods. Notifications require an
+explicit SNS topic; no recipient is inferred from account data. The idle cost
+is up to 96 metadata checks per day plus custom metrics and alarms.
+
+Model transports emit numeric attempt, token and billing metadata without
+prompts, responses, vectors, credentials or account IDs. OpenRouter's returned
+`usage.cost` is recorded when finite and nonnegative. Missing/invalid cost and
+ambiguous failures remain unpriced, never free. Gemini token metadata is
+recorded without invented dollar estimates. Dimensions are only stage/provider,
+with closed operation labels as ordinary log fields. These metrics observe
+spending; they are not a dollar-cap enforcement ledger or proof of provider
+retention settings. Per-environment limits and alert recipients require explicit
+configuration and deployed verification. Existing call/job budgets still apply.
+
+Operator checks distinguish configured facts from unverified deployment facts.
+Runtime verification accepts only the stage's explicit HTTPS API/web origins,
+production cookie settings, stage/model tags and no fixture-address overrides.
+It does not attest proxy topology, database isolation, provider privacy or
+monetary limits. No URL, key label, credential or provider failure body is echoed.
+
+OpenRouter requests support restrictive opt-in policy: data collection may be
+denied and zero retention required. Unset preferences leave account policy
+untouched; no request disables an account-level restriction. Invalid policy is
+refused before dispatch, and missing eligible routes do not trigger a silent
+provider fallback. Gemini policy is separate. Source code or a synthetic routing
+probe does not establish deployed settings or contractual retention behavior.
 
 ## The four layers
 

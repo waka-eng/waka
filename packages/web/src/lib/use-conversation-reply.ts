@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {fetchConversation,fetchConversationReply,requestConversationReply,stopConversationReply,type ApiConversation,type ConversationReplyState} from './api/conversations';
 
 /** Reads resume work; only explicit request/stop handlers mutate it. */
-export function useConversationReply(profileId:string,id:string|null,enabled:boolean,revision:number,onConversation:(row:ApiConversation)=>void){
+export function useConversationReply(profileId:string,id:string|null,enabled:boolean,revision:number,onConversation:(row:ApiConversation)=>void,messageWindowStart?:number){
   const [stored,setStored]=useState<ConversationReplyState|null>(null),[serial,setSerial]=useState(0),[checking,setChecking]=useState(false),[waiting,setWaiting]=useState(false),[error,setError]=useState(false),[busy,setBusy]=useState(false);
   const deliver=useRef(onConversation);deliver.current=onConversation;
   const alive=useRef(true),mutation=useRef<AbortController|null>(null);
@@ -22,7 +22,7 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
         setStored(next);setChecking(false);setError(false);failures=0;
         const refreshKey=`${profileId}:${id}:${serial}:${next.revision}`;
         if(next.revision>revision||(next.phase==='stale'||serial>0&&next.phase==='ready')&&delivered.current!==refreshKey){
-          const conversation=await fetchConversation(profileId,id,request.signal);if(controller.signal.aborted)return;
+          const conversation=messageWindowStart!==undefined?await fetchConversation(profileId,id,request.signal,messageWindowStart):await fetchConversation(profileId,id,request.signal);if(controller.signal.aborted)return;
           if(conversation.revision<next.revision)throw new Error('Older conversation');delivered.current=refreshKey;deliver.current(conversation);
         }
         if(['pending','running'].includes(next.phase)){
@@ -33,7 +33,7 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
       }catch{if(!controller.signal.aborted){if(++failures<2)timer=window.setTimeout(()=>void read(),1000);else{setError(true);setChecking(false);}}}
       finally{window.clearTimeout(deadline);controller.signal.removeEventListener('abort',abort);}
     };void read();return()=>{controller.abort();window.clearTimeout(timer);};
-  },[profileId,id,enabled,revision,serial]);
+  },[profileId,id,enabled,revision,serial,messageWindowStart]);
   useEffect(()=>{const resume=()=>{if(!document.hidden)check();};window.addEventListener('focus',resume);document.addEventListener('visibilitychange',resume);return()=>{window.removeEventListener('focus',resume);document.removeEventListener('visibilitychange',resume);};},[]);
   const act=async(kind:'request'|'stop')=>{
     if(!id||!state||busy||!enabled||kind==='request'&&(!state.canRetry||!state.messageId)||kind==='stop'&&!state.requestId)return;

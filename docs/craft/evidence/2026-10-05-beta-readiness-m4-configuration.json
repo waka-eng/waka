@@ -1,0 +1,67 @@
+{
+  "milestone":4,
+  "slice":"Runtime origin, provider privacy and key-limit acceptance checks",
+  "date":"2026-10-05",
+  "status":"Prepared and locally checked, not deployed or fully accepted",
+  "runtimePolicy":{
+    "trustedStageOriginsRequired":true,
+    "secureCookieFlagsRequired":true,
+    "approvedModelAndStageTagsRequired":true,
+    "fixtureHostOverridesRefused":true,
+    "sensitiveInputEchoed":false,
+    "proxyTopologyVerified":false,
+    "databaseIsolationVerifiedByThisCheck":false,
+    "actualDeployedConfigurationChecked":false
+  },
+  "monetaryPolicy":{
+    "explicitApprovedAmountAndResetRequiredBeforeLookup":true,
+    "broaderMissingOrIncompleteProviderCapRefused":true,
+    "byokCoverageRequired":true,
+    "separateStageKeysVerified":false,
+    "geminiProtectionVerified":false,
+    "accountBudgetOrKeyChanged":false,
+    "networkErrorsCannotEchoSensitiveTextAsPolicyErrors":true
+  },
+  "privacy":{
+    "controls":"Restrictive opt-in collection denial and zero-retention routing",
+    "unsetOverridesRetainAccountSettings":true,
+    "invalidPreferencesRefusedBeforeDispatch":true,
+    "silentProviderFallback":false,
+    "actualStageActivation":false,
+    "retentionBehaviorOrContractAudit":false,
+    "publicEndpointCatalog":"31 endpoints, no retention-policy flags provided",
+    "liveSyntheticProbe":{
+      "path":"work/conversation-eval/privacy-1791259909417.json",
+      "sha256":"7011c2f80ea2508563523b49311c749b8eca6416cad998e0f765d1b825f8ae3e",
+      "model":"deepseek/deepseek-v4.1-flash",
+      "provider":"CoreWeave",
+      "status":200,
+      "expectedJson":true,
+      "calls":1,
+      "costUsd":0.0000131,
+      "costComplete":true,
+      "realAccountInputs":false,
+      "proves":"Restricted routing availability only"
+    }
+  },
+  "verification":{
+    "apiUnitTests":918,
+    "targetedPolicyAndCanonicalTests":51,
+    "goalIndexTests":3,
+    "typesMigrationAndDiffChecks":"pass",
+    "schemaMigrationRequired":false
+  },
+  "evaluationBudget":{
+    "cumulativeUsd":1.6332342014,
+    "capUsd":5,
+    "remainingUsd":3.3667657986
+  },
+  "remaining":[
+    "Chosen dev/production monetary policies and actual exercised controls",
+    "Verified separate stage keys and Gemini protection",
+    "Attested proxy topology and real deployment configuration",
+    "Provider account settings and applicable retention policies",
+    "Authorized deployment, live stage metrics and alert delivery",
+    "First-time-user comprehension"
+  ]
+}
