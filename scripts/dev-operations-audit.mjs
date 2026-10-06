@@ -16,6 +16,13 @@ export function validateDevAuditTargets(api,worker){
     throw new Error('Explicit development API and worker function names are required');
 }
 
+export function devAuditReadFailure(error){
+  const stderr=typeof error?.stderr==='string'?error.stderr:'';
+  if(/An error occurred \((AccessDeniedException|AccessDenied)\)/.test(stderr))return 'access_denied';
+  if(/An error occurred \(ResourceNotFoundException\)/.test(stderr))return 'missing_resource';
+  return error?.code==='ETIMEDOUT'?'timeout':'read_failed';
+}
+
 /** Never return messages, request IDs, source words or arbitrary log fields. */
 export function summarizeDevEvents(kind,events){
   const readings=[];
@@ -46,20 +53,20 @@ export function summarizeDevEvents(kind,events){
 /** At most ten read commands, one log page per kind/role, never an invocation. */
 export function auditDevOperations({api,worker,now=Date.now(),awsRead}){
   validateDevAuditTargets(api,worker);
-  const report={stage:'development',observedAt:new Date(now).toISOString(),failures:[],configuration:{},logs:[],
+  const report={stage:'development',observedAt:new Date(now).toISOString(),failures:[],configurationReads:[],configuration:{},logs:[],
     controlledConcurrentMeasurement:false,alertDeliveryVerified:false,providerPrivacyVerified:false,
     recurringMonetaryLimitsVerified:false};
   const environments={};
   for(const [role,name] of [['api',api],['worker',worker]]){
-    try{environments[role]=awsRead(['lambda','get-function-configuration','--function-name',name,'--query',query]);}
-    catch{report.failures.push(role+'_configuration_unavailable');}
+    try{environments[role]=awsRead(['lambda','get-function-configuration','--function-name',name,'--query',query]);report.configurationReads.push({role,read:true});}
+    catch(error){report.failures.push(role+'_configuration_unavailable');report.configurationReads.push({role,read:false,reason:devAuditReadFailure(error)});}
     for(const [kind,pattern] of [['timing','"performance-stage"'],['recovery','{ $.event = "queue_recovery" }'],
       ['usage','{ $.event = "model_usage" }'],['runtime','"REPORT"']]){
       try{
         const page=awsRead(['logs','filter-log-events','--log-group-name','/aws/lambda/'+name,'--filter-pattern',pattern,
           '--start-time',String(now-60*60*1000),'--end-time',String(now),'--limit','100']);
         report.logs.push({role,kind,read:true,partialPage:!!page.nextToken,...summarizeDevEvents(kind,page.events)});
-      }catch{report.failures.push(role+'_'+kind+'_unavailable');report.logs.push({role,kind,read:false});}
+      }catch(error){report.failures.push(role+'_'+kind+'_unavailable');report.logs.push({role,kind,read:false,reason:devAuditReadFailure(error)});}
     }
   }
   if(environments.api&&environments.worker){
@@ -79,7 +86,7 @@ export function auditDevOperations({api,worker,now=Date.now(),awsRead}){
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   try{
     const report=auditDevOperations({api:process.env.WAKA_AUDIT_API_FUNCTION,worker:process.env.WAKA_AUDIT_WORKER_FUNCTION,
-      awsRead:args=>JSON.parse(execFileSync('aws',[...args,'--region','us-west-2','--output','json','--no-cli-pager'],
+      awsRead:args=>JSON.parse(execFileSync('aws',[...args,'--region','us-west-2','--output','json','--no-cli-pager','--no-paginate'],
         {encoding:'utf8',timeout:15000,maxBuffer:2*1024*1024,stdio:['ignore','pipe','pipe']}))});
     console.log(JSON.stringify(report,null,2));if(report.failures.length)process.exitCode=1;
   }catch{console.error('Development operational audit failed; no private configuration was printed');process.exitCode=1;}

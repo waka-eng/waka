@@ -2,7 +2,7 @@
  * and logs. Real audit/CLI policy, no cloud, credentials or model calls. */
 import {readFileSync} from 'node:fs';
 import {expect,it,vi} from 'vitest';
-import {auditDevOperations,summarizeDevEvents,validateDevAuditTargets} from '../../../scripts/dev-operations-audit.mjs';
+import {auditDevOperations,devAuditReadFailure,summarizeDevEvents,validateDevAuditTargets} from '../../../scripts/dev-operations-audit.mjs';
 const api='waka-development-ApiFunction-efwcwxdn',worker='waka-development-BackgroundWorkerFunction-xxbrbmcx';
 const environment={PUBLIC_WEB_URL:'https://dev.waka.im',PUBLIC_API_URL:'https://dev.waka.im',NODE_ENV:'production',WAKA_STAGE:'development',WAKA_TRUSTED_PROXY_HOPS:null,
   OPENROUTER_GENERATION_MODEL:'deepseek/deepseek-v4.1-flash',WAKA_MODEL_CHAT:'deepseek/deepseek-v4.1-flash'};
@@ -25,6 +25,12 @@ it('bounds reads, scopes development and leaves broad operational gates unproven
 it('reports refused reads without echoing provider errors, configuration or credentials',()=>{
   const result=auditDevOperations({api,worker,awsRead:()=>{throw new Error('PRIVATE_CREDENTIAL PRIVATE_DB');}});
   expect(result.failures).toHaveLength(10);expect(JSON.stringify(result)).not.toContain('PRIVATE');
+});
+it('classifies only known CLI failure codes without echoing sensitive stderr',()=>{
+  expect(devAuditReadFailure({stderr:'An error occurred (AccessDeniedException) PRIVATE_ROLE PRIVATE_KEY'})).toBe('access_denied');
+  expect(devAuditReadFailure({stderr:'An error occurred (ResourceNotFoundException) PRIVATE_GROUP'})).toBe('missing_resource');
+  expect(devAuditReadFailure({code:'ETIMEDOUT',stderr:'PRIVATE_ERROR'})).toBe('timeout');
+  expect(devAuditReadFailure({message:'AccessDenied PRIVATE_KEY'})).toBe('read_failed');
 });
 it('fails mismatched worker/database policy and never returns supplied raw environment',()=>{
   const result=auditDevOperations({api,worker,awsRead:args=>args[0]==='logs'?{events:[]}:{environment:{...environment,...(args[3]===worker?{PUBLIC_WEB_URL:'https://PRIVATE.evil.test'}:{})},database:args[3]}});
@@ -54,4 +60,5 @@ it('keeps manual verification out of push/deployment jobs and never invokes mode
   expect(verification).toContain('timeout-minutes: 5');expect(verification).not.toMatch(/sst deploy|db:migrate|secret set|pnpm install/);
   const script=readFileSync(new URL('../../../scripts/dev-operations-audit.mjs',import.meta.url),'utf8');
   expect(script).not.toMatch(/InvokeCommand|put-metric|invoke-function|fetch\(/);
+  expect(script).toContain("'--no-paginate'");
 });
