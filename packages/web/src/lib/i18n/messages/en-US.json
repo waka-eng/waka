@@ -526,8 +526,6 @@
   "worldPublic": "public",
   "worldReflect": "reflect",
   "worldASavedInspiration": "a saved inspiration",
-  "worldPrivateTooltip": "Only you can read this. Nothing leaves your own ground.",
-  "worldPublicTooltip": "Rooms you are in can read this, and it can feed what a room says.",
   "worldWordsOfThisInspiration": "the words of this inspiration",
   "worldCouldntLoadRest": "Couldn’t load the rest.",
   "worldInYourOwnWords": "In your own words",
