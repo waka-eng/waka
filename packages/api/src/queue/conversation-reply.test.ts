@@ -46,6 +46,15 @@ it('accepts a requested list of questions without an additional follow-up',()=>{
   expect(parseConversationReply(reply,{...input,sources:[]})).toEqual(reply);
   expect(buildConversationReplyRequest(input).generationConfig.responseSchema.properties!.answer).not.toHaveProperty('pattern');
 });
+it('asks for a new follow-up rather than repeating an earlier assistant question',()=>{
+  const previous='What is the one decision you most want people to make in this dashboard?';
+  const continuation:ConversationReplyInput={...input,history:[{role:'user',content:'Help with this dashboard.'},{role:'assistant',content:'Start with one clear action.\n'+previous},{role:'user',content:'Let’s explore this idea further.'}]};
+  expect(buildConversationReplyRequest(continuation).systemInstruction.parts[0].text).toContain('Never repeat a question already asked by an assistant');
+  expect(parseConversationReply({answer:'We can explore the important action.',followUpQuestion:previous,citations:[]},continuation)).toEqual({answer:'We can explore the important action.',followUpQuestion:null,citations:[]});
+  expect(()=>parseConversationReply({answer:'We can explore the important action.',followUpQuestion:previous,citations:[{sourceNumber:1,quote:'Invented words'}]},continuation)).toThrow('conversation grounding');
+  expect(()=>parseConversationReply({answer:'A second question?',followUpQuestion:previous,citations:[]},continuation)).toThrow('conversation grounding');
+  expect(parseConversationReply({answer:'We can explore the important action.',followUpQuestion:'Where did people hesitate in the prototype?',citations:[]},continuation).followUpQuestion).toContain('hesitate');
+});
 it.each([
   {answer:'A statement.',followUpQuestion:null,citations:[{sourceNumber:2,quote:'Leave room'}]},
   {answer:'A statement.',followUpQuestion:null,citations:[{sourceNumber:1,quote:'Invented quote'}]},
