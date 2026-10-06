@@ -13,7 +13,7 @@ it('refuses production, missing or flag-bearing targets before AWS access',()=>{
   expect(awsRead).not.toHaveBeenCalled();expect(()=>validateDevAuditTargets(api,worker)).not.toThrow();
 });
 it('bounds reads, scopes development and leaves broad operational gates unproven',()=>{
-  const awsRead=vi.fn(args=>args[0]==='lambda'?{environment,database:'PRIVATE_DB'}:{events:[],nextToken:'PRIVATE_CURSOR'});
+  const awsRead=vi.fn(args=>args[0]==='lambda'?{environment,database:'PRIVATE_DB',logGroup:'/aws/lambda/'+args[3]}:{events:[],nextToken:'PRIVATE_CURSOR'});
   const result=auditDevOperations({api,worker,now:1791266400000,awsRead});
   expect(awsRead).toHaveBeenCalledTimes(10);expect(result.failures).toEqual([]);
   expect(result.configuration).toMatchObject({trustedOrigins:true,proxyTopologyDeclared:false,apiWorkerDatabaseIdentical:true,chatModelsMatch:true,restrictivePrivacyOverrides:false});
@@ -24,7 +24,7 @@ it('bounds reads, scopes development and leaves broad operational gates unproven
 });
 it('reports refused reads without echoing provider errors, configuration or credentials',()=>{
   const result=auditDevOperations({api,worker,awsRead:()=>{throw new Error('PRIVATE_CREDENTIAL PRIVATE_DB');}});
-  expect(result.failures).toHaveLength(10);expect(JSON.stringify(result)).not.toContain('PRIVATE');
+  expect(result.failures).toHaveLength(4);expect(JSON.stringify(result)).not.toContain('PRIVATE');
 });
 it('classifies only known CLI failure codes without echoing sensitive stderr',()=>{
   expect(devAuditReadFailure({stderr:'An error occurred (AccessDeniedException) PRIVATE_ROLE PRIVATE_KEY'})).toBe('access_denied');
@@ -33,8 +33,21 @@ it('classifies only known CLI failure codes without echoing sensitive stderr',()
   expect(devAuditReadFailure({message:'AccessDenied PRIVATE_KEY'})).toBe('read_failed');
 });
 it('fails mismatched worker/database policy and never returns supplied raw environment',()=>{
-  const result=auditDevOperations({api,worker,awsRead:args=>args[0]==='logs'?{events:[]}:{environment:{...environment,...(args[3]===worker?{PUBLIC_WEB_URL:'https://PRIVATE.evil.test'}:{})},database:args[3]}});
+  const result=auditDevOperations({api,worker,awsRead:args=>args[0]==='logs'?{events:[]}:{environment:{...environment,...(args[3]===worker?{PUBLIC_WEB_URL:'https://PRIVATE.evil.test'}:{})},database:args[3],logGroup:'/aws/lambda/'+args[3]}});
   expect(result.failures).toContain('runtime_policy_failed');expect(result.failures).toContain('runtime_database_mismatch');expect(JSON.stringify(result)).not.toContain('PRIVATE');
+});
+it('uses the actual configured group instead of assuming it matches a replaced function',()=>{
+  const awsRead=vi.fn(args=>args[0]==='lambda'?{environment,database:'PRIVATE_DB',logGroup:'/aws/lambda/waka-development-'+(args[3]===api?'ApiFunction':'BackgroundWorkerFunction')+'-oldergroup'}:{events:[]});
+  expect(auditDevOperations({api,worker,awsRead}).failures).toEqual([]);
+  for(const [args] of awsRead.mock.calls.filter(([args])=>args[0]==='logs'))expect(args[3]).toContain('-oldergroup');
+});
+it('refuses absent, foreign or flag-bearing configured log groups before log reads',()=>{
+  for(const logGroup of [undefined,'/aws/lambda/waka-production-ApiFunction-old','PRIVATE_GROUP --profile=other']){
+    const awsRead=vi.fn(()=>({environment,database:'PRIVATE_DB',logGroup}));
+    const result=auditDevOperations({api,worker,awsRead});
+    expect(awsRead).toHaveBeenCalledTimes(2);expect(result.failures).toEqual(['api_log_group_unverified','worker_log_group_unverified']);
+    expect(JSON.stringify(result)).not.toContain('PRIVATE');
+  }
 });
 it('keeps only closed numeric log fields, omitting private wording and identities',()=>{
   const wrap=body=>[{message:'timestamp INFO '+JSON.stringify({...body,secret:'PRIVATE_WORDS',requestId:'PRIVATE_ID'})}];

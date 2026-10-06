@@ -8,7 +8,7 @@ const numeric=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
 const fields=['PUBLIC_WEB_URL','PUBLIC_API_URL','NODE_ENV','WAKA_INSECURE_COOKIES','WAKA_STAGE',
   'OPENROUTER_GENERATION_MODEL','WAKA_ENRICHMENT_ALLOWED_HOSTS','WAKA_TRUSTED_PROXY_HOPS',
   'WAKA_MODEL_CHAT','WAKA_OPENROUTER_DATA_COLLECTION','WAKA_OPENROUTER_REQUIRE_ZDR'];
-const query='{environment:{'+fields.map(key=>`${key}:Environment.Variables.${key}`).join(',')+'},database:Environment.Variables.DB_CONNECTION_URL}';
+const query='{environment:{'+fields.map(key=>`${key}:Environment.Variables.${key}`).join(',')+'},database:Environment.Variables.DB_CONNECTION_URL,logGroup:LoggingConfig.LogGroup}';
 
 export function validateDevAuditTargets(api,worker){
   if(!/^waka-development-ApiFunction-[a-z0-9]+$/.test(api??'')||
@@ -60,10 +60,15 @@ export function auditDevOperations({api,worker,now=Date.now(),awsRead}){
   for(const [role,name] of [['api',api],['worker',worker]]){
     try{environments[role]=awsRead(['lambda','get-function-configuration','--function-name',name,'--query',query]);report.configurationReads.push({role,read:true});}
     catch(error){report.failures.push(role+'_configuration_unavailable');report.configurationReads.push({role,read:false,reason:devAuditReadFailure(error)});}
+    const group=environments[role]?.logGroup;
+    const groupPrefix=role==='api'?'ApiFunction':'BackgroundWorkerFunction';
+    if(typeof group!=='string'||!new RegExp('^/aws/lambda/waka-development-'+groupPrefix+'-[a-z0-9]+$').test(group)){
+      report.failures.push(role+'_log_group_unverified');report.logs.push({role,kind:'group',read:false,reason:'untrusted_log_group'});continue;
+    }
     for(const [kind,pattern] of [['timing','"performance-stage"'],['recovery','{ $.event = "queue_recovery" }'],
       ['usage','{ $.event = "model_usage" }'],['runtime','"REPORT"']]){
       try{
-        const page=awsRead(['logs','filter-log-events','--log-group-name','/aws/lambda/'+name,'--filter-pattern',pattern,
+        const page=awsRead(['logs','filter-log-events','--log-group-name',group,'--filter-pattern',pattern,
           '--start-time',String(now-60*60*1000),'--end-time',String(now),'--limit','100']);
         report.logs.push({role,kind,read:true,partialPage:!!page.nextToken,...summarizeDevEvents(kind,page.events)});
       }catch(error){report.failures.push(role+'_'+kind+'_unavailable');report.logs.push({role,kind,read:false,reason:devAuditReadFailure(error)});}
