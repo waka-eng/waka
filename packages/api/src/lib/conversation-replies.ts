@@ -29,11 +29,16 @@ async function lockMemory(tx:Tx,profileId:string){
   await tx.select().from(generationRevisions).where(eq(generationRevisions.profileId,profileId)).for('update');
 }
 async function requestsFor(db:Reader,profileId:string,id:string){return db.select().from(conversationReplyRequests).where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,id))).orderBy(desc(conversationReplyRequests.createdAt),desc(conversationReplyRequests.id));}
+type StateJob=Pick<typeof backgroundJobs.$inferSelect,'status'|'lockedAt'|'attempts'|'maxAttempts'|'runAfter'>;
+function statusWithJob(status:Request['status'],job:StateJob|undefined){
+  if(!['pending','running'].includes(status))return status;
+  if(!job||job.status==='failed'||job.status==='succeeded'||job.status==='running'&&(!job.lockedAt||job.lockedAt.getTime()<Date.now()-STALE_LOCK_SECONDS*1000)&&job.attempts>=job.maxAttempts)return 'failed' as const;
+  return status;
+}
 async function effectiveStatus(db:Reader,row:Request){
   if(!['pending','running'].includes(row.status))return row.status;
   const [job]=row.jobId?await db.select().from(backgroundJobs).where(and(eq(backgroundJobs.profileId,row.profileId),eq(backgroundJobs.id,row.jobId))):[];
-  if(!job||job.status==='failed'||job.status==='succeeded'||job.status==='running'&&job.attempts>=job.maxAttempts&&(!job.lockedAt||job.lockedAt.getTime()<Date.now()-STALE_LOCK_SECONDS*1000))return 'failed' as const;
-  return row.status;
+  return statusWithJob(row.status,job);
 }
 export async function projectConversationMessages(db:Reader,profileId:string,id:string,messages:Array<typeof conversationMessages.$inferSelect>){
   const requests=await requestsFor(db,profileId,id);
@@ -72,19 +77,28 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
   return {input,sources,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }
 async function replyState(db:Reader,profileId:string,id:string){
-  const conversation=await owned(db,profileId,id),messages=await db.select().from(conversationMessages).where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id))).orderBy(desc(conversationMessages.position)).limit(2);
-  const message=messages.find(row=>row.role==='user'),rows=await requestsFor(db,profileId,id),row=rows.find(item=>item.userMessageId===message?.id);
-  const recent=rows.filter(item=>item.userMessageId===message?.id&&item.createdAt.getTime()>Date.now()-HOUR);
-  const messageRetryAfter=recent.length>=CONVERSATION_LIMITS.attemptsPerMessage?new Date(Math.min(...recent.map(item=>item.createdAt.getTime()))+HOUR).toISOString():null;
-  const [owner]=await db.select({accountId:profiles.accountId}).from(profiles).where(eq(profiles.id,profileId));
+  const now=new Date(),boundary=new Date(now.getTime()-HOUR);
+  const [conversation]=await db.select({id:conversations.id,revision:conversations.revision,deletedAt:conversations.deletedAt,accountId:profiles.accountId,
+    messages:sql<Array<{id:string;role:string}>>`COALESCE((SELECT jsonb_agg(jsonb_build_object('id',m.id,'role',m.role) ORDER BY m.position DESC)
+      FROM (SELECT id,role,position FROM conversation_messages WHERE profile_id=${profileId}::uuid AND conversation_id=${id}::uuid ORDER BY position DESC LIMIT 2) m),'[]'::jsonb)`})
+    .from(conversations).innerJoin(profiles,eq(profiles.id,conversations.profileId)).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
+  if(!conversation)throw new ConversationReplyError(404,'Conversation not found.');
+  if(conversation.deletedAt)throw new ConversationReplyError(410,'This conversation was deleted.');
+  const message=conversation.messages.find(row=>row.role==='user');
+  const [row]=message?await db.select({id:conversationReplyRequests.id,jobId:conversationReplyRequests.jobId,status:conversationReplyRequests.status,failureCode:conversationReplyRequests.failureCode,
+    recentCount:sql<number>`(SELECT count(*)::int FROM conversation_reply_requests r WHERE r.profile_id=${profileId}::uuid AND r.conversation_id=${id}::uuid AND r.user_message_id=${message.id}::uuid AND r.created_at>${boundary.toISOString()}::timestamptz)`,
+    recentOldest:sql<string|null>`(SELECT min(r.created_at)::text FROM conversation_reply_requests r WHERE r.profile_id=${profileId}::uuid AND r.conversation_id=${id}::uuid AND r.user_message_id=${message.id}::uuid AND r.created_at>${boundary.toISOString()}::timestamptz)`})
+    .from(conversationReplyRequests).where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,id),eq(conversationReplyRequests.userMessageId,message.id)))
+    .orderBy(desc(conversationReplyRequests.createdAt),desc(conversationReplyRequests.id)).limit(1):[];
+  const messageRetryAfter=row&&row.recentCount>=CONVERSATION_LIMITS.attemptsPerMessage&&row.recentOldest?new Date(Date.parse(row.recentOldest)+HOUR).toISOString():null;
   const [budget]=await db.select({count:sql<number>`coalesce(sum(1 + CASE WHEN ${conversationReplyRequests.retrievalDispatchedAt} IS NOT NULL THEN 1 ELSE 0 END),0)::int`,oldest:sql<string|null>`min(${conversationReplyRequests.dispatchedAt})::text`}).from(conversationReplyRequests)
-    .innerJoin(profiles,eq(profiles.id,conversationReplyRequests.profileId)).where(and(eq(profiles.accountId,owner.accountId!),gte(conversationReplyRequests.dispatchedAt,new Date(Date.now()-HOUR))));
+    .innerJoin(profiles,eq(profiles.id,conversationReplyRequests.profileId)).where(and(eq(profiles.accountId,conversation.accountId!),gte(conversationReplyRequests.dispatchedAt,boundary)));
   const accountRetryAfter=budget.count>=CONVERSATION_LIMITS.modelCalls&&budget.oldest?new Date(Date.parse(budget.oldest)+HOUR).toISOString():null;
   const retryAfter=[messageRetryAfter,accountRetryAfter].filter((value):value is string=>value!==null).sort().at(-1)??null;
-  const phase=row?await effectiveStatus(db,row):'idle';
-  const [job]=row?.jobId?await db.select({status:backgroundJobs.status,runAfter:backgroundJobs.runAfter}).from(backgroundJobs).where(and(eq(backgroundJobs.profileId,profileId),eq(backgroundJobs.id,row.jobId))):[];
+  const [job]=row?.jobId?await db.select({status:backgroundJobs.status,runAfter:backgroundJobs.runAfter,lockedAt:backgroundJobs.lockedAt,attempts:backgroundJobs.attempts,maxAttempts:backgroundJobs.maxAttempts}).from(backgroundJobs).where(and(eq(backgroundJobs.profileId,profileId),eq(backgroundJobs.id,row.jobId))):[];
+  const phase=row?statusWithJob(row.status,job):'idle';
   return {profileId,conversationId:id,messageId:message?.id??null,requestId:row?.id??null,phase,revision:conversation.revision,
-    runAfter:phase==='pending'&&job?.status==='pending'&&job.runAfter.getTime()>Date.now()?job.runAfter.toISOString():null,
+    runAfter:phase==='pending'&&job?.status==='pending'&&job.runAfter.getTime()>now.getTime()?job.runAfter.toISOString():null,
     failureCode:row?.failureCode??null,retryAfter,canRetry:conversationRepliesEnabled()&&Boolean(message)&&conversation.revision<200&&!retryAfter&&['idle','failed','stopped','stale'].includes(phase),generationEnabled:conversationRepliesEnabled()};
 }
 export async function readConversationReplyState(db:Db,profileId:string,id:string){return db.transaction(tx=>replyState(tx,profileId,id),{isolationLevel:'repeatable read',accessMode:'read only'});}

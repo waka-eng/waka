@@ -39,6 +39,16 @@ async function claim(){
   await t.sql`UPDATE background_jobs SET run_after=now()+interval '1 day' WHERE type::text<>'generate_conversation_reply'`;
   const job=await postgresBackgroundJobStore.claimNext(new Date());expect(job?.type).toBe('generate_conversation_reply');return job!;
 }
+it('polls an active reply with at most four application statements',async()=>{
+  const f=await fixture();expect((await f.request()).status).toBe(200);
+  const options=t.sql.options as {debug?:boolean|((...args:any[])=>void)};
+  const previous=options.debug;let statements=0;
+  options.debug=(_connection:unknown,query:string)=>{if(!/^(begin|commit|rollback|set transaction)\b/i.test(query.trim()))statements++;};
+  try{
+    expect(await f.state()).toMatchObject({phase:'pending',messageId:f.messageId,canRetry:false});
+    expect(statements).toBe(4);
+  }finally{options.debug=previous;}
+});
 it('delivers actual dated earlier/current records without IDs and keeps history citations reopenable',async()=>{
   const f=await fixture();
   await t.sql`UPDATE conversation_messages SET content='What has changed in how I think?' WHERE id=${f.messageId}`;

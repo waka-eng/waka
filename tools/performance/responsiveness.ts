@@ -17,10 +17,10 @@ const samples=Number(process.env.WAKA_PERFORMANCE_SAMPLES??12);assert.ok(Number.
 process.env.NODE_ENV='test';process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';process.env.WAKA_CONVERSATION_REPLIES='1';
 delete process.env.OPENROUTER_API_KEY;delete process.env.GEMINI_API_KEY;delete process.env.WAKA_BACKGROUND_WORKER_FUNCTION;
 globalThis.fetch=async()=>{throw new Error('Responsiveness benchmark refuses provider traffic');};
+let interrupted=false;process.once('SIGTERM',()=>{interrupted=true;});process.once('SIGINT',()=>{interrupted=true;});
 const fixture=await createTestDatabase();
 let driverStatements=0,recording=false;
 (fixture.sql.options as any).debug=(_connection:unknown,query:string)=>{if(recording&&!/^(begin|commit|rollback|set transaction)\b/i.test(query.trim()))driverStatements++;};
-let interrupted=false;process.once('SIGTERM',()=>{interrupted=true;});process.once('SIGINT',()=>{interrupted=true;});
 const results:unknown[]=[];
 const hashes=Object.fromEntries(['packages/api/src/lib/review-sessions.ts','packages/api/src/lib/conversation-replies.ts'].map(p=>[p,createHash('sha256').update(readFileSync(p)).digest('hex')]));
 // Builder proxies retain real SQL and transaction semantics. Only awaited

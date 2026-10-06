@@ -63,3 +63,28 @@ The first instrument missed fluent select builders; it was corrected before
 editing application code and a driver-parity assertion now rejects that error.
 Both disposable schemas cleaned successfully; provider calls and remote writes
 are zero. Receipt: `work/performance/responsiveness-baseline.json`.
+
+### 2026 10 06 database gate passed
+
+The unchanged gate requires at least 25 percent fewer Review Next statements
+and 25 percent lower simulated median, with chat at no more than four
+application statements. Five matching candidate samples use 20 Review Next
+statements (28.57 percent fewer) and 1079.81 ms simulated median (28.43 percent
+lower than 1508.73 ms). Chat uses four statements rather than seven, simulated
+median 216.84 ms rather than 376.82 ms (42.45 percent lower). Local medians are
+6.85 ms and 2.18 ms respectively; no improvement in local chat latency is
+claimed. Driver counts match instrumentation and output assertions pass.
+Receipt: `work/performance/responsiveness-candidate.json`, both schemas cleaned.
+
+Review now reuses session rows only inside its locked transaction and avoids
+building the same presentation twice. Chat fetches only the last two message
+identities, latest request, retry aggregates and one job row; it no longer
+loads request context/content history during a poll. Ownership, current source
+versions, replay tokens, hourly limits and old review manifests remain checked.
+The new real-driver regression pins active chat polling to four statements.
+
+Verification: API types and performance-tool types pass; real Review/dialogue,
+conversation and retry/recovery SQL suites pass 103 cases. Initial chat checks
+caught an undefined lease helper and a Date bound directly into raw SQL; both
+were fixed before acceptance, without weakening those checks. Transport delay
+is a local simulation, not measured cloud p95 or end-to-end provider latency.
