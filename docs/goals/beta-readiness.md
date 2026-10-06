@@ -548,6 +548,11 @@ samples do not pass controlled concurrency, runnable-recovery, alert-delivery or
 cost-safeguard gates. Full receipts and scope are in
 `docs/craft/evidence/2026-10-05-beta-readiness-m4-dev-operations.json`.
 
+Verification of this follow-up: 942 API unit tests, 28 targeted audit/runtime
+policy tests and three goal-index tests pass. API types, migration and diff
+checks pass. The manual cloud audit succeeds with deployment skipped; no
+permission, credential, provider-cap or production change was made.
+
 The full goal remains incomplete. First-time comprehension, explicit recurring
 budget policies and actual enforcement, retention/source-topology attestation,
 controlled deployed stage/concurrency measurements, non-idle recovery and
