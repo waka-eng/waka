@@ -278,6 +278,10 @@ export default $config({
      */
     const backgroundWorker = new sst.aws.Function("BackgroundWorker", {
       handler: "packages/api/src/background-worker.handler",
+      // Enqueue wakes may return a retry signal for a still-pending transient
+      // failure. Native async deliveries are bounded; Postgres remains the
+      // authority for due times, attempts, leases and model budgets.
+      retries: 2,
       timeout: "14 minutes",
       link: runtimeLinks,
       environment: {

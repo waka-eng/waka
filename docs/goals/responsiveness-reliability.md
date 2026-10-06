@@ -1,6 +1,7 @@
 # Review and chat responsiveness
 
-Status: in progress (2026-10-06).
+Status: done locally (2026-10-06). Not pushed or deployed; cloud delivery/timing
+still needs a post-deployment check, not part of this local implementation gate.
 Branch: `codex/responsiveness-reliability`, based on dev `8d67723`.
 
 ## Objective
@@ -71,7 +72,7 @@ and 25 percent lower simulated median, with chat at no more than four
 application statements. Five matching candidate samples use 20 Review Next
 statements (28.57 percent fewer) and 1079.81 ms simulated median (28.43 percent
 lower than 1508.73 ms). Chat uses four statements rather than seven, simulated
-median 216.84 ms rather than 376.82 ms (42.45 percent lower). Local medians are
+median 216.84 ms rather than 376.82 ms (42.46 percent lower). Local medians are
 6.85 ms and 2.18 ms respectively; no improvement in local chat latency is
 claimed. Driver counts match instrumentation and output assertions pass.
 Receipt: `work/performance/responsiveness-candidate.json`, both schemas cleaned.
@@ -88,3 +89,47 @@ conversation and retry/recovery SQL suites pass 103 cases. Initial chat checks
 caught an undefined lease helper and a Date bound directly into raw SQL; both
 were fixed before acceptance, without weakening those checks. Transport delay
 is a local simulation, not measured cloud p95 or end-to-end provider latency.
+
+### 2026 10 06 retry gate passed locally
+
+The API's existing `InvocationType: Event` wake now carries `mode: enqueue`.
+Only that event in Lambda may request native redelivery, after the bounded
+drain verifies an exact still-pending failed transition from its own attempts.
+The hint includes profile/job identity, attempt, settlement time and due time;
+a later success, claim, rerun, hold or budget deferral invalidates it. The check
+does not claim work, scan unrelated jobs or invoke a provider. API wake failures
+still cannot turn a committed save into a write failure, and a worker never
+self-invokes when it enqueues the next stage.
+
+SST now explicitly pins two extra asynchronous attempts. AWS documents waits
+of one minute, then two minutes, after function errors; delivery can be late or
+duplicated, so SQL claims and model-dispatch fences remain authoritative.
+Contract verified against [AWS asynchronous error handling](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-error-handling.html)
+and SST's local `FunctionEventInvokeConfig` implementation. The controlled
+`BackgroundJobRetryScheduled` error counts in Lambda Errors; it does not mark
+the durable job failed. Operators must distinguish this expected signal from
+exhausted jobs. A future alert based on raw Lambda Errors must account for it.
+
+Native redelivery is bounded, not a new scheduler for every attempt. After the
+two extra deliveries, or for backoff beyond the two-minute lookahead, remaining
+work still uses the existing recovery/daily sweep or a later normal enqueue.
+No tighter cron, new cloud service, new IAM permission, sleeps or migration.
+Local calls and scheduled recovery/daily events never manufacture this signal.
+
+Eight real SQL retry cases pass: due-time exclusion, duplicate claim delivery,
+budget deferral with retained error, both cadence/support holds, active leases,
+source reruns/tenant mismatch, exhaustion/lost ownership and long backoff.
+The tests caught stale `last_error` on a hold; the documented held-not-failed
+transition now clears it. Worker summaries also include their previously
+omitted held count. Signal/SDK/config coverage passes 31 targeted unit cases.
+The final full API suite passes 961 cases with three existing paid cases skipped.
+All 103 targeted SQL cases, API/performance-tool types, migration integrity and
+three goal-index cases pass. Tests use scripted processors/SDK transports,
+not live providers or AWS. Actual Lambda redelivery timing remains unmeasured
+until an authorized dev deployment; no cloud latency improvement is claimed.
+
+Milestone implemented and accepted locally. Provider calls, AWS writes and
+remote database writes are zero; the evaluation spending allocation is unchanged.
+No changes to review selection, prompts, human wording, design or daily cadence.
+Next handoff is a PR/dev rollout and measured deployment check if requested,
+not another product milestone automatically started.

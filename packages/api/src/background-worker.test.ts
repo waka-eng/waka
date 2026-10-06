@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler } from "./background-worker.js";
-import { runBackgroundJobWorker,readBackgroundJobRecoveryState } from "./lib/queue.js";
+import { runBackgroundJobWorker,readBackgroundJobRecoveryState,hasNearTermBackgroundJobRetry,type BackgroundJobRetryWake } from "./lib/queue.js";
 
 /** WHAT THIS MOCKS, AND WHY: `runBackgroundJobWorker` supplies completed pass
  * counts; `readBackgroundJobRecoveryState` supplies eligibility counts. SQL
@@ -13,6 +13,7 @@ const IDLE_PASS = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, de
 vi.mock("./lib/queue.js", () => ({
   runBackgroundJobWorker: vi.fn(),
   readBackgroundJobRecoveryState:vi.fn(),
+  hasNearTermBackgroundJobRetry:vi.fn(),
 }));
 
 beforeEach(() => {
@@ -23,6 +24,7 @@ beforeEach(() => {
   // early hides behind a test that stopped early too.
   vi.mocked(runBackgroundJobWorker).mockReset().mockResolvedValue(IDLE_PASS);
   vi.mocked(readBackgroundJobRecoveryState).mockReset().mockResolvedValue({overdue:0,oldestOverdueMs:0,exhaustedLeases:0});
+  vi.mocked(hasNearTermBackgroundJobRetry).mockReset().mockResolvedValue(false);
 });
 
 afterEach(() => {
@@ -30,6 +32,43 @@ afterEach(() => {
 });
 
 describe("background worker cron handler", () => {
+  const retry:BackgroundJobRetryWake={id:'synthetic-job',profileId:'synthetic-profile',attempts:1,updatedAt:new Date('2026-10-06T12:00:00Z'),runAfter:new Date('2026-10-06T12:00:30Z')};
+  function transientPass(){
+    vi.mocked(runBackgroundJobWorker).mockImplementationOnce(async options=>{
+      options?.onTransientRetry?.(retry);
+      return {...IDLE_PASS,claimed:1,retried:1};
+    });
+  }
+  it('requests native redelivery only for a verified still-pending transient failure from an async enqueue',async()=>{
+    vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME','test-worker');transientPass();
+    vi.mocked(hasNearTermBackgroundJobRetry).mockResolvedValue(true);
+    await expect(handler({mode:'enqueue'})).rejects.toThrow('BackgroundJobRetryScheduled');
+    expect(runBackgroundJobWorker).toHaveBeenCalledTimes(2);
+    expect(hasNearTermBackgroundJobRetry).toHaveBeenCalledExactlyOnceWith([retry]);
+  });
+  it('does not signal a failure already completed, rearmed, claimed or put on hold during the drain',async()=>{
+    vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME','test-worker');transientPass();
+    expect(await handler({mode:'enqueue'})).toMatchObject({retried:1,passes:2});
+    expect(hasNearTermBackgroundJobRetry).toHaveBeenCalledExactlyOnceWith([retry]);
+  });
+  it.each([undefined,{mode:'enqueue'},{source:'aws.events'}])('never manufactures native retry errors for local or non-enqueue calls: %j',async event=>{
+    if((event as {source?:string}|undefined)?.source)vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME','test-worker');
+    transientPass();vi.mocked(hasNearTermBackgroundJobRetry).mockResolvedValue(true);
+    expect(await handler(event)).toMatchObject({retried:1});
+    expect(hasNearTermBackgroundJobRetry).not.toHaveBeenCalled();
+  });
+  it.each(['succeeded','held','failed','deferred'] as const)('does not signal native retry for %s-only work',async outcome=>{
+    vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME','test-worker');
+    vi.mocked(runBackgroundJobWorker).mockResolvedValueOnce({...IDLE_PASS,claimed:outcome==='deferred'?0:1,[outcome]:1});
+    expect(await handler({mode:'enqueue'})).toMatchObject({[outcome]:1});
+    expect(hasNearTermBackgroundJobRetry).not.toHaveBeenCalled();
+  });
+  it('recovery never opts into native retry signaling, even after a transient failure',async()=>{
+    vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME','test-worker');transientPass();
+    vi.mocked(readBackgroundJobRecoveryState).mockResolvedValue({overdue:1,oldestOverdueMs:600000,exhaustedLeases:0});
+    expect(await handler({mode:'recovery'})).toMatchObject({retried:1,passes:1});
+    expect(hasNearTermBackgroundJobRetry).not.toHaveBeenCalled();
+  });
   it('observes but never drains a queue without overdue eligible work',async()=>{
     vi.mocked(readBackgroundJobRecoveryState).mockResolvedValue({overdue:0,oldestOverdueMs:0,exhaustedLeases:2});
     expect(await handler({mode:'recovery'})).toMatchObject({passes:0,recovery:{overdue:0,exhaustedLeases:2}});

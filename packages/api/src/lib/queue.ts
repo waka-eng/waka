@@ -223,12 +223,23 @@ export interface DrainBackgroundJobsOptions {
   /** Recovery observes only work past grace; ordinary wake-ups remain immediate. */
   overdueOnly?:boolean;
   processor?: (job: BackgroundJob) => Promise<BackgroundJobResult | void>;
+  /** Internal wake hint, never permission to claim. Rechecked after the drain
+   * against the exact failed transition so later holds/deferrals invalidate it. */
+  onTransientRetry?: (retry: BackgroundJobRetryWake) => void;
   /**
    * Where the loop reads and writes its rows. Defaults to Postgres; a test
    * hands it a queue it can hold in memory, which is what makes the budget
    * rule below observable at all — see `BackgroundJobStore`.
    */
   store?: BackgroundJobStore;
+}
+
+export interface BackgroundJobRetryWake {
+  id: string;
+  profileId: string;
+  attempts: number;
+  updatedAt: Date;
+  runAfter: Date;
 }
 
 export interface DrainBackgroundJobsResult {
@@ -795,7 +806,7 @@ async function wakeBackgroundWorker(): Promise<void> {
     const { InvokeCommand, LambdaClient } = await import("@aws-sdk/client-lambda");
     lambdaClient ??= new LambdaClient({});
     await lambdaClient.send(
-      new InvokeCommand({ FunctionName: functionName, InvocationType: "Event" }),
+      new InvokeCommand({ FunctionName: functionName, InvocationType: "Event", Payload: new TextEncoder().encode(JSON.stringify({ mode: 'enqueue' })) }),
     );
   } catch (err) {
     console.warn("[background-jobs] could not wake the worker; the sweep will catch it", {
@@ -952,9 +963,13 @@ export async function drainBackgroundJobs(
         continue;
       }
       const exhausted = job.attempts >= job.maxAttempts;
-      await store.markFailedOrPending(job, err, exhausted, clock());
+      const failedAt = clock();
+      await store.markFailedOrPending(job, err, exhausted, failedAt);
       if (exhausted) result.failed += 1;
-      else result.retried += 1;
+      else {
+        result.retried += 1;
+        options.onTransientRetry?.({id:job.id,profileId:job.profileId,attempts:job.attempts,updatedAt:failedAt,runAfter:calculateBackoffRunAfter(job.attempts,failedAt)});
+      }
     }
   }
 
@@ -1693,6 +1708,7 @@ async function holdBackgroundJob(job: BackgroundJob, until: Date, reason: 'suppo
         locked_at = NULL,
         started_at = NULL,
         attempts = GREATEST(attempts - 1, 0),
+        last_error = NULL,
         run_after = CASE WHEN ${reason} = 'cadence' AND payload->>'reason' = 'manual' THEN now()
           WHEN ${reason} = 'support' AND rerun_requested THEN LEAST(${until.toISOString()}::timestamptz, now() + interval '5 seconds')
           ELSE ${until.toISOString()}::timestamptz END,
@@ -1730,6 +1746,33 @@ async function markJobFailedOrPending(
       AND locked_at = ${coerceNullableDate(job.lockedAt)?.toISOString() ?? null}::timestamptz
       AND attempts = ${job.attempts}
   `);
+}
+
+/** Only failures from this drain can request a near-term async wake. A later
+ * success, claim, source rerun, cadence hold or account-budget deferral makes
+ * the hint stale. No broad queue scan and no new claim/model invocation here.
+ * Lambda's two native retries wait about one then two minutes; longer backoff
+ * remains the recovery sweep's responsibility. */
+export async function hasNearTermBackgroundJobRetry(
+  retries: BackgroundJobRetryWake[],
+  db: Pick<ReturnType<typeof getDb>, 'execute'> = getDb(),
+  now = new Date(),
+): Promise<boolean> {
+  if (!retries.length) return false;
+  const hints = JSON.stringify(retries.map(retry => ({id:retry.id,profile_id:retry.profileId,attempts:retry.attempts,updated_at:retry.updatedAt.toISOString(),run_after:retry.runAfter.toISOString()})));
+  const [row] = await db.execute<{pending:boolean}>(sql`
+    SELECT EXISTS (
+      SELECT 1 FROM background_jobs job
+      JOIN jsonb_to_recordset(${hints}::jsonb)
+        AS hint(id uuid, profile_id uuid, attempts integer, updated_at timestamptz, run_after timestamptz)
+        ON job.id=hint.id AND job.profile_id=hint.profile_id
+      WHERE job.status='pending' AND job.locked_at IS NULL AND job.last_error IS NOT NULL
+        AND job.attempts=hint.attempts AND job.attempts>0 AND job.attempts<job.max_attempts
+        AND job.updated_at=hint.updated_at AND job.run_after=hint.run_after
+        AND job.run_after<=${new Date(now.getTime()+120000).toISOString()}::timestamptz
+    ) AS pending
+  `);
+  return row?.pending === true;
 }
 
 /**
