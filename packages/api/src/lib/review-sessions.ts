@@ -41,7 +41,7 @@ async function present(db:Reader,profileId:string,id:string,includeCurrent=false
       currentInspiration={...serializeInspirationDetail(source,{attachments:media.map(serializeAttachment),reflections:answers}),materialRevision:current.currentRevision.toString(),...(origin?{conversationOrigin:origin}:{})};
     }
   }
-  return {id:session.id,profileId,revision:session.revision,cursor:session.cursor,
+  return {id:session.id,profileId,revision:session.revision,cursor:session.cursor,supportsAdvance:true,
     currentInspirationId:current?.item.inspirationId??null,
     ...(includeCurrent?{currentInspiration}:{}),
     createdAt:session.createdAt.toISOString(),completedAt:session.completedAt?.toISOString()??null,
@@ -63,6 +63,10 @@ export function createReviewSession(db:Db,profileId:string,input:{id:string;insp
   const inputHash=hashEmbeddingInput(JSON.stringify(input.inspirationIds??null));
   return db.transaction(async tx=>{
     await lockReviewOwner(tx,profileId);
+    return createReviewInTransaction(tx,profileId,input,includeCurrent,inputHash);
+  },{isolationLevel:'repeatable read'});
+}
+async function createReviewInTransaction(tx:Tx,profileId:string,input:{id:string;inspirationIds?:string[]},includeCurrent:boolean,inputHash:string){
     const [existing]=await tx.select().from(reviewSessions).where(and(eq(reviewSessions.profileId,profileId),eq(reviewSessions.id,input.id)));
     if (existing) {
       if (existing.inputHash!==inputHash) throw new ReviewSessionError(409,'review_request_changed','This review was started with a different selection.');
@@ -103,12 +107,16 @@ export function createReviewSession(db:Db,profileId:string,input:{id:string;insp
       sourceRevision:revisions.find(row=>row.inspirationId===inspirationId)!.personalRevision,
       reason:input.inspirationIds?'chosen' as const:candidates.find(row=>row.id===inspirationId)!.reviewed?'revisit' as const:'unreviewed' as const})));
     return present(tx,profileId,input.id,includeCurrent);
-  },{isolationLevel:'repeatable read'});
 }
 
-export function chooseReviewItem(db:Db,profileId:string,id:string,input:{revision:number;inspirationId:string;sourceRevision:string;choice:'keep'|'skip'|null}) {
+type ReviewChoice={revision:number;inspirationId:string;sourceRevision:string;choice:'keep'|'skip'|null};
+export function chooseReviewItem(db:Db,profileId:string,id:string,input:ReviewChoice,includeCurrent=false) {
   return db.transaction(async tx=>{
     await lockReviewOwner(tx,profileId);
+    return chooseReviewInTransaction(tx,profileId,id,input,includeCurrent);
+  },{isolationLevel:'repeatable read'});
+}
+async function chooseReviewInTransaction(tx:Tx,profileId:string,id:string,input:ReviewChoice,includeCurrent=false){
     const [session]=await tx.select().from(reviewSessions).where(and(eq(reviewSessions.profileId,profileId),eq(reviewSessions.id,id))).for('update');
     if (!session) throw new ReviewSessionError(404,'review_not_found','Review not found');
     if (session.completedAt) throw new ReviewSessionError(409,'review_completed','This review is already finished.');
@@ -120,13 +128,42 @@ export function chooseReviewItem(db:Db,profileId:string,id:string,input:{revisio
     const cursor=input.choice===null?item.position:item.position+1;
     // Response-loss replay is a no-op only for exactly the already-applied
     // next revision, choice, source and cursor; never overwrite a later tab.
-    if (session.revision===input.revision+1 && item.choice===input.choice && item.sourceRevision===source.personalRevision && session.cursor===cursor) return present(tx,profileId,id);
+    if (session.revision===input.revision+1 && item.choice===input.choice && item.sourceRevision===source.personalRevision && session.cursor===cursor) return present(tx,profileId,id,includeCurrent);
     if (session.revision!==input.revision) throw new ReviewSessionError(409,'review_changed','This review changed in another tab. Reload it first.');
     await tx.update(reviewItems).set({choice:input.choice,sourceRevision:source.personalRevision,decidedAt:input.choice===null?null:new Date()})
       .where(and(eq(reviewItems.profileId,profileId),eq(reviewItems.sessionId,id),eq(reviewItems.inspirationId,input.inspirationId)));
     await tx.update(reviewSessions).set({cursor,revision:session.revision+1,updatedAt:new Date()}).where(eq(reviewSessions.id,id));
-    return present(tx,profileId,id);
-  });
+    return present(tx,profileId,id,includeCurrent);
+}
+
+export type ReviewAdvanceInput=ReviewChoice&{nextId:string;choice:'keep'|'skip'};
+/** One explicit Next saves the choice, closes the old review and loads the
+ * next owned original atomically. A durable next ID binds response-loss replay. */
+export function advanceReviewSession(db:Db,profileId:string,id:string,input:ReviewAdvanceInput){
+  return db.transaction(async tx=>{
+    await lockReviewOwner(tx,profileId);
+    if(input.nextId===id)throw new ReviewSessionError(409,'review_request_changed','The next review needs its own id.');
+    const hash=hashEmbeddingInput(JSON.stringify({previousId:id,...input}));
+    const [previous]=await tx.select().from(reviewSessions).where(and(eq(reviewSessions.profileId,profileId),eq(reviewSessions.id,id))).for('update');
+    if(!previous)throw new ReviewSessionError(404,'review_not_found','Review not found');
+    const [next]=await tx.select().from(reviewSessions).where(and(eq(reviewSessions.profileId,profileId),eq(reviewSessions.id,input.nextId)));
+    if(next){
+      if(next.inputHash!==hash||!previous.completedAt)throw new ReviewSessionError(409,'review_request_changed','This next review belongs to a different request.');
+      return present(tx,profileId,next.id,true);
+    }
+    if(previous.completedAt){
+      const [item]=await tx.select().from(reviewItems).where(and(eq(reviewItems.profileId,profileId),eq(reviewItems.sessionId,id),eq(reviewItems.inspirationId,input.inspirationId)));
+      if(previous.revision===input.revision+2&&item?.choice===input.choice&&item.sourceRevision.toString()===input.sourceRevision)return null;
+      throw new ReviewSessionError(409,'review_completed','This review is already finished.');
+    }
+    const current=await present(tx,profileId,id);
+    const replay=current?.revision===input.revision+1&&current.items.some(item=>item.inspirationId===input.inspirationId&&item.choice===input.choice&&item.sourceRevision===input.sourceRevision);
+    if(!replay&&current?.currentInspirationId!==input.inspirationId)throw new ReviewSessionError(409,'review_changed','This review changed in another tab.');
+    const chosen=await chooseReviewInTransaction(tx,profileId,id,input,true);
+    if(chosen?.currentInspirationId)return chosen;
+    await tx.update(reviewSessions).set({completedAt:new Date(),updatedAt:new Date(),revision:input.revision+2}).where(eq(reviewSessions.id,id));
+    return createReviewInTransaction(tx,profileId,{id:input.nextId},true,hash);
+  },{isolationLevel:'repeatable read'});
 }
 
 export function completeReviewSession(db:Db,profileId:string,id:string,revision:number) {
