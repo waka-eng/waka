@@ -1,6 +1,6 @@
 # WAKA beta readiness milestones
 
-Status: in progress (2026-10-05), milestones 1 and 3 passed locally; milestone 2 technically checked, human comprehension pending; milestone 4 remains open. No current-goal deployment.
+Status: incomplete (2026-10-05), milestones 1 and 3 passed locally; milestone 2 technically checked, human comprehension pending; milestone 4 remains open. Dev delivery approved; PR 350 awaits CI and merge.
 Branch: `codex/beta-readiness-m1-m4`, based on deployed dev `56a2694`.
 
 ## Objective
@@ -467,3 +467,21 @@ each participant's first action, completion, requests for help, and wrong turns.
 
 Do not count an expert/agent walkthrough as first-time comprehension. Use the
 observed results to repair unclear paths before passing the human gate.
+
+### Dev delivery approval on 2026 10 05
+
+The owner approved pending dev delivery. PR 350 targets dev with all eight
+implementation commits; merge waits for CI. No new SQL migration is needed.
+The existing automatic dev workflow verifies separate configured database
+targets before applying its migration chain. Production remains untouched.
+
+Recurring spending limits refer to the app's ongoing provider bills, not the
+separate USD 5 synthetic evaluation allocation or GitHub Actions. No new dollar
+amount, reset period or notification recipient was supplied. Provider caps and
+credentials remain unchanged; dev alarms have console visibility without an
+external recipient. The local evaluation key's USD 10 monthly OpenRouter cap
+does not establish deployed stage separation or cover Gemini charges.
+
+Human comprehension, authoritative deployed configuration and privacy,
+stage/concurrency timings, actual cost enforcement and exercised alert delivery
+remain open. Approval to deliver does not pass those measurement gates.
