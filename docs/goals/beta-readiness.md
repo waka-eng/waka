@@ -1,7 +1,7 @@
 # WAKA beta readiness milestones
 
-Status: incomplete (2026-10-05), milestones 1 and 3 passed locally and delivered to dev in PR 350; milestone 2 technically checked, human comprehension pending; milestone 4 remains open. Dev deployment verified at `54db0c0`; PR 351 contains operational verification and recovery fixes pending fresh CI.
-Branch: `codex/beta-readiness-m1-m4`, originally based on dev `56a2694`; PR 350 deployed as `54db0c0`.
+Status: incomplete (2026-10-06), milestones 1 and 3 passed locally and delivered to dev in PR 350; milestone 2 technically checked, human comprehension pending; milestone 4 remains open. Operational verification and recovery fixes in PR 351 deployed at `32d2aa7`; source-policy follow-up prepared.
+Branch: `codex/beta-readiness-m1-m4`, originally based on dev `56a2694`; latest verified goal deployment is PR 351 at `32d2aa7`.
 
 ## Objective
 
@@ -591,3 +591,46 @@ duplicate work, not every ambiguous provider failure. Live non-idle recovery,
 controlled deployed timings, exercised alerts, spending/privacy/source policy
 verification and first-time comprehension remain open. PR 351 must pass fresh
 CI before merge; the failed CI run was not bypassed or blindly retried.
+
+### Recovery delivery and source policy on 2026 10 06
+
+PR 351 passed fresh CI: 942 API unit cases, 1,691 hermetic API cases and 793
+web cases. The hermetic count includes unit cases. It merged as `32d2aa7`,
+and its automatic dev deployment succeeded. API/worker functions updated and
+matched the approved models and migrated dev target. No new migration or
+production deployment was required.
+
+A separate two-read probe, run manually with deployment skipped, inspected
+the actual dev Function URL and resource policy. AWS returned authentication
+type `NONE` and an allow statement with a public principal; no CloudFront
+service grant was observed. These are configuration facts, not proof of
+unrestricted account-data access or an attested CloudFront-only path. Principal
+presence alone cannot prove every policy condition or identity permission.
+The forwarded-header/source trust flags remain unverified; no proxy hop,
+routing policy, permission or credential was changed. The probe omits URLs,
+ARNs, policy conditions and arbitrary errors from its output. Its four tests
+and the eleven existing operational-audit tests pass, as do API types and
+diff checks. The manual audit succeeded with deployment skipped.
+
+The source observation occurred during the PR 351 deployment. That PR changes
+worker code, not URL authorization or resource permissions; the observation is
+not relabeled as a post-deployment end-to-end probe. Source-proof details are
+in `docs/craft/evidence/2026-10-06-beta-readiness-m4-source-policy.json`.
+
+The owner chose USD 5/month as the starting recurring AI budget. Whether that
+means USD 5 per environment or combined remains pending; provider allocation
+and actual enforcement are not assumed. No cap or key changed. The separate
+synthetic evaluation allocation remains USD 1.6332342014 of USD 5. First-time
+comprehension, controlled live timings/recovery, exercised alerts and remaining
+spending/privacy/source safeguards still prevent full goal completion.
+
+Provider administration remains separate from inference access. The inspected
+local env files and repository secret names contain no named OpenRouter
+management credential or Google project-administration credential. OpenRouter
+requires a [management key](https://openrouter.ai/docs/api/api-reference/api-keys/update-keys)
+to change key limits. Gemini now supports
+[project monthly spend caps](https://ai.google.dev/gemini-api/docs/billing#project-spend-caps),
+with editor/owner/admin access and potential overages during roughly ten minutes
+of billing delay. Google keys inherit project billing settings; separate keys
+alone do not establish independent environment caps. No budget alert is
+relabeled as dollar enforcement, and no administrative access was expanded.

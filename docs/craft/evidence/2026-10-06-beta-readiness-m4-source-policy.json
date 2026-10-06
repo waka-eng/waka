@@ -1,0 +1,51 @@
+{
+  "milestone": 4,
+  "slice": "Actual dev URL authentication and resource-policy metadata",
+  "date": "2026-10-06",
+  "status": "Observed configuration; secure forwarded-header topology not established",
+  "recoveryDelivery": {
+    "pullRequest": "https://github.com/waka-eng/waka/pull/351",
+    "mergeRevision": "32d2aa7937e6d926f50cb6d552831ac2616dfc74",
+    "deployment": "https://github.com/waka-eng/waka/actions/runs/37427327598",
+    "conclusion": "success",
+    "ciApiUnitCases": 942,
+    "ciHermeticApiCasesIncludingUnits": 1691,
+    "ciWebCases": 793
+  },
+  "probe": {
+    "workflow": "https://github.com/waka-eng/waka/actions/runs/37427376564",
+    "sourceRevision": "9a955d0bc1588fc48c2b15f95a3f515d8b9e8c76",
+    "deployJob": "skipped",
+    "readCommands": 2,
+    "rawReceipt": "work/performance/beta-source-policy-37427376564/dev-source-policy.json",
+    "sha256": "92e2e3d73212ea59427036152dc51aed2f159386e5b8793285a818dc5538481b",
+    "duringDeployment": true,
+    "urlAuthentication": "NONE",
+    "publicPrincipalPresent": true,
+    "cloudFrontServiceGrantPresent": false,
+    "cloudFrontOnlyVerified": false,
+    "forwardedHeaderTrustVerified": false,
+    "accountDataAccessTested": false,
+    "routesPermissionsKeysOrProxyHopsChanged": false,
+    "urlsArnsConditionsCredentialsOrPrivateWordsReturned": false,
+    "modelCalls": 0
+  },
+  "verification": {
+    "sourcePolicyTests": 4,
+    "existingOperationalAuditTests": 11,
+    "apiTypesAndDiffChecks": "pass",
+    "schemaMigrationRequired": false
+  },
+  "recurringBudget": {
+    "ownerSelectedMonthlyUsd": 5,
+    "perEnvironmentOrCombinedResolved": false,
+    "providerAllocationResolved": false,
+    "enforced": false,
+    "capOrKeyChanged": false
+  },
+  "evaluationBudget": {
+    "cumulativeUsd": 1.6332342014,
+    "capUsd": 5,
+    "remainingUsd": 3.3667657986
+  }
+}
