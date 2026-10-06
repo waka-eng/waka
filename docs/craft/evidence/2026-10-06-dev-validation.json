@@ -1,24 +1,28 @@
 {
-  "status": "In progress; chat candidate awaiting dev delivery and final generation checks",
+  "status": "Complete for the scoped personal dev validation milestone",
   "releases": [
     {"pr": 353, "dev": "ac75ca7a2789f1709f1b6f59e5b2494803fdc0f4", "deployment": 37509739745, "result": "success"},
-    {"pr": 354, "dev": "2d67468fe0d7e35e4fbd742b89345fe2419a952e", "deployment": 37511539703, "result": "success"}
+    {"pr": 354, "dev": "2d67468fe0d7e35e4fbd742b89345fe2419a952e", "deployment": 37511539703, "result": "success"},
+    {"pr": 355, "dev": "d9ccac690ba00540cbdff1083a0f34f5039edba8", "deployment": 37515437552, "result": "success"},
+    {"pr": 356, "dev": "4ec9f2eab27c6bce11f620ae0ba435825c8bd154", "deployment": 37519793821, "result": "success"}
   ],
-  "scope": {"upstream": "https://dev.waka.im", "gateway": "loopback only, actual dev UI and API, synthetic session held in memory", "privateSyntheticCaptures": 11, "realAccountWrites": 0, "productionChanges": 0, "thresholdOverrides": 0, "schemaMigrationNeeded": false},
+  "scope": {"upstream": "https://dev.waka.im", "gateway": "loopback only, actual dev UI and API, synthetic session held in memory", "privateSyntheticCaptures": 11, "realAccountMemoryMutations": 0, "productionChanges": 0, "thresholdOverrides": 0, "schemaMigrationNeeded": false},
   "checks": {
     "capturePersistsOnReload": "pass",
     "captureLostResponse": "owned receipt plus idempotent replay, no duplicate inspiration",
     "reflectionDraftOnReturn": "pass",
     "adaptiveReflection": "live question refers to saved answer; two human turns preserved",
     "chatGrounding": "initial live reply cites two current originals",
-    "chatReferenceContinuation": "message saved; three generation failures retained, candidate correction pending",
+    "chatReferenceContinuation": "original continuation completes on deployed repair after normal retry window; two user and two assistant messages, all references current; earlier failures retained",
+    "chatFromPrinciple": "separate live reply cites the generated Principle and a current inspiration; one user and one assistant message",
     "chatDraftBackAndReturn": "pass",
     "atomicNextCapability": "verified on dev with one source and bundled original",
     "atomicNextLostResponse": "same durable advance replay returns existing successor, no second advancement",
     "atomicNextSlowDoubleClick": "one transition, previous card retained while disabled",
     "reviewReadFailure": "visible failure, explicit GET-only retry, original restored",
     "scheduledStaleReadingRecovery": "deployed Read again visible; no automatic generation on load",
-    "principles": "normal threshold not yet reached for third pattern; final generated reading and principle checks open"
+    "principles": "three active patterns each cite three originals; reading version 2 has one current entry; one held Principle cites three signals with no changed or unsupported flag",
+    "principleEvidenceBack": "deployed rendered evidence count 1 before Back, 0 afterward; selected controls close"
   },
   "timings": {"scope": "Small gateway observations, not controlled cloud baseline or p95", "advanceMs": 3863, "sameAdvanceReplayMs": 1884, "advanceWith2000MsInjectedDelay": 6202},
   "modelDiagnostics": {
@@ -30,9 +34,10 @@
     "correction": "omit optional repeated question after all other guards, preserve grounded answer without another model call",
     "broadQualityGainClaim": false
   },
-  "verification": {"webCases": 803, "apiUnitCases": 947, "targetedHomeAndIndexCases": 32, "targetedChatCases": 42, "typesAndWebBuild": "pass"},
+  "verification": {"webCases": 804, "apiUnitCases": 947, "targetedHomeAndIndexCases": 32, "targetedChatCases": 42, "targetedNavigationAndReadingCases": 25, "typesAndWebBuild": "pass", "applicationPrChecks": "353, 354, 355 and 356 pass normal CI"},
   "operations": {"auditRun": 37510702607, "result": "success", "usageSamples": 49, "partialStageWidePage": true, "pricedCostUsd": 0.003619674, "unpricedGeminiRequests": 27, "testAccountBillingClaim": false},
   "budget": {"previouslyUsedUsd": 1.6332342014, "diagnosticCostUsd": 0.000801466, "devBatchReservationUsd": 1.5, "cumulativeUsedOrHeldUsd": 3.1340356674, "ceilingUsd": 5},
-  "proof": "work/performance/dev-validation/reading-recovery.png",
-  "cleanup": "pending completion of remaining live checks"
+  "proof": ["work/performance/dev-validation/reading-recovery.png", "work/performance/dev-validation/principle-evidence.png", "work/performance/dev-validation/recovered-chat.png", "work/performance/dev-validation/final-home.png"],
+  "cleanup": {"exactSyntheticIdentityVerified": true, "accountErased": true, "erasedSessionStatus": 401, "gatewayExitCode": 0, "port3018Listener": false, "temporaryTabClosed": true, "diagnosticScriptsRemoved": true},
+  "remainingOutsideScope": ["Controlled cloud latency and load", "Faster delayed-job delivery", "Unassisted first-time comprehension", "Physical device behavior", "Broad generative quality guarantee", "Recurring spend, privacy and source-topology safeguards"]
 }

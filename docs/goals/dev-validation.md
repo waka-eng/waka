@@ -1,7 +1,8 @@
 # Dev validation milestone
 
-Status: in progress (2026-10-06).
+Status: done (2026-10-06) — personal dev journey, failure recovery and observed repairs verified; synthetic account erased.
 Branch: `codex/review-next-performance`, based on dev `1f4f2f7`.
+Verified app deployment: `4ec9f2e`, PRs 353–356; production unchanged.
 
 ## Objective
 
@@ -147,3 +148,44 @@ The one-line fix renders evidence only for the open Principle. All 804 web
 cases, 25 targeted navigation/reading cases, web types and build pass locally.
 Deliver this small repair, recheck the affected Back rendering and the deployed
 chat continuation, then erase only the synthetic test identity.
+
+### 2026 10 06 completion
+
+PR 356 passes normal CI and deploys at `4ec9f2e` in run 37519793821. The
+deployment again verifies the existing memory schema and API/worker database
+bindings; no new migration is needed. On the actual built dev UI, expanded
+Principle evidence has one rendered container before Back and zero afterward.
+The selected controls close and Home returns with its reading and Principle.
+
+The originally failed source-led continuation now completes after the ordinary
+retry window, without duplicating its human message. Its two user messages and
+two assistant replies remain; every reference is currently available. A separate
+chat begun from the generated Principle produces a relevant reply citing that
+Principle and a current inspiration. That conversation contains one user and
+one assistant message, also with current references. No new principle or
+inspiration is implicitly saved by either chat.
+
+Delivery, journey and repair gates pass for this scoped dev milestone. The
+record includes cold return, preserved capture/reflection/chat progress, source
+and Principle deep links, Back, ambiguous capture/Next responses, a delayed
+double-click and a failed Review GET. Local final verification is 804 web cases,
+947 API unit cases, types and build; each application repair also passes normal
+remote CI. Bounded model probes and the earlier 43 Review SQL cases are retained,
+not added to overlapping CI totals.
+
+Cleanup verifies the exact generated account and profile before erasing them
+through the dev account API. The erased session returns 401, the gateway exits
+successfully, port 3018 has no listener, and its temporary browser tab closes.
+Only the eleven synthetic originals and their associated test memory are
+erased; existing account memory and production are not changed. Temporary
+diagnostic scripts are removed; private synthetic proof images and numeric
+operational artifacts remain in the ignored performance directory.
+
+Remaining findings are separate follow-up work: cloud Next took about four
+seconds in these sparse observations, and transient generation can wait for
+dev's fifteen-minute recovery. These are not p95/load measurements. First-time
+comprehension, physical devices, broad model-quality guarantees and recurring
+spending/privacy/source safeguards remain the broader beta-readiness work.
+The unknown dev provider charge still holds its $1.50 reservation; no unknown
+usage is treated as free. The documentation skill guided the validation gate
+record and evidence ledger, without a new cloud Page or design change.

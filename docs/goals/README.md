@@ -30,7 +30,6 @@ Work happening now, or stopped mid-way with a recorded reason.
 
 | Goal | Status |
 | --- | --- |
-| [`dev-validation.md`](dev-validation.md) | In progress — ship Review Next and validate the personal loop on dev, including slow/failure and return behavior. |
 | [`beta-readiness.md`](beta-readiness.md) | Incomplete — milestones 1 and 3 delivered in PR 350; operational audit and recovery fixes deployed through PR 351. Dev configuration/heartbeat and public URL policy observed. Milestone 2 first-time comprehension and milestone 4 controlled live measurements, spending/privacy/source safeguards and exercised alerts remain open. |
 | [`performance-improvements.md`](performance-improvements.md) | In progress — five milestones delivered to dev; loading/Review follow-up accepted locally. Exact deployed timing verification remains open. |
 | [`ux-feature-implementation.md`](ux-feature-implementation.md) | Paused by owner after the checked feedback/room-flow batch; dev delivery requested. Later UX/algorithm slices, remaining release cases, semantic validation, historical repair and deployed verification remain open. |
@@ -50,6 +49,7 @@ Shipped, and kept for the measurements.
 
 | Goal | Status |
 | --- | --- |
+| [`dev-validation.md`](dev-validation.md) | Done 2026-10-06 — core personal loop and slow/failure/Back/return checks verified on dev; four observed fixes shipped in PRs 353–356. 804 web and 947 API unit cases; synthetic account erased, production unchanged. |
 | [`chat-home-memory.md`](chat-home-memory.md) | Done 2026-10-04 — all chat/home/memory milestones implemented and accepted locally, including visual cues and Capture spark. 709 web, 803 API unit, 111 SQL cases; calibration 22/24 (91.7%), known misses retained. Not pushed/deployed. |
 | [`personal-ux-clarity.md`](personal-ux-clarity.md) | Done 2026-10-04 — all eight UX improvements verified locally; 689 web, 766 API unit and 16 SQL tests. Not pushed or deployed. |
 | [`personal-experience-delivery.md`](personal-experience-delivery.md) | Done 2026-10-04 — all 31 tasks/M1–M8 in the approved web/simulator scope, deployed and verified on dev through PRs 339/340. Production and native/store deployment excluded. |
