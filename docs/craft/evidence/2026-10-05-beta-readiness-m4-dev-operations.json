@@ -1,0 +1,216 @@
+{
+  "milestone": 4,
+  "slice": "Deployed dev configuration and bounded read-only operational evidence",
+  "date": "2026-10-05",
+  "observedAtUtc": "2026-10-06T06:14:28.528Z",
+  "status": "Partial acceptance; broader milestone gates remain open",
+  "deployment": {
+    "pullRequest": "https://github.com/waka-eng/waka/pull/350",
+    "mergeRevision": "54db0c0bfe6ac37d1da2e493f0c0a951d1d396a8",
+    "workflow": "https://github.com/waka-eng/waka/actions/runs/37420111544",
+    "conclusion": "success",
+    "configuredDatabaseTargetsDiffer": true,
+    "apiWorkerMatchMigratedTarget": true,
+    "newMigrationRequired": false,
+    "productionDeployment": false
+  },
+  "audit": {
+    "workflow": "https://github.com/waka-eng/waka/actions/runs/37422630894",
+    "sourceRevision": "57419b9e22a71dd26b6237db365f516782f4bb2b",
+    "conclusion": "success",
+    "deployJob": "skipped",
+    "rawReceipt": "work/performance/beta-dev-audit-37422630894/dev-operations.json",
+    "sha256": "5d5e87caa8f29842d567885cb068464be42502dd97e41fb2cddc1b0b425a2e66",
+    "maximumReadCommands": 13,
+    "maximumLogPagesPerKindRole": 1,
+    "lookbackHours": 1,
+    "permissionsChanged": false,
+    "modelCalls": 0,
+    "workerInvocations": 0,
+    "privateWordsOrCredentialsReturned": false
+  },
+  "runtime": {
+    "stage": "development",
+    "trustedOrigins": true,
+    "secureCookies": true,
+    "fixtureOverridesAbsent": true,
+    "approvedGenerationModel": true,
+    "proxyTopologyDeclared": false,
+    "proxyTopologyVerified": false,
+    "databaseIsolationVerified": false,
+    "providerPrivacyVerified": false,
+    "monetaryLimitsVerified": false,
+    "apiWorkerDatabaseIdentical": true,
+    "chatModelsMatch": true,
+    "restrictivePrivacyOverrides": false
+  },
+  "queueMetrics": [
+    {
+      "metric": "RecoveryChecks",
+      "read": true,
+      "samples": 2,
+      "values": [
+        1,
+        1
+      ]
+    },
+    {
+      "metric": "OverdueJobs",
+      "read": true,
+      "samples": 2,
+      "values": [
+        0,
+        0
+      ]
+    },
+    {
+      "metric": "ExhaustedLeases",
+      "read": true,
+      "samples": 2,
+      "values": [
+        0,
+        0
+      ]
+    }
+  ],
+  "recoveryMetricExtractionVerified": true,
+  "logs": [
+    {
+      "role": "api",
+      "kind": "timing",
+      "read": true,
+      "partialPage": true,
+      "samples": 2,
+      "readings": [
+        {
+          "stage": "context_read",
+          "durationMs": 493,
+          "outcome": "ok"
+        },
+        {
+          "stage": "context_read",
+          "durationMs": 607,
+          "outcome": "ok"
+        }
+      ]
+    },
+    {
+      "role": "api",
+      "kind": "recovery",
+      "read": true,
+      "partialPage": false,
+      "samples": 0,
+      "readings": []
+    },
+    {
+      "role": "api",
+      "kind": "usage",
+      "read": true,
+      "partialPage": false,
+      "samples": 0
+    },
+    {
+      "role": "api",
+      "kind": "runtime",
+      "read": true,
+      "partialPage": true,
+      "samples": 76,
+      "executionMs": {
+        "samples": 76,
+        "min": 4.32,
+        "max": 2509.3
+      },
+      "coldStarts": 11,
+      "initializationMs": {
+        "samples": 11,
+        "min": 604.11,
+        "max": 638.59
+      }
+    },
+    {
+      "role": "worker",
+      "kind": "timing",
+      "read": true,
+      "partialPage": false,
+      "samples": 0,
+      "readings": []
+    },
+    {
+      "role": "worker",
+      "kind": "recovery",
+      "read": true,
+      "partialPage": true,
+      "samples": 2,
+      "readings": [
+        {
+          "OverdueJobs": 0,
+          "OldestOverdueMs": 0,
+          "ExhaustedLeases": 0,
+          "RecoveryChecks": 1
+        },
+        {
+          "OverdueJobs": 0,
+          "OldestOverdueMs": 0,
+          "ExhaustedLeases": 0,
+          "RecoveryChecks": 1
+        }
+      ]
+    },
+    {
+      "role": "worker",
+      "kind": "usage",
+      "read": true,
+      "partialPage": false,
+      "samples": 0
+    },
+    {
+      "role": "worker",
+      "kind": "runtime",
+      "read": true,
+      "partialPage": true,
+      "samples": 2,
+      "executionMs": {
+        "samples": 2,
+        "min": 757.35,
+        "max": 1638.03
+      },
+      "coldStarts": 2,
+      "initializationMs": {
+        "samples": 2,
+        "min": 539.08,
+        "max": 553.19
+      }
+    }
+  ],
+  "liveSmoke": {
+    "webStatus": 200,
+    "unauthenticatedAuthMeStatus": 401,
+    "oversizedSignup": {
+      "status": 400,
+      "fieldValidationError": true
+    },
+    "malformedUnicodeSignup": {
+      "status": 400,
+      "fieldValidationError": true
+    },
+    "successfulRegistrationAttempted": false,
+    "latencyGate": false
+  },
+  "limitations": {
+    "onePageSamplesMayBeIncomplete": true,
+    "requestsNotPairedByOperationOrProfile": true,
+    "controlledConcurrentMeasurement": false,
+    "embeddingProviderPublicationSamples": false,
+    "runnableRecoveryExercised": false,
+    "alertDeliveryVerified": false,
+    "zeroUsageSamplesDoNotProveZeroBilling": true,
+    "providerPrivacyVerified": false,
+    "recurringMonetaryLimitsVerified": false,
+    "firstTimeUserComprehension": false
+  },
+  "evaluationBudget": {
+    "cumulativeUsd": 1.6332342014,
+    "capUsd": 5,
+    "remainingUsd": 3.3667657986
+  }
+}

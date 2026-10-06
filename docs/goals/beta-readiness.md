@@ -1,7 +1,7 @@
 # WAKA beta readiness milestones
 
-Status: incomplete (2026-10-05), milestones 1 and 3 passed locally; milestone 2 technically checked, human comprehension pending; milestone 4 remains open. Dev delivery approved; PR 350 awaits CI and merge.
-Branch: `codex/beta-readiness-m1-m4`, based on deployed dev `56a2694`.
+Status: incomplete (2026-10-05), milestones 1 and 3 passed locally and delivered to dev in PR 350; milestone 2 technically checked, human comprehension pending; milestone 4 remains open. Dev deployment verified at `54db0c0`; manual operational verification follow-up prepared.
+Branch: `codex/beta-readiness-m1-m4`, originally based on dev `56a2694`; PR 350 deployed as `54db0c0`.
 
 ## Objective
 
@@ -506,3 +506,50 @@ cases and 930 API unit tests pass, with three opt-in paid suites skipped. API
 types and diff checks pass. SQL uses explicit disposable loopback data; no
 provider was called. The fix is included in PR 350, which must pass fresh CI
 before merge. Evaluation allocation and recurring provider caps are unchanged.
+
+### Dev deployment and operational evidence on 2026 10 05
+
+PR 350 passed CI with 930 API unit cases, 1,665 hermetic API cases and 793 web
+cases; the hermetic total includes unit cases and is not added to them. It
+merged as `54db0c0`, and the automatic dev deployment succeeded. Its preflight
+confirmed different configured dev/production database endpoints; both deployed
+functions matched the migrated dev target and approved model pins. No new SQL
+migration was required, and production was not deployed. Live smoke checks
+returned Home 200, unauthenticated `/api/auth/me` 401, and field-level 400
+refusals for oversized and malformed-Unicode signup. No successful registration
+was attempted; these are safety checks, not a performance benchmark.
+
+Local credentials refused configuration/log reads. A manual audit through the
+existing deployment workflow successfully read actual API/worker settings. It
+verifies trusted HTTPS origins, secure-cookie flags, absent fixture overrides,
+stage/model tags and matching database URLs. Proxy-hop trust is undeclared;
+restrictive privacy overrides are unset. The audit does not claim logical
+database isolation, provider retention or monetary enforcement from those facts.
+An AWS-projected null proxy setting is now treated as absent, not explicit zero.
+
+The first cloud log reads failed because their assumed default groups did not
+exist. The audit now resolves `LoggingConfig.LogGroup` from each deployed
+function and refuses absent/non-dev targets. It uses at most thirteen read
+commands, one log page per kind/role and one hour of history, with automatic CLI
+pagination disabled. It returns only configuration verdicts and numeric samples;
+no raw words, credentials, request IDs or arbitrary provider errors. Its
+manual-only mode skips deploy, migrations and secret updates, has a five-minute
+timeout and separate concurrency group, and invokes no worker or model. Branch
+runs use GitHub's documented
+[manual workflow dispatch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow?tool=cli).
+
+The final audit succeeded and its deploy job was skipped. Two observed API
+context reads took 493 and 607 ms. Both recovery log samples report zero overdue
+jobs and exhausted leases; CloudWatch also returned two RecoveryChecks Sum
+datapoints of one, confirming real metric extraction. API/worker runtime samples
+include cold starts, but pages are bounded and requests are not paired. No
+embedding, provider or publication samples were observed. These small natural
+samples do not pass controlled concurrency, runnable-recovery, alert-delivery or
+cost-safeguard gates. Full receipts and scope are in
+`docs/craft/evidence/2026-10-05-beta-readiness-m4-dev-operations.json`.
+
+The full goal remains incomplete. First-time comprehension, explicit recurring
+budget policies and actual enforcement, retention/source-topology attestation,
+controlled deployed stage/concurrency measurements, non-idle recovery and
+exercised alerts are still required. Evaluation allocation remains
+USD 1.6332342014 of USD 5; these audits bought no model calls.
