@@ -49,7 +49,7 @@ Shipped, and kept for the measurements.
 
 | Goal | Status |
 | --- | --- |
-| [`responsiveness-reliability.md`](responsiveness-reliability.md) | Done locally 2026-10-06 — Review Next 28→20 statements, chat polling 7→4; bounded transient retry signaling and hold cleanup verified. No push/deployment or live cloud timing check. |
+| [`responsiveness-reliability.md`](responsiveness-reliability.md) | Implementation complete 2026-10-06 — Review Next 28→20 statements, chat polling 7→4; bounded transient retry signaling and hold cleanup verified locally. Dev delivery approved; cloud timings remain unmeasured. |
 | [`dev-validation.md`](dev-validation.md) | Done 2026-10-06 — core personal loop and slow/failure/Back/return checks verified on dev; four observed fixes shipped in PRs 353–356. 804 web and 947 API unit cases; synthetic account erased, production unchanged. |
 | [`chat-home-memory.md`](chat-home-memory.md) | Done 2026-10-04 — all chat/home/memory milestones implemented and accepted locally, including visual cues and Capture spark. 709 web, 803 API unit, 111 SQL cases; calibration 22/24 (91.7%), known misses retained. Not pushed/deployed. |
 | [`personal-ux-clarity.md`](personal-ux-clarity.md) | Done 2026-10-04 — all eight UX improvements verified locally; 689 web, 766 API unit and 16 SQL tests. Not pushed or deployed. |

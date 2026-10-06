@@ -1,7 +1,7 @@
 # Review and chat responsiveness
 
-Status: done locally (2026-10-06). Not pushed or deployed; cloud delivery/timing
-still needs a post-deployment check, not part of this local implementation gate.
+Status: implementation complete (2026-10-06); dev delivery approved by owner.
+Benchmark results are local; live cloud retry/timing measurements remain separate.
 Branch: `codex/responsiveness-reliability`, based on dev `8d67723`.
 
 ## Objective
@@ -128,8 +128,9 @@ three goal-index cases pass. Tests use scripted processors/SDK transports,
 not live providers or AWS. Actual Lambda redelivery timing remains unmeasured
 until an authorized dev deployment; no cloud latency improvement is claimed.
 
-Milestone implemented and accepted locally. Provider calls, AWS writes and
-remote database writes are zero; the evaluation spending allocation is unchanged.
+Milestone implemented and accepted locally. At local acceptance, provider calls,
+AWS writes and remote database writes were zero; the evaluation allocation is unchanged.
 No changes to review selection, prompts, human wording, design or daily cadence.
-Next handoff is a PR/dev rollout and measured deployment check if requested,
-not another product milestone automatically started.
+The owner approved dev delivery on 2026-10-06. Release uses a PR into `dev` and
+the existing automatic development-stage deployment. No production release,
+paid evaluation or additional product milestone is included.
