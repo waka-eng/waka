@@ -8,12 +8,25 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ReviewPanel} from '../src/components/ReviewPanel';
 import {profileStorageKey} from '../src/lib/profile-storage';
 import {newReviewDraft,storeReviewDraft} from '../src/lib/review-dialogue-drafts';
-import {ApiError,chooseReviewInspiration,createReflection,deleteInspiration,fetchActiveReview,fetchInspiration,fetchInspirationPage,fetchInspirationSaveRequest,fetchReflectionQuestionStatus,fetchReviewDialogue,fetchReviewProcessing,fetchReviewSession,finishReviewSession,requestReflectionQuestion,requestReviewQuestion,saveReviewAnswer,startReviewSession,type ApiInspiration,type ApiReviewSession} from '../src/lib/api';
+import {ApiError,advanceReviewSession,chooseReviewInspiration,createReflection,deleteInspiration,fetchActiveReview,fetchInspiration,fetchInspirationPage,fetchInspirationSaveRequest,fetchReflectionQuestionStatus,fetchReviewDialogue,fetchReviewProcessing,fetchReviewSession,finishReviewSession,requestReflectionQuestion,requestReviewQuestion,saveReviewAnswer,startReviewSession,type ApiInspiration,type ApiReviewSession} from '../src/lib/api';
 vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),
-  chooseReviewInspiration:vi.fn(),createReflection:vi.fn(),deleteInspiration:vi.fn(),fetchActiveReview:vi.fn(),fetchInspiration:vi.fn(),fetchInspirationPage:vi.fn(),fetchInspirationSaveRequest:vi.fn(),fetchReflectionQuestionStatus:vi.fn(),fetchReviewDialogue:vi.fn(),fetchReviewProcessing:vi.fn(),fetchReviewSession:vi.fn(),finishReviewSession:vi.fn(),requestReflectionQuestion:vi.fn(),requestReviewQuestion:vi.fn(),saveReviewAnswer:vi.fn(),startReviewSession:vi.fn()}));
+  advanceReviewSession:vi.fn(),chooseReviewInspiration:vi.fn(),createReflection:vi.fn(),deleteInspiration:vi.fn(),fetchActiveReview:vi.fn(),fetchInspiration:vi.fn(),fetchInspirationPage:vi.fn(),fetchInspirationSaveRequest:vi.fn(),fetchReflectionQuestionStatus:vi.fn(),fetchReviewDialogue:vi.fn(),fetchReviewProcessing:vi.fn(),fetchReviewSession:vi.fn(),finishReviewSession:vi.fn(),requestReflectionQuestion:vi.fn(),requestReviewQuestion:vi.fn(),saveReviewAnswer:vi.fn(),startReviewSession:vi.fn()}));
 const SID='11111111-1111-4111-8111-111111111111',SOURCE='22222222-2222-4222-8222-222222222222',SECOND='33333333-3333-4333-8333-333333333333',scope={accountId:'account',profileId:'profile'};
 let host:HTMLDivElement,root:Root,current:ApiReviewSession|null,source:ApiInspiration,missing:boolean;
 const onId=vi.fn(),onClose=vi.fn(),onNewInspiration=vi.fn(),onOpen=vi.fn(),onSaved=vi.fn(),onSynchronized=vi.fn(),onInspirationRemoved=vi.fn();
+it('opens the next bundled inspiration in one write without active/start/detail reads',async()=>{
+  current!.supportsAdvance=true;current!.currentInspiration={...source,materialRevision:'1'};
+  vi.mocked(advanceReviewSession).mockImplementation(async(_id,input)=>{
+    current={...current!,id:input.nextId,revision:0,cursor:0,currentInspirationId:SECOND,
+      items:[{...current!.items[0]!,inspirationId:SECOND,position:0}],currentInspiration:{...source,id:SECOND,text:'A second inspiration.',materialRevision:'1'}};
+    return copy();
+  });
+  await mount();const reads=vi.mocked(fetchReviewSession).mock.calls.length;
+  await act(async()=>{button('Next inspiration →').click();button('Next inspiration →').click();});
+  expect(host.textContent).toContain('A second inspiration.');expect(advanceReviewSession).toHaveBeenCalledOnce();
+  expect(chooseReviewInspiration).not.toHaveBeenCalled();expect(finishReviewSession).not.toHaveBeenCalled();expect(startReviewSession).not.toHaveBeenCalled();
+  expect(fetchActiveReview).not.toHaveBeenCalled();expect(fetchInspiration).not.toHaveBeenCalled();expect(fetchReviewSession).toHaveBeenCalledTimes(reads);
+});
 it('makes Next a keep-and-continue action rather than implying deletion',async()=>{
   await mount();expect(host.querySelector('#review-next-hint')?.textContent).toBe('Next keeps this inspiration.');
   const next=[...host.querySelectorAll('button')].find(button=>button.textContent==='Next inspiration →')!;
@@ -65,7 +78,7 @@ it('starts a suggested single-source review on entry, with no manual manifest or
 });
 it('Next retains the inspiration, finishes its session and advances without a joint reflection',async()=>{
   await mount();await click('Next inspiration →');
-  expect(chooseReviewInspiration).toHaveBeenCalledWith(SID,{revision:0,inspirationId:SOURCE,sourceRevision:'1',choice:'skip'},scope.profileId,expect.any(AbortSignal));
+  expect(chooseReviewInspiration).toHaveBeenCalledWith(SID,{revision:0,inspirationId:SOURCE,sourceRevision:'1',choice:'skip'},scope.profileId,expect.any(AbortSignal),true);
   expect(finishReviewSession).toHaveBeenCalledWith(SID,1,scope.profileId,expect.any(AbortSignal));expect(onId).toHaveBeenCalledWith('new');
   expect(deleteInspiration).not.toHaveBeenCalled();expect(requestReviewQuestion).not.toHaveBeenCalled();expect(saveReviewAnswer).not.toHaveBeenCalled();
 });

@@ -1,7 +1,7 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): `fetch` supplies HTTP JSON at the
  * transport boundary. The actual API helpers and owner/id validation run. */
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {fetchActiveReview,fetchReviewSession,chooseReviewInspiration,startReviewSession,type ApiReviewSession} from '../src/lib/api';
+import {advanceReviewSession,fetchActiveReview,fetchReviewSession,chooseReviewInspiration,startReviewSession,type ApiReviewSession} from '../src/lib/api';
 const SID='11111111-1111-4111-8111-111111111111',PROFILE='22222222-2222-4222-8222-222222222222';
 let row:ApiReviewSession;
 beforeEach(()=>{row={id:SID,profileId:PROFILE,revision:0,cursor:0,currentInspirationId:null,createdAt:'2026-10-02T00:00:00Z',completedAt:null,items:[]};
@@ -10,6 +10,13 @@ afterEach(()=>vi.unstubAllGlobals());
 it('scopes a read and rejects a response belonging to another owner',async()=>{
   expect((await fetchActiveReview(PROFILE))?.id).toBe(SID);expect(vi.mocked(fetch).mock.calls[0]?.[0]).toContain(`profile=${PROFILE}`);
   row.profileId='other';await expect(fetchActiveReview(PROFILE)).rejects.toThrow('Could not verify');
+});
+it('accepts only the requested successor or a verified same-session cursor advance',async()=>{
+  const input={nextId:PROFILE,revision:0,inspirationId:SID,sourceRevision:'1',choice:'skip' as const};
+  row.id=PROFILE;expect((await advanceReviewSession(SID,input,PROFILE))?.id).toBe(PROFILE);
+  expect(vi.mocked(fetch).mock.calls.at(-1)![0]).toContain('/advance?profile=');
+  row.id='33333333-3333-4333-8333-333333333333';await expect(advanceReviewSession(SID,input,PROFILE)).rejects.toThrow('verify');
+  row.id=SID;await expect(advanceReviewSession(SID,input,PROFILE)).rejects.toThrow('verify');
 });
 it('requests current material explicitly and refuses a mismatched original/revision',async()=>{
   row.currentInspirationId=SID;row.items=[{inspirationId:SID,position:0,sourceRevision:'1',currentRevision:'2',sourceChanged:true,reason:'chosen',choice:null,decidedAt:null,inspirationCreatedAt:row.createdAt}];

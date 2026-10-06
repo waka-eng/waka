@@ -132,10 +132,13 @@ export function ReviewPanel({scope,id,thoughtId=null,locale,onId,onClose,onNewIn
         {review.pending&&!review.busy?<div role="status">{!review.error?<p>{say('worldReviewPending')}</p>:null}{review.error!=='conflict'?<button type="button" onClick={review.retry}>{say('worldRoomHistoryRetry')}</button>:null}<button type="button" onClick={()=>void review.useLatest()}>{say('worldReviewUseLatest')}</button></div>:null}
         {review.empty&&!disabled&&!review.error?<><p>{say(review.hasInspirations===false||count===0?'worldReviewEmpty':'worldReviewCaughtUp')}</p>{review.hasInspirations===false||count===0?<button type="button" onClick={onNewInspiration}>{say('worldCaptureInspiration')}</button>:null}</>:null}
         {session&&item&&!review.loading&&!thoughtId?<ReviewCard key={`${item.inspirationId}:${item.currentRevision}`} item={item} sessionId={session.id} initialSource={session.currentInspiration} scope={scope} locale={locale} disabled={disabled}
-          onNext={reflected=>{setAdvance(true);review.choose(item,reflected?'keep':'skip');}} onRefresh={()=>void review.refresh()}
+          onNext={reflected=>{
+            if(session.supportsAdvance){setAdvance(false);review.next(item,reflected?'keep':'skip');}
+            else{setAdvance(true);review.choose(item,reflected?'keep':'skip');}
+          }} onRefresh={()=>void review.refresh()}
           onDeleted={removedId=>{onInspirationRemoved?.(removedId);setAdvance(true);void review.refresh();}}
           onSaved={onSaved} onSynchronized={onSynchronized} onReflectionRemoved={onReflectionRemoved} onOpen={onOpen}/>:null}
-        {session&&!item&&!advance&&!thoughtId&&!disabled&&!review.error&&!review.pending?<><p>{say('worldReviewDone')}</p><button type="button" className="jar-review-primary" onClick={()=>setAdvance(true)}>{say('worldReviewAnotherInspiration')} →</button></>:null}
+        {session&&!item&&!advance&&!thoughtId&&!disabled&&!review.error&&!review.pending?<><p>{say('worldReviewDone')}</p><button type="button" className="jar-review-primary" onClick={()=>{if(session.completedAt&&session.supportsAdvance)review.start();else setAdvance(true);}}>{say('worldReviewAnotherInspiration')} →</button></>:null}
         {/* Preserve historical multi-source answers and deep links without
             reintroducing a collective reflection path in new reviews. */}
         {session&&(thoughtId||!item&&!advance)?<>

@@ -489,6 +489,20 @@ An older API's rejection of the opt-in query may negotiate a read-only legacy
 fallback before starting. A rejected or uncertain POST is never automatically
 replayed for compatibility; its durable identity and explicit recovery remain.
 
+Current APIs advertise `supportsAdvance`. Explicit Next uses one atomic
+`/advance` request to save its versioned choice, complete an exhausted session
+and create the next suggested single-source review. The response includes that
+current owned original, not a prefetched or cached copy. A client-generated
+next session ID and its creation-input hash bind the previous session, observed
+revision, source revision and choice. Repeating the same request returns its
+existing successor rather than skipping again; an empty successor result cannot
+start a later capture on replay. Legacy multi-item manifests advance within
+their fixed order first. Conflicts or creation failure roll back the transition.
+The browser journals the intent before posting, retains a confirmed bundle
+through the route change and reconciles a lost response with scoped reads.
+Older APIs retain the existing multi-request flow without an automatic write
+retry. No inspiration is deleted or model work created by Next.
+
 Removal is the existing permanent inspiration deletion, including its server
 reflections, attachments and evidence links. Review requires confirmation and
 sends the observed personal material revision. The DELETE route checks that

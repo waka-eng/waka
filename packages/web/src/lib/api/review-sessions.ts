@@ -6,6 +6,7 @@ export interface ApiReviewItem {
   reason:'unreviewed'|'revisit'|'chosen';choice:'keep'|'skip'|null;decidedAt:string|null;inspirationCreatedAt:string;
 }
 export interface ApiReviewSession {
+  supportsAdvance?:boolean;
   currentInspiration?:ApiInspiration|null;
   id:string;profileId:string;revision:number;cursor:number;currentInspirationId:string|null;
   createdAt:string;completedAt:string|null;items:ApiReviewItem[];
@@ -15,7 +16,7 @@ const uuid=(value:unknown)=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[
 function checked(body:{session:ApiReviewSession|null},profileId:string,id?:string){
   const row=body?.session;
   if(row===null&&!id) return null;
-  if(!row || !uuid(row.id) || (id && row.id!==id) || row.profileId!==profileId || !Number.isSafeInteger(row.revision) || row.revision<0 ||
+  if(!row || !uuid(row.id) || (id && row.id!==id) || row.profileId!==profileId || (row.supportsAdvance!==undefined&&typeof row.supportsAdvance!=='boolean') || !Number.isSafeInteger(row.revision) || row.revision<0 ||
     !Number.isInteger(row.cursor) || row.cursor<0 || row.cursor>5 || !Array.isArray(row.items) || row.items.length>5 ||
     !Number.isFinite(Date.parse(row.createdAt)) || !(row.completedAt===null||Number.isFinite(Date.parse(row.completedAt))) ||
     row.items.some(item=>!uuid(item.inspirationId)||!Number.isInteger(item.position)||item.position<0||item.position>4||
@@ -37,5 +38,18 @@ type ReviewResponse={session:ApiReviewSession|null;hasInspirations?:boolean};
 export async function fetchActiveReview(profileId:string,signal?:AbortSignal,includeCurrent=false){return checked(await getJson<ReviewResponse>(path('/active',profileId,includeCurrent),'Could not load the review',signal),profileId);}
 export async function fetchReviewSession(id:string,profileId:string,signal?:AbortSignal,includeCurrent=false){return checked(await getJson<ReviewResponse>(path(`/${encodeURIComponent(id)}`,profileId,includeCurrent),'Could not load the review',signal),profileId,id);}
 export async function startReviewSession(input:{id:string;inspirationIds?:string[]},profileId:string,signal?:AbortSignal,includeCurrent=false,onEmpty?:(hasInspirations:boolean)=>void){const body=await postJson<ReviewResponse>(path('',profileId,includeCurrent),input,'Could not start the review',signal);const row=checked(body,profileId,input.inspirationIds?input.id:undefined);if(!row&&typeof body.hasInspirations==='boolean')onEmpty?.(body.hasInspirations);return row;}
-export async function chooseReviewInspiration(id:string,input:ReviewChoiceInput,profileId:string,signal?:AbortSignal){return checked(await postJson<{session:ApiReviewSession|null}>(path(`/${encodeURIComponent(id)}/choices`,profileId),input,'Could not keep the review choice',signal),profileId,id);}
+export async function chooseReviewInspiration(id:string,input:ReviewChoiceInput,profileId:string,signal?:AbortSignal,includeCurrent=false){return checked(await postJson<{session:ApiReviewSession|null}>(path(`/${encodeURIComponent(id)}/choices`,profileId,includeCurrent),input,'Could not keep the review choice',signal),profileId,id);}
+export type ReviewAdvanceInput=ReviewChoiceInput&{nextId:string;choice:'keep'|'skip'};
+export async function advanceReviewSession(id:string,input:ReviewAdvanceInput,profileId:string,signal?:AbortSignal){
+  const body=await postJson<{session:ApiReviewSession|null}>(path(`/${encodeURIComponent(id)}/advance`,profileId,true),input,'Could not open the next inspiration',signal);
+  if(body?.session===null)return null;
+  const row=checked(body,profileId);
+  if(row!.id!==id&&row!.id!==input.nextId)throw new ApiError({status:200,code:'invalid_review',message:'Could not verify the next review'});
+  if(row!.id===id){
+    const item=row!.items.find(item=>item.inspirationId===input.inspirationId);
+    if(row!.completedAt||row!.revision!==input.revision+1||!item||item.choice!==input.choice||item.sourceRevision!==input.sourceRevision||row!.cursor!==item.position+1)
+      throw new ApiError({status:200,code:'invalid_review',message:'Could not verify the next review'});
+  }
+  return row;
+}
 export async function finishReviewSession(id:string,revision:number,profileId:string,signal?:AbortSignal){return checked(await postJson<{session:ApiReviewSession|null}>(path(`/${encodeURIComponent(id)}/complete`,profileId),{revision},'Could not finish the review',signal),profileId,id);}

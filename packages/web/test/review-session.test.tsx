@@ -7,8 +7,8 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {useReviewSession} from '../src/lib/use-review-session';
 import {profileStorageKey} from '../src/lib/profile-storage';
 import {readReviewSelections,storeReviewSelection} from '../src/lib/review-selection-drafts';
-import {ApiError,chooseReviewInspiration,fetchActiveReview,fetchReviewSession,finishReviewSession,startReviewSession,type ApiReviewSession} from '../src/lib/api';
-vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),chooseReviewInspiration:vi.fn(),fetchActiveReview:vi.fn(),fetchReviewSession:vi.fn(),finishReviewSession:vi.fn(),startReviewSession:vi.fn()}));
+import {ApiError,advanceReviewSession,chooseReviewInspiration,fetchActiveReview,fetchReviewSession,finishReviewSession,startReviewSession,type ApiReviewSession} from '../src/lib/api';
+vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),advanceReviewSession:vi.fn(),chooseReviewInspiration:vi.fn(),fetchActiveReview:vi.fn(),fetchReviewSession:vi.fn(),finishReviewSession:vi.fn(),startReviewSession:vi.fn()}));
 const SID='11111111-1111-4111-8111-111111111111',SOURCE='22222222-2222-4222-8222-222222222222';
 const scope={accountId:'account',profileId:'profile'},prefix=profileStorageKey(scope,'reviewIntent:')!;
 let host:HTMLDivElement,root:Root,hook:ReturnType<typeof useReviewSession>,current:ApiReviewSession|null;
@@ -29,6 +29,48 @@ beforeEach(()=>{
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.useRealTimers();});
 const mount=(id='new',owner=scope,includeCurrent=false)=>act(async()=>root.render(<Harness id={id} owner={owner} includeCurrent={includeCurrent}/>));
 const keys=()=>Object.keys(localStorage).filter(key=>key.startsWith(prefix));
+it('journals next identity before advancing and retains its returned source through routing',async()=>{
+  current=session();await mount(SID,scope,true);
+  vi.mocked(advanceReviewSession).mockImplementation(async(_id,input)=>{
+    expect(keys()).toHaveLength(1);expect(localStorage.getItem(keys()[0]!)).toContain(input.nextId);
+    current={...session(),id:input.nextId};return copy();
+  });
+  await act(async()=>hook.next(hook.session!.items[0]!,'skip'));const next=hook.session!.id;
+  const reads=vi.mocked(fetchReviewSession).mock.calls.length;
+  await mount(next,scope,true);expect(keys()).toHaveLength(0);expect(hook.loading).toBe(false);expect(fetchReviewSession).toHaveBeenCalledTimes(reads);
+});
+it('recovers a committed next transition after response loss using only reads',async()=>{
+  current=session();await mount(SID,scope,true);
+  vi.mocked(advanceReviewSession).mockImplementation(async(_id,input)=>{current={...session(),id:input.nextId};throw new Error('Response lost');});
+  await act(async()=>hook.next(hook.session!.items[0]!,'skip'));expect(hook.pending?.kind).toBe('advance');
+  await act(async()=>root.unmount());root=createRoot(host);await mount(SID,scope,true);
+  expect(hook.session?.id).toBe(current!.id);expect(hook.pending).toBeNull();expect(advanceReviewSession).toHaveBeenCalledOnce();
+});
+it('confirms an empty advance after response loss without starting another review',async()=>{
+  current=session();await mount(SID,scope,true);
+  let nextId='';
+  vi.mocked(advanceReviewSession).mockImplementation(async(_id,input)=>{
+    nextId=input.nextId;current={...session(),revision:2,cursor:1,completedAt:'2026-10-02T01:00:00Z',currentInspirationId:null,
+      items:session().items.map(item=>({...item,choice:'skip'}))};throw new Error('Response lost');
+  });
+  await act(async()=>hook.next(hook.session!.items[0]!,'skip'));
+  vi.mocked(fetchReviewSession).mockImplementation(async id=>{if(id===nextId)throw new ApiError({status:404,message:'Not found'});return copy();});
+  vi.mocked(fetchActiveReview).mockResolvedValue(null);
+  await act(async()=>hook.refresh());expect(hook.pending).toBeNull();expect(hook.empty).toBe(true);expect(hook.hasInspirations).toBe(true);
+  expect(advanceReviewSession).toHaveBeenCalledOnce();expect(startReviewSession).not.toHaveBeenCalled();
+});
+it('does not call a conflicting newer review an empty confirmed advance',async()=>{
+  current=session();await mount(SID,scope,true);let nextId='';
+  vi.mocked(advanceReviewSession).mockImplementation(async(_id,input)=>{
+    nextId=input.nextId;current={...session(),revision:2,cursor:1,completedAt:'2026-10-02T01:00:00Z',currentInspirationId:null,items:session().items.map(item=>({...item,choice:'skip'}))};throw new Error('Response lost');
+  });
+  await act(async()=>hook.next(hook.session!.items[0]!,'skip'));
+  vi.mocked(fetchReviewSession).mockImplementation(async id=>{if(id===nextId)throw new ApiError({status:404,message:'Not found'});return copy();});
+  vi.mocked(fetchActiveReview).mockResolvedValue({...session(),id:'33333333-3333-4333-8333-333333333333'});
+  await act(async()=>hook.refresh());expect(hook.pending?.kind).toBe('advance');expect(hook.error).toBe('conflict');expect(hook.empty).toBe(false);
+  expect(advanceReviewSession).toHaveBeenCalledOnce();
+  await act(async()=>hook.useLatest());expect(hook.pending).toBeNull();expect(hook.error).toBeNull();expect(hook.session?.id).toBe('33333333-3333-4333-8333-333333333333');
+});
 it('only reads on opening and durably journals an explicit start before posting',async()=>{
   await mount();expect(startReviewSession).not.toHaveBeenCalled();
   vi.mocked(startReviewSession).mockImplementationOnce(async input=>{expect(keys()).toHaveLength(1);expect(localStorage.getItem(keys()[0]!)).toContain(input.id);return {...session(),id:input.id};});

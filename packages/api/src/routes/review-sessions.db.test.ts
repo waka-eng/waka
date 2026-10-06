@@ -41,6 +41,56 @@ async function sessionBody(response:Response){
 }
 const choose=(p:Person,session: {id:string;revision:number},inspirationId:string,choice:'keep'|'skip'|null,sourceRevision='1')=>post(p,`/${session.id}/choices`,{revision:session.revision,inspirationId,choice,sourceRevision});
 
+it('advances atomically to one new owned inspiration with its full material and replay proof',async()=>{
+  const p=await person(),a=await source(p.id),b=await source(p.id,1),session=await start(p,[a]);
+  const input={revision:session.revision,inspirationId:a,sourceRevision:'1',choice:'skip',nextId:randomUUID()};
+  const next=await sessionBody(await post(p,`/${session.id}/advance`,input));
+  expect(next.id).toBe(input.nextId);expect(next.currentInspiration).toMatchObject({id:b,profileId:p.id,materialRevision:'1'});
+  expect(next.supportsAdvance).toBe(true);expect(next.items).toHaveLength(1);
+  const [finished]=await t.sql`SELECT completed_at,revision FROM review_sessions WHERE id=${session.id}`;
+  expect(finished.revision).toBe(2);expect(Number.isFinite(Date.parse(finished.completed_at))).toBe(true);
+  expect((await sessionBody(await post(p,`/${session.id}/advance`,input))).id).toBe(next.id);
+  expect(await t.sql`SELECT id FROM review_sessions`).toHaveLength(2);expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
+  expect((await post(p,`/${session.id}/advance`,{...input,choice:'keep'})).status).toBe(409);
+});
+it('rolls back the entire next transition on stale source or foreign access',async()=>{
+  const p=await person(),other=await person(),a=await source(p.id);await source(p.id,1);const session=await start(p,[a]);
+  const input={revision:session.revision,inspirationId:a,sourceRevision:'2',choice:'skip',nextId:randomUUID()};
+  expect((await post(p,`/${session.id}/advance`,input)).status).toBe(409);
+  expect((await post(other,`/${session.id}/advance`,{...input,sourceRevision:'1'})).status).toBe(404);
+  expect((await t.sql`SELECT revision,completed_at FROM review_sessions WHERE id=${session.id}`)[0]).toEqual({revision:0,completed_at:null});
+  expect((await t.sql`SELECT choice FROM review_items WHERE session_id=${session.id}`)[0].choice).toBeNull();
+  expect(await t.sql`SELECT id FROM review_sessions`).toHaveLength(1);
+});
+it('never creates another review on replay after a no-candidate next result',async()=>{
+  const p=await person(),a=await source(p.id),session=await start(p,[a]);
+  const input={revision:session.revision,inspirationId:a,sourceRevision:'1',choice:'skip',nextId:randomUUID()};
+  expect(await (await post(p,`/${session.id}/advance`,input)).json()).toEqual({session:null});
+  await source(p.id);
+  expect(await (await post(p,`/${session.id}/advance`,input)).json()).toEqual({session:null});
+  expect(await t.sql`SELECT id FROM review_sessions`).toHaveLength(1);
+});
+it('keeps legacy multi-item manifests and bundles their next original without opening another session',async()=>{
+  const p=await person(),a=await source(p.id),b=await source(p.id,1),session=await start(p,[a,b]);
+  const input={revision:session.revision,inspirationId:a,sourceRevision:'1',choice:'skip',nextId:randomUUID()};
+  const next=await sessionBody(await post(p,`/${session.id}/advance`,input));
+  expect(next.id).toBe(session.id);expect(next.currentInspiration).toMatchObject({id:b});expect(next.completedAt).toBeNull();
+  expect((await sessionBody(await post(p,`/${session.id}/advance`,input))).revision).toBe(1);
+  expect(await t.sql`SELECT id FROM review_sessions`).toHaveLength(1);
+});
+it('rolls back choice and completion when the next review cannot be created',async()=>{
+  const p=await person(),a=await source(p.id);await source(p.id,1);const session=await start(p,[a]);
+  await t.sql`CREATE FUNCTION reject_next_review() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'PRIVATE_NEXT_TEST'; END; $$ LANGUAGE plpgsql`;
+  await t.sql`CREATE TRIGGER reject_next_review BEFORE INSERT ON review_sessions FOR EACH ROW EXECUTE FUNCTION reject_next_review()`;
+  const logged=vi.spyOn(console,'error').mockImplementation(()=>{});
+  try{
+    const response=await post(p,`/${session.id}/advance`,{revision:0,inspirationId:a,sourceRevision:'1',choice:'skip',nextId:randomUUID()});
+    expect(response.status).toBe(500);expect(await response.text()).not.toContain('PRIVATE_NEXT_TEST');
+    expect((await t.sql`SELECT revision,completed_at FROM review_sessions WHERE id=${session.id}`)[0]).toEqual({revision:0,completed_at:null});
+    expect((await t.sql`SELECT choice FROM review_items WHERE session_id=${session.id}`)[0].choice).toBeNull();
+  }finally{logged.mockRestore();await t.sql`DROP TRIGGER reject_next_review ON review_sessions`;await t.sql`DROP FUNCTION reject_next_review()`;}
+});
+
 it('bundles only the current owned original and its matching revision when explicitly requested',async()=>{
   const p=await person(),other=await person(),id=await source(p.id);await source(other.id);
   await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer) VALUES (${p.id},${id},'Why?','A synthetic saved thought')`;

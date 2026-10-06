@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../lib/db.js';
 import { humanSessionsOnly, requireAuth, type AuthEnv } from '../lib/middleware.js';
-import { chooseReviewItem, completeReviewSession, createReviewSession, MAX_REVIEW_ITEMS, readActiveReview, readReviewSession, ReviewSessionError } from '../lib/review-sessions.js';
+import { advanceReviewSession, chooseReviewItem, completeReviewSession, createReviewSession, MAX_REVIEW_ITEMS, readActiveReview, readReviewSession, ReviewSessionError } from '../lib/review-sessions.js';
 import { profileQuerySchema } from './inspirations-validation.js';
 import { resolveTargetProfile } from './inspirations-tenancy.js';
 import {registerReviewDialogueRoutes} from './review-dialogue.js';
@@ -57,7 +57,12 @@ export function createReviewSessionRoutes(deps:{getDatabase?:typeof getDb;authMi
   routes.post('/:id/choices',async c=>{
     const id=uuid.safeParse(c.req.param('id')),input=choiceSchema.safeParse(await c.req.json().catch(()=>null));
     if (!id.success || !input.success) return c.json({error:'Invalid review choice'},400);
-    return c.json({session:await chooseReviewItem(database(),c.get('reviewProfileId'),id.data,input.data)});
+    return c.json({session:await chooseReviewItem(database(),c.get('reviewProfileId'),id.data,input.data,includeCurrent(c))});
+  });
+  routes.post('/:id/advance',async c=>{
+    const id=uuid.safeParse(c.req.param('id')),input=choiceSchema.extend({revision:revision.max(2147483645),choice:z.enum(['keep','skip']),nextId:uuid}).strict().safeParse(await c.req.json().catch(()=>null));
+    if(!id.success||!input.success)return c.json({error:'Invalid next review request'},400);
+    return c.json({session:await advanceReviewSession(database(),c.get('reviewProfileId'),id.data,input.data)});
   });
   routes.post('/:id/complete',async c=>{
     const id=uuid.safeParse(c.req.param('id')),input=z.object({revision}).strict().safeParse(await c.req.json().catch(()=>null));
