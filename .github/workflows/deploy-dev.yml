@@ -67,12 +67,16 @@ jobs:
           # Names verified from the development deployment outputs, not prod.
           WAKA_AUDIT_API_FUNCTION: waka-development-ApiFunction-efwcwxdn
           WAKA_AUDIT_WORKER_FUNCTION: waka-development-BackgroundWorkerFunction-xxbrbmcx
-        run: node scripts/dev-operations-audit.mjs > dev-operations.json
+        run: |
+          node scripts/dev-operations-audit.mjs > dev-operations.json
+          node scripts/dev-source-policy.mjs > dev-source-policy.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: dev-operations
-          path: dev-operations.json
+          path: |
+            dev-operations.json
+            dev-source-policy.json
           if-no-files-found: error
           retention-days: 7
   deploy:
