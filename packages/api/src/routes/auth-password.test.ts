@@ -14,3 +14,10 @@ it.each(['a'.repeat(73),'가'.repeat(25),'😀'.repeat(19),'a'.repeat(69)+'😀'
   const body=await response.json() as {details:{password:string[]}};expect(body.details.password.join(' ')).toMatch(/72.*bytes|bytes.*72/);
   expect(database).not.toHaveBeenCalled();
 });
+it.each(['password\uD800x','password\uDC00x','password\uD800','password\uDC00'])('refuses malformed Unicode before account lookup',async password=>{
+  const response=await app.request('/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'synthetic@example.test',password})});
+  expect(response.status).toBe(400);
+  const body=await response.json() as {details:{password:string[]}};
+  expect(body.details.password.join(' ')).toContain('invalid Unicode');
+  expect(database).not.toHaveBeenCalled();
+});

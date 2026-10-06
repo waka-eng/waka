@@ -485,3 +485,24 @@ does not establish deployed stage separation or cover Gemini charges.
 Human comprehension, authoritative deployed configuration and privacy,
 stage/concurrency timings, actual cost enforcement and exercised alert delivery
 remain open. Approval to deliver does not pass those measurement gates.
+
+### Delivery CI password repair on 2026 10 05
+
+PR CI passed typechecks and migrations, then crashed its password-test worker:
+`Fatal JavaScript invalid size error`, followed by `Worker exited unexpectedly`.
+The run reported 910 passed tests before aborting. A bounded isolated probe of
+the installed bcrypt encoder with a lone surrogate reproduces SIGABRT; its
+legacy UTF-16 conversion can loop after malformed input. This is a real input
+safety failure, not a reason to skip the emoji boundary case or rerun blindly.
+
+Signup now refuses malformed Unicode before database access. Hashing rejects
+it before bcrypt; login verification returns false before bcrypt, preserving
+the generic credential refusal. Valid ASCII, Korean, emoji, exact spaces and
+legacy long-password verification remain unchanged; no normalization, hash
+rewrite or cost-factor reduction was introduced.
+
+Verification: 26 targeted password/route tests, eight real signup/login SQL
+cases and 930 API unit tests pass, with three opt-in paid suites skipped. API
+types and diff checks pass. SQL uses explicit disposable loopback data; no
+provider was called. The fix is included in PR 350, which must pass fresh CI
+before merge. Evaluation allocation and recurring provider caps are unchanged.

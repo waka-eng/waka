@@ -38,3 +38,9 @@ it('logs an existing long-password account in without rewriting its hash',async(
   expect((await fixture.sql`SELECT password_hash FROM accounts WHERE id=${account.id}`)[0].password_hash).toBe(hash);
   expect((await send('/login',email,'b'+password.slice(1))).status).toBe(401);
 });
+it('returns a generic login refusal for malformed Unicode without creating a session',async()=>{
+  const email=randomUUID()+'@example.test';
+  expect((await send('/signup',email,'synthetic password')).status).toBe(201);
+  expect((await send('/login',email,'password\uD800x')).status).toBe(401);
+  expect(await fixture.sql`SELECT id FROM sessions`).toHaveLength(1);
+});
