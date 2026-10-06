@@ -1,15 +1,16 @@
 /**
  * The background queue's worker.
  *
- * Woken two ways. Normally the API invokes it the moment work is enqueued, so
- * a capture starts deriving in the same second. Once a day a cron invokes it
+ * Normally the API invokes it the moment work is enqueued, so a capture starts
+ * deriving immediately. Short transient failures request bounded native async
+ * redelivery, without sleeping here. Once a day a cron invokes it
  * as a safety net, for the error paths a push cannot cover: a job whose
  * backoff outlived the invocation that failed it, a row still locked by a
  * worker that died, an enqueue whose wake-up call never landed.
  * A dev-only recovery event checks overdue work every fifteen minutes, taking
  * one normal pass of five claims after grace; daily and push drains remain.
  *
- * Because nothing polls behind it, this drains until the queue is *dry*
+ * Because no continuous poller drives normal work, this drains until the queue is *dry*
  * rather than running a single batch. The pipeline enqueues as it goes — a
  * finished derivation asks for a synthesis — so stopping after one batch
  * would leave the second half of a person's pipeline waiting for tomorrow's
@@ -17,7 +18,7 @@
  * re-arming itself is a Lambda that runs until its timeout, every time.
  */
 
-import { runBackgroundJobWorker,readBackgroundJobRecoveryState } from "./lib/queue.js";
+import { runBackgroundJobWorker,readBackgroundJobRecoveryState,hasNearTermBackgroundJobRetry,type BackgroundJobRetryWake } from "./lib/queue.js";
 import {QUEUE_RECOVERY_LIMITS,recordQueueRecovery} from './lib/queue-recovery.js';
 
 const DEFAULT_CRON_LIMIT = 5;
@@ -46,13 +47,18 @@ export async function handler(event?:unknown) {
     return {...result,passes:1,exhaustedPasses:false,recovery:state};
   }
   const limit = parseCronLimit(process.env.WAKA_BACKGROUND_JOB_CRON_LIMIT);
-  const total = { claimed: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
+  // Only our known asynchronous enqueue event opts into native error retries.
+  // Local calls, daily sweeps and recovery must not manufacture Lambda errors.
+  const asyncEnqueue = Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME && event && typeof event==='object' && (event as {mode?:unknown}).mode==='enqueue');
+  const retries:BackgroundJobRetryWake[]=[];
+  const total = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
   let passes = 0;
 
   while (passes < MAX_DRAIN_PASSES) {
-    const result = await runBackgroundJobWorker({ limit });
+    const result = await runBackgroundJobWorker({ limit, ...(asyncEnqueue?{onTransientRetry:(retry:BackgroundJobRetryWake)=>{retries.push(retry);}}:{}) });
     passes += 1;
     total.claimed += result.claimed;
+    total.held += result.held;
     total.succeeded += result.succeeded;
     total.retried += result.retried;
     total.failed += result.failed;
@@ -87,5 +93,13 @@ export async function handler(event?:unknown) {
 
   const drained = { ...total, passes, exhaustedPasses: passes >= MAX_DRAIN_PASSES };
   console.log("[background-worker] drained background jobs", drained);
+  if(asyncEnqueue && retries.length && await hasNearTermBackgroundJobRetry(retries)){
+    // This error asks Lambda's existing async queue for at most two more
+    // deliveries. The next delivery still uses normal due-time, lease and
+    // budget checks. Completed work is not replayed. Expected retry signals
+    // count in Lambda Errors, not as permanently failed database jobs.
+    console.info('[background-worker] transient retry remains; requesting bounded async redelivery');
+    throw new Error('BackgroundJobRetryScheduled');
+  }
   return drained;
 }

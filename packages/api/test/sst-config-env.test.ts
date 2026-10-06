@@ -44,6 +44,11 @@ describe("SST background job delivery", () => {
     /new sst\.aws\.Function\("Api", \{(?<body>[\s\S]*?)\n    \}\);/,
   );
 
+  it('pins native asynchronous retry delivery to two extra invocations',()=>{
+    const worker=sstConfig.match(/new sst\.aws\.Function\("BackgroundWorker", \{(?<body>[\s\S]*?)\n    \}\);/);
+    expect(worker?.groups?.body).toMatch(/retries:\s*2\s*,/);
+  });
+
   it("tells the API which worker to wake", () => {
     expect(apiFunction?.groups?.body).toEqual(
       expect.stringContaining("WAKA_BACKGROUND_WORKER_FUNCTION: backgroundWorker.name"),
