@@ -19,6 +19,8 @@ const searchCorpus=process.env.WAKA_PERFORMANCE_SEARCH_CORPUS==='1';
 process.env.NODE_ENV='test';process.env.JWT_SECRET='disposable-performance-probe-only';
 const chatScenario=process.env.WAKA_PERFORMANCE_CHAT_SCENARIO==='1';
 const chatHistory=process.env.WAKA_PERFORMANCE_CHAT_HISTORY==='1';
+const chatMessages=Number(process.env.WAKA_PERFORMANCE_CHAT_MESSAGES??2);
+assert.ok(Number.isInteger(chatMessages)&&chatMessages>=2&&chatMessages<=200&&chatMessages%2===0);
 assert.ok(!chatHistory||chatScenario,'Dated history fixture requires the interactive Chat fixture.');
 process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';process.env.WAKA_CONVERSATION_REPLIES=chatScenario?'1':'0';
 delete process.env.OPENROUTER_API_KEY;delete process.env.GEMINI_API_KEY;delete process.env.AWS_LAMBDA_FUNCTION_NAME;delete process.env.WAKA_BACKGROUND_WORKER_FUNCTION;
@@ -113,6 +115,15 @@ if(chatScenario)for(const f of fixtures.values()){
     (${assistantId},${f.id},${conversationId},2,'assistant',${assistantText})`;
   await fixture.sql`INSERT INTO conversation_reply_requests(id,profile_id,conversation_id,user_message_id,assistant_message_id,conversation_revision,context_hash,status,"references",context_sources,finished_at)
     VALUES (${requestId},${f.id},${conversationId},${userId},${assistantId},1,'synthetic-fixture','ready',${JSON.stringify(references)}::jsonb,${JSON.stringify(references)}::jsonb,now())`;
+  for(let turn=1;turn<chatMessages/2;turn++){
+    const user=crypto.randomUUID(),assistant=crypto.randomUUID();
+    await fixture.sql`INSERT INTO conversation_messages(id,profile_id,conversation_id,position,role,content) VALUES
+      (${user},${f.id},${conversationId},${turn*2+1},'user',${`Synthetic question ${turn+1}.`}),
+      (${assistant},${f.id},${conversationId},${turn*2+2},'assistant',${`Synthetic reply ${turn+1}: the selected records remain available to explore.`})`;
+    await fixture.sql`INSERT INTO conversation_reply_requests(id,profile_id,conversation_id,user_message_id,assistant_message_id,conversation_revision,context_hash,status,"references",context_sources,finished_at)
+      VALUES (${crypto.randomUUID()},${f.id},${conversationId},${user},${assistant},${turn*2+1},'synthetic-fixture','ready',${JSON.stringify(references)}::jsonb,${JSON.stringify(references)}::jsonb,now())`;
+  }
+  await fixture.sql`UPDATE conversations SET revision=${chatMessages} WHERE id=${conversationId}`;
   f.conversationId=conversationId;
 }
 await fixture.sql`ANALYZE`;

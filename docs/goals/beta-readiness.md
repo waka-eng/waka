@@ -404,6 +404,55 @@ only after the owner's choice. This makes no model request or budget change.
 Check stage-key separation and Gemini controls separately. Exercise live alarms
 and stage timings only under authorized delivery, retaining failure receipts.
 
+### Milestone 4 bounded history checkpoint on 2026 10 05
+
+Large-body measurement resolved the conditional paging decision. Maximum-size
+Korean placeholders in a 200-message thread produce 2,221,883 bytes for the
+full projected rows, before API envelope or transport compression. Initial
+thirty-message API delivery is 334,997 bytes (repeated sources), or 334,432
+bytes with varied sources. The final size receipt is
+`work/performance/long-conversation-window-final-size-1791261615695.json`.
+These are synthetic uncompressed bounds, not transfer-time or compression
+guarantees; one intermediate run overlapped web tests and is not a timing gate.
+
+Implemented explicit tail/expanded windows, preserving legacy full-thread
+requests, total revision fences and every immutable message. The browser opens
+the latest thirty and offers Load earlier messages, expanding by thirty
+positions. Loaded spans are refreshed/revalidated, not cached as source proof.
+Original-topic previews remain scoped to the full conversation. Write validation
+still uses the complete thread; lost-response replay includes the actual
+confirmation anchor. Invalid write windows roll back inside the transaction.
+Uncertain-write reads do not assume a commit: they inspect the current tail and
+expand only when its expected position is hidden. Scoped scroll metadata keeps
+the loaded boundary through Back/reload; old scroll records request the full span.
+
+Verification: 918 API unit tests, 793 web tests, 42 conversation SQL cases,
+API/web/performance types, build, migration and diff checks pass. New checks
+cover contiguous DTOs, foreign windows, malformed ranges, legacy access,
+rollback, old replay confirmation, unchanged sidebar topic, draft/read failure,
+scroll anchoring and reopening. SQL fixtures initially omitted client IDs and
+were corrected; the replay test retained its GET-only/no-resend assertions.
+
+Built browser evidence used an owned 80-message fixture with provider network
+and autodrain disabled. It opened thirty messages, expanded to sixty and eighty,
+preserved the old visible anchor and earlier-reading date labels, then reopened
+the sixty-message span at exactly the same 8,332-pixel scroll position. Screenshots
+are retained under `work/performance/beta-m4-window/`. No real account or paid
+model was involved; this is not first-time comprehension or cloud verification.
+
+Mixed-version clients fall back only when an old server explicitly rejects
+the new query shape before its write route. Durable IDs/body are unchanged;
+ambiguous failures and actual window errors do not replay. The full web gate
+initially lost two writes because its text scan did not follow local helpers.
+AST discovery now follows helper calls with a cycle guard, retains both verbs
+and self-tests that delegated reads are not writes. No register entry was removed.
+The owned browser schema was removed after normal shutdown and checked absent;
+temporary tabs and viewport overrides were cleaned up, with screenshots retained.
+
+The full goal remains open for monetary policy choices/actual enforcement,
+alert destination and live delivery, authorized rollout, attested runtime and
+provider settings, deployed stage/concurrency measurements and human UX evidence.
+
 ### First time user check
 
 Use a fresh synthetic preview, not an existing user's account. Give participants

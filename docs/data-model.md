@@ -236,8 +236,19 @@ allowances; each citation still checks its own current or legacy proof. Legacy
 inspiration references retain both original-text and enriched projections where
 needed. No source cache survives the request, and per-message historical/stale
 status is preserved. At most 200 message groups and three citations per group
-are accepted. The existing 200-message conversation limit and full message
-delivery remain; large-body or deployed measurements may require paging later.
+are accepted. The 200-message conversation limit remains. Browser reads request
+the latest thirty messages initially, then expand the loaded span by thirty
+positions on explicit request. Every refresh revalidates the loaded span.
+`messageWindowStart` is a response boundary over immutable message positions,
+not another message identity or stored revision. Total `revision` remains the
+write fence; partial DTOs must be contiguous through that total revision.
+Legacy requests without window parameters still receive the complete thread.
+Writes validate against the full conversation, and a replay response includes
+its original message confirmation even outside the requested tail. Invalid
+write windows roll back. Uncertain-write recovery first checks current state,
+then expands only when later messages hide its expected confirmation position.
+Session scroll metadata remembers the account/profile/conversation-scoped
+loaded boundary, never raw words; legacy scroll records restore the full span.
 
 Material includes saved reflection answers and ready link/image/audio text;
 an audio correction replaces the original transcript rather than adding a

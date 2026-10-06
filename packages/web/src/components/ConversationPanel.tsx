@@ -23,6 +23,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const [context,setContext]=useState<ConversationContext|null>(null),[memoryOpen,setMemoryOpen]=useState(false),[memoryBusy,setMemoryBusy]=useState(false),[memoryFailed,setMemoryFailed]=useState(false);
   const [historyOpen,setHistoryOpen]=useState(false),[mobile,setMobile]=useState(()=>window.matchMedia?.('(max-width:760px)').matches??false);
   const [historyFailed,setHistoryFailed]=useState(false);
+  const [earlierBusy,setEarlierBusy]=useState(false),[earlierFailed,setEarlierFailed]=useState(false);
+  const prependScroll=useRef<{height:number;top:number}|null>(null);
   const [focusPrinciple,setFocusPrinciple]=useState<ApiPrinciple|null>(null),[focusFailed,setFocusFailed]=useState(false);
   const lifecycle=useRef(new AbortController()),draftRef=useRef<Draft|null>(null),working=useRef(false),memorySerial=useRef(0);
   const conversationRef=useRef<ApiConversation|null>(initial),writer=useRef(crypto.randomUUID()),receipt=useRef<StoredConversationDraft>();
@@ -30,7 +32,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const [readingChoice,setReadingChoice]=useState<{messageId:string;index:number}|null>(null),[readingChoiceFailed,setReadingChoiceFailed]=useState<string|null>(null),choosingReading=useRef(false);
   const [citation,setCitation]=useState<{requestId:string;index:number;value:ConversationCitation|null;failed:boolean}|null>(null),citationSerial=useRef(0);
   const root=useRef<HTMLElement>(null),body=useRef<HTMLDivElement>(null),editor=useRef<HTMLTextAreaElement>(null),nearBottom=useRef(true),[newMessages,setNewMessages]=useState(false);
-  const restoredScroll=useRef<{top:number;nearBottom:boolean}|null>(null),scrollKey=profileStorageKey(scope,`conversationScroll:${journal}`)!;
+  const restoredScroll=useRef<{top:number;nearBottom:boolean;messageWindowStart?:number}|null>(null),scrollKey=profileStorageKey(scope,`conversationScroll:${journal}`)!;
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
   const sourceName=(kind:ConversationSourceKind)=>say(kind==='principle'?'worldConversationPrincipleRef':kind==='inspiration'?'worldConversationInspirationRef':'worldConversationReadingRef');
   useEffect(()=>{const media=window.matchMedia?.('(max-width:760px)');if(!media)return;const change=()=>setMobile(media.matches);media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
@@ -47,7 +49,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const observe=(next:ApiConversation)=>{
     if(conversationRef.current?.id===next.id&&conversationRef.current.profileId===next.profileId&&conversationRef.current.revision>next.revision)next=conversationRef.current;
     conversationRef.current=next;setConversation(next);setGenerationEnabled(next.generationEnabled??false);setContext(null);setCitation(null);citationSerial.current++;memorySerial.current++;setMemoryBusy(false);
-    const preview=conversationPreview(next.messages);
+    const preview=next.preview??conversationPreview(next.messages);
     setRows(previous=>[{id:next.id,profileId:next.profileId,revision:next.revision,updatedAt:next.updatedAt,preview},...previous.filter(row=>row.id!==next.id)].slice(0,100));
     const pending=draftRef.current;
     if(pending?.pending&&next.messages.some(message=>message.id===pending.id&&message.content===pending.content&&(message.correctsMessageId??undefined)===pending.correctsMessageId)){
@@ -57,7 +59,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     }
     try{setDrafts(readConversationDrafts(scope,journal));}catch{setStorageFailed(true);}
   };
-  const reply=useConversationReply(scope.profileId,id,Boolean(conversation?.generationEnabled),conversation?.revision??0,observe);
+  const reply=useConversationReply(scope.profileId,id,Boolean(conversation?.generationEnabled),conversation?.revision??0,observe,conversation?.messageWindowStart);
   const replyPending=reply.state?.phase==='pending'||reply.state?.phase==='running';
   const latestMessage=conversation?.messages.at(-1);
   const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&(!reply.state||reply.error));
@@ -69,6 +71,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     else if(opened.bottom>visible.bottom)node.scrollTop+=opened.bottom-visible.bottom;
   },[citation]);
   useLayoutEffect(()=>{const node=body.current;if(!node||!conversation)return;const saved=restoredScroll.current;
+    if(prependScroll.current){const previous=prependScroll.current;node.scrollTop=previous.top+node.scrollHeight-previous.height;prependScroll.current=null;return;}
     if(saved){nearBottom.current=saved.nearBottom;node.scrollTop=saved.nearBottom?node.scrollHeight:saved.top;restoredScroll.current=null;}
     else if(nearBottom.current){node.scrollTop=node.scrollHeight;setNewMessages(false);}else setNewMessages(true);
   },[conversation?.messages.length]);
@@ -80,15 +83,30 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       if(id)loadHistory();else await refreshList();if(lifecycle.current.signal.aborted)return;
       const target=id??(draftRef.current?.pending?draftRef.current.conversationId:null);
       if(target){const committed=bootstrap.current;bootstrap.current=null;
-        const next=committed?.id===target&&committed.profileId===scope.profileId?committed:await run(signal=>fetchConversation(scope.profileId,target,signal));if(!lifecycle.current.signal.aborted)observe(next);}
+        const pending=draftRef.current,from=conversationRef.current?.messageWindowStart??restoredScroll.current?.messageWindowStart;
+        let next=committed?.id===target&&committed.profileId===scope.profileId?committed:await run(signal=>from!==undefined?fetchConversation(scope.profileId,target,signal,from):fetchConversation(scope.profileId,target,signal));
+        // An uncertain write may not exist. First read current state; expand
+        // only when its expected position is hidden by a confirmed later tail.
+        const expected=pending?.pending?Math.max(1,pending.revision+1):null;
+        if(expected!==null&&next.revision>=expected&&(next.messageWindowStart??1)>expected&&!next.messages.some(message=>message.id===pending!.id))next=await run(signal=>fetchConversation(scope.profileId,target,signal,expected));
+        if(!lifecycle.current.signal.aborted)observe(next);}
       if(!id&&initialPrincipleId){const available=await run(signal=>fetchPrinciples({profile:scope.profileId},signal));if(!lifecycle.current.signal.aborted){const focus=available.find(row=>row.id===initialPrincipleId)??null;setFocusPrinciple(focus);setFocusFailed(!focus);}}
     }catch{if(!lifecycle.current.signal.aborted)setError(say(draftRef.current?.pending?'worldConversationSaveFailed':'worldConversationReadFailed'));}
     finally{if(!lifecycle.current.signal.aborted)setLoading(false);}
   };
+  const loadEarlier=async()=>{
+    if(!id||earlierBusy||busy||loading||!conversation?.messageWindowStart||conversation.messageWindowStart<=1)return;
+    setEarlierBusy(true);setEarlierFailed(false);
+    try{const from=Math.max(1,conversation.messageWindowStart-30),next=await run(signal=>fetchConversation(scope.profileId,id,signal,from));
+      if(lifecycle.current.signal.aborted)return;
+      if(next.revision<(conversationRef.current?.revision??0)||(next.messageWindowStart??1)>from)throw new Error('Older history window');
+      const node=body.current;if(node)prependScroll.current={height:node.scrollHeight,top:node.scrollTop};observe(next);
+    }catch{if(!lifecycle.current.signal.aborted)setEarlierFailed(true);}finally{if(!lifecycle.current.signal.aborted)setEarlierBusy(false);}
+  };
   useEffect(()=>{
     lifecycle.current=new AbortController();
     try{const saved=readConversationDrafts(scope,journal);setDrafts(saved);if(saved[0]){receipt.current=saved[0];draftRef.current=saved[0].value;setDraft(saved[0].value);}}catch{setStorageFailed(true);}
-    try{const saved=JSON.parse(sessionStorage.getItem(scrollKey)??'null');if(saved&&Number.isFinite(saved.top)&&saved.top>=0&&typeof saved.nearBottom==='boolean')restoredScroll.current=saved;}catch{/* Scrolling is recoverable without a stored position. */}
+    try{const saved=JSON.parse(sessionStorage.getItem(scrollKey)??'null');if(saved&&Number.isFinite(saved.top)&&saved.top>=0&&typeof saved.nearBottom==='boolean'&&(saved.messageWindowStart===undefined||Number.isSafeInteger(saved.messageWindowStart)&&saved.messageWindowStart>=1&&saved.messageWindowStart<=200))restoredScroll.current={...saved,messageWindowStart:saved.messageWindowStart??1};}catch{/* Scrolling is recoverable without a stored position. */}
     void refresh();return()=>lifecycle.current.abort();
   },[scope.accountId,scope.profileId,id,initialPrincipleId]);
   const save=async()=>{
@@ -96,7 +114,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID()}:{})};
     if(!keep(intent))return;working.current=true;setBusy(true);setError(null);nearBottom.current=true;
     try{
-      const next=id?await run(signal=>saveConversationMessage(scope.profileId,id,{id:intent.id,content:intent.content,revision:intent.revision,...(intent.correctsMessageId?{correctsMessageId:intent.correctsMessageId}:{}),...(generationEnabled?{requestReply:true}:{})},signal))
+      const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(intent.correctsMessageId?{correctsMessageId:intent.correctsMessageId}:{}),...(generationEnabled?{requestReply:true}:{})},from=conversationRef.current?.messageWindowStart;
+        return from!==undefined?saveConversationMessage(scope.profileId,id,input,signal,from):saveConversationMessage(scope.profileId,id,input,signal);})
         :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:generationEnabled===true}));
       if(!lifecycle.current.signal.aborted){observe(next);if(id)reply.check();}
     }catch{if(!lifecycle.current.signal.aborted)setError(say('worldConversationSaveFailed'));}
@@ -159,8 +178,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       {error?<div className="chat-notice" role="alert">{error} {!draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldRoomHistoryRetry')}</button>:null}</div>:null}
       {loading?<p className="chat-notice" role="status">{say('worldChatLoading')}</p>:null}
       {focusFailed?<p className="chat-notice" role="alert">{say('worldPrincipleUnavailable')} <button type="button" onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button></p>:null}
-      <div className="jar-conversation-body chat-scroll" ref={body} onScroll={()=>{const node=body.current;if(!node)return;nearBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<80;if(nearBottom.current)setNewMessages(false);try{sessionStorage.setItem(scrollKey,JSON.stringify({top:node.scrollTop,nearBottom:nearBottom.current}));}catch{/* The transcript remains available. */}}}>
+      <div className="jar-conversation-body chat-scroll" ref={body} onScroll={()=>{const node=body.current;if(!node)return;nearBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<80;if(nearBottom.current)setNewMessages(false);try{sessionStorage.setItem(scrollKey,JSON.stringify({top:node.scrollTop,nearBottom:nearBottom.current,...(conversationRef.current?.messageWindowStart!==undefined?{messageWindowStart:conversationRef.current.messageWindowStart}:{})}));}catch{/* The transcript remains available. */}}}>
         <div className="chat-transcript">
+          {(conversation?.messageWindowStart??1)>1?<div className="chat-earlier"><button type="button" disabled={earlierBusy||busy||loading} onClick={()=>void loadEarlier()}>{say(earlierBusy?'worldChatEarlierLoading':'worldChatEarlierMessages')}</button>{earlierFailed?<p role="alert">{say('worldChatEarlierFailed')}</p>:null}</div>:null}
           {first?<div className="chat-topic"><span>{say('worldConversationStartingFrom')}</span><blockquote>{first.statement}</blockquote>{first.state==='contested'?<p>{say('worldConversationContested')}</p>:null}</div>:null}
           {canCompose&&!conversation?.messages.length&&!draft?.pending?<section className="chat-welcome"><h2>{say('worldConversationFirst')}</h2><p>{say('worldChatContextHint')}</p><div className="chat-starters">
             {(['worldConversationStarterChoice','worldConversationStarterMeaning','worldConversationStarterChange'] as const).map(key=><button key={key} type="button" disabled={suggestionBlocked} onClick={()=>sendSuggestion(say(key))}>{say(key)}</button>)}

@@ -38,12 +38,27 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
+import ts from 'typescript';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "../src");
 const API = resolve(SRC, "lib/api");
 
 const WRITERS = ["postJson", "patchJson", "putJson", "requestVoid", "deleteJson"];
+
+function exportedWriters(text:string):string[]{
+  const source=ts.createSourceFile('resource.ts',text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+  const functions=new Map(source.statements.filter(ts.isFunctionDeclaration).filter(node=>node.name&&node.body).map(node=>[node.name!.text,node]));
+  const reachesWriter=(name:string,seen=new Set<string>()):boolean=>{
+    if(seen.has(name))return false;seen.add(name);const definition=functions.get(name);if(!definition?.body)return false;
+    let writes=false;
+    const visit=(node:ts.Node)=>{if(ts.isCallExpression(node)&&ts.isIdentifier(node.expression)){
+      const target=node.expression.text;if(WRITERS.includes(target)||functions.has(target)&&reachesWriter(target,new Set(seen)))writes=true;
+    }if(!writes)ts.forEachChild(node,visit);};
+    visit(definition.body);return writes;
+  };
+  return [...functions].filter(([name,node])=>node.modifiers?.some(modifier=>modifier.kind===ts.SyntaxKind.ExportKeyword)&&reachesWriter(name)).map(([name])=>name);
+}
 
 function everyFile(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -65,14 +80,7 @@ function verbsOffered(): string[] {
   for (const entry of readdirSync(API)) {
     if (!entry.endsWith(".ts") || entry === "http.ts" || entry.endsWith(".test.ts")) continue;
     const text = readFileSync(resolve(API, entry), "utf8");
-    const marks = [...text.matchAll(/export (?:async )?function (\w+)\b/g)];
-    for (let i = 0; i < marks.length; i += 1) {
-      const name = marks[i]![1] as string;
-      const from = marks[i]!.index as number;
-      const to = i + 1 < marks.length ? (marks[i + 1]!.index as number) : text.length;
-      const span = text.slice(from, to);
-      /* the helper may carry a generic — `postJson<{ x: Y }>(…)` */
-      if (!WRITERS.some((w) => new RegExp(`(?<![\\w.])${w}\\s*[<(]`).test(span))) continue;
+    for (const name of exportedWriters(text)) {
       if ((blob.match(new RegExp(`(?<![\\w.])${name}\\b`, "g"))?.length ?? 0) <= 1) continue;
       found.push(name);
     }
@@ -190,6 +198,9 @@ const REGISTER: Record<string, string> = {
 };
 
 describe("every verb has a way back, or a reason it does not", () => {
+  it('discovers delegated writes without treating delegated reads or cycles as writes',()=>{
+    expect(exportedWriters('async function writeWindow(){return postJson<number>("owned");} async function readWindow(){return getJson("owned");} function cycle(){return cycle();} export async function save(){return writeWindow();} export async function read(){return readWindow();} export function empty(){return cycle();}')).toEqual(['save']);
+  });
   it("has no verb missing from the register", () => {
     const missing = verbsOffered().filter((v) => !(v in REGISTER));
     expect(

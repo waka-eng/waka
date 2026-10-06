@@ -7,6 +7,7 @@ import {createTestDatabase} from '../../packages/api/test/helpers/db.js';
 import {conversationMessages,conversationReplyRequests,conversations,type ConversationReference} from '../../packages/api/src/db/index.js';
 import {readConversationContext,conversationHash,type ConversationSource} from '../../packages/api/src/lib/conversation-context.js';
 import {projectConversationMessages} from '../../packages/api/src/lib/conversation-replies.js';
+import {createConversationRoutes} from '../../packages/api/src/routes/conversations.js';
 import {writeEvaluationSnapshot} from '../e2e/evaluation-journal.js';
 
 const target=new URL(process.env.DB_CONNECTION_URL??'');
@@ -15,6 +16,7 @@ assert.equal(target.searchParams.has('options'),false);assert.equal(process.env.
 const samples=Number(process.env.WAKA_PERFORMANCE_SAMPLES??20);
 assert.ok(Number.isInteger(samples)&&samples>=5&&samples<=60);
 const label=process.argv.find(arg=>arg.startsWith('--label='))?.slice(8)??'baseline';assert.match(label,/^[a-z0-9-]+$/);
+const largeMessages=process.argv.includes('--large-messages');
 process.env.NODE_ENV='test';process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';
 delete process.env.OPENROUTER_API_KEY;delete process.env.GEMINI_API_KEY;delete process.env.WAKA_BACKGROUND_WORKER_FUNCTION;
 globalThis.fetch=async()=>{throw new Error('Long-thread benchmark refuses provider network');};
@@ -24,7 +26,7 @@ const path=`work/performance/long-conversation-${label}-${Date.now()}.json`;
 const sourceHashes=Object.fromEntries(['packages/api/src/lib/conversation-replies.ts','packages/api/src/lib/conversation-context.ts'].map(file=>[file,createHash('sha256').update(readFileSync(file)).digest('hex')]));
 const results:Array<Record<string,unknown>>=[];
 let cleaned=false;
-const save=(complete=false)=>writeEvaluationSnapshot(path,{label,complete,cleaned,samples,poolMax:1,providerCalls:0,remoteWrites:0,sourceHashes,
+const save=(complete=false)=>writeEvaluationSnapshot(path,{label,largeMessages,complete,cleaned,samples,poolMax:1,providerCalls:0,remoteWrites:0,sourceHashes,
   scope:'Real message selection/projection in one read-only transaction, no HTTP/auth or cloud latency',results});
 save();const fixture=await createTestDatabase();
 const ref=(source:ConversationSource):ConversationReference=>({kind:source.kind,id:source.id,hash:source.hash,quoteStart:0,quoteLength:Math.min(source.text.length,40),...(source.kind==='top_of_mind_entry'?{historical:source.historical===true}:{})});
@@ -32,6 +34,9 @@ const stats=(values:number[])=>{const ordered=[...values].sort((a,b)=>a-b);retur
 try{
   const [account]=await fixture.sql`INSERT INTO accounts(email) VALUES(${randomUUID()+'@example.test'}) RETURNING id`;
   const [owner]=await fixture.sql`INSERT INTO profiles(account_id,type,name) VALUES(${account.id},'human','Synthetic long thread') RETURNING id`;
+  const routes=createConversationRoutes({getDatabase:()=>fixture.db as never,authMiddleware:async(c,next)=>{
+    c.set('session',{sessionId:randomUUID(),account:{id:account.id,email:'synthetic@example.test'},profile:{id:owner.id,accountId:account.id,type:'human',name:'Synthetic',preferredLocale:'en-US'}});await next();
+  }});
   const [other]=await fixture.sql`INSERT INTO profiles(account_id,type,name) VALUES(${account.id},'agent','Other stack') RETURNING id`;
   const principleRows=await fixture.sql`INSERT INTO principles(profile_id,statement,type,origin,rank,locked_at)
     SELECT ${owner.id},'Synthetic guide '||i||': leave room for a small experiment.','maxim','declared',i,now() FROM generate_series(1,12) i RETURNING id`;
@@ -63,8 +68,8 @@ try{
     const expectedAvailable:boolean[][]=[];
     for(let turn=0;turn<length/2;turn++){
       const user=randomUUID(),assistant=randomUUID();
-      messages.push({id:user,profileId:owner.id,conversationId:id,position:turn*2+1,role:'user',content:`Synthetic question ${turn+1}.`},
-        {id:assistant,profileId:owner.id,conversationId:id,position:turn*2+2,role:'assistant',content:`Synthetic answer ${turn+1}.`});
+      messages.push({id:user,profileId:owner.id,conversationId:id,position:turn*2+1,role:'user',content:largeMessages?'가'.repeat(4000):`Synthetic question ${turn+1}.`},
+        {id:assistant,profileId:owner.id,conversationId:id,position:turn*2+2,role:'assistant',content:largeMessages?'나'.repeat(3000):`Synthetic answer ${turn+1}.`});
       const references=mode==='repeated'?common.map(row=>({...row})):Array.from({length:3},(_,i)=>({...varied[(turn*3+i)%varied.length]}));
       if(mode==='repeated'&&turn%3===0)references[2]={...legacy};
       const available=[true,true,true];
@@ -92,7 +97,7 @@ try{
       }
       console.log(JSON.stringify({diagnosticPlans:plans}));
     }
-    const durations:number[]=[],queries:number[]=[];let digest='';
+    const durations:number[]=[],queries:number[]=[],serialization:number[]=[];let digest='',jsonBytes=0;
     for(let sample=0;sample<samples;sample++){
       if(interrupted)throw new Error('Benchmark interrupted');
       recording=true;statements=0;const start=performance.now(),rows=await read();durations.push(Math.round((performance.now()-start)*100)/100);recording=false;queries.push(statements);
@@ -102,8 +107,11 @@ try{
       const normalized=rows.map(row=>({position:row.position,role:row.role,content:row.content,memoryChanged:row.memoryChanged,
         citations:row.citations.map(({index,kind,available,preview,historical,recordedAt})=>({index,kind,available,preview,historical,recordedAt}))}));
       const currentDigest=conversationHash(normalized);if(digest)assert.equal(currentDigest,digest);digest=currentDigest;
+      const serializeStart=performance.now(),json=JSON.stringify(rows);jsonBytes=Buffer.byteLength(json);serialization.push(Math.round((performance.now()-serializeStart)*100)/100);
     }
-    results.push({mode,messages:length,durationMs:stats(durations),sqlStatements:stats(queries),projectionDigest:digest,
+    const response=await routes.request(`/${id}?limit=30`),page=await response.text();assert.equal(response.status,200);
+    const dto=JSON.parse(page).conversation;assert.equal(dto.messages.length,Math.min(30,length));assert.equal(dto.messageWindowStart,Math.max(1,length-29));
+    results.push({mode,messages:length,durationMs:stats(durations),sqlStatements:stats(queries),serializationMs:stats(serialization),jsonBytes,boundedApiBytes:Buffer.byteLength(page),boundedApiMessages:dto.messages.length,projectionDigest:digest,
       foreignAndChangedProofsRefused:true,legacyAndHistoricalProofsPreserved:mode==='repeated'?true:null});save();
   }
 }finally{await fixture.cleanup();cleaned=true;console.info=info;save(results.length===6&&!interrupted);}

@@ -90,6 +90,13 @@ write data or print query parameters. This measures projection, not HTTP/auth,
 large-body delivery, cold starts or deployed latency. The temporary old-reader
 snapshot used for the recorded matched comparison was removed after selection.
 
+`--large-messages` uses maximum-length Korean placeholder messages (4,000 user
+and 3,000 assistant characters). It records serialization and projected JSON
+bytes, plus the actual API's thirty-message initial response. Placeholder text
+is highly compressible, so these are uncompressed payload bounds, not mobile
+transfer-time or realistic compression measurements. Do not time it alongside
+test suites; record overlapping load separately when it occurs.
+
 ## Interactive Chat fixture
 
 Set `WAKA_PERFORMANCE_CHAT_SCENARIO=1` to seed one synthetic conversation with
@@ -105,6 +112,9 @@ kept reading dated September 1 and a current reading dated October 1. It exercis
 date disclosure and source-based continuation through the real API, without
 claiming the seeded answer is model quality evidence. The history flag requires
 the interactive Chat fixture and changes only its owned synthetic schema.
+`WAKA_PERFORMANCE_CHAT_MESSAGES=80` adds a longer synthetic thread for built
+window/scroll tests (even values 2 to 200). Ready replies and references are
+seeded fixtures; no model or background drain is enabled.
 
 ## Recovery and controlled worker checks
 
