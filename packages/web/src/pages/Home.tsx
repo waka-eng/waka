@@ -12634,7 +12634,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               in the grounds band opens the memories under
                               IT. Four layers, reachable in hops, with no
                               second picture of the place. */}
-                          {pRoots === pr.id && !pDraft ? (
+                          {pick === pr.id && pRoots === pr.id && !pDraft ? (
                             <PrincipleEvidence signals={pr.citedSignals} locale={locale} />
                           ) : null}
                           {pick === pr.id && !pDraft ? (

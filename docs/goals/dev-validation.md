@@ -127,3 +127,23 @@ log page has 49 usage samples, $0.003619674 priced usage and 27 unpriced Gemini
 requests; it is partial and not test-account billing. The $1.50 reservation
 therefore remains held. Including priced diagnostics, cumulative used or held
 is $3.1340356674 of $5. No recurring cap or provider policy changed.
+
+### 2026 10 06 generated output and final Back repair
+
+The delayed source job recovered on its second attempt and completed derivation
+at 18:47:22 UTC. The account now has three active patterns, each with three
+independent supporting originals. An explicit Read again produces reading
+version 2 with one current entry and no withdrawn support. The ordinary next
+pass produces one held Principle citing all three active patterns, with no
+unsupported or changed-support flag. Its rendered Why this fits contains the
+three statements and current saved examples. No threshold override, fake
+timestamp, direct signal/Principle write or extra calendar wait was used.
+
+PR 355 passed normal CI and deployed at `d9ccac6` in run 37515437552. A final
+rendered Back check finds an unrelated UI defect: expanded Principle evidence
+remains visible after its Principle closes. A real-router regression fails
+on that orphan evidence while the route and action controls correctly close.
+The one-line fix renders evidence only for the open Principle. All 804 web
+cases, 25 targeted navigation/reading cases, web types and build pass locally.
+Deliver this small repair, recheck the affected Back rendering and the deployed
+chat continuation, then erase only the synthetic test identity.
