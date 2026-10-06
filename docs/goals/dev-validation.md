@@ -63,7 +63,7 @@ A loopback-only gateway forwards actual dev HTML, assets and API calls using
 an in-memory session for a new private synthetic account. It does not read or
 replace existing browser cookies. Eight captures persist across reload. A
 lost capture response after the upstream save recovers by an owned receipt
-read, with one POST and eight total originals. An unfinished reflection survives
+read and an idempotent replay, with eight total originals and no duplicate. An unfinished reflection survives
 closing and reload. Its generated follow-up asks what a test participant's
 confusion revealed; the next answer saves and the original shows two reflections.
 The first chat reply cites two current originals and gives a relevant next step.
@@ -85,3 +85,45 @@ No backend policy, cadence, schema or automatic generation behavior changes.
 The bounded synthetic provider batch reserves $1.50 from the remaining test
 allowance; actual provider charges are not available through the test session.
 Reserve remains counted, so cumulative used or held is $3.1332342014 of $5.
+
+### 2026 10 06 deployed recovery and chat diagnosis
+
+PRs 353 and 354 deployed successfully at `ac75ca7` and `2d67468`. Both
+deployment verifiers confirm migrations 0065/0066/0067 and matching API/worker
+dev database bindings. The actual API advertises supportsAdvance with one
+item and its current source. A lost Next response preserves the old card;
+explicit Retry replays the same durable advance and returns its existing
+successor, without advancing twice. Reload reconciliation uses reads. The
+gateway trace distinguishes this replay from the separate read-only retry
+of a failed Review GET. A slow double-click produces one transition. Observed
+advance request times are 3863 ms, 1884 ms for its idempotent replay, and
+6202 ms with 2000 ms added delay; this is not a cloud p95 or a 248 ms claim.
+An unsent chat draft survives Back and return. The repaired Read again control
+is visible on the actual deployed Home with withdrawn support and a scheduled
+reading. Its screenshot is saved with private synthetic data only.
+
+The continuation failed on all three permitted attempts; the app retained
+the message, references and draft and surfaced the one-hour reply limit.
+Four diagnostic calls cost $0.000801466 total. A read-only reconstruction of
+the exact failed request verifies its stored context hash and source identities
+before any provider call. Baseline reproduction returned valid output. A
+prompt-only candidate still repeated the earlier follow-up question and was
+rejected despite valid citations. The final candidate keeps a validated answer
+but omits an optional question already asked; invalid citations, IDs, shape,
+bounds and multiple-question output remain refused. This candidate passes
+947 API unit cases, 42 focused cases and API types. The final paid probe is
+accepted with current citations and no repeated question. This small sample
+does not claim a statistically measured quality gain or explain every prior
+provider failure. Dev delivery and an affected live continuation are next.
+
+Three additional, distinct private captures extend the fixture to eleven,
+using the unchanged evidence threshold. Two patterns now have three supporting
+originals and are active; the third is still processing. Generated Principles
+and the manual reading remain open checks, not declared complete from an
+empty state. No threshold or stored source was fabricated.
+
+The read-only operational audit 37510702607 succeeds. Its bounded stage-wide
+log page has 49 usage samples, $0.003619674 priced usage and 27 unpriced Gemini
+requests; it is partial and not test-account billing. The $1.50 reservation
+therefore remains held. Including priced diagnostics, cumulative used or held
+is $3.1340356674 of $5. No recurring cap or provider policy changed.
