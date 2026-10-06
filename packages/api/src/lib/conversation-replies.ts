@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {and,asc,desc,eq,gte,inArray,sql} from 'drizzle-orm';
 import {backgroundJobs,conversationMessages,conversationReplyRequests,conversations,generationRevisions,inspirationEmbeddings,profiles,type BackgroundJob,type ConversationReference} from '../db/index.js';
 import type {getDb} from './db.js';
-import {CONVERSATION_LIMITS,conversationHash,conversationRepliesEnabled,currentConversationReferences,readConversationContext,conversationPromptSources} from './conversation-context.js';
+import {CONVERSATION_LIMITS,conversationHash,conversationRepliesEnabled,currentConversationReferences,currentConversationReferenceGroups,readConversationContext,conversationPromptSources} from './conversation-context.js';
 import {getDefaultModelProvider,type ConversationReplyInput} from './model-provider.js';
 import {parseConversationReply} from '../queue/gemini.js';
 import {conversationSearchQuery} from './conversation-material.js';
@@ -37,15 +37,17 @@ async function effectiveStatus(db:Reader,row:Request){
 }
 export async function projectConversationMessages(db:Reader,profileId:string,id:string,messages:Array<typeof conversationMessages.$inferSelect>){
   const requests=await requestsFor(db,profileId,id);
-  return Promise.all(messages.map(async message=>{
+  const byMessage=new Map<string,Request>();
+  for(const request of requests)if(request.status==='ready'&&request.assistantMessageId&&!byMessage.has(request.assistantMessageId))byMessage.set(request.assistantMessageId,request);
+  const groups=await currentConversationReferenceGroups(db,profileId,messages.map(message=>message.role==='assistant'?byMessage.get(message.id)?.references??[]:[]));
+  return messages.map((message,index)=>{
     if(message.role==='user')return {...message,followUpQuestion:null,memoryChanged:false,replyRequestId:null,citations:[]};
-    const request=requests.find(row=>row.assistantMessageId===message.id&&row.status==='ready');
-    const current=request?await currentConversationReferences(db,profileId,request.references):[];
+    const request=byMessage.get(message.id),current=groups[index];
     const memoryChanged=!request||current.some((row,index)=>row===null||row.historical===true&&request.references[index]?.historical!==true);
     return {...message,followUpQuestion:request?.followUpQuestion??null,memoryChanged,replyRequestId:request?.id??null,
       citations:request?.references.map((reference,index)=>({index,kind:reference.kind,id:reference.id,available:current[index]!==null,
         ...(current[index]?{preview:current[index]!.text.replace(/\s+/g,' ').slice(0,96),...(current[index]!.historical?{historical:true,recordedAt:current[index]!.recordedAt}:{} )}:{})}))??[]};
-  }));
+  });
 }
 async function inputFor(db:Reader,profileId:string,id:string,userMessageId:string,queryVector?:number[]){
   const conversation=await owned(db,profileId,id),messages=await db.select().from(conversationMessages)

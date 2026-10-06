@@ -230,6 +230,15 @@ These are optional fields in existing JSON metadata, not a new memory layer or
 a database migration. Historical date labels and selected-source messages use
 the UTC record date, matching the supplied model dates across device timezones.
 
+Conversation reads validate unique source identities once per read rather than
+once per assistant message. Three-identity chunks preserve the original excerpt
+allowances; each citation still checks its own current or legacy proof. Legacy
+inspiration references retain both original-text and enriched projections where
+needed. No source cache survives the request, and per-message historical/stale
+status is preserved. At most 200 message groups and three citations per group
+are accepted. The existing 200-message conversation limit and full message
+delivery remain; large-body or deployed measurements may require paging later.
+
 Material includes saved reflection answers and ready link/image/audio text;
 an audio correction replaces the original transcript rather than adding a
 second account of it. Excerpts distinguish human reflections from generated

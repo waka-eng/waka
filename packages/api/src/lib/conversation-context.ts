@@ -44,7 +44,7 @@ export async function readConversationContext(db:Reader,profileId:string,questio
   return {profileId,principles:bound('principle',p,referenceIds?16000:8000),reading:bound('top_of_mind_entry',r,referenceIds?8000:4000),inspirations:bound('inspiration',i,referenceIds?9600:4000),...conversationCapabilities()};
   });
 }
-export async function currentConversationReferences(db:Reader,profileId:string,references:ConversationReference[]):Promise<Array<ConversationSource|null>>{
+async function readConversationReferenceSources(db:Reader,profileId:string,references:ConversationReference[]):Promise<ConversationSource[]>{
   if(!references.length)return [];
   const context=await readConversationContext(db,profileId,'',references),sources=[...context.principles,...context.reading,...context.inspirations];
   // Old citations refer only to the original text. Preserve their exact hash
@@ -52,6 +52,30 @@ export async function currentConversationReferences(db:Reader,profileId:string,r
   const legacyIds=references.filter(row=>row.kind==='inspiration'&&/^[a-f0-9]{64}$/.test(row.hash)).map(row=>row.id);
   const legacy=legacyIds.length?await db.select({id:inspirations.id,text:inspirations.text,recordedAt:sql<string>`${inspirations.createdAt}::text`,revision:sql<string>`${inspirations.updatedAt}::text`})
     .from(inspirations).where(and(eq(inspirations.profileId,profileId),inArray(inspirations.id,legacyIds))).limit(6):[];
-  const available:ConversationSource[]=[...sources,...legacy.map(row=>({...row,kind:'inspiration' as const,hash:conversationHash(row),truncated:row.text.length>1600,text:row.text.slice(0,1600)}))];
-  return references.map(reference=>available.find(source=>source.kind===reference.kind&&source.id===reference.id&&(source.hash===reference.hash||source.kind==='top_of_mind_entry'&&source.legacyHash===reference.hash))??null);
+  return [...sources,...legacy.map(row=>({...row,kind:'inspiration' as const,hash:conversationHash(row),truncated:row.text.length>1600,text:row.text.slice(0,1600)}))];
+}
+const matchesReference=(source:ConversationSource,reference:ConversationReference)=>source.kind===reference.kind&&source.id===reference.id&&
+  (source.hash===reference.hash||source.kind==='top_of_mind_entry'&&source.legacyHash===reference.hash);
+export async function currentConversationReferences(db:Reader,profileId:string,references:ConversationReference[]):Promise<Array<ConversationSource|null>>{
+  const available=await readConversationReferenceSources(db,profileId,references);
+  return references.map(reference=>available.find(source=>matchesReference(source,reference))??null);
+}
+/** Per-read batching, never a cross-request source cache. Three identities per
+ * chunk fit every existing excerpt allowance, even with full-length sources. */
+export async function currentConversationReferenceGroups(db:Reader,profileId:string,groups:ConversationReference[][]):Promise<Array<Array<ConversationSource|null>>>{
+  if(groups.length>CONVERSATION_LIMITS.messages||groups.some(group=>group.length>3))throw new Error('Conversation reference bounds');
+  const key=(source:{kind:string;id:string})=>`${source.kind}:${source.id}`;
+  const identities=new Map<string,ConversationReference>();
+  for(const reference of groups.flat()){
+    // A legacy inspiration needs its original-text projection as well as the
+    // enriched one. Prefer that representative if either proof is requested.
+    if(!identities.has(key(reference))||reference.kind==='inspiration'&&/^[a-f0-9]{64}$/.test(reference.hash))identities.set(key(reference),reference);
+  }
+  const selected=[...identities.values()],available=new Map<string,ConversationSource[]>();
+  for(let offset=0;offset<selected.length;offset+=3){
+    for(const source of await readConversationReferenceSources(db,profileId,selected.slice(offset,offset+3))){
+      const rows=available.get(key(source))??[];rows.push(source);available.set(key(source),rows);
+    }
+  }
+  return groups.map(group=>group.map(reference=>available.get(key(reference))?.find(source=>matchesReference(source,reference))??null));
 }

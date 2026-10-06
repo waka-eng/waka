@@ -74,6 +74,22 @@ stage, elapsed milliseconds and outcome. Queue wait excludes intended run-after
 delay. Separate these stages when diagnosing waiting; never log source wording
 or infer provider latency from a pending UI state alone.
 
+## Long conversation reads
+
+Run `pnpm tsx tools/performance/long-conversation.ts --label=current` with the
+same explicit disposable loopback database. It creates 20-, 100- and 200-message
+threads with repeated or varied citations, measures one read-only transaction
+at pool one, and cleans its own schema before exiting. `WAKA_PERFORMANCE_SAMPLES`
+sets 5 to 60 samples; the default is 20. Provider traffic is refused.
+
+The oracle includes current/legacy inspiration proofs, earlier readings,
+changed hashes and other-profile references. Output contains timing, statement
+counts and normalized projection digests, not source IDs or raw account words.
+`--diagnose` adds sanitized SQL plan costs and times for one warmup; it does not
+write data or print query parameters. This measures projection, not HTTP/auth,
+large-body delivery, cold starts or deployed latency. The temporary old-reader
+snapshot used for the recorded matched comparison was removed after selection.
+
 ## Interactive Chat fixture
 
 Set `WAKA_PERFORMANCE_CHAT_SCENARIO=1` to seed one synthetic conversation with

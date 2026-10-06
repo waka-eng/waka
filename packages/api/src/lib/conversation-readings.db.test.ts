@@ -4,7 +4,7 @@
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,beforeEach,expect,it} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/index.js';
-import {readConversationContext,currentConversationReferences,conversationHash} from './conversation-context.js';
+import {readConversationContext,currentConversationReferences,currentConversationReferenceGroups,conversationHash} from './conversation-context.js';
 let t:TestDatabase;
 beforeAll(async()=>{t=await createTestDatabase();});beforeEach(async()=>{await t.truncateAll();});afterAll(async()=>{await t?.cleanup();});
 async function owner(){const [a]=await t.sql`INSERT INTO accounts(email) VALUES(${randomUUID()+'@example.test'}) RETURNING id`;const [p]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${a.id},'human','Synthetic history') RETURNING id`;return p.id as string;}
@@ -61,4 +61,29 @@ it('withdraws generated historical wording when its current witness disappears',
   expect((await readConversationContext(t.db as never,p,'What changed in how I think?')).reading.some(row=>row.id===id)).toBe(true);
   await t.sql`DELETE FROM inspirations WHERE id=${i.id}`;
   expect((await readConversationContext(t.db as never,p,'What changed in how I think?')).reading.some(row=>row.id===id)).toBe(false);
+});
+it('batches mixed proofs without clipping large history, losing legacy text or admitting another profile',async()=>{
+  const p=await owner(),other=await owner(),ids:string[]=[];
+  for(let version=1;version<=6;version++)ids.push(await entry(p,version,`Kept reading ${version}. `+'x'.repeat(2000),'superseded'));
+  const r=await readConversationContext(t.db as never,p,'',ids.map(id=>({kind:'top_of_mind_entry',id,hash:'setup'})));
+  // Read individually so every offered excerpt has the original full allowance.
+  const large=await Promise.all(ids.map(async id=>(await readConversationContext(t.db as never,p,'',[{kind:'top_of_mind_entry',id,hash:'setup'}])).reading[0]));
+  expect(r.reading.length).toBe(5); // One broad context keeps its 8,000-char cap.
+  expect(r.reading.reduce((sum,source)=>sum+source.text.length,0)).toBe(8000);
+  const foreignId=await entry(other,1,'Other-profile words.','superseded');
+  const foreign=(await readConversationContext(t.db as never,other,'',[{kind:'top_of_mind_entry',id:foreignId,hash:'setup'}])).reading[0];
+  const [original]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${p},'Original exact words.') RETURNING id`;
+  const modern=(await readConversationContext(t.db as never,p,'Original exact words.')).inspirations[0];
+  const [plain]=await t.sql`SELECT id,text,created_at::text AS "recordedAt",updated_at::text AS revision FROM inspirations WHERE id=${original.id}`;
+  const reference=(source:typeof modern)=>({kind:source.kind,id:source.id,hash:source.hash,quoteStart:0,quoteLength:10,historical:source.historical});
+  const groups=[...large.map(source=>[reference(source)]),[reference(modern),{...reference(modern),hash:conversationHash(plain)}],
+    [reference(foreign),{...reference(large[0]),hash:'changed-proof'}]];
+  const baseline=await Promise.all(groups.map(group=>currentConversationReferences(t.db as never,p,group)));
+  const batched=await currentConversationReferenceGroups(t.db as never,p,groups);
+  expect(batched).toEqual(baseline);expect(batched.slice(0,6).every(group=>group[0]?.text.length===1600)).toBe(true);
+  expect(batched.at(-1)).toEqual([null,null]);expect(batched[6].every(source=>source?.id===original.id)).toBe(true);
+  await t.sql`UPDATE inspirations SET text=text||' Edited.',updated_at=clock_timestamp() WHERE id=${original.id}`;
+  await t.sql`UPDATE top_of_mind_entries SET body=body||' Changed outside its excerpt.' WHERE id=${ids[0]}`;
+  const fresh=await currentConversationReferenceGroups(t.db as never,p,groups);
+  expect(fresh[0]).toEqual([null]);expect(fresh[6]).toEqual([null,null]);
 });

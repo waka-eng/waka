@@ -1,0 +1,65 @@
+{
+  "milestone": 4,
+  "slice": "Long conversation source validation",
+  "date": "2026-10-05",
+  "acceptance": "Local read optimization accepted; full operational milestone remains open",
+  "baselineRevision": "da74232",
+  "scope": {
+    "database": "Owned disposable loopback schema",
+    "poolMax": 1,
+    "samplesPerImplementationPerCase": 20,
+    "comparison": "Alternating baseline/candidate order on the same fixture",
+    "providerCalls": 0,
+    "remoteWrites": 0,
+    "cleanup": "All benchmark schemas removed",
+    "notMeasured": ["HTTP/auth", "worst-case message body delivery", "cold starts", "concurrent users", "deployed latency"]
+  },
+  "matchedReceipt": {
+    "path": "work/performance/long-conversation-matched-1791256473635.json",
+    "sha256": "4ef305c2e83f42344a7b9398ed8aaee57317d836fae2db21a34da9528473bd3a",
+    "temporaryBaselineSnapshotAndComparisonSwitch": "Removed after selection"
+  },
+  "measurements": [
+    {"sources":"repeated","messages":20,"beforeMedianMs":30.75,"afterMedianMs":6.54,"beforeP95Ms":34.11,"afterP95Ms":7.83,"beforeStatements":39,"afterStatements":11},
+    {"sources":"repeated","messages":100,"beforeMedianMs":145.91,"afterMedianMs":6.75,"beforeP95Ms":149.99,"afterP95Ms":7.66,"beforeStatements":172,"afterStatements":11},
+    {"sources":"repeated","messages":200,"beforeMedianMs":297.83,"afterMedianMs":7.09,"beforeP95Ms":310.89,"afterP95Ms":8.35,"beforeStatements":339,"afterStatements":11},
+    {"sources":"varied","messages":20,"beforeMedianMs":20.84,"afterMedianMs":11.87,"beforeP95Ms":23.68,"afterP95Ms":13.41,"beforeStatements":25,"afterStatements":15},
+    {"sources":"varied","messages":100,"beforeMedianMs":105.68,"afterMedianMs":12.33,"beforeP95Ms":111.67,"afterP95Ms":13.59,"beforeStatements":105,"afterStatements":15},
+    {"sources":"varied","messages":200,"beforeMedianMs":209.45,"afterMedianMs":13.68,"beforeP95Ms":217.51,"afterP95Ms":19.46,"beforeStatements":205,"afterStatements":15}
+  ],
+  "correctness": {
+    "allSixNormalizedProjectionDigestsEqual": true,
+    "allMessagesPreserved": true,
+    "foreignAndChangedProofsRefused": true,
+    "legacyAndHistoricalProofsPreserved": true,
+    "completeSourceObjectSqlEquality": true,
+    "changesOutsideVisibleExcerptInvalidateProof": true,
+    "groupBoundsRefusedBeforeSql": true,
+    "crossRequestSourceCache": false,
+    "chunks": "Three source identities; every citation still checks its own proof"
+  },
+  "verification": {
+    "apiUnitTests": 866,
+    "conversationAndHistorySqlTests": 46,
+    "apiAndPerformanceTypes": "pass",
+    "migrationAndDiffChecks": "pass",
+    "goalIndexTests": 3,
+    "schemaMigrationRequired": false
+  },
+  "retainedFailuresAndLimits": [
+    "First candidate overlapped targeted SQL tests; not treated as an uncontended timing gate",
+    "Separate-process candidate runs varied and included a short varied-source regression; matched results do not establish a cold/deployed guarantee",
+    "Diagnostic SELECT plans showed sub-millisecond planning and no JIT; no speculative cause assigned to timing variation",
+    "SQL fixture initially expected six long rows inside an 8,000-character context; kept the cap and verified batching against individually valid excerpts",
+    "Nested test-table arrays were expanded by it.each; explicit table objects repaired the tests without weakening bounds"
+  ],
+  "remaining": [
+    "Conditional paging decision using large-body/deployed measurements",
+    "Deployed queue/retrieval/provider/publication and warm/cold/concurrency evidence",
+    "Monitored bounded overdue-job recovery",
+    "Usage/spend observability and per-environment controls/alerts",
+    "Provider data policies and trusted origin/source configuration verification",
+    "Milestone 2 first-time-user comprehension",
+    "Authorized delivery; dev PR/merge approval is pending"
+  ]
+}

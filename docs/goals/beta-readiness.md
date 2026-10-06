@@ -254,6 +254,57 @@ evaluations contain synthetic inputs only. No remote data, production, push
 or deployment changed. Verdict: milestone 3 passes its local fixed-matrix gate.
 Milestone 2 human comprehension and milestone 4 remain open.
 
+### Milestone 4 long conversation read checkpoint on 2026 10 05
+
+Criterion for this slice: reduce repeated source-validation work while retaining
+all messages, exact proof validation, ownership and earlier/current status.
+Measure before changing the reader; keep the broader milestone open.
+
+The initial model-free baseline at 20 samples uses 339 SQL statements and
+299.3 ms median for a repeated-source 200-message thread; varied sources use
+205 statements and 212.07 ms. Source validation was repeated per assistant
+message. The new reader deduplicates identities within the read, loads them in
+three-identity chunks and validates every requested proof independently. Legacy
+and modern inspiration proofs can coexist; large earlier words keep their
+full original excerpt allowance. No cache survives the request.
+
+Standalone candidate timings varied, including a small varied-source regression;
+the first candidate also overlapped targeted SQL tests. Diagnostic plans showed
+sub-millisecond planning and no JIT, not an identified cause of that variation.
+A matched 20-sample comparison alternated baseline/candidate order on the same
+owned schema. The temporary baseline projection was copied from `da74232` and
+used the same serving predicates. It was removed, along with its comparison
+switch, after selection. All six normalized output digests match.
+
+| Sources | Messages | Median before and after ms | Statements before and after |
+| --- | --- | --- | --- |
+| Repeated | 20 | 30.75 → 6.54 | 39 → 11 |
+| Repeated | 100 | 145.91 → 6.75 | 172 → 11 |
+| Repeated | 200 | 297.83 → 7.09 | 339 → 11 |
+| Varied | 20 | 20.84 → 11.87 | 25 → 15 |
+| Varied | 100 | 105.68 → 12.33 | 105 → 15 |
+| Varied | 200 | 209.45 → 13.68 | 205 → 15 |
+
+Matched p95 at 200 messages is 310.89 → 8.35 ms repeated and
+217.51 → 19.46 ms varied. This is one local read-only transaction at pool one,
+not HTTP/auth, cold-start, concurrent-user, worst-case body or cloud latency.
+All benchmark schemas were cleaned and no provider was called. Foreign/changed
+proofs are refused; legacy and historical proofs remain available. SQL equality
+tests additionally compare complete source objects and invalidate proofs after
+words change beyond the visible excerpt. Bounds tests refuse oversized groups
+before SQL. Initial test errors incorrectly expected six long rows inside one
+8,000-character context and spread nested test-table arrays; the original cap
+and actual boundary assertions were retained when correcting those fixtures.
+
+Verification: 866 API unit tests, 46 SQL cases, API/performance types,
+migration and diff checks pass. The matched receipt is
+`work/performance/long-conversation-matched-1791256473635.json`.
+The full milestone is not complete: paging remains conditional on large-body
+or deployed evidence; overdue recovery, usage/cost controls, provider/origin
+verification and deployed stage measurements are still required. This host has
+no AWS CLI or local SST output receipt. Dev PR/deployment authority was requested
+separately and is pending; no remote writes or deployment occurred.
+
 ### First time user check
 
 Use a fresh synthetic preview, not an existing user's account. Give participants
