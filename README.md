@@ -68,17 +68,18 @@ the authoritative bars live in [`docs/generation.md`](docs/generation.md):
    small tool over the platform" points at the next decision.
 3. **Evidence** — your own history backs it, in at least three distinct
    signals. A value nobody has ever seen you live is a horoscope.
-4. **Time** — that evidence stretches across at least 45 days and survived
-   into at least five versions of your top of mind. A two-week obsession is
-   exactly what top of mind is for; character is what is still there after
-   the obsession passes.
+4. **Support** — the citing theme appears in at least one meaningful version
+   of your top of mind. There is no fixed calendar wait for an initial
+   principle; repeated choices across contexts can qualify, while a burst of
+   saved quotes or temporary intentions does not establish a lasting guide.
 5. **Completion** — it can never be finished. "Ship the museum app by June"
    can someday be checked off — that is a goal. A principle keeps applying
    to every choice after this one.
 
-Minting (nightly, midnight PST) enforces all five, with evidence and time
-computed over the union of the citing signals. Declaring one yourself skips
-evidence and time — your word stands immediately, marked *aspirational*
+Minting runs in the background when material changes, with a nightly recovery
+pass at 08:00 UTC. It enforces all five, with support computed over the union
+of the citing signals. Declaring one yourself skips evidence and support —
+your word stands immediately, marked *aspirational*
 until your history demonstrates it — but context, directive, and completion
 still apply, silently: a declaration that fails them is kept with your
 inspirations, and no refusal is ever shown.
@@ -90,7 +91,7 @@ inspirations, and no refusal is ever shown.
 | Frontend | Vite + React 18 + React Router (SST `StaticSite`) |
 | API | Hono on an AWS Lambda Function URL (SST `Function`) |
 | Async work | Postgres `background_jobs`, drained by a cron and an in-process tick |
-| Generation | OpenRouter (DeepSeek V4 Flash, pinned) — extraction, judges, synthesis; Gemini — embeddings, image description, and the fallback road |
+| Generation | OpenRouter (DeepSeek V4.1 Flash, pinned) — extraction, judges, synthesis and chat; Gemini — embeddings, image description, audio transcription, and the fallback road |
 | Storage | S3, presigned PUT only (SST `Bucket`) |
 | Database | Neon Postgres via Drizzle ORM (not provisioned by SST) |
 | Auth | Email + password, Google OAuth, and a loopback flow for CLI/MCP clients |

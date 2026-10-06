@@ -22,6 +22,8 @@
   "worldChatReadingChoices": "이야기할 떠오르는 생각을 골라 보세요",
   "worldChatDiscussSource": "이 내용으로 대화하기",
   "worldChatSourceSelectionFailed": "기억이 바뀌었거나 불러오지 못했어요. 다시 시도하거나 다른 기억을 골라 보세요.",
+  "worldChatEarlierReading": "이전의 읽기",
+  "worldChatExploreEarlierReadingMessage": "이 날짜의 기록에 담긴 이전 생각을 더 이야기해 봐요",
   "worldChatExploreSourceMessage": "이 생각을 더 깊이 이야기해 봐요.",
   "worldShareLoading": "원칙을 불러오고 있어요…",
   "worldChatExploreReading": "이 떠오르는 생각으로 대화 이어가기",

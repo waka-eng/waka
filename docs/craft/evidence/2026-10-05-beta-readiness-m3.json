@@ -1,0 +1,141 @@
+{
+  "milestone": 3,
+  "date": "2026-10-05",
+  "acceptance": "passed locally on the fixed synthetic matrix; not deployed",
+  "environment": {
+    "database": "explicit disposable loopback Postgres",
+    "model": "deepseek/deepseek-v4.1-flash",
+    "realAccountInputs": false,
+    "remoteWrites": 0,
+    "schemaMigrationRequired": false
+  },
+  "generation": {
+    "matrixDigest": "b142bfef0b000df1c79cf2484f5c2bf0358d4c1f576bb06559bfed45e4032f94",
+    "criterion": "At least 90 percent qualitative acceptance and all critical safety cases pass",
+    "baseline": {
+      "cases": 24,
+      "structuralPasses": 23,
+      "qualitativePasses": 22,
+      "criticalSafetyPass": false,
+      "failures": {
+        "one-origin-many-signals": "A workshop you attended suggested making something by hand, trying clay, and slowing down. These are new possibilities rather than established habits.",
+        "early-strong-choices": "Missing initial Principle despite explicit repeated choices across contexts"
+      },
+      "path": "work/generation-calibration/beta-m3-v41-baseline-1791250876490.json",
+      "sha256": "79c96b9c530376f7c27918214cb9e6ffb693cd8ca93c89aa66b3f2651f37211f"
+    },
+    "candidate": {
+      "cases": 24,
+      "structuralPasses": 24,
+      "qualitativePasses": 24,
+      "criticalSafetyPass": true,
+      "reviewer": "agent review against the pre-existing rubric, not an independent human study",
+      "path": "work/generation-calibration/beta-m3-v41-candidate-1791251566148.json",
+      "sha256": "bf0cfb02e6aaf1b5471f603762134806f3d245b0989a288c010debb27c90dd91",
+      "caseVerdicts": {
+        "empty": "pass: no artifact or dispatch",
+        "first-save-en": "pass: tentative interest, no habit or Principle",
+        "first-save-ko": "pass: natural tentative Korean",
+        "one-origin-many-signals": "pass: no invented attendance or independent choices",
+        "durable-choices-en": "pass: portable, legible tool guide grounded across contexts",
+        "durable-choices-ko": "pass: Korean commitment constraint, no biography invented",
+        "early-strong-choices": "pass: initial reversible-trial guide without a calendar wait",
+        "one-day-external-burst": "pass: saved external claims are not personal endorsement",
+        "duplicate-dominance": "pass: no repeated theme slots or tools/family compound guide",
+        "established-new-focus": "pass: tentative drawing focus leads",
+        "active-interest-shift": "pass: recent reversible trials lead over old background",
+        "unresolved-contradiction": "pass: tension preserved without a winner",
+        "temporary-scope": "pass: project-only scope preserved, no timeless guide",
+        "corrected-claim": "pass: enjoyment and this-month scope, no revived regret",
+        "deleted-support": "pass: deleted witness not selected or reconstructed",
+        "locked-lost-support": "pass: exact human lead, no invented restored support",
+        "pinned-lead": "pass: exact human lead remains first",
+        "locale-change": "pass: Korean reading and guide without metadata narration",
+        "return-after-quiet": "pass: evidence-dated return, no invented emotional cause",
+        "unchanged-reading": "pass: unchanged audit, not a paraphrased shift",
+        "automatic-daily-hold": "pass: held with no synthesis dispatch",
+        "photo-only": "pass: tentative visual interest, no endorsement",
+        "corrected-audio-ko": "pass: corrected watercolor context, not old running transcript",
+        "single-incidental-arrival": "pass: incidental arrival does not displace established patterns"
+      }
+    },
+    "finalCodeReplay": {
+      "path": "work/generation-calibration/beta-m3-commit-replay-1791254631794.json",
+      "cases": 24,
+      "structuralPasses": 24,
+      "providerCalls": 0,
+      "purpose": "Recheck final selection, publication and parsing using the recorded candidate outputs; not another live quality sample"
+    },
+    "limits": "Layer-2 fixtures are prevalidated. This matrix does not establish extraction quality from arbitrary real captures or deployed queue timing. Weights, thresholds and cadence are unchanged."
+  },
+  "conversation": {
+    "fixedMatrixDigest": "5444f6d6cee5fc86ae1adb37339c3a712611c4756d2d5266682a9521bf248e9c",
+    "finalPath": "work/conversation-eval/reply-beta-m3-chat-creation-1791253695337.json",
+    "sha256": "7dbc0c1b82b39d4e11da4342f45e8e1f8d58ec32b29a014fb50d06492f1fee11",
+    "structuralPasses": 24,
+    "cases": 24,
+    "qualitativePasses": 23,
+    "criticalSafetyFailures": 0,
+    "retainedQualityMiss": {
+      "case": "edited-en",
+      "output": "Since it's marked as a possible guide rather than a verified habit, treat it as an option to consider.",
+      "reason": "The human-kept sentence has unverified supporting examples, not a separate possible-guide label. Scope, exact citation and ownership remain correct; do not treat this phrasing as ideal."
+    },
+    "verifiedCases": "Empty memory, one-question conflicts, current edited scope, old/capture-dated interests, corrections, withdrawn claims, missing decision conditions, injection, direct bilingual answers, requested question lists, hypothetical examples, non-endorsement and irrelevant-memory omission",
+    "retainedPriorFailures": [
+      "Initial empty-en output duplicated its follow-up inside answer and was correctly refused",
+      "Earlier conflict-en bundled course days and overlap into one question",
+      "Earlier correction-ko reintroduced an old Principle citation",
+      "Earlier injection-ko converted consideration into a decision",
+      "Compact prompt asked what was disappointing about a project without that premise",
+      "Two intermediate replies incorrectly described explicit edits as the only way Principles can first form"
+    ],
+    "history": {
+      "path": "work/conversation-eval/history-1791253696706.json",
+      "sha256": "bda97ee5b71cf26170c2fd4872add44846708a4514bdbac1d64424d70da8e502",
+      "structuralPasses": 4,
+      "qualitativePasses": 4,
+      "cases": 4,
+      "caseVerdicts": {
+        "comparison-en": "pass: actual September/October words and citations, tentative recorded contrast",
+        "comparison-ko": "pass: natural dated comparison without motives or exact belief-change claims",
+        "missing-earlier": "pass: partial-context abstention, not archive-wide absence",
+        "withheld-earlier": "pass: unsupported and other-profile records not revived"
+      },
+      "qualityCaveat": "Both comparison replies still overemphasize unverified examples beneath kept wording. No human words are replaced or declared invalid; friendliness can improve.",
+      "readerBounds": {"live": 5, "comparisonLive": 3, "priorArtifacts": 3, "historicalVersions": 2, "entryScan": 14}
+    }
+  },
+  "budget": {
+    "paidCalls": 256,
+    "milestoneCostUsd": 0.049843195,
+    "previousAllocationUsd": 1.5833779064,
+    "cumulativeUsd": 1.6332211014,
+    "remainingUsd": 3.3667788986,
+    "capUsd": 5,
+    "allCostsReturned": true,
+    "accountingIncludesFailedAndIntermediateOutputs": true
+  },
+  "verification": {
+    "apiUnitTests": 863,
+    "webTests": 780,
+    "sqlTests": 45,
+    "apiWebAdminTypes": "pass",
+    "migrationCorpus": "pass",
+    "productionWebBuild": "pass",
+    "browser": "Built 390px history cards and continuation, actual owned API, no provider network",
+    "continuedSourceWrites": 1,
+    "dispatchedConversationRequests": 0,
+    "correctionReceipts": "Worker, provider and decoder share one routing policy. Plain correction sources and lookup dispatch are empty; explicit comparison retrieves and cites unchanged owned memory.",
+    "fixtureCleanup": "Owned browser fixture schema removed after normal shutdown; screenshots retained",
+    "screenshots": [
+      "work/performance/beta-m3-history/earlier-card-narrow.png",
+      "work/performance/beta-m3-history/earlier-reading-continued.png"
+    ]
+  },
+  "remainingGoalWork": [
+    "Milestone 2 first-time-user comprehension",
+    "Milestone 4 long-thread benchmarking and optimization, deployed timing, overdue recovery, usage/cost controls and provider/origin verification",
+    "Authorized delivery; no current-goal changes pushed or deployed"
+  ]
+}

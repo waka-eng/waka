@@ -48,6 +48,7 @@
 .chat-page .jar-conversation-adopt input { width:var(--sp-20); height:var(--sp-20); flex:none; }
 .chat-citations { display:flex; flex-wrap:wrap; gap:var(--sp-8); }
 .chat-citations button { max-width:100%; border:1px solid var(--w-edge); text-align:left; font-size:var(--t-note); }
+.chat-source-date { display:block; }
 .chat-reading-choices { display:grid; gap:var(--sp-8); margin-block:var(--sp-16); }
 .chat-reading-choices > p { margin:0; }
 .chat-page .chat-reading-choice { display:flex; flex-direction:column; gap:var(--sp-6); width:100%; text-align:left; border:1px solid var(--w-edge); padding:var(--sp-12); }

@@ -39,7 +39,7 @@ import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import { selectIndependentEvidence, type ConfidenceEvidence } from './signal-lifecycle.js';
 import {loadSignalEvidence} from './review-evidence.js';
-import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput} from './principle-input.js';
+import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput,renderPrincipleDistillContext} from './principle-input.js';
 import {GEMINI_GENERATION_MODEL,parseDistilledPrinciples,parsePrincipleRelation,parsePrincipleGrounding,PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
 import {principleMaterialKey} from './principle-material-key.js';
 import {principleWork} from './principle-work.js';
@@ -428,7 +428,7 @@ export async function refreshPrinciplesForProfile(
     provider:provider.name??'injected',models:provider.name==='openrouter'
       ?[process.env.WAKA_MODEL_PRINCIPLES?.trim()||OPENROUTER_GENERATION_MODEL,process.env.WAKA_MODEL_PRINCIPLE_JUDGE?.trim()||OPENROUTER_GENERATION_MODEL]
       :[GEMINI_GENERATION_MODEL],limits:{input:PRINCIPLE_INPUT_LIMITS,comparison:PRINCIPLE_COMPARISON_LIMITS,grounding:PRINCIPLE_GROUNDING_LIMITS},
-    prompts:[PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION],material:principleMaterialKey(material),distillInput,
+    prompts:[PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION],context:renderPrincipleDistillContext(distillInput),material:principleMaterialKey(material),distillInput,
     standing:existing.map(row=>({id:row.id,statement:row.statement,revision:String(row.statementRevision),rank:row.rank,state:row.state,origin:row.origin,locked:row.lockedAt!==null,supported:row.supportCurrent,conflictsWithId:row.conflictsWithId}))})).digest('hex');
   const work=principleWork({db,profileId:input.profileId,billingProfileId,inputHash,revision,jobId:deps.jobId,beforeProgress:deps.beforeProgress});
   const distilled=await work.run('distill',()=>provider.distillPrinciples(distillInput),value=>({candidates:parseDistilledPrinciples(value).candidates.slice(0,PRINCIPLE_MAX_CANDIDATES_PER_RUN)}));

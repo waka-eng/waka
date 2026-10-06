@@ -2,10 +2,11 @@ import {randomUUID} from 'node:crypto';
 import {and,asc,desc,eq,gte,inArray,sql} from 'drizzle-orm';
 import {backgroundJobs,conversationMessages,conversationReplyRequests,conversations,generationRevisions,inspirationEmbeddings,profiles,type BackgroundJob,type ConversationReference} from '../db/index.js';
 import type {getDb} from './db.js';
-import {CONVERSATION_LIMITS,conversationHash,conversationRepliesEnabled,currentConversationReferences,readConversationContext} from './conversation-context.js';
+import {CONVERSATION_LIMITS,conversationHash,conversationRepliesEnabled,currentConversationReferences,readConversationContext,conversationPromptSources} from './conversation-context.js';
 import {getDefaultModelProvider,type ConversationReplyInput} from './model-provider.js';
 import {parseConversationReply} from '../queue/gemini.js';
 import {conversationSearchQuery} from './conversation-material.js';
+import {conversationUsesSavedSources} from './conversation-corrections.js';
 import {GEMINI_EMBEDDING_DIMENSIONS,GEMINI_EMBEDDING_MODEL,GeminiEmbeddingHttpClient,validateEmbeddingVector,type GeminiEmbeddingClient} from './inspiration-embeddings.js';
 import type {ConversationRetrievalTrace} from './conversation-retrieval.js';
 import {enqueueConversationReply,STALE_LOCK_SECONDS,wakeCommittedBackgroundJobs} from './queue.js';
@@ -40,10 +41,10 @@ export async function projectConversationMessages(db:Reader,profileId:string,id:
     if(message.role==='user')return {...message,followUpQuestion:null,memoryChanged:false,replyRequestId:null,citations:[]};
     const request=requests.find(row=>row.assistantMessageId===message.id&&row.status==='ready');
     const current=request?await currentConversationReferences(db,profileId,request.references):[];
-    const memoryChanged=!request||current.some(row=>row===null);
+    const memoryChanged=!request||current.some((row,index)=>row===null||row.historical===true&&request.references[index]?.historical!==true);
     return {...message,followUpQuestion:request?.followUpQuestion??null,memoryChanged,replyRequestId:request?.id??null,
       citations:request?.references.map((reference,index)=>({index,kind:reference.kind,id:reference.id,available:current[index]!==null,
-        ...(current[index]?{preview:current[index]!.text.replace(/\s+/g,' ').slice(0,96)}:{})}))??[]};
+        ...(current[index]?{preview:current[index]!.text.replace(/\s+/g,' ').slice(0,96),...(current[index]!.historical?{historical:true,recordedAt:current[index]!.recordedAt}:{} )}:{})}))??[]};
   }));
 }
 async function inputFor(db:Reader,profileId:string,id:string,userMessageId:string,queryVector?:number[]){
@@ -62,10 +63,10 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     history.unshift({role:row.role,content,...(row.correctsMessageId?{correction:true}:{})});characters+=content.length;
   }
   let retrievalTrace:ConversationRetrievalTrace|undefined;
-  const context=await readConversationContext(db,profileId,conversationSearchQuery(history),undefined,conversation.initialPrincipleId,queryVector,trace=>{retrievalTrace=trace;}),sources=[...context.principles,...context.reading,...context.inspirations];
+  const context=conversationUsesSavedSources(history)?await readConversationContext(db,profileId,conversationSearchQuery(history),undefined,conversation.initialPrincipleId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
   const [profile]=await db.select({locale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId));
   const focusIndex=sources.findIndex(source=>source.kind==='principle'&&source.id===conversation.initialPrincipleId);
-  const input:ConversationReplyInput={preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:sources.map(({kind,text,recordedAt,state,rank,locked,supportCurrent,truncated})=>({kind,text,...(recordedAt?{recordedAt}:{}),state,rank,locked,supportCurrent,truncated}))};
+  const input:ConversationReplyInput={preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
   return {input,sources,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }
 async function replyState(db:Reader,profileId:string,id:string){
@@ -120,7 +121,7 @@ export async function readConversationReference(db:Db,profileId:string,id:string
     const reference=request?.references[index];if(!reference)throw new ConversationReplyError(404,'Reference not found.');
     const [source]=await currentConversationReferences(tx,profileId,[reference]);if(!source)throw new ConversationReplyError(409,'This memory changed since the reply.');
     if(!Number.isInteger(reference.quoteStart)||!Number.isInteger(reference.quoteLength)||reference.quoteStart!<0||reference.quoteLength!<4||reference.quoteLength!>300||reference.quoteStart!+reference.quoteLength!>source.text.length)throw new ConversationReplyError(409,'This reference cannot be verified.');
-    return {profileId,conversationId:id,requestId,index,source:{kind:source.kind,id:source.id,text:source.text,state:source.state,supportCurrent:source.supportCurrent,
+    return {profileId,conversationId:id,requestId,index,source:{kind:source.kind,id:source.id,text:source.text,state:source.state,supportCurrent:source.supportCurrent,recordedAt:source.recordedAt,historical:source.historical,artifactVersion:source.artifactVersion,
       quote:source.text.slice(reference.quoteStart??0,(reference.quoteStart??0)+(reference.quoteLength??0))}};
   },{isolationLevel:'repeatable read',accessMode:'read only'});
 }
@@ -151,7 +152,7 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
     const [usage]=await tx.execute<{count:number}>(sql`SELECT coalesce(sum(1 + CASE WHEN r.retrieval_dispatched_at IS NOT NULL THEN 1 ELSE 0 END),0)::int AS count FROM conversation_reply_requests r JOIN profiles p ON p.id=r.profile_id
       WHERE p.account_id=${owner.accountId}::uuid AND r.dispatched_at>=now()-interval '1 hour'`);
     if(usage.count>=CONVERSATION_LIMITS.modelCalls)return refuse('failed','budget');
-    const [indexed]=embeddingClient?.model===GEMINI_EMBEDDING_MODEL&&usage.count+2<=CONVERSATION_LIMITS.modelCalls
+    const [indexed]=conversationUsesSavedSources(next.input.history)&&embeddingClient?.model===GEMINI_EMBEDDING_MODEL&&usage.count+2<=CONVERSATION_LIMITS.modelCalls
       ?await tx.select({id:inspirationEmbeddings.id}).from(inspirationEmbeddings).where(and(eq(inspirationEmbeddings.profileId,job.profileId),eq(inspirationEmbeddings.inputScope,'personal'),eq(inspirationEmbeddings.model,GEMINI_EMBEDDING_MODEL),eq(inspirationEmbeddings.dimensions,GEMINI_EMBEDDING_DIMENSIONS))).limit(1):[];
     const semantic=Boolean(indexed);
     await tx.update(conversationReplyRequests).set({status:'running',dispatchedAt:sql`clock_timestamp()`,retrievalDispatchedAt:semantic?sql`clock_timestamp()`:null,failureCode:null}).where(eq(conversationReplyRequests.id,requestId));
@@ -192,7 +193,7 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
     if(!request||request.status!=='running')return;
     const current=request.userMessageId?await inputFor(tx,job.profileId,id,request.userMessageId,queryVector):null;
     if(!current||current.hash!==work.hash){await tx.update(conversationReplyRequests).set({status:'stale',failureCode:'memory_changed',finishedAt:new Date()}).where(eq(conversationReplyRequests.id,requestId));return;}
-    const assistantId=randomUUID(),references:ConversationReference[]=result.citations.map(citation=>{const source=work.sources[citation.sourceNumber-1]!;return {kind:source.kind,id:source.id,hash:source.hash,quoteStart:source.text.indexOf(citation.quote),quoteLength:citation.quote.length};});
+    const assistantId=randomUUID(),references:ConversationReference[]=result.citations.map(citation=>{const source=work.sources[citation.sourceNumber-1]!;return {kind:source.kind,id:source.id,hash:source.hash,quoteStart:source.text.indexOf(citation.quote),quoteLength:citation.quote.length,...(source.kind==='top_of_mind_entry'?{historical:source.historical===true}:{})};});
     await tx.insert(conversationMessages).values({id:assistantId,profileId:job.profileId,conversationId:id,position:conversation.revision+1,role:'assistant',content:result.answer});
     await tx.update(conversations).set({revision:conversation.revision+1,updatedAt:new Date()}).where(eq(conversations.id,id));
     await tx.update(conversationReplyRequests).set({status:'ready',assistantMessageId:assistantId,references,followUpQuestion:result.followUpQuestion,finishedAt:new Date()}).where(eq(conversationReplyRequests.id,requestId));

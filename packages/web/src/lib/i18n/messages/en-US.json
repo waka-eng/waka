@@ -22,6 +22,8 @@
   "worldChatReadingChoices": "Choose a top of mind to explore",
   "worldChatDiscussSource": "Discuss this",
   "worldChatSourceSelectionFailed": "This memory changed or couldn’t be opened. Try again or choose another.",
+  "worldChatEarlierReading": "Earlier reading",
+  "worldChatExploreEarlierReadingMessage": "Let’s explore this earlier reading, from the record dated",
   "worldChatExploreSourceMessage": "Let’s explore this idea further.",
   "worldShareLoading": "Loading your principle…",
   "worldChatExploreReading": "Continue with this top of mind",

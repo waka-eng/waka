@@ -8,6 +8,7 @@ import {ConversationHistory} from './ConversationHistory';
 import {ConversationMemory} from './ConversationMemory';
 import {ConversationText} from './ConversationText';
 import {ConversationReadingChoices} from './ConversationReadingChoices';
+import {ConversationSourceDate} from './ConversationSourceDate';
 import {conversationPreview} from '../../../api/src/lib/conversation-preview';
 import {fetchPrinciples,type ApiInspiration,type ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
@@ -132,7 +133,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       if(current.profileId!==scope.profileId||current.conversationId!==id||current.requestId!==requestId||current.index!==reference.index||current.source.kind!==reference.kind||current.source.id!==reference.id||conversationRef.current?.revision!==revision)throw new Error('Reading changed');
       if(draftRef.current?.pending||draftRef.current?.content.trim())return;
       const text=current.source.text.length<=3000?current.source.text:current.source.quote;
-      const content=`“${text}”\n\n${say(reference.kind==='top_of_mind_entry'?'worldChatExploreReadingMessage':'worldChatExploreSourceMessage')}`;
+      const content=`“${text}”\n\n${current.source.historical&&current.source.recordedAt?`${say('worldChatExploreEarlierReadingMessage')} (${new Date(current.source.recordedAt).toLocaleDateString(locale,{dateStyle:'medium',timeZone:'UTC'})})`:say(reference.kind==='top_of_mind_entry'?'worldChatExploreReadingMessage':'worldChatExploreSourceMessage')}`;
       if(!keep({id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content,revision:revision??0,pending:false}))return;
       nearBottom.current=true;await save();
     }catch{if(!lifecycle.current.signal.aborted)setReadingChoiceFailed(messageId);}
@@ -175,10 +176,10 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
                 references={message.citations.filter(reference=>reference.kind==='top_of_mind_entry')} locale={locale} disabled={suggestionBlocked} hasDraft={Boolean(draft?.content.trim())}
                 opening={readingChoice?.messageId===message.id?readingChoice.index:null} failed={readingChoiceFailed===message.id}
                 onChoose={reference=>void chooseSource(message.id,message.replyRequestId!,reference)}/>:null}
-              {message.citations?.some(reference=>!(message.id===latestMessage?.id&&generationEnabled&&reference.kind==='top_of_mind_entry'))&&message.replyRequestId?<div className="chat-citations jar-conversation-citations" aria-label={say('worldConversationReferences')}>{message.citations.filter(reference=>!(message.id===latestMessage?.id&&generationEnabled&&reference.kind==='top_of_mind_entry')).map(reference=><button key={reference.index} type="button" disabled={!reference.available} aria-expanded={citation?.requestId===message.replyRequestId&&citation?.index===reference.index} onClick={()=>void openCitation(message.replyRequestId!,reference.index)}><span>{sourceName(reference.kind)} {reference.index+1}</span>{reference.preview?<span className="jar-citation-preview">{reference.preview}{reference.preview.length===96?'…':''}</span>:null}{!reference.available?` · ${say('worldConversationReferenceChanged')}`:''}</button>)}</div>:null}
+              {message.citations?.some(reference=>!(message.id===latestMessage?.id&&generationEnabled&&reference.kind==='top_of_mind_entry'))&&message.replyRequestId?<div className="chat-citations jar-conversation-citations" aria-label={say('worldConversationReferences')}>{message.citations.filter(reference=>!(message.id===latestMessage?.id&&generationEnabled&&reference.kind==='top_of_mind_entry')).map(reference=><button key={reference.index} type="button" disabled={!reference.available} aria-expanded={citation?.requestId===message.replyRequestId&&citation?.index===reference.index} onClick={()=>void openCitation(message.replyRequestId!,reference.index)}><span>{sourceName(reference.kind)} {reference.index+1}</span><ConversationSourceDate locale={locale} historical={reference.historical} recordedAt={reference.recordedAt}/>{reference.preview?<span className="jar-citation-preview">{reference.preview}{reference.preview.length===96?'…':''}</span>:null}{!reference.available?` · ${say('worldConversationReferenceChanged')}`:''}</button>)}</div>:null}
               {citation&&citation.requestId===message.replyRequestId?<section className="jar-conversation-reference" aria-label={say('worldConversationReferences')}>
                 <button type="button" onClick={()=>{citationSerial.current++;setCitation(null);}}>{say('worldClose')}</button>
-                {citation.failed?<p role="alert">{say('worldConversationReferenceFailed')}</p>:citation.value?<><p>{sourceName(citation.value.source.kind)}</p><blockquote>{citation.value.source.quote}</blockquote>
+                {citation.failed?<p role="alert">{say('worldConversationReferenceFailed')}</p>:citation.value?<><p>{sourceName(citation.value.source.kind)}</p><ConversationSourceDate locale={locale} historical={citation.value.source.historical} recordedAt={citation.value.source.recordedAt}/><blockquote>{citation.value.source.quote}</blockquote>
                   {generationEnabled&&message.citations?.find(reference=>reference.index===citation.index&&reference.available)?<button type="button" disabled={suggestionBlocked} onClick={()=>{const reference=message.citations!.find(row=>row.index===citation.index)!;void chooseSource(message.id,message.replyRequestId!,reference);}}>{say('worldChatDiscussSource')}</button>:null}
                   {draft?.content.trim()&&generationEnabled?<p className="chat-muted">{say('worldChatReadingDraft')}</p>:null}
                   {readingChoiceFailed===message.id?<p role="alert">{say('worldChatSourceSelectionFailed')}</p>:null}

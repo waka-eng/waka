@@ -205,6 +205,31 @@ The initial limits are 100 active conversations per profile, 200 messages per
 conversation and 4,000 characters per user message. Context reads are bounded to
 16,000 text characters and freshly select only that profile's current readable
 Principles, live Top of mind and keyword-matched owned inspiration material.
+Questions about changes in thinking can additionally read earlier Top of Mind
+records. The reader uses up to three live entries plus one different entry from
+each of at most two earlier versions, scanning at most three superseded
+meaningful artifacts and fourteen earlier entries. Ordinary questions remain
+live-only. No-change audits and exact copies of current wording do not become
+evidence of a change. Earlier records obey the same owned, current-support and
+human-wording policy as the private history surface; unsupported machine words,
+dismissed entries and deleted evidence are not revived.
+
+An earlier record carries its artifact publication date and version. That date
+does not prove when a belief changed or when a later human edit happened.
+Chat compares supplied earlier/current wording tentatively, and abstains when
+the selected records cannot support the requested comparison. The UI labels
+earlier sources with their record date before selection and on reopening.
+New reading-reference proofs use `reading-v2`, binding complete wording,
+revision, entry identity, human lock, current support, publication date and
+artifact version before excerpting. Supersession alone preserves that proof;
+old text-only proofs remain valid only against the same currently readable
+owned words. Reply references record whether they were already historical when
+cited, so deliberate use of history is not immediately marked changed. A
+formerly current source becoming historical still marks the old reply changed.
+These are optional fields in existing JSON metadata, not a new memory layer or
+a database migration. Historical date labels and selected-source messages use
+the UTC record date, matching the supplied model dates across device timezones.
+
 Material includes saved reflection answers and ready link/image/audio text;
 an audio correction replaces the original transcript rather than adding a
 second account of it. Excerpts distinguish human reflections from generated
@@ -259,6 +284,11 @@ A correction is a new user message with an optional `corrects_message_id`
 pointing to an earlier assistant message in the same profile/conversation. It
 does not rewrite history, create memory or edit a Principle. Reply context labels
 the correction and prioritizes the current user view over earlier interpretations.
+For an ordinary deliberate correction, the provider and citation parser omit
+saved sources rather than rearguing them. An explicit comparison request keeps
+those sources. This does not erase memory, rewrite earlier messages or change
+past receipts. The current reply records no selected saved sources and skips
+query embedding; an explicit comparison retains normal retrieval.
 Principle editing is a separate confirmation of exact wording and its observed
 `statement_revision`. A stale edit conflicts; an exact retry of the immediately
 applied revision is a no-op. Existing statement history and human locks apply.

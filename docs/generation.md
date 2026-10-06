@@ -629,6 +629,11 @@ artifact. It returns the
 typed (`pattern`, `tension`, `question`, `hypothesis`, `action`), each
 citing signal ids — or an explicit `noChange`.
 
+The first supplied signal is the selected leading focus unless a human-kept
+entry already leads. A saved event or workshop does not prove attendance,
+completion or a repeated habit; the prompt preserves that distinction. These
+are synthesis constraints, not new ranking weights or eligibility thresholds.
+
 Whole-artifact on purpose: a model asked to patch entries reasons about
 diffs it cannot see, and every incremental variant of this call drifted into
 appending. Temperature 0, schema-constrained, everything user-originated
@@ -863,8 +868,7 @@ qualifies.
    horoscope.
 4. **Support** — evidence spanning at least `PRINCIPLE_MIN_SPAN_DAYS` (0)
    days and selected into at least `PRINCIPLE_MIN_TOM_APPEARANCES` (1)
-   top-of-mind versions; a two-week obsession is top of mind, not
-   character. Both computed over the UNION of the citing signals — the
+   top-of-mind versions. Both computed over the UNION of the citing signals — the
    theme's lifetime, not any one wording's. **[checked]**
 5. **Completion** — can never be finished; anything checkable-off is a
    goal, not a principle.
@@ -876,6 +880,10 @@ guides the next choice rather than describing current attention. Capture dates
 alone do not impose a calendar wait; explicit cross-context choices still need
 current, distinct supporting statements. Temporary intentions and saved external
 opinions do not become timeless directives.
+Same-day captures can describe choices made across different contexts; their
+save dates alone do not prove the experiences happened on one day. Conversely,
+multiple statements from one originating event do not establish independent
+choices. Distillation distinguishes those cases before semantic grounding.
 
 Before matching/publication, structurally eligible generated candidates receive
 one semantic grounding batch against only their cited statements. Its limits
@@ -929,6 +937,9 @@ wording and semantic-grounding checks so an old completed empty result cannot
 permanently suppress them. An eligible profile can get one fresh pass under the new key
 when the normal scheduling path next runs, not from a GET or a data repair.
 Failed jobs retry only within the worker budget or by an explicit retry.
+The work fingerprint also binds the actual rendered distillation context,
+including its framing, so a prompt-header change cannot reuse an obsolete
+completed step. No cadence, hourly allowance or dispatch limit changes.
 Each request evaluates the active profile: one cheap SQL check for clusters
 newly past the bar, and only then model calls (distill at most
 `PRINCIPLE_MAX_CANDIDATES_PER_RUN` (3) candidates; judge each against the

@@ -81,6 +81,13 @@ describe("distillation request", () => {
     expect(PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION).toMatch(/Zero candidates is a correct answer/);
     expect(PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION).toMatch(/never echo/i);
   });
+  it('does not turn capture age into a calendar gate for repeated choices',()=>{
+    const request=buildPrincipleDistillRequest(DISTILL_INPUT);
+    expect(request.contents[0]!.parts[0]!.text).toContain('Current supported signals');
+    expect(request.contents[0]!.parts[0]!.text).toContain('Capture dates are not experience dates');
+    expect(PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION).toContain('An evidence span of zero is not a reason to reject');
+    expect(PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION).toContain('one originating event');
+  });
 });
 
 describe("reading distillation", () => {

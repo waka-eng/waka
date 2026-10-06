@@ -84,6 +84,12 @@ autodrain and provider networking remain disabled and keys are removed. The
 seeded assistant response is a known fixture, not a generated quality result.
 Stop the process normally to remove only its own disposable schema.
 
+Add `WAKA_PERFORMANCE_CHAT_HISTORY=1` alongside that flag to include an earlier
+kept reading dated September 1 and a current reading dated October 1. It exercises
+date disclosure and source-based continuation through the real API, without
+claiming the seeded answer is model quality evidence. The history flag requires
+the interactive Chat fixture and changes only its owned synthetic schema.
+
 ## Recovery and controlled worker checks
 
 These controls exist only in the disposable loopback fixture, not the app API:

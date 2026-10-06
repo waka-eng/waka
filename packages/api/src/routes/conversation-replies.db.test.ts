@@ -39,13 +39,32 @@ async function claim(){
   await t.sql`UPDATE background_jobs SET run_after=now()+interval '1 day' WHERE type::text<>'generate_conversation_reply'`;
   const job=await postgresBackgroundJobStore.claimNext(new Date());expect(job?.type).toBe('generate_conversation_reply');return job!;
 }
+it('delivers actual dated earlier/current records without IDs and keeps history citations reopenable',async()=>{
+  const f=await fixture();
+  await t.sql`UPDATE conversation_messages SET content='What has changed in how I think?' WHERE id=${f.messageId}`;
+  const [past]=await t.sql`INSERT INTO top_of_minds(profile_id,version,status,created_at) VALUES(${f.profileId},1,'superseded','2026-09-01T12:00:00Z') RETURNING id`;
+  const [live]=await t.sql`INSERT INTO top_of_minds(profile_id,version,status,created_at) VALUES(${f.profileId},2,'live','2026-10-01T12:00:00Z') RETURNING id`;
+  await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,locked_at) VALUES(${past.id},'pattern','I prefer a detailed plan before starting.',now()),(${live.id},'pattern','I try a small experiment before a detailed plan.',now())`;
+  answer.mockImplementationOnce(async input=>({answer:'The earlier reading favored planning first; the current reading describes trying a small experiment.',followUpQuestion:null,citations:input.sources.flatMap((source,index)=>source.historical?[{sourceNumber:index+1,quote:source.text}]:[])}));
+  await f.request();await processBackgroundJob(await claim());
+  const input=answer.mock.calls[0][0];expect(input.sources.filter(source=>source.kind==='top_of_mind_entry')).toHaveLength(2);
+  expect(input.sources.find(source=>source.historical)).toMatchObject({recordedAt:'2026-09-01T12:00:00.000Z',artifactVersion:1});
+  expect(JSON.stringify(input.sources)).not.toContain(past.id);
+  const [request]=await t.sql`SELECT id FROM conversation_reply_requests WHERE conversation_id=${f.id}`;
+  const reopened=await f.app.request(`/conversations/${f.id}/replies/${request.id}/references/0`);expect(reopened.status).toBe(200);
+  expect((await reopened.json() as {source:{historical:boolean}}).source.historical).toBe(true);
+  const conversation=await(await f.app.request(`/conversations/${f.id}`)).json() as {conversation:{messages:Array<{role:string;memoryChanged:boolean}>}};
+  expect(conversation.conversation.messages.find(message=>message.role==='assistant')?.memoryChanged).toBe(false);
+});
 it('delivers the explicit correction to the next reply without changing memory or duplicating the user message',async()=>{
   const f=await fixture();await f.request();const firstJob=await claim();await processBackgroundJob(firstJob);await postgresBackgroundJobStore.markSucceeded(firstJob,null);
   const [reply]=await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${f.id} AND role='assistant'`;
   const correction={id:randomUUID(),content:'No, I enjoyed it. For this month only, I want a slower pace.',revision:2,correctsMessageId:reply.id,requestReply:true};
   for(let n=0;n<2;n++)expect((await f.post(`/${f.id}/messages`,correction)).status).toBe(200);
   expect((await f.post(`/${f.id}/messages`,{...correction,correctsMessageId:randomUUID()})).status).toBe(409);
+  answer.mockImplementationOnce(async()=>({answer:'You enjoyed it and want a slower pace this month only.',followUpQuestion:null,citations:[]}));
   await processBackgroundJob(await claim());const input=answer.mock.calls.at(-1)![0];expect(input.history.at(-1)).toEqual({role:'user',content:correction.content,correction:true});
+  expect((await f.state()).phase).toBe('ready');
   expect(await t.sql`SELECT id FROM inspirations`).toHaveLength(1);expect(await t.sql`SELECT id FROM principles`).toHaveLength(0);
   expect(await t.sql`SELECT id FROM conversation_messages WHERE id=${correction.id}`).toHaveLength(1);
   expect((await assembleProfileExport(t.db as never,f.profileId)).conversationMessages.find(row=>row.id===correction.id)?.correctsMessageId).toBe(reply.id);
@@ -56,6 +75,35 @@ it('rejects correction targets outside this conversation and user-authored targe
   const [reply]=await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${other.id} AND role='assistant'`;
   for(const correctsMessageId of [reply.id,f.messageId])expect((await f.post(`/${f.id}/messages`,{id:randomUUID(),content:'A correction',revision:1,correctsMessageId})).status).toBe(409);
   expect(await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${f.id}`).toHaveLength(1);
+});
+it('records only actually used correction sources and skips unused query embedding',async()=>{
+  const f=await fixture(),words='Seek intensive experiences whenever possible.';
+  const [principle]=await t.sql`INSERT INTO principles(profile_id,statement,type,origin,rank,locked_at) VALUES(${f.profileId},${words},'maxim','declared',0,now()) RETURNING id`;
+  const vector=[1,...Array<number>(767).fill(0)];
+  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await f.request();const firstState=await f.state(),firstJob=await claim();
+  await processConversationReply(t.db as never,firstJob,f.id,firstState.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await postgresBackgroundJobStore.markSucceeded(firstJob,null);
+  const [first]=await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${f.id} AND role='assistant'`;
+  const embed=vi.fn(async()=>vector),embeddingClient={model:GEMINI_EMBEDDING_MODEL,embed};
+  answer.mockImplementationOnce(async()=>({answer:'The slower pace is for this month only.',followUpQuestion:null,citations:[]}));
+  expect((await f.post(`/${f.id}/messages`,{id:randomUUID(),content:'No, I enjoyed it. For this month only I want a slower pace.',revision:2,correctsMessageId:first.id,requestReply:true})).status).toBe(200);
+  const state=await f.state(),job=await claim();
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient});
+  await postgresBackgroundJobStore.markSucceeded(job,null);
+  expect(answer.mock.calls.at(-1)![0].sources).toEqual([]);expect(embed).not.toHaveBeenCalled();
+  const [receipt]=await t.sql`SELECT context_sources,retrieval_dispatched_at FROM conversation_reply_requests WHERE id=${state.requestId}`;
+  expect(receipt.context_sources).toEqual([]);expect(receipt.retrieval_dispatched_at).toBeNull();
+  const context=await(await f.app.request(`/conversations/${f.id}/context`)).json() as {principles:unknown[];reading:unknown[];inspirations:unknown[]};
+  expect([...context.principles,...context.reading,...context.inspirations]).toEqual([]);
+  expect((await f.state()).phase).toBe('ready');
+  answer.mockImplementationOnce(async input=>({answer:'The recorded guide favors intensive experiences; your current choice is slower for this month.',followUpQuestion:null,citations:[{sourceNumber:input.sources.findIndex(source=>source.text===words)+1,quote:words}]}));
+  expect((await f.post(`/${f.id}/messages`,{id:randomUUID(),content:'No, keep the slower pace this month. Compare it with my saved principle.',revision:4,correctsMessageId:first.id,requestReply:true})).status).toBe(200);
+  const comparison=await f.state();await processConversationReply(t.db as never,await claim(),f.id,comparison.requestId,async()=>{}, {embeddingClient});
+  expect(embed).toHaveBeenCalledOnce();expect(answer.mock.calls.at(-1)![0].sources.some(source=>source.text===words)).toBe(true);
+  expect((await f.state()).phase).toBe('ready');
+  const [kept]=await t.sql`SELECT statement,locked_at FROM principles WHERE id=${principle.id}`;
+  expect(kept.statement).toBe(words);expect(kept.locked_at).not.toBeNull();
 });
 it('coalesces initial requests, stores one grounded reply, and replays without another dispatch',async()=>{
   const f=await fixture();const [a,b]=await Promise.all([f.request(),f.request()]);expect(a.status).toBe(200);expect(b.status).toBe(200);

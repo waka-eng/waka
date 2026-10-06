@@ -1,6 +1,6 @@
 # WAKA beta readiness milestones
 
-Status: in progress (2026-10-05), milestone 1 passed locally; milestone 2 implemented and technically checked, human comprehension pending; milestones 3 and 4 remain open.
+Status: in progress (2026-10-05), milestones 1 and 3 passed locally; milestone 2 technically checked, human comprehension pending; milestone 4 remains open. No current-goal deployment.
 Branch: `codex/beta-readiness-m1-m4`, based on deployed dev `56a2694`.
 
 ## Objective
@@ -184,6 +184,75 @@ silently claimed by this checkpoint.
 Both owned fixture schemas were removed after normal shutdown and checked
 absent; the baseline/current screenshots remain. Temporary test tabs were
 closed and the viewport override reset.
+
+### Milestone 3 gate on 2026 10 05
+
+Criterion: the existing fixed 24-scenario generation matrix clears its 90
+percent qualitative bar and critical safety cases; historical chat uses real
+owned earlier/current records without invented dates or missing-source revival.
+
+Baseline: 23/24 structural and 22/24 qualitative. The single-origin case
+invented attendance ("A workshop you attended"), and repeated same-day choices
+failed to produce an initial guide. Candidate: 24/24 structural and qualitative,
+including the retained compound-guide and locale cases. Selected recent focus
+now leads unless human-kept words already lead. Capture dates no longer imply
+experience dates or a calendar wait. Weights, thresholds and cadence did not
+change. Final-code provider-free replay also passes all 24 structural cases;
+it reuses the recorded candidate outputs, not another live sample.
+
+Historical retrieval adds at most two earlier meaningful versions to up to
+three live entries, within the existing context allowance. No-change copies,
+identical current words, unsupported machine history, dismissed entries and
+other profiles are excluded. New reading proofs bind dates/version/full words
+without breaking old text-only citations. Deliberate historical citations stay
+usable; a formerly current source becoming historical still marks its old
+reply changed. SQL verifies deletion withdrawal, supersession, proof changes
+and foreign exclusion. Existing JSON reference metadata gains an optional
+historical flag; no SQL migration is required.
+
+The final 24-case chat matrix has 24 structural and 23 qualitative passes,
+with no critical safety failure. The retained miss describes kept wording as
+if it had a separate possible-guide label. All four real-reader history cases
+pass; comparison replies still sound more cautious than ideal about examples
+under kept words. These are bounded synthetic results, not an independent user
+study or a claim to inspect the whole archive. The complete per-case review,
+failed examples and receipts are in
+`docs/craft/evidence/2026-10-05-beta-readiness-m3.json`.
+
+Retained intermediate failures include duplicated/bundled questions, old
+Principle citations after corrections, a considered class treated as decided,
+an assumed disappointing project, schema labels in prose and a false claim
+that only editing could first create a Principle. Corrections now omit saved
+sources unless an explicit comparison is requested, through both the provider
+builder and strict citation parser. A shorter prompt keeps direct-answer and
+hypothetical behavior without silent memory edits. Raw evaluation snapshots
+remain unchanged; the separate review receipt records their verdicts.
+
+Verification: 863 API unit tests, 780 web tests, 45 conversation/history SQL
+cases, API/web/admin types, migration check and production build pass. Built
+narrow cards show Earlier reading and the record date, including accessible
+labels. Current and old-reference previews, source reopening, and the selected
+follow-up preserve the date and exact words. The fixture stored one follow-up
+and dispatched zero provider requests. Test-only history setup is opt-in.
+An initial mock-header seam check and a wrong diagnostic SQL column were
+corrected without weakening behavior checks.
+
+Final consistency review aligned the worker's selected-context receipt with
+the provider/decoder correction rule. A plain correction now records no saved
+sources and buys no query embedding; an explicit comparison still retrieves
+the unchanged owned Principle. The new SQL case initially reused the fixture's
+earlier follow-up, which the strict parser correctly refused; supplying distinct
+controlled replies and asserting ready publication fixed the test. No live
+prompt changed in this policy extraction. The browser fixture was shut down
+normally and its exact schema checked absent; temporary tabs and viewport
+overrides were cleaned up, with screenshots retained.
+
+All paid attempts, including intermediate failures, total 256 calls and
+USD 0.049843195 for this milestone. Cumulative allocation is USD 1.6332211014
+of USD 5, leaving USD 3.3667788986; every call returned cost metadata. Provider
+evaluations contain synthetic inputs only. No remote data, production, push
+or deployment changed. Verdict: milestone 3 passes its local fixed-matrix gate.
+Milestone 2 human comprehension and milestone 4 remain open.
 
 ### First time user check
 

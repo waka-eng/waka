@@ -207,6 +207,21 @@ it('lets an older reading preview continue the chat with its verified words once
   expect(vi.mocked(saveConversationMessage).mock.calls[0][2].content).toContain('Try a small experiment before making a commitment.');
   expect(requestConversationReply).not.toHaveBeenCalled();
 });
+it('labels an earlier record and carries its date into the selected follow-up',async()=>{
+  readingReply();stored.messages.push({id:'later',role:'assistant',profileId:scope.profileId,conversationId:id,position:2,content:'You can compare with an earlier reading.',createdAt:stored.createdAt});stored.revision=2;replyState.revision=2;
+  stored.messages[0].citations![0]={...stored.messages[0].citations![0],historical:true,recordedAt:'2026-09-01T12:00:00Z'};
+  vi.mocked(fetchConversationCitation).mockResolvedValue({...readingReference(0),source:{...readingReference(0).source,historical:true,recordedAt:'2026-09-01T12:00:00Z',artifactVersion:1}});
+  await mount();expect(host.querySelector('.chat-citations button')?.textContent).toContain('Earlier reading · Sep 1, 2026');
+  await act(async()=>host.querySelector<HTMLButtonElement>('.chat-citations button')!.click());
+  expect(host.textContent).toContain('Earlier reading');expect(host.textContent).toContain('Sep 1, 2026');
+  await click('Discuss this');expect(vi.mocked(saveConversationMessage).mock.calls[0][2].content).toContain('from the record dated (Sep 1, 2026)');
+});
+it('discloses the earlier date on a reading choice before it is opened',async()=>{
+  readingReply();stored.messages[0].citations![0]={...stored.messages[0].citations![0],historical:true,recordedAt:'2026-09-01T12:00:00Z'};
+  await mount();expect(host.querySelector('.chat-reading-choice')?.textContent).toContain('Earlier reading · Sep 1, 2026');
+  expect(host.querySelector('.chat-reading-choice')?.getAttribute('aria-label')).toContain('Earlier reading · Sep 1, 2026');
+  expect(fetchConversationCitation).not.toHaveBeenCalled();expect(saveConversationMessage).not.toHaveBeenCalled();
+});
 it.each(['principle','inspiration'] as const)('continues from a verified %s preview and never overwrites a draft',async kind=>{
   stored.generationEnabled=true;completeReply();stored.messages[0].citations![0].kind=kind;
   const source={kind,id:'principle',text:'Verified words for this topic.',quote:'Verified words'};
