@@ -329,6 +329,19 @@ spending; they are not a dollar-cap enforcement ledger or proof of provider
 retention settings. Per-environment limits and alert recipients require explicit
 configuration and deployed verification. Existing call/job budgets still apply.
 
+Operator checks distinguish configured facts from unverified deployment facts.
+Runtime verification accepts only the stage's explicit HTTPS API/web origins,
+production cookie settings, stage/model tags and no fixture-address overrides.
+It does not attest proxy topology, database isolation, provider privacy or
+monetary limits. No URL, key label, credential or provider failure body is echoed.
+
+OpenRouter requests support restrictive opt-in policy: data collection may be
+denied and zero retention required. Unset preferences leave account policy
+untouched; no request disables an account-level restriction. Invalid policy is
+refused before dispatch, and missing eligible routes do not trigger a silent
+provider fallback. Gemini policy is separate. Source code or a synthetic routing
+probe does not establish deployed settings or contractual retention behavior.
+
 ## The four layers
 
 | | Layer 1 — **Inspiration** | Layer 2 — **Signal** | Layer 3 — **Top of mind** | Layer 4 — **Principle** |

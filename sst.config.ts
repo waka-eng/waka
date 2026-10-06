@@ -228,6 +228,8 @@ export default $config({
       GEMINI_API_KEY: geminiApiKey.value,
       OPENROUTER_API_KEY: openRouterApiKey.value,
       OPENROUTER_GENERATION_MODEL: "deepseek/deepseek-v4.1-flash",
+      ...(process.env.WAKA_OPENROUTER_DATA_COLLECTION ? { WAKA_OPENROUTER_DATA_COLLECTION: process.env.WAKA_OPENROUTER_DATA_COLLECTION } : {}),
+      ...(process.env.WAKA_OPENROUTER_REQUIRE_ZDR ? { WAKA_OPENROUTER_REQUIRE_ZDR: process.env.WAKA_OPENROUTER_REQUIRE_ZDR } : {}),
       // Chat enablement is dev-only and shared by API/worker. A manual dev
       // deploy can disable new requests without reverting the additive schema.
       WAKA_CONVERSATION_REPLIES: isDevelopmentDomain && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0",

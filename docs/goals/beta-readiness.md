@@ -347,6 +347,63 @@ remain pending. First-time-user comprehension, actual deployed stage timings,
 provider-data/origin verification and exercised cost safeguards are still open.
 This checkpoint is progress, not completion of milestone 4 or the full goal.
 
+### Milestone 4 configuration checkpoint on 2026 10 05
+
+Runtime and provider-key checks are implemented without defaulting budgets or
+printing secrets. Runtime input requires separate API/worker environment
+objects, exact stage HTTPS origins, safe cookies, stage/model tags and no
+fixture/private-host allowlist. Parsed equivalent origins remain equivalent.
+The report deliberately leaves proxy topology, isolation, privacy and money
+limits unverified. SST currently declares no trusted proxy-hop count; choosing
+one without attesting the real edge/direct-access topology would be unsafe.
+
+`verify-model-key-limit.mjs` requires explicit approved amount/reset flags before
+its read-only provider lookup. It rejects absent or broader limits, wrong reset
+periods and excluded BYOK usage; it does not claim to protect Gemini or prove
+separate stage keys. Native/network errors use an exact safe-message allowlist,
+not a prefix that could echo credentials. The default invocation intentionally
+refuses without a chosen budget. No account policy, key or spending limit changed.
+
+OpenRouter's transport can opt into collection denial and zero retention via
+`WAKA_OPENROUTER_DATA_COLLECTION=deny` and `WAKA_OPENROUTER_REQUIRE_ZDR=1`.
+Unset/zero overrides do not send a weaker policy, invalid values fail before
+dispatch, and an unavailable restricted route fails without fallback. Controls
+are not enabled on deployed stages. These follow OpenRouter's
+[provider-policy controls](https://openrouter.ai/docs/guides/privacy/provider-logging)
+and [retention routing contract](https://openrouter.ai/docs/guides/features/zdr),
+not an inference from a model name or a local env filename.
+
+The public model catalog returned 31 endpoints but no retention-policy flags.
+One synthetic restrictive-route probe returned HTTP 200, the expected V4.1
+model, CoreWeave and `{ok:true}`, at USD 0.0000131. It proves gateway routing
+availability only, not actual provider retention, account settings or deployed
+privacy. Its complete priced receipt is
+`work/conversation-eval/privacy-1791259909417.json`. Cumulative evaluation
+allocation is now USD 1.6332342014 of USD 5; USD 3.3667657986 remains.
+
+Verification: 918 API unit tests, API types, migration and diff checks pass.
+Operator CLI tests use synthetic provider metadata and secret-bearing errors,
+without network access. Wrong/unsafe origins and unapproved budget choices are
+refused without sensitive output. No SQL/schema change, remote mutation, push
+or deployment occurred. This prepares acceptance checks; it does not pass the
+remaining monetary, proxy, privacy, deployment or human comprehension gates.
+
+### Operator verification commands
+
+After authorized deployment, export actual API/worker environment objects into
+a protected local JSON file under `api` and `worker`. Run
+`node scripts/verify-runtime-configuration.mjs --stage=development --config=PATH`
+and retain only its sanitized result. Do not paste the exported environment
+into a PR or log. A proxy count being present is not proof the caller cannot
+reach the origin directly or spoof a forwarded address.
+
+With the verified stage key supplied as `OPENROUTER_API_KEY`, run
+`node scripts/verify-model-key-limit.mjs --limit-usd=APPROVED_AMOUNT --reset=APPROVED_PERIOD`.
+The reset period must be daily, weekly or monthly. Replace the placeholders
+only after the owner's choice. This makes no model request or budget change.
+Check stage-key separation and Gemini controls separately. Exercise live alarms
+and stage timings only under authorized delivery, retaining failure receipts.
+
 ### First time user check
 
 Use a fresh synthetic preview, not an existing user's account. Give participants
