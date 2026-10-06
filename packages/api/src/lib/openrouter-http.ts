@@ -22,6 +22,7 @@ import {
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
 import { MODEL_DECLINED } from "./model-provider.js";
+import {recordModelUsage} from './model-usage.js';
 
 export const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -114,13 +115,15 @@ export async function callOpenRouter(
 
   /* one quiet line per call while the road is new — which task, which model */
   console.log(`[openrouter] ${label} → ${request.model}`);
-  const response = await fetchModelWithTimeout(fetch, OPENROUTER_CHAT_URL, {
+  const started=performance.now();let response:Response;
+  try{response=await fetchModelWithTimeout(fetch, OPENROUTER_CHAT_URL, {
     method: "POST",
     headers: buildOpenRouterHeaders(apiKey),
     body: JSON.stringify(request),
-  });
+  });}catch(error){recordModelUsage('openrouter',label,null,performance.now()-started,'unknown');throw error;}
 
   if (!response.ok) {
+    const billing=await response.clone().json().catch(()=>null);recordModelUsage('openrouter',label,billing,performance.now()-started,'http_error');
     throw new Error(
       formatSafeGeminiError(
         `OpenRouter ${label} failed`,
@@ -133,10 +136,13 @@ export async function callOpenRouter(
   try {
     rawJson = await response.json();
   } catch (err) {
+    recordModelUsage('openrouter',label,null,performance.now()-started,'unknown');
     throw new Error(
       `OpenRouter ${label} returned non-JSON body: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+
+  recordModelUsage('openrouter',label,rawJson,performance.now()-started,'received');
 
   const envelope = chatResponseSchema.safeParse(rawJson);
   if (!envelope.success) {

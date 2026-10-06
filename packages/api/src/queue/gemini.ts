@@ -329,7 +329,7 @@ async function callGemini(
     method: "POST",
     headers: buildGeminiJsonHeaders(apiKey),
     body: JSON.stringify(request),
-  });
+  },undefined,undefined,label);
 
   if (!response.ok) {
     throw new Error(

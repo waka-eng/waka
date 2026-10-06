@@ -784,6 +784,20 @@ merge moves their memory):
 
 ## When the model fails
 
+Dev recovery additionally checks known overdue work every fifteen minutes,
+using the existing claim and budget path with five-minute grace and at most
+five claims in one pass. Scheduled cadence/budget waits and active leases are
+excluded. The daily sweep stays in place and production's cadence is unchanged.
+Recovery never creates a second job or resets its attempt budget; ambiguous
+conversation dispatches retain their existing refusal-to-redispatch guard.
+Exhausted stale leases raise operational counts instead of being revived.
+
+Model transport metrics record attempted requests and available token metadata,
+plus returned OpenRouter charges. They contain no source words or response
+content. Missing cost and Gemini dollar costs are explicitly unpriced; metrics
+do not turn hourly job/call allowances into a hard monetary cap. Deployed
+per-environment cap and notification verification remain separate acceptance.
+
 Two absences, told apart at the transport and never conflated again
 (2026-08-31; before this, both were recorded as the safe verdict — a failed
 extraction became "this capture teaches nothing" forever, and a failed judge

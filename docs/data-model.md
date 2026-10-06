@@ -302,6 +302,33 @@ Principle editing is a separate confirmation of exact wording and its observed
 `statement_revision`. A stale edit conflicts; an exact retry of the immediately
 applied revision is a no-op. Existing statement history and human locks apply.
 
+## Operational monitoring
+
+Queue recovery observes counts, not another memory layer. Dev's fifteen-minute
+check uses the claim predicate and a five-minute grace from `run_after` or the
+fifteen-minute lease expiry. It takes at most five overdue claims in one pass,
+retaining normal fairness, account budgets, request identities and attempt
+ceilings. It does not reenqueue jobs, reset attempts or bypass scheduled waits.
+The daily sweep and ordinary immediate wake-ups remain; production's schedule
+does not change. Exhausted stale leases are reported for operator intervention,
+not automatically revived.
+
+Raw JSON metrics contain stage-level overdue counts, oldest overdue age,
+exhausted leases and a recovery heartbeat. Dev console alarms watch backlog,
+exhausted work and two missing heartbeat periods. Notifications require an
+explicit SNS topic; no recipient is inferred from account data. The idle cost
+is up to 96 metadata checks per day plus custom metrics and alarms.
+
+Model transports emit numeric attempt, token and billing metadata without
+prompts, responses, vectors, credentials or account IDs. OpenRouter's returned
+`usage.cost` is recorded when finite and nonnegative. Missing/invalid cost and
+ambiguous failures remain unpriced, never free. Gemini token metadata is
+recorded without invented dollar estimates. Dimensions are only stage/provider,
+with closed operation labels as ordinary log fields. These metrics observe
+spending; they are not a dollar-cap enforcement ledger or proof of provider
+retention settings. Per-environment limits and alert recipients require explicit
+configuration and deployed verification. Existing call/job budgets still apply.
+
 ## The four layers
 
 | | Layer 1 — **Inspiration** | Layer 2 — **Signal** | Layer 3 — **Top of mind** | Layer 4 — **Principle** |

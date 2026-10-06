@@ -305,6 +305,48 @@ verification and deployed stage measurements are still required. This host has
 no AWS CLI or local SST output receipt. Dev PR/deployment authority was requested
 separately and is pending; no remote writes or deployment occurred.
 
+### Milestone 4 recovery and usage checkpoint on 2026 10 05
+
+Implemented a dev-only fifteen-minute recovery event on the existing worker,
+with a five-minute overdue grace and at most five claims in one pass. The same
+eligibility predicate serves observation, budget peek and claim. Normal
+immediate wake-ups and the daily sweep remain. Active leases, intentional
+future waits and unsupported future job types are excluded; attempt-exhausted
+leases are reported, not restarted. This adds up to 96 idle metadata reads per
+day and custom metric/alarm costs; deployment is not authorized by the code.
+
+Raw JSON CloudWatch metrics expose overdue count, age, exhausted leases and a
+heartbeat. Dev console alarms include missing recovery checks; an explicit SNS
+topic is required for notifications. The implementation follows the documented
+[SST Cron event contract](https://sst.dev/docs/component/aws/cron/) and
+[CloudWatch embedded metric format](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Embedded_Metric_Format_Specification.html).
+Live metric extraction, alarms and delivery have not been verified.
+
+OpenRouter and Gemini transports now emit content-free numeric usage metadata.
+Returned OpenRouter cost is recorded even when output is unusable; failures
+retain an attempt and unknown billing rather than a zero-cost assumption.
+Gemini costs remain unknown despite available token counts. Stage/provider
+dimensions are bounded; operation labels are closed and not dimensions. No
+prompts, responses, vectors, credentials or account IDs are logged by these
+new metrics. This observes spend, not a hard-dollar enforcement ledger.
+
+Verification: 883 API unit tests and 38 targeted queue/conversation SQL cases
+pass, along with API types, migration and diff checks. Real SQL proves concurrent
+claims process one durable job once, budget-capped work keeps its identity and
+waits, recovery skips newly due jobs, and normal wakes still process them.
+Existing conversation tests retain the ambiguous-dispatch refusal. Initial
+type inference, raw-SQL timestamp parsing and mock-table corrections were fixed
+without weakening those checks. No paid model request or remote data write was
+made; cumulative evaluation allocation remains USD 1.6332211014 of USD 5.
+
+A read-only check of the approved local evaluation key reports a USD 10 monthly
+OpenRouter limit, excluding BYOK usage. This verifies only that key, not deployed
+stage keys, Gemini budgets or separate dev/production limits. Budget amounts and
+reset periods, alert destination and dev PR/deploy approval were requested and
+remain pending. First-time-user comprehension, actual deployed stage timings,
+provider-data/origin verification and exercised cost safeguards are still open.
+This checkpoint is progress, not completion of milestone 4 or the full goal.
+
 ### First time user check
 
 Use a fresh synthetic preview, not an existing user's account. Give participants

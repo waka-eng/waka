@@ -1,13 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler } from "./background-worker.js";
-import { runBackgroundJobWorker } from "./lib/queue.js";
+import { runBackgroundJobWorker,readBackgroundJobRecoveryState } from "./lib/queue.js";
+
+/** WHAT THIS MOCKS, AND WHY: `runBackgroundJobWorker` supplies completed pass
+ * counts; `readBackgroundJobRecoveryState` supplies eligibility counts. SQL
+ * eligibility and real claims are tested separately on disposable Postgres. */
 
 /** A pass over an empty queue: nothing taken, nothing pushed out of the way. */
 const IDLE_PASS = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
 
 vi.mock("./lib/queue.js", () => ({
   runBackgroundJobWorker: vi.fn(),
+  readBackgroundJobRecoveryState:vi.fn(),
 }));
 
 beforeEach(() => {
@@ -17,6 +22,7 @@ beforeEach(() => {
   // question it was never asked — which is exactly how a handler that stops
   // early hides behind a test that stopped early too.
   vi.mocked(runBackgroundJobWorker).mockReset().mockResolvedValue(IDLE_PASS);
+  vi.mocked(readBackgroundJobRecoveryState).mockReset().mockResolvedValue({overdue:0,oldestOverdueMs:0,exhaustedLeases:0});
 });
 
 afterEach(() => {
@@ -24,6 +30,28 @@ afterEach(() => {
 });
 
 describe("background worker cron handler", () => {
+  it('observes but never drains a queue without overdue eligible work',async()=>{
+    vi.mocked(readBackgroundJobRecoveryState).mockResolvedValue({overdue:0,oldestOverdueMs:0,exhaustedLeases:2});
+    expect(await handler({mode:'recovery'})).toMatchObject({passes:0,recovery:{overdue:0,exhaustedLeases:2}});
+    expect(runBackgroundJobWorker).not.toHaveBeenCalled();
+  });
+  it('recovery takes one bounded normal pass even when more jobs remain',async()=>{
+    vi.mocked(readBackgroundJobRecoveryState).mockResolvedValue({overdue:200,oldestOverdueMs:3600000,exhaustedLeases:0});
+    vi.mocked(runBackgroundJobWorker).mockResolvedValue({...IDLE_PASS,claimed:5,succeeded:5});
+    expect(await handler({mode:'recovery'})).toMatchObject({claimed:5,passes:1});
+    expect(runBackgroundJobWorker).toHaveBeenCalledExactlyOnceWith({limit:5,overdueOnly:true});
+  });
+  it('recovery respects normal budget deferral without another pass',async()=>{
+    vi.mocked(readBackgroundJobRecoveryState).mockResolvedValue({overdue:1,oldestOverdueMs:3600000,exhaustedLeases:0});
+    vi.mocked(runBackgroundJobWorker).mockResolvedValue({...IDLE_PASS,deferred:25});
+    expect(await handler({mode:'recovery'})).toMatchObject({claimed:0,deferred:25,passes:1});
+    expect(runBackgroundJobWorker).toHaveBeenCalledOnce();
+  });
+  it('a failed recovery read cannot silently claim work',async()=>{
+    vi.mocked(readBackgroundJobRecoveryState).mockRejectedValue(new Error('Unavailable'));
+    await expect(handler({mode:'recovery'})).rejects.toThrow('Unavailable');
+    expect(runBackgroundJobWorker).not.toHaveBeenCalled();
+  });
   it("drains a bounded number of background jobs by default", async () => {
     await handler();
 
