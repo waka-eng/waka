@@ -16,7 +16,7 @@ export function verifyRuntimeConfiguration(config,stage){
     if(env.WAKA_ENRICHMENT_ALLOWED_HOSTS?.trim())throw new Error(`${name} enrichment allowlist must not include fixture/private-address overrides`);
   }
   const raw=config.api.WAKA_TRUSTED_PROXY_HOPS;
-  const hops=raw===undefined||String(raw).trim()===''?null:Number(raw);
+  const hops=raw==null||String(raw).trim()===''?null:Number(raw);
   if(hops!==null&&(!Number.isInteger(hops)||hops<0||hops>16))throw new Error('Trusted proxy hop configuration is invalid');
   return {stage,trustedOrigins:true,secureCookies:true,fixtureOverridesAbsent:true,approvedGenerationModel:true,
     proxyTopologyDeclared:hops!==null,proxyTopologyVerified:false,databaseIsolationVerified:false,

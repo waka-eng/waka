@@ -21,3 +21,6 @@ it('accepts a declared proxy count without asserting the real network is atteste
 it('compares parsed origins rather than equivalent capitalization or trailing slashes',()=>{
   expect(verifyRuntimeConfiguration({api:{...env,PUBLIC_API_URL:'https://DEV.WAKA.IM/'},worker:env},'development').trustedOrigins).toBe(true);
 });
+it('does not interpret an absent AWS-projected proxy setting as an explicit zero',()=>{
+  expect(verifyRuntimeConfiguration({api:{...env,WAKA_TRUSTED_PROXY_HOPS:null},worker:env},'development').proxyTopologyDeclared).toBe(false);
+});
