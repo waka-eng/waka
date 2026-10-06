@@ -57,6 +57,7 @@ import { DEFAULT_LOCALE, supportedLocaleSchema } from "../lib/locales.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import { createSessionRow, describeUserAgent } from "../lib/session.js";
 import { validationDetails } from "../lib/validation.js";
+import {passwordFitsByteLimit,PASSWORD_MAX_BYTES} from '../lib/password-policy.js';
 import {
   accountColumns,
   profileColumns,
@@ -93,7 +94,8 @@ const signupSchema = z.object({
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
-    .max(200, "Password is too long"),
+    .max(200, "Password is too long")
+    .refine(passwordFitsByteLimit,`Password must use at most ${PASSWORD_MAX_BYTES} UTF-8 bytes. Choose a shorter password.`),
   name: z
     .string()
     .trim()

@@ -22,6 +22,7 @@
 import { randomBytes } from "node:crypto";
 
 import bcrypt from "bcryptjs";
+import {passwordFitsByteLimit,PASSWORD_MAX_BYTES} from './password-policy.js';
 import { sign, verify } from "hono/jwt";
 import type { JWTPayload } from "hono/utils/jwt/types";
 
@@ -64,6 +65,7 @@ const BCRYPT_COST = 10;
  * the salt and cost factor, so it is the only thing that needs to be stored.
  */
 export async function hashPassword(plaintext: string): Promise<string> {
+  if(!passwordFitsByteLimit(plaintext))throw new RangeError(`Password must use at most ${PASSWORD_MAX_BYTES} UTF-8 bytes`);
   return bcrypt.hash(plaintext, BCRYPT_COST);
 }
 
@@ -76,6 +78,8 @@ export async function verifyPassword(
   plaintext: string,
   hash: string,
 ): Promise<boolean> {
+  // Historical hashes may have been created from longer input. Refusing it
+  // here would lock existing users out; new hashes are guarded above.
   try {
     return await bcrypt.compare(plaintext, hash);
   } catch {
