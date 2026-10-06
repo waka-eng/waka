@@ -53,3 +53,35 @@ Review fix `4cf4cdd`. No remote PR is open. Prior local proof records four
 serial requests reduced to one and median transition 815 to 248 ms with
 150 ms injected delay, six samples per path. This is not a deployed timing
 claim. Normal CI and the deployed journey are the next gates.
+
+### 2026 10 06 delivery and first dev findings
+
+PR 353 passed normal CI and merged to dev `ac75ca7`. Automatic deployment
+37509739745 is running; deployed advance is not yet claimed.
+
+A loopback-only gateway forwards actual dev HTML, assets and API calls using
+an in-memory session for a new private synthetic account. It does not read or
+replace existing browser cookies. Eight captures persist across reload. A
+lost capture response after the upstream save recovers by an owned receipt
+read, with one POST and eight total originals. An unfinished reflection survives
+closing and reload. Its generated follow-up asks what a test participant's
+confusion revealed; the next answer saves and the original shows two reflections.
+The first chat reply cites two current originals and gives a relevant next step.
+Discuss this saves a continuation; that reply failed and remains recoverable,
+so successful continuation is still an open check.
+
+Initial profile-list read returned 429; a later identical read returned 200.
+No service-limit change is justified from this transient observation.
+
+Home hides its manual re-read action while source processing waits for the
+daily reading, even when support has withdrawn every displayed entry. A real
+Home regression with owned status reproduces the absent action. The repair
+offers Read again only for withdrawn support with scheduled reading work, not
+active derivation, and queues nothing until explicitly pressed. The corrected
+regression fails against the unchanged baseline and passes with the fix.
+All 803 web cases, 32 targeted checks, web types and production build pass.
+No backend policy, cadence, schema or automatic generation behavior changes.
+
+The bounded synthetic provider batch reserves $1.50 from the remaining test
+allowance; actual provider charges are not available through the test session.
+Reserve remains counted, so cumulative used or held is $3.1332342014 of $5.
