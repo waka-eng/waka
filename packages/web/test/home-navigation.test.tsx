@@ -52,6 +52,15 @@ it('keeps the selected principle and its route after editing, so Back returns to
   expect(updatePrinciple).toHaveBeenCalledWith('principle-one','Leave unhurried time for thought.');
   await navigate(-1);expect(location.pathname+location.search).toBe('/');
 });
+it('hides a principle’s expanded evidence when Back closes that principle',async()=>{
+  principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'minted',rank:0,locked:false,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[{id:'signal-one',statement:'Make space to think.',examples:[{text:'I left an unhurried morning for thinking.',createdAt:'2026-10-03T12:00:00Z'}]}]}];
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();await navigate('/principles/principle-one');
+  const why=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principles-list--personal button')].find(button=>button.textContent==='Why this fits')!;
+  await act(async()=>why.click());expect(world.container.querySelector('.jar-principle-evidence')).not.toBeNull();
+  await navigate(-1);expect(location.pathname+location.search).toBe('/');
+  expect(world.container.textContent).not.toContain('Talk about this');
+  expect(world.container.querySelector('.jar-principle-evidence')).toBeNull();
+});
 
 it('starts a review beside the personal reading and restores home through Back',async()=>{
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
