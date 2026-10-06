@@ -75,6 +75,9 @@ it('requires a visible audience confirmation before publishing and leaves cancel
   world=await mountWorld(FACTS,{initialEntries:['/inspirations/older'],routerTools:<RouterTools/>});await settle();
   expect(world.container.querySelector<HTMLElement>('.jar-personal-shortcuts')?.hidden).toBe(true);
   const button=(label:string)=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-panel button')].find(item=>item.textContent?.trim()===label)!;
+  expect(world.container.querySelector('.jar-panel .jar-audience-note')).toBeNull();
+  expect(button('private').getAttribute('title')).toBeNull();
+  expect(button('public').getAttribute('title')).toBeNull();
   await act(async()=>button('public').click());
   expect(world.container.textContent).toContain('People in your rooms can read it and its attachments');
   expect(updateInspiration).not.toHaveBeenCalled();
@@ -85,6 +88,7 @@ it('requires a visible audience confirmation before publishing and leaves cancel
   await act(async()=>button('Make public').click());
   expect(updateInspiration).toHaveBeenCalledExactlyOnceWith('older',{visibility:'public'});
   expect(button('public').getAttribute('aria-pressed')).toBe('true');
+  expect(world.container.querySelector('.jar-panel .jar-audience-note')).toBeNull();
 });
 
 it('records opening Capture before the observer debounce and keeps it through later restoration',async()=>{

@@ -13572,12 +13572,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 type="button"
                 className={panelIsPublic ? "jar-where-off" : "jar-where-on"}
                 aria-pressed={!panelIsPublic}
-                /* WHAT THE WORD MEANS, ON HOVER (founder's sketch, 2026-08-25:
-                   "when hovering, show tooltip of what that means"). Two words
-                   that decide who can read something have to be able to say
-                   what they decide; the state is legible at a glance and the
-                   consequence is not. */
-                title={say("worldPrivateTooltip")}
                 onClick={() => {
                   if (!panelIsPublic) return;
                   /* un-publishing a memory a signal stands on gets the same
@@ -13594,7 +13588,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 type="button"
                 className={panelIsPublic ? "jar-where-on" : "jar-where-off"}
                 aria-pressed={panelIsPublic}
-                title={say("worldPublicTooltip")}
                 onClick={() => { if (!panelIsPublic) setPublishAsk(true); }}
               >
                 {say("worldPublic")}
@@ -13606,7 +13599,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m10 14 4-4m-7 3-2 2a4 4 0 0 0 6 6l4-4m-4-10 2-2a4 4 0 0 1 6 6l-4 4" /></svg>
           </button>
           </div>
-          {!panelIsGroup ? <p className="jar-audience-note" role="status">{say(panelIsPublic ? 'worldAudiencePublic' : 'worldAudiencePrivate')}</p> : null}
           {publishAsk&&!panelIsPublic?<div className="jar-panel-askrow" role="group" aria-label={say('worldAudience')}>
             <p className="jar-panel-warn">{say('worldPublishConfirm')}</p>
             <div className="jar-ask jar-ask--row">
