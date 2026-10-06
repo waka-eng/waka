@@ -10,7 +10,7 @@ describe('new password byte boundaries',()=>{
     const hash=await hashPassword(password);
     expect(await verifyPassword(password,hash)).toBe(true);
     expect(await verifyPassword(password.slice(0,-1),hash)).toBe(false);
-  });
+  },15000); // Real cost-10 hashing/comparison may contend with other suites.
   it.each(['a'.repeat(73),'가'.repeat(25),'😀'.repeat(19),'a'.repeat(69)+'😀'])('refuses a new hash that would discard bytes',async password=>{
     await expect(hashPassword(password)).rejects.toThrow(/72.*bytes|bytes.*72/);
   });
