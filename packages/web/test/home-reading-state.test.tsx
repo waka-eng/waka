@@ -10,16 +10,17 @@ import {afterEach,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {installCanvasStub,setViewport} from './helpers/canvas-stub';
 import {apiMockFrom,dataMockFrom,mountWorld,VIEWER_ID,type MountedWorld} from './helpers/render-home';
 import type {TopOfMind} from '../src/lib/data';
+import {profileStorageKey} from '../src/lib/profile-storage';
 const facts=vi.hoisted(()=>({inspirations:[{id:'source-one',text:'A synthetic source',daysAgo:0}],groups:[]}));
 const reads=vi.hoisted(()=>({owner:'profile-viewer',requests:[] as Array<{profile?:string;signal?:AbortSignal;resolve:(value:TopOfMind|null)=>void;reject:(reason:Error)=>void}>}));
-vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),...apiMockFrom(facts),refreshTopOfMind:vi.fn()}));
+vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),...apiMockFrom(facts),refreshTopOfMind:vi.fn(),fetchInspirationProcessing:vi.fn()}));
 vi.mock('../src/lib/auth-context',async original=>({...await original<typeof import('../src/lib/auth-context')>(),useOptionalAuth:()=>({status:'authenticated',account:{id:'owner',email:'owner@example.test'},profile:{id:reads.owner,name:'Owner',type:'human'},profiles:[]})}));
 vi.mock('../src/lib/data',async original=>({...await original<typeof import('../src/lib/data')>(),...dataMockFrom(facts),
   loadTopOfMind:(profile?:string,signal?:AbortSignal)=>new Promise<TopOfMind|null>((resolve,reject)=>reads.requests.push({profile,signal,resolve,reject}))}));
-import {refreshTopOfMind} from '../src/lib/api';
+import {refreshTopOfMind,fetchInspirationProcessing} from '../src/lib/api';
 let world:MountedWorld|undefined;
 beforeAll(()=>{installCanvasStub();setViewport(1280,900);(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;});
-beforeEach(()=>{reads.owner=VIEWER_ID;reads.requests=[];facts.inspirations=[{id:'source-one',text:'A synthetic source',daysAgo:0}];localStorage.clear();sessionStorage.clear();vi.mocked(refreshTopOfMind).mockClear();});
+beforeEach(()=>{reads.owner=VIEWER_ID;reads.requests=[];facts.inspirations=[{id:'source-one',text:'A synthetic source',daysAgo:0}];localStorage.clear();sessionStorage.clear();vi.mocked(refreshTopOfMind).mockClear();vi.mocked(fetchInspirationProcessing).mockReset();});
 afterEach(()=>{world?.unmount();world=undefined;vi.useRealTimers();});
 const board=(body='Leave room for a small experiment.',profileId=reads.owner):TopOfMind=>({id:'reading-'+profileId,profileId,version:1,reason:'regenerated',createdMs:Date.now(),
   entries:[{id:'entry-one',type:'hypothesis',body,belief:null,prompt:null,locked:false,pinned:false,dismissed:false,sortOrder:0,citedSignals:[],createdMs:Date.now()}]});
@@ -87,4 +88,27 @@ it('shows loading again on a Home remount instead of flashing an empty or unvali
   world=await mountWorld(facts);await act(async()=>reads.requests[0]!.resolve(board()));await world.step(2);world.unmount();world=undefined;
   world=await mountWorld(facts);expect(reads.requests).toHaveLength(2);expectLoading();
   await act(async()=>reads.requests[1]!.resolve(board()));await world.step(2);expect(poster()).not.toBeNull();
+});
+it('offers an explicit re-read when stale support is hidden and automatic reading is scheduled',async()=>{
+  sessionStorage.setItem(profileStorageKey({accountId:'owner',profileId:VIEWER_ID},'sourceProcessing')!,JSON.stringify({profileId:VIEWER_ID,inspirationId:'source-one'}));
+  vi.mocked(fetchInspirationProcessing).mockResolvedValue({profileId:VIEWER_ID,inspirationId:'source-one',receipt:null,
+    currentMaterialRevision:'1',requestedMaterialRevision:'1',latestDerivedRevision:'1',latestCompletedRevision:'0',superseded:false,
+    phase:'waiting',stage:'reading',runAfter:new Date(Date.now()+86400000).toISOString(),result:null,unavailableAttachments:0,canRetry:false});
+  world=await mountWorld(facts);
+  await act(async()=>reads.requests[0]!.resolve({...board(),entries:[],supportChanged:true}));await world.step(2);
+  expect(world.container.textContent).toContain('This reading needs another look.');
+  expect(world.container.textContent).toContain('The next reading is scheduled');
+  expect(refreshTopOfMind).not.toHaveBeenCalled();
+  const reread=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-board-acts button')].find(row=>row.textContent?.trim()==='Read again');
+  expect(reread).toBeDefined();
+  await act(async()=>reread!.click());expect(refreshTopOfMind).toHaveBeenCalledOnce();
+});
+it.each(['queued','processing','waiting'] as const)('keeps active %s derivation separate from manual reading recovery',async phase=>{
+  sessionStorage.setItem(profileStorageKey({accountId:'owner',profileId:VIEWER_ID},'sourceProcessing')!,JSON.stringify({profileId:VIEWER_ID,inspirationId:'source-one'}));
+  vi.mocked(fetchInspirationProcessing).mockResolvedValue({profileId:VIEWER_ID,inspirationId:'source-one',receipt:null,
+    currentMaterialRevision:'1',requestedMaterialRevision:'1',latestDerivedRevision:'0',latestCompletedRevision:'0',superseded:false,
+    phase,stage:'derivation',runAfter:new Date(Date.now()+86400000).toISOString(),result:null,unavailableAttachments:0,canRetry:false});
+  world=await mountWorld(facts);await act(async()=>reads.requests[0]!.resolve({...board(),entries:[],supportChanged:true}));await world.step(2);
+  expect([...world.container.querySelectorAll<HTMLButtonElement>('.jar-board-acts button')].some(row=>row.textContent?.trim()==='Read again')).toBe(false);
+  expect(refreshTopOfMind).not.toHaveBeenCalled();
 });

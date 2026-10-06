@@ -1843,7 +1843,11 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
         : result.outcome;
     },
   });
-  const readingMessage: MessageKey | null = (sourceProcessing.active || inspirationSave.phase !== 'idle') && !readingRefresh.busy ? null
+  // A scheduled automatic read must not hide recovery for withdrawn support.
+  // Only an explicit press buys a manual read; active derivation stays separate.
+  const scheduledReadingRecovery = topOfMind?.supportChanged === true && sourceProcessing.phase === 'waiting' &&
+    sourceProcessing.status?.stage === 'reading' && !sourceProcessing.busy;
+  const readingMessage: MessageKey | null = ((sourceProcessing.active && !scheduledReadingRecovery) || inspirationSave.phase !== 'idle') && !readingRefresh.busy ? null
     : !readingRefresh.busy && readingChecking ? "worldReadingChecking"
     : !readingRefresh.busy && readingCheckFailed ? "worldReadingCheckFailed"
     : topOfMind?.supportChanged &&
