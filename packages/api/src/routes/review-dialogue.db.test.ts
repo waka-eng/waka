@@ -57,6 +57,35 @@ it('reads without generating, coalesces duplicate asks and exposes only current 
   expect((await request(f,'/question',{afterAnswerId:null,retry:true})).status).toBe(200);
   expect(calls).toBe(1);expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(1);
 });
+it('reuses a persisted current review question after missed settlement without another model call',async()=>{
+  const f=await fixture();await request(f,'/question',{afterAnswerId:null});
+  const job=await postgresBackgroundJobStore.claimNext(new Date(Date.now()+1000));expect(job?.type).toBe('generate_review_question');
+  await processBackgroundJob(job!);
+  const [saved]=await t.sql`SELECT payload FROM background_jobs WHERE id=${job!.id}`;
+  await t.sql`UPDATE background_jobs SET locked_at=now()-interval '21 minutes' WHERE id=${job!.id}`;
+  const recovered=await postgresBackgroundJobStore.claimNext(new Date(Date.now()+1000));expect(recovered?.id).toBe(job!.id);
+  await processBackgroundJob(recovered!);expect(calls).toBe(1);
+  expect(await postgresBackgroundJobStore.markSucceeded(recovered!,null)).toBe(true);
+  expect((await body(await read(f))).question).toMatchObject({phase:'ready',question:saved.payload.question});
+  expect((await t.sql`SELECT payload FROM background_jobs WHERE id=${job!.id}`)[0].payload).toEqual(saved.payload);
+});
+it('refuses a lost review claim before spending on a question',async()=>{
+  const f=await fixture();await request(f,'/question',{afterAnswerId:null});
+  const job=await postgresBackgroundJobStore.claimNext(new Date(Date.now()+1000));expect(job?.type).toBe('generate_review_question');
+  await t.sql`UPDATE background_jobs SET locked_at=now()+interval '2 seconds',attempts=attempts+1 WHERE id=${job!.id}`;
+  await expect(processBackgroundJob(job!)).rejects.toThrow(/ownership changed/);expect(calls).toBe(0);
+});
+it.each(['foreign source','duplicate sources','malformed question'] as const)('regenerates rather than reusing review output with %s',async invalid=>{
+  const f=await fixture();await request(f,'/question',{afterAnswerId:null});
+  const job=await postgresBackgroundJobStore.claimNext(new Date(Date.now()+1000));expect(job?.type).toBe('generate_review_question');
+  await processBackgroundJob(job!);
+  const override=invalid==='foreign source'?{sourceIds:[randomUUID(),f.ids[1]]}:invalid==='duplicate sources'?{sourceIds:[f.ids[0],f.ids[0]]}:{question:'What would you keep? What would you change?'};
+  await t.sql`UPDATE background_jobs SET payload=payload||${JSON.stringify(override)}::jsonb,locked_at=now()-interval '21 minutes' WHERE id=${job!.id}`;
+  const recovered=await postgresBackgroundJobStore.claimNext(new Date(Date.now()+1000));expect(recovered?.id).toBe(job!.id);
+  await processBackgroundJob(recovered!);expect(calls).toBe(2);
+  const [saved]=await t.sql`SELECT payload FROM background_jobs WHERE id=${job!.id}`;
+  expect(saved.payload.sourceIds).toEqual(f.ids);expect(saved.payload.question).toBe(questionText);
+});
 it('uses the same version fingerprint for lightweight status and full worker inputs',async()=>{
   const f=await fixture();
   async function fingerprint(){

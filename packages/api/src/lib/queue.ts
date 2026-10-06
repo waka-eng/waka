@@ -1066,6 +1066,17 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       if(!sessionId||!(raw.afterAnswerId===null||typeof raw.afterAnswerId==='string'))return dropPoisonPayload(job);
       const db=getDb(),context=await db.transaction(tx=>loadReviewQuestionContext(tx,job.profileId,sessionId),{isolationLevel:'repeatable read'});
       if(!context||context.latestAnswerId!==raw.afterAnswerId||context.hash!==raw.contextHash)return dropPoisonPayload(job);
+      await db.transaction(tx=>assertBackgroundJobOwnership(tx,job,true));
+      // A worker may have saved its result and died before queue settlement.
+      // Revalidate the saved words/citations against current owned inputs.
+      if(typeof raw.question==='string'&&Array.isArray(raw.sourceIds)&&raw.sourceIds.every(id=>typeof id==='string')){
+        const {parseReviewQuestion}=await import('../queue/gemini.js');
+        try{
+          const cached=parseReviewQuestion({question:raw.question,connection:raw.connection,
+            sourceNumbers:raw.sourceIds.map(id=>context.sourceIdentities.findIndex(source=>source.id===id)+1)},context.input);
+          if(cached.question===raw.question&&cached.connection===raw.connection)return;
+        }catch{/* Invalid cached output requires fresh owned generation. */}
+      }
       const provider=await getDefaultModelProvider(),result=await provider.askReviewQuestion(context.input);
       await db.transaction(async tx=>{
         const [session]=await tx.select({id:reviewSessions.id}).from(reviewSessions).where(and(eq(reviewSessions.profileId,job.profileId),eq(reviewSessions.id,sessionId))).for('update',{noWait:true});
@@ -1084,6 +1095,13 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       const db = getDb();
       const context = await loadReflectionQuestionContext(db, job.profileId, payload.inspirationId);
       if (!context || context.latestId !== payload.afterReflectionId) return dropPoisonPayload(job);
+      await db.transaction(tx=>assertBackgroundJobOwnership(tx,job,true));
+      const savedHash=readString(job.payload,'contextHash'),savedQuestion=readString(job.payload,'question');
+      if(savedHash===context.hash&&savedQuestion){
+        const {parseReflectionQuestion}=await import('../queue/gemini.js');
+        try{if(parseReflectionQuestion({question:savedQuestion},context.input).question===savedQuestion)return;}
+        catch{/* Invalid cached output requires fresh owned generation. */}
+      }
       const provider = await getDefaultModelProvider();
       const result = await provider.askReflectionQuestion(context.input);
       await db.transaction(async (tx) => {
@@ -1376,31 +1394,35 @@ function parseRefreshGroupTopOfMindPayload(
  * else's WHERE: the day a caller adds one AND beside it, unparenthesized
  * precedence would quietly claim rows that are not runnable.
  */
-function backgroundJobDueTime(){return sql`CASE WHEN candidate.status='pending'::background_job_status THEN candidate.run_after
-  ELSE candidate.locked_at+(${STALE_LOCK_SECONDS}||' seconds')::interval END`;}
-function runnableBackgroundJobPredicate(nowIso: string,overdueBeforeIso?:string) {
+function backgroundJobDueTime(alias='candidate'){
+  const row=sql.identifier(alias);
+  return sql`CASE WHEN ${row}.status='pending'::background_job_status THEN ${row}.run_after
+    ELSE ${row}.locked_at+(${STALE_LOCK_SECONDS}||' seconds')::interval END`;
+}
+function runnableBackgroundJobPredicate(nowIso: string,overdueBeforeIso?:string,alias='candidate') {
+  const row=sql.identifier(alias);
   return sql`
     (
       (
-        candidate.status = 'pending'::background_job_status
-        AND candidate.run_after <= ${nowIso}::timestamptz
+        ${row}.status = 'pending'::background_job_status
+        AND ${row}.run_after <= ${nowIso}::timestamptz
       )
       OR (
-        candidate.status = 'running'::background_job_status
-        AND candidate.locked_at < ${nowIso}::timestamptz - (${STALE_LOCK_SECONDS} || ' seconds')::interval
+        ${row}.status = 'running'::background_job_status
+        AND ${row}.locked_at < ${nowIso}::timestamptz - (${STALE_LOCK_SECONDS} || ' seconds')::interval
         -- A job that crashes the worker (rather than throwing) never runs
         -- its own failure path, so only the reclaim bounds it. Without this
         -- ceiling a poison job is reclaimed every stale-lock interval
         -- forever; with it, a job that has already been attempted its full
         -- budget is left where it is rather than taking the worker down again.
-        AND candidate.attempts < candidate.max_attempts
+        AND ${row}.attempts < ${row}.max_attempts
       )
     )
     -- A migrated database can contain work from a newer API build. An older
     -- worker must leave it queued, not claim it and spend unsupported retries.
     -- Peek and claim share this predicate, including stale-lease reclamation.
-    AND candidate.type::text IN (${sql.join(backgroundJobTypeValues.map((type) => sql`${type}`), sql`, `)})
-    ${overdueBeforeIso?sql`AND ${backgroundJobDueTime()}<=${overdueBeforeIso}::timestamptz`:sql``}
+    AND ${row}.type::text IN (${sql.join(backgroundJobTypeValues.map((type) => sql`${type}`), sql`, `)})
+    ${overdueBeforeIso?sql`AND ${backgroundJobDueTime(alias)}<=${overdueBeforeIso}::timestamptz`:sql``}
   `;
 }
 
@@ -1597,10 +1619,14 @@ async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Pro
       SELECT locked.id
       FROM (${rankedRunnableJobs(nowIso,overdueBefore?.toISOString())}) AS fair
       JOIN background_jobs AS locked ON locked.id = fair.id
+      -- Ranking can retain an older MVCC tuple. Recheck eligibility on the
+      -- locked base row so EvalPlanQual cannot claim completed/active work.
+      WHERE ${runnableBackgroundJobPredicate(nowIso,overdueBefore?.toISOString(),'locked')}
       ${RUNNABLE_JOB_ORDER}
       LIMIT 1
       FOR UPDATE OF locked SKIP LOCKED
     )
+    AND ${runnableBackgroundJobPredicate(nowIso,overdueBefore?.toISOString(),'job')}
     RETURNING
       job.id,
       job.profile_id AS "profileId",

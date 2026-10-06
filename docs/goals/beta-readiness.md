@@ -1,7 +1,7 @@
 # WAKA beta readiness milestones
 
-Status: incomplete (2026-10-05), milestones 1 and 3 passed locally; milestone 2 technically checked, human comprehension pending; milestone 4 remains open. Dev delivery approved; PR 350 awaits CI and merge.
-Branch: `codex/beta-readiness-m1-m4`, based on deployed dev `56a2694`.
+Status: incomplete (2026-10-05), milestones 1 and 3 passed locally and delivered to dev in PR 350; milestone 2 technically checked, human comprehension pending; milestone 4 remains open. Dev deployment verified at `54db0c0`; PR 351 contains operational verification and recovery fixes pending fresh CI.
+Branch: `codex/beta-readiness-m1-m4`, originally based on dev `56a2694`; PR 350 deployed as `54db0c0`.
 
 ## Objective
 
@@ -506,3 +506,88 @@ cases and 930 API unit tests pass, with three opt-in paid suites skipped. API
 types and diff checks pass. SQL uses explicit disposable loopback data; no
 provider was called. The fix is included in PR 350, which must pass fresh CI
 before merge. Evaluation allocation and recurring provider caps are unchanged.
+
+### Dev deployment and operational evidence on 2026 10 05
+
+PR 350 passed CI with 930 API unit cases, 1,665 hermetic API cases and 793 web
+cases; the hermetic total includes unit cases and is not added to them. It
+merged as `54db0c0`, and the automatic dev deployment succeeded. Its preflight
+confirmed different configured dev/production database endpoints; both deployed
+functions matched the migrated dev target and approved model pins. No new SQL
+migration was required, and production was not deployed. Live smoke checks
+returned Home 200, unauthenticated `/api/auth/me` 401, and field-level 400
+refusals for oversized and malformed-Unicode signup. No successful registration
+was attempted; these are safety checks, not a performance benchmark.
+
+Local credentials refused configuration/log reads. A manual audit through the
+existing deployment workflow successfully read actual API/worker settings. It
+verifies trusted HTTPS origins, secure-cookie flags, absent fixture overrides,
+stage/model tags and matching database URLs. Proxy-hop trust is undeclared;
+restrictive privacy overrides are unset. The audit does not claim logical
+database isolation, provider retention or monetary enforcement from those facts.
+An AWS-projected null proxy setting is now treated as absent, not explicit zero.
+
+The first cloud log reads failed because their assumed default groups did not
+exist. The audit now resolves `LoggingConfig.LogGroup` from each deployed
+function and refuses absent/non-dev targets. It uses at most thirteen read
+commands, one log page per kind/role and one hour of history, with automatic CLI
+pagination disabled. It returns only configuration verdicts and numeric samples;
+no raw words, credentials, request IDs or arbitrary provider errors. Its
+manual-only mode skips deploy, migrations and secret updates, has a five-minute
+timeout and separate concurrency group, and invokes no worker or model. Branch
+runs use GitHub's documented
+[manual workflow dispatch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow?tool=cli).
+
+The final audit succeeded and its deploy job was skipped. Two observed API
+context reads took 493 and 607 ms. Both recovery log samples report zero overdue
+jobs and exhausted leases; CloudWatch also returned two RecoveryChecks Sum
+datapoints of one, confirming real metric extraction. API/worker runtime samples
+include cold starts, but pages are bounded and requests are not paired. No
+embedding, provider or publication samples were observed. These small natural
+samples do not pass controlled concurrency, runnable-recovery, alert-delivery or
+cost-safeguard gates. Full receipts and scope are in
+`docs/craft/evidence/2026-10-05-beta-readiness-m4-dev-operations.json`.
+
+Verification of this follow-up: 942 API unit tests, 28 targeted audit/runtime
+policy tests and three goal-index tests pass. API types, migration and diff
+checks pass. The manual cloud audit succeeds with deployment skipped; no
+permission, credential, provider-cap or production change was made.
+
+The full goal remains incomplete. First-time comprehension, explicit recurring
+budget policies and actual enforcement, retention/source-topology attestation,
+controlled deployed stage/concurrency measurements, non-idle recovery and
+exercised alerts are still required. Evaluation allocation remains
+USD 1.6332342014 of USD 5; these audits bought no model calls.
+
+### Recovery race and saved question repair on 2026 10 05
+
+PR 351 CI failed its concurrent recovery test: the same durable job reached
+the processor twice. The fairness-ranked snapshot selected an eligible ID,
+but the joined lock did not recheck the latest row's eligibility. A controlled
+Postgres advisory gate pauses selection before locking, changes the base row
+through another connection and resumes it. Before the fix, the completed row
+was claimed again; after rechecking the shared predicate on the locked row and
+update target, completed, actively claimed, future-deferred and exhausted rows
+are all refused. Ranking/fairness, grace, attempt bounds and budget waits stay.
+The temporary view/function exist only in the disposable fixture and are
+restored/removed in cleanup; this is not a production schema change.
+
+Two further defect-first cases bought the same reflection/review question twice
+after its payload was saved but settlement was missed. Two lost-claim cases
+also made a provider call before failing their commit. Questions now verify
+ownership before dispatch and reuse saved output only with current owned input
+hashes and the existing strict parser. Review citations are mapped back to
+currently offered owned sources. Malformed, duplicate or foreign citations and
+malformed questions are regenerated from current input; source edits do not
+revive removed cached text. Human words and existing public phases are unchanged.
+
+Verification: 54 targeted real-SQL cases, 942 API unit tests, API types,
+migration and diff checks pass. Source/fairness/rollout/redaction tests remain.
+One test fixture omitted a store import and another bound JSON as an object
+to a text parameter; those were repaired without weakening assertions. Models
+are scripted and SQL uses explicit disposable loopback data; no provider was
+called and evaluation allocation is unchanged. These fixes address observed
+duplicate work, not every ambiguous provider failure. Live non-idle recovery,
+controlled deployed timings, exercised alerts, spending/privacy/source policy
+verification and first-time comprehension remain open. PR 351 must pass fresh
+CI before merge; the failed CI run was not bypassed or blindly retried.

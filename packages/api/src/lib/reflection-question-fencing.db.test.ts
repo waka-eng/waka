@@ -82,6 +82,41 @@ describe('reflection follow-up commit fences', () => {
     expect(providerCalls).toBe(1);
   });
 
+  it('settles a reclaimed saved question without buying the same model work again', async () => {
+    const f=await fixture();await processBackgroundJob(f.job);
+    const [saved]=await t.sql`SELECT payload FROM background_jobs WHERE id=${f.job.id}`;
+    await t.sql`UPDATE background_jobs SET locked_at=now()-interval '21 minutes' WHERE id=${f.job.id}`;
+    const recovered=await postgresBackgroundJobStore.claimNext(new Date(Date.now()+1000));
+    expect(recovered?.id).toBe(f.job.id);expect(recovered?.attempts).toBe(2);
+    await processBackgroundJob(recovered!);
+    expect(providerCalls).toBe(1);
+    expect(await postgresBackgroundJobStore.markSucceeded(recovered!,null)).toBe(true);
+    expect((await t.sql`SELECT status,payload FROM background_jobs WHERE id=${f.job.id}`)[0]).toEqual({status:'succeeded',payload:saved.payload});
+  });
+
+  it('refuses a lost claim before spending on a follow-up', async()=>{
+    const f=await fixture();
+    await t.sql`UPDATE background_jobs SET locked_at=now()+interval '2 seconds',attempts=attempts+1 WHERE id=${f.job.id}`;
+    await expect(processBackgroundJob(f.job)).rejects.toThrow(/ownership changed/);
+    expect(providerCalls).toBe(0);
+  });
+  it.each(['hash','question'] as const)('regenerates rather than reusing a saved reflection with an invalid %s',async field=>{
+    const f=await fixture();await processBackgroundJob(f.job);
+    const invalid=field==='hash'?{contextHash:'0'.repeat(64)}:{question:'What would you keep? What would you change?'};
+    await t.sql`UPDATE background_jobs SET payload=payload||${JSON.stringify(invalid)}::jsonb,locked_at=now()-interval '21 minutes' WHERE id=${f.job.id}`;
+    const recovered=await postgresBackgroundJobStore.claimNext(new Date(Date.now()+1000));expect(recovered?.id).toBe(f.job.id);
+    await processBackgroundJob(recovered!);expect(providerCalls).toBe(2);
+    const [saved]=await t.sql`SELECT payload FROM background_jobs WHERE id=${f.job.id}`;
+    expect(saved.payload.question).toBe('What would give you more space for that?');expect(saved.payload.contextHash).not.toBe('0'.repeat(64));
+  });
+  it('does not revive saved reflection output after a human source edit',async()=>{
+    const f=await fixture();await processBackgroundJob(f.job);
+    const [saved]=await t.sql`SELECT payload FROM background_jobs WHERE id=${f.job.id}`;
+    await t.sql`UPDATE inspirations SET text='My current words' WHERE id=${f.sourceId}`;
+    await expect(processBackgroundJob({...f.job,payload:saved.payload})).rejects.toThrow(/ownership changed/);
+    expect(providerCalls).toBe(1);expect(await t.sql`SELECT id FROM background_jobs WHERE id=${f.job.id}`).toHaveLength(0);
+  });
+
   it('does not spend another question call when unrelated reading work advances the profile revision', async () => {
     const f = await fixture();
     duringQuestion = async () => { await t.sql`INSERT INTO top_of_minds(profile_id, version) VALUES (${f.profileId}, 1)`; };

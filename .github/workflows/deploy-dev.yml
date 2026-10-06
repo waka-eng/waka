@@ -11,6 +11,11 @@ on:
       - 'progress.txt'
   workflow_dispatch:
     inputs:
+      verify_only:
+        description: "Read-only dev runtime/log audit; skips deployment, migrations and secret updates"
+        required: false
+        default: false
+        type: boolean
       enable_conversation_replies:
         description: "Enable conversation replies on dev (off disables new dispatches; keeps saved messages)"
         required: false
@@ -23,7 +28,7 @@ on:
         type: boolean
 
 concurrency:
-  group: deploy-dev
+  group: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_only == true && 'verify-dev' || 'deploy-dev' }}
   cancel-in-progress: true
 
 permissions:
@@ -47,7 +52,31 @@ env:
   WAKA_CONVERSATION_REPLIES: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_conversation_replies == false && '0' || '1' }}
 
 jobs:
+  verify:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_only == true }}
+    name: Read-only dev operational audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Inspect deployed settings and numeric logs only
+        env:
+          # Names verified from the development deployment outputs, not prod.
+          WAKA_AUDIT_API_FUNCTION: waka-development-ApiFunction-efwcwxdn
+          WAKA_AUDIT_WORKER_FUNCTION: waka-development-BackgroundWorkerFunction-xxbrbmcx
+        run: node scripts/dev-operations-audit.mjs > dev-operations.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dev-operations
+          path: dev-operations.json
+          if-no-files-found: error
+          retention-days: 7
   deploy:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.verify_only != true }}
     name: SST deploy dev.waka.im
     runs-on: ubuntu-latest
     timeout-minutes: 30
