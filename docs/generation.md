@@ -792,6 +792,14 @@ Recovery never creates a second job or resets its attempt budget; ambiguous
 conversation dispatches retain their existing refusal-to-redispatch guard.
 Exhausted stale leases raise operational counts instead of being revived.
 
+The claim rechecks the runnable predicate on its locked base row and update
+target, not only the earlier fairness-ranking snapshot. A row that another
+worker completed, claimed, deferred or exhausted in that interval is not taken.
+Saved reflection/review questions are reused on missed settlement only when
+their owned context, output format and citations still validate. These guards
+prevent those duplicate purchases; they do not promise exactly-once billing
+when a provider response is lost before any result was saved.
+
 Model transport metrics record attempted requests and available token metadata,
 plus returned OpenRouter charges. They contain no source words or response
 content. Missing cost and Gemini dollar costs are explicitly unpriced; metrics

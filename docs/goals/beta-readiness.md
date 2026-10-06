@@ -1,6 +1,6 @@
 # WAKA beta readiness milestones
 
-Status: incomplete (2026-10-05), milestones 1 and 3 passed locally and delivered to dev in PR 350; milestone 2 technically checked, human comprehension pending; milestone 4 remains open. Dev deployment verified at `54db0c0`; manual operational verification follow-up prepared.
+Status: incomplete (2026-10-05), milestones 1 and 3 passed locally and delivered to dev in PR 350; milestone 2 technically checked, human comprehension pending; milestone 4 remains open. Dev deployment verified at `54db0c0`; PR 351 contains operational verification and recovery fixes pending fresh CI.
 Branch: `codex/beta-readiness-m1-m4`, originally based on dev `56a2694`; PR 350 deployed as `54db0c0`.
 
 ## Objective
@@ -558,3 +558,36 @@ budget policies and actual enforcement, retention/source-topology attestation,
 controlled deployed stage/concurrency measurements, non-idle recovery and
 exercised alerts are still required. Evaluation allocation remains
 USD 1.6332342014 of USD 5; these audits bought no model calls.
+
+### Recovery race and saved question repair on 2026 10 05
+
+PR 351 CI failed its concurrent recovery test: the same durable job reached
+the processor twice. The fairness-ranked snapshot selected an eligible ID,
+but the joined lock did not recheck the latest row's eligibility. A controlled
+Postgres advisory gate pauses selection before locking, changes the base row
+through another connection and resumes it. Before the fix, the completed row
+was claimed again; after rechecking the shared predicate on the locked row and
+update target, completed, actively claimed, future-deferred and exhausted rows
+are all refused. Ranking/fairness, grace, attempt bounds and budget waits stay.
+The temporary view/function exist only in the disposable fixture and are
+restored/removed in cleanup; this is not a production schema change.
+
+Two further defect-first cases bought the same reflection/review question twice
+after its payload was saved but settlement was missed. Two lost-claim cases
+also made a provider call before failing their commit. Questions now verify
+ownership before dispatch and reuse saved output only with current owned input
+hashes and the existing strict parser. Review citations are mapped back to
+currently offered owned sources. Malformed, duplicate or foreign citations and
+malformed questions are regenerated from current input; source edits do not
+revive removed cached text. Human words and existing public phases are unchanged.
+
+Verification: 54 targeted real-SQL cases, 942 API unit tests, API types,
+migration and diff checks pass. Source/fairness/rollout/redaction tests remain.
+One test fixture omitted a store import and another bound JSON as an object
+to a text parameter; those were repaired without weakening assertions. Models
+are scripted and SQL uses explicit disposable loopback data; no provider was
+called and evaluation allocation is unchanged. These fixes address observed
+duplicate work, not every ambiguous provider failure. Live non-idle recovery,
+controlled deployed timings, exercised alerts, spending/privacy/source policy
+verification and first-time comprehension remain open. PR 351 must pass fresh
+CI before merge; the failed CI run was not bypassed or blindly retried.

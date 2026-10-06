@@ -675,6 +675,10 @@ agent's relayed excerpt, an agent's own observation.
   publish the old question. Unrelated reading/signal changes do not invalidate
   an unchanged question context or spend another model call. Source redaction
   holding the question job wins; generation retries without deadlocking it.
+  If a worker saved a question but stopped before queue settlement, a new
+  owner may reuse it only after validating its current owned context and
+  current question format. Review questions also revalidate every source ID.
+  Lost claims are refused before question dispatch, not only at commit.
 - **Embedding input scope** separates `personal` material (including answers)
   from `public` material (capture and attachment context, never answers).
   `inspiration_embeddings.input_scope` is part of the vector's identity with
