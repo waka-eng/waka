@@ -50,10 +50,10 @@ export function summarizeDevEvents(kind,events){
   return {samples:readings.length,readings};
 }
 
-/** At most ten read commands, one log page per kind/role, never an invocation. */
+/** At most thirteen read commands, one log page per kind/role, never an invocation. */
 export function auditDevOperations({api,worker,now=Date.now(),awsRead}){
   validateDevAuditTargets(api,worker);
-  const report={stage:'development',observedAt:new Date(now).toISOString(),failures:[],configurationReads:[],configuration:{},logs:[],
+  const report={stage:'development',observedAt:new Date(now).toISOString(),failures:[],configurationReads:[],configuration:{},logs:[],queueMetrics:[],
     controlledConcurrentMeasurement:false,alertDeliveryVerified:false,providerPrivacyVerified:false,
     recurringMonetaryLimitsVerified:false};
   const environments={};
@@ -85,6 +85,16 @@ export function auditDevOperations({api,worker,now=Date.now(),awsRead}){
     if(!report.configuration.apiWorkerDatabaseIdentical)report.failures.push('runtime_database_mismatch');
     if(!report.configuration.chatModelsMatch)report.failures.push('runtime_chat_model_mismatch');
   }
+  for(const [metric,statistic] of [['RecoveryChecks','Sum'],['OverdueJobs','Maximum'],['ExhaustedLeases','Maximum']]){
+    try{
+      const result=awsRead(['cloudwatch','get-metric-statistics','--namespace','WAKA/QueueRecovery','--metric-name',metric,
+        '--dimensions','Name=Stage,Value=development','--unit','Count','--period','900','--statistics',statistic,
+        '--start-time',new Date(now-60*60*1000).toISOString(),'--end-time',new Date(now).toISOString()]);
+      const values=(result.Datapoints??[]).filter(point=>numeric(point[statistic])).map(point=>point[statistic]);
+      report.queueMetrics.push({metric,read:true,samples:values.length,values});
+    }catch(error){report.failures.push('metric_'+metric+'_unavailable');report.queueMetrics.push({metric,read:false,reason:devAuditReadFailure(error)});}
+  }
+  report.recoveryMetricExtractionVerified=report.queueMetrics.some(metric=>metric.metric==='RecoveryChecks'&&metric.values?.some(value=>value>=1));
   return report;
 }
 

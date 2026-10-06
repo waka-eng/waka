@@ -15,16 +15,16 @@ it('refuses production, missing or flag-bearing targets before AWS access',()=>{
 it('bounds reads, scopes development and leaves broad operational gates unproven',()=>{
   const awsRead=vi.fn(args=>args[0]==='lambda'?{environment,database:'PRIVATE_DB',logGroup:'/aws/lambda/'+args[3]}:{events:[],nextToken:'PRIVATE_CURSOR'});
   const result=auditDevOperations({api,worker,now:1791266400000,awsRead});
-  expect(awsRead).toHaveBeenCalledTimes(10);expect(result.failures).toEqual([]);
+  expect(awsRead).toHaveBeenCalledTimes(13);expect(result.failures).toEqual([]);
   expect(result.configuration).toMatchObject({trustedOrigins:true,proxyTopologyDeclared:false,apiWorkerDatabaseIdentical:true,chatModelsMatch:true,restrictivePrivacyOverrides:false});
   expect(result).toMatchObject({controlledConcurrentMeasurement:false,alertDeliveryVerified:false,providerPrivacyVerified:false,recurringMonetaryLimitsVerified:false});
   expect(result.logs.every(log=>log.partialPage&&log.samples===0)).toBe(true);
   expect(JSON.stringify(result)).not.toContain('PRIVATE');
-  for(const [args] of awsRead.mock.calls)expect(args.slice(0,2)).toEqual(args[0]==='lambda'?['lambda','get-function-configuration']:['logs','filter-log-events']);
+  for(const [args] of awsRead.mock.calls)expect(args.slice(0,2)).toEqual(args[0]==='lambda'?['lambda','get-function-configuration']:args[0]==='logs'?['logs','filter-log-events']:['cloudwatch','get-metric-statistics']);
 });
 it('reports refused reads without echoing provider errors, configuration or credentials',()=>{
   const result=auditDevOperations({api,worker,awsRead:()=>{throw new Error('PRIVATE_CREDENTIAL PRIVATE_DB');}});
-  expect(result.failures).toHaveLength(4);expect(JSON.stringify(result)).not.toContain('PRIVATE');
+  expect(result.failures).toHaveLength(7);expect(JSON.stringify(result)).not.toContain('PRIVATE');
 });
 it('classifies only known CLI failure codes without echoing sensitive stderr',()=>{
   expect(devAuditReadFailure({stderr:'An error occurred (AccessDeniedException) PRIVATE_ROLE PRIVATE_KEY'})).toBe('access_denied');
@@ -45,9 +45,19 @@ it('refuses absent, foreign or flag-bearing configured log groups before log rea
   for(const logGroup of [undefined,'/aws/lambda/waka-production-ApiFunction-old','PRIVATE_GROUP --profile=other']){
     const awsRead=vi.fn(()=>({environment,database:'PRIVATE_DB',logGroup}));
     const result=auditDevOperations({api,worker,awsRead});
-    expect(awsRead).toHaveBeenCalledTimes(2);expect(result.failures).toEqual(['api_log_group_unverified','worker_log_group_unverified']);
+    expect(awsRead).toHaveBeenCalledTimes(5);expect(result.failures).toEqual(['api_log_group_unverified','worker_log_group_unverified']);
     expect(JSON.stringify(result)).not.toContain('PRIVATE');
   }
+});
+it('verifies actual dev heartbeat extraction without treating log receipt as metric delivery',()=>{
+  const awsRead=vi.fn(args=>args[0]==='lambda'?{environment,database:'PRIVATE_DB',logGroup:'/aws/lambda/'+args[3]}:
+    args[0]==='logs'?{events:[]}:{Datapoints:[{Sum:1,Maximum:0,private:'PRIVATE_VALUE'}]});
+  const result=auditDevOperations({api,worker,awsRead});
+  expect(result.recoveryMetricExtractionVerified).toBe(true);expect(JSON.stringify(result)).not.toContain('PRIVATE');
+  for(const [args] of awsRead.mock.calls.filter(([args])=>args[0]==='cloudwatch')){
+    expect(args).toContain('WAKA/QueueRecovery');expect(args).toContain('Name=Stage,Value=development');
+  }
+  expect(auditDevOperations({api,worker,awsRead:args=>args[0]==='lambda'?{environment,database:'PRIVATE_DB',logGroup:'/aws/lambda/'+args[3]}:{}}).recoveryMetricExtractionVerified).toBe(false);
 });
 it('keeps only closed numeric log fields, omitting private wording and identities',()=>{
   const wrap=body=>[{message:'timestamp INFO '+JSON.stringify({...body,secret:'PRIVATE_WORDS',requestId:'PRIVATE_ID'})}];
