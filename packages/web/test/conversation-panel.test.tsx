@@ -14,6 +14,7 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ConversationPanel} from '../src/components/ConversationPanel';
 import {createConversation,deleteConversation,fetchConversation,fetchConversationCitation,fetchConversationContext,fetchConversationReply,listConversations,requestConversationReply,saveConversationMessage,stopConversationReply,type ApiConversation,type ConversationReplyState} from '../src/lib/api/conversations';
 import {readConversationDrafts} from '../src/lib/conversation-drafts';
+import type {ConversationCitation} from '../src/lib/api/conversations';
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),deleteConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationContext:vi.fn(),fetchConversationReply:vi.fn(),requestConversationReply:vi.fn(),stopConversationReply:vi.fn(),fetchConversationCitation:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
 const scope={accountId:'owner',profileId:'profile'},id='11111111-1111-4111-8111-111111111111',choose=vi.fn(),close=vi.fn();
 it('leaves reply text clear of mobile overlay scrollbars',()=>{
@@ -189,4 +190,95 @@ it('does not jump away from older messages when a new reply arrives',async()=>{
 it('treats the first reply-read failure as transient rather than flashing an error',async()=>{
   stored.generationEnabled=true;vi.mocked(fetchConversationReply).mockRejectedValueOnce(new Error('Transient'));await mount();
   expect(host.textContent).not.toContain('Couldn’t check reply progress.');await tick(1000);expect(host.textContent).not.toContain('Couldn’t check reply progress.');expect(requestConversationReply).not.toHaveBeenCalled();
+});
+
+function readingReply(){
+  stored.generationEnabled=true;completeReply();
+  stored.messages[0].content='Which top of mind would you like to explore?';
+  stored.messages[0].citations=[{index:0,kind:'top_of_mind_entry',id:'reading-one',available:true,preview:'Try a small experiment.'},{index:1,kind:'top_of_mind_entry',id:'reading-two',available:true,preview:'Leave time to notice.'}];
+}
+const readingReference=(index=1):ConversationCitation=>({profileId:scope.profileId,conversationId:id,requestId:replyId,index,source:{kind:'top_of_mind_entry',id:index===1?'reading-two':'reading-one',text:index===1?'Leave time to notice what changes before making a commitment.':'Try a small experiment before making a commitment.',quote:index===1?'Leave time to notice':'Try a small experiment'}});
+it('sends a starter in one click instead of requiring another Send',async()=>{
+  stored.generationEnabled=true;await mount();await click('What has changed in how I think?');
+  expect(saveConversationMessage).toHaveBeenCalledExactlyOnceWith(scope.profileId,id,expect.objectContaining({content:'What has changed in how I think?',requestReply:true}),expect.any(AbortSignal));
+  expect(host.querySelector('textarea')!.value).toBe('');expect(host.textContent).toContain('Waiting to start…');expect(requestConversationReply).not.toHaveBeenCalled();
+});
+it('coalesces rapid starter clicks and retains one durable sending intent',async()=>{
+  stored.generationEnabled=true;let finish!:()=>void;const actual=vi.mocked(saveConversationMessage).getMockImplementation()!;
+  vi.mocked(saveConversationMessage).mockImplementationOnce(async(...args)=>{await new Promise<void>(resolve=>{finish=resolve;});return actual(...args);});
+  await mount();const starter=[...host.querySelectorAll('button')].find(row=>row.textContent==='What has changed in how I think?')!;
+  await act(async()=>{starter.click();starter.click();});expect(saveConversationMessage).toHaveBeenCalledOnce();expect(readConversationDrafts(scope,id)[0].value.pending).toBe(true);
+  expect(host.textContent).toContain('Sending…');await act(async()=>finish());expect(stored.messages).toHaveLength(1);
+});
+it('selects a verified top of mind and automatically sends a contextual follow-up',async()=>{
+  readingReply();vi.mocked(fetchConversationCitation).mockResolvedValue(readingReference());await mount();
+  expect(host.querySelectorAll('.chat-reading-choice')).toHaveLength(2);
+  await act(async()=>host.querySelectorAll<HTMLButtonElement>('.chat-reading-choice')[1].click());
+  expect(fetchConversationCitation).toHaveBeenCalledExactlyOnceWith(scope.profileId,id,replyId,1,expect.any(AbortSignal));
+  expect(vi.mocked(saveConversationMessage).mock.calls[0][2]).toMatchObject({content:'“Leave time to notice what changes before making a commitment.”\n\nLet’s explore this top of mind further.',requestReply:true});
+  expect(saveConversationMessage).toHaveBeenCalledOnce();expect(stored.messages.at(-1)?.role).toBe('user');expect(requestConversationReply).not.toHaveBeenCalled();
+});
+it('preserves typed words instead of replacing them with a selected reading',async()=>{
+  readingReply();await mount();await type('My unfinished question');
+  const choice=host.querySelector<HTMLButtonElement>('.chat-reading-choice')!;expect(choice.disabled).toBe(true);
+  await act(async()=>choice.click());expect(fetchConversationCitation).not.toHaveBeenCalled();expect(saveConversationMessage).not.toHaveBeenCalled();
+  expect(host.querySelector('textarea')!.value).toBe('My unfinished question');expect(host.textContent).toContain('Send or clear your draft before choosing.');
+});
+it('refuses unavailable or changed readings without inventing a follow-up',async()=>{
+  readingReply();stored.messages[0].citations![0]={...stored.messages[0].citations![0],available:false,preview:undefined};
+  vi.mocked(fetchConversationCitation).mockRejectedValue(new Error('Changed'));await mount();
+  const choices=host.querySelectorAll<HTMLButtonElement>('.chat-reading-choice');expect(choices[0].disabled).toBe(true);
+  await act(async()=>choices[1].click());expect(host.textContent).toContain('This top of mind changed or couldn’t be opened');
+  expect(saveConversationMessage).not.toHaveBeenCalled();expect(host.querySelector('textarea')!.value).toBe('');
+});
+it('rejects a mismatched owned source response before copying its text',async()=>{
+  readingReply();vi.mocked(fetchConversationCitation).mockResolvedValue({...readingReference(),profileId:'other-profile',source:{...readingReference().source,text:'PRIVATE_OTHER_PROFILE'}});
+  await mount();await act(async()=>host.querySelectorAll<HTMLButtonElement>('.chat-reading-choice')[1].click());
+  expect(saveConversationMessage).not.toHaveBeenCalled();expect(host.textContent).not.toContain('PRIVATE_OTHER_PROFILE');expect(readConversationDrafts(scope,id)).toEqual([]);
+});
+it('coalesces double selection and recovers a stalled read without sending later',async()=>{
+  readingReply();let resolve!:(row:ConversationCitation)=>void;
+  vi.mocked(fetchConversationCitation).mockImplementationOnce(()=>new Promise<ConversationCitation>(done=>{resolve=done;}));
+  await mount();const choice=host.querySelectorAll<HTMLButtonElement>('.chat-reading-choice')[1];
+  await act(async()=>{choice.click();choice.click();});expect(fetchConversationCitation).toHaveBeenCalledOnce();expect(host.textContent).toContain('Opening this top of mind…');
+  await tick(15000);expect(host.textContent).toContain('This top of mind changed or couldn’t be opened');
+  await act(async()=>resolve(readingReference()));expect(saveConversationMessage).not.toHaveBeenCalled();
+});
+it('cancels a source selection on navigation and cannot send into the next conversation',async()=>{
+  readingReply();let resolve!:(row:ConversationCitation)=>void;vi.mocked(fetchConversationCitation).mockImplementationOnce(()=>new Promise<ConversationCitation>(done=>{resolve=done;}));
+  await mount();await act(async()=>host.querySelectorAll<HTMLButtonElement>('.chat-reading-choice')[1].click());
+  await mount(id,{accountId:'different-owner',profileId:'different-profile'});await act(async()=>resolve(readingReference()));
+  expect(saveConversationMessage).not.toHaveBeenCalled();expect(host.textContent).not.toContain('Leave time to notice what changes');
+});
+it('checks quick replies after one second rather than waiting two',async()=>{
+  stored.generationEnabled=true;await mount();await type('A quick question');await click('Send');completeReply();await tick(1000);
+  expect(host.textContent).toContain('Which condition matters most today?');expect(requestConversationReply).not.toHaveBeenCalled();
+});
+it('shows waiting immediately while reply status is still being read and preserves the next draft',async()=>{
+  stored.generationEnabled=true;await mount();let finish!:(row:ConversationReplyState)=>void;
+  vi.mocked(fetchConversationReply).mockImplementationOnce(()=>new Promise<ConversationReplyState>(resolve=>{finish=resolve;}));
+  await type('A question');await click('Send');expect(host.textContent).toContain('Waiting to start…');await type('My next thought');
+  const send=host.querySelector<HTMLButtonElement>('.chat-send')!;expect(send.disabled).toBe(true);
+  await act(async()=>finish(structuredClone(replyState)));expect(host.querySelector('textarea')!.value).toBe('My next thought');
+});
+it('uses an immediately committed first-message response without another conversation read',async()=>{
+  stored.generationEnabled=true;stored.revision=1;stored.messages=[{id:replyId,profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'The committed first question',createdAt:stored.createdAt}];
+  replyState={...replyState,revision:1,messageId:replyId,requestId:replyId,phase:'pending'};
+  await act(async()=>root.render(<ConversationPanel scope={scope} id={id} initialConversation={structuredClone(stored)} locale="en-US" onChoose={choose} onClose={close}/>));
+  expect(host.textContent).toContain('The committed first question');expect(fetchConversation).not.toHaveBeenCalled();expect(host.textContent).toContain('Waiting to start…');
+});
+it('recovers a lost selected-reading send with GET, without repeating the message or reply request',async()=>{
+  readingReply();vi.mocked(fetchConversationCitation).mockResolvedValue(readingReference());
+  const actual=vi.mocked(saveConversationMessage).getMockImplementation()!;
+  vi.mocked(saveConversationMessage).mockImplementationOnce(async(...args)=>{await actual(...args);throw new Error('Response lost');});
+  await mount();await act(async()=>host.querySelectorAll<HTMLButtonElement>('.chat-reading-choice')[1].click());
+  expect(readConversationDrafts(scope,id)[0].value.pending).toBe(true);expect(host.textContent).toContain('Couldn’t confirm this message.');
+  await click('Check saved messages');expect(saveConversationMessage).toHaveBeenCalledOnce();expect(requestConversationReply).not.toHaveBeenCalled();
+  expect(readConversationDrafts(scope,id)).toEqual([]);expect(stored.messages).toHaveLength(2);
+});
+it('bounds automatic progress reads and then offers an explicit check',async()=>{
+  stored.generationEnabled=true;await mount();await type('A longer question');await click('Send');
+  const initialCalls=vi.mocked(fetchConversationReply).mock.calls.length;await tick(70000);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length-initialCalls).toBeLessThanOrEqual(35);
+  expect(host.textContent).toContain('Still working. You can come back later.');expect(requestConversationReply).not.toHaveBeenCalled();
 });

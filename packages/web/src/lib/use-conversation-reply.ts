@@ -26,7 +26,9 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
           if(conversation.revision<next.revision)throw new Error('Older conversation');delivered.current=refreshKey;deliver.current(conversation);
         }
         if(['pending','running'].includes(next.phase)){
-          if(++polls<30)timer=window.setTimeout(()=>void read(),2000);else setWaiting(true);
+          // A short early cadence avoids adding two seconds to a quick reply.
+          // Keep a bounded ~one-minute window, then require an explicit check.
+          if(++polls<35)timer=window.setTimeout(()=>void read(),polls<=10?1000:2000);else setWaiting(true);
         }
       }catch{if(!controller.signal.aborted){if(++failures<2)timer=window.setTimeout(()=>void read(),1000);else{setError(true);setChecking(false);}}}
       finally{window.clearTimeout(deadline);controller.signal.removeEventListener('abort',abort);}

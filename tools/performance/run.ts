@@ -17,7 +17,8 @@ assert.ok(Number.isInteger(samples)&&samples>=5&&samples<=60);assert.ok(Number.i
 const outputDir=resolve(process.env.WAKA_PERFORMANCE_OUTPUT??'work/performance');await mkdir(outputDir,{recursive:true});
 const searchCorpus=process.env.WAKA_PERFORMANCE_SEARCH_CORPUS==='1';
 process.env.NODE_ENV='test';process.env.JWT_SECRET='disposable-performance-probe-only';
-process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';process.env.WAKA_CONVERSATION_REPLIES='0';
+const chatScenario=process.env.WAKA_PERFORMANCE_CHAT_SCENARIO==='1';
+process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';process.env.WAKA_CONVERSATION_REPLIES=chatScenario?'1':'0';
 delete process.env.OPENROUTER_API_KEY;delete process.env.GEMINI_API_KEY;delete process.env.AWS_LAMBDA_FUNCTION_NAME;delete process.env.WAKA_BACKGROUND_WORKER_FUNCTION;
 globalThis.fetch=async()=>{throw new Error('Performance fixture refuses provider network');};
 const fixture=await createTestDatabase();configured.searchParams.set('options',`-c search_path=${fixture.schemaName}`);process.env.DB_CONNECTION_URL=configured.toString();
@@ -38,10 +39,10 @@ const {createSessionRow}=await import('../../packages/api/src/lib/session.js');
 const {getDb}=await import('../../packages/api/src/lib/db.js');
 const {createGroupForProfile}=await import('../../packages/api/src/routes/groups-membership.js');
 const {readConversationContext}=await import('../../packages/api/src/lib/conversation-context.js');
-const {createReviewSession,completeReviewSession,readActiveReview}=await import('../../packages/api/src/lib/review-sessions.js');
+const {createReviewSession,completeReviewSession,readActiveReview,chooseReviewItem}=await import('../../packages/api/src/lib/review-sessions.js');
 const {drainBackgroundJobs}=await import('../../packages/api/src/lib/queue.js');
 const {loadInspirationMaterial,assertMaterialCurrent}=await import('../../packages/api/src/lib/inspiration-material.js');
-const db=getDb();const fixtures=new Map<number,{id:string;token:string;firstId:string;signalId:string;groups:string[];signals:number;principles:number}>();
+const db=getDb();const fixtures=new Map<number,{id:string;token:string;firstId:string;signalId:string;groups:string[];signals:number;principles:number;conversationId?:string}>();
 stopDatabase=()=>db.$client.end();
 for(const count of sizes){
   const [account]=await fixture.sql`INSERT INTO accounts(email,onboarding_completed_at) VALUES (${`performance-${count}@example.test`},now()) RETURNING id`;
@@ -89,6 +90,22 @@ for(const count of sizes){
   const token=await signSessionToken({profileId:profile.id,email:`performance-${count}@example.test`});await createSessionRow({profileId:profile.id,token});
   const [first]=await fixture.sql`SELECT id FROM inspirations WHERE profile_id=${profile.id} ORDER BY created_at DESC LIMIT 1`;
   fixtures.set(count,{id:profile.id,token,firstId:first.id,signalId:signalRows[0].id,groups,signals:signalCount,principles:principleCount});
+}
+if(chatScenario)for(const f of fixtures.values()){
+  const [reading]=await fixture.sql`SELECT id FROM top_of_minds WHERE profile_id=${f.id}`;
+  const [entry]=await fixture.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,sort_order)
+    VALUES (${reading.id},'pattern','I leave time to notice what changes before deciding what comes next.',1) RETURNING id`;
+  await fixture.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id,statement_revision,entry_body_revision) VALUES (${entry.id},${f.signalId},1,1)`;
+  const context=await readConversationContext(db,f.id,'What has changed in how I think?');assert.equal(context.reading.length,2);
+  const conversationId=crypto.randomUUID(),userId=crypto.randomUUID(),assistantId=crypto.randomUUID(),requestId=crypto.randomUUID();
+  const references=context.reading.map(source=>({kind:source.kind,id:source.id,hash:source.hash,quoteStart:0,quoteLength:Math.min(40,source.text.length)}));
+  await fixture.sql`INSERT INTO conversations(id,profile_id,revision) VALUES (${conversationId},${f.id},2)`;
+  await fixture.sql`INSERT INTO conversation_messages(id,profile_id,conversation_id,position,role,content) VALUES
+    (${userId},${f.id},${conversationId},1,'user','What has changed in how I think?'),
+    (${assistantId},${f.id},${conversationId},2,'assistant','Two themes stand out: trying small experiments, and leaving space to notice. Which top of mind would you like to explore?')`;
+  await fixture.sql`INSERT INTO conversation_reply_requests(id,profile_id,conversation_id,user_message_id,assistant_message_id,conversation_revision,context_hash,status,"references",context_sources,finished_at)
+    VALUES (${requestId},${f.id},${conversationId},${userId},${assistantId},1,'synthetic-fixture','ready',${JSON.stringify(references)}::jsonb,${JSON.stringify(references)}::jsonb,now())`;
+  f.conversationId=conversationId;
 }
 await fixture.sql`ANALYZE`;
 let recording=false;let queries:Array<{query:string;params:unknown[]}>=[];
@@ -153,7 +170,7 @@ for(const name of await readdir(resolve('packages/web/dist/assets'))){const byte
 const results={kind:'local synthetic production-build baseline',createdAt:new Date().toISOString(),apiImportMs:round(apiImportMs),database:'disposable loopback only',modelCalls:0,searchCorpus,fixtures:[...fixtures].map(([size,f])=>({size,signals:f.signals,principles:f.principles,rooms:f.groups.length})),measured,assets,reviewSelectionExplain:explain};
 await writeFile(resolve(outputDir,'api.json'),JSON.stringify({...results,samples,poolMax:process.env.WAKA_DB_POOL_MAX??5},null,2));
 console.log(JSON.stringify({origin,schema:fixture.schemaName,apiImportMs:round(apiImportMs),results:resolve(outputDir,'api.json')}));
-let activeSize=sizes[0]!,delayMs=0,fault:string|null=null;
+let activeSize=sizes[0]!,delayMs=0,readingDelayMs=0,fault:string|null=null;
 const httpRequests:Array<{path:string;method:string;size:number;start:number;durationMs?:number;status?:number;bytes?:number}>=[];
 const probe=`<script>(()=>{let started=null,mode=null;document.addEventListener('click',e=>{const b=e.target.closest?.('button');if(!b)return;const text=(b.querySelector('.jar-activity-title')?.textContent||b.textContent).trim();if(/^(Review your inspirations|Resume review)$/.test(text)){started=performance.now();mode='review'}else if(text==='Capture inspiration'){started=performance.now();mode='capture'}else if(text==='Talk with WAKA'){started=performance.now();mode='chat'}else if(text==='← Back'&&location.pathname.startsWith('/chat/')){started=performance.now();mode='return'}} ,true);new MutationObserver(()=>{if(started===null)return;const ready=mode==='review'?document.querySelector('.jar-review-item-actions button:not(:disabled)'):mode==='capture'?document.querySelector('[aria-label="Capture inspiration"] textarea'):mode==='chat'?document.querySelector('[aria-label="Your message"]'):document.querySelector('.jar-home-activities button');if(ready){document.documentElement.dataset.wakaAction=JSON.stringify({mode,durationMs:performance.now()-started});started=null}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true})})();(()=>{const tasks=[],frames=[];let ready=null,last=null,stopped=false,layoutShiftScore=0;try{new PerformanceObserver(list=>list.getEntries().forEach(e=>{if(!e.hadRecentInput)layoutShiftScore+=e.value})).observe({type:'layout-shift',buffered:true})}catch{};try{new PerformanceObserver(list=>list.getEntries().forEach(e=>tasks.push({start:e.startTime,duration:e.duration}))).observe({type:'longtask',buffered:true})}catch{};function sample(now){if(last!==null)frames.push(now-last);last=now;if(ready===null&&document.querySelector('.jar-home-activities button')&&document.querySelector('.jar-mouth-rest')){ready=now;document.documentElement.dataset.wakaReady=String(now);}if(!stopped)requestAnimationFrame(sample)}requestAnimationFrame(sample);setTimeout(()=>{stopped=true;frames.sort((a,b)=>a-b);document.documentElement.dataset.wakaPerf=JSON.stringify({readyMs:ready,layoutShiftScore,longTasks:tasks.length,longTaskTotalMs:tasks.reduce((n,e)=>n+e.duration,0),longestTaskMs:Math.max(0,...tasks.map(e=>e.duration)),frames:frames.length,frameMedianMs:frames[Math.floor(frames.length*.5)],frameP95Ms:frames[Math.floor(frames.length*.95)],framesOver32:frames.filter(n=>n>32).length})},8000)})();</script>`;
 const dist=resolve('packages/web/dist');
@@ -162,21 +179,33 @@ server=createServer(async(req,res)=>{
   try{
     if(closing){res.writeHead(503);res.end();return;}
     const url=new URL(req.url??'/',origin);
+    if(url.pathname==='/perf/chat'){
+      assert.ok(chatScenario);const size=Number(url.searchParams.get('size')??sizes[0]);assert.ok(fixtures.has(size));activeSize=size;delayMs=150;readingDelayMs=0;fault=null;
+      const f=fixtures.get(size)!;assert.ok(f.conversationId);httpRequests.length=0;
+      res.writeHead(302,{Location:'/chat/'+f.conversationId,'Set-Cookie':buildSessionCookie(f.token,{secure:false})});res.end();return;
+    }
     if(url.pathname==='/perf/scenario'){
       const size=Number(url.searchParams.get('size'));assert.ok(fixtures.has(size));activeSize=size;
       delayMs=Number(url.searchParams.get('delay')??0);assert.ok(delayMs>=0&&delayMs<=500);
-      fault=url.searchParams.get('fault');assert.ok(fault===null||['archive-tail-once','review-read-once','capture-lost-once'].includes(fault));
+      readingDelayMs=Number(url.searchParams.get('readingDelay')??0);assert.ok(Number.isFinite(readingDelayMs)&&readingDelayMs>=0&&readingDelayMs<=5000);
+      fault=url.searchParams.get('fault');assert.ok(fault===null||['archive-tail-once','reading-read-once','review-read-once','capture-lost-once'].includes(fault));
       // Test-only setup: close the synthetic session without making a source
       // choice, so repeated browser samples can measure a genuinely new start.
-      if(url.searchParams.get('review')==='fresh'){
+      if(['fresh','checkpoint'].includes(url.searchParams.get('review')??'')){
         const active=await readActiveReview(db,fixtures.get(size)!.id);
         if(active)await completeReviewSession(db,active.profileId,active.id,active.revision);
+        if(url.searchParams.get('review')==='checkpoint'){
+          const profile=fixtures.get(size)!.id,created=await createReviewSession(db,profile,{id:crypto.randomUUID()});
+          const current=created?.currentInspirationId,item=created?.items.find(row=>row.inspirationId===current);
+          assert.ok(created&&item,'Synthetic checkpoint requires an eligible source');
+          await chooseReviewItem(db,profile,created.id,{revision:created.revision,inspirationId:item.inspirationId,sourceRevision:item.currentRevision,choice:'skip'});
+        }
       }
       httpRequests.length=0;res.writeHead(302,{Location:'/', 'Set-Cookie':buildSessionCookie(fixtures.get(size)!.token,{secure:false})});res.end();return;
     }
     if(url.pathname==='/perf/results'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({size:activeSize,delayMs,httpRequests}));return;}
     if(url.pathname==='/perf/fault'){
-      const next=url.searchParams.get('name');assert.ok(next===null||['archive-tail-once','review-read-once','capture-lost-once'].includes(next));fault=next;
+      const next=url.searchParams.get('name');assert.ok(next===null||['archive-tail-once','reading-read-once','review-read-once','capture-lost-once'].includes(next));fault=next;
       res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({fault}));return;
     }
     if(url.pathname==='/perf/worker'){
@@ -240,7 +269,9 @@ server=createServer(async(req,res)=>{
       const receipt:{path:string;method:string;size:number;start:number;durationMs?:number;status?:number;bytes?:number}={path,method:req.method??'GET',size,start};httpRequests.push(receipt);
       const dataPromise=new Promise<Buffer>((done,reject)=>{const parts:Buffer[]=[];let size=0;req.on('data',c=>{size+=c.length;if(size>1024*1024)reject(new Error('Fixture body limit'));else parts.push(c);});req.on('end',()=>done(Buffer.concat(parts)));req.on('aborted',()=>reject(new Error('Fixture request aborted')));});
       const data=await dataPromise;if(delayMs)await new Promise(done=>setTimeout(done,delayMs));
+      if(readingDelayMs&&req.method==='GET'&&url.pathname==='/api/top-of-mind')await new Promise(done=>setTimeout(done,readingDelayMs));
       const rejected=fault==='archive-tail-once'&&req.method==='GET'&&url.pathname==='/api/inspirations'&&url.searchParams.has('cursor')
+        ||fault==='reading-read-once'&&req.method==='GET'&&url.pathname==='/api/top-of-mind'
         ||fault==='review-read-once'&&req.method==='GET'&&url.pathname==='/api/review-sessions/active'&&url.searchParams.get('include')==='current';
       if(rejected){fault=null;const bytes=Buffer.from('{"error":"Synthetic one-off failure"}');Object.assign(receipt,{durationMs:round(performance.now()-start),status:500,bytes:bytes.length});res.writeHead(500,{'Content-Type':'application/json'});res.end(bytes);return;}
       const headers:Record<string,string>={};for(const [key,value] of Object.entries(req.headers))if(value!==undefined)headers[key]=Array.isArray(value)?value.join(','):value;

@@ -74,6 +74,16 @@ stage, elapsed milliseconds and outcome. Queue wait excludes intended run-after
 delay. Separate these stages when diagnosing waiting; never log source wording
 or infer provider latency from a pending UI state alone.
 
+## Interactive Chat fixture
+
+Set `WAKA_PERFORMANCE_CHAT_SCENARIO=1` to seed one synthetic conversation with
+two currently valid Top of Mind references, then open `/perf/chat?size=25`
+(or another seeded size). Source reopening and one-click follow-up writes use
+the real owned API and durable client journals. Replies may be queued, but
+autodrain and provider networking remain disabled and keys are removed. The
+seeded assistant response is a known fixture, not a generated quality result.
+Stop the process normally to remove only its own disposable schema.
+
 ## Recovery and controlled worker checks
 
 These controls exist only in the disposable loopback fixture, not the app API:
@@ -84,6 +94,11 @@ These controls exist only in the disposable loopback fixture, not the app API:
   The archive/Review controls reject the matching read once. Capture commits
   through the real handler and then drops the response; verify a durable replay
   creates exactly one source, rather than expecting only one POST.
+- `readingDelay=0..5000` on `/perf/scenario` delays only the initial reading
+  endpoint, keeping early Home/Capture readiness independently measurable.
+  `fault=reading-read-once` rejects that GET once; retry must remain read-only.
+  `review=checkpoint` prepares one decided synthetic source in an open session
+  so the saved checkpoint and its next-inspiration transition can be inspected.
 - `/perf/worker?action=start`, `stop` and `status` control one bounded worker.
   Concurrent starts refuse the second request. The worker claims and completes
   a real queue job, repeatedly reads owned material/context and validates its

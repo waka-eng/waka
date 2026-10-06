@@ -157,3 +157,28 @@ it.each([false,true])('keeps legacy drafts copyable without a collective questio
   const draft=newReviewDraft(crypto.randomUUID(),{phase:'ready',jobId:SOURCE,question:'Old question?',connection:null,sourceIds:[SOURCE],contextHash:'a'.repeat(64),retryAfter:null});storeReviewDraft(scope,SID,{...draft,answer:'Keep my unfinished words',submitted:true});
   await mount();expect(host.textContent).toContain('Your earlier draft is kept here');expect(button('Copy draft')).toBeDefined();expect(host.querySelector('textarea')?.readOnly).toBe(true);expect(requestReviewQuestion).not.toHaveBeenCalled();
 });
+it.each([false,true])('offers Review another inspiration at a saved checkpoint without replaying its previous choice, completed=%s',async completed=>{
+  current={...current!,cursor:1,currentInspirationId:null,completedAt:completed?source.createdAt:null,
+    items:current!.items.map(item=>({...item,choice:'skip',decidedAt:source.createdAt}))};
+  await mount();expect(host.textContent).toContain('Your progress is saved.');expect(host.textContent).not.toContain('Review saved');
+  expect(button('Review another inspiration →').disabled).toBe(false);
+  await act(async()=>{button('Review another inspiration →').click();button('Review another inspiration →').click();});
+  expect(onId).toHaveBeenCalledExactlyOnceWith('new');
+  expect(finishReviewSession).toHaveBeenCalledTimes(completed?0:1);
+  expect(chooseReviewInspiration).not.toHaveBeenCalled();expect(deleteInspiration).not.toHaveBeenCalled();
+  expect(requestReviewQuestion).not.toHaveBeenCalled();expect(requestReflectionQuestion).not.toHaveBeenCalled();
+});
+it('does not announce a saved checkpoint while its new action remains unconfirmed',async()=>{
+  current={...current!,cursor:1,currentInspirationId:null,items:current!.items.map(item=>({...item,choice:'skip',decidedAt:source.createdAt}))};
+  vi.mocked(finishReviewSession).mockRejectedValue(new ApiError({status:0,message:'Response lost'}));
+  await mount();await click('Review another inspiration →');
+  expect(host.textContent).toContain('Your last confirmed choice is kept. Try again.');
+  expect(host.textContent).not.toContain('Your progress is saved.');expect(onId).not.toHaveBeenCalled();
+});
+it('gives a Korean saved checkpoint the same explicit next action',async()=>{
+  current={...current!,cursor:1,currentInspirationId:null,completedAt:source.createdAt,
+    items:current!.items.map(item=>({...item,choice:'keep',decidedAt:source.createdAt}))};
+  await act(async()=>root.render(<ReviewPanel scope={scope} id={SID} locale="ko-KR" onId={onId} onClose={onClose} onNewInspiration={onNewInspiration} onOpen={onOpen}/>));
+  expect(host.textContent).toContain('돌아본 기록은 저장되어 있어요.');
+  expect(button('다른 영감 돌아보기 →')).toBeDefined();expect(requestReviewQuestion).not.toHaveBeenCalled();
+});

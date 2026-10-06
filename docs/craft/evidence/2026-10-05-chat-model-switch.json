@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-05",
+  "scope": "Talk with WAKA only; other generation models unchanged",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "openrouter",
+  "deployed": false,
+  "databaseWrites": 0,
+  "accountDataUsed": false,
+  "verification": {
+    "apiUnitTestsPassed": 809,
+    "paidBenchTestsSkipped": 3,
+    "apiTypecheck": "passed",
+    "gitDiffCheck": "passed"
+  },
+  "smoke": {
+    "calls": 4,
+    "maxCostUsd": 0.1,
+    "costUsd": 0.00104272,
+    "costComplete": true,
+    "allHttp200": true,
+    "allFinishReasonStop": true,
+    "allParsed": true,
+    "cases": ["sparse", "conflicting", "correction", "korean-injection"],
+    "requestDurationsMs": [1061, 3555, 1180, 1797],
+    "limitations": "Four synthetic requests, not a full semantic-quality or deployed end-to-end latency benchmark. Existing citation parser remained active.",
+    "localReceipt": "work/conversation-eval/reply-deepseek-v41-chat-switch-1791240584252.json"
+  },
+  "budget": {
+    "priorAllocatedUsd": 1.58019284,
+    "supersededV4SmokeCalls": 4,
+    "supersededV4SmokeCostUsd": 0.0002410104,
+    "currentTaskCalls": 8,
+    "currentTaskCostUsd": 0.0012837304,
+    "cumulativeAllocatedUsd": 1.5814765704,
+    "remainingApprovedUsd": 3.4185234296
+  }
+}

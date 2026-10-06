@@ -22,7 +22,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setDefaultModelProviderForTests, getDefaultModelProvider } from "./model-provider.js";
-import { ModelDidNotAnswerError } from "./model-provider.js";
+import { ModelDidNotAnswerError,type ModelProvider } from "./model-provider.js";
 import { stripJsonFence } from "./openrouter-http.js";
 import {
   createOpenRouterModelProvider,
@@ -41,6 +41,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   delete process.env.OPENROUTER_API_KEY;
   delete process.env.WAKA_MODEL_JUDGE;
   delete process.env.WAKA_MODEL_CHAT;
@@ -53,6 +54,36 @@ const chatReply = (content: string): Response =>
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
 
+describe('all generation tasks share the V4.1 default',()=>{
+  const locale={preferredLocale:'en-US' as const},profile={...locale,profileId:'synthetic-profile'};
+  const sources=[{text:'I leave room for small experiments.',reflections:[],attachments:[]}];
+  const cases:Array<[string,(provider:ModelProvider)=>Promise<unknown>]>=[
+    ['chat',p=>p.answerConversation({...locale,history:[{role:'user',content:'What should I explore?'}],sources:[]})],
+    ['reflection',p=>p.askReflectionQuestion({...locale,inspirationText:sources[0]!.text,reflections:[]})],
+    ['review question',p=>p.askReviewQuestion({...locale,sources,history:[]})],
+    ['review derivation',p=>p.deriveReviewAnswer({...locale,sources,answer:'I want to try something small.',question:null,contextChanged:false,claims:[],discover:true})],
+    ['signal extraction',p=>p.extractSignalCandidates({...profile,inspiration:{id:'source',text:sources[0]!.text,source:'app',createdAt:new Date('2026-10-05')},reflections:[],attachments:[],existingStatements:[],relatedInspirations:[]})],
+    ['signal support',p=>p.assessSignalSupport({sources:[{id:'source',kind:'inspiration',text:sources[0]!.text}],claims:[{signalId:'signal',statement:'Small experiments matter.'}]})],
+    ['signal matching',p=>p.judgeSignalMatch({...locale,candidateStatement:'Small experiments matter.',existingStatement:'Try small experiments.'})],
+    ['top of mind',p=>p.synthesizeTopOfMind({...profile,signals:[],lockedEntries:[],currentEntries:[],recentFeedback:[],provisional:true})],
+    ['principles',p=>p.distillPrinciples({...profile,signals:[],currentPrinciples:[],currentEntries:[]})],
+    ['principle grounding',p=>p.assessPrincipleGrounding({...locale,signals:[],candidates:[]})],
+    ['principle matching',p=>p.judgePrincipleRelation({...locale,candidateStatement:'Try small experiments.',existingPrinciples:[{id:'existing',statement:'Try small experiments before committing.'}]})],
+    ['declaration routing',p=>p.routeDeclaration({...locale,statement:'Try small experiments before committing.'})],
+  ];
+  it.each(cases)('%s dispatches the common model once without enabling reasoning',async(_name,invoke)=>{
+    for(const key of ['WAKA_MODEL_CHAT','WAKA_MODEL_REFLECT','WAKA_MODEL_EXTRACT','WAKA_MODEL_SUPPORT','WAKA_MODEL_JUDGE','WAKA_MODEL_SYNTHESIZE','WAKA_MODEL_PRINCIPLES','WAKA_MODEL_PRINCIPLE_JUDGE','WAKA_MODEL_ROUTE'])vi.stubEnv(key,'');
+    // An unusable result isolates dispatch from each task's output parser.
+    // No account data, live provider, or database is used by this check.
+    fetchMock.mockResolvedValueOnce(chatReply('{}'));
+    await invoke(createOpenRouterModelProvider()).catch(()=>undefined);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const request=JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(request.model).toBe('deepseek/deepseek-v4.1-flash');
+    expect(request.reasoning).toEqual({enabled:false});
+  });
+});
+
 describe("the translation", () => {
   it('preserves the actual comparison and grounding output-token bounds',()=>{
     expect(toChatRequest(buildPrincipleRelationRequest({preferredLocale:'en-US',candidateStatement:'A rule.',existingPrinciples:[{id:'p',statement:'Another rule.'}]}),'model','principle_relation').max_tokens).toBe(1600);
@@ -63,11 +94,12 @@ describe("the translation", () => {
     await createOpenRouterModelProvider().answerConversation({preferredLocale:'en-US',history:[{role:'user',content:'A choice.'}],sources:[]});
     const request=JSON.parse(fetchMock.mock.calls[0][1].body);expect(request.model).toBe('google/gemini-3.8-flash');expect(request.reasoning).toEqual({effort:'low',exclude:true});expect(request.max_tokens).toBe(1200);
   });
-  it('bounds a conversation reply to one call and 1200 output tokens while validating its quote',async()=>{
+  it.each([undefined,'deepseek/deepseek-v4.1-flash'])('uses V4.1 Flash with chat override %s, one call and 1200 output tokens while validating its quote',async model=>{
+    if(model)process.env.WAKA_MODEL_CHAT=model;else delete process.env.WAKA_MODEL_CHAT;
     fetchMock.mockResolvedValueOnce(chatReply(JSON.stringify({answer:'This is one possible guide, not a decision.',followUpQuestion:'What would help you compare the options?',citations:[{sourceNumber:1,quote:'Leave room for thought.'}]})));
     const result=await createOpenRouterModelProvider().answerConversation({preferredLocale:'en-US',history:[{role:'user',content:'What could I consider?'}],sources:[{kind:'principle',text:'Leave room for thought.',state:'held',supportCurrent:true,truncated:false}]});
     expect(result.citations).toHaveLength(1);expect(fetchMock).toHaveBeenCalledTimes(1);
-    const request=JSON.parse(fetchMock.mock.calls[0][1].body);expect(request.max_tokens).toBe(1200);expect(request.reasoning).toEqual({enabled:false});expect(request.response_format).toEqual({type:'json_object'});
+    const request=JSON.parse(fetchMock.mock.calls[0][1].body);expect(request.model).toBe('deepseek/deepseek-v4.1-flash');expect(request.max_tokens).toBe(1200);expect(request.reasoning).toEqual({enabled:false});expect(request.response_format).toEqual({type:'json_object'});
   });
   it.each(['length','error'])('refuses even parseable JSON when the provider marks a reply %s',async finish_reason=>{
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({choices:[{finish_reason,message:{content:JSON.stringify({answer:'Partial but valid.',followUpQuestion:null,citations:[]})}}]}),{status:200}));
@@ -83,9 +115,9 @@ describe("the translation", () => {
       candidateStatement: "Small tools beat grand systems.",
       existingStatement: "Grand systems beat small tools.",
     }) as never;
-    const chat = toChatRequest(request, "deepseek/deepseek-v4-flash-0731", "signal_match");
+    const chat = toChatRequest(request, "deepseek/deepseek-v4.1-flash", "signal_match");
 
-    expect(chat.model).toBe("deepseek/deepseek-v4-flash-0731");
+    expect(chat.model).toBe("deepseek/deepseek-v4.1-flash");
     expect(chat.temperature, "a comparison, not a composition").toBe(0);
     expect(chat.messages[0]!.role).toBe("system");
     expect(chat.messages[0]!.content).toContain("Exactly one of three answers");
@@ -184,7 +216,7 @@ describe("the judge over the second road", () => {
     });
     expect(verdict).toEqual({ relation: "same" });
     const sent = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
-    expect(sent.model).toBe("deepseek/deepseek-v4-flash-0731");
+    expect(sent.model).toBe("deepseek/deepseek-v4.1-flash");
     expect(String(fetchMock.mock.calls[0]![0])).toContain("openrouter.ai");
 
     process.env.WAKA_MODEL_JUDGE = "some-lab/other-model";

@@ -269,6 +269,7 @@ describe("the type scale is one scale", () => {
     for (const step of [
       "--t-display",
       "--t-reading",
+      "--t-home-reading",
       "--t-lead",
       "--t-body",
       "--t-input",

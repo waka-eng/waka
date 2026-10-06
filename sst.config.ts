@@ -227,6 +227,7 @@ export default $config({
       DB_CONNECTION_URL: dbConnectionUrl.value,
       GEMINI_API_KEY: geminiApiKey.value,
       OPENROUTER_API_KEY: openRouterApiKey.value,
+      OPENROUTER_GENERATION_MODEL: "deepseek/deepseek-v4.1-flash",
       // Chat enablement is dev-only and shared by API/worker. A manual dev
       // deploy can disable new requests without reverting the additive schema.
       WAKA_CONVERSATION_REPLIES: isDevelopmentDomain && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0",
@@ -240,7 +241,7 @@ export default $config({
       ...(publicWebUrl ? { PUBLIC_WEB_URL: publicWebUrl } : {}),
       ...(isDevelopmentDomain
         ? {
-            WAKA_MODEL_CHAT: "google/gemini-3.8-flash",
+            WAKA_MODEL_CHAT: "deepseek/deepseek-v4.1-flash",
             WAKA_ENABLE_ADMIN_ROUTES: "true",
             WAKA_SHOW_INTERNAL_STATUS: "true",
             WAKA_ENABLE_BACKGROUND_JOBS_ADMIN: "true",

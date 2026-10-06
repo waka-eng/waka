@@ -25,13 +25,11 @@ import { MODEL_DECLINED } from "./model-provider.js";
 
 export const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-/** The default for every generation task (founder ruling, 2026-08-30).
-    Pinned to the 0731 GA snapshot, deliberately not the floating `-latest`
-    alias: a float would swap the judge under the canon the day a new
-    snapshot ships, and a model change should be a decision with an eval,
-    never a surprise. */
+/** The default for every generation task (owner request, 2026-10-05).
+    Use the explicit V4.1 model ID, not a floating `-latest` alias. A model
+    change is an owner decision with verification, never a silent upgrade. */
 export const OPENROUTER_GENERATION_MODEL =
-  process.env.OPENROUTER_GENERATION_MODEL ?? "deepseek/deepseek-v4-flash-0731";
+  process.env.OPENROUTER_GENERATION_MODEL ?? "deepseek/deepseek-v4.1-flash";
 
 export function getOpenRouterApiKey(): string | null {
   const key = process.env.OPENROUTER_API_KEY?.trim();
