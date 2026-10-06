@@ -8,6 +8,7 @@ import {resolveTargetProfile} from './inspirations-tenancy.js';
 import {profileQuerySchema} from './inspirations-validation.js';
 import {CONVERSATION_LIMITS,conversationCapabilities,conversationRepliesEnabled,currentConversationReferences,readConversationContext,type ConversationSource} from '../lib/conversation-context.js';
 import {conversationSearchQuery} from '../lib/conversation-material.js';
+import {CONVERSATION_STARTERS} from '../lib/conversation-preview.js';
 import {ConversationReplyError,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
 import {wakeCommittedBackgroundJobs} from '../lib/queue.js';
 import {personalPrincipleReadable} from '../lib/personal-output.js';
@@ -52,7 +53,9 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
   routes.get('/',async c=>{
     const profileId=c.get('conversationProfileId');
     const rows=await database().select({id:conversations.id,profileId:conversations.profileId,updatedAt:conversations.updatedAt,revision:conversations.revision,
-      preview:sql<string>`coalesce((SELECT left(m.content,120) FROM conversation_messages m WHERE m.profile_id=${profileId}::uuid AND m.conversation_id=conversations.id ORDER BY m.position LIMIT 1),'')`})
+      preview:sql<string>`coalesce((SELECT left(trim(m.content),120) FROM conversation_messages m
+        WHERE m.profile_id=${profileId}::uuid AND m.conversation_id=conversations.id AND m.role='user'
+        ORDER BY CASE WHEN trim(m.content) IN (${sql.join(CONVERSATION_STARTERS.map(value=>sql`${value}`),sql`, `)}) THEN 1 ELSE 0 END,m.position LIMIT 1),'')`})
       .from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt))).orderBy(desc(conversations.updatedAt),asc(conversations.id)).limit(CONVERSATION_LIMITS.conversations);
     return c.json({profileId,conversations:rows,...conversationCapabilities()});
   });

@@ -198,6 +198,29 @@ function readingReply(){
   stored.messages[0].citations=[{index:0,kind:'top_of_mind_entry',id:'reading-one',available:true,preview:'Try a small experiment.'},{index:1,kind:'top_of_mind_entry',id:'reading-two',available:true,preview:'Leave time to notice.'}];
 }
 const readingReference=(index=1):ConversationCitation=>({profileId:scope.profileId,conversationId:id,requestId:replyId,index,source:{kind:'top_of_mind_entry',id:index===1?'reading-two':'reading-one',text:index===1?'Leave time to notice what changes before making a commitment.':'Try a small experiment before making a commitment.',quote:index===1?'Leave time to notice':'Try a small experiment'}});
+it('lets an older reading preview continue the chat with its verified words once',async()=>{
+  readingReply();stored.messages.push({id:'later',role:'assistant',profileId:scope.profileId,conversationId:id,position:2,content:'Choose whichever topic matters now.',createdAt:stored.createdAt});stored.revision=2;replyState.revision=2;
+  vi.mocked(fetchConversationCitation).mockResolvedValue(readingReference(0));await mount();
+  expect(host.querySelector('.chat-reading-choices')).toBeNull();
+  await act(async()=>host.querySelector<HTMLButtonElement>('.chat-citations button')!.click());
+  await click('Discuss this');expect(saveConversationMessage).toHaveBeenCalledOnce();
+  expect(vi.mocked(saveConversationMessage).mock.calls[0][2].content).toContain('Try a small experiment before making a commitment.');
+  expect(requestConversationReply).not.toHaveBeenCalled();
+});
+it.each(['principle','inspiration'] as const)('continues from a verified %s preview and never overwrites a draft',async kind=>{
+  stored.generationEnabled=true;completeReply();stored.messages[0].citations![0].kind=kind;
+  const source={kind,id:'principle',text:'Verified words for this topic.',quote:'Verified words'};
+  vi.mocked(fetchConversationCitation).mockResolvedValue({profileId:scope.profileId,conversationId:id,requestId:replyId,index:0,source});
+  await mount();await act(async()=>host.querySelector<HTMLButtonElement>('.chat-citations button')!.click());
+  await type('Keep my unfinished words');expect([...host.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent==='Discuss this')!.disabled).toBe(true);
+  expect(host.querySelector('textarea')!.value).toBe('Keep my unfinished words');expect(saveConversationMessage).not.toHaveBeenCalled();
+  await type('');await click('Discuss this');expect(saveConversationMessage).toHaveBeenCalledOnce();
+  expect(vi.mocked(saveConversationMessage).mock.calls[0][2]).toMatchObject({content:'“Verified words for this topic.”\n\nLet’s explore this idea further.',requestReply:true});
+});
+it('keeps the local sidebar title aligned with the actual human topic',async()=>{
+  stored.messages=[{id:'first',role:'user',profileId:scope.profileId,conversationId:id,position:1,content:'Help me think through a choice.',createdAt:stored.createdAt},{id:'second',role:'user',profileId:scope.profileId,conversationId:id,position:2,content:'Should I take the evening course?',createdAt:stored.createdAt}];
+  await mount();expect(host.querySelector('.chat-sidebar nav')?.textContent).toContain('Should I take the evening course?');
+});
 it('sends a starter in one click instead of requiring another Send',async()=>{
   stored.generationEnabled=true;await mount();await click('What has changed in how I think?');
   expect(saveConversationMessage).toHaveBeenCalledExactlyOnceWith(scope.profileId,id,expect.objectContaining({content:'What has changed in how I think?',requestReply:true}),expect.any(AbortSignal));

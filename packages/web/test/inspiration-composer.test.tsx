@@ -35,6 +35,8 @@ it('opens with a decorative spark without changing focus, the action name or sav
 it('describes the selected audience visibly and accessibly without publishing on selection', async () => {
   await mount();
   const group=host.querySelector('[aria-label="Who can read this"]')!;
+  expect([...group.querySelectorAll('button')].map(row=>row.textContent)).toEqual(['Only me','Share with rooms']);
+  expect(group.querySelector('button')?.getAttribute('aria-pressed')).toBe('true');
   expect(group.getAttribute('aria-describedby')).toBe('capture-audience');
   expect(host.querySelector('#capture-audience')?.textContent).toContain('Only you');
   props.public=true;await mount();

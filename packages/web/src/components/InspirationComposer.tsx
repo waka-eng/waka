@@ -105,8 +105,8 @@ export function InspirationComposer(props: {
     {!props.ready ? <p role="status">{say('worldComposerOpening')}</p> : null}
     </div>
     <div className="jar-composer-footer"><div className="jar-composer-visibility" role="group" aria-label={say('worldAudience')} aria-describedby="capture-audience">
-      <button type="button" disabled={blocked} aria-pressed={!props.public} onClick={() => props.onVisibility(false)}>{say('worldPrivate')}</button>
-      <button type="button" disabled={blocked} aria-pressed={props.public} onClick={() => props.onVisibility(true)}>{say('worldPublic')}</button>
+      <button type="button" disabled={blocked} aria-pressed={!props.public} onClick={() => props.onVisibility(false)}>{say('worldAudienceOnlyMe')}</button>
+      <button type="button" disabled={blocked} aria-pressed={props.public} onClick={() => props.onVisibility(true)}>{say('worldAudienceRooms')}</button>
     </div><div className="jar-composer-actions">
       <button type="button" aria-label={say('worldSaveInspiration')} disabled={blocked || invalidFiles || Boolean(link.trim()) || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(false)}>{say('worldSave')}</button>
       <button type="button" aria-label={say('worldSaveAndReflect')} disabled={blocked || invalidFiles || Boolean(link.trim()) || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(true)}>{say('worldComposerThink')}</button>

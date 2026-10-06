@@ -90,9 +90,10 @@ function ReviewCard({item,sessionId,initialSource,scope,locale,disabled,onNext,o
               <button type="button" className="jar-review-destructive" disabled={disabled||removing} onClick={()=>void remove()}>{say(removing?'worldReviewRemoving':'worldReviewDeleteInspiration')}</button></div>
           </div>:<div className="jar-review-item-actions">
             <button type="button" className="jar-review-primary" disabled={disabled} onClick={()=>setReflecting(true)}>{say('worldReflect')}</button>
-            <button type="button" disabled={disabled} onClick={()=>onNext(turns.length>0)}>{say('worldReviewNextInspiration')} →</button>
+            <button type="button" disabled={disabled} aria-describedby="review-next-hint" onClick={()=>onNext(turns.length>0)}>{say('worldReviewNextInspiration')} →</button>
             <button type="button" className="jar-review-remove" disabled={disabled} onClick={()=>setConfirm(true)}>{say('worldReviewRemoveInspiration')}</button>
           </div>}
+          {!confirm?<p id="review-next-hint" className="jar-review-context">{say('worldReviewNextKeeps')}</p>:null}
         </>}
       </>}
   </div>;

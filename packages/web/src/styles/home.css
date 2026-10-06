@@ -772,11 +772,12 @@
   gap: 7px;
   appearance: none;
   -webkit-appearance: none;
-  border: 0;
+  border: 1px solid var(--jar-faint);
+  border-radius: var(--sp-24);
   margin: 0;
   padding: 5px var(--sp-12);
   min-height: 32px;
-  background: none;
+  background: color-mix(in srgb,var(--jar-ink) 4%,transparent);
   font-family: inherit;
   /* THE SAME INK AS A WAY OUT (founder, 2026-08-25: "same font and opacity
      as ROOM1 and the other one"). The type already matched on all four —
@@ -928,7 +929,10 @@
   flex-wrap: wrap;
   gap: var(--sp-8) var(--sp-20);
 }
-.jar-principle-actions > button { min-height: 44px; }
+.jar-principle-actions > button { min-height: 44px; font-size:var(--t-note); color:var(--jar-ink); }
+.jar-values .jar-values-words { font-size:var(--t-note); font-weight:400; letter-spacing:normal; text-transform:none; }
+.jar-values-count { display:grid; place-items:center; min-width:var(--sp-20); min-height:var(--sp-20); border-radius:var(--sp-12); background:color-mix(in srgb,var(--jar-ink) 8%,transparent); font-size:var(--t-fine); }
+.jar-board-acts button.jar-board-act { font-size:var(--t-note); letter-spacing:normal; text-transform:none; }
 .jar-principle-secondary {
   display: flex;
   align-items: center;

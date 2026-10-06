@@ -30,6 +30,16 @@ it('stores ordered words once, rejects changed replay and never requests an assi
   const history=await (await f.app.request('/conversations')).json() as any;expect(history.conversations).toHaveLength(1);expect(history.conversations[0].preview).toBe(message.content);
   expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
 });
+it('names starter-led threads after the first human topic without copying assistant text',async()=>{
+  const f=await fixture(),other=await fixture();await f.send('',{id:f.id});
+  await f.send(`/${f.id}/messages`,{id:randomUUID(),content:'Help me think through a choice.',revision:0});
+  await f.send(`/${f.id}/messages`,{id:randomUUID(),content:'Should I take the evening course?',revision:1});
+  await other.send('',{id:other.id,firstMessage:{id:randomUUID(),content:'PRIVATE_OTHER_TOPIC'}});
+  const body=await (await f.app.request('/conversations')).json() as {conversations:Array<{preview:string}>};
+  expect(body.conversations).toHaveLength(1);expect(body.conversations[0].preview).toBe('Should I take the evening course?');
+  expect(JSON.stringify(body)).not.toContain('PRIVATE_OTHER_TOPIC');
+  expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
+});
 it('creates the first message atomically and joins concurrent exact first-send replays',async()=>{
   const f=await fixture(),firstMessage={id:randomUUID(),content:'My first question.',requestReply:false};
   const responses=await Promise.all([f.send('',{id:f.id,firstMessage}),f.send('',{id:f.id,firstMessage})]);

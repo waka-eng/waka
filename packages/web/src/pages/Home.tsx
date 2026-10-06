@@ -86,6 +86,7 @@ import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
 import { useReviewEntry } from '../lib/use-review-entry';
 import { HomeActivities } from '../components/HomeActivities';
+import {PrinciplesShortcutLabel} from '../components/PrinciplesShortcutLabel';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
@@ -14436,8 +14437,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           data-jar-chrome="1"
           onClick={() => simApiRef.current?.toSky()}
         >
-          <span className="jar-values-words jar-label">{say("worldPhilosophiesValues")}</span>
-          <span className="jar-caret jar-caret--up" aria-hidden="true" />
+          <PrinciplesShortcutLabel locale={locale} count={atWall.kind==='self'?principlesRead?principles.length:null:groupPrincipleCounts[atWall.id]??null}/>
         </button>
       ) : null}
 

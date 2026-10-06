@@ -1,6 +1,6 @@
 # WAKA beta readiness milestones
 
-Status: in progress (2026-10-05), milestone 1 passed locally; milestone 2 next, milestones 3 and 4 remain open.
+Status: in progress (2026-10-05), milestone 1 passed locally; milestone 2 implemented and technically checked, human comprehension pending; milestones 3 and 4 remain open.
 Branch: `codex/beta-readiness-m1-m4`, based on deployed dev `56a2694`.
 
 ## Objective
@@ -127,3 +127,75 @@ type; a package-version diagnostic used an unexported package subpath and was
 replaced by reading the installed package metadata. These were not failures
 of the boundary policy. No model calls, remote data changes, schema changes,
 push or deployment occurred. Verdict: milestone 1 passes locally.
+
+### Milestone 2 baseline on 2026 10 05
+
+Started a current production-build fixture with 25 synthetic inspirations,
+three Principles and two synthetic reading references. Provider networking and
+autodrain are disabled; no real account content is used. The fresh desktop Home
+baseline is retained at `work/performance/beta-m2-baseline/home.png`. Its
+Principles shortcut has a 44-pixel hit height and 15-pixel uppercase label,
+but no count; the destination is at the top edge rather than alongside the
+reading. Existing Review and chat activity cards remain distinct.
+
+Asked whether first-time participants can be arranged for the comprehension
+gate; the request is pending. That check is not replaced by these measurements.
+The owned fixture remains live for the next UI implementation and verification.
+
+### Milestone 2 technical checkpoint on 2026 10 05
+
+Implemented a visible counted Principles shortcut without another Home action
+row; unknown data does not appear as zero. Reading evidence/actions use plain
+names, Principle action labels use readable type, Capture offers Only me and
+Share with rooms, and Review states that Next keeps the inspiration. Share-card
+loading now names the Principle instead of an inspiration.
+
+Chat previews, including older references and Principle/inspiration references,
+offer Discuss this through the same owned-source revalidation and durable send
+path. Existing draft, double-click, cancellation and stale/foreign-source guards
+remain. Empty reference groups no longer render after conversion to cards.
+Sidebar previews use the first substantive human topic rather than a generic
+starter; one provider-free policy governs the local update and bilingual starter
+list, with a drift test and scoped SQL list selection. No title generation call,
+stored title, new schema, or assistant-generated label was added.
+
+Verification: 771 web tests, 843 API unit tests, 12 conversation SQL cases,
+API/web/admin types, production web build and diff check pass. Built browser
+checks at desktop/320 pixels covered Capture/draft return, Review/Next return,
+Principles, the selected share-card route/preview, and chat. Review Next left
+all 25 originals stored. The old-reference action made one successful message
+POST and stored the verified second reading once; SQL confirmed zero dispatched
+conversation model requests. Seeded assistant replies are UI fixtures, not AI
+quality evidence. Detailed receipts are in
+`docs/craft/evidence/2026-10-05-beta-readiness-m2.json`.
+
+Retained failures: old-word test selectors were repaired without dropping
+behavior assertions; a duplicate CSS rule was consolidated after the structure
+gate failed; formatting the count required formatMessage, not t. Concurrent
+full checks caused two 5-second real bcrypt timeouts; production cost and all
+assertions were retained, the affected test timeout is bounded at 15 seconds,
+and the full API rerun passed. No paid provider calls or remote writes occurred.
+
+The technical work is ready, but no first-time participants have been observed.
+The pending user question remains unanswered. The milestone 2 human gate and
+the all-four-milestone objective are not complete; milestones 3 and 4 are not
+silently claimed by this checkpoint.
+
+Both owned fixture schemas were removed after normal shutdown and checked
+absent; the baseline/current screenshots remain. Temporary test tabs were
+closed and the viewport override reset.
+
+### First time user check
+
+Use a fresh synthetic preview, not an existing user's account. Give participants
+only the tasks below, without naming or pointing at the relevant buttons. Record
+each participant's first action, completion, requests for help, and wrong turns.
+
+1. Keep a new idea privately, and return to its unfinished draft after closing.
+2. Find one saved idea to revisit and move on without removing it.
+3. Find the guides WAKA has gathered for making choices.
+4. Open a conversation about one of those guides.
+5. Prepare an image of a guide to share, without changing the saved wording.
+
+Do not count an expert/agent walkthrough as first-time comprehension. Use the
+observed results to repair unclear paths before passing the human gate.
