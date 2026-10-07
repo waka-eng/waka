@@ -1,0 +1,29 @@
+{
+  "name": "@waka/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build:dev": "node scripts/build.mjs development",
+    "build:prod": "node scripts/build.mjs production",
+    "sync:dev": "node scripts/sync.mjs development",
+    "sync:prod": "node scripts/sync.mjs production",
+    "build:ios:dev": "node scripts/native-build.mjs ios development",
+    "build:ios:prod": "node scripts/native-build.mjs ios production",
+    "build:android:dev": "node scripts/native-build.mjs android development",
+    "build:android:prod": "node scripts/native-build.mjs android production",
+    "test": "node --test test/*.test.mjs",
+    "check:android": "node scripts/check-android.mjs",
+    "doctor": "node scripts/doctor.mjs"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.5.2",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/browser": "8.0.5",
+    "@capacitor/filesystem": "8.1.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2",
+    "@capacitor/ios": "8.5.2",
+    "@capacitor/android": "8.5.2"
+  }
+}

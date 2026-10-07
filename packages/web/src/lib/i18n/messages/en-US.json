@@ -1,4 +1,6 @@
 {
+  "mobileConnectionUnavailable": "Can’t connect to WAKA. Check your connection and try again.",
+  "mobileRetryConnection": "Try again",
   "worldHomeActivities": "Explore your inspirations",
   "worldPrinciplesShortcut": "Principles",
   "worldPrinciplesAvailable": "{count} available",
