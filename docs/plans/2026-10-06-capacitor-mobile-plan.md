@@ -1,7 +1,8 @@
 # WAKA iOS and Android app plan
 
-Status: M1 foundation accepted 2026-10-07; M2 is next and not started. Prepared 2026-10-06 against
-`dev` commit `315328e`.
+Status: M1 and M2 accepted in simulator scope 2026-10-07. M3 is next and not
+started. Registered signing and verified device links remain deferred until
+device/beta delivery. Prepared 2026-10-06 against `dev` commit `315328e`.
 
 Build iOS and Android apps with the existing React application inside Capacitor.
 Keep the current design and full consumer web functionality, with native
@@ -152,6 +153,14 @@ Google documents OS-browser authentication and PKCE for installed clients;
 provider configuration must use the supported flow for each platform.
 [Google authentication guidance](https://developers.google.com/identity/protocols/oauth2/native-app),
 [Capacitor deep links](https://capacitorjs.com/docs/guides/deep-links).
+
+M2 result: both native account/lifecycle slices pass. The owner confirmed live
+Google login on Android; iOS OS-browser acceptance uses the simulated provider
+and does not establish live Google identity acceptance on iOS. PRs 359/360 and
+additive migration 0068 are deployed to dev, with 975 API unit, 1,744 hermetic
+API and 857 web passes. Registered identities, device-verified associations,
+iOS live-provider follow-up and store signing remain explicitly deferred.
+See the [completion audit](../goals/native-accounts.md). Production is unchanged.
 
 ### M3 Native capture and durable drafts
 

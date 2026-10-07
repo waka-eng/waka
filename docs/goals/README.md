@@ -30,7 +30,6 @@ Work happening now, or stopped mid-way with a recorded reason.
 
 | Goal | Status |
 | --- | --- |
-| [`native-accounts.md`](native-accounts.md) | In progress — local journeys verified; dev rollout and Android browser consent approved. Simulator acceptance continues; registered signing and verified device links deferred by owner. |
 | [`beta-readiness.md`](beta-readiness.md) | Incomplete — milestones 1 and 3 delivered in PR 350; operational audit and recovery fixes deployed through PR 351. Dev configuration/heartbeat and public URL policy observed. Milestone 2 first-time comprehension and milestone 4 controlled live measurements, spending/privacy/source safeguards and exercised alerts remain open. |
 | [`performance-improvements.md`](performance-improvements.md) | In progress — five milestones delivered to dev; loading/Review follow-up accepted locally. Exact deployed timing verification remains open. |
 | [`ux-feature-implementation.md`](ux-feature-implementation.md) | Paused by owner after the checked feedback/room-flow batch; dev delivery requested. Later UX/algorithm slices, remaining release cases, semantic validation, historical repair and deployed verification remain open. |
@@ -50,6 +49,7 @@ Shipped, and kept for the measurements.
 
 | Goal | Status |
 | --- | --- |
+| [`native-accounts.md`](native-accounts.md) | Done 2026-10-07 in owner-approved simulator scope — both account/lifecycle journeys and owner-confirmed live Android Google login; PRs 359/360 deployed with migration and green CI. Registered signing, verified device links and iOS live-provider follow-up remain explicit limitations. |
 | [`capacitor-foundation.md`](capacitor-foundation.md) | Done 2026-10-07 — M1 shared/native builds and simulator storage/callback/font/API checks accepted; Android network denial and iOS controlled failure/retry verified. Native accounts, full parity and stores remain M2–M6. |
 | [`responsiveness-reliability.md`](responsiveness-reliability.md) | Implementation complete 2026-10-06 — Review Next 28→20 statements, chat polling 7→4; bounded transient retry signaling and hold cleanup verified locally. Dev delivery approved; cloud timings remain unmeasured. |
 | [`dev-validation.md`](dev-validation.md) | Done 2026-10-06 — core personal loop and slow/failure/Back/return checks verified on dev; four observed fixes shipped in PRs 353–356. 804 web and 947 API unit cases; synthetic account erased, production unchanged. |
