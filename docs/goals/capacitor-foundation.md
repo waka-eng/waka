@@ -1,6 +1,7 @@
 # Capacitor app foundation
 
-Status: in progress (2026-10-06).
+Status: blocked on administrator-assisted Xcode setup and native UI access
+(2026-10-06). Implementation/build evidence is preserved; M1 remains incomplete.
 Branch: `codex/capacitor-m1`, based on dev `315328e`.
 
 ## Objective and scope
@@ -94,7 +95,7 @@ No server, model, schema, paid-call or deployment work was performed.
 | M1.5 integration proofs | Android native receipt and nine protocol cases; iOS UI driver blocked | Incomplete on iOS |
 | M1.6 launch routes fonts and offline | Android native/visual evidence; iOS installed/healthy, interaction pending | Incomplete on iOS |
 
-The full M1 goal remains active and incomplete until the remaining gates are verified.
+The full M1 goal remains incomplete until the remaining gates are verified.
 
 ### 2026 10 06 fresh checkout verification
 
@@ -117,3 +118,19 @@ under `work/mobile-foundation/clean-aamMAT/checkout`.
 Build reproducibility is now established independently of the working checkout's
 caches/generated files. Remaining iOS storage/callback and offline interaction
 acceptance still requires the requested Xcode component setup and native UI access.
+
+### 2026 10 06 blocked audit
+
+The previous goal turn was progress: fresh-checkout builds passed on both
+platforms and were recorded in `5ef12de`. This third consecutive goal turn
+revalidated the same iOS interaction blocker. `xcodebuild
+-checkFirstLaunchStatus` exits 69, installed CoreSimulator is 1051.55, and
+`sudo -n true` reports that a password is required. Process inspection found
+no live component-setup or UI-test job. Native UI inventory again reports the
+Mac locked, so the manual simulator interaction alternative is unavailable.
+
+All independent implementation, Android native checks and fresh build
+reproduction work is recorded. The outstanding iOS storage/callback and
+offline/route checks require an external change: unlock the Mac and complete
+Xcode component installation, for example `sudo xcodebuild -runFirstLaunch`
+entered by the owner. Resume M1 after setup; retain the same acceptance gates.
