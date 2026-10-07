@@ -63,6 +63,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { PrincipleRead } from "../components/PrincipleRead";
+import { publicWebOrigin } from '../lib/public-origins';
 import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlow";
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { DialogSurface } from "../components/DialogSurface";
@@ -11750,7 +11751,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        no notification channel we do not have — you copy it and put it wherever
        you already talk to these people. Anyone holding it can walk in, which
        is the one thing to know about it. */
-    const url = `${window.location.origin}/?join=${encodeURIComponent(g.joinCode)}`;
+    const url = `${publicWebOrigin()}/?join=${encodeURIComponent(g.joinCode)}`;
     navigator.clipboard
       ?.writeText(url)
       .then(() => {
@@ -12342,7 +12343,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       label: atWall.kind === 'agent' ? atWall.name : undefined, section: 'field', inspirationId: row.id }, { query: seek ?? '' });
   };
   const copyInspirationLink = async (reflectionId: string | null = observedView.reflectionId) => {
-    try { await navigator.clipboard.writeText(window.location.origin + viewHref({ ...observedView, reflectionId, find: false })); setCharSay(say('worldLinkCopied')); }
+    try { await navigator.clipboard.writeText(publicWebOrigin() + viewHref({ ...observedView, reflectionId, find: false })); setCharSay(say('worldLinkCopied')); }
     catch { setCharSay(say('worldLinkCopyFailed')); }
   };
 

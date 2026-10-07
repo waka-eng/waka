@@ -79,3 +79,32 @@ Dev domain association endpoints currently return the SPA HTML with status 200,
 not the required JSON association documents. Apple Team ID/registration details
 were requested while independent implementation continues. No remote data or
 configuration was changed.
+
+### 2026 10 07 Google handoff and schema checks
+
+Native Google now opens the OS browser and preserves its intended destination
+in protected app storage. The shared Google callback resolves the same account
+and human profile as web sign-in, but a mobile context issues only an expiring
+code. Server-signed context, app state, S256 challenge and exact app identity
+bind the exchange. Session minting and code consumption share a transaction.
+Browser dismissal/app cancellation invalidate the pending attempt; password
+sign-in removes it. Native expiry clears identity without trusting localStorage.
+
+Migration `0068_mobile_login_codes` is additive and has a generated snapshot
+and journal entry. Migration integrity passes five file checks. On explicit
+loopback database `waka_mobile_m2_test_20261007`, five real SQL cases pass using
+a two-connection pool: valid single-use exchange, wrong app/state/verifier,
+expiry, concurrent exchange with exactly one session and refusal of agent
+profiles. The per-suite schema was cleaned up; the empty owned test database
+is retained for the simulator fixture. No remote schema or account was changed.
+
+Three signed-context protocol cases pass; existing Google/CORS regressions
+remain green. The latest full source checks passed 830 web and 973 API unit
+cases (three paid suites skipped) before the final cancellation/URL changes.
+Final checks and actual native authenticated journeys still remain.
+
+The Apple linking/private-relay plan and additive deployment/rollback order
+are recorded in [native auth decisions](../decisions/2026-10-07-native-auth-rollout.md).
+Public profile, invite, reflection and key-setup URLs now choose canonical
+WAKA origins in native builds. Verified domain association and complete
+cold/warm route acceptance remain open.

@@ -21,7 +21,8 @@ describe('native WebView CORS without cookie authentication', () => {
     expect(response.status).toBe(204); expect(response.headers.get('Vary')).toContain('Origin');
   });
   it('refuses unexpected methods, headers and native cookies', async () => {
-    for (const headers of [ { 'Access-Control-Request-Method': 'TRACE' }, { 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'X-Other' } ]) {
+    const invalid: Record<string, string>[] = [ { 'Access-Control-Request-Method': 'TRACE' }, { 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'X-Other' } ];
+    for (const headers of invalid) {
       expect((await app.request('/api/test', { method: 'OPTIONS', headers: { Origin: 'https://localhost', ...headers } })).status).toBe(403);
     }
     expect((await app.request('/api/test', { headers: { Origin: 'https://localhost', Cookie: 'waka_session=fixture' } })).status).toBe(403);

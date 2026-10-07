@@ -40,6 +40,13 @@ describe('native resource transport', () => {
   it('rejects caller-chosen authorization', async () => {
     await expect(apiFetch(`${origin}/api/auth/me`, { headers: { Authorization: 'Bearer other' } })).rejects.toThrow('cannot choose');
   });
+  it('password/code rejection does not send or revoke an unrelated active session', async () => {
+    await nativeSession.adopt(token, nativeSession.beginChange());
+    const fetch = vi.fn(async () => new Response(null, { status: 401 })); vi.stubGlobal('fetch', fetch);
+    await apiFetch(`${origin}/api/auth/mobile/exchange`, { method: 'POST' });
+    expect(new Headers((fetch.mock.calls[0]![1] as RequestInit).headers).has('Authorization')).toBe(false);
+    expect(await nativeSession.read()).toBe(token);
+  });
   it('clears an active unauthorized session but does not clear a newer sign-in', async () => {
     await nativeSession.adopt(token, nativeSession.beginChange());
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 401 })));

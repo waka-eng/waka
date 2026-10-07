@@ -3,10 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { isMobileBuild, mobileDiagnosticsEnabled, platformServices } from '../lib/platform';
 import { readStoredLocale, t } from '../lib/locales';
 import { parseAppLink } from '../lib/platform/links';
+import { useAuth } from '../lib/auth-context';
+import { AuthorizationCancelled } from '../lib/platform/authorization';
 
 export function MobileShell() {
   const navigate = useNavigate();
   const navigation = useRef(navigate); navigation.current = navigate;
+  const { refresh } = useAuth();
+  const refreshAuth = useRef(refresh); refreshAuth.current = refresh;
   const diagnosticFailure = useRef(false);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [retrying, setRetrying] = useState(false);
@@ -14,11 +18,30 @@ export function MobileShell() {
     if (!isMobileBuild) return;
     let stopped = false, release: (() => void) | undefined;
     void platformServices().then(async services => {
+      const google = await import('../lib/platform/google-sign-in');
       const identity = await services.identity();
       const cleanup = await services.listenForLinks(raw => {
         if (stopped) return;
         try {
           const link = parseAppLink(raw, import.meta.env.VITE_APP_ID as string);
+          if (link.hostname === 'auth') {
+            void google.hasNativeGoogleSignIn().then(async pending => {
+              if (pending) {
+                try {
+                  const destination = await google.completeNativeGoogleSignIn(raw);
+                  await refreshAuth.current();
+                  if (!stopped) navigation.current(destination);
+                } catch (error) {
+                  await google.cancelNativeGoogleSignIn();
+                  const reason = error instanceof AuthorizationCancelled && error.reason === 'cancelled' ? 'oauth_denied' : 'token_exchange_failed';
+                  if (!stopped) navigation.current(`/login?error=${reason}`);
+                }
+              } else if (mobileDiagnosticsEnabled) {
+                navigation.current(`/mobile-check?${new URLSearchParams({ phase: 'callback', callback: raw })}`);
+              }
+            });
+            return;
+          }
           if (mobileDiagnosticsEnabled && (link.hostname === 'diagnostics' || link.hostname === 'auth')) {
             // A dev-only UI failure fixture avoids changing the Mac's network.
             // Retry still calls the real native HTTPS handshake.

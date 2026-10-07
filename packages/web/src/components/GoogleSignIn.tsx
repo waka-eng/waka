@@ -24,6 +24,8 @@ import { apiPath } from "../lib/api";
 import { readStoredLocale, t } from "../lib/locales";
 import type { MessageKey, SupportedLocale } from "../lib/locales";
 import { DEFAULT_REDIRECT } from "../lib/sign-in-destination";
+import { useEffect, useState } from 'react';
+import { isMobileBuild } from '../lib/platform';
 
 /**
  * Build the absolute (or relative) URL the browser should navigate to in
@@ -95,8 +97,24 @@ export function GoogleSignInButton({
   locale?: SupportedLocale;
   returnTo?: string;
 }): JSX.Element {
+  const [pending, setPending] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isMobileBuild) return;
+    let stopped = false;
+    void import('../lib/platform/google-sign-in').then(module => module.hasNativeGoogleSignIn())
+      .then(value => { if (!stopped) setPending(value); }).catch(() => {});
+    return () => { stopped = true; };
+  }, []);
   function handleClick(): void {
-    if (disabled) return;
+    if (disabled || starting) return;
+    if (isMobileBuild) {
+      setStarting(true); setError(null);
+      void import('../lib/platform/google-sign-in').then(module => module.startNativeGoogleSignIn(returnTo))
+        .then(() => setPending(true)).catch(() => setError(t(locale, 'oauthFallback'))).finally(() => setStarting(false));
+      return;
+    }
     // assign() (vs href= or replace()) keeps the /login entry in browser
     // history so the user can hit "Back" from Google's consent page and
     // land where they were. replace() would silently swallow that history
@@ -104,12 +122,12 @@ export function GoogleSignInButton({
     window.location.assign(googleLoginUrl(returnTo));
   }
 
-  return (
+  return <>
     <button
       type="button"
       className="btn-google"
       onClick={handleClick}
-      disabled={disabled}
+      disabled={disabled || starting}
       aria-label={t(locale, "loginGoogleContinue")}
     >
       {/*
@@ -146,5 +164,10 @@ export function GoogleSignInButton({
       </svg>
       <span>{t(locale, "loginGoogleContinue")}</span>
     </button>
-  );
+    {isMobileBuild && pending && <button type="button" className="btn-google" onClick={() => {
+      void import('../lib/platform/google-sign-in').then(module => module.cancelNativeGoogleSignIn())
+        .then(() => setPending(false)).catch(() => setError(t(locale, 'oauthFallback')));
+    }}>{t(locale, 'nativeCancelSignIn')}</button>}
+    {error && <p role="alert">{error}</p>}
+  </>;
 }

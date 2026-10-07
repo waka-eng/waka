@@ -21,7 +21,7 @@ import {
   type ApiProfileType,
 } from "./http";
 import { apiFetch, nativeSession, revokeRetiredNativeSessions } from './transport';
-import { isMobileBuild } from '../platform';
+import { isMobileBuild, platformServices } from '../platform';
 
 // ---------------------------------------------------------------------------
 // Who a session is
@@ -134,6 +134,7 @@ export async function login(input: LoginRequest): Promise<AuthSessionResponse> {
 
 async function authenticate(path: string, input: SignupRequest | LoginRequest, message: string): Promise<AuthSessionResponse> {
   const version = isMobileBuild ? nativeSession.beginChange() : 0;
+  if (isMobileBuild) await (await platformServices()).credentials.remove('auth.authorization');
   const response = await postJson<AuthSessionResponse>(apiPath(path), input, message);
   if (isMobileBuild) {
     if (response.profile.type !== 'human' || response.profile.accountId !== response.account.id) {
@@ -161,6 +162,7 @@ async function authenticate(path: string, input: SignupRequest | LoginRequest, m
  */
 export async function logout(): Promise<void> {
   if (isMobileBuild) {
+    await (await platformServices()).credentials.remove('auth.authorization');
     await nativeSession.clear();
     await revokeRetiredNativeSessions();
     return;

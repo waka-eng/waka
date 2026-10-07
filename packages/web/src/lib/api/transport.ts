@@ -16,7 +16,8 @@ export async function apiFetch(url: string, init: RequestInit = {}): Promise<Res
     parsed.username || parsed.password || parsed.hash || !parsed.pathname.startsWith('/api/')) {
     throw new Error('Native credentials may only reach the configured WAKA API.');
   }
-  const version = nativeSession.version, token = await nativeSession.read();
+  const publicAuth = ['/api/auth/login', '/api/auth/signup', '/api/auth/mobile/exchange'].includes(parsed.pathname);
+  const version = nativeSession.version, token = publicAuth ? null : await nativeSession.read();
   if (version !== nativeSession.version) throw new Error('Account changed before the request started.');
   const headers = new Headers(init.headers);
   if (headers.has('Authorization')) throw new Error('Resource callers cannot choose a session credential.');

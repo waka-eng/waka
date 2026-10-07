@@ -3,8 +3,14 @@
  * are the app-side protocol under test and need no replacement. Native URL
  * delivery/storage and the server exchange have separate acceptance gates. */
 import {describe,expect,it} from 'vitest';
-import {createAuthorizationAttempt,validateAuthorizationCallback} from '../src/lib/platform/authorization';
+import {AuthorizationCancelled,createAuthorizationAttempt,validateAuthorizationCallback} from '../src/lib/platform/authorization';
 describe('mobile authorization handoff',()=>{
+  it('accepts cancellation only for the exact pending app/state, without an accompanying code',async()=>{
+    const attempt=await createAuthorizationAttempt('im.waka.app.dev',1000);
+    const cancelled=`${attempt.callback}?error=cancelled&state=${attempt.state}`;
+    expect(()=>validateAuthorizationCallback(attempt,cancelled,2000)).toThrow(AuthorizationCancelled);
+    for(const raw of [cancelled+'&code=synthetic_authorization_code',cancelled+'&error=cancelled',cancelled.replace(attempt.state,'foreign'),cancelled.replace('cancelled','unknown')])expect(()=>validateAuthorizationCallback(attempt,raw,2000)).toThrow();
+  });
   it('generates unpredictable state and the actual S256 PKCE challenge',async()=>{
     const attempt=await createAuthorizationAttempt('im.waka.app.dev',1000),other=await createAuthorizationAttempt('im.waka.app.dev',1000);
     expect(attempt.verifier).toHaveLength(43);expect(attempt.state).not.toBe(other.state);
