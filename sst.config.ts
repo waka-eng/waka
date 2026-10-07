@@ -294,6 +294,11 @@ export default $config({
       handler: "packages/api/src/lambda.handler",
       url: router
         ? {
+            // Hono owns the exact native-origin policy on the shared domain.
+            // Function URL's default wildcard appends a second allow-origin
+            // header, which browsers reject even when both layers allow it.
+            // Keep sandbox cross-origin web hosting unchanged below.
+            cors: false,
             router: {
               instance: router,
               path: "/api",

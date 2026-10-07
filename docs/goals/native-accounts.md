@@ -181,11 +181,11 @@ active; source tests and a simulated provider cannot replace its open gates.
 | --- | --- | --- |
 | M2.1 accounts and lifecycle | Password/signup/restart/expiry/profile-edit UI on both platforms; race/retirement tests; native revocation; SQL auth checks. Live provider acceptance remains. | Passed locally; provider gate open |
 | M2.2 scoped transport | Secure storage, real CORS/API journeys, wrong-host/header and cancellation/body deadlines; signed PUT unchanged. | Passed locally |
-| M2.3 Google | Signed context, atomic PKCE/human SQL exchange, iOS simulated OS browser/cancel/revoke. Live Google and Android browser open. | Partial |
+| M2.3 Google | Signed context, atomic PKCE/human SQL exchange; both simulated OS browsers/cancel/revoke. Live Google remains open. | Partial |
 | M2.4 Apple plan | Explicit linking/private relay/token verification/review-rule plan. | Plan delivered |
-| M2.5 verified links | Canonical URLs, route rules, entitlements/filters/generator, cold/warm routes. Registered identities and domain deployment open. | Incomplete |
+| M2.5 verified links | Canonical URLs, route rules, entitlements/filters/generator, cold/warm routes. Registered identities and verified device-domain links deferred by owner. | Deferred device verification |
 | M2.6 authenticated slice | Capture/reopen/read/chat/restart/switch/logout UI on both platforms; no paid chat send. | Local slice passed |
-| Schema rollout | Migration 0068/snapshot/journal, SQL rehearsal and rollout/rollback instructions. No remote application. | Prepared |
+| Schema rollout | Migration 0068/snapshot/journal, SQL rehearsal and rollout/rollback instructions; approved dev workflow migration succeeded. | Applied to dev only |
 
 ### 2026 10 07 signup and session expiry continuation
 
@@ -274,3 +274,32 @@ device signing are not prerequisites for this simulator run. Keep the current
 local identities; defer verified device-domain links and store signing rather
 than claiming their gates passed. Live Google still needs actual provider
 acceptance; the simulated provider is only browser/transport evidence.
+
+### 2026 10 07 Android browser acceptance and dev delivery
+
+PR [359](https://github.com/waka-eng/waka/pull/359) merges M1 and M2 source into
+dev at `0e976a9f`. Dev deployment
+[37672300116](https://github.com/waka-eng/waka/actions/runs/37672300116) succeeds,
+including distinct configured database-target preflight, additive migration,
+memory-schema checks and deployed functions using the migrated target.
+
+Android's real Chrome Custom Tab opens the isolated simulated provider. Closing
+it returns to sign-in without an exchange. A fresh attempt issues one 200 code
+exchange, reaches Home and restores on cold restart. Fixture revocation then
+produces 401 and sign-in over two restarts. Audit records two successful `/me`
+responses and the post-revocation refusal. Evidence remains in ignored
+`work/mobile-foundation/m2-android-browser-*`. This proves the browser transport,
+not live Google identity acceptance. The owned loopback fixture schema is
+cleaned up afterward; no paid provider calls are used.
+
+Normal dev builds install and launch on both simulators. CoreSimulator produces
+the iOS sign-in screenshot, but this Xcode installation has no Simulator window
+application. Android's window is available for interactive testing.
+
+The deployed smoke check finds two `Access-Control-Allow-Origin` headers:
+Hono's exact native origin and Function URL's default wildcard. Android shows a
+connection failure, confirming local fixture acceptance did not cover the cloud
+layer. Disable Function URL CORS for shared-domain deployments so Hono is its
+sole owner; preserve the existing separately hosted sandbox policy. A source
+regression and existing Hono/no-store cases pass 20/20. Deployed verification of
+this follow-up and live Google still remain; no completed milestone is claimed.

@@ -1,5 +1,6 @@
 /** Real Hono middleware and requests; no database/network/native bridge. */
 import { Hono } from 'hono';
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mobileCors } from './mobile-cors.js';
 const app = new Hono();
@@ -7,6 +8,12 @@ app.use('/api/*', mobileCors);
 app.get('/api/test', c => c.json({ authorization: c.req.header('Authorization') ?? null }));
 afterEach(() => vi.unstubAllEnvs());
 describe('native WebView CORS without cookie authentication', () => {
+  it('has one CORS owner on deployed shared domains', () => {
+    const source = readFileSync(new URL('../../../../sst.config.ts', import.meta.url), 'utf8');
+    const api = source.slice(source.indexOf('const api = new sst.aws.Function("Api"'), source.indexOf('link: runtimeLinks,', source.indexOf('const api = new sst.aws.Function("Api"')));
+    expect(api).toMatch(/url: router\s*\?\s*\{[\s\S]*?cors: false,[\s\S]*?router:/);
+    expect(api).toMatch(/:\s*true,/); // Preserve separately hosted sandbox web.
+  });
   it.each(['capacitor://localhost', 'https://localhost'])('allows the exact native origin %s', async origin => {
     const response = await app.request('/api/test', { headers: { Origin: origin, Authorization: 'Bearer fixture' } });
     expect(response.status).toBe(200); expect(response.headers.get('Access-Control-Allow-Origin')).toBe(origin);
