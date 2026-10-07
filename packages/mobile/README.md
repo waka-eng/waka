@@ -10,7 +10,7 @@ and [the parity inventory](../../docs/plans/2026-10-06-mobile-feature-parity.md)
 Use Node 22+, Xcode 26+ with an available simulator runtime, Android SDK 36 and
 a compatible JDK (21 recommended). `pnpm mobile:doctor` checks the installed
 tool locations. `JAVA_HOME` and `ANDROID_SDK_ROOT` can select another toolchain.
-Native targets use iOS 16+ and Android API 24+, matching the selected native
+Native targets use iOS 17+ and Android API 24+, matching the selected native
 dependencies; the installed simulator versions are recorded separately.
 
 ```sh
@@ -30,7 +30,8 @@ with the simulator SDK, or open the native project in Xcode/Android Studio.
 | Development | `im.waka.app.dev`, WAKA Dev | `https://dev.waka.im` | iOS Debug / Android debug |
 | Production | `im.waka.app`, WAKA | `https://waka.im` | iOS Release / Android release |
 
-`build:ios:prod` produces an unsigned simulator app; `build:android:prod`
+`build:ios:prod` produces an ad-hoc-signed simulator app with app-scoped Keychain
+entitlements (not a device/store signature); `build:android:prod`
 produces an unsigned release APK. The identities are proposed local identities;
 store registration, archives/App Bundles and production signing remain M6.
 Different IDs allow side-by-side installation and separate protected storage.

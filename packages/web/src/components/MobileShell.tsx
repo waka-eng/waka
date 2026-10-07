@@ -7,6 +7,7 @@ import { parseAppLink } from '../lib/platform/links';
 export function MobileShell() {
   const navigate = useNavigate();
   const navigation = useRef(navigate); navigation.current = navigate;
+  const diagnosticFailure = useRef(false);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [retrying, setRetrying] = useState(false);
   useEffect(() => {
@@ -19,6 +20,12 @@ export function MobileShell() {
         try {
           const link = parseAppLink(raw, import.meta.env.VITE_APP_ID as string);
           if (mobileDiagnosticsEnabled && (link.hostname === 'diagnostics' || link.hostname === 'auth')) {
+            // A dev-only UI failure fixture avoids changing the Mac's network.
+            // Retry still calls the real native HTTPS handshake.
+            if (link.hostname === 'diagnostics' && link.pathname === '/connection-failure') {
+              diagnosticFailure.current = true;
+              setConnected(false); navigation.current('/login'); return;
+            }
             const params = new URLSearchParams();
             if (link.hostname === 'auth') { params.set('phase', 'callback'); params.set('callback', raw); }
             else params.set('phase', link.searchParams.get('phase') ?? 'read');
@@ -33,7 +40,7 @@ export function MobileShell() {
       if (stopped) cleanup(); else release = cleanup;
       const health = await services.health();
       await services.files.write('runtime/readiness.json', JSON.stringify({ identity, health }));
-      if (!stopped) setConnected(health.connected);
+      if (!stopped && !diagnosticFailure.current) setConnected(health.connected);
     }).catch(() => { if (!stopped) setConnected(false); });
     return () => { stopped = true; release?.(); };
   }, []);
@@ -42,6 +49,7 @@ export function MobileShell() {
   return <div role="status" style={{ position: 'fixed', zIndex: 20000, top: 'env(safe-area-inset-top, 0px)', left: 0, right: 0, padding: '12px 16px', background: '#171c26', color: '#e9e5db', fontSize: 14, textAlign: 'center' }}>
     <span>{t(locale, 'mobileConnectionUnavailable')}</span>{' '}
     <button type="button" disabled={retrying} style={{ padding: '10px 14px', marginLeft: 8, minHeight: 44, border: '1px solid #596273', borderRadius: 18, background: 'transparent', color: 'inherit', font: 'inherit' }} onClick={() => {
+      diagnosticFailure.current = false;
       setRetrying(true);
       void platformServices().then(services => services.health()).then(health => setConnected(health.connected)).catch(() => setConnected(false)).finally(() => setRetrying(false));
     }}>{t(locale, 'mobileRetryConnection')}</button>

@@ -1,7 +1,7 @@
 # Capacitor app foundation
 
-Status: blocked on administrator-assisted Xcode setup and native UI access
-(2026-10-06). Implementation/build evidence is preserved; M1 remains incomplete.
+Status: in progress — resumed 2026-10-07 after Xcode component setup.
+Implementation/build evidence is preserved; remaining iOS acceptance is running.
 Branch: `codex/capacitor-m1`, based on dev `315328e`.
 
 ## Objective and scope

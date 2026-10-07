@@ -56,7 +56,7 @@ export default function MobileChecks() {
       await services.files.write('m1/report.json', JSON.stringify(result));
       if (!stopped) setReport(result);
     })().catch(async error => {
-      const failed = { marker, phase, failed: true, reason: error instanceof Error ? error.message : 'Device check failed' };
+      const failed = { marker, phase, failed: true, reason: error instanceof Error ? error.message : 'Device check failed', code: error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined };
       try { await (await platformServices()).files.write('m1/report.json', JSON.stringify(failed)); } catch { /* Preserve the visible failure. */ }
       if (!stopped) setReport(failed);
     });

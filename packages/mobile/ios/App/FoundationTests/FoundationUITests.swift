@@ -9,13 +9,14 @@ final class FoundationUITests: XCTestCase {
     private func open(_ raw: String) {
         app.open(URL(string: raw)!)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let systemOpen = springboard.alerts.buttons["Open"]
-        if systemOpen.waitForExistence(timeout: 2) { systemOpen.tap() }
-        let appOpen = app.alerts.buttons["Open"]
-        if appOpen.exists { appOpen.tap() }
+        // The OS handoff can be a sheet rather than an XCTest alert.
+        let systemOpen = springboard.buttons["Open"]
+        if systemOpen.waitForExistence(timeout: 3) { systemOpen.tap() }
+        let appOpen = app.buttons["Open"]
+        if appOpen.waitForExistence(timeout: 2) { appOpen.tap() }
     }
     private func reportContains(_ text: String) -> Bool {
-        let condition = NSPredicate(format: "label CONTAINS %@", text)
+        let condition = NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", text, text)
         return app.webViews.staticTexts.matching(condition).firstMatch.waitForExistence(timeout: 20)
     }
     func testProtectedStorageFilesAndCallbackSurviveRelaunch() {
@@ -23,6 +24,9 @@ final class FoundationUITests: XCTestCase {
         open("im.waka.app.dev://diagnostics/check?phase=write")
         XCTAssertTrue(reportContains("\"secureWrite\": true"))
         XCTAssertTrue(reportContains("\"fileWrite\": true"))
+        XCTAssertTrue(reportContains("\"body\": true"))
+        XCTAssertTrue(reportContains("\"heading\": true"))
+        XCTAssertTrue(reportContains("\"connected\": true"))
         let field = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "callbackFixture")).firstMatch.label
         let pattern = "im\\.waka\\.app\\.dev://auth/callback\\?code=synthetic_authorization_code&state=[A-Za-z0-9_-]+"
         let expression = try! NSRegularExpression(pattern: pattern)
@@ -45,5 +49,18 @@ final class FoundationUITests: XCTestCase {
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "M1 iOS shared sign-in screen"; screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+    func testConnectionFailureBannerAndRealRetry() {
+        continueAfterFailure = false
+        open("im.waka.app.dev://diagnostics/connection-failure")
+        let retry = app.webViews.buttons["Try again"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 15))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "M1 iOS simulated connection failure"; screenshot.lifetime = .keepAlways
+        add(screenshot)
+        retry.tap()
+        let disappeared = NSPredicate(format: "exists == false")
+        expectation(for: disappeared, evaluatedWith: retry)
+        waitForExpectations(timeout: 15)
     }
 }

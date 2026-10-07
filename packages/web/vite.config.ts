@@ -26,7 +26,8 @@ export default defineConfig({
   plugins: [react(), ...(mobile ? [{
     name: 'waka-mobile-fonts', enforce: 'pre' as const,
     transformIndexHtml(html: string) {
-      return html.replace(/<link\b[^>]*href="https:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.jsdelivr\.net)[^"]*"[^>]*>/gs, '');
+      return html.replace(/<link\b[^>]*href="https:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.jsdelivr\.net)[^"]*"[^>]*>/gs, '')
+        .replace('content="width=device-width,initial-scale=1"', 'content="width=device-width,initial-scale=1,viewport-fit=cover"');
     },
   }] : [])],
   ...(mobile ? { css: { postcss: { plugins: [{
