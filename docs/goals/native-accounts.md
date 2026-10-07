@@ -178,10 +178,39 @@ active; source tests and a simulated provider cannot replace its open gates.
 
 | Requirement | Evidence and remaining work | Result |
 | --- | --- | --- |
-| M2.1 accounts and lifecycle | Both password journeys; race/retirement tests; native revocation; SQL password/expired sessions. Native signup and remaining walkthroughs open. | Partial |
+| M2.1 accounts and lifecycle | Password/signup/restart/expiry UI on both platforms; race/retirement tests; native revocation; SQL auth checks. Final profile-change walkthrough and live provider acceptance remain. | Partial |
 | M2.2 scoped transport | Secure storage, real CORS/API journeys, wrong-host/header and cancellation/body deadlines; signed PUT unchanged. | Passed locally |
 | M2.3 Google | Signed context, atomic PKCE/human SQL exchange, iOS simulated OS browser/cancel/revoke. Live Google and Android browser open. | Partial |
 | M2.4 Apple plan | Explicit linking/private relay/token verification/review-rule plan. | Plan delivered |
 | M2.5 verified links | Canonical URLs, route rules, entitlements/filters/generator, cold/warm routes. Registered identities and domain deployment open. | Incomplete |
 | M2.6 authenticated slice | Capture/reopen/read/chat/restart/switch/logout UI on both platforms; no paid chat send. | Local slice passed |
 | Schema rollout | Migration 0068/snapshot/journal, SQL rehearsal and rollout/rollback instructions. No remote application. | Prepared |
+
+### 2026 10 07 signup and session expiry continuation
+
+The previous goal turn made progress; its remaining prerequisites are unchanged.
+The ordinary signup UI now has native acceptance on both platforms. Each creates
+an account through the real 201 API response, reaches an empty personal Home,
+and restores its protected session after process termination. Signup already
+completes onboarding when a display name is supplied; an extra Continue step is
+not part of this normal flow. The initial iOS test selected the tab rather than
+the submit control, then incorrectly expected that extra step. Corrected native
+selectors follow the actual flow without injecting a session.
+
+The guarded fixture can expire its own session rows. Both apps then receive 401,
+return to sign-in and remain signed out over another cold restart. Evidence:
+`work/mobile-foundation/m2-ios-signup.json`, `m2-android-signup-home.png`,
+`m2-android-expired.png`, `m2-android-expired-again.xml` and `m2-signup-audit.json`.
+The expiry endpoint exists only in the disposable fixture entry, not the API.
+
+Onboarding now uses the existing strict destination parser rather than a
+prefix-only check that accepted external protocol-relative destinations. Web
+regressions pass 857/857; API/web types, targeted auth/navigation cases and five
+migration-integrity assertions pass. No paid calls, remote writes or deployment.
+
+A read-only local signing inventory finds an Apple development identity with
+Team ID `9F3U82NJ7X`, but no local provisioning profiles. This supplies a public
+team identifier, not proof of registered WAKA app IDs or paid-domain capability.
+Those registrations, domain publishing, live Google dev rollout approval and
+Chrome Terms acceptance remain unverified/pending. Do not generate or publish
+associations from certificate presence alone. M2 remains incomplete.

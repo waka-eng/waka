@@ -56,6 +56,10 @@ app.post('/api/mobile-fixture/revoke', async c => {
   await fixture.sql`DELETE FROM sessions WHERE profile_id = ${primary.profileId}`;
   return c.json({ ok: true });
 });
+app.post('/api/mobile-fixture/expire', async c => {
+  await fixture.sql`UPDATE sessions SET expires_at = now() - interval '1 second'`;
+  return c.json({ ok: true });
+});
 app.get('/api/auth/google/login', c => c.html(`<html><body><h1>Simulated Google consent</h1><p>Only the disposable native fixture account is used.</p><form method="post" action="/api/mobile-fixture/google-complete"><button>Continue synthetic Google</button></form></body></html>`));
 app.post('/api/mobile-fixture/google-complete', async c => {
   const binding = await readMobileBinding(getCookie(c, MOBILE_BINDING_COOKIE));

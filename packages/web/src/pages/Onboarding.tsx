@@ -11,11 +11,10 @@ import {
   writeStoredLocale,
 } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
+import { safeInAppPath } from '../lib/sign-in-destination';
 
 function safeRedirect(from: unknown): string {
-  return typeof from === "string" && from.startsWith("/") && from !== "/login"
-    ? from
-    : "/";
+  return safeInAppPath(from) ?? '/';
 }
 
 export default function OnboardingPage(): JSX.Element {

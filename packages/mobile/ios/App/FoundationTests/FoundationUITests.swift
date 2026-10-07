@@ -169,4 +169,33 @@ final class AccountsUITests: XCTestCase {
         app.terminate(); app.launch()
         XCTAssertTrue(app.webViews.buttons["sign in"].waitForExistence(timeout: 15))
     }
+    func testSignupAndExpiredSession() async throws {
+        continueAfterFailure = false
+        app.terminate(); app.launch()
+        if capture.waitForExistence(timeout: 3) {
+            open("/profile"); XCTAssertTrue(logoutButton.waitForExistence(timeout: 10)); logoutButton.tap()
+        }
+        let tab = app.webViews.descendants(matching: .any).matching(NSPredicate(format: "label ==[c] %@", "create account")).firstMatch
+        XCTAssertTrue(tab.waitForExistence(timeout: 15)); tab.tap()
+        let address = "native-signup-\(UUID().uuidString.lowercased())@example.test"
+        let email = app.webViews.textFields.element(boundBy: 0)
+        XCTAssertTrue(email.waitForExistence(timeout: 10)); email.tap(); email.typeText(address)
+        let password = app.webViews.secureTextFields.firstMatch
+        password.tap(); password.typeText("native-fixture-password")
+        let name = app.webViews.textFields.element(boundBy: 1)
+        name.tap(); name.typeText("Native signup fixture")
+        let submit = app.webViews.buttons.matching(NSPredicate(format: "label ==[c] %@", "create account")).element(boundBy: 1)
+        submit.tap()
+        // A supplied name completes onboarding in the existing signup API.
+        XCTAssertTrue(capture.waitForExistence(timeout: 20))
+        app.terminate(); app.launch()
+        XCTAssertTrue(capture.waitForExistence(timeout: 15))
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:8787/api/mobile-fixture/expire")!); request.httpMethod = "POST"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        XCTAssertEqual((response as! HTTPURLResponse).statusCode, 200)
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.webViews.buttons["sign in"].waitForExistence(timeout: 15))
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.webViews.buttons["sign in"].waitForExistence(timeout: 15))
+    }
 }
