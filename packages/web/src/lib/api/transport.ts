@@ -1,0 +1,58 @@
+import { isMobileBuild, platformServices } from '../platform';
+import { NativeSession } from '../platform/session';
+
+export const nativeSession = new NativeSession({
+  get: async key => (await platformServices()).credentials.get(key),
+  set: async (key, value) => (await platformServices()).credentials.set(key, value),
+  remove: async key => (await platformServices()).credentials.remove(key),
+}, () => window.dispatchEvent(new Event('waka:session-expired')));
+
+/** The shared resource client only. Signed object-storage uploads bypass it. */
+export async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  if (!isMobileBuild) return fetch(url, init);
+  const origin = import.meta.env.VITE_API_URL as string;
+  const parsed = new URL(url);
+  if (!['https://dev.waka.im', 'https://waka.im'].includes(origin) || parsed.origin !== origin ||
+    parsed.username || parsed.password || parsed.hash || !parsed.pathname.startsWith('/api/')) {
+    throw new Error('Native credentials may only reach the configured WAKA API.');
+  }
+  const version = nativeSession.version, token = await nativeSession.read();
+  if (version !== nativeSession.version) throw new Error('Account changed before the request started.');
+  const headers = new Headers(init.headers);
+  if (headers.has('Authorization')) throw new Error('Resource callers cannot choose a session credential.');
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  // Browser fetch keeps genuine AbortSignal and Blob semantics. A native
+  // session never depends on WebView cookies or globally patched native HTTP.
+  const controller = new AbortController();
+  const abort = () => controller.abort(init.signal?.reason);
+  if (init.signal?.aborted) abort();
+  else init.signal?.addEventListener('abort', abort, { once: true });
+  const timeout = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), 20_000);
+  try {
+    const response = await fetch(url, { ...init, headers, credentials: 'omit', redirect: 'error', signal: controller.signal });
+    if (response.status === 401 && token) await nativeSession.clearIfCurrent(version, token);
+    // Resource APIs are buffered JSON/markdown, not upload streams. Keep the
+    // deadline active through body transfer rather than only response headers.
+    const body = response.status === 204 || response.status === 205 || response.status === 304 ? null : await response.arrayBuffer();
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  } finally {
+    clearTimeout(timeout); init.signal?.removeEventListener('abort', abort);
+  }
+}
+
+let revoking: Promise<void> | undefined;
+/** Retry offline retirements without restoring the retired account. */
+export function revokeRetiredNativeSessions(): Promise<void> {
+  if (!isMobileBuild) return Promise.resolve();
+  return revoking ??= (async () => {
+    const origin = import.meta.env.VITE_API_URL as string;
+    if (!['https://dev.waka.im', 'https://waka.im'].includes(origin)) throw new Error('Unexpected mobile API.');
+    for (const token of await nativeSession.revocations()) {
+      try {
+        const response = await fetch(`${origin}/api/auth/logout`, { method: 'POST', credentials: 'omit', redirect: 'error',
+          headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) });
+        if (response.ok) await nativeSession.acknowledgeRevocation(token);
+      } catch { /* Encrypted pending retirement survives offline/restart. */ }
+    }
+  })().finally(() => { revoking = undefined; });
+}

@@ -20,6 +20,8 @@ import {
   type ApiFieldErrors,
   type ApiProfileType,
 } from "./http";
+import { apiFetch, nativeSession, revokeRetiredNativeSessions } from './transport';
+import { isMobileBuild } from '../platform';
 
 // ---------------------------------------------------------------------------
 // Who a session is
@@ -108,7 +110,7 @@ export interface AuthSessionResponse extends ApiViewer {
  * predictable failure path (try/catch instead of a discriminated union).
  */
 export async function signup(input: SignupRequest): Promise<AuthSessionResponse> {
-  return postJson<AuthSessionResponse>(apiPath("/auth/signup"), input, "Signup failed");
+  return authenticate('/auth/signup', input, 'Signup failed');
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +129,21 @@ export interface LoginRequest {
  * the account + acting profile are returned for UI rendering.
  */
 export async function login(input: LoginRequest): Promise<AuthSessionResponse> {
-  return postJson<AuthSessionResponse>(apiPath("/auth/login"), input, "Login failed");
+  return authenticate('/auth/login', input, 'Login failed');
+}
+
+async function authenticate(path: string, input: SignupRequest | LoginRequest, message: string): Promise<AuthSessionResponse> {
+  const version = isMobileBuild ? nativeSession.beginChange() : 0;
+  const response = await postJson<AuthSessionResponse>(apiPath(path), input, message);
+  if (isMobileBuild) {
+    if (response.profile.type !== 'human' || response.profile.accountId !== response.account.id) {
+      throw new ApiError({ status: 403, message: 'Mobile sign-in requires your personal profile.' });
+    }
+    try { await nativeSession.adopt(response.token, version); }
+    catch { throw new ApiError({ status: 0, code: 'NATIVE_SESSION_NOT_SAVED', message: 'Sign-in could not be saved securely. Please try again.' }); }
+    void revokeRetiredNativeSessions();
+  }
+  return response;
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +160,12 @@ export async function login(input: LoginRequest): Promise<AuthSessionResponse> {
  * the server has already invalidated. The auth context handles that policy.
  */
 export async function logout(): Promise<void> {
-  await fetch(apiPath("/auth/logout"), {
+  if (isMobileBuild) {
+    await nativeSession.clear();
+    await revokeRetiredNativeSessions();
+    return;
+  }
+  await apiFetch(apiPath("/auth/logout"), {
     method: "POST",
     credentials: "include",
   }).catch(() => {
@@ -170,9 +191,10 @@ export async function logout(): Promise<void> {
  * `ApiError` so the caller can decide whether to retry.
  */
 export async function fetchCurrentViewer(): Promise<ApiViewer | null> {
+  if (isMobileBuild) void revokeRetiredNativeSessions();
   let res: Response;
   try {
-    res = await fetch(apiPath("/auth/me"), {
+    res = await apiFetch(apiPath("/auth/me"), {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
@@ -204,6 +226,11 @@ export async function fetchCurrentViewer(): Promise<ApiViewer | null> {
 
   const payload = (body ?? {}) as Partial<ApiViewer>;
   if (!payload.account || !payload.profile) return null;
+  if (isMobileBuild && (payload.profile.type !== 'human' || payload.profile.accountId !== payload.account.id)) {
+    await nativeSession.clear();
+    throw new ApiError({ status: 403, message: 'Mobile sign-in requires your personal profile.' });
+  }
+  if (isMobileBuild) void revokeRetiredNativeSessions();
   return { account: payload.account, profile: payload.profile };
 }
 
@@ -255,7 +282,7 @@ export async function updateAuthProfile(
 }
 
 export async function deleteAccount(): Promise<void> {
-  const res = await fetch(apiPath("/auth/me"), {
+  const res = await apiFetch(apiPath("/auth/me"), {
     method: "DELETE",
     credentials: "include",
     headers: {
@@ -278,4 +305,5 @@ export async function deleteAccount(): Promise<void> {
       fieldErrors: errorBody.details,
     });
   }
+  if (isMobileBuild) await nativeSession.clear();
 }

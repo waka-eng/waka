@@ -15,6 +15,7 @@ import { createRecallRoutes } from "./routes/recall.js";
 import { createSignalDuplicatesRoutes } from "./routes/signal-duplicates.js";
 import { Hono } from "hono";
 import { handle } from "hono/aws-lambda";
+import { mobileCors } from './lib/mobile-cors.js';
 
 import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
 import { createAdminLoopHealthRoute } from "./routes/admin-loop-health.js";
@@ -62,8 +63,9 @@ export const app = new Hono();
 app.use("*", async (c, next) => {
   await next();
   c.header("Cache-Control", "no-store, private");
-  c.header("Vary", "Authorization, Cookie");
+  c.header("Vary", "Authorization, Cookie, Origin");
 });
+app.use('/api/*', mobileCors);
 
 // Liveness probe + capability handshake for external clients (waka-mcp
 // validates the API URL against it at login; capabilities let clients
