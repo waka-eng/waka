@@ -64,3 +64,109 @@ final class FoundationUITests: XCTestCase {
         waitForExpectations(timeout: 15)
     }
 }
+
+@MainActor
+final class AccountsUITests: XCTestCase {
+    private let app = XCUIApplication(bundleIdentifier: "im.waka.app.test")
+    private let captureText = "Native capture: I want tools that leave room to think."
+    private var capture: XCUIElement { app.webViews.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "capture inspiration")).firstMatch }
+    private var logoutButton: XCUIElement { app.webViews.buttons.matching(NSPredicate(format: "label ==[c] %@", "sign out")).firstMatch }
+    private func open(_ path: String) {
+        app.open(URL(string: "im.waka.app.test://navigate\(path)")!)
+        let systemOpen = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Open"]
+        if systemOpen.waitForExistence(timeout: 2) { systemOpen.tap() }
+        let appOpen = app.buttons["Open"]
+        if appOpen.waitForExistence(timeout: 1) { appOpen.tap() }
+    }
+    private func signIn(_ address: String) async {
+        let email = app.webViews.textFields.firstMatch
+        XCTAssertTrue(email.waitForExistence(timeout: 15))
+        email.tap(); email.typeText(address)
+        let password = app.webViews.secureTextFields.firstMatch
+        XCTAssertTrue(password.waitForExistence(timeout: 5))
+        password.tap(); password.typeText("native-fixture-password")
+        let submit = app.webViews.buttons["sign in"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 5)); submit.tap()
+        let left = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: submit)
+        await fulfillment(of: [left], timeout: 20)
+        let ready = capture.waitForExistence(timeout: 15)
+        if !ready { let tree = XCTAttachment(string: app.debugDescription); tree.name = "M2 home accessibility"; tree.lifetime = .keepAlways; add(tree) }
+        XCTAssertTrue(ready)
+    }
+    func testAuthenticatedSliceAndSessionRestoration() async throws {
+        continueAfterFailure = false
+        app.terminate(); app.launch()
+        if capture.waitForExistence(timeout: 3) {
+            open("/profile")
+            let signOut = logoutButton
+            XCTAssertTrue(signOut.waitForExistence(timeout: 10)); signOut.tap()
+        }
+        await signIn("native-one@example.test")
+        capture.tap()
+        let text = app.webViews.textViews["Capture inspiration"]
+        XCTAssertTrue(text.waitForExistence(timeout: 10)); text.tap(); text.typeText(captureText)
+        let save = app.webViews.buttons["Save inspiration"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5)); save.tap()
+        let saved = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: save)
+        await fulfillment(of: [saved], timeout: 20)
+        let (context, _) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:8787/api/mobile-fixture/context")!)
+        let fixture = try JSONSerialization.jsonObject(with: context) as! [String: [String: String]]
+        let inspiration = fixture["primary"]!["newestInspirationId"]!
+        open("/inspirations/\(inspiration)")
+        XCTAssertTrue(app.webViews.staticTexts[captureText].waitForExistence(timeout: 15))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "M2 iOS saved inspiration"; screenshot.lifetime = .keepAlways
+        add(screenshot)
+        open("/chat/new")
+        XCTAssertTrue(app.webViews.textViews.firstMatch.waitForExistence(timeout: 15))
+        app.terminate(); app.launch()
+        XCTAssertTrue(capture.waitForExistence(timeout: 15))
+        open("/inspirations/\(inspiration)")
+        XCTAssertTrue(app.webViews.staticTexts[captureText].waitForExistence(timeout: 15))
+        open("/profile")
+        let signOut = logoutButton
+        XCTAssertTrue(signOut.waitForExistence(timeout: 15)); signOut.tap()
+        XCTAssertTrue(app.webViews.textFields.firstMatch.waitForExistence(timeout: 15))
+        await signIn("native-two@example.test")
+        open("/inspirations/\(inspiration)")
+        XCTAssertFalse(app.webViews.staticTexts[captureText].waitForExistence(timeout: 5))
+        let (auditData, _) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:8787/api/mobile-fixture/audit")!)
+        let audit = try JSONSerialization.jsonObject(with: auditData) as! [String: [[String: Any]]]
+        XCTAssertTrue(audit["requests"]!.contains { ($0["path"] as? String) == "/api/inspirations/\(inspiration)" && ($0["actor"] as? String) == "secondary" && ($0["status"] as? Int) == 404 })
+        open("/profile")
+        XCTAssertTrue(signOut.waitForExistence(timeout: 15)); signOut.tap()
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.webViews.buttons["sign in"].waitForExistence(timeout: 15))
+    }
+    func testBrowserHandoffCancellationAndRevocation() async throws {
+        continueAfterFailure = false
+        app.terminate(); app.launch()
+        let google = app.webViews.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "continue with google")).firstMatch
+        XCTAssertTrue(google.waitForExistence(timeout: 15)); google.tap()
+        let synthetic = app.webViews.buttons["Continue synthetic Google"]
+        XCTAssertTrue(synthetic.waitForExistence(timeout: 15))
+        let done = app.descendants(matching: .button).matching(identifier: "Close").firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        // iOS 26's address element overlaps the close button's centre in AX.
+        // Tap the visible left portion of the semantic Close control.
+        done.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5)).tap()
+        XCTAssertTrue(google.waitForExistence(timeout: 10))
+        let cancel = app.webViews.buttons["Cancel sign-in"]
+        let dismissed = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: cancel)
+        await fulfillment(of: [dismissed], timeout: 10)
+        google.tap(); XCTAssertTrue(synthetic.waitForExistence(timeout: 15)); synthetic.tap()
+        let systemOpen = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Open"]
+        if systemOpen.waitForExistence(timeout: 3) { systemOpen.tap() }
+        let appOpen = app.buttons["Open"]
+        if appOpen.waitForExistence(timeout: 2) { appOpen.tap() }
+        XCTAssertTrue(capture.waitForExistence(timeout: 20))
+        let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "M2 iOS simulated-provider OS handoff"; screenshot.lifetime = .keepAlways; add(screenshot)
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:8787/api/mobile-fixture/revoke")!); request.httpMethod = "POST"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        XCTAssertEqual((response as! HTTPURLResponse).statusCode, 200)
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.webViews.buttons["sign in"].waitForExistence(timeout: 15))
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.webViews.buttons["sign in"].waitForExistence(timeout: 15))
+    }
+}

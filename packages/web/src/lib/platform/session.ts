@@ -48,7 +48,7 @@ export class NativeSession {
   adopt(token: string, version: number) {
     if (!/^[A-Za-z0-9_.-]{20,8192}$/.test(token)) return Promise.reject(new Error('Invalid session credential.'));
     return this.serial(async () => {
-      if (version !== this.revision) throw new Error('Sign-in was superseded.');
+      if (version !== this.revision) { await this.retire(token); throw new Error('Sign-in was superseded.'); }
       const previous = await this.load();
       if (previous && previous !== token) await this.retire(previous);
       await this.credentials.set('auth.session', token);

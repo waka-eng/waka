@@ -103,9 +103,11 @@ export function GoogleSignInButton({
   useEffect(() => {
     if (!isMobileBuild) return;
     let stopped = false;
-    void import('../lib/platform/google-sign-in').then(module => module.hasNativeGoogleSignIn())
+    const update = () => { void import('../lib/platform/google-sign-in').then(module => module.hasNativeGoogleSignIn())
       .then(value => { if (!stopped) setPending(value); }).catch(() => {});
-    return () => { stopped = true; };
+    };
+    update(); window.addEventListener('waka:authorization-changed', update);
+    return () => { stopped = true; window.removeEventListener('waka:authorization-changed', update); };
   }, []);
   function handleClick(): void {
     if (disabled || starting) return;

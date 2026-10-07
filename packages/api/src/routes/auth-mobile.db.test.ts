@@ -13,7 +13,9 @@ const fixtureState = vi.hoisted(() => ({ db: undefined as unknown as ReturnType<
 vi.mock('../lib/db.js', () => ({ getDb: () => fixtureState.db }));
 import { mobileAuthRoutes } from './auth-mobile.js';
 import { issueMobileCode, mobileChallenge, mobileDigest } from '../lib/mobile-handoff.js';
+import { requireAuth, type AuthEnv } from '../lib/middleware.js';
 const app = new Hono().route('/api/auth/mobile', mobileAuthRoutes);
+const protectedApp = new Hono<AuthEnv>().get('/private', requireAuth, c => c.json({ profileId: c.get('session').profile.id }));
 let fixture: TestDatabase, profileId: string, concurrentSql: Sql;
 const state = randomBytes(32).toString('base64url'), verifier = randomBytes(32).toString('base64url');
 const binding = { appId: 'im.waka.app.dev' as const, state, challenge: mobileChallenge(verifier) };
@@ -67,4 +69,12 @@ it('never issues an agent-profile handoff', async () => {
   const [agent] = await fixture.sql`INSERT INTO profiles (account_id, type, name) SELECT account_id, 'agent', 'Agent fixture' FROM profiles WHERE id = ${profileId} RETURNING id`;
   await expect(issueMobileCode(agent!.id, binding)).rejects.toThrow('human');
   expect(await fixture.sql`SELECT id FROM mobile_login_codes`).toHaveLength(0);
+});
+it('a minted mobile session is refused once its server lifetime expires', async () => {
+  const code = await issueMobileCode(profileId, binding);
+  const body = await (await exchange(code)).json() as { token: string };
+  const headers = { Authorization: `Bearer ${body.token}` };
+  expect((await protectedApp.request('/private', { headers })).status).toBe(200);
+  await fixture.sql`UPDATE sessions SET expires_at = now() - interval '1 second'`;
+  expect((await protectedApp.request('/private', { headers })).status).toBe(401);
 });

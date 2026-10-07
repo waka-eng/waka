@@ -1,5 +1,6 @@
 import { isMobileBuild, platformServices } from '../platform';
 import { NativeSession } from '../platform/session';
+import { checkedNativeApiOrigin } from '../platform/api-origin';
 
 export const nativeSession = new NativeSession({
   get: async key => (await platformServices()).credentials.get(key),
@@ -10,9 +11,9 @@ export const nativeSession = new NativeSession({
 /** The shared resource client only. Signed object-storage uploads bypass it. */
 export async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
   if (!isMobileBuild) return fetch(url, init);
-  const origin = import.meta.env.VITE_API_URL as string;
+  const origin = checkedNativeApiOrigin();
   const parsed = new URL(url);
-  if (!['https://dev.waka.im', 'https://waka.im'].includes(origin) || parsed.origin !== origin ||
+  if (parsed.origin !== origin ||
     parsed.username || parsed.password || parsed.hash || !parsed.pathname.startsWith('/api/')) {
     throw new Error('Native credentials may only reach the configured WAKA API.');
   }
@@ -46,8 +47,7 @@ let revoking: Promise<void> | undefined;
 export function revokeRetiredNativeSessions(): Promise<void> {
   if (!isMobileBuild) return Promise.resolve();
   return revoking ??= (async () => {
-    const origin = import.meta.env.VITE_API_URL as string;
-    if (!['https://dev.waka.im', 'https://waka.im'].includes(origin)) throw new Error('Unexpected mobile API.');
+    const origin = checkedNativeApiOrigin();
     for (const token of await nativeSession.revocations()) {
       try {
         const response = await fetch(`${origin}/api/auth/logout`, { method: 'POST', credentials: 'omit', redirect: 'error',

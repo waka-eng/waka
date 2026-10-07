@@ -1,10 +1,11 @@
 /** Real Hono middleware and requests; no database/network/native bridge. */
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mobileCors } from './mobile-cors.js';
 const app = new Hono();
 app.use('/api/*', mobileCors);
 app.get('/api/test', c => c.json({ authorization: c.req.header('Authorization') ?? null }));
+afterEach(() => vi.unstubAllEnvs());
 describe('native WebView CORS without cookie authentication', () => {
   it.each(['capacitor://localhost', 'https://localhost'])('allows the exact native origin %s', async origin => {
     const response = await app.request('/api/test', { headers: { Origin: origin, Authorization: 'Bearer fixture' } });
@@ -30,5 +31,14 @@ describe('native WebView CORS without cookie authentication', () => {
   it('leaves ordinary web requests untouched', async () => {
     const response = await app.request('/api/test', { headers: { Cookie: 'waka_session=fixture' } });
     expect(response.status).toBe(200); expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+  it('permits fixture origin only with both the explicit flag and loopback database', async () => {
+    vi.stubEnv('WAKA_MOBILE_FIXTURE_RUN', '1'); vi.stubEnv('DB_CONNECTION_URL', 'postgresql://fixture@remote.example.test/test');
+    const headers = { Origin: 'http://localhost' };
+    expect((await app.request('/api/test', { headers })).headers.get('Access-Control-Allow-Origin')).toBeNull();
+    vi.stubEnv('DB_CONNECTION_URL', 'postgresql://fixture@127.0.0.1/test');
+    expect((await app.request('/api/test', { headers })).headers.get('Access-Control-Allow-Origin')).toBe('http://localhost');
+    vi.stubEnv('WAKA_MOBILE_FIXTURE_RUN', '0');
+    expect((await app.request('/api/test', { headers })).headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
 });

@@ -203,8 +203,8 @@ export interface AuthContextValue {
   signup: (input: SignupRequest) => Promise<ApiViewer>;
   /**
    * Clear the session both server-side (POST /auth/logout) and locally.
-   * Never throws — logging out has to be a guaranteed-success operation
-   * from the person's perspective.
+   * Web clears locally even offline. Native secure-retirement failures are
+   * reported rather than falsely claiming the saved credential was removed.
    */
   logout: () => Promise<void>;
   /**
@@ -378,7 +378,6 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       // Native invalidation is emitted after durable retirement, before the
       // server round trip. A failed secure write must not claim successful logout.
       await apiLogout();
-      applyViewer(null);
       return;
     }
     applyViewer(null);

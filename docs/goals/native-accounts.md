@@ -1,6 +1,7 @@
 # Native accounts networking and deep links
 
-Status: in progress (2026-10-07).
+Status: in progress (2026-10-07) — local account journeys verified;
+live provider/domain acceptance and remaining native cases are open.
 Branch: `codex/capacitor-m2`, based on M1 `04f7e5a`.
 
 ## Objective
@@ -108,3 +109,79 @@ are recorded in [native auth decisions](../decisions/2026-10-07-native-auth-roll
 Public profile, invite, reflection and key-setup URLs now choose canonical
 WAKA origins in native builds. Verified domain association and complete
 cold/warm route acceptance remain open.
+
+### 2026 10 07 isolated iOS authenticated journey
+
+The separate `im.waka.app.test` fixture build targets only the host's local API;
+normal dev/prod retain their HTTPS hosts and cannot use fixture cleartext policy.
+The fixture API owns a disposable loopback schema, has synthetic accounts and
+model auto-drain disabled. Four build-policy cases and explicit fixture-origin
+guards prevent replacing a shipping target. Production bundle inspection passes
+with no local fixture API literals.
+
+Real iOS UI typing exposed keyboard overlap with sign-in. Official MIT Keyboard
+8.0.6 resize support, Android `adjustResize` and email-next/password-go actions
+correct it without a web layout redesign. The iOS XCTest then completes ordinary
+password login, text capture, reopen/read, opening chat without a paid send,
+full app termination/session restoration, logout, switching accounts, refusal
+to display the first account's captured words and logout persistence after
+another restart. One full journey case passes; captured rows and zero remaining
+sessions are observed in the disposable schema. Some earlier test-driver
+failures were case-sensitive matches against uppercase/lowercase rendered labels;
+semantic case-insensitive matches correct them, without bypassing app behavior.
+
+Android authenticated acceptance, native browser handoff/cancellation, live
+Google acceptance and verified associations remain open. The local simulated
+Google provider is not counted as live provider verification. No remote push,
+deployment, schema/data writes or paid calls occurred.
+
+### 2026 10 07 Android and browser checks
+
+Android emulator-5554 completes UI password login, text capture/save, warm-link
+reopen, chat opening, force-stop/cold-link restoration, logout and second-account
+private-source denial. The local audit records a 200 source read for the primary
+account and 404 for the secondary; SDK screenshots show the words only for the
+primary. Logout settles pending revocation after restart and `/auth/me` returns
+401. Evidence: `work/mobile-foundation/m2-android-*`, `m2-native-audit.json`.
+
+iOS's full journey passes with an explicit secondary-account 404 audit assertion.
+Its simulated-provider OS-browser case also passes: dismissal cancels, a fresh
+attempt exchanges its PKCE-bound code, and server revocation remains signed out
+over two restarts. Receipt: `work/mobile-foundation/m2-ios-browser.json`. This is
+not live Google verification. The guarded HTTP fixture now explicitly sets the
+test environment so Safari can retain its cookie; deployed Secure defaults were
+not relaxed. One stalled Xcode build was stopped; package resolution and a cached
+retry recovered. Safari's overlapping AX address/Close geometry required tapping
+the visible portion of the semantic Close control.
+
+Unavailable links now offer account switching, preserve the intended destination
+and do not suggest retrying a permanent access failure or disclose ownership.
+Late native logout completion cannot erase a newer login. Superseded returned
+credentials enter protected revocation retirement. Browser-close/code-delivery
+ordering and pending-state cleanup have controller regressions.
+
+Current checks pass: 857 web cases, 974 API unit cases (three paid suites skipped),
+six mobile policy/association cases, 14 real SQL auth cases, API/web types and
+five migration-integrity assertions. Normal iOS/Android dev/release builds pass,
+including production fixture-origin exclusion. Native association configuration
+and a signing-input-validated document generator are prepared; no guessed
+identifiers or temporary keys are published.
+
+Owner input remains pending: Apple Team ID/registered app IDs, dev PR/deployment
+and additive migration approval for live Google QA, and Chrome Terms acceptance
+on the Android test emulator. That browser test stopped at its legal prompt.
+Native signup and remaining lifecycle/browser cases still need their final audit.
+No remote push, deployment, schema/data writes or paid calls occurred. M2 stays
+active; source tests and a simulated provider cannot replace its open gates.
+
+## Current completion audit
+
+| Requirement | Evidence and remaining work | Result |
+| --- | --- | --- |
+| M2.1 accounts and lifecycle | Both password journeys; race/retirement tests; native revocation; SQL password/expired sessions. Native signup and remaining walkthroughs open. | Partial |
+| M2.2 scoped transport | Secure storage, real CORS/API journeys, wrong-host/header and cancellation/body deadlines; signed PUT unchanged. | Passed locally |
+| M2.3 Google | Signed context, atomic PKCE/human SQL exchange, iOS simulated OS browser/cancel/revoke. Live Google and Android browser open. | Partial |
+| M2.4 Apple plan | Explicit linking/private relay/token verification/review-rule plan. | Plan delivered |
+| M2.5 verified links | Canonical URLs, route rules, entitlements/filters/generator, cold/warm routes. Registered identities and domain deployment open. | Incomplete |
+| M2.6 authenticated slice | Capture/reopen/read/chat/restart/switch/logout UI on both platforms; no paid chat send. | Local slice passed |
+| Schema rollout | Migration 0068/snapshot/journal, SQL rehearsal and rollout/rollback instructions. No remote application. | Prepared |

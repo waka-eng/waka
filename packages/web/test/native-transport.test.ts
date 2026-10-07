@@ -2,6 +2,8 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/platform` supplies a fixture native
  * CredentialStore in place of OS bridges; `fetch` is the network seam and
  * `VITE_API_URL` chooses a fixed fixture origin. Real
+ * `VITE_BUILD_TARGET`, `VITE_MOBILE_DIAGNOSTICS`, `VITE_APP_ENVIRONMENT` and
+ * `VITE_APP_ID` exercise the isolated-fixture policy, never production settings.
  * transport, session ordering, headers, AbortController and Response parsing
  * remain. No Home/data fixture, real account, provider or database is used. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,6 +17,7 @@ vi.mock('../src/lib/platform', () => ({
   } }),
 }));
 import { apiFetch, nativeSession, revokeRetiredNativeSessions } from '../src/lib/api/transport';
+import { checkedNativeApiOrigin } from '../src/lib/platform/api-origin';
 const origin = 'https://dev.waka.im', token = 'synthetic_session_token_account_a';
 beforeEach(async () => {
   vi.stubEnv('VITE_API_URL', origin);
@@ -24,6 +27,14 @@ beforeEach(async () => {
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 describe('native resource transport', () => {
+  it('refuses loopback unless every isolated fixture build condition holds', () => {
+    vi.stubEnv('VITE_API_URL', 'http://127.0.0.1:8787');
+    expect(() => checkedNativeApiOrigin()).toThrow();
+    vi.stubEnv('VITE_BUILD_TARGET', 'mobile'); vi.stubEnv('VITE_MOBILE_DIAGNOSTICS', '1');
+    vi.stubEnv('VITE_APP_ENVIRONMENT', 'development'); vi.stubEnv('VITE_APP_ID', 'im.waka.app.test');
+    expect(checkedNativeApiOrigin()).toBe('http://127.0.0.1:8787');
+    vi.stubEnv('VITE_APP_ENVIRONMENT', 'production'); expect(() => checkedNativeApiOrigin()).toThrow();
+  });
   it('uses bearer only at the configured API and preserves resource headers/body', async () => {
     await nativeSession.adopt(token, nativeSession.beginChange());
     const fetch = vi.fn(async () => Response.json({ ok: true })); vi.stubGlobal('fetch', fetch);

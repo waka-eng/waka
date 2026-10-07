@@ -3,8 +3,13 @@ export const targets = Object.freeze({
   production: Object.freeze({ environment: 'production', appId: 'im.waka.app', appName: 'WAKA', apiOrigin: 'https://waka.im', webOrigin: 'https://waka.im', diagnostics: false }),
 });
 
-export function targetFor(environment) {
+export function targetFor(environment, fixturePlatform = process.env.WAKA_MOBILE_FIXTURE_PLATFORM) {
   if (!Object.hasOwn(targets, environment)) throw new Error('Choose development or production explicitly.');
+  if (fixturePlatform) {
+    if (environment !== 'development' || !['ios', 'android'].includes(fixturePlatform)) throw new Error('Local fixtures are restricted to explicit development simulator builds.');
+    return { ...targets.development, appId: 'im.waka.app.test', appName: 'WAKA Test', fixturePlatform,
+      apiOrigin: fixturePlatform === 'ios' ? 'http://127.0.0.1:8787' : 'http://10.0.2.2:8787' };
+  }
   return targets[environment];
 }
 
@@ -14,10 +19,10 @@ export function capacitorConfiguration(target) {
     // Bridge request/response logging can include future session/file values.
     // Inspectable dev WebViews are sufficient; do not persist bridge payloads.
     loggingBehavior: 'none',
-    server: { hostname: 'localhost', androidScheme: 'https', iosScheme: 'capacitor' },
+    server: { hostname: 'localhost', androidScheme: target.fixturePlatform ? 'http' : 'https', iosScheme: 'capacitor' },
     android: { webContentsDebuggingEnabled: target.diagnostics, allowMixedContent: false },
     ios: { webContentsDebuggingEnabled: target.diagnostics },
-    plugins: { CapacitorHttp: { enabled: false }, CapacitorCookies: { enabled: false } },
+    plugins: { CapacitorHttp: { enabled: false }, CapacitorCookies: { enabled: false }, Keyboard: { resize: 'native', resizeOnFullScreen: true } },
   };
 }
 

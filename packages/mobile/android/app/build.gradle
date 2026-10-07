@@ -1,10 +1,12 @@
 apply plugin: 'com.android.application'
+def wakaFixture = project.hasProperty('wakaFixture') && project.property('wakaFixture') == 'true'
 
 android {
     namespace = "im.waka.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "im.waka.app"
+        manifestPlaceholders = [wakaCleartext: "false", wakaLinkHost: "waka.im"]
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -18,8 +20,9 @@ android {
     }
     buildTypes {
         debug {
-            applicationIdSuffix ".dev"
-            resValue "string", "app_display_name", "WAKA Dev"
+            manifestPlaceholders = [wakaCleartext: wakaFixture ? "true" : "false", wakaLinkHost: wakaFixture ? "fixture.invalid" : "dev.waka.im"]
+            applicationIdSuffix wakaFixture ? ".test" : ".dev"
+            resValue "string", "app_display_name", wakaFixture ? "WAKA Test" : "WAKA Dev"
         }
         release {
             debuggable false
@@ -42,7 +45,10 @@ tasks.register('verifyWakaTarget') {
         def nativeConfig = new groovy.json.JsonSlurper().parse(file('src/main/assets/capacitor.config.json'))
         def releaseBuild = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
         def expected = releaseBuild ? 'production' : 'development'
-        def expectedId = releaseBuild ? 'im.waka.app' : 'im.waka.app.dev'
+        if (wakaFixture && releaseBuild) throw new GradleException('Fixture builds cannot be released.')
+        def expectedId = wakaFixture ? 'im.waka.app.test' : releaseBuild ? 'im.waka.app' : 'im.waka.app.dev'
+        if (wakaFixture && (metadata.fixturePlatform != 'android' || metadata.apiOrigin != 'http://10.0.2.2:8787')) throw new GradleException('Invalid local fixture host.')
+        if (!wakaFixture && metadata.fixturePlatform != null) throw new GradleException('Fixture assets need the isolated test binary.')
         if (metadata.environment != expected || metadata.appId != expectedId || nativeConfig.appId != expectedId) {
             throw new GradleException('Native variant and bundled WAKA target differ. Run the matching sync command.')
         }

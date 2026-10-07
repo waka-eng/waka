@@ -7,7 +7,7 @@ import { getDb } from './db.js';
 
 export const MOBILE_BINDING_COOKIE = 'waka_mobile_login';
 export const mobileBindingSchema = z.object({
-  appId: z.enum(['im.waka.app', 'im.waka.app.dev']),
+  appId: z.enum(['im.waka.app', 'im.waka.app.dev', 'im.waka.app.test']),
   state: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
 }).strict();

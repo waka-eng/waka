@@ -12,7 +12,7 @@ function encode(bytes: Uint8Array) {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 export async function createAuthorizationAttempt(appId: string, now = Date.now()): Promise<AuthorizationAttempt> {
-  if (!/^im\.waka\.app(?:\.dev)?$/.test(appId)) throw new Error('Unknown app identity.');
+  if (!/^im\.waka\.app(?:\.(?:dev|test))?$/.test(appId)) throw new Error('Unknown app identity.');
   const verifier = encode(crypto.getRandomValues(new Uint8Array(32)));
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
   return { state: encode(crypto.getRandomValues(new Uint8Array(32))), verifier,

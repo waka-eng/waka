@@ -5,6 +5,7 @@ import { readStoredLocale, t } from '../lib/locales';
 import { parseAppLink } from '../lib/platform/links';
 import { useAuth } from '../lib/auth-context';
 import { AuthorizationCancelled } from '../lib/platform/authorization';
+import { nativeLinkDestination } from '../lib/platform/navigation';
 
 export function MobileShell() {
   const navigate = useNavigate();
@@ -23,8 +24,11 @@ export function MobileShell() {
       const cleanup = await services.listenForLinks(raw => {
         if (stopped) return;
         try {
+          const destination = nativeLinkDestination(raw, import.meta.env.VITE_APP_ID as string, import.meta.env.VITE_PUBLIC_WEB_URL as string);
+          if (destination) { navigation.current(destination); return; }
           const link = parseAppLink(raw, import.meta.env.VITE_APP_ID as string);
           if (link.hostname === 'auth') {
+            google.noteNativeAuthorizationCallback(raw);
             void google.hasNativeGoogleSignIn().then(async pending => {
               if (pending) {
                 try {
@@ -36,8 +40,10 @@ export function MobileShell() {
                   const reason = error instanceof AuthorizationCancelled && error.reason === 'cancelled' ? 'oauth_denied' : 'token_exchange_failed';
                   if (!stopped) navigation.current(`/login?error=${reason}`);
                 }
-              } else if (mobileDiagnosticsEnabled) {
+              } else if (mobileDiagnosticsEnabled && link.searchParams.get('code') === 'synthetic_authorization_code') {
                 navigation.current(`/mobile-check?${new URLSearchParams({ phase: 'callback', callback: raw })}`);
+              } else if (!stopped) {
+                navigation.current('/login?error=state_expired');
               }
             });
             return;
@@ -53,8 +59,6 @@ export function MobileShell() {
             if (link.hostname === 'auth') { params.set('phase', 'callback'); params.set('callback', raw); }
             else params.set('phase', link.searchParams.get('phase') ?? 'read');
             navigation.current(`/mobile-check?${params.toString()}`);
-          } else if (link.hostname === 'navigate' && /^\/(?:login|profile|inspirations|review|principles|chat)(?:\/|$)/.test(link.pathname)) {
-            navigation.current(link.pathname + link.search);
           }
         } catch (error) {
           if (mobileDiagnosticsEnabled) void services.files.write('m1/navigation-error.json', JSON.stringify({ errorName: error instanceof Error ? error.name : 'Unknown navigation error' }));

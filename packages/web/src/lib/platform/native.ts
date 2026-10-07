@@ -3,6 +3,8 @@ import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import type { PlatformServices } from './contracts';
+import { checkedNativeApiOrigin } from './api-origin';
+import { Keyboard, KeyboardResize } from '@capacitor/keyboard';
 
 const SecureStorage = registerPlugin<{
   get(input: { key: string }): Promise<{ value: string | null }>;
@@ -13,11 +15,11 @@ function localPath(path: string) {
   if (!/^[A-Za-z0-9_./-]{1,240}$/.test(path) || path.startsWith('/') || path.split('/').some(part => !part || part === '..' || part === '.')) throw new Error('Invalid local file path.');
   return `waka/${path}`;
 }
-export function nativePlatform(): PlatformServices {
+export async function nativePlatform(): Promise<PlatformServices> {
   const platform = Capacitor.getPlatform();
   if (!Capacitor.isNativePlatform() || (platform !== 'ios' && platform !== 'android')) throw new Error('Native bridge is unavailable.');
-  const origin = import.meta.env.VITE_API_URL as string;
-  if (!['https://dev.waka.im', 'https://waka.im'].includes(origin)) throw new Error('Unexpected mobile API origin.');
+  const origin = checkedNativeApiOrigin();
+  if (platform === 'ios') await Keyboard.setResizeMode({ mode: KeyboardResize.Native });
   return {
     async identity() {
       const info = await App.getInfo();
@@ -48,7 +50,7 @@ export function nativePlatform(): PlatformServices {
     },
     async openBrowser(url) {
       const parsed = new URL(url);
-      if (parsed.origin !== origin || parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error('Unexpected authorization origin.');
+      if (parsed.origin !== origin || parsed.username || parsed.password) throw new Error('Unexpected authorization origin.');
       await Browser.open({ url });
     },
     async listenForLinks(listener) {

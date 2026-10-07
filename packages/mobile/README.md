@@ -65,3 +65,46 @@ authenticated key names. Failure never falls back to plaintext. Files use
 Capacitor's Data directory. Owner-scoped draft integration and retention remain
 M3; native session transport remains M2; native capture/sharing and full consumer
 journey acceptance remain visible in the parity inventory.
+
+## Isolated native account fixture
+
+M2 journeys use `im.waka.app.test`, separate from both normal app identities.
+The explicit fixture build targets only port 8787 on the simulator's host
+loopback; it cannot produce a production/release target. No remote frontend is
+loaded. The fixture server refuses non-loopback/non-test databases, disables
+model workers, uses synthetic accounts, and removes its owned schema on exit.
+Its simulated Google page proves browser/code delivery, not live provider login.
+
+```sh
+DB_CONNECTION_URL=postgresql://agi@127.0.0.1:5432/waka_mobile_m2_test_20261007 \
+  WAKA_MOBILE_FIXTURE_RUN=1 pnpm --filter @waka/api exec tsx test/mobile-fixture.mts
+WAKA_MOBILE_FIXTURE_PLATFORM=ios pnpm --filter @waka/mobile build:ios:dev
+WAKA_MOBILE_FIXTURE_PLATFORM=android pnpm --filter @waka/mobile build:android:dev
+```
+
+Create your own empty local test database first; the example names this
+machine's disposable database, not dev data. Install the generated fixture
+binary and use its ordinary login/capture UI. Normal dev/prod commands keep
+their HTTPS API origins and do not enable fixture cleartext policy.
+
+The official Keyboard 8.0.6 plugin (MIT) resizes the native WebView when typing;
+Android uses `adjustResize`. This keeps sign-in controls above the keyboard.
+
+## Public link associations
+
+Native configurations declare stage-specific consumer HTTPS paths; API/OAuth
+callback paths are excluded. Website verification still requires registered
+Apple identifiers and the actual Android signing certificate, not simulator
+identities or a temporary test key.
+
+```sh
+WAKA_APPLE_TEAM_ID=YOUR_TEAM_ID WAKA_ANDROID_CERT_SHA256=YOUR_CERTIFICATE_SHA256 \
+  node packages/mobile/scripts/link-associations.mjs development
+```
+
+This validates public signing identifiers and emits stage-specific documents in
+`.build/links-development/.well-known/`. It does not publish or modify the shared
+web public directory. Serve both files as JSON at the same stage domain without
+SPA fallback. The native code/association document is preparation, not evidence
+that the OS has verified the link; complete OS verification after registration
+and an approved deployment.

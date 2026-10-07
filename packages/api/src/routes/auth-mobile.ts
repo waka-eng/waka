@@ -15,7 +15,9 @@ mobileAuthRoutes.get('/google', async c => {
   const parsed = mobileBindingSchema.safeParse(c.req.query());
   if (!parsed.success) return c.json({ error: 'Invalid sign-in request' }, 400);
   const origin = new URL(process.env.PUBLIC_WEB_URL ?? getOAuthRedirectOrigin());
-  const expectedApp = origin.hostname === 'waka.im' ? 'im.waka.app' : 'im.waka.app.dev';
+  const fixture = process.env.WAKA_MOBILE_FIXTURE_RUN === '1' && ['localhost', '127.0.0.1'].includes(origin.hostname) &&
+    ['localhost', '127.0.0.1'].includes(new URL(process.env.DB_CONNECTION_URL ?? 'https://invalid').hostname);
+  const expectedApp = fixture ? 'im.waka.app.test' : origin.hostname === 'waka.im' ? 'im.waka.app' : 'im.waka.app.dev';
   if (!['waka.im', 'dev.waka.im', 'localhost', '127.0.0.1'].includes(origin.hostname) || parsed.data.appId !== expectedApp) {
     return c.json({ error: 'Unexpected app identity' }, 400);
   }

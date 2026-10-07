@@ -7,7 +7,11 @@ const allowedHeaders = new Set(['accept', 'content-type', 'authorization', 'idem
 /** Native WebViews use bearer sessions. Never enable cross-origin cookies. */
 export const mobileCors: MiddlewareHandler = async (c, next) => {
   const origin = c.req.header('Origin');
-  if (!origin || !origins.has(origin) || !c.req.path.startsWith('/api/')) return next();
+  let fixtureOrigin = false;
+  if (origin === 'http://localhost' && process.env.WAKA_MOBILE_FIXTURE_RUN === '1') {
+    try { fixtureOrigin = ['localhost', '127.0.0.1'].includes(new URL(process.env.DB_CONNECTION_URL ?? '').hostname); } catch { /* Refuse unknown target. */ }
+  }
+  if (!origin || (!origins.has(origin) && !fixtureOrigin) || !c.req.path.startsWith('/api/')) return next();
   if (c.req.method === 'OPTIONS') {
     const method = c.req.header('Access-Control-Request-Method') ?? '';
     const headers = (c.req.header('Access-Control-Request-Headers') ?? '').split(',').map(h => h.trim().toLowerCase()).filter(Boolean);

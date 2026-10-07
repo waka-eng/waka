@@ -141,7 +141,7 @@ async function authenticate(path: string, input: SignupRequest | LoginRequest, m
       throw new ApiError({ status: 403, message: 'Mobile sign-in requires your personal profile.' });
     }
     try { await nativeSession.adopt(response.token, version); }
-    catch { throw new ApiError({ status: 0, code: 'NATIVE_SESSION_NOT_SAVED', message: 'Sign-in could not be saved securely. Please try again.' }); }
+    catch { void revokeRetiredNativeSessions(); throw new ApiError({ status: 0, code: 'NATIVE_SESSION_NOT_SAVED', message: 'Sign-in could not be saved securely. Please try again.' }); }
     void revokeRetiredNativeSessions();
   }
   return response;

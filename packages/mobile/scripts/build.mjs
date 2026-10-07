@@ -31,6 +31,9 @@ for (const path of files(dist)) {
   if (target.environment === 'production' && source.includes('WAKA_M1_DIAGNOSTICS')) {
     throw new Error('Development diagnostics entered the production bundle.');
   }
+  if (target.environment === 'production' && /http:\/\/(?:127\.0\.0\.1|10\.0\.2\.2):8787/.test(source)) {
+    throw new Error('Local fixture API entered the production bundle.');
+  }
 }
 
 mkdirSync(resolve(mobile, '.build'), { recursive: true });
@@ -39,6 +42,7 @@ cpSync(dist, staging, { recursive: true });
 const licenses = [
   ['@capacitor/core', 'mobile'], ['@capacitor/ios', 'mobile'], ['@capacitor/android', 'mobile'],
   ['@capacitor/app', 'mobile'], ['@capacitor/browser', 'mobile'], ['@capacitor/filesystem', 'mobile'],
+  ['@capacitor/keyboard', 'mobile'],
   ['@fontsource-variable/inter-tight', 'web'], ['@fontsource-variable/jost', 'web'],
   ['@fontsource-variable/caveat', 'web'], ['@fontsource-variable/fraunces', 'web'],
   ['@fontsource-variable/jetbrains-mono', 'web'], ['@fontsource/instrument-serif', 'web'], ['pretendard', 'web'],

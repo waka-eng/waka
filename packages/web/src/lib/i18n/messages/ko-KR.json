@@ -427,6 +427,8 @@
   "worldSearchFailed": "영감을 검색하지 못했어요.",
   "worldMoreResults": "결과 더 보기",
   "worldLinkUnavailable": "이 화면을 열지 못했어요.",
+  "worldPrivateLinkUnavailable": "이 계정에서는 볼 수 없는 화면이에요. 비공개이거나 삭제되었을 수 있어요.",
+  "worldSwitchAccount": "계정 바꾸기",
   "worldLinkCopyFailed": "링크를 복사하지 못했어요. 다시 시도해 주세요.",
   "worldCopyInspirationLink": "영감 링크 복사",
   "worldCopyReflectionLink": "성찰 링크 복사",
