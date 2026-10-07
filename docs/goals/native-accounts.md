@@ -1,7 +1,8 @@
 # Native accounts networking and deep links
 
-Status: blocked (2026-10-07) — awaiting owner approvals and registered signing
-configuration for live Google, Android browser and domain-verification gates.
+Status: in progress (2026-10-07) — owner approved dev rollout and Android browser
+consent; simulator acceptance continues. Registered signing and verified device
+links are deferred by the owner, not counted as passed.
 Branch: `codex/capacitor-m2`, based on M1 `04f7e5a`.
 
 ## Objective
@@ -258,3 +259,18 @@ data, remote schema/deployment or paid provider usage changed.
 
 Set the runtime goal blocked at this third audit. M2 is not complete; preserve
 all gates and resume after the owner supplies the required decisions and setup.
+
+### 2026 10 07 owner approvals and simulator scope
+
+The owner approved opening/merging the dev PR, deploying the supporting API and
+applying migration `0068_mobile_login_codes` to dev only. The existing dev
+workflow verifies distinct configured database targets before migration and
+checks that deployed functions use the migrated target. Production remains
+outside this approval.
+
+The owner also approved Chrome Terms acceptance using “Use without an account”
+on the Android test emulator. Apple membership, registered identifiers and
+device signing are not prerequisites for this simulator run. Keep the current
+local identities; defer verified device-domain links and store signing rather
+than claiming their gates passed. Live Google still needs actual provider
+acceptance; the simulated provider is only browser/transport evidence.

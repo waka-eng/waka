@@ -30,7 +30,7 @@ Work happening now, or stopped mid-way with a recorded reason.
 
 | Goal | Status |
 | --- | --- |
-| [`native-accounts.md`](native-accounts.md) | Blocked — M2 local native account journeys verified; owner rollout/browser approvals and registered signing/domain setup needed for live acceptance. |
+| [`native-accounts.md`](native-accounts.md) | In progress — local journeys verified; dev rollout and Android browser consent approved. Simulator acceptance continues; registered signing and verified device links deferred by owner. |
 | [`beta-readiness.md`](beta-readiness.md) | Incomplete — milestones 1 and 3 delivered in PR 350; operational audit and recovery fixes deployed through PR 351. Dev configuration/heartbeat and public URL policy observed. Milestone 2 first-time comprehension and milestone 4 controlled live measurements, spending/privacy/source safeguards and exercised alerts remain open. |
 | [`performance-improvements.md`](performance-improvements.md) | In progress — five milestones delivered to dev; loading/Review follow-up accepted locally. Exact deployed timing verification remains open. |
 | [`ux-feature-implementation.md`](ux-feature-implementation.md) | Paused by owner after the checked feedback/room-flow batch; dev delivery requested. Later UX/algorithm slices, remaining release cases, semantic validation, historical repair and deployed verification remain open. |
