@@ -198,4 +198,26 @@ final class AccountsUITests: XCTestCase {
         app.terminate(); app.launch()
         XCTAssertTrue(app.webViews.buttons["sign in"].waitForExistence(timeout: 15))
     }
+    func testProfileEditPersistsAcrossRestart() async throws {
+        continueAfterFailure = false
+        app.terminate(); app.launch()
+        if !capture.waitForExistence(timeout: 3) { await signIn("native-one@example.test") }
+        open("/profile")
+        let name = app.webViews.textFields.firstMatch
+        XCTAssertTrue(name.waitForExistence(timeout: 10))
+        name.tap(); name.press(forDuration: 1.0)
+        let selectAll = app.buttons["Select All"]
+        if selectAll.waitForExistence(timeout: 2) { selectAll.tap() }
+        else { let menu = app.menuItems["Select All"]; XCTAssertTrue(menu.waitForExistence(timeout: 2)); menu.tap() }
+        name.typeText("Native profile updated")
+        let save = app.webViews.buttons.matching(NSPredicate(format: "label ==[c] %@", "save profile")).firstMatch
+        XCTAssertTrue(save.waitForExistence(timeout: 10)); save.tap()
+        let saved = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "profile saved")).firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: 15))
+        app.terminate(); app.launch(); XCTAssertTrue(capture.waitForExistence(timeout: 15))
+        open("/profile")
+        XCTAssertTrue(name.waitForExistence(timeout: 10)); XCTAssertEqual(name.value as? String, "Native profile updated")
+        let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "M2 iOS persisted profile edit"; screenshot.lifetime = .keepAlways; add(screenshot)
+        XCTAssertTrue(logoutButton.waitForExistence(timeout: 10)); logoutButton.tap()
+    }
 }

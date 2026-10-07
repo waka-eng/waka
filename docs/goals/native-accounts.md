@@ -178,7 +178,7 @@ active; source tests and a simulated provider cannot replace its open gates.
 
 | Requirement | Evidence and remaining work | Result |
 | --- | --- | --- |
-| M2.1 accounts and lifecycle | Password/signup/restart/expiry UI on both platforms; race/retirement tests; native revocation; SQL auth checks. Final profile-change walkthrough and live provider acceptance remain. | Partial |
+| M2.1 accounts and lifecycle | Password/signup/restart/expiry/profile-edit UI on both platforms; race/retirement tests; native revocation; SQL auth checks. Live provider acceptance remains. | Passed locally; provider gate open |
 | M2.2 scoped transport | Secure storage, real CORS/API journeys, wrong-host/header and cancellation/body deadlines; signed PUT unchanged. | Passed locally |
 | M2.3 Google | Signed context, atomic PKCE/human SQL exchange, iOS simulated OS browser/cancel/revoke. Live Google and Android browser open. | Partial |
 | M2.4 Apple plan | Explicit linking/private relay/token verification/review-rule plan. | Plan delivered |
@@ -214,3 +214,27 @@ team identifier, not proof of registered WAKA app IDs or paid-domain capability.
 Those registrations, domain publishing, live Google dev rollout approval and
 Chrome Terms acceptance remain unverified/pending. Do not generate or publish
 associations from certificate presence alone. M2 remains incomplete.
+
+### 2026 10 07 persisted native profile edits
+
+The preceding turn made progress through signup and expiry acceptance. This
+continuation verifies ordinary Profile edits on both installed fixture apps.
+iOS types the replacement name through the real field, submits Save profile,
+observes the saved message, terminates/relaunches and reads the exact new value.
+One XCTest case passes with no runtime warnings; receipt:
+`work/mobile-foundation/m2-ios-profile.json`. The first attempt placed the caret
+at the start and saved a prefix; Select All corrects the test interaction rather
+than accepting an unintended name as the expected result.
+
+Android's actual field interaction replaces the second fixture account's name,
+receives the saved message and a 200 PATCH for that account, then reads the exact
+new name after a cold launch. Evidence: `m2-android-profile-saved.xml`,
+`m2-android-profile-restored.xml`, `m2-android-profile-restored.png` and
+`m2-profile-audit.json` under `work/mobile-foundation/`. Current API/web types,
+targeted Profile/auth regressions and whitespace checks pass. No paid calls or
+remote changes occurred.
+
+The remaining live Google, Android OS-browser and verified domain-association
+gates still require the pending owner approvals/configuration. Local certificate
+presence does not prove app registration or domain verification. This turn is
+progress, not a completion claim and not a repeated no-progress blocker audit.
