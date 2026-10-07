@@ -1,7 +1,7 @@
 # Native accounts networking and deep links
 
-Status: in progress (2026-10-07) — local account journeys verified;
-live provider/domain acceptance and remaining native cases are open.
+Status: blocked (2026-10-07) — awaiting owner approvals and registered signing
+configuration for live Google, Android browser and domain-verification gates.
 Branch: `codex/capacitor-m2`, based on M1 `04f7e5a`.
 
 ## Objective
@@ -238,3 +238,23 @@ The remaining live Google, Android OS-browser and verified domain-association
 gates still require the pending owner approvals/configuration. Local certificate
 presence does not prove app registration or domain verification. This turn is
 progress, not a completion claim and not a repeated no-progress blocker audit.
+
+### 2026 10 07 blocked audit
+
+After the verified profile-edit batch, three consecutive continuation turns
+made no further implementation progress because the same owner-controlled
+prerequisites remain. Each revalidated current state rather than treating an
+automatic goal continuation as approval. Final read-only checks find zero PRs
+for `codex/capacitor-m2`, an empty local provisioning-profile directory, and both
+dev association endpoints returning 200 `text/html` with invalid JSON. The
+local signing certificate does not establish registered app/domain capability.
+
+No new human response authorizes the dev PR/deployment and migration rollout,
+Chrome Terms acceptance on the Android test emulator, or verifies registered
+WAKA app IDs/signing inputs for association publishing. Tests cannot substitute
+for those actions. Local fixtures and simulators are stopped, their disposable
+schemas cleaned up, and the worktree is committed and clean. No real account
+data, remote schema/deployment or paid provider usage changed.
+
+Set the runtime goal blocked at this third audit. M2 is not complete; preserve
+all gates and resume after the owner supplies the required decisions and setup.
