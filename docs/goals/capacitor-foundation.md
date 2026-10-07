@@ -88,10 +88,32 @@ No server, model, schema, paid-call or deployment work was performed.
 | Requirement | Evidence | Result |
 | --- | --- | --- |
 | M1.1 feature inventory | 37 groups, source map and cross-platform cases | Passed |
-| M1.2 projects and compatible dependencies | Native source/projects, lockfile, licenses, dev/release builds | Implemented; final clean-checkout verification remains |
+| M1.2 projects and compatible dependencies | Native sources, lockfile, licenses and fresh-checkout builds on both platforms | Passed for build reproduction; SDK UI compatibility remains open |
 | M1.3 distinct targets | Both IDs installed on both platforms; native API-readiness files | Passed for observed binaries |
 | M1.4 shared pipeline and release constraints | React builds, target guards, sensitive-marker/diagnostic exclusion checks | Passed; final rebuild after remaining fixes required |
 | M1.5 integration proofs | Android native receipt and nine protocol cases; iOS UI driver blocked | Incomplete on iOS |
 | M1.6 launch routes fonts and offline | Android native/visual evidence; iOS installed/healthy, interaction pending | Incomplete on iOS |
 
 The full M1 goal remains active and incomplete until the remaining gates are verified.
+
+### 2026 10 06 fresh checkout verification
+
+The preceding goal turn was progress: implementation and Android acceptance
+changed authoritative state. On continuation, Xcode first-launch status still
+fails, CoreSimulator remains 1051.55, and administrator access still requires
+a password. The iOS interaction blocker remains unchanged; no live setup job
+was found.
+
+A separate clean checkout of `6630813` initially had no generated native assets,
+plugin configuration or Swift package manifest. `pnpm install --offline
+--frozen-lockfile` passed in two seconds using the dependency store. Web types
+and three mobile configuration cases passed. Both documented native dev build
+commands regenerated their inputs and passed: Android in 13 seconds (185 tasks
+executed), iOS with successful exit and its App.app receipt. The checkout stayed
+Git-clean after builds. Logs are `work/mobile-foundation/clean-install.log`,
+`clean-android-build.log` and `clean-ios-build.log`; the temporary checkout is
+under `work/mobile-foundation/clean-aamMAT/checkout`.
+
+Build reproducibility is now established independently of the working checkout's
+caches/generated files. Remaining iOS storage/callback and offline interaction
+acceptance still requires the requested Xcode component setup and native UI access.
