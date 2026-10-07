@@ -1,8 +1,9 @@
 # Native accounts networking and deep links
 
-Status: in progress (2026-10-07) — owner approved dev rollout and Android browser
-consent; simulator acceptance continues. Registered signing and verified device
-links are deferred by the owner, not counted as passed.
+Status: done (2026-10-07, owner-approved simulator scope). Account/lifecycle
+journeys pass on both platforms; the owner confirmed live Android Google login.
+Registered signing and verified device links remain accepted deferrals, not
+passed checks. Store readiness and native capture remain later milestones.
 Branch: `codex/capacitor-m2`, based on M1 `04f7e5a`.
 
 ## Objective
@@ -179,9 +180,9 @@ active; source tests and a simulated provider cannot replace its open gates.
 
 | Requirement | Evidence and remaining work | Result |
 | --- | --- | --- |
-| M2.1 accounts and lifecycle | Password/signup/restart/expiry/profile-edit UI on both platforms; race/retirement tests; native revocation; SQL auth checks. Live provider acceptance remains. | Passed locally; provider gate open |
+| M2.1 accounts and lifecycle | Password/signup/restart/expiry/profile-edit UI on both platforms; race/retirement tests; native revocation; SQL auth checks; owner-confirmed live Android Google login. | Passed in simulator scope |
 | M2.2 scoped transport | Secure storage, real CORS/API journeys, wrong-host/header and cancellation/body deadlines; signed PUT unchanged. | Passed locally |
-| M2.3 Google | Signed context, atomic PKCE/human SQL exchange; both simulated OS browsers/cancel/revoke. Live Google remains open. | Partial |
+| M2.3 Google | Signed context, atomic PKCE/human SQL exchange; both simulated OS browsers/cancel/revoke; owner-confirmed live Android Google login. iOS live-provider login remains a follow-up, not independently proven. | Accepted simulator evidence |
 | M2.4 Apple plan | Explicit linking/private relay/token verification/review-rule plan. | Plan delivered |
 | M2.5 verified links | Canonical URLs, route rules, entitlements/filters/generator, cold/warm routes. Registered identities and verified device-domain links deferred by owner. | Deferred device verification |
 | M2.6 authenticated slice | Capture/reopen/read/chat/restart/switch/logout UI on both platforms; no paid chat send. | Local slice passed |
@@ -303,3 +304,37 @@ layer. Disable Function URL CORS for shared-domain deployments so Hono is its
 sole owner; preserve the existing separately hosted sandbox policy. A source
 regression and existing Hono/no-store cases pass 20/20. Deployed verification of
 this follow-up and live Google still remain; no completed milestone is claimed.
+
+### 2026 10 07 final simulator acceptance
+
+The owner explicitly confirmed successful Google login in the Android emulator,
+not the local web browser. This closes the live Android provider check with
+human acceptance evidence. No account credentials or private memory were
+collected to corroborate that report. The confirmation is also recorded on
+[PR 360](https://github.com/waka-eng/waka/pull/360#issuecomment-6045460795).
+
+Dev source `0998a859` has successful
+[CI](https://github.com/waka-eng/waka/actions/runs/37672854083) and
+[deployment](https://github.com/waka-eng/waka/actions/runs/37672853736). CI records
+975 API unit passes (three paid suites skipped), 1,744 hermetic API passes and
+857 web passes. Additive migration 0068, database-target separation and deployed
+function bindings passed. The CORS follow-up gives each native origin one
+matching allow-origin header and its preflight returns 204. Android's restarted
+dev app reaches sign-in without the former connection-error banner.
+
+The retained iOS receipts contain four passing journey cases: authenticated
+slice, browser cancellation/exchange/revocation, signup/expiry and profile edits.
+Android audit/AX evidence covers the same account/lifecycle slice, a successful
+simulated code exchange, private-source refusal and signed-out restoration.
+Existing checks cover web-cookie preservation, credential destination guards,
+body deadlines/cancellation, single-use PKCE, human identity and signed uploads
+without WAKA credentials. The Apple linking/private-relay deliverable is a plan,
+not a provider implementation.
+
+All non-deferred M2 simulator acceptance work is delivered in PRs 359/360.
+Gate 4's registered signing and OS-verified website associations are deferred by
+the owner's simulator-only decision; their original criteria are preserved.
+They must be demonstrated with registered identities before device/beta delivery.
+iOS live Google login, physical-device behavior and store signing also remain
+explicit follow-ups. No fake association files were published, and production
+was not deployed. Stop at the M2 checkpoint; M3 has not started.

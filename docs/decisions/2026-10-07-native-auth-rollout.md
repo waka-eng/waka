@@ -1,6 +1,9 @@
 # Native authentication rollout and Apple sign in plan
 
-Status: M2 implementation in progress. No remote migration or deployment applied.
+Status: M2 accepted in owner-approved simulator scope. PRs 359/360 and additive
+migration 0068 are deployed to dev. Production is unchanged; registered signing
+and verified device associations remain deferred. Exact evidence and limitations
+are in the [completion audit](../goals/native-accounts.md).
 
 ## Google and native sessions
 
