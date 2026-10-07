@@ -48,6 +48,7 @@ import {
 } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
 import { createSessionRow, describeUserAgent } from "../lib/session.js";
+import { MOBILE_BINDING_COOKIE, readMobileBinding, issueMobileCode, mobileCallback } from '../lib/mobile-handoff.js';
 import {
   getGoogleClientId,
   getGoogleClientSecret,
@@ -313,6 +314,9 @@ export const googleAuthRoutes = new Hono();
  *   <a href="${API_URL}/api/auth/google/login">Continue with Google</a>
  */
 googleAuthRoutes.get("/login", async (c) => {
+  if (c.req.query('mobile') === '1') {
+    if (!await readMobileBinding(getCookie(c, MOBILE_BINDING_COOKIE))) return c.json({ error: 'Sign-in expired. Please try again.' }, 400);
+  } else deleteCookie(c, MOBILE_BINDING_COOKIE, { path: '/' });
   const state = randomToken(32);
   const codeVerifier = randomToken(32);
   const codeChallenge = await sha256Base64Url(codeVerifier);
@@ -375,18 +379,23 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
     // hit the API. If the SPA and API are co-served, this also works.
     "http://localhost:5173";
   const returnTo = safeReturnTo(getCookie(c, RETURN_TO_COOKIE_NAME));
+  const mobileCookie = getCookie(c, MOBILE_BINDING_COOKIE);
+  const mobileBinding = await readMobileBinding(mobileCookie);
 
   function failTo(reason: string): Response {
     // Best-effort cleanup so a stale state cookie doesn't poison a retry.
     deleteCookie(c, STATE_COOKIE_NAME, { path: "/" });
     deleteCookie(c, PKCE_COOKIE_NAME, { path: "/" });
     deleteCookie(c, RETURN_TO_COOKIE_NAME, { path: "/" });
+    deleteCookie(c, MOBILE_BINDING_COOKIE, { path: '/' });
+    if (mobileBinding) return c.redirect(mobileCallback(mobileBinding, { error: reason === 'oauth_denied' ? 'cancelled' : 'failed' }), 302);
     const target = new URL("/login", webOrigin);
     target.searchParams.set("error", reason);
     if (returnTo !== POST_LOGIN_PATH) target.searchParams.set("returnTo", returnTo);
     return c.redirect(target.toString(), 302);
   }
 
+  if (mobileCookie && !mobileBinding) return failTo('state_expired');
   if (errorFromGoogle) {
     // The user clicked "Cancel" on the consent screen, or Google rejected
     // the request (e.g. invalid_client). We never echo Google's error code
@@ -660,6 +669,14 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
   // the SPA.
   // -------------------------------------------------------------------------
 
+  if (mobileBinding) {
+    const code = await issueMobileCode(identity.profileId, mobileBinding);
+    deleteCookie(c, STATE_COOKIE_NAME, { path: '/' });
+    deleteCookie(c, PKCE_COOKIE_NAME, { path: '/' });
+    deleteCookie(c, RETURN_TO_COOKIE_NAME, { path: '/' });
+    deleteCookie(c, MOBILE_BINDING_COOKIE, { path: '/' });
+    return c.redirect(mobileCallback(mobileBinding, { code }), 302);
+  }
   const sessionToken = await signSessionToken({
     profileId: identity.profileId,
     email: identity.email,

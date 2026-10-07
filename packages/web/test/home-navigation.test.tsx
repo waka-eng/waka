@@ -172,7 +172,8 @@ it('discards a late detail when the person navigates elsewhere', async () => {
 });
 it('shows an unavailable link without silently opening another room and can return home', async () => {
   world = await mountWorld(FACTS, { initialEntries: ['/w/missing-id/old-name'], routerTools: <RouterTools /> }); await settle();
-  expect(world.container.querySelector('[role="alert"]')?.textContent).toContain("couldn't be opened");
-  await act(async () => world.container.querySelectorAll<HTMLButtonElement>('.jar-navigation-notice button')[1]!.click()); await settle();
+  expect(world.container.querySelector('[role="alert"]')?.textContent).toContain('isn’t available to this account');
+  expect(world.container.querySelector('[role="alert"]')?.textContent).not.toContain('Try again');
+  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.jar-navigation-notice button')].find(button => button.textContent === 'Me')!.click()); await settle();
   expect(world.container.querySelector('.jar-navigation-notice')).toBeNull(); expect(world.audit().wallKind).toBe('self');
 });

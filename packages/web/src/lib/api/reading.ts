@@ -9,6 +9,7 @@
  * anywhere would be the drift the whole surface exists to make impossible.
  */
 import { apiPath, ApiError } from "./http";
+import { apiFetch } from './transport';
 
 export interface ApiReading {
   /** the loop's rules, one sentence each, in the served order */
@@ -22,7 +23,7 @@ export async function fetchTheReading(): Promise<ApiReading> {
   try {
     /* apiPath prepends the /api prefix itself — the served route is
        /api/reading.md, so the argument is the bare path */
-    res = await fetch(apiPath("/reading.md"), {
+    res = await apiFetch(apiPath("/reading.md"), {
       method: "GET",
       credentials: "include",
       headers: { Accept: "text/markdown" },

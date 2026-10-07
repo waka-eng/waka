@@ -36,6 +36,8 @@ import LoginPage from "./pages/Login";
 import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
 import PublicProfilePage from "./pages/PublicProfile";
+import { MobileShell } from './components/MobileShell';
+if (import.meta.env.VITE_BUILD_TARGET === 'mobile') void import('./styles/mobile-fonts.css');
 // FIRST, ALWAYS: declares the layer order every other stylesheet relies on.
 // A @layer statement must precede the rules it orders, so this import cannot
 // move without silently restoring bundle-order precedence.
@@ -70,6 +72,7 @@ import "./styles/chrome.css";
 */
 const HomePage = lazy(() => import("./pages/Home"));
 const ChatPage = lazy(() => import('./pages/Chat'));
+const MobileChecks = import.meta.env.VITE_BUILD_TARGET === 'mobile' && import.meta.env.VITE_MOBILE_DIAGNOSTICS === '1' ? lazy(() => import('./pages/MobileChecks')) : null;
 
 /**
  * THE WORLD CAN BE LOOKED AT WITHOUT A SESSION, IN DEV ONLY.
@@ -137,7 +140,9 @@ ReactDOM.createRoot(root).render(
         localStorage synchronously and re-validates against /auth/me on mount.
       */}
       <AuthProvider>
+        <MobileShell />
         <Routes>
+          {MobileChecks && <Route path="/mobile-check" element={<Suspense fallback={null}><MobileChecks /></Suspense>} />}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/:handle" element={<PublicProfilePage />} />
           <Route

@@ -29,6 +29,7 @@ export * from "./schema-keeper-keys";
 export * from "./schema-experiences";
 export * from "./schema-grants";
 export * from "./schema-cli-login-codes";
+export * from './schema-mobile-login-codes';
 export * from "./schema-inspirations";
 export * from "./schema-inspiration-processing";
 export * from "./schema-inspiration-save-requests";

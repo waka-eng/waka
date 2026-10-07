@@ -1,4 +1,7 @@
 {
+  "nativeCancelSignIn": "Cancel sign-in",
+  "mobileConnectionUnavailable": "Can’t connect to WAKA. Check your connection and try again.",
+  "mobileRetryConnection": "Try again",
   "worldHomeActivities": "Explore your inspirations",
   "worldPrinciplesShortcut": "Principles",
   "worldPrinciplesAvailable": "{count} available",
@@ -424,6 +427,8 @@
   "worldSearchFailed": "Couldn't search your inspirations.",
   "worldMoreResults": "More results",
   "worldLinkUnavailable": "This view couldn't be opened.",
+  "worldPrivateLinkUnavailable": "This view isn’t available to this account. It may be private or removed.",
+  "worldSwitchAccount": "Switch account",
   "worldLinkCopyFailed": "Couldn't copy the link. Try again.",
   "worldCopyInspirationLink": "Copy link to inspiration",
   "worldCopyReflectionLink": "Copy link to reflection",

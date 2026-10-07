@@ -62,6 +62,7 @@ import type {
 } from "./api";
 import { normalizeSupportedLocale, writeStoredLocale } from "./locales";
 import type { SupportedLocale } from "./locales";
+import { isMobileBuild } from './platform';
 
 // ---------------------------------------------------------------------------
 // Storage helpers
@@ -80,6 +81,7 @@ const STORAGE_KEY = "waka.auth.viewer";
  * thrown — the worst case is one extra `/auth/me` round-trip on next load.
  */
 function readCachedViewer(): ApiViewer | null {
+  if (isMobileBuild) return null;
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -133,7 +135,7 @@ function readCachedViewer(): ApiViewer | null {
 function writeCachedViewer(viewer: ApiViewer | null): void {
   if (typeof window === "undefined") return;
   try {
-    if (viewer) {
+    if (viewer && !isMobileBuild) {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(viewer));
     } else {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -201,8 +203,8 @@ export interface AuthContextValue {
   signup: (input: SignupRequest) => Promise<ApiViewer>;
   /**
    * Clear the session both server-side (POST /auth/logout) and locally.
-   * Never throws — logging out has to be a guaranteed-success operation
-   * from the person's perspective.
+   * Web clears locally even offline. Native secure-retirement failures are
+   * reported rather than falsely claiming the saved credential was removed.
    */
   logout: () => Promise<void>;
   /**
@@ -279,6 +281,12 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
   /** See `AuthContextValue.serverUnreachable`. Says nothing about access. */
   const [serverUnreachable, setServerUnreachable] = useState(false);
+  useEffect(() => {
+    if (!isMobileBuild) return;
+    const expired = () => { applyViewer(null); setServerUnreachable(false); setIsLoading(false); };
+    window.addEventListener('waka:session-expired', expired);
+    return () => window.removeEventListener('waka:session-expired', expired);
+  }, [applyViewer]);
 
   // Initial hydration: confirm the cached viewer against the server.
   useEffect(() => {
@@ -331,7 +339,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
   const login = useCallback(
     async (input: LoginRequest): Promise<ApiViewer> => {
+      const startedAt = ++authMutationRef.current;
       const { account, profile } = await apiLogin(input);
+      if (!aliveRef.current || startedAt !== authMutationRef.current) throw new ApiError({ status: 409, message: 'Sign-in changed. Please try again.' });
       /* THE SERVER ANSWERED, so whatever the door was told earlier is stale.
          Without this the flag survived the whole page session: a person who
          hit a dead network, signed in once it came back, then signed out
@@ -349,7 +359,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
   const signup = useCallback(
     async (input: SignupRequest): Promise<ApiViewer> => {
+      const startedAt = ++authMutationRef.current;
       const { account, profile } = await apiSignup(input);
+      if (!aliveRef.current || startedAt !== authMutationRef.current) throw new ApiError({ status: 409, message: 'Sign-in changed. Please try again.' });
       setServerUnreachable(false);
       const next: ApiViewer = { account, profile };
       applyViewer(next);
@@ -362,6 +374,12 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     // Wipe local state FIRST so the UI updates immediately even if the
     // network call hangs. The server-side cookie clear is a best-effort
     // follow-up; `apiLogout()` swallows network errors by design.
+    if (isMobileBuild) {
+      // Native invalidation is emitted after durable retirement, before the
+      // server round trip. A failed secure write must not claim successful logout.
+      await apiLogout();
+      return;
+    }
     applyViewer(null);
     await apiLogout();
   }, [applyViewer]);

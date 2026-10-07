@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { publicWebOrigin, publicApiOrigin } from '../lib/public-origins';
 
 import {
   ApiError,
@@ -81,7 +82,7 @@ export default function ProfilePage(): JSX.Element {
       : null;
   const publicProfileUrl =
     normalizedPublicHandle.length > 0
-      ? `${typeof window === "undefined" ? "" : window.location.origin}/@${normalizedPublicHandle}`
+      ? `${publicWebOrigin()}/@${normalizedPublicHandle}`
       : null;
 
   // The account's memories. Loaded here rather than from auth context because
@@ -876,7 +877,7 @@ export default function ProfilePage(): JSX.Element {
               <p className="login-subtitle">{t(locale, "profileKeyShownOnce")}</p>
               <p className="login-subtitle">{t(locale, "profileKeyConfigHint")}</p>
               <code className="profile-secret">
-                {`WAKA_API_KEY=${mintedAgentKey.secret}\nWAKA_API_URL=${window.location.origin}`}
+                {`WAKA_API_KEY=${mintedAgentKey.secret}\nWAKA_API_URL=${publicApiOrigin()}`}
               </code>
               <button
                 className="profile-memory-action"
@@ -945,7 +946,7 @@ export default function ProfilePage(): JSX.Element {
               <p className="login-subtitle">{t(locale, "profileKeyShownOnce")}</p>
               <p className="login-subtitle">{t(locale, "profileKeyConfigHint")}</p>
               <code className="profile-secret">
-                {`WAKA_API_KEY=${mintedKey.secret}\nWAKA_API_URL=${window.location.origin}`}
+                {`WAKA_API_KEY=${mintedKey.secret}\nWAKA_API_URL=${publicApiOrigin()}`}
               </code>
               <button
                 className="profile-memory-action"
@@ -1041,7 +1042,7 @@ export default function ProfilePage(): JSX.Element {
               <p className="login-subtitle">{t(locale, "profileKeyShownOnce")}</p>
               <p className="login-subtitle">{t(locale, "profileKeyConfigHint")}</p>
               <code className="profile-secret">
-                {`WAKA_API_KEY=${reissuedKey.secret}\nWAKA_API_URL=${window.location.origin}`}
+                {`WAKA_API_KEY=${reissuedKey.secret}\nWAKA_API_URL=${publicApiOrigin()}`}
               </code>
               <button
                 className="profile-memory-action"

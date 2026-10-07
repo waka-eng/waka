@@ -32,6 +32,7 @@
 // Errors
 // ---------------------------------------------------------------------------
 import {invalidateSourceRequest} from '../inspiration-snapshots';
+import { apiFetch } from './transport';
 
 /**
  * Field-level validation errors as emitted by Hono handlers via zod's
@@ -117,7 +118,7 @@ export async function getJson<T>(
 ): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, {
+    res = await apiFetch(path, {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
@@ -203,7 +204,7 @@ export async function writeJson<T>(
   let res: Response;
   invalidateSourceRequest(path);
   try {
-    res = await fetch(path, {
+    res = await apiFetch(path, {
       method,
       ...(signal ? { signal } : {}),
       credentials: "include",
@@ -258,7 +259,7 @@ export async function requestVoid(
   let res: Response;
   invalidateSourceRequest(path);
   try {
-    res = await fetch(path, {
+    res = await apiFetch(path, {
       method,
       ...(signal ? { signal } : {}),
       credentials: "include",

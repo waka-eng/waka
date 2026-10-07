@@ -115,7 +115,7 @@ export function serializeProfile(profile: ProfileRow) {
  * can change under it at any time.
  */
 export async function loadIdentity(
-  db: WakaDb,
+  db: Pick<WakaDb, 'select'>,
   profileId: string,
 ): Promise<{ account: AccountRow; profile: ProfileRow } | null> {
   const [row] = await db

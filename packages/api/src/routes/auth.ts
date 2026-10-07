@@ -57,6 +57,7 @@ import { buildSessionClearCookie, SESSION_COOKIE_NAME } from "../lib/auth.js";
 import { type AuthEnv, humanSessionsOnly, requireAuth } from "../lib/middleware.js";
 import { revokeSessionByToken } from "../lib/session.js";
 import { cliAuthRoutes } from "./auth-cli.js";
+import { mobileAuthRoutes } from './auth-mobile.js';
 import { googleAuthRoutes, handleGoogleCallback } from "./auth-google.js";
 import {
   eraseAccountHandler,
@@ -137,6 +138,7 @@ export const authRoutes = new Hono<AuthEnv>();
 authRoutes.route("/google", googleAuthRoutes);
 authRoutes.get("/callback/google", handleGoogleCallback);
 authRoutes.route("/cli", cliAuthRoutes);
+authRoutes.route('/mobile', mobileAuthRoutes);
 
 /*
  * Every route in this namespace, with every guard in front of it, in

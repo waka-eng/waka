@@ -231,6 +231,8 @@ export function SignupForm({
           type="email"
           name="email"
           autoComplete="email"
+          enterKeyHint="next"
+          onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.form?.querySelector<HTMLInputElement>('input[name="password"]')?.focus(); } }}
           inputMode="email"
           required
           disabled={submitting}
@@ -253,6 +255,7 @@ export function SignupForm({
           type="password"
           name="password"
           autoComplete="new-password"
+          enterKeyHint="go"
           required
           minLength={MIN_PASSWORD_LENGTH}
           disabled={submitting}
@@ -478,6 +481,8 @@ export function LoginForm(): JSX.Element {
           type="email"
           name="email"
           autoComplete="email"
+          enterKeyHint="next"
+          onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.form?.querySelector<HTMLInputElement>('input[name="password"]')?.focus(); } }}
           inputMode="email"
           required
           disabled={submitting}
@@ -500,6 +505,7 @@ export function LoginForm(): JSX.Element {
           type="password"
           name="password"
           autoComplete="current-password"
+          enterKeyHint="go"
           required
           disabled={submitting}
           value={values.password}

@@ -107,6 +107,15 @@ captures sharing a microsecond timestamp do not disappear between pages.
 
 ### Credentials bind to a profile
 
+Native consumer sign-in acts as the account's human profile, never an agent.
+`mobile_login_codes` is transient authentication infrastructure, not a memory
+layer. It stores a SHA-256 code hash, the authorized human profile, exact app
+identity, S256 PKCE challenge, a hash of the app's state and a two-minute expiry.
+Exchange atomically consumes only a valid matching code and creates its human
+session in the same transaction. Reusable session credentials never appear in
+callback URLs. Google browser identity resolution remains shared with web
+sign-in; the mobile handoff does not use the CLI's profile-selection flow.
+
 Every session acts *as* exactly one profile:
 
 - The browser session acts as the human profile (admin over the account).

@@ -63,6 +63,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { PrincipleRead } from "../components/PrincipleRead";
+import { publicWebOrigin } from '../lib/public-origins';
 import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlow";
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { DialogSurface } from "../components/DialogSurface";
@@ -1326,7 +1327,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       window.removeEventListener('popstate', interacted);
     };
   }, []);
-  const [navigationProblem, setNavigationProblem] = useState(false);
+  const [navigationProblem, setNavigationProblem] = useState<'retryable' | 'unavailable' | null>(null);
   const [detachedInspiration, setDetachedInspiration] = useState<{ wall: string; ball: Ball; detail: InspirationDetail | null } | null>(null);
   const detachedRef = useRef(detachedInspiration); detachedRef.current = detachedInspiration;
   const linkedReflectionRef = useRef<{ panelId: string; open: boolean } | null>(null);
@@ -11750,7 +11751,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        no notification channel we do not have — you copy it and put it wherever
        you already talk to these people. Anyone holding it can walk in, which
        is the one thing to know about it. */
-    const url = `${window.location.origin}/?join=${encodeURIComponent(g.joinCode)}`;
+    const url = `${publicWebOrigin()}/?join=${encodeURIComponent(g.joinCode)}`;
     navigator.clipboard
       ?.writeText(url)
       .then(() => {
@@ -12241,11 +12242,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     }
     const target = desired && (desired.wallId === storageScope?.profileId ? walls.find((wall) => wall.kind === 'self') : resolveViewWall(desired, walls));
     if (!target && desired?.wallId && (agentRoster === null || !groupRosterReady)) return;
-    if (!target || !desired) { setNavigationProblem(true); appliedViewKey.current = viewNavigation.key; restoringViewRef.current = false; return; }
+    if (!target || !desired) { setNavigationProblem('unavailable'); appliedViewKey.current = viewNavigation.key; restoringViewRef.current = false; return; }
     const serial = ++viewRequest.current, key = viewNavigation.key, controller = new AbortController();
     let timer = 0, stage = 'wall', loading = false, canceled = false;
     const current = () => !canceled && !controller.signal.aborted && viewRequest.current === serial && latestViewKey.current === key;
-    setNavigationProblem(false);
+    setNavigationProblem(null);
     linkedReflectionRef.current = null;
     setReflectOn(null); setReflectOpen(false); setSelectedId(null); setDetachedInspiration(null); setGroupPanel(null);
     setSeek(desired.find ? viewNavigation.query : null);
@@ -12299,7 +12300,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         if (ballsRef.current?.byId.has(ball.id)) { sim.release(); sim.select(ball.id); }
         setSelectedId(ball.id); setPanel({ id: ball.id, detail, partial: false }); setPanelOpen(true);
         timer = window.setTimeout(finish, 0);
-      } catch { if (current()) { setNavigationProblem(true); finish(); } }
+      } catch (error) { if (current()) { setNavigationProblem(error instanceof ApiError && error.status === 404 ? 'unavailable' : 'retryable'); finish(); } }
     };
     void run();
     return () => { canceled = true; controller.abort(); window.clearTimeout(timer); };
@@ -12342,7 +12343,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       label: atWall.kind === 'agent' ? atWall.name : undefined, section: 'field', inspirationId: row.id }, { query: seek ?? '' });
   };
   const copyInspirationLink = async (reflectionId: string | null = observedView.reflectionId) => {
-    try { await navigator.clipboard.writeText(window.location.origin + viewHref({ ...observedView, reflectionId, find: false })); setCharSay(say('worldLinkCopied')); }
+    try { await navigator.clipboard.writeText(publicWebOrigin() + viewHref({ ...observedView, reflectionId, find: false })); setCharSay(say('worldLinkCopied')); }
     catch { setCharSay(say('worldLinkCopyFailed')); }
   };
 
@@ -12359,8 +12360,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </div>
       ) : null}
       {navigationProblem ? <div className="jar-navigation-notice" role="alert" data-jar-chrome="1">
-        <p>{say('worldLinkUnavailable')}</p>
-        <button type="button" onClick={() => viewNavigation.write(viewNavigation.view ?? { ...EMPTY_VIEW }, { replace: true, query: viewNavigation.query })}>{say('worldRoomHistoryRetry')}</button>
+        <p>{say(navigationProblem === 'unavailable' ? 'worldPrivateLinkUnavailable' : 'worldLinkUnavailable')}</p>
+        {navigationProblem === 'retryable' ? <button type="button" onClick={() => viewNavigation.write(viewNavigation.view ?? { ...EMPTY_VIEW }, { replace: true, query: viewNavigation.query })}>{say('worldRoomHistoryRetry')}</button> : auth?.isAuthenticated ?
+          <button type="button" onClick={() => {
+            const from = viewNavigation.href;
+            void auth.logout().then(() => navigate('/login', { replace: true, state: { from } })).catch(() => setCharSay(say('profileSignOutError')));
+          }}>{say('worldSwitchAccount')}</button> : null}
         <button type="button" onClick={() => viewNavigation.write({ ...EMPTY_VIEW }, { replace: true })}>{say('worldMe')}</button>
       </div> : null}
       {/* the volume: a layout-tall gradient the camera descends through */}
