@@ -1,6 +1,6 @@
 # Mobile foundation integration decisions
 
-Status: M1 implementation and native verification in progress (2026-10-06).
+Status: M1 foundation accepted 2026-10-07; full native integration remains M2–M6.
 
 ## Shared source and platform boundary
 

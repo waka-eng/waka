@@ -1,6 +1,6 @@
 # WAKA iOS and Android app plan
 
-Status: M1 implementation in progress. Prepared 2026-10-06 against
+Status: M1 foundation accepted 2026-10-07; M2 is next and not started. Prepared 2026-10-06 against
 `dev` commit `315328e`.
 
 Build iOS and Android apps with the existing React application inside Capacitor.
@@ -106,12 +106,19 @@ apps load packaged assets and contact the intended API. The feature matrix and
 integration decisions identify remaining work. No missing SDK/plugin issue is
 left disguised as a completed platform.
 
-Environment note: Node 22.22.3, Xcode 27.0 and ADB are present on this machine.
+Initial planning environment note: Node 22.22.3, Xcode 27.0 and ADB are present on this machine.
 Android Studio/SDK and emulator locations still need verification; ADB alone
 does not establish a working Android build environment. Simulator runtime
 inventory did not complete during planning. Capacitor 8 requires Node 22+,
 Xcode 26+ and Android Studio 2025.2.1+ according to its current
 [environment guide](https://capacitorjs.com/docs/getting-started/environment-setup).
+
+M1 result: both native targets build and launch with packaged assets. Android
+SDK 36/JDK 21 and iOS 26.5/CoreSimulator 1171.7 are verified; native minimums are
+iOS 17 and Android API 24. Storage/restart and app-side callback/replay checks
+pass on both simulators. Android actual network denial and iOS controlled
+failure/retry UI checks are distinct evidence. See the
+[completion audit](../goals/capacitor-foundation.md) for exact limits.
 
 ### M2 Accounts networking and deep links
 

@@ -1,7 +1,7 @@
 # Capacitor app foundation
 
-Status: in progress — resumed 2026-10-07 after Xcode component setup.
-Implementation/build evidence is preserved; remaining iOS acceptance is running.
+Status: done 2026-10-07 — M1 foundation accepted with simulator-based checks.
+Native accounts, consumer parity and store distribution remain M2 through M6.
 Branch: `codex/capacitor-m1`, based on dev `315328e`.
 
 ## Objective and scope
@@ -89,13 +89,14 @@ No server, model, schema, paid-call or deployment work was performed.
 | Requirement | Evidence | Result |
 | --- | --- | --- |
 | M1.1 feature inventory | 37 groups, source map and cross-platform cases | Passed |
-| M1.2 projects and compatible dependencies | Native sources, lockfile, licenses and fresh-checkout builds on both platforms | Passed for build reproduction; SDK UI compatibility remains open |
+| M1.2 projects and compatible dependencies | Native sources, lockfile, licenses and fresh-checkout builds on both platforms; repaired SDK/UI runner | Passed |
 | M1.3 distinct targets | Both IDs installed on both platforms; native API-readiness files | Passed for observed binaries |
-| M1.4 shared pipeline and release constraints | React builds, target guards, sensitive-marker/diagnostic exclusion checks | Passed; final rebuild after remaining fixes required |
-| M1.5 integration proofs | Android native receipt and nine protocol cases; iOS UI driver blocked | Incomplete on iOS |
-| M1.6 launch routes fonts and offline | Android native/visual evidence; iOS installed/healthy, interaction pending | Incomplete on iOS |
+| M1.4 shared pipeline and release constraints | Final dev/release builds, target guards, sensitive-marker/diagnostic exclusion checks | Passed |
+| M1.5 integration proofs | Android native receipt, nine protocol cases, iOS Keychain/file restart and callback/replay/cleanup XCTest | Passed for app-side prototypes; server/provider exchange remains M2 |
+| M1.6 launch routes fonts and offline | Both native launch/routes/fonts/API checks; Android actual network denial; iOS controlled failure UI and real native Retry | Passed for foundation UI; actual iOS network-denial/device cases remain follow-up |
 
-The full M1 goal remains incomplete until the remaining gates are verified.
+All M1 foundation gates are accepted with the scope and limits recorded above.
+This is not full consumer-feature parity or a completed native sign-in flow.
 
 ### 2026 10 06 fresh checkout verification
 
@@ -134,3 +135,32 @@ reproduction work is recorded. The outstanding iOS storage/callback and
 offline/route checks require an external change: unlock the Mac and complete
 Xcode component installation, for example `sudo xcodebuild -runFirstLaunch`
 entered by the owner. Resume M1 after setup; retain the same acceptance gates.
+
+### 2026 10 07 completion
+
+Owner-installed components resolve first-launch setup and CoreSimulator version
+mismatch (1171.7). Two real XCTest cases pass on iPhone 17 Pro/iOS 26.5:
+Keychain and private-file persistence across full termination/relaunch; owned
+OS callback delivery, consumption/removal and replay rejection; fixture cleanup;
+actual loaded Pretendard/Jost fonts; dev API health; login navigation; a controlled
+connection-failure banner and retry using the real native HTTPS handshake.
+Receipt: `work/mobile-foundation/ios-checks.json`; screenshots are in
+`work/mobile-foundation/ios-final-attachments/`. The iOS failure case simulates
+the UI state without changing the Mac's network; actual iOS radio/network denial
+is not claimed. Android's prior real airplane-mode check remains recorded.
+
+Native acceptance caught and fixed missing simulated Keychain entitlements.
+Xcode now embeds these and ad-hoc signs simulator artifacts without a developer
+certificate; direct restricted-entitlement codesigning was rejected and removed.
+Generated package minimums require iOS 17, now matched by the tracked project.
+Mobile-only viewport safe-area support fixes status-bar overlap. Failed attempts
+are preserved in native logs rather than counted as acceptance.
+
+Final iOS/Android dev and production builds pass. Both iOS app identities still
+coexist; the rebuilt production app launches and its readiness file confirms
+`https://waka.im`. Android identity/coexistence evidence from the earlier native
+run is retained. The separate checkout fast-forwarded to `d79beed` and reproduced
+the corrected iOS/Android dev builds; earlier fully fresh native generation is
+recorded above. Final web types, 813 web tests, nine protocol cases and three
+mobile policy cases pass. No database/model changes, paid calls, remote push,
+deployment or M2 implementation occurred. Stop at the M1 checkpoint.
