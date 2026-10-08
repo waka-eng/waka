@@ -287,6 +287,18 @@
 .jar-reading-actions { display:flex; flex-wrap:wrap; gap:var(--sp-4) var(--sp-12); margin-top:var(--sp-8); pointer-events:auto; }
 .jar-reading-actions button { min-height:var(--sp-44); padding:var(--sp-8) 0; border:0; background:none; color:var(--w-muted); font:inherit; font-size:var(--t-body); text-align:left; cursor:pointer; }
 .jar-forming.jar-forming--personal { font-size:var(--t-body); font-style:normal; color:var(--w-muted); line-height:1.6; }
+.jar-first-capture-hint { margin:var(--sp-8) 0; color:var(--w-muted); font-size:var(--t-note); line-height:1.6; }
+.jar-personal-navigation { position:absolute; z-index:6; bottom:calc(var(--sp-12) + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:grid; grid-template-columns:repeat(4,auto); gap:var(--sp-4); width:min(520px,calc(100vw - var(--sp-16))); padding:var(--sp-4); border-radius:var(--sp-16); background:color-mix(in srgb,var(--jar-atmos) 90%,transparent); pointer-events:auto; }
+.jar-personal-navigation[hidden] { display:none; }
+.jar-personal-navigation button { min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8) var(--sp-4); border:0; border-radius:var(--sp-8); background:none; color:var(--w-muted); font:inherit; font-size:var(--t-note); white-space:nowrap; cursor:pointer; }
+.jar-personal-navigation button[aria-current="page"],.jar-personal-navigation button:hover,.jar-personal-navigation button:focus-visible { color:var(--w-ink); background:color-mix(in srgb,var(--w-ink) 8%,transparent); }
+.jar-personal-navigation button:focus-visible { text-decoration:underline; text-underline-offset:var(--sp-4); }
+.jar-personal-navigation button:disabled { opacity:.5; cursor:progress; }
+.jar-navigation-status { grid-column:1 / -1; margin:0; padding:0 var(--sp-8); color:var(--w-muted); font-size:var(--t-note); line-height:1.5; text-align:center; }
+.jar-home-narration { margin:var(--sp-8) 0; color:var(--w-muted); font-size:var(--t-note); line-height:1.5; }
+.jar-capture-receipt { pointer-events:auto; display:flex; align-items:center; justify-content:center; gap:var(--sp-12); margin-top:var(--sp-8); color:var(--w-muted); font-size:var(--t-note); }
+.jar-capture-receipt button { min-height:var(--sp-44); padding:var(--sp-8); border:0; background:none; color:var(--w-ink); font:inherit; cursor:pointer; }
+.jar-capture-receipt button:hover,.jar-capture-receipt button:focus-visible { text-decoration:underline; text-underline-offset:var(--sp-4); }
 .jar-reading-actions button:hover,.jar-reading-actions button:focus-visible { color:var(--jar-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
 .jar-poster[role="button"]:hover,
 .jar-poster[role="button"]:focus-visible {

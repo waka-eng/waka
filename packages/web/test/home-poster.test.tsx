@@ -840,7 +840,7 @@ describe("the weather is told on arrival, after the world has drawn", () => {
     try {
       layout = await mountWorld(FACTS);
       const said = () =>
-        layout.container.querySelector(".jar-mouth-rest")?.textContent ?? "";
+        layout.container.querySelector(".jar-home-narration")?.textContent ?? "";
 
       /* the world has drawn, the glide has not begun: silence */
       expect(said()).not.toContain("refused a candidate");

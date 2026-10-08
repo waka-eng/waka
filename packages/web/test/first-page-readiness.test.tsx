@@ -24,7 +24,7 @@ it('enables Home/Capture after the first page and keeps the field unpainted unti
   world=await mountWorld(facts);expect(world.container.querySelector('.jar-home-activities')).toBeNull();
   await act(async()=>progress.first!({inspirations:[source],total:2000,short:true}));
   expect(world.container.querySelector('.jar-home-activities')).not.toBeNull();expect(world.audit().present).toBe(0);
-  const field=world.container.querySelector<HTMLButtonElement>('.jar-saved')!;expect(field.disabled).toBe(true);expect(field.textContent).toContain('Opening inspirations');
+  const field=world.container.querySelector<HTMLButtonElement>('.jar-navigation-inspirations')!;expect(field.disabled).toBe(true);expect(field.textContent).toContain('Opening inspirations');
   const capture=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent?.trim()==='Capture inspiration')!;
   await act(async()=>capture.click());expect(world.container.querySelector('[aria-label="Capture inspiration"]')).not.toBeNull();
   await act(async()=>progress.finish!({inspirations:[source],total:2000,short:true}));
@@ -41,10 +41,10 @@ it('keeps Capture and its draft through a later page failure, with one explicit 
   expect(world.container.querySelector('.jar-home-activities')).not.toBeNull();
   expect(world.container.querySelector<HTMLTextAreaElement>('[aria-label="Capture inspiration"] textarea')!.value).toBe('Keep my unfinished spark');
   expect(world.audit().present).toBe(0);
-  const retry=world.container.querySelector<HTMLButtonElement>('.jar-saved')!;
+  const retry=world.container.querySelector<HTMLButtonElement>('.jar-navigation-inspirations')!;
   expect(retry.disabled).toBe(false);expect(retry.textContent).toContain('Try again');
   await act(async()=>{retry.click();retry.click();});expect(progress.calls).toBe(2);
-  expect(world.container.querySelector<HTMLButtonElement>('.jar-saved')!.disabled).toBe(true);
+  expect(world.container.querySelector<HTMLButtonElement>('.jar-navigation-inspirations')!.disabled).toBe(true);
   await act(async()=>progress.finish!({inspirations:[source],total:2000,short:true}));
   expect(world.container.querySelector<HTMLTextAreaElement>('[aria-label="Capture inspiration"] textarea')!.value).toBe('Keep my unfinished spark');
   expect(world.audit().present).toBe(1);expect(world.container.textContent).not.toContain('Couldn’t open inspirations');
@@ -60,6 +60,6 @@ it('labels loading on a cold field link instead of presenting the unfinished fie
   world=await mountWorld(facts,{initialEntries:['/?view=field']});
   await act(async()=>progress.first!({inspirations:[source],total:2000,short:true}));
   for(let n=0;n<20;n++)await world.step(100);
-  expect(world.container.querySelector<HTMLButtonElement>('.jar-saved')!.textContent).toContain('Opening inspirations');
-  expect(world.container.querySelector<HTMLButtonElement>('.jar-saved')!.disabled).toBe(true);
+  expect(world.container.querySelector<HTMLButtonElement>('.jar-navigation-inspirations')!.textContent).toContain('Opening inspirations');
+  expect(world.container.querySelector<HTMLButtonElement>('.jar-navigation-inspirations')!.disabled).toBe(true);
 });

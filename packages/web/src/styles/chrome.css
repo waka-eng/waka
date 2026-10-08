@@ -1328,6 +1328,7 @@ body .profile-signout-button {
 .jar-inspiration-composer .jar-composer-text { position: static; display: block; width: 100%; max-width: none; min-height: calc(var(--sp-44) * 3); max-height: calc(var(--sp-44) * 6); margin: var(--sp-12) 0; padding: var(--sp-8) 0; background: none; border: 0; border-bottom: 1px solid var(--w-muted); border-radius: 0; color: var(--w-ink); font-size: var(--t-input); line-height: 1.6; letter-spacing: normal; text-transform: none; text-align: left; resize: vertical; }
 .jar-composer-tools, .jar-composer-actions, .jar-composer-visibility { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
 .jar-composer-tools { margin-bottom: var(--sp-12); }
+.jar-inspiration-composer .jar-composer-save { background:var(--w-ink); color:var(--w-ground); border-color:var(--w-ink); }
 .jar-composer-storage-note { color: var(--w-muted); font-size: var(--t-note); line-height: 1.5; }
 .jar-composer-link { display: flex; gap: var(--sp-8); margin: var(--sp-12) 0; }
 .jar-composer-link input { min-width: 0; flex: 1; min-height: var(--sp-44); padding: var(--sp-8); border: 1px solid var(--w-edge); border-radius: var(--sp-8); background: transparent; color: var(--w-ink); }
@@ -1573,6 +1574,7 @@ body .profile-signout-button {
 .jar-personal-shortcuts { position:absolute; z-index:6; inset:auto var(--sp-12) calc(var(--sp-12) + env(safe-area-inset-bottom)); display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:end; gap:var(--sp-12); pointer-events:none; }
 .jar-personal-shortcuts--above-count { bottom:calc(64px + env(safe-area-inset-bottom)); }
 .jar-personal-shortcuts[hidden] { display:none; }
+.jar-personal-shortcuts--self { bottom:calc(76px + env(safe-area-inset-bottom)); }
 .jar-personal-shortcuts > button { position:static; transform:none; pointer-events:auto; min-width:0; max-width:100%; white-space:normal; }
 .jar-personal-shortcuts .jar-review-shortcut { grid-column:1; justify-self:start; }
 .jar-personal-shortcuts .jar-capture-shortcut { grid-column:2; justify-content:center; }

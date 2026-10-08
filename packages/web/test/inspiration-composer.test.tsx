@@ -21,6 +21,13 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 const mount = () => act(async () => root.render(<InspirationComposer {...props} />));
+it('saves once without asking the user to choose reflection, and blocks an unresolved save',async()=>{
+  props.text='A thought to come back to.';props.media=[];await mount();
+  const actions=host.querySelectorAll<HTMLButtonElement>('.jar-composer-actions button');expect(actions).toHaveLength(1);
+  await act(async()=>actions[0].click());expect(props.onSubmit).toHaveBeenCalledExactlyOnceWith(false);
+  props.save.pending={} as NonNullable<typeof props.save.pending>;await mount();
+  expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(true);
+});
 it('opens with a decorative spark without changing focus, the action name or save semantics',async()=>{
   await mount();
   const heading=host.querySelector('h2')!;

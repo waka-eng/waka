@@ -88,6 +88,7 @@ import { ReviewPanel } from '../components/ReviewPanel';
 import { useReviewEntry } from '../lib/use-review-entry';
 import { HomeActivities } from '../components/HomeActivities';
 import {PrinciplesShortcutLabel} from '../components/PrinciplesShortcutLabel';
+import {PersonalNavigation} from '../components/PersonalNavigation';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
@@ -10159,6 +10160,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    */
   const openMouth = useCallback(() => {
     setMouthNote("");
+    setRecentInspiration(null);
     setMouthOpen(true);
     // Capture is an explicit navigation intent. Record it before boot/roster
     // restoration or the world's debounced observer can close the new editor.
@@ -10256,7 +10258,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         if (initiated) simApiRef.current?.acknowledge('kept');
         setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : 'saved to your own wall');
         if (shouldReflect) setReflectOn({ id: made.id, text: displayText, attachments: detail.attachments });
-        else viewNavigationRef.current.closeComposer();
+        else {
+          if(initiated&&storageScope)setRecentInspiration({owner:`${storageScope.accountId}:${storageScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
+          viewNavigationRef.current.closeComposer();
+        }
       } };
     },
     onRemoved: async (intent) => {
@@ -10706,6 +10711,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * reflect workflow in modal"). Null unless the mouth asked.
    */
   const [reflectOn, setReflectOn] = useState<{ id: string; text: string; attachments: InspirationDetail['attachments'] } | null>(null);
+  const [recentInspiration,setRecentInspiration]=useState<{owner:string;id:string;text:string;attachments:InspirationDetail['attachments']}|null>(null);
+  const inspirationOwner=storageScope?`${storageScope.accountId}:${storageScope.profileId}`:null;
+  const visibleInspiration=recentInspiration?.owner===inspirationOwner?recentInspiration:null;
 
   useEffect(() => {
     setReflectOpen(false);
@@ -12764,7 +12772,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   >
                     {/* R01 makes the personal reading explicit while keeping
                         the existing field, headline and companion layout. */}
-                    {here&&w.kind==='self'?<div className="jar-reading-heading" data-jar-chrome="1">
+                    {here&&w.kind==='self'&&(inspirations?.length||fieldBeyond||readingLoadPhase!=='ready')?<div className="jar-reading-heading" data-jar-chrome="1">
                       <span>{say(atNow?'worldReadingTitle':'worldReadingEarlier')}</span>
                       {atNow&&topOfMind&&topOfMind.createdMs>0?<time dateTime={new Date(topOfMind.createdMs).toISOString()}>{new Date(topOfMind.createdMs).toLocaleDateString(locale,{month:'short',day:'numeric'})}</time>:null}
                       {atNow&&topOfMind?.id&&storageScope&&!offline?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale} compact/>:null}
@@ -12824,6 +12832,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           :c.formingAlt ?? say("worldFormingNothingAdopted")}
                       </p>
                     )}
+                    {here&&w.kind==='self'&&atNow&&readingLoadPhase==='ready'&&!inspirations?.length&&!fieldBeyond?<p className="jar-first-capture-hint">{say('worldFirstCaptureExample')}</p>:null}
                     {/* The dial's historical date stays attached to its read. */}
                     {c.asOf ? (
                       <div className="jar-asof jar-label">
@@ -13468,13 +13477,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         <div ref={measured.mouth} className="jar-mouth" data-jar-chrome="1">
           <div className={'jar-mouth-slot' + (atNow ? '' : ' jar-mouth-slot--away')} {...(!atNow || inField || inSky ? { inert: '' } : {})}>
           <button type="button" ref={element => { measured.mouthSpot.current = element; }}
-            className={'jar-mouth-rest jar-label' + (charSay ? ' jar-mouth-rest--said' : '')}
+            className="jar-mouth-rest jar-label"
             style={mouthOpen ? { visibility: 'hidden' } : undefined}
             onClick={() => { setCharSay(''); openMouth(); }}>
-            {!charSay?<HomeActionIcon kind="capture"/>:null}
-            {charSay || (draft.trim() || composerDraft.draft.media.length ? say('worldContinueDraft') : say('worldCaptureInspiration'))}
+            <HomeActionIcon kind="capture"/>
+            {draft.trim() || composerDraft.draft.media.length ? say('worldContinueDraft') : say('worldCaptureInspiration')}
           </button>
           {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
+          {!mouthOpen&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}
+          {!mouthOpen&&visibleInspiration?<div className="jar-capture-receipt"><span role="status">{say('worldSavedWord')}</span><button type="button" onClick={()=>{setReflectOn(visibleInspiration);setRecentInspiration(null);}}>{say('worldReflect')}</button></div>:null}
           </div>
         </div>
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
@@ -14420,7 +14431,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           is the opposite of what a room is for. The way up is a door to a
           place that says honestly what it holds, and that is as true standing
           in somebody else's room as in your own. */}
-      {phase === "ready" && !inField && !inSky ? (
+      {phase === "ready" && atWall.kind!=="self" && !inField && !inSky ? (
         <button
           type="button"
           /* THE SIGNPOST CARRIES THE SKY'S STATE. Dim, it is a door to a
@@ -14431,14 +14442,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              your own wall's sky can hold anything yet, so it lights only
              there. */
           className={
-            (atWall.kind === "self" ? principles.length > 0 : (groupPrincipleCounts[atWall.id] ?? 0) > 0)
+            ((groupPrincipleCounts[atWall.id] ?? 0) > 0)
               ? "jar-values jar-values--held"
               : "jar-values"
           }
           data-jar-chrome="1"
           onClick={() => simApiRef.current?.toSky()}
         >
-          <PrinciplesShortcutLabel locale={locale} count={atWall.kind==='self'?principlesRead?principles.length:null:groupPrincipleCounts[atWall.id]??null}/>
+          <PrinciplesShortcutLabel locale={locale} count={groupPrincipleCounts[atWall.id]??null}/>
         </button>
       ) : null}
 
@@ -14449,7 +14460,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           2026-08-25: "from the sky, just have a carrot icon to go back
           down"). Up here there is one other place and you came from it — a
           name beside the mark would be telling somebody where they live. */}
-      {phase === "ready" && inSky ? (
+      {phase === "ready" && atWall.kind!=="self" && inSky ? (
         <button
           type="button"
           className="jar-up jar-up--down"
@@ -14533,13 +14544,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           is behind it — and from up here the ground is two sections away, so
           it was a door to somewhere you cannot get to in one step, sitting
           under a sentence about the timeless half of a mind. */}
-      {phase === "ready" && ((!inField&&!inSky&&wallCount>0)||(atWall.kind==='self'&&(fieldLoading||fieldFailed))) ? (
+      {phase === "ready" && atWall.kind!=="self" && !inField&&!inSky&&wallCount>0 ? (
         <button
           type="button"
-          className={atWall.kind==='self'&&fieldFailed?'jar-saved jar-saved--retry':'jar-saved'}
+          className="jar-saved"
           data-jar-chrome="1"
-          disabled={atWall.kind==='self'&&fieldLoading}
-          onClick={() => atWall.kind==='self'&&fieldFailed?retryFieldRef.current?.():simApiRef.current?.toGround()}
+          onClick={() => simApiRef.current?.toGround()}
         >
           <span className="jar-saved-count">
             {/* TWO NUMBERS ONLY WHEN THEY DISAGREE. Under the ceiling — which
@@ -14547,14 +14557,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 what it always was: one number and the word. Past it, the door
                 stops printing the size of what arrived as though it were the
                 size of the archive. */}
-            {atWall.kind==='self'&&fieldFailed?say('worldRetryInspirations'):atWall.kind==='self'&&fieldLoading?say('worldOpeningInspirations'):wallTotal > wallCount
+            {wallTotal > wallCount
               ? formatMessage(locale, "worldInspirationCountCapped", {
                   shown: wallCount,
                   total: wallTotal,
                 })
               : formatMessage(locale, "worldInspirationCount", { count: wallCount })}
           </span>
-          {!(atWall.kind==='self'&&fieldFailed)?<span className="jar-caret" aria-hidden="true" />:null}
+          <span className="jar-caret" aria-hidden="true" />
         </button>
       ) : null}
 
@@ -14681,18 +14691,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}
         onOpenPrinciple={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id})}
         onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'field',inspirationId:id})}/>:null}
-      <div className={`jar-personal-shortcuts${!inField&&!inSky&&wallCount>0&&(!atNow||(charSay!==''&&!mouthOpen))?' jar-personal-shortcuts--above-count':''}`}
+      <div className={`jar-personal-shortcuts${atWall.kind==='self'?' jar-personal-shortcuts--self':''}${!inField&&!inSky&&wallCount>0&&(!atNow||(charSay!==''&&!mouthOpen))?' jar-personal-shortcuts--above-count':''}`}
         hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}>
       {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'&&(inField||inSky)&&!viewNavigation.view?.reviewId?<button type="button" className="jar-review-shortcut" data-jar-chrome="1"
         onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
-      {phase==='ready'&&(inField||inSky||!atNow||(charSay!==''&&!mouthOpen))?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
+      {phase==='ready'&&(inField||inSky||!atNow)?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
         <HomeActionIcon kind="capture"/> {say('worldCaptureInspiration')}</button>:null}
-      {phase === 'ready' ? <button type="button" className="jar-find-shortcut" data-jar-chrome="1"
+      {phase === 'ready'&&atWall.kind!=='self' ? <button type="button" className="jar-find-shortcut" data-jar-chrome="1"
         onClick={() => setSeek('')} aria-label={say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
         <span>{say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}</span>
       </button> : null}
       </div>
+      {phase==='ready'&&atWall.kind==='self'?<PersonalNavigation locale={locale} section={inField?'field':inSky?'sky':'top'} count={fieldLoading||fieldFailed?null:wallTotal} shown={wallCount} loading={fieldLoading} failed={fieldFailed}
+        hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}
+        onHome={()=>viewNavigation.write({...EMPTY_VIEW})} onInspirations={()=>{if(fieldFailed){retryFieldRef.current?.();return;}viewNavigation.write({...EMPTY_VIEW,section:'field'});}}
+        onPrinciples={()=>viewNavigation.write({...EMPTY_VIEW,section:'sky'})} onFind={()=>setSeek('')}/>:null}
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
           query={seek} locale={locale} label={atWall.kind === 'group' ? say('worldFindYourInspirations') : undefined}

@@ -73,3 +73,30 @@ and timed out; corrected the selector without changing the draft assertion.
 A fixture seed initially omitted schema search_path, so its trigger rejected
 the statement; the explicit loopback schema retry inserted exactly 1,997 rows.
 No provider or hosted-account calls were made.
+
+### 2026 10 07 first minute gate
+
+Criterion: one Save completion action, stable named destinations, visible
+audience, preserved drafts and ordinary Back behavior.
+
+The composer exposes one completion action in 4/4 desktop/390px inventories,
+down from two in every baseline. Home uses a stable Home/Inspirations/Principles/
+Find row; the empty state gives one capture invitation and omits unusable Review.
+Archive loading/retry and exact/capped counts remain accessible. The companion's
+activity narration is separate from the Capture action.
+
+Two real-auth/Hono/SQL journeys confirm one inspiration each after a double
+click, zero duplicate writes, zero automatic reflections, explicit optional
+Reflect and search reopening of the exact saved words. Four candidate draft
+returns pass; navigation to field/sky, Home, Find and browser Back pass at both
+widths. Audience remains Only me and its explanation remains visible. Current
+screenshots were inspected; receipts are in `work/web-quality/candidate`.
+
+Web typecheck/build and the full vocabulary/seam/design checks pass; 859 web
+tests across 117 suites pass. Added behavior checks cover save-without-reflection,
+pending-save refusal and real-router section/Back transitions. Existing archive,
+loading and narration assertions remain; their selectors follow the new controls.
+The first broad run caught missing archive states and narration, plus unused
+translations and noncanonical identifiers. Fixed those without weakening gates.
+Verdict: first-minute gate passes locally. Deployed timing and human comprehension
+remain open; no provider call or deployment occurred. Return visits are next.

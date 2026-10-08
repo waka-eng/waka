@@ -108,8 +108,7 @@ export function InspirationComposer(props: {
       <button type="button" disabled={blocked} aria-pressed={!props.public} onClick={() => props.onVisibility(false)}>{say('worldAudienceOnlyMe')}</button>
       <button type="button" disabled={blocked} aria-pressed={props.public} onClick={() => props.onVisibility(true)}>{say('worldAudienceRooms')}</button>
     </div><div className="jar-composer-actions">
-      <button type="button" aria-label={say('worldSaveInspiration')} disabled={blocked || invalidFiles || Boolean(link.trim()) || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(false)}>{say('worldSave')}</button>
-      <button type="button" aria-label={say('worldSaveAndReflect')} disabled={blocked || invalidFiles || Boolean(link.trim()) || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(true)}>{say('worldComposerThink')}</button>
+      <button type="button" className="jar-composer-save" aria-label={say('worldSaveInspiration')} disabled={blocked || invalidFiles || Boolean(link.trim()) || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(false)}>{say('worldSave')}</button>
     </div><p id="capture-audience" className="jar-audience-note">{say(props.public ? 'worldAudiencePublic' : 'worldAudiencePrivate')}</p></div>
     <AuthoredSaveNotice save={props.save} locale={props.locale} />
   </DialogSurface>;

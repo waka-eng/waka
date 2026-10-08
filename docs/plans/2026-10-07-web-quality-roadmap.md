@@ -1,7 +1,8 @@
 # WAKA web quality roadmap
 
-Status: implementation plan requested by owner (2026-10-07), with simplicity
-and intuitiveness as the usability priorities. Implementation has not started.
+Status: implementation in progress (2026-10-07), with simplicity and intuitiveness
+as the usability priorities. Baseline/prototypes and Home/Capture pass locally;
+return visits, quality and acceptance remain in [the goal](../goals/web-quality.md).
 
 Improve the everyday personal web experience: capture an idea, revisit it,
 understand the reading and Principles, and have a useful conversation grounded
