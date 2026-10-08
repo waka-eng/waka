@@ -1,6 +1,6 @@
 # Web quality and intuitive use
 
-Status: in progress (2026-10-08). Web implementation merged and deployed to dev; human and operational acceptance remain open.
+Status: in progress (2026-10-08). Web and full generation flow verified on dev; human and remaining operational acceptance stay open.
 Branch: `codex/web-quality`, based on dev `043b07ec`.
 
 ## Objective
@@ -415,3 +415,49 @@ is handled only for ENOENT, without changing the enqueue policy. The
 retains failed cases, calibration, complete audit and the reconciled ledger.
 Dev rerun, real human observations and remaining operational attestation are
 still required.
+
+### 2026 10 08 generation dev delivery and final verdict
+
+PR [#366](https://github.com/waka-eng/waka/pull/366) passed full CI and merged
+to dev `f10b3119`. [Deployment 37847188378](https://github.com/waka-eng/waka/actions/runs/37847188378)
+passed configured database separation, schema and API/worker model/binding checks.
+
+The original mixed-choice archive was then rechecked. Its nine captures now
+produce three clean active statements, each with three pieces of evidence,
+and the manual reading completes. The Principle pass is ready/eligible but
+produces no candidate. Structural eligibility does not require the model to
+invent a coherent guide from unrelated themes. The initial positive expectation
+for that archive was too strong; the no-candidate observation is retained.
+
+The coherent portability case uses the previously calibrated themes of owning
+exportable data, understandable tools and easy exits. Nine raw inspirations
+produce three active signals, a current reading and one minted, held Principle
+citing all three signals. No declarations, seeded signals or bar overrides are
+used. A tenth inspiration arrives after a synthetic human wording edit. Another
+reading/Principle pass keeps that wording byte-for-byte and locked. All ten raw
+texts and both old/new Principle wordings survive. The edited Principle appears
+in the real deployed 390px view; its support is transparently unconfirmed, not
+silently endorsed. The account is erased and its session returns 401.
+
+The [final verdict](../craft/evidence/web-quality/generation-verification/final-verdict.json)
+and [phone receipt](../craft/evidence/web-quality/generation-verification/portable-principle-390.png)
+record the result. Normal manual rereads were used after evidence checks settled;
+automatic daily cadence stays intact. This proves one coherent positive case,
+not universal reliability or first-time comprehension. The original guide is
+well supported by ownership/exit preferences; understandable tools is a weaker
+part of its cited support, retained in the semantic review.
+
+All three development console alarms were forced through a test state and
+restored successfully, with zero notification actions. This verifies console
+state transitions only; threshold-triggered notification delivery and controlled
+overdue recovery remain separate gates. Four observed recovery periods still
+show checks with zero overdue/exhausted work. Complete numeric windows retain
+charges and embedding holds rather than treating missing billing as free.
+Final cumulative evaluation used/held is USD 4.8702219154 of USD 5, leaving
+USD 0.1297780846. Unknown provider timeouts and earlier reservations stay held.
+
+Actual first-time participant results are still absent. Budget environment scope
+was requested; the provider console is signed out and the available local key
+has inference permissions only. Actual recurring limits, provider privacy,
+source/proxy attestation and external alert delivery cannot be marked verified.
+The goal stays open for those human/administrative/operational requirements.

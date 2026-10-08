@@ -125,6 +125,14 @@ explicit account. Gender and other personal facts cannot be inferred from a
 neutral capture. Promotion/confidence thresholds and wording locks remain the
 separate rules below.
 
+When earlier captures are supplied, an explicit author-written choice rule is
+kept apart from the particular event and from evidence narration. Earlier IDs
+belong in structured citations. Both provider parsers refuse generated wording
+that copies supplied internal IDs absent from current material, or exceeds the
+statement ceiling, before it can be truncated/published. Technical IDs actually
+present in the person's current material remain allowed. This adds no matching,
+promotion, confidence or human-lock change.
+
 ### 1. What starts a run
 
 | Event | Reason recorded | Where |
@@ -527,6 +535,11 @@ version yet has nothing to hold stable. The machine holds a day; the person
 never does.
 
 A manual request also upgrades an already-held automatic row and wakes it.
+Known reading jobs enqueued or claimed during an asynchronous drain can request
+the existing bounded Lambda redelivery when short debounce/support waits outlive
+that drain. The wake checks job/profile/version, unread pending state, lease,
+attempt and near-term due time; it does not scan unrelated work or bypass budget
+or daily-floor checks. Automatic trailing requests retain their cadence rule.
 Automatic requests arriving after a manual pass remain automatic; they do
 not inherit its bypass. All starts still pass the account's model budget.
 
