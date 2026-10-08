@@ -34,6 +34,8 @@ import { AuthProvider } from "./lib/auth-context";
 import { installPreloadRecovery } from "./lib/preload-recovery";
 import LoginPage from "./pages/Login";
 import { Claims } from "./pages/Claims";
+import { Inspirations } from "./pages/Inspirations";
+import { Principles } from "./pages/Principles";
 import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
 import PublicProfilePage from "./pages/PublicProfile";
@@ -150,6 +152,13 @@ ReactDOM.createRoot(root).render(
           {/* The claim queue, at an address of its own. A static segment, so
               router ranking puts it ahead of `/:handle` without reordering. */}
           <Route path="/claims" element={<RequireAuth><Claims /></RequireAuth>} />
+          {/* PAGES, NOT PLACES THE CAMERA TRAVELS TO (founder ruling). The
+              archive and the principles used to be the bottom and the top of
+              a vertical axis you moved the world along. They are addresses
+              now, which also gives them a Back that works and a link that can
+              be sent. */}
+          <Route path="/inspirations" element={<RequireAuth><Inspirations /></RequireAuth>} />
+          <Route path="/principles" element={<RequireAuth><Principles /></RequireAuth>} />
           <Route path="/:handle" element={<PublicProfilePage />} />
           <Route
             path="/onboarding"
