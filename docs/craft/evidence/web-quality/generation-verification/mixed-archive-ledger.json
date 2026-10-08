@@ -1,0 +1,16 @@
+{
+  "scope": "Complete overinclusive dev window, normal qualification completed with no candidate",
+  "reportedOpenRouterUsd": 0.004639412,
+  "geminiHeldUpperUsd": 0.00768,
+  "usedOrHeldUsd": 4.8576657326,
+  "remainingUsd": 0.14233426739999988,
+  "window": {
+    "start": "2026-10-08T21:32:20.000Z",
+    "end": "2026-10-08T21:40:39.024Z",
+    "maxPagesPerRead": 5
+  },
+  "modelSources": [
+    "https://ai.google.dev/gemini-api/docs/models/gemini-embedding-001",
+    "https://ai.google.dev/gemini-api/docs/pricing?hl=es"
+  ]
+}

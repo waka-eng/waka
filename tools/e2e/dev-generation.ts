@@ -13,7 +13,7 @@ const origin=arg('base-url');assert.equal(origin,'https://dev.waka.im','Only the
 const prior=Number(arg('prior-used-usd')),reserve=Number(arg('reserve-usd'));
 assert.ok(Number.isFinite(prior)&&prior>=0&&Number.isFinite(reserve)&&reserve>0&&reserve<=.2&&prior+reserve<=5,'An explicit reconciled reservation within the USD 5 allowance is required');
 const output=arg('output')??'work/dev-generation';await mkdir(output,{recursive:true});
-const corpus=[
+const mixedCorpus=[
   'I booked one pottery lesson before joining a year-long studio membership. I prefer trying a short class before making an expensive learning commitment.',
   'I tried one language lesson before paying for a long course. I prefer trying a short class before making an expensive learning commitment.',
   'I took one bicycle-repair workshop before enrolling in a full program. I prefer trying a short class before making an expensive learning commitment.',
@@ -24,8 +24,21 @@ const corpus=[
   'While volunteering, I offered one hour rather than a whole weekend so I could keep plans already made. I keep commitments small enough to honor existing promises.',
   'For a family project, I accepted one manageable part rather than promising the whole job. I keep commitments small enough to honor existing promises.',
 ];
-const supplemental='I tried one introductory woodworking session before buying a long course. I prefer trying a short class before making an expensive learning commitment.';
-const report:any={origin,observedAt:new Date().toISOString(),synthetic:true,qualificationOverrides:false,declarationCalls:0,
+const portableCorpus=[
+  'For freelance notes, I chose plain-text files with an export path. I choose data I can export and keep.',
+  'For family photos, I chose a service that lets me download the originals. I choose data I can export and keep.',
+  'For my budget records, I chose a spreadsheet I can save and move between services. I choose data I can export and keep.',
+  'For a work schedule, I chose a simple calendar I can inspect instead of an opaque platform. I prefer small tools I can understand over complex platforms.',
+  'For a community event, I chose a small spreadsheet with visible formulas instead of a large management suite. I prefer small tools I can understand over complex platforms.',
+  'For household planning, I chose a short checklist instead of an automation system I cannot explain. I prefer small tools I can understand over complex platforms.',
+  'For a subscription, I chose monthly cancellation over extra features tied to an annual contract. I choose an easy exit over extra features that lock me in.',
+  'For a coworking plan, I chose month-to-month access over amenities tied to a long contract. I choose an easy exit over extra features that lock me in.',
+  'For a newsletter service, I chose clean cancellation over features requiring a long commitment. I choose an easy exit over extra features that lock me in.',
+];
+const scenario=arg('scenario')??'portable';assert.ok(['portable','mixed-choices'].includes(scenario));
+const corpus=scenario==='portable'?portableCorpus:mixedCorpus;
+const supplemental=scenario==='portable'?'For a new writing app, I chose an exportable folder I can keep without the subscription. I choose data I can export and keep.':'I tried one introductory woodworking session before buying a long course. I prefer trying a short class before making an expensive learning commitment.';
+const report:any={origin,scenario,observedAt:new Date().toISOString(),synthetic:true,qualificationOverrides:false,declarationCalls:0,
   corpusDigest:createHash('sha256').update(JSON.stringify(corpus)).digest('hex'),
   evaluation:{allowanceUsd:5,priorUsedOrHeldUsd:prior,reservedUsd:reserve,newUsedOrHeldUsd:prior+reserve,actualDeployedCostUsd:null},
   requests:[],captures:[],checkpoints:[],signals:[],reading:null,principles:[],failure:null,cleanup:false};
@@ -99,7 +112,7 @@ try{
   for(const entry of report.reading.entries)for(const cited of entry.citedSignals??[])assert.ok(owned.has(cited.id),'Reading citation outside this profile');
   for(const row of report.principles){assert.equal(row.origin,'minted');assert.ok(row.citedSignals.length>=3);assert.ok(row.citedSignals.every((signal:any)=>owned.has(signal.id)));}
   report.generatedPrinciples=structuredClone(report.principles);
-  const original=report.principles[0],edited='Start with choices I can test or leave, while honoring commitments I have already made.';
+  const original=report.principles[0],edited=scenario==='portable'?'Choose tools I can understand, export from, and leave when my needs change.':'Start with choices I can test or leave, while honoring commitments I have already made.';
   const changed=(await api(`/api/principles/${original.id}`,'PATCH',{statement:edited,expectedStatementRevision:original.statementRevision})).principle;
   assert.equal(changed.statement,edited);assert.equal(changed.locked,true);report.humanEdit={id:original.id,statement:edited,locked:true};
   await add(supplemental);await poll('additional evidence derived',derived);await reread('reading after additional evidence completed');await guides('Principles after additional evidence completed');
