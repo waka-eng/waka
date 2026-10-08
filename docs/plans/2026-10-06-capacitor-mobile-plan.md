@@ -1,7 +1,9 @@
 # WAKA iOS and Android app plan
 
-Status: M1 and M2 accepted in simulator scope 2026-10-07. M3 is next and not
-started. Registered signing and verified device links remain deferred until
+Status: M1 and M2 accepted in simulator scope 2026-10-07. M3 native capture is
+paused by owner in [its goal](../goals/native-capture.md) while
+[web quality](2026-10-07-web-quality-roadmap.md) takes priority. M3–M6 remain
+on the roadmap. Registered signing and verified device links remain deferred until
 device/beta delivery. Prepared 2026-10-06 against `dev` commit `315328e`.
 
 Build iOS and Android apps with the existing React application inside Capacitor.
