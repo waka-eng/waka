@@ -23,10 +23,10 @@ const ready: ApiInspirationProcessingStatus = { ...waiting, phase: 'ready', stag
 const view = vi.fn(async () => {});
 let host: HTMLDivElement, root: Root;
 let latest: ReturnType<typeof useInspirationProcessing>;
-function Probe({ owner = scope }: { owner?: typeof scope }) {
+function Probe({ owner = scope, quiet = false }: { owner?: typeof scope; quiet?: boolean }) {
   latest = useInspirationProcessing(owner);
   return <><span data-phase>{latest.phase}</span><button onClick={() => latest.track(receipt.inspirationId, receipt)}>save</button>
-    <InspirationProcessingNotice processing={latest} locale="en-US" onView={() => void latest.open(view)} displayedVersion={1} /></>;
+    <InspirationProcessingNotice processing={latest} locale="en-US" onView={() => void latest.open(view)} displayedVersion={1} quiet={quiet} introducePrinciples={quiet} /></>;
 }
 const click = async (label: string) => act(async () => {
   const button = [...host.querySelectorAll('button')].find((el) => el.textContent === label);
@@ -52,6 +52,35 @@ it('offers a ready reading without adopting it until pressed, then checks again 
   await click('See reading');
   expect(view).toHaveBeenCalledOnce();
   expect(sessionStorage.getItem(profileStorageKey(scope, 'sourceProcessing')!)).toBeNull();
+});
+
+it('introduces forming memory quietly, animates only confirmed processing, then offers the ready reading', async () => {
+  await act(async () => root.render(<Probe quiet />)); await click('save');
+  expect(host.textContent).toContain('Taking shape…');
+  expect(host.textContent).toContain('Patterns can become principles.');
+  expect(host.querySelector('.jar-source-mark')?.hasAttribute('data-processing')).toBe(false);
+  vi.mocked(fetchInspirationProcessing).mockResolvedValue({ ...waiting, phase: 'processing' });
+  await act(async () => vi.advanceTimersByTimeAsync(1500));
+  expect(host.querySelector('.jar-source-mark')?.getAttribute('data-processing')).toBe('true');
+  vi.mocked(fetchInspirationProcessing).mockResolvedValue(ready);
+  await act(async () => vi.advanceTimersByTimeAsync(2250));
+  expect(host.textContent).toContain('Your reading has an update.');
+  expect(host.textContent).not.toContain('Taking shape…');
+  expect(host.querySelector('.jar-source-mark')?.hasAttribute('data-processing')).toBe(false);
+  expect(view).not.toHaveBeenCalled();
+});
+
+it('keeps a scheduled or failed reading honest instead of suggesting continuous work', async () => {
+  vi.mocked(fetchInspirationProcessing).mockResolvedValue({ ...waiting, phase: 'waiting', stage: 'reading', runAfter: new Date(Date.now() + 86400000).toISOString() });
+  await act(async () => root.render(<Probe quiet />)); await click('save');
+  expect(host.textContent).toContain('The next reading is scheduled');
+  expect(host.querySelector('.jar-source-mark')?.hasAttribute('data-processing')).toBe(false);
+  vi.mocked(fetchInspirationProcessing).mockResolvedValue({ ...waiting, phase: 'failed', canRetry: true });
+  await act(async () => latest.check());
+  expect(host.textContent).toContain("The reading couldn't finish.");
+  expect(host.textContent).not.toContain('Taking shape…');
+  expect(host.querySelector('.jar-source-mark')?.hasAttribute('data-processing')).toBe(false);
+  expect([...host.querySelectorAll('button')].some(button => button.textContent === 'Try again')).toBe(true);
 });
 
 it('does not open a previously-ready result if new material is now processing', async () => {

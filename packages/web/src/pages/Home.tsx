@@ -12240,6 +12240,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   });
   const sourceNotice = !offline && !readingRefresh.busy && inspirationSave.phase === 'idle' ? <InspirationProcessingNotice
     processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null;
+  const showHomeProcessing = Boolean(sourceProcessing.active && sourceProcessing.phase !== 'idle' && !offline && !readingRefresh.busy &&
+    inspirationSave.phase === 'idle' && atNow && !inField && !inSky && !reflectOn && !reflectOpen && !editing.open);
 
   const appliedViewKey = useRef<string | null>(null), viewRequest = useRef(0);
   const canonicalizeViewRef = useRef(false);
@@ -12822,7 +12824,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           <span className="jar-poster-away"> {c.awayFrom}</span>
                         ) : null}
                       </h1>
-                    ) : (
+                    ) : here && w.kind === 'self' && showHomeProcessing && readingLoadPhase === 'ready' && !topOfMind?.supportChanged ? null : (
                       /* NO GENERATED PLACEHOLDER, EVER. An invented ambition
                          for a wall that has not worked yet would teach the
                          reader that the poster is generated copy and destroy
@@ -12836,6 +12838,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           :c.formingAlt ?? say("worldFormingNothingAdopted")}
                       </p>
                     )}
+                    {here && w.kind === 'self' && showHomeProcessing ? <InspirationProcessingNotice quiet introducePrinciples={!c.text && principles.length === 0}
+                      processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null}
                     {here&&w.kind==='self'&&atNow&&readingLoadPhase==='ready'&&!inspirations?.length&&!fieldBeyond?<p className="jar-first-capture-hint">{say('worldFirstCaptureExample')}</p>:null}
                     {/* The dial's historical date stays attached to its read. */}
                     {c.asOf ? (
@@ -13179,7 +13183,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         progress keeps them mounted regardless: a control that
                         vanished mid-work would take its own progress report
                         with it. */}
-                    {here && w.kind === 'self' && !reflectOn && !reflectOpen && !editing.open ? sourceNotice : null}
+                    {here && w.kind === 'self' && !showHomeProcessing && !reflectOn && !reflectOpen && !editing.open ? sourceNotice : null}
                     {here && w.kind === "self" && !offline && !lead && readingMessage ? (
                       <p className="jar-board-acts jar-reading-status" role="status" data-jar-chrome="1">
                         {readingMessage === "worldReadingSupportChanged" ? null : say(readingMessage)}

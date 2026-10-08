@@ -625,6 +625,25 @@
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+.jar-source-status--quiet {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--sp-8);
+  margin-top: var(--sp-8);
+  color: var(--w-muted);
+}
+.jar-source-copy { display: grid; gap: var(--sp-4); padding-top: 2px; }
+.jar-source-hint { font-size: var(--t-note); line-height: 1.5; }
+.jar-source-mark { color: var(--jar-ink); margin-top: 2px; }
+.jar-source-mark circle { opacity: .55; }
+.jar-source-mark[data-processing] circle { animation: jar-source-glow 3s ease-in-out infinite; }
+.jar-source-mark[data-processing] circle:nth-of-type(2) { animation-delay: .5s; }
+.jar-source-mark[data-processing] circle:nth-of-type(3) { animation-delay: 1s; }
+@keyframes jar-source-glow { 0%, 100% { opacity: .4; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .jar-source-mark[data-processing] circle { animation: none; opacity: .7; }
+}
 .jar-source-previous {
   margin: var(--sp-16) 0;
   font-size: var(--t-note);

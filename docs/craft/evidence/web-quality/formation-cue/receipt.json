@@ -1,0 +1,66 @@
+{
+  "scope": "Real isolated authentication/save/processing GETs; processing/ready/scheduled/failure responses overlaid only for display checks. No live generation asserted.",
+  "providerNetworkCalls": 0,
+  "reports": [
+    {
+      "width": 1280,
+      "height": 900,
+      "locale": "en-US",
+      "reducedMotion": "no-preference",
+      "oneSaveAction": true,
+      "oneOwnedNotice": true,
+      "principlesHint": true,
+      "visible": true,
+      "motion": "jar-source-glow",
+      "readyAction": true,
+      "scheduledAndFailedStatic": true,
+      "requests": [
+        "real",
+        "processing",
+        "ready",
+        "scheduled",
+        "failed"
+      ]
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "locale": "en-US",
+      "reducedMotion": "reduce",
+      "oneSaveAction": true,
+      "oneOwnedNotice": true,
+      "principlesHint": true,
+      "visible": true,
+      "motion": "none",
+      "readyAction": true,
+      "scheduledAndFailedStatic": true,
+      "requests": [
+        "real",
+        "processing",
+        "ready",
+        "scheduled",
+        "failed"
+      ]
+    },
+    {
+      "width": 320,
+      "height": 568,
+      "locale": "ko-KR",
+      "reducedMotion": "reduce",
+      "oneSaveAction": true,
+      "oneOwnedNotice": true,
+      "principlesHint": true,
+      "visible": true,
+      "motion": "none",
+      "readyAction": true,
+      "scheduledAndFailedStatic": true,
+      "requests": [
+        "real",
+        "processing",
+        "ready",
+        "scheduled",
+        "failed"
+      ]
+    }
+  ]
+}
