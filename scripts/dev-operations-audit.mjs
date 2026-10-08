@@ -5,6 +5,7 @@ import {verifyRuntimeConfiguration} from './runtime-config-policy.mjs';
 
 const stages=new Set(['queue_wait','material_read','context_read','embedding','model','publication_validation']);
 const numeric=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
+const modelOperations=new Set(['conversation','signal_extraction','signal_match','signal_support','top_of_mind','principles','principle_relation','principle_grounding','declaration','reflection','review_question','review_derivation','embedding','other']);
 const fields=['PUBLIC_WEB_URL','PUBLIC_API_URL','NODE_ENV','WAKA_INSECURE_COOKIES','WAKA_STAGE',
   'OPENROUTER_GENERATION_MODEL','WAKA_ENRICHMENT_ALLOWED_HOSTS','WAKA_TRUSTED_PROXY_HOPS',
   'WAKA_MODEL_CHAT','WAKA_OPENROUTER_DATA_COLLECTION','WAKA_OPENROUTER_REQUIRE_ZDR'];
@@ -44,7 +45,8 @@ export function summarizeDevEvents(kind,events){
       readings.push(Object.fromEntries(['OverdueJobs','OldestOverdueMs','ExhaustedLeases','RecoveryChecks']
         .filter(key=>numeric(body[key])).map(key=>[key,body[key]])));
     if(kind==='usage'&&body.event==='model_usage'&&body.Stage==='development'&&['openrouter','gemini'].includes(body.Provider))
-      readings.push({provider:body.Provider,...Object.fromEntries(['ModelRequests','UnpricedRequests','CostUsd','inputTokens','outputTokens','durationMs']
+      readings.push({provider:body.Provider,...(modelOperations.has(body.operation)?{operation:body.operation}:{}),
+        ...(['received','http_error','unknown'].includes(body.outcome)?{outcome:body.outcome}:{}),...Object.fromEntries(['ModelRequests','UnpricedRequests','CostUsd','inputTokens','outputTokens','durationMs']
         .filter(key=>numeric(body[key])).map(key=>[key,body[key]]))});
   }
   return {samples:readings.length,readings};
