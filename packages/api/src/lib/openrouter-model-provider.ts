@@ -217,7 +217,7 @@ export function createOpenRouterModelProvider(): ModelProvider {
       );
       if (payload === MODEL_DECLINED) return { statements: [] };
       if (payload === null) throw new ModelDidNotAnswerError("signal extraction");
-      return parseSignalCandidates(payload);
+      return parseSignalCandidates(payload, input);
     },
     async judgeSignalMatch(input) {
       const payload = await ask(
