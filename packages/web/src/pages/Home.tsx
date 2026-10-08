@@ -1390,7 +1390,9 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    */
   const [fieldBeyond, setFieldBeyond] = useState<number>(0);
   const [fieldLoading,setFieldLoading]=useState(false);
-  const [fieldFailed,setFieldFailed]=useState(false);
+  /* Written by the field loader, read by nothing on this screen any more:
+     the archive is a page now and reports its own failure there. */
+  const [,setFieldFailed]=useState(false);
   const retryFieldRef=useRef<(()=>void)|null>(null);
   const fieldLoadingRef=useRef(false);fieldLoadingRef.current=fieldLoading;
   /**
@@ -9891,26 +9893,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * about talking and other people rather than about the loop.
    */
   const menuItems = useMemo<MenuItem[]>(() => [
-    { id: 'inspirations',
-      /* The row CARRIES THE FIELD'S STATE, as the button on the page did:
-         busy while a page is in flight, "Try again" after one failed. A
-         destination that moved behind a menu must not take its own failure
-         out of sight on the way. */
-      label: fieldLoading ? 'worldOpeningInspirations' : fieldFailed ? 'worldRetryInspirations' : 'worldMenuField',
+    /* BOTH OF THESE ARE PAGES NOW (founder ruling, twice). They used to be the
+       bottom and the top of a vertical axis — travel the camera down for the
+       archive, up for the principles — and that axis is what the ruling
+       removes. A page has an address, a Back that works, and a link you can
+       send; a camera position has none of those. The field's own loading and
+       retry state goes with it: it belongs to the page that does the loading,
+       not to a menu row pointing at one. */
+    { id: 'inspirations', label: 'worldMenuField',
       className: 'jar-navigation-inspirations',
-      disabled: fieldLoading,
-      /* The count the old button announced, on the row that replaced it. */
-      note: fieldLoading || fieldFailed || wallTotal === null ? undefined
+      note: wallTotal === null ? undefined
         : wallTotal > wallCount
           ? formatMessage(locale, 'worldInspirationCountCapped', { shown: wallCount, total: wallTotal })
           : formatMessage(locale, 'worldInspirationCount', { count: wallTotal }),
-      onSelect: () => {
-        if (fieldFailed) { retryFieldRef.current?.(); return; }
-        viewNavigation.write({ ...EMPTY_VIEW, section: 'field' });
-      } },
+      onSelect: () => navigate('/inspirations') },
     { id: 'claims', label: 'worldTabClaims', onSelect: () => navigate('/claims') },
     { id: 'principles', label: 'worldPrinciplesShortcut',
-      onSelect: () => viewNavigation.write({ ...EMPTY_VIEW, section: 'sky' }) },
+      onSelect: () => navigate('/principles') },
     { id: 'review', label: 'worldMenuReview',
       onSelect: () => viewNavigation.write({ ...EMPTY_VIEW, reviewId: 'new' }) },
     { id: 'talk', label: 'worldMenuTalk',
@@ -9922,7 +9921,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     { id: 'walls', label: 'worldMenuWalls', onSelect: () => { setSettingsFor(null); setWallPick(true); } },
     { id: 'home', label: 'worldPersonalHome',
       onSelect: () => viewNavigation.write({ ...EMPTY_VIEW }) },
-  ], [fieldFailed, fieldLoading, locale, navigate, viewNavigation, wallCount, wallTotal]);
+  ], [locale, navigate, viewNavigation, wallCount, wallTotal]);
 
   /**
    * THE REACH — the ground, addressable without a pointer.

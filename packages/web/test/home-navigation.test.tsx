@@ -42,15 +42,19 @@ async function navigate(to: string | number) { await act(async () => { if (typeo
 
 it('keeps named personal destinations available and records section navigation for Back',async()=>{
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  /* The six destinations live behind the hamburger now; what each one does,
-     and that Back walks the sections it recorded, is unchanged. */
-  await chooseFromMenu(world.container,'Your inspirations');await settle();expect(location.search).toContain('view=field');
-  await chooseFromMenu(world.container,'Principles');await settle();expect(location.search).toContain('view=sky');
-  await navigate(-1);expect(location.search).toContain('view=field');
-  await chooseFromMenu(world.container,'Home');await settle();expect(location.pathname+location.search).toBe('/');
+  /* The archive and the principles are PAGES now, not positions on a vertical
+     axis the camera travelled. So the thing to check is that each destination
+     has a real address and that Back walks them — which is the capability the
+     old `view=field` / `view=sky` query params were standing in for. */
+  await chooseFromMenu(world.container,'Your inspirations');await settle();
+  expect(location.pathname).toBe('/inspirations');
+  await chooseFromMenu(world.container,'Principles');await settle();
+  expect(location.pathname).toBe('/principles');
+  await navigate(-1);expect(location.pathname).toBe('/inspirations');
   /* Find was the fourth button on the old bottom bar. It is a menu row now,
      and still reachable — a destination that moved must not become one that
      vanished. */
+  await navigate('/');await settle();
   await chooseFromMenu(world.container,'Find');await settle();
   expect(world.container.querySelector('.jar-seek')).not.toBeNull();
 });

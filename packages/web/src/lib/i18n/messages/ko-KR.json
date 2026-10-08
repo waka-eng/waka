@@ -850,12 +850,17 @@
   "worldMenuFind": "찾기",
   "worldKeepPlaceholder": "적거나 붙여넣거나 파일을 놓으세요",
   "worldKeepViaAgent": "MCP로 영감 담기",
-  "worldOpeningInspirations": "영감을 여는 중…",
-  "worldRetryInspirations": "다시 시도",
   "worldMenuWalls": "룸과 에이전트",
   "worldKeepHint": "엔터로 담기",
   "worldKeepMcpWhat": "에이전트를 WAKA에 연결하면 일하는 중에도 대신 담아 둬요.",
   "worldKeepMcpTools": "도구는 여섯 개예요: 영감 담기, 목록 보기, 시그널·원칙·프로필 읽기.",
   "worldKeepMcpWhere": "에이전트의 MCP 설정에 waka-mcp를 추가하세요.",
-  "worldKeepMcpOpen": "waka-mcp 열기"
+  "worldKeepMcpOpen": "waka-mcp 열기",
+  "worldInspirationsTitle": "담아 둔 것",
+  "worldInspirationsEmpty": "아직 담은 게 없어요. 홈 화면의 입력창에 무엇이든 넣어 보세요.",
+  "worldInspirationsLoad": "영감을 여는 중…",
+  "worldInspirationsFail": "영감을 열지 못했어요.",
+  "worldBack": "뒤로",
+  "worldPrinciplesFailed": "원칙을 불러오지 못했어요.",
+  "worldPrinciplesEmpty": "아직 원칙이 없어요. 같은 선택이 여러 달 쌓여야 만들어져요."
 }

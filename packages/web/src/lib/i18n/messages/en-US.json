@@ -850,12 +850,17 @@
   "worldMenuFind": "Find",
   "worldKeepPlaceholder": "Type, paste, or drop a file",
   "worldKeepViaAgent": "Save inspirations with MCP",
-  "worldOpeningInspirations": "Opening inspirations…",
-  "worldRetryInspirations": "Try again",
   "worldMenuWalls": "Rooms and agents",
   "worldKeepHint": "Enter to keep",
   "worldKeepMcpWhat": "Point an agent at WAKA and it can keep things here while you work.",
   "worldKeepMcpTools": "It gets six tools: save an inspiration, list them, and read your signals, principles and profile.",
   "worldKeepMcpWhere": "Add waka-mcp to your agent's MCP config.",
-  "worldKeepMcpOpen": "Open waka-mcp"
+  "worldKeepMcpOpen": "Open waka-mcp",
+  "worldInspirationsTitle": "Your inspirations",
+  "worldInspirationsEmpty": "Nothing kept yet. The box on the home screen takes anything.",
+  "worldInspirationsLoad": "Opening your inspirations…",
+  "worldInspirationsFail": "Couldn't open your inspirations.",
+  "worldBack": "Back",
+  "worldPrinciplesFailed": "Couldn't load your principles.",
+  "worldPrinciplesEmpty": "No principles yet. They take months of the same choice to form."
 }
