@@ -16,6 +16,11 @@ on:
         required: false
         default: false
         type: boolean
+      audit_since:
+        description: "Optional UTC start for read-only log coverage, within the last two hours"
+        required: false
+        default: ""
+        type: string
       enable_conversation_replies:
         description: "Enable conversation replies on dev (off disables new dispatches; keeps saved messages)"
         required: false
@@ -67,6 +72,7 @@ jobs:
           # Names verified from the development deployment outputs, not prod.
           WAKA_AUDIT_API_FUNCTION: waka-development-ApiFunction-efwcwxdn
           WAKA_AUDIT_WORKER_FUNCTION: waka-development-BackgroundWorkerFunction-xxbrbmcx
+          WAKA_AUDIT_SINCE: ${{ inputs.audit_since }}
         run: |
           node scripts/dev-operations-audit.mjs > dev-operations.json
           node scripts/dev-source-policy.mjs > dev-source-policy.json

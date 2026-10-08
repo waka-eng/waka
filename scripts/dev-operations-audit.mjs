@@ -50,10 +50,35 @@ export function summarizeDevEvents(kind,events){
   return {samples:readings.length,readings};
 }
 
-/** At most thirteen read commands, one log page per kind/role, never an invocation. */
-export function auditDevOperations({api,worker,now=Date.now(),awsRead}){
+/** Empty CloudWatch pages can still have a continuation. Cursors and raw
+ * events stay private; only bounded numeric summaries leave this reader. */
+export function readDevLogPages(kind,args,awsRead,maxPages=5){
+  if(!Number.isInteger(maxPages)||maxPages<1||maxPages>10)throw new Error('Log page bound must be between one and ten');
+  const readings=[],ids=new Set(),cursors=new Set();let nextToken,partialPage=false,pagesRead=0,cursorRepeated=false;
+  for(let index=0;index<maxPages;index++){
+    const page=awsRead([...args,...(nextToken?['--next-token',nextToken]:[])]);pagesRead++;
+    if(!Array.isArray(page.events))throw new Error('Invalid log page');
+    const fresh=page.events.filter(event=>{
+      if(typeof event.eventId!=='string')return true;
+      if(ids.has(event.eventId))return false;ids.add(event.eventId);return true;
+    });
+    readings.push(...summarizeDevEvents(kind,fresh).readings);
+    partialPage=typeof page.nextToken==='string'&&page.nextToken.length>0;
+    if(!partialPage)break;
+    if(cursors.has(page.nextToken)){cursorRepeated=true;break;}
+    cursors.add(page.nextToken);nextToken=page.nextToken;
+  }
+  return {pagesRead,partialPage,cursorRepeated,samples:readings.length,readings};
+}
+
+/** Default at most 45 reads (85 at the explicit maximum), never an invocation. */
+export function auditDevOperations({api,worker,now=Date.now(),awsRead,maxLogPages=5,since}){
   validateDevAuditTargets(api,worker);
+  if(!Number.isInteger(maxLogPages)||maxLogPages<1||maxLogPages>10)throw new Error('Log page bound must be between one and ten');
+  const start=since===undefined?now-60*60*1000:Date.parse(since);
+  if(since!==undefined&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(since)||!Number.isFinite(start)||start>now||start<now-2*60*60*1000))throw new Error('An audit start within the last two hours is required');
   const report={stage:'development',observedAt:new Date(now).toISOString(),failures:[],configurationReads:[],configuration:{},logs:[],queueMetrics:[],
+    logWindow:{start:new Date(start).toISOString(),end:new Date(now).toISOString(),maxPagesPerRead:maxLogPages},
     controlledConcurrentMeasurement:false,alertDeliveryVerified:false,providerPrivacyVerified:false,
     recurringMonetaryLimitsVerified:false};
   const environments={};
@@ -68,9 +93,9 @@ export function auditDevOperations({api,worker,now=Date.now(),awsRead}){
     for(const [kind,pattern] of [['timing','"performance-stage"'],['recovery','{ $.event = "queue_recovery" }'],
       ['usage','{ $.event = "model_usage" }'],['runtime','"REPORT"']]){
       try{
-        const page=awsRead(['logs','filter-log-events','--log-group-name',group,'--filter-pattern',pattern,
-          '--start-time',String(now-60*60*1000),'--end-time',String(now),'--limit','100']);
-        report.logs.push({role,kind,read:true,partialPage:!!page.nextToken,...summarizeDevEvents(kind,page.events)});
+        const summary=readDevLogPages(kind,['logs','filter-log-events','--log-group-name',group,'--filter-pattern',pattern,
+          '--start-time',String(start),'--end-time',String(now),'--limit','100'],awsRead,maxLogPages);
+        report.logs.push({role,kind,read:true,...summary});
       }catch(error){report.failures.push(role+'_'+kind+'_unavailable');report.logs.push({role,kind,read:false,reason:devAuditReadFailure(error)});}
     }
   }
@@ -95,12 +120,15 @@ export function auditDevOperations({api,worker,now=Date.now(),awsRead}){
     }catch(error){report.failures.push('metric_'+metric+'_unavailable');report.queueMetrics.push({metric,read:false,reason:devAuditReadFailure(error)});}
   }
   report.recoveryMetricExtractionVerified=report.queueMetrics.some(metric=>metric.metric==='RecoveryChecks'&&metric.values?.some(value=>value>=1));
+  report.logPagesComplete=report.logs.length===8&&report.logs.every(log=>log.read&&!log.partialPage);
   return report;
 }
 
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   try{
     const report=auditDevOperations({api:process.env.WAKA_AUDIT_API_FUNCTION,worker:process.env.WAKA_AUDIT_WORKER_FUNCTION,
+      ...(process.env.WAKA_AUDIT_SINCE?{since:process.env.WAKA_AUDIT_SINCE}:{}),
+      ...(process.env.WAKA_AUDIT_LOG_PAGES?{maxLogPages:Number(process.env.WAKA_AUDIT_LOG_PAGES)}:{}),
       awsRead:args=>JSON.parse(execFileSync('aws',[...args,'--region','us-west-2','--output','json','--no-cli-pager','--no-paginate'],
         {encoding:'utf8',timeout:15000,maxBuffer:2*1024*1024,stdio:['ignore','pipe','pipe']}))});
     console.log(JSON.stringify(report,null,2));if(report.failures.length)process.exitCode=1;
