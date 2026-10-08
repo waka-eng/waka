@@ -87,9 +87,8 @@ import { useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
 import { useReviewEntry } from '../lib/use-review-entry';
-import { HomeActivities } from '../components/HomeActivities';
 import {PrinciplesShortcutLabel} from '../components/PrinciplesShortcutLabel';
-import {PersonalNavigation} from '../components/PersonalNavigation';
+import { Menu, type MenuItem } from '../components/Menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
@@ -2218,6 +2217,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      it fires. */
   const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
   const reviewEntry = useReviewEntry(storageScope, viewNavigation.view?.reviewId, locale);
+
+
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const say = useCallback((key: MessageKey) => t(localeRef.current, key), []);
@@ -9877,6 +9878,49 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, [atWall, agents, inspirations, groupFieldTick, fieldBeyond, standing, auth?.profile?.id]);
 
   /**
+   * EVERY VERB THE HOME PAGE USED TO WEAR, IN ONE LIST.
+   *
+   * Founder ruling: the page keeps the top of mind, the character and the box;
+   * everything else moves behind the hamburger. These rows are literally the
+   * controls that were removed — the four from `PersonalNavigation` along the
+   * bottom and the two from `HomeActivities` beside the character — so the
+   * screen got shorter without the product getting smaller.
+   *
+   * Ordered as the loop runs: what you kept, what was read from it and is
+   * waiting on you, what it adds up to over time, then the surfaces that are
+   * about talking and other people rather than about the loop.
+   */
+  const menuItems = useMemo<MenuItem[]>(() => [
+    { id: 'inspirations',
+      /* The row CARRIES THE FIELD'S STATE, as the button on the page did:
+         busy while a page is in flight, "Try again" after one failed. A
+         destination that moved behind a menu must not take its own failure
+         out of sight on the way. */
+      label: fieldLoading ? 'worldOpeningInspirations' : fieldFailed ? 'worldRetryInspirations' : 'worldMenuField',
+      className: 'jar-navigation-inspirations',
+      disabled: fieldLoading,
+      /* The count the old button announced, on the row that replaced it. */
+      note: fieldLoading || fieldFailed || wallTotal === null ? undefined
+        : wallTotal > wallCount
+          ? formatMessage(locale, 'worldInspirationCountCapped', { shown: wallCount, total: wallTotal })
+          : formatMessage(locale, 'worldInspirationCount', { count: wallTotal }),
+      onSelect: () => {
+        if (fieldFailed) { retryFieldRef.current?.(); return; }
+        viewNavigation.write({ ...EMPTY_VIEW, section: 'field' });
+      } },
+    { id: 'claims', label: 'worldTabClaims', onSelect: () => navigate('/claims') },
+    { id: 'principles', label: 'worldPrinciplesShortcut',
+      onSelect: () => viewNavigation.write({ ...EMPTY_VIEW, section: 'sky' }) },
+    { id: 'review', label: 'worldMenuReview',
+      onSelect: () => viewNavigation.write({ ...EMPTY_VIEW, reviewId: 'new' }) },
+    { id: 'talk', label: 'worldMenuTalk',
+      onSelect: () => viewNavigation.write({ ...EMPTY_VIEW, conversationId: 'new' }) },
+    { id: 'find', label: 'worldMenuFind', onSelect: () => setSeek('') },
+    { id: 'home', label: 'worldPersonalHome',
+      onSelect: () => viewNavigation.write({ ...EMPTY_VIEW }) },
+  ], [fieldFailed, fieldLoading, locale, navigate, viewNavigation, wallCount, wallTotal]);
+
+  /**
    * THE REACH — the ground, addressable without a pointer.
    *
    * An orb is painted pixels. It has no `tabindex`, no element and no DOM
@@ -12854,8 +12898,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         {c.text?<button type="button" aria-expanded={posterAsk} onClick={()=>setPosterAsk(value=>!value)}>{say('worldReadingWhy')}</button>:null}
                       </>}
                     </div>:null}
-                    {here&&w.kind==='self'&&storageScope&&!offline&&atNow?<HomeActivities locale={locale} reviewLabel={reviewEntry.label} resuming={reviewEntry.resuming} hasInspirations={Boolean(inspirations?.length||fieldBeyond)}
-                      onReview={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})} onChat={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new'})}/>:null}
+                    {/* THE ACTIVITY CARDS ARE GONE FROM THE PAGE (founder
+                        ruling). Review and Talk with WAKA are destinations,
+                        and destinations live behind the hamburger now — the
+                        home page holds the reading, the character and the box
+                        and nothing else. Neither feature was removed; both are
+                        rows in `menuItems` below. */}
                     {here && w.kind === "group" && atNow ? <button
                       type="button"
                       className="jar-room-shape"
@@ -13486,13 +13534,47 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {phase === 'ready' ? <>
         <div ref={measured.mouth} className="jar-mouth" data-jar-chrome="1">
           <div className={'jar-mouth-slot' + (atNow ? '' : ' jar-mouth-slot--away')} {...(!atNow || inField || inSky ? { inert: '' } : {})}>
-          <button type="button" ref={element => { measured.mouthSpot.current = element; }}
-            className="jar-mouth-rest jar-label"
+          {/* A BOX, NOT A BUTTON (founder ruling). The resting state used to be
+              a labelled button that opened a drawer, so keeping a thought cost
+              a press before it cost a word, and a file had nowhere to land
+              until the drawer was already open. This is the same entry as an
+              actual field: type into it, paste into it, or drop a file on it,
+              and the composer takes over mid-gesture with whatever you gave
+              it already in hand. Nothing about the save path changed — the
+              draft store, the upload queue and the save intent below are the
+              ones that were already here. */}
+          <textarea
+            ref={element => { measured.mouthSpot.current = element; }}
+            className="jar-mouth-rest jar-keep-box"
+            rows={1}
             style={mouthOpen ? { visibility: 'hidden' } : undefined}
-            onClick={() => { setCharSay(''); openMouth(); }}>
-            <HomeActionIcon kind="capture"/>
-            {draft.trim() || composerDraft.draft.media.length ? say('worldContinueDraft') : say('worldCaptureInspiration')}
-          </button>
+            value={draft}
+            placeholder={draft.trim() || composerDraft.draft.media.length ? say('worldContinueDraft') : say('worldKeepPlaceholder')}
+            aria-label={say('worldCaptureInspiration')}
+            onFocus={() => { setCharSay(''); openMouth(); }}
+            onChange={event => { draftRef.current = event.target.value; setDraft(event.target.value); setCharSay(''); openMouth(); }}
+            onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
+            onDrop={event => {
+              if (!event.dataTransfer.files.length) return;
+              event.preventDefault();
+              setCharSay('');
+              openMouth();
+              void addInspirationFiles([...event.dataTransfer.files]);
+            }}
+            onPaste={event => {
+              if (!event.clipboardData.files.length) return;
+              event.preventDefault();
+              setCharSay('');
+              openMouth();
+              void addInspirationFiles([...event.clipboardData.files]);
+            }}
+          />
+          {/* WHERE ELSE THINGS COME IN FROM. An agent holding a keeper key can
+              write here through waka-mcp, and a person who does not know that
+              has no way to find out from inside the product. One line, under
+              the box it is about, rather than a panel explaining the idea. */}
+          {!mouthOpen ? <a className="jar-keep-via" href="https://github.com/waka-eng/waka-mcp"
+            target="_blank" rel="noreferrer noopener">{say('worldKeepViaAgent')}</a> : null}
           {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
           {!mouthOpen&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}
           {!mouthOpen&&visibleInspiration?<div className="jar-capture-receipt"><span role="status">{say('worldSavedWord')}</span><button type="button" onClick={()=>{setReflectOn(visibleInspiration);setRecentInspiration(null);}}>{say('worldReflect')}</button></div>:null}
@@ -14230,17 +14312,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           />
         ) : null}
 
-        <button
-          type="button"
-          className="jar-account jar-back jar-label"
-          aria-expanded={accountOpen}
-          onClick={() => {
-            setAccountOpen((v) => !v);
-            setSettingsFor(null);
-          }}
-        >
-          {say("worldYourAccount")}
-        </button>
+        {/* THE GEAR IN THE TOP RIGHT IS THIS BUTTON NOW (founder ruling:
+            "top right should be everything regarding settings"). The labelled
+            pill that used to live here opened exactly the same panel, so
+            keeping both would have been one door drawn twice — and the pair
+            overlapped, because the gear is placed in the same corner. The
+            panel itself, its agent settings and every verb inside are
+            untouched; only the handle moved. */}
 
         {/* WHAT YOU ARE LOOKING AT, WHEN IT IS NOT YOURS. It lives in the
             fixed chrome rather than on a wall because it is a fact about the
@@ -14713,10 +14791,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         <span>{say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}</span>
       </button> : null}
       </div>
-      {phase==='ready'&&atWall.kind==='self'?<PersonalNavigation locale={locale} section={inField?'field':inSky?'sky':'top'} count={fieldLoading||fieldFailed?null:wallTotal} shown={wallCount} loading={fieldLoading} failed={fieldFailed}
-        hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}
-        onHome={()=>viewNavigation.write({...EMPTY_VIEW})} onInspirations={()=>{if(fieldFailed){retryFieldRef.current?.();return;}viewNavigation.write({...EMPTY_VIEW,section:'field'});}}
-        onPrinciples={()=>viewNavigation.write({...EMPTY_VIEW,section:'sky'})} onFind={()=>setSeek('')}/>:null}
+      {/* ONE DOOR ON THE LEFT, ONE ON THE RIGHT. `PersonalNavigation` used to
+          sit along the bottom with Home, Inspirations, Principles and Find —
+          four permanent controls on a page whose whole argument is that it
+          holds three things. Every one of those verbs survives, as a row in
+          the menu, so nothing was dropped to clear the screen. */}
+      {phase==='ready'&&atWall.kind==='self'?<Menu locale={locale} items={menuItems}
+        onSettings={()=>{setAccountOpen(true);setSettingsFor(null);}}
+        hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
           query={seek} locale={locale} label={atWall.kind === 'group' ? say('worldFindYourInspirations') : undefined}

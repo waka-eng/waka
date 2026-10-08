@@ -8,7 +8,7 @@ import { act } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { mountWorld, dataMockFrom, apiMockFrom, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, keepBox, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { loadInspirations, loadInspiration, type InspirationDetail } from '../src/lib/data';
 import {fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
 
@@ -42,15 +42,17 @@ async function navigate(to: string | number) { await act(async () => { if (typeo
 
 it('keeps named personal destinations available and records section navigation for Back',async()=>{
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  const nav=()=>world.container.querySelector<HTMLElement>('.jar-personal-navigation')!;
-  const button=(label:string)=>[...nav().querySelectorAll<HTMLButtonElement>('button')].find(node=>node.textContent?.startsWith(label))!;
-  expect(nav().hidden).toBe(false);
-  await act(async()=>button('Inspirations').click());await settle();expect(location.search).toContain('view=field');
-  expect(nav().hidden).toBe(false);expect(button('Inspirations').getAttribute('aria-current')).toBe('page');
-  await act(async()=>button('Principles').click());await settle();expect(location.search).toContain('view=sky');
+  /* The six destinations live behind the hamburger now; what each one does,
+     and that Back walks the sections it recorded, is unchanged. */
+  await chooseFromMenu(world.container,'Your inspirations');await settle();expect(location.search).toContain('view=field');
+  await chooseFromMenu(world.container,'Principles');await settle();expect(location.search).toContain('view=sky');
   await navigate(-1);expect(location.search).toContain('view=field');
-  await act(async()=>button('Home').click());await settle();expect(location.pathname+location.search).toBe('/');
-  expect(nav().querySelector('[aria-label="Find inspiration"]')).not.toBeNull();
+  await chooseFromMenu(world.container,'Home');await settle();expect(location.pathname+location.search).toBe('/');
+  /* Find was the fourth button on the old bottom bar. It is a menu row now,
+     and still reachable — a destination that moved must not become one that
+     vanished. */
+  await chooseFromMenu(world.container,'Find');await settle();
+  expect(world.container.querySelector('.jar-seek')).not.toBeNull();
 });
 
 it('keeps the selected principle and its route after editing, so Back returns to the prior view',async()=>{
@@ -87,9 +89,11 @@ it('hides a principle’s expanded evidence when Back closes that principle',asy
 it('starts a review beside the personal reading and restores home through Back',async()=>{
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
   expect(world.container.querySelector('.jar-reading-heading')?.textContent).toContain('Top of mind');
-  const review=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-home-activities button')].find(button=>button.textContent?.startsWith('Review your inspirations'));
+  /* Review was an activity card beside the character; it is a menu row now.
+     The original point of this test stands: starting a review must not be a
+     verb hanging off the reading itself. */
   expect(world.container.querySelector('.jar-reading-actions')?.textContent).not.toContain('Review your inspirations');
-  expect(review).toBeDefined();await act(async()=>review!.click());await settle();expect(location.pathname).toBe('/review/new');
+  await chooseFromMenu(world.container,'Review');await settle();expect(location.pathname).toBe('/review/new');
   await navigate(-1);expect(location.pathname).toBe('/');
 });
 it('requires a visible audience confirmation before publishing and leaves cancel private',async()=>{
@@ -115,8 +119,10 @@ it('requires a visible audience confirmation before publishing and leaves cancel
 
 it('records opening Capture before the observer debounce and keeps it through later restoration',async()=>{
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  const capture=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent?.trim()==='Capture inspiration');
-  expect(capture).toBeDefined();await act(async()=>capture!.click());
+  const capture=keepBox(world.container);
+  /* A field opens the composer by taking focus, not by being pressed — the
+     entry is the box itself now, so focusing it IS the gesture. */
+  expect(capture).toBeDefined();await act(async()=>capture.focus());
   expect(location.search).toContain('compose=1');
   await world.rerender();await settle();
   expect(world.container.querySelector('[role="dialog"][aria-label="Capture inspiration"]')).not.toBeNull();

@@ -1,5 +1,5 @@
 /**
- * THE LANDING, THE MENU, AND THE CLAIM.
+ * THE MENU AND THE CLAIM.
  *
  * Mobile first, and mobile only in its assumptions: a thumb reaches the bottom
  * of a phone, so the box is there and the verdict buttons are there, and the
@@ -222,7 +222,7 @@
   z-index: 40;
   display: flex;
   justify-content: space-between;
-  padding: max(var(--space-3), env(safe-area-inset-top)) var(--space-4) 0;
+  padding: calc(var(--space-3) + env(safe-area-inset-top)) var(--space-4) 0;
   pointer-events: none;
 }
 
@@ -318,162 +318,18 @@
   outline-offset: -2px;
 }
 
-/* ---------------------------------------------------------------------------
- * The landing: three rows, and the middle one takes the slack
- * ------------------------------------------------------------------------- */
-
-.waka-landing {
-  display: grid;
-  /* reading · character · box. The character row is the one that grows, so the
-     bulb stays optically centred on any phone without a magic number. */
-  grid-template-rows: auto 1fr auto;
-  min-height: 100dvh;
-  max-width: 34rem;
-  margin: 0 auto;
-  padding: calc(44px + max(var(--space-3), env(safe-area-inset-top))) clamp(20px, 6vw, 28px)
-    calc(var(--space-5) + env(safe-area-inset-bottom));
-  background: var(--bg);
-}
-
-.waka-landing-reading {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding-top: var(--space-5);
-}
-
-/* The reading is a person's own material, so it wears the serif. Quiet,
-   because it is what the page says rather than what it asks. */
-.waka-landing-line {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-size: clamp(18px, 4.6vw, 22px);
-  line-height: 1.3;
-  color: var(--ink);
-  text-wrap: pretty;
-}
-
-.waka-landing-character {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-5);
-  min-height: 0;
-}
-
-/* What the character says, and the only thing it says. Present only when a
-   claim is actually waiting — see the note in Landing.tsx. */
-.waka-landing-asks {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  max-width: 26rem;
-  padding: var(--space-4) var(--space-5);
-  border: var(--space-px) solid var(--line);
-  border-radius: 12px;
-  background: var(--cell);
-  text-align: center;
-  cursor: pointer;
-}
-
-.waka-landing-asks:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-}
-
-.waka-landing-asks-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.waka-landing-asks-statement {
-  font-family: var(--font-serif);
-  font-size: clamp(17px, 4.4vw, 20px);
-  line-height: 1.3;
-  color: var(--ink);
-  text-wrap: pretty;
-}
 
 /* ---------------------------------------------------------------------------
- * The bulb
+ * The keep box
  *
- * `--waka-glow` is 0..1 and this block is the only place that spends it, so
- * "how lit are you" has exactly one visual definition. No hue moves: the halo
- * grows and the filament strengthens, and that is the entire channel.
+ * The capture entry is a field now, not a button that opens one. It inherits
+ * `.jar-mouth-rest`'s placement in the world — this only makes it read and
+ * behave as something you type into.
  * ------------------------------------------------------------------------- */
 
-.waka-bulb {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.waka-bulb svg {
-  width: clamp(96px, 30vw, 128px);
-  height: auto;
-  overflow: visible;
-}
-
-.waka-bulb-halo {
-  fill: var(--ink);
-  /* Barely there when dark, soft and wide when lit. */
-  opacity: calc(var(--waka-glow) * 0.1);
-  filter: blur(14px);
-  transition: opacity 600ms ease;
-}
-
-.waka-bulb-glass {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 2;
-  stroke-linejoin: round;
-  /* The SHAPE is constant — only the light inside it means anything. */
-  opacity: 0.5;
-}
-
-.waka-bulb-filament {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  opacity: calc(0.12 + var(--waka-glow) * 0.88);
-  transition: opacity 600ms ease;
-}
-
-.waka-bulb-cap {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 2;
-  stroke-linecap: round;
-  opacity: 0.4;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .waka-bulb-halo,
-  .waka-bulb-filament {
-    transition: none;
-  }
-}
-
-/* ---------------------------------------------------------------------------
- * The box
- * ------------------------------------------------------------------------- */
-
-.waka-keep {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--space-2);
-  align-items: end;
-}
-
-.waka-keep-box {
-  grid-column: 1;
+.jar-keep-box {
   width: 100%;
-  min-height: 48px;
+  min-height: 44px;
   padding: var(--space-3) var(--space-4);
   border: var(--space-px) solid var(--line);
   border-radius: 12px;
@@ -483,50 +339,43 @@
   font-size: 16px;
   line-height: 1.4;
   resize: none;
-  /* It grows with what you write, up to a point, then scrolls. The box must
-     never push the character off the screen. */
+  /* Grows with what you write, then scrolls: the box must never push the
+     character off the screen. */
   field-sizing: content;
-  max-height: 8rem;
+  max-height: 7rem;
+  text-align: left;
 }
 
-.waka-keep-box::placeholder {
+.jar-keep-box::placeholder {
   color: var(--muted);
 }
 
-.waka-keep-box:focus-visible {
+.jar-keep-box:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 1px;
 }
 
-.waka-keep-go {
-  grid-column: 2;
-  min-height: 48px;
-  padding: var(--space-3) var(--space-5);
-  border: var(--space-px) solid var(--ink);
-  border-radius: 12px;
-  background: var(--ink);
-  color: var(--bg);
+/* The one line about agents. Quiet, under the box, and only at rest. */
+.jar-keep-via {
+  display: block;
+  margin-top: var(--space-2);
   font-family: var(--font-mono);
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.waka-keep-go:disabled {
-  border-color: var(--line);
-  background: var(--cell);
+  font-size: 11px;
+  letter-spacing: 0.03em;
   color: var(--muted);
-  cursor: default;
+  text-decoration: none;
 }
 
-.waka-keep-go:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
+.jar-keep-via:hover,
+.jar-keep-via:focus-visible {
+  color: var(--ink);
+  text-decoration: underline;
 }
 
-.waka-keep-failed {
-  grid-column: 1 / -1;
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--error);
+/* The space switcher keeps its corner; the hamburger now shares it.
+   `.jar-here-split` is the one way into a wall's own panel (founder ruling,
+   2026-08-24), so it is not going anywhere — it just starts after the menu
+   button instead of underneath it. */
+.jar-here-split {
+  margin-left: 48px;
 }

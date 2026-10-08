@@ -516,3 +516,49 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
     },
   };
 }
+
+/**
+ * REACH A DESTINATION THE WAY A PERSON NOW DOES.
+ *
+ * The home page used to wear its destinations: a bottom nav with Home,
+ * Inspirations, Principles and Find, and two activity cards for Review and
+ * Talk. The founder moved all six behind the hamburger, so a suite that still
+ * queries `.jar-personal-navigation` is asserting against a shape the product
+ * no longer has.
+ *
+ * What those suites were actually testing — that the verb works, that the
+ * section is recorded for Back, that Capture survives a reload — is unchanged
+ * and still worth testing. Only the route to the control moved, so this helper
+ * carries that one difference and the assertions stay where they were.
+ */
+export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
+  const opener = container.querySelector<HTMLButtonElement>(".waka-corners button[aria-controls]");
+  if (!opener) throw new Error("the menu button is not on this screen");
+  await act(async () => opener.click());
+  /* A row may carry an sr-only note after its label — the archive's size rides
+     the Inspirations row — so match the label, not the whole string. */
+  const row = [...container.querySelectorAll<HTMLButtonElement>(".waka-menu .waka-menu-item")].find(
+    (node) => node.textContent?.trim().startsWith(label),
+  );
+  if (!row) {
+    const had = [...container.querySelectorAll(".waka-menu .waka-menu-item")]
+      .map((node) => node.textContent?.trim())
+      .join(", ");
+    throw new Error(`no menu row named ${label}. The menu offers: ${had}`);
+  }
+  await act(async () => row.click());
+}
+
+/** The capture entry is a field now, not a button that opens one. */
+export function keepBox(container: HTMLElement): HTMLTextAreaElement {
+  const box = container.querySelector<HTMLTextAreaElement>("textarea.jar-keep-box");
+  if (!box) throw new Error("the keep box is not on this screen");
+  return box;
+}
+
+/** Open the menu and leave it open, for assertions about a row's own state. */
+export async function openMenu(container: HTMLElement): Promise<void> {
+  const opener = container.querySelector<HTMLButtonElement>(".waka-corners button[aria-controls]");
+  if (!opener) throw new Error("the menu button is not on this screen");
+  if (!container.querySelector(".waka-menu")) await act(async () => opener.click());
+}

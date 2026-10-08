@@ -8,7 +8,7 @@
 import {act} from 'react';
 import {afterEach,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {installCanvasStub,setViewport} from './helpers/canvas-stub';
-import {apiMockFrom,dataMockFrom,mountWorld,VIEWER_ID,type MountedWorld} from './helpers/render-home';
+import {apiMockFrom,dataMockFrom,mountWorld,VIEWER_ID,type MountedWorld, keepBox} from './helpers/render-home';
 import type {TopOfMind} from '../src/lib/data';
 import {profileStorageKey} from '../src/lib/profile-storage';
 const facts=vi.hoisted(()=>({inspirations:[{id:'source-one',text:'A synthetic source',daysAgo:0}],groups:[]}));
@@ -32,7 +32,7 @@ const expectLoading=()=>{
   expect(forming()?.getAttribute('role')).toBe('status');
   expect(world!.container.textContent).not.toContain('No reading yet');
   expect(world!.container.textContent).not.toContain('Capture your first inspiration');
-  expect(world!.container.querySelector('.jar-home-activities')).not.toBeNull();
+  expect(world!.container.querySelector('.waka-corners')).not.toBeNull();
 };
 it('keeps Home usable while a delayed reading loads, without claiming it is empty',async()=>{
   world=await mountWorld(facts);expectLoading();expect(reads.requests).toHaveLength(1);expect(reads.requests[0]!.profile).toBe(VIEWER_ID);
@@ -57,15 +57,18 @@ it('shows a read failure, preserves a Capture draft, and coalesces explicit read
   expect(forming()?.textContent).toContain('Couldn’t load your top of mind');
   expect(forming()?.getAttribute('role')).toBe('alert');
   expect(world.container.textContent).not.toContain('No reading yet');
-  const capture=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent?.trim()==='Capture inspiration')!;
-  await act(async()=>capture.click());const textarea=world.container.querySelector<HTMLTextAreaElement>('[aria-label="Capture inspiration"] textarea')!;
+  const capture=keepBox(world.container);
+  await act(async()=>capture.focus());const textarea=world.container.querySelector<HTMLTextAreaElement>('[aria-label="Capture inspiration"] textarea')!;
   await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(textarea,'Keep my unfinished spark');textarea.dispatchEvent(new Event('input',{bubbles:true}));});
   const close=[...world.container.querySelectorAll<HTMLButtonElement>('[aria-label="Capture inspiration"] button')].find(row=>row.textContent==='close')!;
   await act(async()=>close.click());
   await act(async()=>{retry().click();retry().click();});expect(reads.requests).toHaveLength(2);
   await act(async()=>reads.requests[1]!.resolve(board()));await world.step(2);
-  const resume=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent?.trim()==='Continue your draft')!;
-  await act(async()=>resume.click());
+  /* "Continue your draft" is the box's PLACEHOLDER now, not a button's label —
+     the entry is a field, so the draft is announced in it rather than on it. */
+  const resume=keepBox(world.container);
+  expect(resume.placeholder).toBe('Continue your draft');
+  await act(async()=>resume.dispatchEvent(new FocusEvent('focusin',{bubbles:true})));
   expect(world.container.querySelector<HTMLTextAreaElement>('[aria-label="Capture inspiration"] textarea')?.value).toBe('Keep my unfinished spark');
   expect(world.container.textContent).not.toContain('Couldn’t load your top of mind');expect(refreshTopOfMind).not.toHaveBeenCalled();
 });

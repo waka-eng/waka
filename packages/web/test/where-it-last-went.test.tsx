@@ -166,7 +166,7 @@ it('includes the visible secondary link when the keyboard save shortcut is used'
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,'https://example.test/not-added');
     input.dispatchEvent(new Event('input',{bubbles:true}));
   });
-  await act(async()=>layout!.container.querySelector('textarea')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true})));
+  await act(async()=>layout!.container.querySelector('[aria-label="Capture inspiration"] textarea')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true})));
   expect(saveCalls).toHaveLength(1);
   expect(saveCalls[0]).toMatchObject({text:'a thing worth keeping\nhttps://example.test/not-added'});
 });
@@ -212,7 +212,9 @@ describe("the capture remembers where it last went", () => {
   it('does not replace a newer draft when an earlier keep finishes', async () => {
     saveControl.holdNext = true;
     await worldWithTheMouthOpen(); await press(/^save$/i);
-    await act(async () => layout!.container.querySelector<HTMLButtonElement>('.jar-mouth-rest')!.click());
+    /* `.jar-mouth-rest` is the keep box now, and a field reopens the composer
+       by taking focus rather than by being pressed. */
+    await act(async () => layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-rest')!.dispatchEvent(new FocusEvent('focusin',{bubbles:true})));
     const field = layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-field')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'My newer unsent draft');
@@ -227,7 +229,7 @@ describe("the capture remembers where it last went", () => {
   it('Escape keeps a newer short draft while an earlier save is uncertain', async () => {
     saveControl.loseNext = true;
     await worldWithTheMouthOpen(); await press(/^save$/i);
-    await act(async () => layout!.container.querySelector<HTMLButtonElement>('.jar-mouth-rest')!.click());
+    await act(async () => layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-rest')!.dispatchEvent(new FocusEvent('focusin',{bubbles:true})));
     const field = layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-field')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'A newer thought');
@@ -237,7 +239,12 @@ describe("the capture remembers where it last went", () => {
     expect(localStorage.getItem(DRAFT_KEY)).toBe('A newer thought');
     expect(saveCalls).toHaveLength(1);
     expect(Object.keys(localStorage).filter((key) => key.includes(':pendingSave:'))).toHaveLength(1);
-    await act(async () => layout!.container.querySelector<HTMLButtonElement>('.jar-mouth-rest')!.click());
+    /* `.jar-mouth-rest` is the keep box now, and a field reopens the composer by
+       taking focus rather than by being pressed. The reopen is a state change
+       plus a route write, so it needs its own flush before the composer's own
+       textarea exists to be read. */
+    await act(async () => layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-rest')!.dispatchEvent(new FocusEvent('focusin',{bubbles:true})));
+    await act(async () => { await Promise.resolve(); });
     expect(layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-field')!.value).toBe('A newer thought');
   });
   it("does not assign an unscoped draft or sharing choice to the next account", async () => {

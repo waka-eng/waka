@@ -56,7 +56,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
-import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
+import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld , openMenu} from "./helpers/render-home";
 
 /** Nine kept, and — as far as this world is concerned — nine held. */
 const FACTS = {
@@ -124,7 +124,10 @@ afterEach(() => {
 });
 
 /** The door into the ground, printed with how much is behind it. */
-function doorText(): string {
+async function doorText(): Promise<string> {
+  /* The count rides the Inspirations row in the menu now, which is where the
+     destination itself went. Same span, same words — one door further in. */
+  await openMenu(layout.container);
   const door = layout.container.querySelector(".jar-saved-count");
   return (door?.textContent ?? "").replace(/\s+/g, " ").trim();
 }
@@ -135,7 +138,7 @@ describe("the count under the door", () => {
     layout = await mountWorld(FACTS);
     /* The ordinary case, and the one every account lives in for a long time:
        nine kept, nine held, and nothing said about a ceiling nobody met. */
-    expect(doorText()).toBe("9 inspirations");
+    expect(await doorText()).toBe("9 inspirations");
   });
 
   it("says both when the archive holds more than the walk reached", async () => {
@@ -143,7 +146,7 @@ describe("the count under the door", () => {
     layout = await mountWorld(FACTS);
     /* The first number is still the orbs in the ground the caret takes you
        into (founder, 2026-08-25). The second is what is actually kept. */
-    expect(doorText()).toBe("9 of 2500 inspirations");
+    expect(await doorText()).toBe("9 of 2500 inspirations");
   });
 
   it("never states a size smaller than what it is standing on", async () => {
@@ -163,6 +166,6 @@ describe("the count under the door", () => {
      */
     heldTotal = 2;
     layout = await mountWorld(FACTS);
-    expect(doorText()).toBe("9 inspirations");
+    expect(await doorText()).toBe("9 inspirations");
   });
 });
