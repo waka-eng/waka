@@ -1,0 +1,18 @@
+{
+  "stage": "development",
+  "reads": [
+    {
+      "kind": "url_configuration",
+      "read": true
+    },
+    {
+      "kind": "resource_policy",
+      "read": true
+    }
+  ],
+  "urlAuthType": "NONE",
+  "publicPrincipalPresent": true,
+  "cloudFrontServiceGrantPresent": false,
+  "cloudFrontOnlyVerified": false,
+  "forwardedHeaderTrustVerified": false
+}

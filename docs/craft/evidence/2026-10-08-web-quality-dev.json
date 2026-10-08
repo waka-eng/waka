@@ -1,0 +1,576 @@
+{
+  "candidateHead": "9b413a9430cb29d09e1b9929db99fb5102ae1c8f",
+  "mergeSha": "b2bae5dfffbcc6e3eaa70e40c6e7665c0ab31a1b",
+  "pr": "https://github.com/waka-eng/waka/pull/362",
+  "deployment": {
+    "run": "https://github.com/waka-eng/waka/actions/runs/37785618707",
+    "conclusion": "success",
+    "origin": "https://dev.waka.im",
+    "databaseTargetPreflight": true,
+    "runtimeModelAndBindingCheck": true
+  },
+  "firstAttempt": {
+    "observedAt": "2026-10-08T13:39:55.198Z",
+    "origin": "https://dev.waka.im",
+    "mergeSha": "b2bae5dfffbcc6e3eaa70e40c6e7665c0ab31a1b",
+    "deploymentRun": 37785618707,
+    "synthetic": true,
+    "humanObservations": 0,
+    "evaluation": {
+      "priorUsedOrHeldUsd": 3.7823478004,
+      "reservedUsd": 0.5,
+      "newUsedOrHeldUsd": 4.2823478004,
+      "actualCostUsd": null
+    },
+    "journeys": [],
+    "timings": [
+      {
+        "width": 1280,
+        "operation": "initialHome",
+        "durationMs": 3395,
+        "coldRuntimeVerified": false
+      },
+      {
+        "width": 1280,
+        "operation": "saveConfirmed",
+        "durationMs": 2844
+      }
+    ],
+    "apiResponses": [
+      {
+        "path": "/api/auth/me",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/review-sessions/active",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/profiles",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/groups",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/signals",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/top-of-mind",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/principles",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/save-requests/:id",
+        "method": "GET",
+        "status": 404,
+        "durationMs": null
+      },
+      {
+        "path": "/api/principles/status",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations",
+        "method": "POST",
+        "status": 201,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id/processing",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id/processing",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id/processing",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id/processing",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id/processing",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      }
+    ],
+    "failures": [
+      "page.waitForURL: Timeout 20000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation to \"https://dev.waka.im/\" until \"load\"\n  navigated to \"https://dev.waka.im/?view=field\"\n============================================================"
+    ],
+    "cleanup": true,
+    "coldRuntimeVerified": false,
+    "stageAttributionVerified": false
+  },
+  "correctedAttempt": {
+    "observedAt": "2026-10-08T13:41:20.585Z",
+    "origin": "https://dev.waka.im",
+    "mergeSha": "b2bae5dfffbcc6e3eaa70e40c6e7665c0ab31a1b",
+    "deploymentRun": 37785618707,
+    "synthetic": true,
+    "humanObservations": 0,
+    "evaluation": {
+      "priorUsedOrHeldUsd": 4.2823478004,
+      "reservedUsd": 0.25,
+      "newUsedOrHeldUsd": 4.5323478004,
+      "actualCostUsd": null
+    },
+    "journeys": [
+      {
+        "width": 1280,
+        "oneCompletionAction": true,
+        "draftRestored": true,
+        "privateAudience": true,
+        "saves": 1,
+        "duplicates": 0,
+        "automaticReflections": 0,
+        "searchExactWords": true,
+        "navigationBack": true
+      },
+      {
+        "width": 390,
+        "oneCompletionAction": true,
+        "draftRestored": true,
+        "privateAudience": true,
+        "saves": 1,
+        "duplicates": 0,
+        "automaticReflections": 0,
+        "searchExactWords": true,
+        "navigationBack": true
+      }
+    ],
+    "timings": [
+      {
+        "width": 1280,
+        "operation": "initialHome",
+        "durationMs": 1668,
+        "coldRuntimeVerified": false
+      },
+      {
+        "width": 1280,
+        "operation": "saveConfirmed",
+        "durationMs": 3321
+      },
+      {
+        "width": 1280,
+        "operation": "warmHomeReturn",
+        "durationMs": 24
+      },
+      {
+        "width": 390,
+        "operation": "initialHome",
+        "durationMs": 2105,
+        "coldRuntimeVerified": false
+      },
+      {
+        "width": 390,
+        "operation": "saveConfirmed",
+        "durationMs": 2314
+      },
+      {
+        "width": 390,
+        "operation": "warmHomeReturn",
+        "durationMs": 26
+      },
+      {
+        "width": 390,
+        "operation": "reviewNext",
+        "durationMs": 16
+      },
+      {
+        "width": 390,
+        "operation": "chatReplyVisible",
+        "durationMs": 17560,
+        "includesQueueAndProvider": true
+      }
+    ],
+    "apiResponses": [
+      {
+        "path": "/api/auth/me",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/profiles",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/groups",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/signals",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/review-sessions/active",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/top-of-mind",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/principles",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/save-requests/:id",
+        "method": "GET",
+        "status": 404,
+        "durationMs": null
+      },
+      {
+        "path": "/api/principles/status",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations",
+        "method": "POST",
+        "status": 201,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id/processing",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id/processing",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/auth/me",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/groups",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/profiles",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/review-sessions/active",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/signals",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/top-of-mind",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/principles",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/save-requests/:id",
+        "method": "GET",
+        "status": 404,
+        "durationMs": null
+      },
+      {
+        "path": "/api/principles/status",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations",
+        "method": "POST",
+        "status": 201,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id/processing",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id/processing",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/review-sessions/active",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/review-sessions",
+        "method": "POST",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/inspirations/:id/processing",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/conversations",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/conversations",
+        "method": "POST",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/conversations",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/conversations/:id/reply",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/conversations/:id/reply",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/conversations/:id/reply",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/conversations/:id/reply",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/conversations/:id/reply",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/conversations/:id/reply",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      },
+      {
+        "path": "/api/conversations/:id",
+        "method": "GET",
+        "status": 200,
+        "durationMs": null
+      }
+    ],
+    "failures": [],
+    "cleanup": true,
+    "coldRuntimeVerified": false,
+    "stageAttributionVerified": false,
+    "review": {
+      "nextKeeps": true,
+      "removeDisclosed": true,
+      "escapePreservesReview": true
+    },
+    "chat": {
+      "assistantVisible": true,
+      "sourcesPresent": true,
+      "citationButtons": 1,
+      "correctionReachable": true
+    }
+  },
+  "limitations": {
+    "firstAttemptDriver": "Search opens an item in Inspirations. The first driver incorrectly expected Home after closing the item. The corrected driver explicitly establishes Home before Home to Inspirations to Back.",
+    "reviewNextTiming": "The 16 ms observation awaited an already-visible card and does not prove next-item readiness. Exclude it from latency acceptance. A separate check awaits the advance endpoint 200 response and the exact next item words becoming visible. Its 3,297 ms is one confirmed sample.",
+    "samples": "One initial Home/Save/warm return per viewport, one chat reply. No percentiles, runtime coldness, stage attribution, controlled concurrency, or improvement over a deployed baseline established.",
+    "operationalAudit": "One bounded log page per role/kind over the preceding hour. Empty partial pages do not establish zero calls/cost or correlation to these synthetic journeys.",
+    "humanObservations": 0
+  },
+  "evaluation": {
+    "allowanceUsd": 5,
+    "priorUsedOrHeldUsd": 3.7823478004,
+    "newHeldUsd": 1,
+    "usedOrHeldUsd": 4.7823478004,
+    "remainingUsd": 0.2176521996,
+    "deployedCostUsd": null,
+    "reservationsReleased": false,
+    "monthlyOperatingPolicyVerified": false
+  },
+  "audit": {
+    "run": "https://github.com/waka-eng/waka/actions/runs/37786141801",
+    "conclusion": "success",
+    "directory": "web-quality/dev-release"
+  },
+  "gates": {
+    "devDelivery": "passed",
+    "deployedPersonalJourneys": "passed",
+    "humanUsability": "pending",
+    "controlledTimingAndRecovery": "incomplete",
+    "alertsAndSourcePrivacySpending": "incomplete"
+  },
+  "preciseReviewCheck": {
+    "origin": "https://dev.waka.im",
+    "mergeSha": "b2bae5dfffbcc6e3eaa70e40c6e7665c0ab31a1b",
+    "observedAt": "2026-10-08T13:46:31.407Z",
+    "evaluation": {
+      "priorUsedOrHeldUsd": 4.5323478004,
+      "reservedUsd": 0.25,
+      "newUsedOrHeldUsd": 4.7823478004,
+      "actualCostUsd": null
+    },
+    "synthetic": true,
+    "requests": [
+      {
+        "path": "/api/review-sessions",
+        "method": "POST",
+        "status": 200
+      },
+      {
+        "path": "/api/review-sessions/:id/advance",
+        "method": "POST",
+        "status": 200
+      }
+    ],
+    "review": {
+      "width": 390,
+      "acknowledgedStatus": 200,
+      "actualNextWordsVisible": true,
+      "bothOriginalsKept": true,
+      "durationMs": 3297
+    },
+    "failures": [],
+    "cleanup": true
+  }
+}
