@@ -1,0 +1,51 @@
+{
+  "scope": "Real isolated built Home, authentication, Save and queued processing. Help is static; no provider requests.",
+  "providerNetworkCalls": 0,
+  "reports": [
+    {
+      "width": 1280,
+      "height": 900,
+      "locale": "en-US",
+      "account": "primary",
+      "collapsedInitially": true,
+      "threeExplanations": true,
+      "touchTarget": true,
+      "allTextReachable": true,
+      "captureVisible": true,
+      "escapeRestoresSummary": true,
+      "noHelpRequests": true,
+      "oneSaveAction": true,
+      "availableAfterSave": true
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "locale": "en-US",
+      "account": "native",
+      "collapsedInitially": true,
+      "threeExplanations": true,
+      "touchTarget": true,
+      "allTextReachable": true,
+      "captureVisible": true,
+      "escapeRestoresSummary": true,
+      "noHelpRequests": true,
+      "oneSaveAction": true,
+      "availableAfterSave": true
+    },
+    {
+      "width": 320,
+      "height": 568,
+      "locale": "ko-KR",
+      "account": "native",
+      "collapsedInitially": true,
+      "threeExplanations": true,
+      "touchTarget": true,
+      "allTextReachable": true,
+      "captureVisible": true,
+      "escapeRestoresSummary": true,
+      "noHelpRequests": true,
+      "oneSaveAction": true,
+      "availableAfterSave": true
+    }
+  ]
+}
