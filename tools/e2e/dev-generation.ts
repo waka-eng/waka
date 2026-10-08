@@ -65,6 +65,11 @@ async function derived(){
   await persist();return complete;
 }
 async function reread(label:string){
+  await poll('evidence checks settled before '+label,async()=>{
+    const state=(await api('/api/principles/status')).status;report.principleState=state;
+    if(state.phase==='failed')throw Error('Evidence or Principle work failed before rereading');
+    return !state.supportPending&&state.phase!=='processing';
+  });
   const receipt=await api('/api/top-of-mind/refresh','POST',{});assert.ok(receipt.jobId&&receipt.requestVersion);
   await poll(label,async()=>{const state=await api(`/api/top-of-mind/refresh/${receipt.jobId}?requestVersion=${receipt.requestVersion}`);
     report.readingState=state;if(state.status==='failed')throw Error('Top of Mind refresh failed');return state.status==='succeeded'&&Boolean(state.result);});

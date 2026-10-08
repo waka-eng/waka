@@ -364,3 +364,54 @@ were made. The [receipt](../craft/evidence/web-quality/formation-help/receipt.js
 and [preview](../craft/evidence/web-quality/formation-help/preview.png) retain the
 scope. The evaluation ledger and existing human/operational gates stay open at
 their previously recorded values.
+
+### 2026 10 08 full generation verification start
+
+The owner authorized the next generation/operational checks and dev delivery.
+A guarded live development case used nine raw synthetic inspirations, ordinary
+API routes and the unmodified qualification bars. One source produced no
+Principle. All nine sources were derived, but a manual reading remained pending
+past its due time and timed out after four minutes. The account was erased and
+its session returned 401. Of three derived statements, one was active; one
+mixed a preference with a single event, and another copied internal reference
+text into its wording. No positive Principle-creation result is claimed.
+
+Candidate repairs keep known reading work in the existing bounded Lambda
+redelivery path, including reading follow-ups created/claimed in a drain.
+References are scoped to job/profile/version and checked against pending,
+unread, near-term work; completed jobs, active leases and next-day holds do not
+wake. No broad queue scan, sleep, budget or qualification change is introduced.
+The wider database regression caught an intentional rule that an automatic
+trailing request cannot inherit manual cadence bypass; that rule is retained.
+
+Extraction context guidance now keeps an explicit author-written rule separate
+from event examples and puts earlier evidence in citations. It applies only
+when earlier captures are supplied. A code guard refuses copied internal IDs
+and oversized generated text before publication. Both English/Korean context
+probes now return reusable author wording, with cited earlier evidence.
+
+The first fixed extraction run aborted on an unusable response and exposed a
+report-freshness issue: an older JSON file could remain after failure. The
+opt-in reporter now journals attempts/failures, awaits workers and bounds
+in-flight spending. Intermediate results and provider timeouts are retained.
+The latest context-only instruction run observed 15/16 correct (93.75%), zero
+meta-references and one provider timeout; the original 80% bench floor is not
+changed. This is a fixed extraction result, not a completed live pipeline.
+
+Paginated, bounded numeric dev reads fix the empty-first-page audit gap. A
+complete, overinclusive window reports USD 0.004043608 OpenRouter charges.
+Twenty-one embedding calls remain held at a maximum-token/rate estimate of
+USD 0.0064512, not an invoice. Unused reservation was released only after the
+full window was read. Model context limits/rates were checked against official
+Google/OpenRouter sources; no billing tier/privacy setting is inferred.
+Both later provider timeouts retain USD 0.02 each. All current evaluation
+charges/holds total USD 4.8453463206 of USD 5 before the final dev rerun.
+
+API types and 989 unit checks pass (three paid benches excluded); 62 targeted
+real-database generation/fencing/lease checks pass on the explicit disposable
+loopback database. A transient source-probe removal race in the policy scan
+is handled only for ENOENT, without changing the enqueue policy. The
+[verification evidence](../craft/evidence/web-quality/generation-verification/)
+retains failed cases, calibration, complete audit and the reconciled ledger.
+Dev rerun, real human observations and remaining operational attestation are
+still required.

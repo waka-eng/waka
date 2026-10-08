@@ -1,0 +1,49 @@
+{
+  "allowanceUsd": 5,
+  "baseUsedOrHeldUsd": 4.7823478004,
+  "records": [
+    {
+      "name": "first development case",
+      "used": 0.010494808
+    },
+    {
+      "name": "probe first",
+      "used": 0.00047532
+    },
+    {
+      "name": "probe corrected",
+      "used": 0.00061964
+    },
+    {
+      "name": "failed pre-journal bench",
+      "used": 0.002810051
+    },
+    {
+      "name": "first journal bench",
+      "used": 0.0018456100000000001
+    },
+    {
+      "name": "second journal bench",
+      "used": 0.0234967462,
+      "knownCostUsd": 0.0034967462000000007,
+      "unknownCalls": 1,
+      "heldUsd": 0.02,
+      "upperPerUnknown": 0.012452099999999999,
+      "maxReconstructedBytesWithMargin": 8739
+    },
+    {
+      "name": "context-only fixed bench",
+      "used": 0.022271495,
+      "knownCostUsd": 0.0022714949999999997,
+      "unknownCalls": 1,
+      "heldUsd": 0.02
+    },
+    {
+      "name": "final context probe",
+      "used": 0.00098485
+    }
+  ],
+  "usedOrHeldUsd": 4.8453463206,
+  "remainingUsd": 0.15465367939999997,
+  "caveat": "The provider timeout remains held at USD .02. This exceeds the maximum default-token/request-body estimate using current model rates. Gemini costs remain a held token-limit estimate."
+}

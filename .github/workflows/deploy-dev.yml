@@ -21,6 +21,11 @@ on:
         required: false
         default: ""
         type: string
+      exercise_console_alarms:
+        description: "Verify dev alarm state transitions only when every notification action is empty"
+        required: false
+        default: false
+        type: boolean
       enable_conversation_replies:
         description: "Enable conversation replies on dev (off disables new dispatches; keeps saved messages)"
         required: false
@@ -73,9 +78,11 @@ jobs:
           WAKA_AUDIT_API_FUNCTION: waka-development-ApiFunction-efwcwxdn
           WAKA_AUDIT_WORKER_FUNCTION: waka-development-BackgroundWorkerFunction-xxbrbmcx
           WAKA_AUDIT_SINCE: ${{ inputs.audit_since }}
+          WAKA_EXERCISE_CONSOLE_ALARMS: ${{ inputs.exercise_console_alarms == true && '1' || '0' }}
         run: |
           node scripts/dev-operations-audit.mjs > dev-operations.json
           node scripts/dev-source-policy.mjs > dev-source-policy.json
+          node scripts/dev-alert-audit.mjs > dev-alerts.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -83,6 +90,7 @@ jobs:
           path: |
             dev-operations.json
             dev-source-policy.json
+            dev-alerts.json
           if-no-files-found: error
           retention-days: 7
   deploy:
