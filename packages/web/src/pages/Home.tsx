@@ -88,6 +88,7 @@ import { ReviewPanel } from '../components/ReviewPanel';
 import { useReviewEntry } from '../lib/use-review-entry';
 import {PrinciplesShortcutLabel} from '../components/PrinciplesShortcutLabel';
 import { Menu, type MenuItem } from '../components/Menu';
+import { HoverCard } from '../components/HoverCard';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
@@ -13602,8 +13603,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               the box it is about, rather than a panel explaining the idea. */}
           {!mouthOpen ? <p className="jar-keep-foot" id="jar-keep-hint">
             <span>{say('worldKeepHint')}</span>
-            <a className="jar-keep-via" href="https://github.com/waka-eng/waka-mcp"
-              target="_blank" rel="noreferrer noopener">{say('worldKeepViaAgent')}</a>
+            <HoverCard label={say('worldKeepViaAgent')} className="jar-keep-via">
+              <span>{say('worldKeepMcpWhat')}</span>
+              <span>{say('worldKeepMcpTools')}</span>
+              <span>{say('worldKeepMcpWhere')}</span>
+              <a href="https://github.com/waka-eng/waka-mcp" target="_blank" rel="noreferrer noopener">
+                {say('worldKeepMcpOpen')}
+              </a>
+            </HoverCard>
           </p> : null}
           {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
           {!mouthOpen&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}

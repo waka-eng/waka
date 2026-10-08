@@ -397,6 +397,7 @@
 
 /* Dropped files, listed under the box rather than inside a drawer. */
 .jar-keep-media {
+  pointer-events: auto;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
@@ -442,6 +443,7 @@
 
 /* The two quiet lines under the box: how to keep, and who else can. */
 .jar-keep-foot {
+  pointer-events: auto;
   display: flex;
   justify-content: space-between;
   gap: var(--space-4);
@@ -451,4 +453,67 @@
   font-size: 11px;
   letter-spacing: 0.03em;
   color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * The hover card
+ *
+ * Opens UPWARD: the line it hangs off sits near the bottom of the screen, so
+ * a card below it would be off the page. Anchored to the right edge for the
+ * same reason — the trigger is the rightmost thing on its row.
+ * ------------------------------------------------------------------------- */
+
+.waka-hovercard {
+  pointer-events: auto;
+  position: relative;
+  display: inline-block;
+}
+
+.waka-hovercard-trigger {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: help;
+}
+
+.waka-hovercard-trigger:hover,
+.waka-hovercard-trigger[aria-expanded="true"] {
+  color: var(--ink);
+}
+
+.waka-hovercard-trigger:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.waka-hovercard-card {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-3));
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: max-content;
+  max-width: 19rem;
+  padding: var(--space-4);
+  border: var(--space-px) solid var(--line);
+  border-radius: 12px;
+  background: var(--cell);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-align: left;
+  /* The one shadow on this screen: the card is the only thing that floats. */
+  box-shadow: 0 14px 34px rgb(0 0 0 / 45%);
+}
+
+.waka-hovercard-card a {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
 }

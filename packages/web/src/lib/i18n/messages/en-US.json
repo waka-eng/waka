@@ -849,9 +849,13 @@
   "worldMenuTalk": "Talk with WAKA",
   "worldMenuFind": "Find",
   "worldKeepPlaceholder": "Type, paste, or drop a file",
-  "worldKeepViaAgent": "Your agents can keep things here too — waka-mcp",
+  "worldKeepViaAgent": "Save inspirations with MCP",
   "worldOpeningInspirations": "Opening inspirations…",
   "worldRetryInspirations": "Try again",
   "worldMenuWalls": "Rooms and agents",
-  "worldKeepHint": "Enter to keep"
+  "worldKeepHint": "Enter to keep",
+  "worldKeepMcpWhat": "Point an agent at WAKA and it can keep things here while you work.",
+  "worldKeepMcpTools": "It gets six tools: save an inspiration, list them, and read your signals, principles and profile.",
+  "worldKeepMcpWhere": "Add waka-mcp to your agent's MCP config.",
+  "worldKeepMcpOpen": "Open waka-mcp"
 }
