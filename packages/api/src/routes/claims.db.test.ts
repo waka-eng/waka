@@ -1,0 +1,262 @@
+/**
+ * THE CLAIM QUEUE, AND THE DEADLOCK IT EXISTS TO BREAK.
+ *
+ * `/api/claims` is not a filter on `/api/signals`. It is the fix for a closed
+ * loop in the product: a claim was reachable only as a `ground` under a
+ * top-of-mind entry, a top of mind cites only the strongest signals, and
+ * affirming is the one act that lifts a weak claim — so a weak claim was never
+ * selected, never shown, never affirmed, and stayed weak forever.
+ *
+ * So the load-bearing assertion in this file is the one about an EMERGING
+ * claim with a single piece of evidence. If that ever stops being served, the
+ * deadlock is back and no other test in the suite would notice.
+ *
+ * The other four facts, each of which a careless rewrite would break:
+ *
+ *   1. Answering removes a claim from the queue. The queue is finishable.
+ *   2. A claim REWRITTEN since you answered comes back, because the verdict
+ *      was about words no longer on screen. This is what makes "is this still
+ *      true?" a property of the model rather than a second mechanism.
+ *   3. `partly` counts as answered. It is a verdict, not a deferral — even
+ *      though nothing downstream reads it yet.
+ *   4. A dismissed claim never returns. Its vector is a suppression anchor;
+ *      asking again would be asking a person to re-litigate a refusal.
+ *
+ * And the tenancy net: one person's unanswered claims are never in another's
+ * queue, enforced by the query rather than by the caller being careful.
+ *
+ * WHAT THIS MOCKS, AND WHY: the auth middleware only, as every route suite
+ * does. Every query runs on real Postgres.
+ */
+import { Hono } from "hono";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+
+import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
+import type { AuthEnv } from "../lib/middleware.js";
+import type { AuthenticatedSession } from "../lib/session.js";
+import { createClaimsRoutes } from "./claims.js";
+
+let t: TestDatabase;
+let seq = 0;
+
+interface Person {
+  profileId: string;
+  session: AuthenticatedSession;
+}
+
+interface ClaimRow {
+  id: string;
+  statement: string;
+  status: string;
+  evidenceCount: number;
+}
+
+async function seedPerson(name: string): Promise<Person> {
+  seq += 1;
+  const [account] = await t.sql`
+    INSERT INTO accounts (email) VALUES (${`claims-${seq}-${name}@example.test`}) RETURNING id`;
+  const [profile] = await t.sql`
+    INSERT INTO profiles (account_id, type, name)
+    VALUES (${account.id}, 'human', ${name}) RETURNING id`;
+  const [sessionRow] = await t.sql`
+    INSERT INTO sessions (profile_id, token_hash, expires_at)
+    VALUES (${profile.id}, ${`claims-hash-${seq}`}, now() + interval '1 hour') RETURNING id`;
+  return {
+    profileId: profile.id as string,
+    session: {
+      sessionId: sessionRow.id as string,
+      account: { id: account.id as string, email: `claims-${seq}@example.test` },
+      profile: {
+        id: profile.id as string,
+        accountId: account.id as string,
+        type: "human",
+        name,
+        preferredLocale: "en-US",
+      },
+    },
+  };
+}
+
+function appFor(person: Person): Hono<AuthEnv> {
+  const app = new Hono<AuthEnv>();
+  const authMiddleware = async (
+    c: { set: (k: "session", v: AuthenticatedSession) => void },
+    next: () => Promise<void>,
+  ) => {
+    c.set("session", person.session);
+    await next();
+  };
+  app.route(
+    "/api/claims",
+    createClaimsRoutes({
+      getDatabase: () => t.db as never,
+      authMiddleware: authMiddleware as never,
+    }),
+  );
+  return app;
+}
+
+async function queueFor(person: Person): Promise<ClaimRow[]> {
+  const response = await appFor(person).request("/api/claims");
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as { claims: ClaimRow[] };
+  return body.claims;
+}
+
+/**
+ * A claim with `evidence` pieces of real support behind it.
+ *
+ * The evidence rows go in by hand rather than through derivation because the
+ * point of each test is the READ, and a model call in the middle of it would
+ * make the suite non-hermetic. `material_revision` is read from
+ * `inspiration_revisions` for the same reason the demo seeder has to: the
+ * `track_inspiration_material` trigger owns that number, and a literal here
+ * would silently stop counting as support.
+ */
+async function claimWith(
+  person: Person,
+  statement: string,
+  status: "emerging" | "active",
+  evidence: number,
+): Promise<string> {
+  /* BORN EMERGING, ALWAYS. `assert_signal_has_evidence` refuses an INSERT that
+     arrives already `active` without three independent supports, which is the
+     right rule — active is a state the product ARRIVES at. So the helper earns
+     it the way derivation does: mint, attach, then promote. */
+  const [signal] = await t.sql`
+    INSERT INTO signals (profile_id, statement, status, confidence)
+    VALUES (${person.profileId}, ${statement}, 'emerging', 0) RETURNING id`;
+  for (let i = 0; i < evidence; i += 1) {
+    const [inspiration] = await t.sql`
+      INSERT INTO inspirations (profile_id, text)
+      VALUES (${person.profileId}, ${`${statement} — kept ${i}`}) RETURNING id`;
+    await t.sql`
+      INSERT INTO signal_evidence
+        (profile_id, owner_profile_id, signal_id, inspiration_id, material_revision)
+      VALUES (
+        ${person.profileId}, ${person.profileId}, ${signal.id}, ${inspiration.id},
+        (SELECT personal_revision FROM inspiration_revisions
+          WHERE profile_id = ${person.profileId} AND inspiration_id = ${inspiration.id})
+      )`;
+  }
+  await t.sql`
+    UPDATE signals SET last_evidence_at = now(), status = ${status} WHERE id = ${signal.id}`;
+  return signal.id as string;
+}
+
+/** The verdict as `POST /api/feedback` writes it: bound to the wording. */
+async function answer(
+  person: Person,
+  signalId: string,
+  value: "true" | "partly" | "not_true",
+): Promise<void> {
+  await t.sql`
+    INSERT INTO feedback (profile_id, target_type, target_id, target_revision, value)
+    VALUES (
+      ${person.profileId}, 'signal', ${signalId},
+      (SELECT statement_revision FROM signals WHERE id = ${signalId}),
+      ${value}
+    )`;
+}
+
+beforeEach(async () => {
+  t = await createTestDatabase();
+});
+
+afterAll(async () => {
+  await t?.cleanup();
+});
+
+describe("the claims awaiting a word", () => {
+  it("serves an emerging claim with one piece of evidence — the deadlock", async () => {
+    /* THE REASON THIS ROUTE EXISTS. Below the promotion bar, so it can never
+       be cited in a top of mind, so under the old world it was unreachable and
+       therefore unanswerable forever. The promotion bar decides what may
+       REPRESENT someone; it was never meant to decide what they are allowed to
+       have an opinion about. */
+    const person = await seedPerson("deadlock");
+    await claimWith(person, "You trust tools that start you off.", "emerging", 1);
+
+    const queue = await queueFor(person);
+
+    expect(queue).toHaveLength(1);
+    expect(queue[0]!.status).toBe("emerging");
+    expect(queue[0]!.evidenceCount).toBe(1);
+  });
+
+  it("drops a claim once it is answered", async () => {
+    const person = await seedPerson("answered");
+    const id = await claimWith(person, "You prefer the reversible door.", "active", 3);
+    expect(await queueFor(person)).toHaveLength(1);
+
+    await answer(person, id, "true");
+
+    expect(await queueFor(person)).toHaveLength(0);
+  });
+
+  it("counts partly as answered", async () => {
+    /* `partly` is a verdict, not a deferral. Nothing downstream reads it yet —
+       selection tests only `true` and `not_true` — but a person who answered
+       must not be asked the same question again because the pipeline has not
+       caught up with them. */
+    const person = await seedPerson("partly");
+    const id = await claimWith(person, "You are suspicious of streaks.", "active", 3);
+
+    await answer(person, id, "partly");
+
+    expect(await queueFor(person)).toHaveLength(0);
+  });
+
+  it("asks again when the words changed since the answer", async () => {
+    /* "Is this still true?" without a second mechanism: the verdict was bound
+       to a `statement_revision`, so rewriting the claim leaves the old answer
+       standing about words nobody can see. Coming back is correct. */
+    const person = await seedPerson("rewritten");
+    const id = await claimWith(person, "You like fast tools.", "active", 3);
+    await answer(person, id, "true");
+    expect(await queueFor(person)).toHaveLength(0);
+
+    await t.sql`
+      UPDATE signals
+      SET statement = 'You like tools that make the first move.',
+          statement_revision = statement_revision + 1
+      WHERE id = ${id}`;
+
+    const queue = await queueFor(person);
+    expect(queue).toHaveLength(1);
+    expect(queue[0]!.statement).toBe("You like tools that make the first move.");
+  });
+
+  it("never asks again about a claim that was thrown out", async () => {
+    const person = await seedPerson("dismissed");
+    const id = await claimWith(person, "You chase novelty.", "active", 3);
+
+    await t.sql`
+      UPDATE signals SET dismissed_at = now(), status = 'retired' WHERE id = ${id}`;
+
+    expect(await queueFor(person)).toHaveLength(0);
+  });
+
+  it("keeps one person's unanswered claims out of another's queue", async () => {
+    const mine = await seedPerson("mine");
+    const theirs = await seedPerson("theirs");
+    await claimWith(mine, "You read endings first.", "active", 3);
+
+    expect(await queueFor(mine)).toHaveLength(1);
+    expect(await queueFor(theirs)).toHaveLength(0);
+  });
+
+  it("reports more honestly when the backlog is longer than the page", async () => {
+    const person = await seedPerson("backlog");
+    for (let i = 0; i < 3; i += 1) {
+      await claimWith(person, `You return to the same shape ${i}.`, "active", 3);
+    }
+
+    const response = await appFor(person).request("/api/claims?limit=2");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { claims: ClaimRow[]; more: boolean };
+
+    expect(body.claims).toHaveLength(2);
+    expect(body.more).toBe(true);
+  });
+});
