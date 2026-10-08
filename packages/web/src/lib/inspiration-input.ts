@@ -21,6 +21,15 @@ export function inspirationLinks(text: string): InspirationDraftMedia[] {
     return [{ id: `text-link:${parsed.written}`, type: 'link' as const, url: parsed.canonical, name: parsed.name }];
   });
 }
+/** A separate URL draft joins the authored text only on an explicit save. */
+export function inspirationWithPendingLink(text:string,pending:string){
+  if(!pending.trim())return text.trim();
+  let url:URL;
+  try{url=new URL(pending.trim());}catch{throw new Error('invalid_link');}
+  if(!['http:','https:'].includes(url.protocol)||url.toString().length>2048)throw new Error('invalid_link');
+  const normalized=url.toString();
+  return inspirationLinks(text).some(item=>item.url===normalized)?text.trim():[text.trim(),normalized].filter(Boolean).join('\n');
+}
 export function inspirationInputMedia(text: string, media: InspirationDraftMedia[]) {
   const seen = new Set<string>();
   return [...media, ...inspirationLinks(text)].filter(item => {

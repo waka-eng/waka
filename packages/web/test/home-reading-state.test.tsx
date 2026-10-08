@@ -48,7 +48,7 @@ it('shows the real empty state only after the owned response confirms no reading
 it('does not tell someone to capture their first inspiration until both reads confirm the empty state',async()=>{
   facts.inspirations=[];world=await mountWorld(facts);expectLoading();
   await act(async()=>reads.requests[0]!.resolve(null));
-  expect(forming()?.textContent).toContain('Capture your first inspiration to begin.');
+  expect(forming()?.textContent).toContain('Keep something you want to come back to.');
   expect(forming()?.textContent).not.toContain('Loading your top of mind');
 });
 it('shows a read failure, preserves a Capture draft, and coalesces explicit read-only retries',async()=>{

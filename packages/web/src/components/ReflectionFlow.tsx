@@ -31,7 +31,7 @@ function savedDraft(draftKey: string | null, afterId: string | null): string {
   } catch { return ""; }
 }
 
-export function ReflectionFlow({ inspirationId, scope, processing, source, initialTurns, locale, onSaved, onRemoved, onDone, onSynchronized, focusReflectionId, onCopyLink, doneLabel, saveAndDoneLabel }: {
+export function ReflectionFlow({ inspirationId, scope, processing, source, initialTurns, locale, onSaved, onRemoved, onDone, onSynchronized, focusReflectionId, onCopyLink, doneLabel }: {
   inspirationId: string;
   scope: ProfileStorageScope | null;
   processing?: ReactNode;
@@ -45,7 +45,6 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
   focusReflectionId?: string | null;
   onCopyLink?: (reflectionId: string) => void;
   doneLabel?: string;
-  saveAndDoneLabel?: string;
 }) {
   const draftKey = profileStorageKey(scope, `reflectionDraft:${inspirationId}`);
   const restored = useRef(readReflectionDraft(draftKey));
@@ -167,7 +166,7 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
       setPhase('saved');
       return () => {
         if (initiated && intent.continueReflecting && currentTurns.at(-1)) void beginQuestion(currentTurns.at(-1)!.id);
-        else if (initiated && !intent.continueReflecting) onDone();
+
       };
     },
     onRemoved: (intent) => {
@@ -264,10 +263,9 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
       <p className="jar-reflection-hint">{t(locale, "worldReflectionNextHint")}</p>
       {!save.pending ? <div className="jar-reflection-actions">
         <button type="button" className="jar-reflection-primary" disabled={!answer.trim()}
-          onClick={() => void saveAnswer(true)}>{t(locale, "worldReflectionNext")}</button>
-        <button type="button" className="jar-reflection-secondary"
-          onClick={() => answer.trim() ? void saveAnswer(false) : onDone()}>
-          {answer.trim() ? saveAndDoneLabel ?? t(locale, "worldReflectionSaveAndFinish") : doneLabel ?? t(locale, "worldReflectionDone")}
+          onClick={() => void saveAnswer(false)}>{t(locale, "worldReflectionSaveThought")}</button>
+        <button type="button" className="jar-reflection-secondary" onClick={onDone}>
+          {doneLabel ?? t(locale, "worldClose")}
         </button>
       </div> : null}
     </div> : null}
@@ -281,8 +279,9 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
         {doneLabel ?? t(locale, "worldReflectionDone")}
       </button>
     </div> : null}
+    {phase === "saved" ? <p className="jar-reflection-status" role="status">{t(locale, "worldReflectionSaved")}</p> : null}
     {phase === "saved" || phase === "question_failed" ? <div className="jar-reflection-actions">
-      {latestId ? <button type="button" className="jar-reflection-primary"
+      {latestId ? <button type="button" className="jar-reflection-secondary"
         onClick={() => void beginQuestion(latestId, phase === "question_failed")}>
         {phase === "question_failed" ? t(locale, "worldReflectionRetry") : t(locale, "worldReflectionGoDeeper")}
       </button> : null}

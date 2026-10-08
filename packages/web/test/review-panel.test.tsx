@@ -60,8 +60,8 @@ const mount=(id=SID,thoughtId:string|null=null)=>act(async()=>root.render(<Revie
 const button=(label:string)=>{const row=[...host.querySelectorAll('button')].find(row=>row.textContent?.trim()===label);if(!row)throw new Error(`Missing button: ${label}`);return row;};
 const click=(label:string)=>act(async()=>button(label).click());
 const answer=(value:string)=>act(async()=>{const textarea=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(textarea,value);textarea.dispatchEvent(new Event('input',{bubbles:true}));});
-it('opens directly to one original with Reflect, Next and Remove, not stages or batch selection',async()=>{
-  await mount();expect(host.textContent).toContain(source.text);expect(button('reflect')).toBeDefined();expect(button('Next inspiration →')).toBeDefined();expect(button('Remove')).toBeDefined();
+it('opens directly to one original with Reflect and Next, with deletion under item actions',async()=>{
+  await mount();expect(host.textContent).toContain(source.text);expect(button('reflect')).toBeDefined();expect(button('Next inspiration →')).toBeDefined();expect(button('Remove')).toBeDefined();expect(host.querySelector<HTMLDetailsElement>('.jar-item-actions')!.open).toBe(false);
   expect(host.querySelector('.jar-review-steps')).toBeNull();expect(host.textContent).not.toMatch(/Choose inspirations|Start review|Stays with me|Selected inspirations/);
   expect(requestReviewQuestion).not.toHaveBeenCalled();expect(requestReflectionQuestion).not.toHaveBeenCalled();expect(saveReviewAnswer).not.toHaveBeenCalled();
 });
@@ -69,6 +69,13 @@ it('uses the snapshot original without a source/session/count round trip',async(
   current={...current!,currentInspiration:{...source,materialRevision:'1'}};
   await mount();expect(host.textContent).toContain(source.text);expect(fetchInspiration).not.toHaveBeenCalled();expect(fetchInspirationPage).not.toHaveBeenCalled();expect(fetchReviewSession).toHaveBeenCalledOnce();
   expect(vi.mocked(fetchReviewSession).mock.calls[0]![3]).toBe(true);
+});
+it('closes item actions with Escape before closing Review, without deleting',async()=>{
+  await mount();const disclosure=host.querySelector<HTMLDetailsElement>('.jar-item-actions')!;
+  disclosure.open=true;const summary=disclosure.querySelector('summary')!;summary.focus();
+  await act(async()=>summary.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
+  expect(disclosure.open).toBe(false);expect(document.activeElement).toBe(summary);
+  expect(onClose).not.toHaveBeenCalled();expect(deleteInspiration).not.toHaveBeenCalled();
 });
 it('starts a suggested single-source review on entry, with no manual manifest or model request',async()=>{
   const original=copy()!;current=null;
@@ -109,7 +116,7 @@ it('reflects on this inspiration only and saves into its normal reflection histo
     source={...source,reflections:[row]};current={...current!,items:current!.items.map(item=>({...item,currentRevision:'2',sourceChanged:true}))};return row;
   });
   await mount();await click('reflect');expect(host.textContent).toContain('What made you want to keep this?');expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('What made you want to keep this?');expect(host.querySelector('.jar-review-item-actions')).toBeNull();
-  await answer('I need room to change my mind.');await click('Keep thought & return');
+  await answer('I need room to change my mind.');await click('Save thought');expect(requestReflectionQuestion).not.toHaveBeenCalled();await click('Back to inspiration');
   expect(createReflection).toHaveBeenCalledOnce();expect(vi.mocked(createReflection).mock.calls[0]).toMatchObject([SOURCE,{answer:'I need room to change my mind.'},{profile:scope.profileId}]);
   expect(onSaved).toHaveBeenCalledOnce();expect(onSynchronized).toHaveBeenCalledWith(SOURCE,expect.objectContaining({reflections:[expect.objectContaining({answer:'I need room to change my mind.'})]}));
   expect(host.textContent).toContain('earlier thoughts (1)');expect(host.querySelector('textarea')).toBeNull();
@@ -119,7 +126,7 @@ it('reflects on this inspiration only and saves into its normal reflection histo
 it('requests a follow-up only for the current inspiration when Continue is chosen',async()=>{
   vi.mocked(createReflection).mockImplementation(async(id,input)=>{const row={id:'answer-1',inspirationId:id,question:input.question,answer:input.answer!,skipped:false,createdAt:source.createdAt};source={...source,reflections:[row]};return row;});
   vi.mocked(requestReflectionQuestion).mockResolvedValue({phase:'ready',question:'What would make that possible?'});
-  await mount();await click('reflect');await answer('I want more space.');await click('continue →');
+  await mount();await click('reflect');await answer('I want more space.');await click('Save thought');expect(requestReflectionQuestion).not.toHaveBeenCalled();await click('Explore another question');
   expect(requestReflectionQuestion).toHaveBeenCalledWith(SOURCE,'answer-1',false,{profile:scope.profileId,signal:expect.any(AbortSignal)});
   expect(host.textContent).toContain('What would make that possible?');expect(requestReviewQuestion).not.toHaveBeenCalled();expect(chooseReviewInspiration).not.toHaveBeenCalled();
 });

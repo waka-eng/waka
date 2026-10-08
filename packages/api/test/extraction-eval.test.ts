@@ -38,6 +38,7 @@
  * evals. Skips (visibly) when no model key is present.
  */
 import { describe, expect, it } from "vitest";
+import {mkdir,writeFile} from 'node:fs/promises';
 
 import { getDefaultModelProvider } from "../src/lib/model-provider.js";
 import type { SignalCandidateExtractionInput } from "../src/lib/model-provider.js";
@@ -218,7 +219,18 @@ describe.skipIf(!HAS_KEY)("extraction, on the bench", () => {
     { timeout: 240_000 },
     async () => {
       const provider = await getDefaultModelProvider();
-
+      const network=globalThis.fetch,guarded=process.env.WAKA_EVALUATION_REPORT==='1';
+      let calls=0,costUsd=0,stopped=false;const attempts:unknown[]=[];
+      if(guarded)globalThis.fetch=async(input,init)=>{
+        const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+        expect(url.origin).toBe('https://openrouter.ai');expect(JSON.parse(String(init?.body)).model).toBe('deepseek/deepseek-v4.1-flash');
+        if(stopped||calls>=20||costUsd>=.1)throw new Error('Extraction evaluation bound reached');calls++;
+        const response=await network(input,init),body=await response.clone().json();
+        if(!response.ok||!Number.isFinite(body.usage?.cost)){stopped=true;attempts.push({status:response.status,costUsd:null});throw new Error('Unpriced or failed extraction evaluation');}
+        costUsd+=body.usage.cost;attempts.push({status:response.status,costUsd:body.usage.cost});
+        if(costUsd>.1){stopped=true;throw new Error('Extraction evaluation cost exceeded');}return response;
+      };
+      try{
       const results = [] as Array<{ c: Case; statements: string[]; problems: string[] }>;
       const queue = [...BENCH.entries()];
       const workers = Array.from({ length: 4 }, async () => {
@@ -261,6 +273,8 @@ describe.skipIf(!HAS_KEY)("extraction, on the bench", () => {
 
       expect(metaOffenders, "un-standalone statements — zero tolerance").toEqual([]);
       expect(accuracy, "the bench's accuracy floor").toBeGreaterThanOrEqual(0.8);
+      if(guarded){await mkdir('../../work/web-quality',{recursive:true});await writeFile('../../work/web-quality/extraction-bench.json',JSON.stringify({calls,costUsd,maxCostUsd:.1,attempts,results,accuracy,metaOffenders},null,2));}
+      }finally{globalThis.fetch=network;}
     },
   );
 });

@@ -192,6 +192,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               {message.correctsMessageId?<><p className="chat-muted">{say('worldChatCorrectionSaved')}</p><ConversationPrincipleEdit scope={scope} contextId={`${id}:${message.id}`} locale={locale} onUpdated={row=>{onPrincipleUpdated?.(row);void refresh();reply.check();}}/></>:null}
               <ConversationThought scope={scope} message={message} locale={locale} onSaved={row=>{onInspirationSaved?.(row);void refresh();}} onOpen={onOpenSource?sourceId=>onOpenSource('inspiration',sourceId):undefined}
                 actions={message.role==='assistant'?<button type="button" disabled={busy||Boolean(draft?.content)||Boolean(draft?.pending)} onClick={()=>{keep({id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content:'',revision:conversation!.revision,pending:false,correctsMessageId:message.id});editor.current?.focus();}}>{say('worldChatCorrectReply')}</button>:null}/>
+              {message.citations?.length?<details className="chat-source-summary"><summary>{say('worldConversationReferences')} ({message.citations.length})</summary>
               {message.replyRequestId&&message.id===latestMessage?.id&&generationEnabled&&message.citations?.some(reference=>reference.kind==='top_of_mind_entry')?<ConversationReadingChoices
                 references={message.citations.filter(reference=>reference.kind==='top_of_mind_entry')} locale={locale} disabled={suggestionBlocked} hasDraft={Boolean(draft?.content.trim())}
                 opening={readingChoice?.messageId===message.id?readingChoice.index:null} failed={readingChoiceFailed===message.id}
@@ -207,6 +208,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
                   {onOpenSource&&citation.value.source.kind!=='top_of_mind_entry'?<button type="button" onClick={()=>onOpenSource(citation.value!.source.kind,citation.value!.source.id)}>{say('worldConversationOpenSource')}</button>:null}
                 </>:<p role="status">{say('worldChatMemoryLoading')}</p>}
               </section>:null}
+              </details>:null}
             </li>)}
             {draft?.pending&&!conversation?.messages.some(message=>message.id===draft.id)?<li className="chat-sending" data-role="user"><span>{say('worldConversationYou')}</span><ConversationText text={draft.content}/><small role="status">{say(busy?'worldChatSending':'worldReviewPending')}</small></li>:null}
           </ol>

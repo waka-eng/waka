@@ -159,7 +159,7 @@ async function worldWithTheMouthOpen(): Promise<MountedWorld> {
   return layout;
 }
 
-it('does not let the keyboard save shortcut omit an unfinished secondary link', async()=>{
+it('includes the visible secondary link when the keyboard save shortcut is used', async()=>{
   await worldWithTheMouthOpen(); await press(/＋ Link/);
   await act(async()=>{
     const input=layout!.container.querySelector<HTMLInputElement>('input[type=url]')!;
@@ -167,8 +167,8 @@ it('does not let the keyboard save shortcut omit an unfinished secondary link', 
     input.dispatchEvent(new Event('input',{bubbles:true}));
   });
   await act(async()=>layout!.container.querySelector('textarea')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true})));
-  expect(saveCalls).toHaveLength(0);
-  expect(layout!.container.textContent).toContain('Add or cancel the link before saving');
+  expect(saveCalls).toHaveLength(1);
+  expect(saveCalls[0]).toMatchObject({text:'a thing worth keeping\nhttps://example.test/not-added'});
 });
 
 /** the two words on the row, by the light they wear */

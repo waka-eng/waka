@@ -94,7 +94,7 @@ describe("reflection conversation", () => {
     vi.mocked(requestReflectionQuestion).mockImplementation(()=>new Promise(done=>{finish=done;}));
     await act(async()=>root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[saved]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
-    await act(async()=>button('ask another question →').click());
+    await act(async()=>button('Explore another question').click());
     const signal=vi.mocked(requestReflectionQuestion).mock.calls[0]?.[3]?.signal;
     await act(async()=>root.unmount()); root=createRoot(host);
     expect(signal?.aborted).toBe(true);
@@ -105,7 +105,7 @@ describe("reflection conversation", () => {
     vi.mocked(requestReflectionQuestion).mockResolvedValue({phase:'idle'});
     await act(async()=>root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[saved]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
-    await act(async()=>button('ask another question →').click());
+    await act(async()=>button('Explore another question').click());
     expect(host.textContent).toContain('inspiration changed'); expect(host.textContent).toContain(saved.answer);
     expect(createReflection).not.toHaveBeenCalled();
   });
@@ -133,10 +133,10 @@ describe("reflection conversation", () => {
     await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await writeAnswer(saved.answer!);
-    await act(async () => button('continue →').click());
+    await act(async () => button('Save thought').click());
     const firstOptions = vi.mocked(createReflection).mock.calls[0]?.[2] as { requestId?: string };
     expect(firstOptions?.requestId).toMatch(/^[0-9a-f-]{36}$/);
-    const retry = [...host.querySelectorAll('button')].find((item) => ['Try again', 'continue →'].includes(item.textContent?.trim() ?? ''))!;
+    const retry = [...host.querySelectorAll('button')].find((item) => ['Try again', 'Save thought'].includes(item.textContent?.trim() ?? ''))!;
     await act(async () => retry.click());
     expect(vi.mocked(createReflection).mock.calls[1]?.[2]).toMatchObject({ requestId: firstOptions.requestId });
   });
@@ -149,7 +149,7 @@ describe("reflection conversation", () => {
     );
     await act(async () => render([]));
     await writeAnswer(saved.answer);
-    await act(async () => button('continue →').click());
+    await act(async () => button('Save thought').click());
     const key = Object.keys(localStorage).find((item) => item.includes(':pendingSave:'))!;
     const intent = JSON.parse(localStorage.getItem(key)!);
     expect(intent.afterId).toBeNull();
@@ -168,7 +168,7 @@ describe("reflection conversation", () => {
     expect(createReflection).toHaveBeenCalledOnce();
     expect(onSaved).toHaveBeenCalledOnce();
     expect(requestReflectionQuestion).not.toHaveBeenCalled();
-    expect(button('ask another question →')).toBeTruthy();
+    expect(button('Explore another question')).toBeTruthy();
   });
   it("discards a pending follow-up when an earlier answer is removed", async () => {
     let finish!: (status: ApiReflectionQuestionStatus) => void;
@@ -178,7 +178,7 @@ describe("reflection conversation", () => {
       { id: "earlier", question: "First question", answer: "PRIVATE_SENTINEL earlier answer" },
       { id: "latest", question: "Second question", answer: "A remaining thought" },
     ]} locale="en-US" onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
-    await act(async () => button("ask another question →").click());
+    await act(async () => button("Explore another question").click());
     await act(async () => host.querySelector<HTMLElement>(".jar-reflection-turns summary")!.click());
     await act(async () => host.querySelector<HTMLButtonElement>(".jar-reflection-turn button")!.click());
     expect(deleteReflection).not.toHaveBeenCalled();
@@ -197,7 +197,7 @@ describe("reflection conversation", () => {
     await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[
       { id: "latest", question: "A question", answer: "An earlier saved answer" },
     ]} locale="en-US" onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
-    await act(async () => button("ask another question →").click());
+    await act(async () => button("Explore another question").click());
     await writeAnswer("My unfinished words should stay.");
     await act(async () => button("Delete reflection").click());
     await act(async () => button("Delete reflection").click());
@@ -229,8 +229,9 @@ describe("reflection conversation", () => {
     await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await writeAnswer(saved.answer!);
-    expect(host.textContent).toContain("Your answer shapes the next question.");
-    await act(async () => button("continue →").click());
+    expect(host.textContent).toContain("Save your thought. You can explore another question afterward.");
+    await act(async () => button("Save thought").click());
+    await act(async () => button("Explore another question").click());
     expect(createReflection).toHaveBeenCalledWith("inspiration-1", { question: saved.question, answer: saved.answer }, expect.objectContaining({ profile: "profile-1", requestId: expect.any(String) }));
     expect(requestReflectionQuestion).toHaveBeenCalledWith("inspiration-1", saved.id, false, {profile:SCOPE.profileId,signal:expect.any(AbortSignal)});
     expect(host.textContent).toContain(saved.answer);
@@ -238,7 +239,7 @@ describe("reflection conversation", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(host.querySelector('textarea'));
     expect(createReflection).toHaveBeenCalledTimes(1);
-    expect(button("done for now")).toBeTruthy();
+    expect(button("close")).toBeTruthy();
   });
 
   it("treats the wait as part of the conversation while keeping the answer in view", async () => {
@@ -247,7 +248,8 @@ describe("reflection conversation", () => {
     await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await writeAnswer(saved.answer!);
-    await act(async () => button("continue →").click());
+    await act(async () => button("Save thought").click());
+    await act(async () => button("Explore another question").click());
     expect(host.querySelector('[role="status"]')?.textContent).toContain("Let’s follow that thought…");
     expect(host.textContent).toContain(saved.answer);
     expect(host.querySelectorAll(".jar-reflection-typing span")).toHaveLength(3);
@@ -261,7 +263,8 @@ describe("reflection conversation", () => {
     await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await writeAnswer(saved.answer!);
-    await act(async () => button("continue →").click());
+    await act(async () => button("Save thought").click());
+    await act(async () => button("Explore another question").click());
     expect(host.textContent).toContain(saved.answer);
     expect(host.querySelector('[role="alert"]')?.textContent).toContain("thought is kept");
     await act(async () => button("try again").click());
@@ -276,7 +279,7 @@ describe("reflection conversation", () => {
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     expect(host.textContent).toContain(saved.answer);
     expect(requestReflectionQuestion).not.toHaveBeenCalled();
-    await act(async () => button("ask another question →").click());
+    await act(async () => button("Explore another question").click());
     expect(requestReflectionQuestion).toHaveBeenCalledWith("inspiration-1", saved.id, false, {profile:SCOPE.profileId,signal:expect.any(AbortSignal)});
   });
 
@@ -285,13 +288,16 @@ describe("reflection conversation", () => {
     await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await writeAnswer(saved.answer!);
-    await act(async () => button("keep this & finish").click());
+    await act(async () => button("Save thought").click());
     expect(createReflection).toHaveBeenCalledOnce();
     expect(requestReflectionQuestion).not.toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("Your thought is saved.");
+    await act(async () => button("done for now").click());
     expect(onDone).toHaveBeenCalledOnce();
   });
 
-  it("lets each answer lead directly to the next question without an intermediate save screen", async () => {
+  it("lets the person deliberately explore another question after each confirmed save", async () => {
     const second = { ...saved, id: "reflection-2", question: "What made leaving that corner unfinished feel calmer?",
       answer: "It left room for someone else to add to it." };
     vi.mocked(createReflection).mockResolvedValueOnce(saved).mockResolvedValueOnce(second);
@@ -301,9 +307,11 @@ describe("reflection conversation", () => {
     await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await writeAnswer(saved.answer!);
-    await act(async () => button("continue →").click());
+    await act(async () => button("Save thought").click());
+    await act(async () => button("Explore another question").click());
     await writeAnswer(second.answer!);
-    await act(async () => button("continue →").click());
+    await act(async () => button("Save thought").click());
+    await act(async () => button("Explore another question").click());
     expect(createReflection).toHaveBeenCalledTimes(2);
     expect(requestReflectionQuestion).toHaveBeenCalledTimes(2);
     expect(host.textContent).toContain("Who might add something you would not have imagined?");

@@ -63,6 +63,13 @@ export const DialogSurface = forwardRef<HTMLDivElement, DialogSurfaceProps>(func
       }
     };
   }, [active]);
+  useLayoutEffect(() => {
+    // Saving/advancing can remove the focused action. Keep Escape and Tab
+    // inside the active sheet while the next content is loading, without
+    // moving focus away from an editor or another deliberate focus target.
+    const node=surface.current;
+    if(active&&node&&document.activeElement===document.body)node.focus({preventScroll:true});
+  });
 
   return <div {...props} ref={surface} role="dialog" aria-modal={active || undefined}
     aria-hidden={active ? undefined : true} tabIndex={-1} data-jar-surface="1"

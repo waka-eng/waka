@@ -22,7 +22,7 @@ it('gives review and chat their own named activity cards and distinct destinatio
 });
 it('shows resume state without implying a new review, and leaves empty review understandable',async()=>{
   await mount(true);expect(host.textContent).toContain('Resume review · 3 selected');expect(host.textContent).toContain('Continue where you left off.');
-  await mount(false,false);expect(host.textContent).toContain('Save an inspiration to begin.');expect(host.querySelector('button')!.disabled).toBe(false);
+  await mount(false,false);expect(host.querySelectorAll('button')).toHaveLength(1);expect(host.textContent).toContain('Talk with WAKA');expect(host.textContent).not.toContain('Review your inspirations');
 });
 it('keeps visual cues decorative and the Korean action names explicit',async()=>{
   await act(async()=>root.render(<HomeActivities locale="ko-KR" reviewLabel="영감 돌아보기" resuming={false} hasInspirations onReview={review} onChat={chat}/>));
@@ -34,7 +34,6 @@ it('keeps visual cues decorative and the Korean action names explicit',async()=>
 it('keeps routine hints accessible without adding a second visible line, retaining the empty-state guidance',async()=>{
   await mount();expect(host.querySelectorAll('.jar-activity-hint.sr-only')).toHaveLength(2);
   await mount(true);expect(host.querySelectorAll('.jar-activity-hint.sr-only')).toHaveLength(2);
-  await mount(false,false);const reviewHint=host.querySelector('.jar-activity-hint')!;
-  expect(reviewHint.classList.contains('sr-only')).toBe(false);expect(reviewHint.textContent).toBe('Save an inspiration to begin.');
+  await mount(false,false);expect(host.querySelectorAll('.jar-activity-hint.sr-only')).toHaveLength(1);expect(host.textContent).toContain('Think through a choice.');
   for(const button of host.querySelectorAll('button'))expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent).toBeTruthy();
 });

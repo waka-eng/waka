@@ -1,0 +1,224 @@
+{
+  "date": "2026-10-07",
+  "reviewer": "agent review against the fixed rubric; no independent human study",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "runs": {
+    "baseline": {
+      "path": "work/conversation-eval/reply-web-quality-baseline-key-1791433517056.json",
+      "sha256": "bc42c19c331ae701bb54e0ef9e5f01195ad47a684bfb9418c496620fcbc05583",
+      "calls": 24,
+      "costUsd": 0.004684065,
+      "finished": true
+    },
+    "candidate": {
+      "path": "work/conversation-eval/reply-web-quality-candidate-1791433779134.json",
+      "sha256": "6787b14bdf5df94387de4a0549951a07da9735f68fbfff9098c813096bad5c3d",
+      "calls": 24,
+      "costUsd": 0.006374745999999999,
+      "finished": true
+    },
+    "generation": {
+      "path": "work/generation-calibration/web-quality-generation-1791434388604.json",
+      "sha256": "f5b760f56a1e174fdfaed7f64921d3838cdc7c605136d9ef6a28916b28d56c1d",
+      "calls": 50,
+      "costUsd": 0.016962655000000004,
+      "finished": true
+    }
+  },
+  "chat": {
+    "matrixDigest": "5444f6d6cee5fc86ae1adb37339c3a712611c4756d2d5266682a9521bf248e9c",
+    "baselineStructural": 24,
+    "baselineQualitative": 23,
+    "candidateStructural": 24,
+    "candidateQualitative": 24,
+    "criticalSafetyFailures": 0,
+    "baselineMiss": {
+      "case": "conflict-en",
+      "reason": "Declares a real conflict and treats two evenings as too large for a small trial before actual overlap or duration is known."
+    },
+    "candidateVerdicts": {
+      "empty-en": "pass",
+      "empty-ko": "pass",
+      "conflict-en": "pass",
+      "conflict-ko": "pass",
+      "edited-en": "pass",
+      "edited-ko": "pass",
+      "old-interest-en": "pass",
+      "old-interest-ko": "pass",
+      "correction-en": "pass",
+      "correction-ko": "pass",
+      "withdrawn-en": "pass",
+      "withdrawn-ko": "pass",
+      "missing-conditions-en": "pass",
+      "missing-conditions-ko": "pass",
+      "injection-en": "pass",
+      "injection-ko": "pass",
+      "capture-date-en": "pass",
+      "capture-date-ko": "pass",
+      "direct-distinction-en": "pass",
+      "direct-distinction-ko": "pass",
+      "requested-question-list-en": "pass",
+      "hypothetical-example-ko": "pass",
+      "saved-is-not-endorsed-en": "pass",
+      "irrelevant-memory-ko": "pass"
+    },
+    "retainedCaveats": [
+      "Human-kept Korean wording still receives a cautious support qualification.",
+      "One sample per case does not establish general model reliability.",
+      "The previously retained edited-en label miss did not reproduce in this baseline."
+    ]
+  },
+  "generation": {
+    "cases": 24,
+    "structuralPasses": 24,
+    "qualitativePasses": 24,
+    "criticalSafetyFailures": 0,
+    "verdicts": {
+      "empty": "pass",
+      "first-save-en": "pass",
+      "first-save-ko": "pass",
+      "one-origin-many-signals": "pass",
+      "durable-choices-en": "pass",
+      "durable-choices-ko": "pass",
+      "early-strong-choices": "pass",
+      "one-day-external-burst": "pass",
+      "duplicate-dominance": "pass",
+      "established-new-focus": "pass",
+      "active-interest-shift": "pass",
+      "unresolved-contradiction": "pass",
+      "temporary-scope": "pass",
+      "corrected-claim": "pass",
+      "deleted-support": "pass",
+      "locked-lost-support": "pass",
+      "pinned-lead": "pass",
+      "locale-change": "pass",
+      "return-after-quiet": "pass",
+      "unchanged-reading": "pass",
+      "automatic-daily-hold": "pass",
+      "photo-only": "pass",
+      "corrected-audio-ko": "pass",
+      "single-incidental-arrival": "pass"
+    },
+    "limits": "Prevalidated layer-2 fixtures; raw capture extraction is a separate gate."
+  },
+  "budget": {
+    "pricedCalls": 98,
+    "returnedCostUsd": 0.028021466000000002,
+    "unpricedAuthProbeReserveUsd": 0.5,
+    "rawAudioReserveUsd": 0.05,
+    "historicalUsedOrHeldUsd": 3.1340356674,
+    "currentUsedOrHeldUsd": 3.7120571334,
+    "evaluationCapUsd": 5
+  },
+  "writeFaults": {
+    "providerNetworkCalls": 0,
+    "results": [
+      {
+        "fault": "save-request",
+        "draftPreserved": true,
+        "confirmedSaves": 1,
+        "duplicates": 0,
+        "posts": 2,
+        "reloadStable": true,
+        "uploads": []
+      },
+      {
+        "fault": "save-response",
+        "draftPreserved": true,
+        "confirmedSaves": 1,
+        "duplicates": 0,
+        "posts": 2,
+        "reloadStable": true,
+        "uploads": []
+      },
+      {
+        "fault": "offline",
+        "draftPreserved": true,
+        "confirmedSaves": 1,
+        "duplicates": 0,
+        "posts": 1,
+        "reloadStable": true,
+        "uploads": []
+      },
+      {
+        "fault": "second-upload",
+        "draftPreserved": true,
+        "confirmedSaves": 1,
+        "duplicates": 0,
+        "posts": 1,
+        "reloadStable": true,
+        "uploads": [
+          {
+            "cookie": false,
+            "authorization": false,
+            "type": "image/png",
+            "bytes": 68,
+            "sha256": "c897f53ea6b8141f1f5152b971a436f6f31d28e9e1f0dca5cfca4c838e28e062"
+          },
+          {
+            "cookie": false,
+            "authorization": false,
+            "type": "image/png",
+            "bytes": 68,
+            "sha256": "c897f53ea6b8141f1f5152b971a436f6f31d28e9e1f0dca5cfca4c838e28e062"
+          },
+          {
+            "cookie": false,
+            "authorization": false,
+            "type": "image/png",
+            "bytes": 68,
+            "sha256": "c897f53ea6b8141f1f5152b971a436f6f31d28e9e1f0dca5cfca4c838e28e062"
+          }
+        ]
+      }
+    ]
+  },
+  "rawAudio": {
+    "at": "2026-10-08T04:49:13.453Z",
+    "calls": 2,
+    "maxCalls": 2,
+    "estimatedCostUsd": 0.000403,
+    "estimatedCapUsd": 0.05,
+    "cases": [
+      {
+        "name": "english",
+        "passed": true,
+        "durationMs": 1851,
+        "bytes": 184152,
+        "status": "ready",
+        "reason": null,
+        "transcriptChars": 99,
+        "drained": {
+          "claimed": 1,
+          "held": 0,
+          "succeeded": 1,
+          "retried": 0,
+          "failed": 0,
+          "deferred": 0
+        }
+      },
+      {
+        "name": "silence",
+        "passed": true,
+        "durationMs": 1280,
+        "bytes": 96044,
+        "status": "unavailable",
+        "reason": "audio_no_speech",
+        "transcriptChars": 0,
+        "drained": {
+          "claimed": 1,
+          "held": 0,
+          "succeeded": 1,
+          "retried": 0,
+          "failed": 0,
+          "deferred": 0
+        }
+      }
+    ],
+    "limitations": [
+      "synthetic speech and silence",
+      "local object transport, not AWS policy",
+      "no physical device audio"
+    ]
+  }
+}

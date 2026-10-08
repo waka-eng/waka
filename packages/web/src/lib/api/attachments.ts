@@ -202,6 +202,7 @@ export async function uploadToPresignedUrl(
   try {
     res = await fetch(url, {
       method: "PUT",
+      credentials: "omit",
       headers,
       body: file,
       ...(signal ? { signal } : {}),

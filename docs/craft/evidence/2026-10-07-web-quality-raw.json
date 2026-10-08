@@ -1,0 +1,1026 @@
+{
+  "date": "2026-10-07",
+  "scope": "Synthetic raw material through real enrichment/extraction/reading/chat workers; agent semantic review, not human research",
+  "digest": "e725a6ebaf2e444300f79acadf3ebcfe3d135bf53f02512c9513a301b00096fc",
+  "baseline": {
+    "cases": 9,
+    "qualitativePasses": 1,
+    "criticalUnsupportedGenderCases": 1,
+    "failures": "Eight cases broadened a single event or omitted a temporary time scope; gender and stronger motives/value judgments were unsupported."
+  },
+  "candidate": {
+    "cases": 9,
+    "qualitativePasses": 9,
+    "criticalSafetyFailures": 0,
+    "results": [
+      {
+        "id": "text-en",
+        "sourceText": "I kept one morning unplanned last weekend; the space helped me start a sketch. I want to try that again.",
+        "enrichment": null,
+        "signals": [
+          {
+            "id": "35fc5aa9-8bca-4362-ba04-9fe029672ca6",
+            "statement": "Keeping one morning unplanned helped them start a sketch, and they want to try that again.",
+            "status": "emerging"
+          }
+        ],
+        "readings": [
+          {
+            "body": "Leaving one morning unplanned seemed to help you start a sketch, and you want to try that again.",
+            "type": "hypothesis"
+          }
+        ],
+        "chat": [
+          {
+            "id": "728c86c6-44bf-4f8d-9053-d0a9ce162b33",
+            "profileId": "2248a04c-a602-405e-966a-c77917c7560b",
+            "conversationId": "cb13d940-a354-43c8-90d9-7c1e3e4fe098",
+            "position": 1,
+            "role": "user",
+            "content": "How could I try leaving room for sketching next weekend?",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:46:37.550Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": null,
+            "citations": [],
+            "savedInspirationIds": []
+          },
+          {
+            "id": "1ee0a5b8-6297-44f1-a9eb-218fa335485c",
+            "profileId": "2248a04c-a602-405e-966a-c77917c7560b",
+            "conversationId": "cb13d940-a354-43c8-90d9-7c1e3e4fe098",
+            "position": 2,
+            "role": "assistant",
+            "content": "You could keep one morning next weekend unplanned, the way it helped you start a sketch before. Maybe just leave the time open and keep your sketchbook nearby, without deciding in advance what you'll draw.",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:46:39.204Z",
+            "followUpQuestion": "Is there a particular morning next weekend that looks free?",
+            "memoryChanged": false,
+            "replyRequestId": "6f6a3268-650d-49b5-9ef7-b63d3f9d1cde",
+            "citations": [
+              {
+                "index": 0,
+                "kind": "top_of_mind_entry",
+                "id": "e1174332-e734-43b6-bb9a-15e617a573df",
+                "available": true,
+                "preview": "Leaving one morning unplanned seemed to help you start a sketch, and you want to try that again."
+              }
+            ],
+            "savedInspirationIds": []
+          }
+        ],
+        "pipeline": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "replyPasses": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "semanticReview": "pending"
+      },
+      {
+        "id": "text-ko",
+        "sourceText": "지난 주말에는 오전을 비워 두고 그림을 시작해 봤어요. 이번 달에만 한 번 더 해보고 싶어요.",
+        "enrichment": null,
+        "signals": [
+          {
+            "id": "9642bed1-4cf1-4469-980d-0229c3fe7115",
+            "statement": "지난 주말에는 오전을 비워 두고 그림을 시작해 봤고, 이번 달에만 한 번 더 해보고 싶어 한다.",
+            "status": "emerging"
+          }
+        ],
+        "readings": [
+          {
+            "body": "지난 주말에는 오전을 비워 두고 그림을 시작해 봤고, 이번 달에 한 번 더 해보고 싶어 한다.",
+            "type": "pattern"
+          }
+        ],
+        "chat": [
+          {
+            "id": "ea793080-66dc-4bce-9d39-0bc2b8ccec2c",
+            "profileId": "4f3d5973-d07e-4b20-a5f4-245167082e55",
+            "conversationId": "2f1eed22-33af-45a2-bf37-81b365fdfff1",
+            "position": 1,
+            "role": "user",
+            "content": "이번 달에만 한 번 더 시도할 때 무엇을 살펴보면 좋을까요?",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:46:42.520Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": null,
+            "citations": [],
+            "savedInspirationIds": []
+          },
+          {
+            "id": "9a43273e-de28-4b27-99fe-289eb04cb45a",
+            "profileId": "4f3d5973-d07e-4b20-a5f4-245167082e55",
+            "conversationId": "2f1eed22-33af-45a2-bf37-81b365fdfff1",
+            "position": 2,
+            "role": "assistant",
+            "content": "이번 달 한 번 더 그림을 시작할 때는, 그날 오전을 실제로 비워 둘 수 있었는지와 시작한 뒤 어떤 느낌이었는지를 가볍게 적어 두면 좋아요. 예를 들어 가상으로, 시작 전 기대와 시작 후 느낌이 달랐는지도 함께 메모해 볼 수 있어요.",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:46:45.839Z",
+            "followUpQuestion": "그 한 번은 언제쯤 해보고 싶으세요?",
+            "memoryChanged": false,
+            "replyRequestId": "8f9170fc-9577-4419-a5ce-4b7560a54d60",
+            "citations": [
+              {
+                "index": 0,
+                "kind": "top_of_mind_entry",
+                "id": "6497096e-b1a5-4f28-86b6-b465272b1c53",
+                "available": true,
+                "preview": "지난 주말에는 오전을 비워 두고 그림을 시작해 봤고, 이번 달에 한 번 더 해보고 싶어 한다."
+              }
+            ],
+            "savedInspirationIds": []
+          }
+        ],
+        "pipeline": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "replyPasses": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "semanticReview": "pending"
+      },
+      {
+        "id": "link-en",
+        "sourceText": "I saved this article to inspect its argument. I have not decided whether I agree with it.",
+        "enrichment": {
+          "enrichment_status": "ready",
+          "enrichment_text": "Notes — A page. — Estuary work rewards patience over instrumentation, and the crews who log the most useful observations are the ones who return to the same bend of water for years rather than sweeping a wider stretch once. The kingfisher audits the riverbank ledger before the tide turns. The bird arrives before the survey team does, works the shallows on a schedule nobody set, and leaves once the water turns over. What the crews write down afterwards is closer to an account of attention than to a measurement, which is why two teams reading the same reach of river rarely produce the same page of notes.",
+          "enrichment_error_reason": null
+        },
+        "signals": [],
+        "readings": [],
+        "chat": [
+          {
+            "id": "bf71643d-7814-4b7d-aeb8-fc3b47922218",
+            "profileId": "302c7cd3-8c0c-4b35-8cd5-9b8ac3acc3fb",
+            "conversationId": "fdb154ae-ee65-4257-801c-628e95a38ce8",
+            "position": 1,
+            "role": "user",
+            "content": "Does saving this article mean I agree with its argument?",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:46:47.852Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": null,
+            "citations": [],
+            "savedInspirationIds": []
+          },
+          {
+            "id": "e2564933-675a-4bcc-8518-80815a331c3b",
+            "profileId": "302c7cd3-8c0c-4b35-8cd5-9b8ac3acc3fb",
+            "conversationId": "fdb154ae-ee65-4257-801c-628e95a38ce8",
+            "position": 2,
+            "role": "assistant",
+            "content": "No — the saved note itself says you saved it to inspect the argument and haven't decided whether you agree. Saving something just means you kept it for a closer look.",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:46:52.724Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": "3a0e5146-c348-444c-9dcb-d2b0b2e8328d",
+            "citations": [
+              {
+                "index": 0,
+                "kind": "inspiration",
+                "id": "41f6de38-7691-4cee-9e7b-d1628983dd98",
+                "available": true,
+                "preview": "Saved text: I saved this article to inspect its argument. I have not decided whether I agree wit"
+              }
+            ],
+            "savedInspirationIds": []
+          }
+        ],
+        "pipeline": [
+          {
+            "claimed": 2,
+            "held": 0,
+            "succeeded": 2,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "replyPasses": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "semanticReview": "pending"
+      },
+      {
+        "id": "link-ko",
+        "sourceText": "이 글의 주장을 살펴보려고 저장했어요. 동의할지는 아직 정하지 않았어요.",
+        "enrichment": {
+          "enrichment_status": "ready",
+          "enrichment_text": "Notes — A page. — Estuary work rewards patience over instrumentation, and the crews who log the most useful observations are the ones who return to the same bend of water for years rather than sweeping a wider stretch once. The kingfisher audits the riverbank ledger before the tide turns. The bird arrives before the survey team does, works the shallows on a schedule nobody set, and leaves once the water turns over. What the crews write down afterwards is closer to an account of attention than to a measurement, which is why two teams reading the same reach of river rarely produce the same page of notes.",
+          "enrichment_error_reason": null
+        },
+        "signals": [
+          {
+            "id": "d38e1d92-9010-42e8-8b63-9853ea965c3e",
+            "statement": "이 글의 주장을 살펴보려고 저장했고, 동의할지는 아직 정하지 않았다.",
+            "status": "emerging"
+          }
+        ],
+        "readings": [
+          {
+            "body": "이 글의 주장을 살펴보려고 저장해 두었다. 아직 동의할지는 정하지 않은 상태다.",
+            "type": "question"
+          }
+        ],
+        "chat": [
+          {
+            "id": "8f83347b-07ad-4999-852b-9aa0541647cf",
+            "profileId": "c25d8e70-19fe-4172-80f8-62a17d751722",
+            "conversationId": "178cc417-de38-446b-a001-d16ea17fd449",
+            "position": 1,
+            "role": "user",
+            "content": "이 글을 저장했다고 해서 그 주장에 동의하는 건가요?",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:47:06.300Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": null,
+            "citations": [],
+            "savedInspirationIds": []
+          },
+          {
+            "id": "2df7977f-9753-4466-851a-6c45c516636f",
+            "profileId": "c25d8e70-19fe-4172-80f8-62a17d751722",
+            "conversationId": "178cc417-de38-446b-a001-d16ea17fd449",
+            "position": 2,
+            "role": "assistant",
+            "content": "아니요, 저장했다고 해서 동의하는 건 아니에요. 남겨주신 기록에도 \"아직 동의할지는 정하지 않은 상태\"라고 되어 있어요.",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:47:07.498Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": "a7220bc5-26a9-4e55-a27e-ffb803a42a3f",
+            "citations": [
+              {
+                "index": 0,
+                "kind": "top_of_mind_entry",
+                "id": "826aee61-d208-4092-8cd1-a808d0508720",
+                "available": true,
+                "preview": "이 글의 주장을 살펴보려고 저장해 두었다. 아직 동의할지는 정하지 않은 상태다."
+              }
+            ],
+            "savedInspirationIds": []
+          }
+        ],
+        "pipeline": [
+          {
+            "claimed": 2,
+            "held": 0,
+            "succeeded": 2,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "replyPasses": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "semanticReview": "pending"
+      },
+      {
+        "id": "image-en",
+        "sourceText": "The phrase in this image makes me want to leave breathing room in this week’s plans.",
+        "enrichment": {
+          "enrichment_status": "ready",
+          "enrichment_text": "LEAVE SOME SPACE\n\nThis is a digital image featuring black, pixelated text centered against a plain white background. The font style resembles that of early 8-bit computer or video game graphics.",
+          "enrichment_error_reason": null
+        },
+        "signals": [
+          {
+            "id": "51750621-6f99-46d8-9518-c9438b177e35",
+            "statement": "The phrase \"LEAVE SOME SPACE\" makes me want to leave breathing room in this week's plans.",
+            "status": "emerging"
+          }
+        ],
+        "readings": [
+          {
+            "body": "The phrase \"LEAVE SOME SPACE\" is on your mind, and it makes you want to leave breathing room in this week's plans.",
+            "type": "pattern"
+          }
+        ],
+        "chat": [
+          {
+            "id": "2e493605-6785-465c-8174-38c087a1364f",
+            "profileId": "02e81549-de46-44a7-81b0-d1bb0ff46a59",
+            "conversationId": "ca9b748f-56d4-48f5-8c4e-0e35aeebea4a",
+            "position": 1,
+            "role": "user",
+            "content": "What is a small way to try leaving room in this week’s plans?",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:47:14.048Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": null,
+            "citations": [],
+            "savedInspirationIds": []
+          },
+          {
+            "id": "c4f538fe-cb92-4cb0-8458-c39c881c98b3",
+            "profileId": "02e81549-de46-44a7-81b0-d1bb0ff46a59",
+            "conversationId": "ca9b748f-56d4-48f5-8c4e-0e35aeebea4a",
+            "position": 2,
+            "role": "assistant",
+            "content": "One small way is to leave one evening or a block of time unplanned this week, so it stays open rather than getting filled.",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:47:14.805Z",
+            "followUpQuestion": "Which day or time block could you keep open?",
+            "memoryChanged": false,
+            "replyRequestId": "76a4660a-3540-4159-b627-3a87231e15e6",
+            "citations": [
+              {
+                "index": 0,
+                "kind": "top_of_mind_entry",
+                "id": "9e4d2551-0276-4891-b943-95088fd782f3",
+                "available": true,
+                "preview": "The phrase \"LEAVE SOME SPACE\" is on your mind, and it makes you want to leave breathing room in "
+              }
+            ],
+            "savedInspirationIds": []
+          }
+        ],
+        "pipeline": [
+          {
+            "claimed": 2,
+            "held": 0,
+            "succeeded": 2,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "replyPasses": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "semanticReview": "pending"
+      },
+      {
+        "id": "image-ko",
+        "sourceText": "사진 속 문구처럼, 이번 주 계획에 여백을 남겨 보고 싶어요.",
+        "enrichment": {
+          "enrichment_status": "ready",
+          "enrichment_text": "LEAVE SOME SPACE\n\nThis is a digital image featuring black, pixelated text centered against a plain white background. The font style resembles that of early 8-bit computer or video game graphics.",
+          "enrichment_error_reason": null
+        },
+        "signals": [
+          {
+            "id": "fc93ffdf-40b5-4d6b-bcd7-c2c895052949",
+            "statement": "이번 주 계획에 여백을 남겨 보고 싶어 해요.",
+            "status": "emerging"
+          }
+        ],
+        "readings": [
+          {
+            "body": "이번 주 계획에 여백을 남겨 보고 싶은 마음이 있어요.",
+            "type": "pattern"
+          }
+        ],
+        "chat": [
+          {
+            "id": "1e7732a5-9da5-45ba-a897-693c613fc524",
+            "profileId": "9013b6cd-aa96-4a33-81b2-3cc9e3cca581",
+            "conversationId": "e74f6a88-94cd-4780-a704-d839ce908e30",
+            "position": 1,
+            "role": "user",
+            "content": "이번 주 계획에 여백을 조금 남겨 보려면 어떻게 시작하면 좋을까요?",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:47:27.343Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": null,
+            "citations": [],
+            "savedInspirationIds": []
+          },
+          {
+            "id": "02f61d18-d469-4056-95d4-389246d78bfd",
+            "profileId": "9013b6cd-aa96-4a33-81b2-3cc9e3cca581",
+            "conversationId": "e74f6a88-94cd-4780-a704-d839ce908e30",
+            "position": 2,
+            "role": "assistant",
+            "content": "이번 주 계획에서 이미 정해 둔 일정 중 하나를 골라, 그 주변에 짧은 빈 시간을 먼저 표시해 두는 것부터 시작해 볼 수 있어요. 예를 들어, 가상으로 화요일 오후 일정 옆에 30분 정도 '여백'이라고 적어 두는 식이에요.",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:47:28.972Z",
+            "followUpQuestion": "이번 주에 이미 정해 둔 일정 중 어느 하나를 떠올려 볼 수 있나요?",
+            "memoryChanged": false,
+            "replyRequestId": "9918c42f-6619-45b8-85d2-1a5c8d7c6b0d",
+            "citations": [
+              {
+                "index": 0,
+                "kind": "top_of_mind_entry",
+                "id": "276aec46-1108-4132-8b2c-17006ca1e5d4",
+                "available": true,
+                "preview": "이번 주 계획에 여백을 남겨 보고 싶은 마음이 있어요."
+              }
+            ],
+            "savedInspirationIds": []
+          }
+        ],
+        "pipeline": [
+          {
+            "claimed": 2,
+            "held": 0,
+            "succeeded": 2,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "replyPasses": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "semanticReview": "pending"
+      },
+      {
+        "id": "audio-en",
+        "sourceText": "",
+        "enrichment": {
+          "enrichment_status": "ready",
+          "enrichment_text": "I like the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "enrichment_error_reason": null
+        },
+        "signals": [
+          {
+            "id": "b06aa157-4fcd-468c-808f-074ccc520f80",
+            "statement": "Next week I want to leave one afternoon free for careful work.",
+            "status": "emerging"
+          }
+        ],
+        "readings": [
+          {
+            "body": "You want to leave one afternoon free next week for careful work.",
+            "type": "action"
+          }
+        ],
+        "chat": [
+          {
+            "id": "eb33f9d9-7a52-46f2-8164-a04cef6094c0",
+            "profileId": "c0eabf6f-0146-45f4-b8ac-88608474ba2e",
+            "conversationId": "c7539cdc-e96d-4950-a111-2088a6ae9c09",
+            "position": 1,
+            "role": "user",
+            "content": "What did I say I wanted to try next week?",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:47:34.954Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": null,
+            "citations": [],
+            "savedInspirationIds": []
+          },
+          {
+            "id": "34acb2ef-4998-4514-9e3f-71b4732ba8db",
+            "profileId": "c0eabf6f-0146-45f4-b8ac-88608474ba2e",
+            "conversationId": "c7539cdc-e96d-4950-a111-2088a6ae9c09",
+            "position": 2,
+            "role": "assistant",
+            "content": "You said you want to leave one afternoon free next week for careful work.",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T05:47:36.246Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": "a887fee1-0816-4784-9654-cd83fdf8f5d3",
+            "citations": [
+              {
+                "index": 0,
+                "kind": "top_of_mind_entry",
+                "id": "6ed45973-6353-4f14-9abc-8e155fb9e282",
+                "available": true,
+                "preview": "You want to leave one afternoon free next week for careful work."
+              },
+              {
+                "index": 1,
+                "kind": "inspiration",
+                "id": "ccba7fcc-7659-4c0b-8d23-76d46fe7b014",
+                "available": true,
+                "preview": "Audio transcript: I like the empty space in that room. Next week I want to leave one afternoon f"
+              }
+            ],
+            "savedInspirationIds": []
+          }
+        ],
+        "pipeline": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 2,
+            "held": 0,
+            "succeeded": 2,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "replyPasses": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "semanticReview": "pending"
+      },
+      {
+        "id": "audio-ko",
+        "sourceText": "",
+        "enrichment": {
+          "enrichment_status": "ready",
+          "enrichment_text": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다.",
+          "enrichment_error_reason": null
+        },
+        "signals": [
+          {
+            "id": "126bd0a1-8c53-4445-8e3a-9bf4364bc826",
+            "statement": "여백이 많은 사진이 마음에 남았다.",
+            "status": "emerging"
+          },
+          {
+            "id": "c2b61b3c-3577-40db-a3b8-7a6e88f66a6f",
+            "statement": "다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다.",
+            "status": "emerging"
+          }
+        ],
+        "readings": [
+          {
+            "body": "여백이 많은 사진이 마음에 남았다.",
+            "type": "pattern"
+          },
+          {
+            "body": "다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다.",
+            "type": "action"
+          }
+        ],
+        "chat": [
+          {
+            "id": "8bc1d32e-139e-4794-bde5-5cd2d294701d",
+            "profileId": "4994fcd3-2342-4d2e-8229-882115795b80",
+            "conversationId": "d6fdba35-be2e-44d8-bf15-80cbbd254a1a",
+            "position": 1,
+            "role": "user",
+            "content": "녹음에서 다음 주에 무엇을 해보고 싶다고 했나요?",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T06:00:56.283Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": null,
+            "citations": [],
+            "savedInspirationIds": []
+          },
+          {
+            "id": "2975661f-9519-4c21-973a-a6ebd2620a5a",
+            "profileId": "4994fcd3-2342-4d2e-8229-882115795b80",
+            "conversationId": "d6fdba35-be2e-44d8-bf15-80cbbd254a1a",
+            "position": 2,
+            "role": "assistant",
+            "content": "녹음에서는 다음 주에 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다고 했어요.",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T06:00:57.146Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": "a9487402-d20b-4de6-baf2-9c1003504f58",
+            "citations": [
+              {
+                "index": 0,
+                "kind": "inspiration",
+                "id": "67c828aa-dd21-4e9a-85b1-c88a8201a83a",
+                "available": true,
+                "preview": "Audio transcript: 오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다."
+              }
+            ],
+            "savedInspirationIds": []
+          }
+        ],
+        "pipeline": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "replyPasses": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "recovery": [],
+        "semanticReview": "pending"
+      },
+      {
+        "id": "silence",
+        "sourceText": "",
+        "enrichment": {
+          "enrichment_status": "unavailable",
+          "enrichment_text": null,
+          "enrichment_error_reason": "audio_no_speech"
+        },
+        "signals": [],
+        "readings": [],
+        "chat": [
+          {
+            "id": "1f65af7a-0c60-48d7-9449-82c1896fbd21",
+            "profileId": "100c17fd-eaed-4d1c-9174-39e1c8f48c19",
+            "conversationId": "bd90dcea-a1b4-48bd-8dc5-8761da2bd6a2",
+            "position": 1,
+            "role": "user",
+            "content": "What does this silent recording tell you about my preferences?",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T06:01:02.119Z",
+            "followUpQuestion": null,
+            "memoryChanged": false,
+            "replyRequestId": null,
+            "citations": [],
+            "savedInspirationIds": []
+          },
+          {
+            "id": "875b2ce3-a467-4daa-b36d-631cca311328",
+            "profileId": "100c17fd-eaed-4d1c-9174-39e1c8f48c19",
+            "conversationId": "bd90dcea-a1b4-48bd-8dc5-8761da2bd6a2",
+            "position": 2,
+            "role": "assistant",
+            "content": "The recording has no text, so it doesn't show any preferences. I can't infer anything from silence.",
+            "correctsMessageId": null,
+            "createdAt": "2026-10-08T06:01:05.755Z",
+            "followUpQuestion": "Is there something specific you wanted to capture in that recording?",
+            "memoryChanged": false,
+            "replyRequestId": "eda312bc-a0e3-4b24-b0dc-28c262553848",
+            "citations": [],
+            "savedInspirationIds": []
+          }
+        ],
+        "pipeline": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "replyPasses": [
+          {
+            "claimed": 1,
+            "held": 0,
+            "succeeded": 1,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          },
+          {
+            "claimed": 0,
+            "held": 0,
+            "succeeded": 0,
+            "retried": 0,
+            "failed": 0,
+            "deferred": 0
+          }
+        ],
+        "recovery": [],
+        "semanticReview": "pending"
+      }
+    ],
+    "verdicts": {
+      "text-en": "pass: supported meaning and time scope, owned citations, unchanged raw text",
+      "text-ko": "pass: supported meaning and time scope, owned citations, unchanged raw text",
+      "link-en": "pass: supported meaning and time scope, owned citations, unchanged raw text",
+      "link-ko": "pass: supported meaning and time scope, owned citations, unchanged raw text",
+      "image-en": "pass: supported meaning and time scope, owned citations, unchanged raw text",
+      "image-ko": "pass: supported meaning and time scope, owned citations, unchanged raw text",
+      "audio-en": "pass: supported meaning and time scope, owned citations, unchanged raw text",
+      "audio-ko": "pass: supported meaning and time scope, owned citations, unchanged raw text",
+      "silence": "pass: supported meaning and time scope, owned citations, unchanged raw text"
+    },
+    "limitations": [
+      "Only one sample per raw case.",
+      "Two earlier Korean-audio attempts completed the job without an assistant message; exact failure code was not retained. Later run completed; this is not proof of general provider reliability.",
+      "Silence contains no inferred preferences, signal or reading."
+    ]
+  },
+  "runs": [
+    {
+      "path": "work/web-quality/raw-inputs-baseline.json",
+      "sha256": "ac3e9804bb5230acf797dbfe66c3b6ecb311c59f9c6541af98b24a94b8ffdedc",
+      "calls": 58,
+      "reportedCostUsd": 0.0060592070000000005,
+      "geminiHeldUpperUsd": 0.024926000000000004,
+      "completedCases": 9
+    },
+    {
+      "path": "work/web-quality/raw-inputs-candidate-partial.json",
+      "sha256": "e936ab5018bd0ad0ed88c595c9e63b461e8ae5515a6f2d569a9a9a8a27bc6d5f",
+      "calls": 52,
+      "reportedCostUsd": 0.005448436,
+      "geminiHeldUpperUsd": 0.023136000000000004,
+      "completedCases": 7
+    },
+    {
+      "path": "work/web-quality/raw-inputs-remainder-first.json",
+      "sha256": "a58434528eca5330e2acfa598be038523bf014d51eab05275321b96d1e999b4e",
+      "calls": 9,
+      "reportedCostUsd": 0.000996355,
+      "geminiHeldUpperUsd": 0.0030719999999999996,
+      "completedCases": 1
+    },
+    {
+      "path": "work/web-quality/raw-inputs-remainder.json",
+      "sha256": "8e30699206a9b266a28ad4c36d151259b349b4e9234177ae0f45ff6d54f04a88",
+      "calls": 13,
+      "reportedCostUsd": 0.0007650290000000001,
+      "geminiHeldUpperUsd": 0.00432,
+      "completedCases": 2
+    }
+  ],
+  "extractionBench": {
+    "cases": 16,
+    "accuracy": 1,
+    "metaReferences": 0,
+    "calls": 16,
+    "costUsd": 0.0015676400000000001
+  },
+  "budget": {
+    "beforeRawUsedOrHeldUsd": 3.7120571334,
+    "rawReportedPlusHeldUpperUsd": 0.068723027,
+    "benchReportedUsd": 0.0015676400000000001,
+    "currentUsedOrHeldUsd": 3.7823478004,
+    "capUsd": 5,
+    "method": "Retain reported OpenRouter cost plus conservative Gemini upper estimates as held amounts; never treat absent billing metadata as zero. Release unused pre-run ceiling only after complete request/usage accounting. Prior auth/dev unknown reservations and audio reservation remain held."
+  }
+}
