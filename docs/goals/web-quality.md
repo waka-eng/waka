@@ -141,3 +141,66 @@ failed. Current screenshots and numeric receipts remain under
 `work/web-quality/candidate` and `work/web-quality/locales`.
 Verdict: return-visits gate passes locally. Live AI usefulness, write-fault and
 deployed timings, human tasks and operating safeguards remain required.
+
+### 2026 10 07 dependability and quality checkpoint
+
+Four actual write-boundary cases pass: request loss, loss of both create/replay
+responses, offline save and second-file upload failure. Draft words remain,
+each recovery keeps exactly one inspiration, and reload does not create another.
+The transport's bounded same-identity replay remains intact; after both responses
+are lost, the durable receipt settles without a third POST. Upload retries keep
+both attachments and only two stored objects. The first driver incorrectly
+expected a failed socket response to remain unresolved even after the client's
+existing reconciliation; forced browser aborts exercise the intended uncertain
+state instead of weakening the write invariant.
+
+Observed signed-PUT defect: all three same-origin upload attempts carried the
+WAKA cookie. Explicit `credentials: omit` fixes it. The repeated real-browser
+check measures zero cookies/authorization, exact image/png, 68 bytes and the
+same SHA-256 for original, failed and retried PUT bodies. No payload or audience
+policy changed. This is a browser contract check, not native File Transfer acceptance.
+
+The fixed 24-case live chat baseline passes 24 structural/23 qualitative cases.
+The observed miss declared an actual course/family conflict and ruled out a small
+trial without confirming overlap/duration. A bounded prompt repair preserves
+conditional tradeoffs and consistent Korean conversational endings. Identical
+inputs/digest on the candidate pass 24 structural/24 qualitative cases, with zero
+critical safety failures. The prior edited-en label miss did not reproduce;
+Korean kept wording still receives a cautious qualification. These are agent
+reviews against the fixed rubric, not a human usefulness study.
+
+Fresh generation calibration passes 24 structural/24 qualitative cases and all
+critical cases; no weights, thresholds, cadence or wording locks changed. It used
+50 calls and USD 0.016962655. Chat baseline/candidate used 48 calls and
+USD 0.011058811. The initial configuration probe read an unavailable key and
+returned 401 without a model output; corrected the loader and retained its
+unpriced USD 0.50 reservation. The raw audio pipeline uses two Gemini calls:
+speech is transcribed/committed and silence yields audio_no_speech, with a
+learning job queued in both cases. Estimate USD 0.000403, with the entire
+USD 0.05 reservation retained; this proves raw audio intake, not its later reading.
+
+The evaluation ledger now has USD 3.7120571334 used or held out of USD 5,
+including the old unresolved USD 1.50 dev charge and the new reservations.
+All live inputs are synthetic. Google standard-model rates were checked against
+[its current pricing](https://ai.google.dev/gemini-api/docs/pricing); no account
+billing tier or provider privacy configuration is inferred from those rates.
+
+Current local API measurements use 30 samples at 25/2,000/10,000 inspirations,
+with provider networking disabled. At 10,000, search p95 is 20.8 ms, chat context
+median/p95 is 47.78/50.2 ms, Top of Mind uses 10 statements and Principles 4.
+Twenty current-build browser samples per viewport at 2,000 inspirations and
+150 ms added API delay give desktop/390px Home medians 412.5/412.3 ms and p95
+433/426.9 ms; Review medians 373.9/384 ms; warm-return medians 225.9/236.5 ms.
+These satisfy measured local targets; they are not cloud/provider timings or a
+claim of a measured speed improvement over the earlier build.
+
+API types and 975 unit cases pass (three paid benches excluded). Web types,
+862 web cases and build pass. The [quality receipt](../craft/evidence/2026-10-07-web-quality-checkpoint.json)
+retains per-case verdicts, run hashes, costs and fault evidence. Raw and timing
+receipts remain under `work/web-quality`.
+
+Phase 4 remains in progress: full raw text/link/image/Korean-audio-to-reading
+evidence, the full browser request window and deployed timing/recovery still need
+verification. Five first-time participants, monthly budget scope/enforcement,
+provider/source-policy attestation and exercised alerts remain phase 5 work.
+The pending owner questions are not treated as consent or as passed gates.

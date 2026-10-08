@@ -11,7 +11,7 @@ assert.ok(process.argv.includes('--live'), 'Use --live explicitly; this check ma
 const url = new URL(process.env.DB_CONNECTION_URL ?? '');
 assert.ok(['127.0.0.1', 'localhost'].includes(url.hostname)); assert.match(url.pathname, /test|disposable/i);
 assert.equal(url.searchParams.has('options'), false);
-const configured = parse(await readFile('.env.local'));
+const configured = parse(await readFile('.env.local').catch(error=>{if(error.code==='ENOENT')return '';throw error;}));
 const apiKey = process.env.GEMINI_API_KEY ?? configured.GEMINI_API_KEY;
 assert.ok(apiKey, 'GEMINI_API_KEY is required');
 process.env.NODE_ENV = 'test'; process.env.WAKA_BACKGROUND_JOB_AUTODRAIN = '0'; process.env.GEMINI_API_KEY = apiKey;
