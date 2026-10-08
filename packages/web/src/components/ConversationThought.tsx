@@ -5,6 +5,7 @@ import {useAuthoredSave} from '../lib/use-authored-save';
 import {readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft,type StoredConversationDraft} from '../lib/conversation-drafts';
 import type {ProfileStorageScope} from '../lib/profile-storage';
 import {t,type SupportedLocale} from '../lib/locales';
+import {ActionDisclosure} from './ActionDisclosure';
 
 /** AI wording prompts the person's takeaway; it is never prefilled as theirs. */
 export function ConversationThought({scope,message,locale,onSaved,onOpen,actions}:{scope:ProfileStorageScope;message:ApiConversationMessage;locale:SupportedLocale;onSaved:(row:ApiInspiration)=>void;onOpen?:(id:string)=>void;actions?:ReactNode}){
@@ -33,14 +34,16 @@ export function ConversationThought({scope,message,locale,onSaved,onOpen,actions
   const saved=[...new Set([...(message.savedInspirationIds??[]),...(savedId?[savedId]:[])])];
   return <div className="jar-conversation-thought">
     <div className="jar-conversation-actions">
-    {!open?<button type="button" onClick={()=>{setOpen(true);if(!draft)keep(assistant?'':message.content);}}>{say(assistant?'worldChatTakeaway':'worldChatKeepThought')}</button>:null}
-    {actions}
+    {!open||actions?<ActionDisclosure locale={locale} label={say('worldChatMessageActions')}>
+      {!open?<button type="button" onClick={()=>{setOpen(true);if(!draft)keep(assistant?'':message.content);}}>{say(assistant?'worldChatTakeaway':'worldChatKeepThought')}</button>:null}
+      {actions}
+    </ActionDisclosure>:null}
     {saved.map((id,index)=><button key={id} type="button" onClick={()=>onOpen?.(id)} disabled={!onOpen}>{say('worldChatOpenSaved')}{saved.length>1?` ${index+1}`:''}</button>)}
     </div>
     {open?<section aria-label={say('worldChatKeepThought')}>
       <p className="jar-review-context">{say(assistant?'worldChatTakeawayNote':'worldChatOwnNote')}</p>
       {drafts.length>1&&!pending?<label>{say('worldShareDrafts')}<select value={draft?.id??''} onChange={event=>{const row=drafts.find(item=>item.value.id===event.target.value);if(row){receipt.current=row;setDraft(row.value);setAdopted(false);}}}>{drafts.map(row=><option key={row.key} value={row.value.id}>{row.value.content.slice(0,50)||say('worldChatTakeaway')}</option>)}</select></label>:null}
-      <label>{say('worldChatThoughtWords')}<textarea rows={3} maxLength={4000} value={pending?.input.text??draft?.content??''} disabled={Boolean(pending)||save.busy} onChange={event=>keep(event.target.value)}/></label>
+      <label>{say('worldChatThoughtWords')}<textarea autoFocus rows={3} maxLength={4000} value={pending?.input.text??draft?.content??''} disabled={Boolean(pending)||save.busy} onChange={event=>keep(event.target.value)}/></label>
       {assistant&&!pending?<label className="jar-conversation-adopt"><input type="checkbox" checked={adopted} onChange={event=>setAdopted(event.target.checked)}/>{say('worldChatAdopt')}</label>:null}
       {storageFailed||save.phase==='storage_error'?<p role="alert">{say('worldConversationDraftFailed')}</p>:null}
       {save.phase==='uncertain'||save.phase==='unsupported'?<p role="status">{say('worldChatSaveUncertain')}</p>:null}

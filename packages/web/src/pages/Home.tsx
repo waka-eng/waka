@@ -12580,7 +12580,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               {pr.statement}
                             </button>
                           )}
-                          {pDraft?.id !== pr.id ? <div className="jar-principle-tools">
+                          {pDraft?.id !== pr.id && pick === pr.id ? <div className="jar-principle-tools">
                           <button
                             type="button"
                             className="jar-principle-edit"

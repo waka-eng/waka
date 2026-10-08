@@ -43,6 +43,11 @@
 .chat-message-text code { background:var(--w-raised); padding:2px var(--sp-4); border-radius:var(--sp-4); }
 .chat-page .jar-conversation-actions { display:flex; flex-wrap:wrap; gap:var(--sp-12); }
 .chat-page .jar-conversation-actions button { margin:0; padding-inline:0; font-size:var(--t-note); color:var(--w-muted); }
+.chat-page .jar-item-actions { margin-left:0; }
+.chat-page .jar-item-actions > summary { padding-inline:0; }
+.chat-source-summary { margin-top:var(--sp-8); font-size:var(--t-note); color:var(--w-muted); }
+.chat-source-summary > summary { display:flex; align-items:center; min-height:var(--sp-44); cursor:pointer; }
+.chat-source-summary > summary:hover,.chat-source-summary > summary:focus-visible { color:var(--w-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
 .chat-page .jar-conversation-thought section { margin-block:var(--sp-12); }
 .chat-page .jar-conversation-adopt { display:flex; align-items:center; gap:var(--sp-8); min-height:var(--sp-44); }
 .chat-page .jar-conversation-adopt input { width:var(--sp-20); height:var(--sp-20); flex:none; }

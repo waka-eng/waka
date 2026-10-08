@@ -11,6 +11,7 @@ import {InspirationAttachments} from './InspirationAttachments';
 import {ReflectionFlow} from './ReflectionFlow';
 import {ReviewDialogue} from './ReviewDialogue';
 import {ReviewResult} from './ReviewResult';
+import {ActionDisclosure} from './ActionDisclosure';
 
 function ReviewCard({item,sessionId,initialSource,scope,locale,disabled,onNext,onRefresh,onDeleted,onSaved,onSynchronized,onReflectionRemoved,onOpen}:{
   item:ApiReviewItem;sessionId:string;scope:ProfileStorageScope;locale:SupportedLocale;disabled:boolean;
@@ -78,7 +79,7 @@ function ReviewCard({item,sessionId,initialSource,scope,locale,disabled,onNext,o
         <p className="jar-review-text">{detail!.preview}</p>
         {source.attachments.length?<InspirationAttachments items={detail!.attachments} locale={locale} readOnly/>:null}
         {reflecting?<ReflectionFlow inspirationId={source.id} scope={scope} initialTurns={turns} locale={locale}
-          doneLabel={say('worldReviewBackToInspiration')} saveAndDoneLabel={say('worldReviewKeepAndReturn')}
+          doneLabel={say('worldReviewBackToInspiration')}
           onSaved={row=>onSaved?.(row)} onRemoved={id=>onReflectionRemoved?.(id,source.id)}
           onSynchronized={row=>{if(row?.id===source.id&&row.profileId===scope.profileId)setSource(row);onSynchronized?.(source.id,row);}}
           onDone={()=>{setReflecting(false);refreshed();}}/>:<>
@@ -91,7 +92,9 @@ function ReviewCard({item,sessionId,initialSource,scope,locale,disabled,onNext,o
           </div>:<div className="jar-review-item-actions">
             <button type="button" className="jar-review-primary" disabled={disabled} onClick={()=>setReflecting(true)}>{say('worldReflect')}</button>
             <button type="button" disabled={disabled} aria-describedby="review-next-hint" onClick={()=>onNext(turns.length>0)}>{say('worldReviewNextInspiration')} →</button>
-            <button type="button" className="jar-review-remove" disabled={disabled} onClick={()=>setConfirm(true)}>{say('worldReviewRemoveInspiration')}</button>
+            <ActionDisclosure locale={locale} label={say('worldReviewItemActions')}>
+              <button type="button" className="jar-review-remove" disabled={disabled} onClick={()=>setConfirm(true)}>{say('worldReviewRemoveInspiration')}</button>
+            </ActionDisclosure>
           </div>}
           {!confirm?<p id="review-next-hint" className="jar-review-context">{say('worldReviewNextKeeps')}</p>:null}
         </>}

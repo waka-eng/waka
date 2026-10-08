@@ -65,6 +65,15 @@ it('keeps the selected principle and its route after editing, so Back returns to
   expect(updatePrinciple).toHaveBeenCalledWith('principle-one','Leave unhurried time for thought.');
   await navigate(-1);expect(location.pathname+location.search).toBe('/');
 });
+it('shows principle management only after choosing the words to read',async()=>{
+  principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'declared',rank:0,locked:true,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[]}];
+  world=await mountWorld(FACTS,{initialEntries:['/?view=sky'],routerTools:<RouterTools/>});await settle();
+  expect(world.container.querySelector('.jar-principle-tools')).toBeNull();
+  const words=world.container.querySelector<HTMLButtonElement>('.jar-values-value')!;await act(async()=>words.click());await settle();
+  expect(location.pathname).toBe('/principles/principle-one');
+  expect(world.container.querySelector('[aria-label="Edit wording"]')).not.toBeNull();
+  await navigate(-1);expect(world.container.querySelector('.jar-principle-tools')).toBeNull();
+});
 it('hides a principle’s expanded evidence when Back closes that principle',async()=>{
   principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'minted',rank:0,locked:false,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[{id:'signal-one',statement:'Make space to think.',examples:[{text:'I left an unhurried morning for thinking.',createdAt:'2026-10-03T12:00:00Z'}]}]}];
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();await navigate('/principles/principle-one');

@@ -28,6 +28,15 @@ async function mount(onClose = vi.fn()) {
 }
 
 describe("dialog input ownership", () => {
+  it('keeps Escape usable when a focused action disappears during a loading transition',async()=>{
+    const close=vi.fn();
+    await act(async()=>root.render(<DialogSurface onClose={close}><button>Next inspiration</button></DialogSurface>));
+    expect(document.activeElement).toBe(host.querySelector('button'));
+    await act(async()=>root.render(<DialogSurface onClose={close}><p role="status">Opening inspiration…</p></DialogSurface>));
+    const dialog=host.querySelector<HTMLElement>('[role="dialog"]')!;expect(document.activeElement).toBe(dialog);
+    await act(async()=>dialog.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
+    expect(close).toHaveBeenCalledOnce();
+  });
   it('keeps collapsed customization controls out of the keyboard loop',async()=>{
     await act(async()=>root.render(<DialogSurface onClose={()=>{}}><button>Save image</button><details><summary>Customize</summary><input aria-label="Hidden wording"/><details><summary>More</summary><button>Hidden action</button></details></details></DialogSurface>));
     const first=host.querySelector('button')!,summary=host.querySelector('summary')!;

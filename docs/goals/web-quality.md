@@ -100,3 +100,44 @@ The first broad run caught missing archive states and narration, plus unused
 translations and noncanonical identifiers. Fixed those without weakening gates.
 Verdict: first-minute gate passes locally. Deployed timing and human comprehension
 remain open; no provider call or deployment occurred. Return visits are next.
+
+### 2026 10 07 return visits gate
+
+Criterion: separate deletion from Review navigation, disclose occasional chat
+actions and evidence, keep reflection completion clear and preserve keyboard/
+Back/source ownership behavior.
+
+Review keeps Reflect/Next visible and moves Remove under native item actions,
+retaining confirmation and revision fencing. Reflections expose Save thought;
+a confirmed save stays visible without requesting a question. Explore another
+question explicitly requests it. Principle editing/ordering appears only after
+selecting the words. Chat groups correction/takeaway actions and reference cards
+behind labeled disclosures; explicit rewriting/adoption still governs takeaways.
+
+Two real-auth/Hono/SQL desktop/390px journeys pass save, double-click protection,
+explicit reflection, save-before-question, one explicit question request, exact
+search reopening, Review Next retention, keyboard disclosure/escape and chat
+reference/correction access. Four draft-return/navigation inventories pass.
+The provider fixture made two reflection and two conversation calls, with zero
+external provider requests; these are behavior checks, not AI quality evidence.
+The actual profile language setting drives two additional Korean layouts at
+320×568 and 390×844. All four navigation targets remain inside the viewport and
+at least 44×44 pixels; one Save action and readable drafts were inspected.
+The synthetic profile's English preference was restored afterward.
+
+The browser walk reproduced loss of keyboard ownership after a focused action
+disappeared. DialogSurface now reclaims body focus during active-sheet transitions;
+it preserves focus in an editor or another explicit target. Escape after Review
+advance and after nested item actions passes. A real-DOM regression covers that
+loading transition. Fixed a driver race by awaiting the actual question/message
+POST receipt before asking the deterministic fixture worker to process it.
+
+Verification: 862 web tests across 117 suites pass, web types/build and manual
+driver types pass, vocabulary/seam/design checks pass. A standard React event
+prop, onClickCapture, has one documented vocabulary exception; product capture
+identifiers remain refused. The Principle-control edit initially used the wrong
+state name; corrected it to the existing selection after types/render checks
+failed. Current screenshots and numeric receipts remain under
+`work/web-quality/candidate` and `work/web-quality/locales`.
+Verdict: return-visits gate passes locally. Live AI usefulness, write-fault and
+deployed timings, human tasks and operating safeguards remain required.

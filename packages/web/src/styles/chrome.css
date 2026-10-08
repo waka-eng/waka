@@ -1384,6 +1384,11 @@ body .profile-signout-button {
 .jar-review-item-actions button { margin:0; font-size:var(--t-body); }
 .jar-review button.jar-review-primary { background:var(--w-raised); }
 .jar-review-item-actions .jar-review-remove { margin-left:auto; border-color:transparent; color:var(--w-muted); }
+.jar-item-actions { position:relative; margin-left:auto; font-size:var(--t-note); }
+.jar-item-actions > summary { display:flex; align-items:center; min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8); list-style:none; color:var(--w-muted); cursor:pointer; }
+.jar-item-actions > summary::-webkit-details-marker { display:none; }
+.jar-item-actions > summary:hover,.jar-item-actions > summary:focus-visible { color:var(--w-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
+.jar-item-actions-options { display:flex; flex-wrap:wrap; gap:var(--sp-8); padding:var(--sp-4) 0; }
 .jar-review-delete { margin-top:var(--sp-20); padding:var(--sp-16); border:1px solid var(--w-edge); border-radius:var(--sp-12); line-height:1.6; }
 .jar-review-delete h3 { margin-top:0; font-size:var(--t-body); }
 .jar-review-delete-actions { display:flex; flex-wrap:wrap; gap:var(--sp-8); }
