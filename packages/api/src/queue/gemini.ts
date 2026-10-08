@@ -392,18 +392,30 @@ async function callGemini(
  * product feel like someone else's notes about you.
  */
 export const SIGNAL_EXTRACTION_SYSTEM_INSTRUCTION = `
-You read one capture from a person's notebook and name the durable pattern it
-is evidence of. A pattern is a taste, a theme, a tension, or a belief that
-would still be true next month — not a summary of what the capture says.
+You read one capture from a person's notebook and name only the pattern,
+current interest, tension, or belief its evidence supports. A candidate may
+be tentative or temporary. Independent support and promotion are handled
+later; never make the words more enduring merely to sound like a pattern.
 
 Write each statement:
 - in the same language the capture is written in, using the person's own
   words and register wherever the capture gives you them,
 - as one plain sentence, short enough to say aloud, that could stand on its
-  own months later, without referring to "this note", "the article", or "the
+  own when read later, without referring to "this note", "the article", or "the
   user",
 - specific enough that someone who knows this person would recognize it, and
-  general enough that a different capture could also be evidence of it.
+  bounded to exactly what the evidence says. Being understandable later does
+  not mean claiming it will remain true later.
+
+Preserve time and certainty: "this week", "this month only", "next week",
+"want to try", and "have not decided" are part of the statement's meaning.
+One event or wish does not establish a habit, default choice, lasting belief,
+necessary practice, or motive. Generalize recurring behavior only when the
+person explicitly says it recurs or independent supplied evidence shows it.
+Wanting to try is not choosing or already doing it. Do not invent gender,
+identity, feelings, causes, or stronger value judgments such as "worth having"
+from liking one example. Use the person's own I/you register; never introduce
+he/she unless their own words explicitly establish it.
 
 One statement names ONE pattern. A capture that witnesses two unrelated
 patterns yields two statements — never one sentence gluing them together
@@ -416,7 +428,8 @@ cannot quote a span, leave the quote out rather than inventing one.
 
 Existing statements are provided for phrasing only. If this capture is
 evidence of a pattern already listed, restate it the way it is already
-phrased rather than coining a near-duplicate.
+phrased rather than coining a near-duplicate, but only when its certainty and
+time scope also match. Existing wording cannot broaden a temporary wish.
 
 You may also be shown a few of the person's EARLIER captures that sit near
 this one. They are context, not material: every statement you return must be
@@ -428,7 +441,7 @@ At most ${MAX_RELATED_INSPIRATION_CITATIONS} citations per statement, and citing
 none is the normal answer. A theme merely adjacent is not a witness.
 
 Return 0 to ${MAX_SIGNAL_CANDIDATES} statements. Zero is the right answer for a
-capture that carries no durable pattern — a logistics note, a reminder, a
+capture that carries no meaningful pattern or interest — a logistics note, a reminder, a
 bare link with nothing said about it. Never pad, never template, never write
 a sentence you could have written before reading the capture.
 `.trim();
@@ -442,7 +455,7 @@ const signalExtractionResponseSchema: ResponseSchema = {
       items: {
         type: "OBJECT",
         properties: {
-          statement: { type: "STRING", description: "The durable pattern, one sentence." },
+          statement: { type: "STRING", description: "One supported statement, preserving certainty and time scope." },
           reason: { type: "STRING", description: "Why this capture is evidence of it." },
           quote: { type: "STRING", description: "A verbatim span, or omitted." },
           relatedEvidence: {

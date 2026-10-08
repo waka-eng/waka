@@ -506,7 +506,6 @@
   "worldComposerLink": "＋ 링크",
   "worldComposerRecord": "● 녹음",
   "worldComposerStop": "녹음 마치기",
-  "worldComposerAdd": "추가",
   "worldComposerUploading": "업로드 중…",
   "worldComposerUploadFailed": "첨부를 올리지 못했어요. 초안은 남아 있으니 다시 저장해 주세요.",
   "worldComposerSeparateDraft": "별도 초안으로 보관",
@@ -836,5 +835,8 @@
   "worldReviewItemActions": "영감에 대한 동작",
   "worldChatMessageActions": "메시지에 대한 동작",
   "worldReflectionSaveThought": "생각 저장",
-  "worldReflectionSaved": "생각을 저장했어요."
+  "worldReflectionSaved": "생각을 저장했어요.",
+  "worldComposerCancelLink": "링크 빼기",
+  "worldComposerLinkReady": "저장할 때 이 링크도 함께 남겨요.",
+  "worldComposerInvalidLink": "2,048자 이내의 HTTP 또는 HTTPS 링크를 입력해 주세요."
 }

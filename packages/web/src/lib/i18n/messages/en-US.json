@@ -506,7 +506,6 @@
   "worldComposerLink": "＋ Link",
   "worldComposerRecord": "● Record",
   "worldComposerStop": "Stop recording",
-  "worldComposerAdd": "Add",
   "worldComposerUploading": "Uploading…",
   "worldComposerUploadFailed": "Couldn’t upload this attachment. Your draft is still here. Try saving again.",
   "worldComposerSeparateDraft": "Keep as a separate draft",
@@ -836,5 +835,8 @@
   "worldReviewItemActions": "Inspiration actions",
   "worldChatMessageActions": "Message actions",
   "worldReflectionSaveThought": "Save thought",
-  "worldReflectionSaved": "Your thought is saved."
+  "worldReflectionSaved": "Your thought is saved.",
+  "worldComposerCancelLink": "Remove link",
+  "worldComposerLinkReady": "This link will be included when you save.",
+  "worldComposerInvalidLink": "Use an HTTP or HTTPS link up to 2,048 characters."
 }

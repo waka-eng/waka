@@ -69,9 +69,9 @@ Do not imply a guaranteed number of saves or a date when a Principle will appear
 
 ### Capture
 
-The current [composer](../../packages/web/src/components/InspirationComposer.tsx)
-already combines text, links, photos and recording, but presents both Save and a
-save-and-reflect action. Make **Save** the single primary completion action.
+The [composer](../../packages/web/src/components/InspirationComposer.tsx)
+combines text, links, photos and recording. **Save** is now the single primary
+completion action, including a visible URL draft without a separate Add step.
 After confirmed success, offer an optional Reflect action on the saved item;
 the person can leave immediately. Preserve any needed efficient shortcut as a
 secondary action only if the prototype shows it helps frequent users.

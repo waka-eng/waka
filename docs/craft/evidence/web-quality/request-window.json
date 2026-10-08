@@ -1,0 +1,281 @@
+{
+  "size": 2000,
+  "addedApiDelayMs": 150,
+  "windowSeconds": 60,
+  "providerCalls": 0,
+  "totalRequests": 30,
+  "originalReads": 0,
+  "roomReads": 0,
+  "requests": [
+    {
+      "path": "/api/auth/me",
+      "method": "GET",
+      "size": 2000,
+      "start": 2161923.980959,
+      "durationMs": 154.6,
+      "status": 200,
+      "bytes": 446
+    },
+    {
+      "path": "/api/review-sessions/active?scope=…",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162154.376667,
+      "durationMs": 167.7,
+      "status": 200,
+      "bytes": 523
+    },
+    {
+      "path": "/api/inspirations?scope=…&limit=200",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162155.818375,
+      "durationMs": 184.45,
+      "status": 200,
+      "bytes": 99373
+    },
+    {
+      "path": "/api/signals?limit=200&include=inspirations",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162156.478667,
+      "durationMs": 174.06,
+      "status": 200,
+      "bytes": 32260
+    },
+    {
+      "path": "/api/top-of-mind?scope=…",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162156.897084,
+      "durationMs": 173.21,
+      "status": 200,
+      "bytes": 741
+    },
+    {
+      "path": "/api/profiles",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162157.040334,
+      "durationMs": 156.06,
+      "status": 200,
+      "bytes": 245
+    },
+    {
+      "path": "/api/groups",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162157.081209,
+      "durationMs": 161.71,
+      "status": 200,
+      "bytes": 1983
+    },
+    {
+      "path": "/api/signals/{id}",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162333.699417,
+      "durationMs": 158.35,
+      "status": 200,
+      "bytes": 1610
+    },
+    {
+      "path": "/api/inspirations?scope=…&limit=200&scope=…",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162342.937875,
+      "durationMs": 176.02,
+      "status": 200,
+      "bytes": 99360
+    },
+    {
+      "path": "/api/principles",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162379.358042,
+      "durationMs": 166.96,
+      "status": 200,
+      "bytes": 31317
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162379.420834,
+      "durationMs": 168.98,
+      "status": 200,
+      "bytes": 127
+    },
+    {
+      "path": "/api/inspirations?scope=…&limit=200&scope=…",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162521.878875,
+      "durationMs": 180.61,
+      "status": 200,
+      "bytes": 99360
+    },
+    {
+      "path": "/api/inspirations?scope=…&limit=200&scope=…",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162704.991542,
+      "durationMs": 176.63,
+      "status": 200,
+      "bytes": 99360
+    },
+    {
+      "path": "/api/inspirations?scope=…&limit=200&scope=…",
+      "method": "GET",
+      "size": 2000,
+      "start": 2162886.59925,
+      "durationMs": 175.49,
+      "status": 200,
+      "bytes": 99360
+    },
+    {
+      "path": "/api/inspirations?scope=…&limit=200&scope=…",
+      "method": "GET",
+      "size": 2000,
+      "start": 2163067.393792,
+      "durationMs": 176.17,
+      "status": 200,
+      "bytes": 99360
+    },
+    {
+      "path": "/api/inspirations?scope=…&limit=200&scope=…",
+      "method": "GET",
+      "size": 2000,
+      "start": 2163247.917834,
+      "durationMs": 176.62,
+      "status": 200,
+      "bytes": 99360
+    },
+    {
+      "path": "/api/inspirations?scope=…&limit=200&scope=…",
+      "method": "GET",
+      "size": 2000,
+      "start": 2163429.10875,
+      "durationMs": 172.05,
+      "status": 200,
+      "bytes": 99360
+    },
+    {
+      "path": "/api/inspirations?scope=…&limit=200&scope=…",
+      "method": "GET",
+      "size": 2000,
+      "start": 2163606.513334,
+      "durationMs": 171.98,
+      "status": 200,
+      "bytes": 99360
+    },
+    {
+      "path": "/api/inspirations?scope=…&limit=200&scope=…",
+      "method": "GET",
+      "size": 2000,
+      "start": 2163784.428667,
+      "durationMs": 167.01,
+      "status": 200,
+      "bytes": 99360
+    },
+    {
+      "path": "/api/principles",
+      "method": "GET",
+      "size": 2000,
+      "start": 2172557.360459,
+      "durationMs": 178.31,
+      "status": 200,
+      "bytes": 31317
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "size": 2000,
+      "start": 2172558.405084,
+      "durationMs": 184.24,
+      "status": 200,
+      "bytes": 127
+    },
+    {
+      "path": "/api/principles",
+      "method": "GET",
+      "size": 2000,
+      "start": 2182752.498125,
+      "durationMs": 177.17,
+      "status": 200,
+      "bytes": 31317
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "size": 2000,
+      "start": 2182752.620834,
+      "durationMs": 185.71,
+      "status": 200,
+      "bytes": 127
+    },
+    {
+      "path": "/api/top-of-mind/versions/{id}?scope=…",
+      "method": "GET",
+      "size": 2000,
+      "start": 2192340.140125,
+      "durationMs": 162.52,
+      "status": 200,
+      "bytes": 741
+    },
+    {
+      "path": "/api/principles",
+      "method": "GET",
+      "size": 2000,
+      "start": 2192947.081542,
+      "durationMs": 177.09,
+      "status": 200,
+      "bytes": 31317
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "size": 2000,
+      "start": 2192947.204709,
+      "durationMs": 185.09,
+      "status": 200,
+      "bytes": 127
+    },
+    {
+      "path": "/api/principles",
+      "method": "GET",
+      "size": 2000,
+      "start": 2203143.405,
+      "durationMs": 176.88,
+      "status": 200,
+      "bytes": 31317
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "size": 2000,
+      "start": 2203143.525042,
+      "durationMs": 184.82,
+      "status": 200,
+      "bytes": 127
+    },
+    {
+      "path": "/api/principles",
+      "method": "GET",
+      "size": 2000,
+      "start": 2213340.313167,
+      "durationMs": 191.93,
+      "status": 200,
+      "bytes": 31317
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "size": 2000,
+      "start": 2213340.468875,
+      "durationMs": 197.89,
+      "status": 200,
+      "bytes": 127
+    }
+  ]
+}

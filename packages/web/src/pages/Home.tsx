@@ -97,7 +97,7 @@ import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
-import { inspirationInputMedia, inspirationLinks, removeInspirationLink } from '../lib/inspiration-input';
+import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
 import { inspectInspirationPhoto } from '../lib/inspiration-photo';
 import { uploadInspirationMedia } from '../lib/inspiration-media-upload';
 import { restoreInspirationDraft, settleInspirationDraft } from '../lib/authored-save-drafts';
@@ -10302,13 +10302,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   };
   const keepIt = useCallback(async (andReflect = false) => {
-    const text = draftRef.current.trim();
+    let text = draftRef.current.trim();
     const initialMedia = composerDraft.current.current.media;
-    if (composerDraft.current.current.linkText?.trim()) { setMouthNote('Add or cancel the link before saving.'); return; }
+    const pendingLink=composerDraft.current.current.linkText??'';
+    try{text=inspirationWithPendingLink(text,pendingLink);}catch{setMouthNote(say('worldComposerInvalidLink'));return;}
     if (composerDraft.current.current.recordingCandidate) { setMouthNote('Choose which recording to keep before saving.'); return; }
     if (initialMedia.some(item => item.validationError)) { setMouthNote('Remove the files marked below before saving. Your other selections are kept.'); return; }
     if ((!text && !initialMedia.length) || inspirationSave.pending || inspirationSave.busy || preparingInspirationRef.current || checkingFilesCount.current || !composerDraft.ready || recording.phase !== 'idle') return;
     if (inspirationInputMedia(text, initialMedia).length > 5) { setMouthNote('Keep up to five attachments in one inspiration.'); return; }
+    if(pendingLink.trim()){
+      composerDraft.setText(text);composerDraft.setLinkText('');draftRef.current=text;setDraft(text);
+    }
     if (offlineRef.current) {
       birthInspiration(`kept-${Date.now().toString(36)}`, text, Date.now());
       draftRef.current = ''; writeProfileText(storageScope, 'draft', ''); setDraft(''); setMouthOpen(false); return;

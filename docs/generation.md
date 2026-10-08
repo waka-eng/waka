@@ -107,7 +107,7 @@ alone does not prove a model's semantic judgment correct.
 |---|---|---|---|
 | 0 | Does this inspiration's current material still support each previously linked claim? | **Model, explicit assessment** | Supported keeps/restores the link; unsupported withdraws it; unresolved, unavailable or omitted verdicts do not withdraw. Same-policy checks are reusable only for identical material and wording. |
 | 1 | Which earlier captures are worth showing alongside this one | Arithmetic | cosine over stored capture vectors — floor `RELATED_INSPIRATION_MIN_COSINE` (0.6), strongest `RELATED_INSPIRATION_CONTEXT_LIMIT` (5) of the `RELATED_INSPIRATION_SCAN_LIMIT` (500) most recent |
-| 2 | Is there a durable pattern here, and in what words | **Model** | 0 to `MAX_SIGNAL_CANDIDATES` (3) statements — zero is a sanctioned answer; its quote is kept only if it is a verbatim span of the capture |
+| 2 | Is there a supported pattern or current interest here, and in what words | **Model** | 0 to `MAX_SIGNAL_CANDIDATES` (3) statements — zero is a sanctioned answer; its quote is kept only if it is a verbatim span of the capture |
 | 3 | Which earlier captures co-witness a statement | **Model proposes, code verifies** | at most `MAX_RELATED_INSPIRATION_CITATIONS` (2) per statement; only ids that were actually offered; each citation needs a verbatim quote from the cited capture's own text or it is dropped whole |
 | 4 | Same pattern as an existing signal, or a new one | Arithmetic — model tie-break inside one band | ≥ `SIGNAL_MATCH_MIN_COSINE` (0.86) attach as evidence · below `SIGNAL_MERGE_JUDGE_MIN_COSINE` (0.7) mint new · in between, one judge call where **uncertainty mints** |
 | 5 | Does the pattern count as real | Arithmetic | `SIGNAL_PROMOTION_MIN_EVIDENCE` (3) evidence rows: `emerging` becomes `active` |
@@ -116,6 +116,14 @@ alone does not prove a model's semantic judgment correct.
 
 Decisions 1–4 happen inside one derivation job; 5–7 are pure code a test can
 pin exactly. The subsections below take the steps in the same order.
+
+A standalone signal need not describe an enduring preference. Extraction keeps
+the person's time limits, uncertainty and level of commitment: one event or
+temporary wish cannot become a habit, necessity or lasting belief merely through
+paraphrase. Repeated behavior requires actual repeated evidence or the person's
+explicit account. Gender and other personal facts cannot be inferred from a
+neutral capture. Promotion/confidence thresholds and wording locks remain the
+separate rules below.
 
 ### 1. What starts a run
 

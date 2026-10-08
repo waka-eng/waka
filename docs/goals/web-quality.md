@@ -204,3 +204,61 @@ evidence, the full browser request window and deployed timing/recovery still nee
 verification. Five first-time participants, monthly budget scope/enforcement,
 provider/source-policy attestation and exercised alerts remain phase 5 work.
 The pending owner questions are not treated as consent or as passed gates.
+
+### 2026 10 07 raw input and link follow up
+
+The full first-minute request window passes at 2,000 inspirations/150 ms added
+delay: 30 requests, zero unsolicited original-detail reads and zero room-content
+reads. URL drafts now join the frozen authored text on explicit Save, removing
+the Link/Add confirmation. Invalid schemes retain the draft and explain the
+field error; duplicate URLs are canonicalized. Real desktop/390px journeys
+restore the URL draft, save one inspiration/attachment, clear the matching draft
+and reopen the exact note and URL. Keyboard save follows the same manifest.
+
+The new raw-input baseline exposed unsupported extraction: eight of nine cases
+broadened an event, wish or time limit; one also invented a gender reference.
+The old extraction instruction explicitly required a pattern true next month.
+Corrected it to preserve supported current interests, uncertainty and time scope,
+without changing matching, promotion, confidence or wording locks. Generation
+documentation now states that standalone wording need not remain true forever.
+
+The real pipeline run covers English/Korean text, fetched article bodies, pixels,
+speech and silence through enrichment, embedding, extraction, reading and chat.
+The matched candidate observations pass 9/9 qualitative cases and contain no
+unsupported gender reference. Raw words remain unchanged, all citations stay
+owned and one source creates no Principle. Article boilerplate is excluded,
+image lettering is transcribed, both speech languages survive and silence
+produces no signal/reading or inferred preference. Two earlier Korean-audio
+attempts ended without an assistant message; their exact request failure code
+was not captured. The later bounded run completed. Retain that limitation rather
+than claiming universal provider reliability. The existing live extraction bench
+passes 16/16, with zero meta-references, for USD 0.00156764.
+
+The [raw comparison receipt](../craft/evidence/2026-10-07-web-quality-raw.json)
+records completed cases, failures, hashes and costs. Raw calls retain conservative
+Gemini upper estimates as held amounts, alongside returned OpenRouter charges;
+unused pre-run ceilings were released after request accounting. The cumulative
+used/held evaluation total is USD 3.7823478004 of USD 5. The old unknown dev/auth
+reservations and raw-audio reservation remain held; unpriced requests are not free.
+
+A no-network generation replay passed 23/24 structural cases. The remaining
+case needed an unrecorded relation-model call, which the replay correctly refused.
+This is a harness coverage limit, not another live quality result. The earlier
+full live 24-case generation result remains recorded; extraction edits did not
+change its request builders, weights or thresholds.
+
+Read-only dev audit [37736288170](https://github.com/waka-eng/waka/actions/runs/37736288170)
+completed against deployed `043b07ec`, skipping deployment/migrations/secrets.
+Both configuration reads and numeric log/metric reads succeed. Trusted origins,
+secure cookies, absent fixture overrides, matching approved models and identical
+API/worker database bindings are verified. Four recovery metric periods each
+show one check, with zero overdue jobs/exhausted leases. Two idle-worker cold
+samples are not controlled request/provider latency evidence. Monetary caps,
+provider privacy, proxy topology/source trust and alert delivery remain unverified.
+The Function URL uses NONE/public-principal policy; no CloudFront service grant
+was observed. This does not imply unauthenticated access to account memory.
+
+The [first-time task kit](../craft/evidence/web-quality/first-time-check.md) and
+blank results CSV are prepared. No participant observation is invented. Candidate
+dev delivery, controlled deployed measurements and the final human/operating
+gates remain open.

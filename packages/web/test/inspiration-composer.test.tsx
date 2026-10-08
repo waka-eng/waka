@@ -83,11 +83,18 @@ it('retains invalid/extra selections with removal controls and blocks saving unt
   props.media = props.media.slice(0,5); await mount();
   expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(false);
 });
-it('restores the unadded link and refuses to silently omit it from a save',async()=>{
+it('restores the separate link draft and includes it through the single Save action',async()=>{
   props.text='My note';props.linkText='https://example.test/unfinished';await mount();
   expect(host.querySelector<HTMLInputElement>('input[type=url]')?.value).toBe(props.linkText);
-  expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(true);
-  await act(async()=>host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
-  expect(props.onText).toHaveBeenCalledWith('My note\nhttps://example.test/unfinished',expect.any(Number));
-  expect(props.onLinkText).toHaveBeenCalledWith('');expect(props.onSubmit).not.toHaveBeenCalled();
+  expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(false);
+  expect(host.textContent).toContain('This link will be included when you save.');
+  await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.click());
+  expect(props.onSubmit).toHaveBeenCalledExactlyOnceWith(false);
+  expect(props.onLinkText).not.toHaveBeenCalled();expect(props.onText).not.toHaveBeenCalled();
+});
+it('refuses unsafe link schemes without submitting or discarding the draft',async()=>{
+  props.linkText='javascript:alert(1)';await mount();
+  await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.click());
+  expect(props.onSubmit).not.toHaveBeenCalled();expect(props.onLinkText).not.toHaveBeenCalled();
+  expect(host.querySelector<HTMLInputElement>('input[type=url]')!.validationMessage).toContain('HTTP or HTTPS');
 });
