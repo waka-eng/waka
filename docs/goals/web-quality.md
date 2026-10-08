@@ -317,3 +317,28 @@ Dev delivery is complete. The broader goal remains in progress until actual
 first-time observations and the outstanding operational evidence meet the
 recorded gates. The prepared results CSV remains blank; native capture stays
 on its paused roadmap.
+
+### 2026 10 08 quiet formation cue
+
+The owner requested a subtle visual introduction to forming memory after first
+captures. Home now places the existing owned processing notice beside Top of
+Mind, with three connected lights and “Taking shape…”. Before a reading or
+Principle is displayed, a quiet line says “Patterns can become principles.”
+It replaces the contradictory empty-reading instruction during known work.
+
+Only confirmed processing glows. Queued, scheduled, failed and ready states
+stay still, and reduced motion keeps the lights static. Actual ready/failure/
+scheduled copy and existing View/Check/Retry actions retain their meaning and
+keyboard behavior. Save remains one action; this adds no fetch, job or generation
+threshold. The original detailed notice remains in inspiration/reflection views.
+
+Web types/build, vocabulary/seam checks and 866 tests across 117 suites pass.
+Three real built-browser layouts cover English at 1280/390px and Korean at
+320×568. One notice appears after confirmed Save, the cue remains above Capture,
+ready actions retain 44px targets, and reduced-motion CSS is verified. Processing,
+ready, scheduled and failure GET responses are overlaid only for display checks;
+auth, Save and the initial queued receipt are real against the explicitly verified
+disposable loopback fixture. No provider calls were made. The [display receipt](../craft/evidence/web-quality/formation-cue/receipt.json)
+and [preview](../craft/evidence/web-quality/formation-cue/preview.png) retain this
+scope. The cumulative USD 4.7823478004 evaluation used/held total is unchanged.
+Human comprehension and the outstanding operational gates remain open.

@@ -810,6 +810,8 @@
   "worldSourceUnchanged": "Your reading still holds.",
   "worldSourceQueued": "Kept. Waiting to be read.",
   "worldSourceReading": "Reading your latest thought…",
+  "worldSourceForming": "Taking shape…",
+  "worldSourcePrinciplesHint": "Patterns can become principles.",
   "worldSourceView": "See reading",
   "worldSourceDismiss": "Dismiss processing notice",
   "worldSourceRetry": "Try again",

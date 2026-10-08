@@ -810,6 +810,8 @@
   "worldSourceUnchanged": "지금의 생각의 흐름이 그대로 이어져요.",
   "worldSourceQueued": "저장됐어요. 읽을 차례를 기다리고 있어요.",
   "worldSourceReading": "방금 남긴 생각을 읽고 있어요…",
+  "worldSourceForming": "모습을 갖춰 가고 있어요…",
+  "worldSourcePrinciplesHint": "반복되는 패턴은 원칙이 될 수 있어요.",
   "worldSourceView": "생각의 흐름 보기",
   "worldSourceDismiss": "진행 알림 닫기",
   "worldSourceRetry": "다시 시도",
