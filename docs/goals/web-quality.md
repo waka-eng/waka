@@ -1,6 +1,6 @@
 # Web quality and intuitive use
 
-Status: in progress (2026-10-07). Implement all batches in the web quality roadmap.
+Status: in progress (2026-10-08). Web implementation merged and deployed to dev; human and operational acceptance remain open.
 Branch: `codex/web-quality`, based on dev `043b07ec`.
 
 ## Objective
@@ -262,3 +262,58 @@ The [first-time task kit](../craft/evidence/web-quality/first-time-check.md) and
 blank results CSV are prepared. No participant observation is invented. Candidate
 dev delivery, controlled deployed measurements and the final human/operating
 gates remain open.
+
+### 2026 10 08 approved dev delivery
+
+The owner approved continuing and merging to dev. PR
+[#362](https://github.com/waka-eng/waka/pull/362) merged at checked head
+`9b413a94`, producing dev commit `b2bae5df`. Required CI passed before the merge.
+Automatic [deployment 37785618707](https://github.com/waka-eng/waka/actions/runs/37785618707)
+succeeded, including the separate configured database targets, memory schema,
+approved API/worker models and database bindings, and domain connection checks.
+
+Two real deployed browser journeys at 1280px and 390px pass one Save action,
+private audience, draft return, one saved item after a double click, no automatic
+reflection, exact-word search reopening and Home/Inspirations/Principles/Back
+navigation. Review keeps both saved items; More/Remove disclosure and Escape
+remain reachable without deletion. One explicit chat reply arrives with one
+source button, and the correction editor opens. All three disposable synthetic
+accounts, including the first attempt and the precise Review check, were erased;
+their sessions return 401.
+
+The first driver incorrectly expected Home after opening a search result and
+closing its detail. Search opens the item in Inspirations. The corrected walk
+establishes Home before testing Home→Inspirations→Back; the failure is retained.
+No application repair or gate relaxation was needed for that driver assumption.
+
+The [deployed receipt](../craft/evidence/2026-10-08-web-quality-dev.json)
+records these observations. Initial Home readiness is 1,668/2,105 ms, confirmed
+Save is 3,321/2,314 ms, and warm Home return is 24/26 ms for desktop/390px.
+One chat reply is visible after 17,560 ms, including queue/provider time. These
+are small observed samples, not percentiles or a measured improvement. Runtime
+coldness and per-stage attribution were not established. The driver's 16 ms
+Review reading only awaited an already-visible card, so it does not establish
+next-item readiness and is excluded from the latency acceptance claim. A separate
+390px check then awaited the advance endpoint's 200 response and the exact next
+item words becoming visible: 3,297 ms, both originals still saved. This is one
+confirmed sample, not a Review latency percentile.
+
+Post-release read-only [audit 37786141801](https://github.com/waka-eng/waka/actions/runs/37786141801)
+again passes configuration checks with no read failures. Four recovery metric
+periods report one check each and zero overdue/exhausted work. Partial log pages
+contain no captured model charges; they do not prove that the paid journeys cost
+zero or attribute stages to the controlled synthetic requests. Provider privacy,
+source/proxy trust, exercised recovery and alert delivery, and actual monthly
+spending enforcement remain unverified.
+
+The first deployed attempt retains a USD 0.50 evaluation reservation; the
+corrected attempt and precise Review check each retain another USD 0.25.
+Cumulative used/held is now USD 4.7823478004 of USD 5, leaving USD 0.2176521996.
+Actual deployed model
+charges remain unknown, and no reservation is released from incomplete logs.
+The monthly operating budget remains a separate policy/enforcement gate.
+
+Dev delivery is complete. The broader goal remains in progress until actual
+first-time observations and the outstanding operational evidence meet the
+recorded gates. The prepared results CSV remains blank; native capture stays
+on its paused roadmap.
