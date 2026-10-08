@@ -1233,6 +1233,7 @@ Source: `packages/web/src/lib/aliveness.ts`.
 | `FIELD_FLOOR_ANSWERED` | 0.18 | Nor one you answered in your own words |
 | `FIELD_FLOOR_IN_GROUP` | 0.1 | Nor one that is out loud in a group |
 | `FIELD_FRONTIER_DAYS` | 3 | Untouched longer than this and cited by nothing = a frontier |
+| `BULB_FLOOR` | 0.12 | The dimmest the character burns — lit, never dark |
 | `FIELD_CARRY_ROOT_SATURATION` | 3 | Roots stop adding carry past this many citing patterns |
 | `FIELD_CARRY_ROOTS_SHARE` | 0.1 | Carry: the share held by how many patterns cite it |
 | `FIELD_CARRY_PROMOTED_SHARE` | 0.45 | Carry: the share held by how far the pattern above it has got |

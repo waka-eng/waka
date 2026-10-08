@@ -33,6 +33,8 @@ import { SurfaceBoundary } from "./components/SurfaceBoundary";
 import { AuthProvider } from "./lib/auth-context";
 import { installPreloadRecovery } from "./lib/preload-recovery";
 import LoginPage from "./pages/Login";
+import { Landing } from "./pages/Landing";
+import { Claims } from "./pages/Claims";
 import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
 import PublicProfilePage from "./pages/PublicProfile";
@@ -53,6 +55,8 @@ import "./styles/system.css";
 // are not flat screens in the sense that was retired. There is no memory to
 // stand in before you are authenticated.
 import "./styles/chrome.css";
+// The landing, the menu and the claim queue — the three-surface IA.
+import "./styles/landing.css";
 
 /*
   THE WORLD IS HOME.
@@ -144,6 +148,22 @@ ReactDOM.createRoot(root).render(
         <Routes>
           {MobileChecks && <Route path="/mobile-check" element={<Suspense fallback={null}><MobileChecks /></Suspense>} />}
           <Route path="/login" element={<LoginPage />} />
+          {/*
+            THE NEW IA, ALONGSIDE THE WORLD RATHER THAN ON TOP OF IT.
+            `/home` is the landing — reading above, character in the middle,
+            one box at the bottom — and `/claims` is the queue. They are
+            static segments, so router ranking puts them ahead of the
+            `/:handle` public profile route without reordering anything.
+
+            THE FRONT DOOR IS THE LANDING NOW (founder ruling). `/` holds
+            three things — the reading above, the character, the box — and
+            every other destination is behind the menu in the top left. The
+            field keeps its own address at `/field` and loses nothing: it is
+            the first entry in that menu, and all of its child routes below
+            are untouched.
+          */}
+          <Route path="/" element={<RequireAuth><Landing /></RequireAuth>} />
+          <Route path="/claims" element={<RequireAuth><Claims /></RequireAuth>} />
           <Route path="/:handle" element={<PublicProfilePage />} />
           <Route
             path="/onboarding"
@@ -179,7 +199,7 @@ ReactDOM.createRoot(root).render(
           {/* Home is the layout. */}
           <Route path="/chat/:conversationId" element={<RequireAuth><SurfaceBoundary surface="chat"><Suspense fallback={null}><ChatPage/></Suspense></SurfaceBoundary></RequireAuth>}/>
           <Route element={<ProtectedHome />}>
-            <Route path="/" element={<></>} />
+            <Route path="/field" element={<></>} />
             <Route path="/w/:wall/:label?" element={<></>} />
             <Route path="/inspirations/:inspirationId" element={<></>} />
             <Route path="/review/:reviewId" element={<></>} />

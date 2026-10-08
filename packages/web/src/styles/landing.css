@@ -1,0 +1,532 @@
+/**
+ * THE LANDING, THE MENU, AND THE CLAIM.
+ *
+ * Mobile first, and mobile only in its assumptions: a thumb reaches the bottom
+ * of a phone, so the box is there and the verdict buttons are there, and the
+ * claim gets the whole middle of its screen because it is the only thing on
+ * that page worth reading.
+ *
+ * NO HUE CARRIES MEANING HERE. The founder law is that light is the only
+ * meaning channel, and the palette already agrees — `--accent` and `--ink` are
+ * the same value. So "yes" is not a green button; it is the INKED one, and the
+ * other two answers are outlined. Emphasis is lightness and fill, never color,
+ * which is also why this file introduces no new color token.
+ *
+ * Every size comes from the existing scale in global.css. A component that
+ * invents its own spacing is a component that drifts.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Claims
+ * ------------------------------------------------------------------------- */
+
+/* head · claim · answers. The claim row takes the slack so the sentence sits
+   at the eye line and the answers stay in the thumb arc at the bottom — the
+   verdict is the one thing this page asks for, and reach decides where it
+   goes. */
+.waka-claims {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 100dvh;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: max(var(--space-6), env(safe-area-inset-top)) clamp(20px, 6vw, 28px)
+    calc(var(--space-5) + env(safe-area-inset-bottom));
+}
+
+.waka-claim-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.waka-claims-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+}
+
+.waka-claims-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.waka-claims-count {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.waka-claim-origin {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+/**
+ * THE ONE SENTENCE WITH WEIGHT ON THE PAGE.
+ *
+ * Serif, because this is the register global.css reserves for a person's own
+ * material rather than for interface. Large, because the whole ruling behind
+ * this page is that a claim buried under its apparatus is not legible — and
+ * size is the cheapest way to say "this is the thing, the rest is support".
+ */
+.waka-claim-statement {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(25px, 7vw, 33px);
+  line-height: 1.24;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
+.waka-claim-answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.waka-claim-answer {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-5);
+  border: var(--space-px) solid var(--line);
+  border-radius: 7px;
+  background: var(--cell);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* Inked, not coloured — see the note at the top of this file. */
+.waka-claim-answer--yes {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+
+.waka-claim-answer:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.waka-claim-receipt,
+.waka-claim-error {
+  margin: var(--space-4) 0 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.waka-claim-receipt {
+  color: var(--muted);
+}
+
+.waka-claim-error {
+  color: var(--error);
+}
+
+.waka-claim-retry {
+  min-height: 44px;
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border: var(--space-px) solid var(--line);
+  border-radius: 7px;
+  background: var(--cell);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.waka-claims-status {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * Caught up, and the glimpse of what is next
+ * ------------------------------------------------------------------------- */
+
+.waka-claims-empty {
+  padding: var(--space-8) 0;
+}
+
+.waka-claims-done {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-serif);
+  font-size: clamp(23px, 6vw, 29px);
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.waka-claims-hint {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.waka-claims-next {
+  padding-top: var(--space-5);
+  border-top: var(--space-px) solid var(--line);
+}
+
+.waka-claims-next-label {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Dimmed on purpose: it is a glimpse, so you know the queue has a bottom —
+   not a second claim competing with the one you are answering. */
+.waka-claims-next-statement {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * The two corners
+ *
+ * The whole top of the screen, accounted for without a bar: where to go on the
+ * left, who you are on the right. A bar would be a permanent surface that
+ * every future feature could be attached to, which is the thing the landing
+ * page is built to refuse.
+ * ------------------------------------------------------------------------- */
+
+.waka-corners {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: space-between;
+  padding: max(var(--space-3), env(safe-area-inset-top)) var(--space-4) 0;
+  pointer-events: none;
+}
+
+.waka-corner {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 44px, the smallest target a thumb reliably hits. */
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.waka-corner:hover,
+.waka-corner:focus-visible {
+  color: var(--ink);
+}
+
+.waka-corner:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+ * The menu
+ * ------------------------------------------------------------------------- */
+
+.waka-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: color-mix(in srgb, var(--ink) 28%, transparent);
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: max(var(--space-6), env(safe-area-inset-top)) var(--space-4);
+}
+
+.waka-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 13rem;
+  padding: var(--space-3);
+  border: var(--space-px) solid var(--line);
+  border-radius: 12px;
+  background: var(--cell);
+}
+
+.waka-menu-item {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-radius: 8px;
+  color: var(--ink);
+  text-decoration: none;
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.waka-menu-item:hover,
+.waka-menu-item:focus-visible {
+  background: var(--bg);
+}
+
+.waka-menu-item.active {
+  color: var(--muted);
+}
+
+.waka-menu-close {
+  min-height: 44px;
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-top: var(--space-px) solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.waka-menu-item:focus-visible,
+.waka-menu-close:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+/* ---------------------------------------------------------------------------
+ * The landing: three rows, and the middle one takes the slack
+ * ------------------------------------------------------------------------- */
+
+.waka-landing {
+  display: grid;
+  /* reading · character · box. The character row is the one that grows, so the
+     bulb stays optically centred on any phone without a magic number. */
+  grid-template-rows: auto 1fr auto;
+  min-height: 100dvh;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: calc(44px + max(var(--space-3), env(safe-area-inset-top))) clamp(20px, 6vw, 28px)
+    calc(var(--space-5) + env(safe-area-inset-bottom));
+  background: var(--bg);
+}
+
+.waka-landing-reading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-5);
+}
+
+/* The reading is a person's own material, so it wears the serif. Quiet,
+   because it is what the page says rather than what it asks. */
+.waka-landing-line {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(18px, 4.6vw, 22px);
+  line-height: 1.3;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
+.waka-landing-character {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  min-height: 0;
+}
+
+/* What the character says, and the only thing it says. Present only when a
+   claim is actually waiting — see the note in Landing.tsx. */
+.waka-landing-asks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 26rem;
+  padding: var(--space-4) var(--space-5);
+  border: var(--space-px) solid var(--line);
+  border-radius: 12px;
+  background: var(--cell);
+  text-align: center;
+  cursor: pointer;
+}
+
+.waka-landing-asks:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.waka-landing-asks-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.waka-landing-asks-statement {
+  font-family: var(--font-serif);
+  font-size: clamp(17px, 4.4vw, 20px);
+  line-height: 1.3;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
+/* ---------------------------------------------------------------------------
+ * The bulb
+ *
+ * `--waka-glow` is 0..1 and this block is the only place that spends it, so
+ * "how lit are you" has exactly one visual definition. No hue moves: the halo
+ * grows and the filament strengthens, and that is the entire channel.
+ * ------------------------------------------------------------------------- */
+
+.waka-bulb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.waka-bulb svg {
+  width: clamp(96px, 30vw, 128px);
+  height: auto;
+  overflow: visible;
+}
+
+.waka-bulb-halo {
+  fill: var(--ink);
+  /* Barely there when dark, soft and wide when lit. */
+  opacity: calc(var(--waka-glow) * 0.1);
+  filter: blur(14px);
+  transition: opacity 600ms ease;
+}
+
+.waka-bulb-glass {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  /* The SHAPE is constant — only the light inside it means anything. */
+  opacity: 0.5;
+}
+
+.waka-bulb-filament {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  opacity: calc(0.12 + var(--waka-glow) * 0.88);
+  transition: opacity 600ms ease;
+}
+
+.waka-bulb-cap {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waka-bulb-halo,
+  .waka-bulb-filament {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * The box
+ * ------------------------------------------------------------------------- */
+
+.waka-keep {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-2);
+  align-items: end;
+}
+
+.waka-keep-box {
+  grid-column: 1;
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-3) var(--space-4);
+  border: var(--space-px) solid var(--line);
+  border-radius: 12px;
+  background: var(--cell);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.4;
+  resize: none;
+  /* It grows with what you write, up to a point, then scrolls. The box must
+     never push the character off the screen. */
+  field-sizing: content;
+  max-height: 8rem;
+}
+
+.waka-keep-box::placeholder {
+  color: var(--muted);
+}
+
+.waka-keep-box:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.waka-keep-go {
+  grid-column: 2;
+  min-height: 48px;
+  padding: var(--space-3) var(--space-5);
+  border: var(--space-px) solid var(--ink);
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.waka-keep-go:disabled {
+  border-color: var(--line);
+  background: var(--cell);
+  color: var(--muted);
+  cursor: default;
+}
+
+.waka-keep-go:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.waka-keep-failed {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--error);
+}

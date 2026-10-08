@@ -241,3 +241,43 @@ export function carryOf(input: {
     (input.underPrinciple ? FIELD_CARRY_PRINCIPLE_SHARE : 0);
   return Math.min(Math.max(carry, 0), 1);
 }
+
+/**
+ * THE BULB — one brightness for the whole character, not for one memory.
+ *
+ * Everything above grades a single memory's light. This grades the person's,
+ * and it lives in the same file for the reason the file exists: there is one
+ * place where numbers that decide what a person SEES are written down, and
+ * `generation-doc.test.ts` reads this path by name, so a constant here cannot
+ * drift from `docs/generation.md` without failing CI.
+ *
+ * The character is a lightbulb, and the less you are keeping, the dimmer it
+ * burns. One input: how long since you last kept anything. Not how many
+ * claims wait, not how much the loop concluded — those are other facts with
+ * other surfaces, and a bulb that meant four things at once would mean none
+ * of them. It reuses `FIELD_DECAY_HALF_LIFE_DAYS` rather than choosing a
+ * second curve, because "the field dims in a week" and "you dim in a week"
+ * are the same statement about the same person and should not be tunable
+ * apart.
+ *
+ * FADING NEVER DELETES, so the bulb has a floor. A bulb at zero does not read
+ * as "you have been away"; it reads as broken, or as switched off, which is a
+ * thing the product would be saying about a person rather than about their
+ * week. `BULB_FLOOR` is the lowest it burns — visibly dim, unmistakably lit,
+ * and in the same range as the floors that keep a load-bearing memory from
+ * rotting.
+ */
+export const BULB_FLOOR = 0.12;
+
+/**
+ * The character's light, 0..1, from days since the last thing was kept.
+ *
+ * A negative or absent number is treated as "just now" rather than as an
+ * error: a clock that disagrees with the server by a second should brighten
+ * the bulb, never blank it.
+ */
+export function bulbGlow(quietDays: number): number {
+  const quiet = Number.isFinite(quietDays) ? Math.max(0, quietDays) : 0;
+  const decayed = Math.pow(2, -quiet / FIELD_DECAY_HALF_LIFE_DAYS);
+  return BULB_FLOOR + (1 - BULB_FLOOR) * decayed;
+}

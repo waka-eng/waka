@@ -12,6 +12,7 @@
  *   inspirations.ts              inspirations.ts  /api/inspirations   (layer 1)
  *   attachments.ts               attachments.ts   /api/attachments
  *   signals.ts                   signals.ts       /api/signals        (layer 2)
+ *   claims.ts                    claims.ts        /api/claims         (layer 2, unanswered)
  *   principles.ts                principles.ts    /api/principles     (layer 4)
  *   top-of-mind.ts               top-of-mind.ts   /api/top-of-mind    (layer 3)
  *   groups.ts                    groups.ts        /api/groups
@@ -54,6 +55,7 @@ export * from './review-processing';
 export * from "./inspiration-save-requests";
 export * from "./attachments";
 export * from "./signals";
+export * from "./claims";
 export * from "./principles";
 export * from "./top-of-mind";
 export * from "./groups";
