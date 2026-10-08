@@ -35,18 +35,11 @@ it('keeps Capture and its draft through a later page failure, with one explicit 
   world=await mountWorld(facts);
   await act(async()=>progress.first!({inspirations:[source],total:2000,short:true}));
   const capture=keepBox(world.container);
-  await act(async()=>capture.focus());
-  const textarea=world.container.querySelector<HTMLTextAreaElement>('[aria-label="Capture inspiration"] textarea')!;
+  const textarea=capture;
   await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(textarea,'Keep my unfinished spark');textarea.dispatchEvent(new Event('input',{bubbles:true}));});
   await act(async()=>progress.fail!(new Error('Later page unavailable')));
-  expect(world.container.querySelector('[aria-label="Capture inspiration"]')).not.toBeNull();
-  expect(world.container.querySelector<HTMLTextAreaElement>('[aria-label="Capture inspiration"] textarea')!.value).toBe('Keep my unfinished spark');
+  expect(keepBox(world.container).value).toBe('Keep my unfinished spark');
   expect(world.audit().present).toBe(0);
-  /* The menu hides while the composer owns the screen — the nav it replaced was
-     `hidden` in exactly the same state, so this closes the composer to read the
-     field's retry rather than asserting against a control a person could not
-     reach either. */
-  await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('[aria-label="Capture inspiration"] button')].find(row=>row.textContent==='close')!.click());
   await openMenu(world.container);
   const retry=world.container.querySelector<HTMLButtonElement>('.jar-navigation-inspirations')!;
   expect(retry.disabled).toBe(false);expect(retry.textContent).toContain('Try again');
@@ -54,10 +47,7 @@ it('keeps Capture and its draft through a later page failure, with one explicit 
   await openMenu(world.container);
   expect(world.container.querySelector<HTMLButtonElement>('.jar-navigation-inspirations')!.disabled).toBe(true);
   await act(async()=>progress.finish!({inspirations:[source],total:2000,short:true}));
-  /* Reopened, which is a stronger claim than the original made: the draft did
-     not merely stay on screen, it survived the composer being closed. */
-  await act(async()=>keepBox(world.container).focus());
-  expect(world.container.querySelector<HTMLTextAreaElement>('[aria-label="Capture inspiration"] textarea')!.value).toBe('Keep my unfinished spark');
+  expect(keepBox(world.container).value).toBe('Keep my unfinished spark');
   expect(world.audit().present).toBe(1);expect(world.container.textContent).not.toContain('Couldn’t open inspirations');
 });
 it('cancels the archive continuation on leaving Home and ignores its late completion',async()=>{

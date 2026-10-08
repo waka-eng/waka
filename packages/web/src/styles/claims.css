@@ -259,7 +259,10 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: color-mix(in srgb, var(--ink) 28%, transparent);
+  /* DARKEN, NEVER WASH. Mixing `--ink` was right on parchment and wrong here:
+     in the moon palette the ink IS the light colour, so the scrim lifted the
+     whole page toward white instead of sinking it. A scrim is shadow. */
+  background: color-mix(in srgb, #000 55%, transparent);
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
@@ -276,16 +279,30 @@
   background: var(--cell);
 }
 
+/* A <button> brings the UA's own border and button-face background, and this
+   block was first written for a link that had neither. Unset explicitly: a
+   light face under `color: var(--ink)` is light text on a light pill, which is
+   exactly as unreadable as it sounds. */
 .waka-menu-item {
   min-height: 44px;
+  width: 100%;
   display: flex;
   align-items: center;
   padding: var(--space-3) var(--space-4);
+  border: 0;
   border-radius: 8px;
+  background: transparent;
   color: var(--ink);
   text-decoration: none;
+  text-align: left;
   font-family: var(--font-mono);
   font-size: 14px;
+  cursor: pointer;
+}
+
+.waka-menu-item:disabled {
+  color: var(--muted);
+  cursor: default;
 }
 
 .waka-menu-item:hover,
@@ -299,12 +316,13 @@
 
 .waka-menu-close {
   min-height: 44px;
+  width: 100%;
   margin-top: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border: 0;
   border-top: var(--space-px) solid var(--line);
   border-radius: 0;
-  background: none;
+  background: transparent;
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 12px;
@@ -322,27 +340,37 @@
 /* ---------------------------------------------------------------------------
  * The keep box
  *
- * The capture entry is a field now, not a button that opens one. It inherits
- * `.jar-mouth-rest`'s placement in the world — this only makes it read and
- * behave as something you type into.
+ * The capture entry is a field now, not a button that opens one. It keeps
+ * `.jar-mouth-rest`'s placement in the world; this gives it the shape of
+ * something you type into.
+ *
+ * WIDTH IS BORROWED, NOT CHOSEN. 680px is `.jar-hq-inner` — the column the
+ * top of mind is set in — so the box lines up with the sentence above it
+ * rather than running the full width of the window. Two measures on one
+ * screen would read as two unrelated things.
  * ------------------------------------------------------------------------- */
 
 .jar-keep-box {
+  display: block;
   width: 100%;
-  min-height: 44px;
-  padding: var(--space-3) var(--space-4);
+  max-width: 680px;
+  margin: 0 auto;
+  /* Two lines of room at rest: a one-line slot reads as a search field, and
+     this is a place to put a thought. */
+  min-height: 64px;
+  padding: var(--space-4) var(--space-4);
   border: var(--space-px) solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--cell);
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 16px;
-  line-height: 1.4;
+  line-height: 1.45;
   resize: none;
-  /* Grows with what you write, then scrolls: the box must never push the
+  /* Grows with what you write, then scrolls — the box must never push the
      character off the screen. */
   field-sizing: content;
-  max-height: 7rem;
+  max-height: 8rem;
   text-align: left;
 }
 
@@ -355,13 +383,8 @@
   outline-offset: 1px;
 }
 
-/* The one line about agents. Quiet, under the box, and only at rest. */
-.jar-keep-via {
-  display: block;
-  margin-top: var(--space-2);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.03em;
+/* The one line about agents, under the box and inside its measure. */
+.jar-keep-foot .jar-keep-via {
   color: var(--muted);
   text-decoration: none;
 }
@@ -372,10 +395,60 @@
   text-decoration: underline;
 }
 
-/* The space switcher keeps its corner; the hamburger now shares it.
-   `.jar-here-split` is the one way into a wall's own panel (founder ruling,
-   2026-08-24), so it is not going anywhere — it just starts after the menu
-   button instead of underneath it. */
-.jar-here-split {
-  margin-left: 48px;
+/* Dropped files, listed under the box rather than inside a drawer. */
+.jar-keep-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  max-width: 680px;
+  margin: var(--space-2) auto 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jar-keep-media li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: var(--space-px) solid var(--line);
+  border-radius: 999px;
+  background: var(--cell);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.jar-keep-media button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.jar-keep-media small {
+  color: var(--error);
+}
+
+.jar-keep-note {
+  max-width: 680px;
+  margin: var(--space-2) auto 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--error);
+}
+
+/* The two quiet lines under the box: how to keep, and who else can. */
+.jar-keep-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  max-width: 680px;
+  margin: var(--space-2) auto 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--muted);
 }

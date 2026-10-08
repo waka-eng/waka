@@ -66,7 +66,6 @@ import { PrincipleRead } from "../components/PrincipleRead";
 import { publicWebOrigin } from '../lib/public-origins';
 import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlow";
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
-import { ReadingFormationHelp } from '../components/ReadingFormationHelp';
 import { DialogSurface } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { Link, useNavigate } from "react-router-dom";
@@ -9916,6 +9915,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     { id: 'talk', label: 'worldMenuTalk',
       onSelect: () => viewNavigation.write({ ...EMPTY_VIEW, conversationId: 'new' }) },
     { id: 'find', label: 'worldMenuFind', onSelect: () => setSeek('') },
+    /* The caret half of the "ME ▾" pill. The pill is gone from the home
+       screen, so the question it answered — which other walls exist, take me
+       there — is asked here instead. */
+    { id: 'walls', label: 'worldMenuWalls', onSelect: () => { setSettingsFor(null); setWallPick(true); } },
     { id: 'home', label: 'worldPersonalHome',
       onSelect: () => viewNavigation.write({ ...EMPTY_VIEW }) },
   ], [fieldFailed, fieldLoading, locale, navigate, viewNavigation, wallCount, wallTotal]);
@@ -12826,7 +12829,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     {here&&w.kind==='self'&&(inspirations?.length||fieldBeyond||readingLoadPhase!=='ready')?<div className="jar-reading-heading" data-jar-chrome="1">
                       <span>{say(atNow?'worldReadingTitle':'worldReadingEarlier')}</span>
                       {atNow&&topOfMind&&topOfMind.createdMs>0?<time dateTime={new Date(topOfMind.createdMs).toISOString()}>{new Date(topOfMind.createdMs).toLocaleDateString(locale,{month:'short',day:'numeric'})}</time>:null}
-                      {atNow&&topOfMind?.id&&storageScope&&!offline?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale} compact/>:null}
+                      {/* "Changes" left the home screen with the other two
+                          explainers. What moved in the reading since last time
+                          is worth having, but it is a thing to go and look at,
+                          not a control sitting beside the sentence — the top of
+                          the page is for the sentence. */}
+                      {atNow&&topOfMind?.id&&storageScope&&!offline&&(inField||inSky)?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale} compact/>:null}
                     </div>:null}
                     {c.text ? (
                       /* A STABLE KEY, AND A CARRIED/NEW SPLIT INSIDE IT.
@@ -12885,7 +12893,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     )}
                     {here && w.kind === 'self' && showHomeProcessing ? <InspirationProcessingNotice quiet introducePrinciples={!c.text && principles.length === 0}
                       processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null}
-                    {here && w.kind === 'self' && storageScope && !offline && atNow && !inField && !inSky ? <ReadingFormationHelp locale={locale} /> : null}
                     {here&&w.kind==='self'&&atNow&&readingLoadPhase==='ready'&&!inspirations?.length&&!fieldBeyond?<p className="jar-first-capture-hint">{say('worldFirstCaptureExample')}</p>:null}
                     {/* The dial's historical date stays attached to its read. */}
                     {c.asOf ? (
@@ -12894,9 +12901,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       </div>
                     ) : null}
                     {here&&w.kind==='self'&&storageScope&&!offline?<div className="jar-reading-actions" data-jar-chrome="1">
-                      {!atNow?<button type="button" onClick={()=>windTo(dial?.end??Date.now())}>{say('worldReadingToday')}</button>:<>
-                        {c.text?<button type="button" aria-expanded={posterAsk} onClick={()=>setPosterAsk(value=>!value)}>{say('worldReadingWhy')}</button>:null}
-                      </>}
+                      {/* "Why this reading" left with "How this forms": the home
+                          screen stopped carrying explanations of itself. Back
+                          to today stays — it is not an explanation, it is the
+                          way out of a date you scrubbed to. */}
+                      {!atNow?<button type="button" onClick={()=>windTo(dial?.end??Date.now())}>{say('worldReadingToday')}</button>:null}
                     </div>:null}
                     {/* THE ACTIVITY CARDS ARE GONE FROM THE PAGE (founder
                         ruling). Review and Talk with WAKA are destinations,
@@ -13549,32 +13558,53 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             rows={1}
             style={mouthOpen ? { visibility: 'hidden' } : undefined}
             value={draft}
-            placeholder={draft.trim() || composerDraft.draft.media.length ? say('worldContinueDraft') : say('worldKeepPlaceholder')}
+            placeholder={say('worldKeepPlaceholder')}
             aria-label={say('worldCaptureInspiration')}
-            onFocus={() => { setCharSay(''); openMouth(); }}
-            onChange={event => { draftRef.current = event.target.value; setDraft(event.target.value); setCharSay(''); openMouth(); }}
+            aria-describedby="jar-keep-hint"
+            onChange={event => { draftRef.current = event.target.value; setDraft(event.target.value); setCharSay(''); setMouthNote(''); }}
+            onKeyDown={event => {
+              /* Enter keeps, Shift+Enter makes a line. Keeping is the common
+                 case and should cost one key; a person writing two sentences
+                 must not have the first one saved out from under them. */
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                void keepIt();
+              }
+            }}
             onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
             onDrop={event => {
               if (!event.dataTransfer.files.length) return;
               event.preventDefault();
               setCharSay('');
-              openMouth();
               void addInspirationFiles([...event.dataTransfer.files]);
             }}
             onPaste={event => {
               if (!event.clipboardData.files.length) return;
               event.preventDefault();
               setCharSay('');
-              openMouth();
               void addInspirationFiles([...event.clipboardData.files]);
             }}
           />
+          {/* WHAT YOU DROPPED, UNDER THE BOX. A file that vanished into a
+              drawer you cannot see is a file you cannot be sure you attached. */}
+          {!mouthOpen && inputMedia.length ? <ul className="jar-keep-media">
+            {inputMedia.map(item => <li key={item.id}>
+              <span>{item.name}</span>
+              <button type="button" aria-label={`${say('worldRemoveLower')} ${item.name}`}
+                onClick={() => composerDraft.setMedia(composerDraft.current.current.media.filter(row => row.id !== item.id))}>×</button>
+              {item.uploadError ? <small role="alert">{item.uploadError}</small> : null}
+            </li>)}
+          </ul> : null}
+          {!mouthOpen && mouthNote ? <p className="jar-keep-note" role="alert">{mouthNote}</p> : null}
           {/* WHERE ELSE THINGS COME IN FROM. An agent holding a keeper key can
               write here through waka-mcp, and a person who does not know that
               has no way to find out from inside the product. One line, under
               the box it is about, rather than a panel explaining the idea. */}
-          {!mouthOpen ? <a className="jar-keep-via" href="https://github.com/waka-eng/waka-mcp"
-            target="_blank" rel="noreferrer noopener">{say('worldKeepViaAgent')}</a> : null}
+          {!mouthOpen ? <p className="jar-keep-foot" id="jar-keep-hint">
+            <span>{say('worldKeepHint')}</span>
+            <a className="jar-keep-via" href="https://github.com/waka-eng/waka-mcp"
+              target="_blank" rel="noreferrer noopener">{say('worldKeepViaAgent')}</a>
+          </p> : null}
           {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
           {!mouthOpen&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}
           {!mouthOpen&&visibleInspiration?<div className="jar-capture-receipt"><span role="status">{say('worldSavedWord')}</span><button type="button" onClick={()=>{setReflectOn(visibleInspiration);setRecentInspiration(null);}}>{say('worldReflect')}</button></div>:null}
@@ -14151,7 +14181,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                stopped being a second door — and the right half answers the
                question that used to need a walk to the edge of the world:
                which other walls exist, and take me there. */
-            <span className="jar-here-split">
+            /* NOT WHEN IT WOULD ONLY SAY "ME" (founder ruling). At home on
+               your own wall this pill reads your own name back to you beside
+               the menu button, which is noise — you have not gone anywhere.
+               It still appears the moment where-you-are is a real question:
+               standing in a room, on an agent's wall, or down in the field.
+               Switching walls lives in the menu now, and the pill comes back
+               with `wallPick` because the list of walls is its own child —
+               choosing that row opens the pill already showing the list. */
+            atWall.kind !== 'self' || inField || inSky || wallPick ? <span className="jar-here-split">
               <button
                 type="button"
                 className="jar-here jar-back jar-label"
@@ -14216,7 +14254,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   </button>
                 </span>
               ) : null}
-            </span>
+            </span> : null
           }
 
           {/* WHEN YOU ARE, BESIDE WHERE YOU ARE.

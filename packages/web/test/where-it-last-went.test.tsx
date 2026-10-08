@@ -239,13 +239,10 @@ describe("the capture remembers where it last went", () => {
     expect(localStorage.getItem(DRAFT_KEY)).toBe('A newer thought');
     expect(saveCalls).toHaveLength(1);
     expect(Object.keys(localStorage).filter((key) => key.includes(':pendingSave:'))).toHaveLength(1);
-    /* `.jar-mouth-rest` is the keep box now, and a field reopens the composer by
-       taking focus rather than by being pressed. The reopen is a state change
-       plus a route write, so it needs its own flush before the composer's own
-       textarea exists to be read. */
-    await act(async () => layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-rest')!.dispatchEvent(new FocusEvent('focusin',{bubbles:true})));
-    await act(async () => { await Promise.resolve(); });
-    expect(layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-field')!.value).toBe('A newer thought');
+    /* Nothing to reopen: `.jar-mouth-rest` IS the box, and the newer draft is
+       sitting in it. That the words survived an uncertain save is the claim;
+       where they survived is no longer a second screen. */
+    expect(layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-rest')!.value).toBe('A newer thought');
   });
   it("does not assign an unscoped draft or sharing choice to the next account", async () => {
     window.localStorage.setItem("waka.draft", "an unattributed private draft");

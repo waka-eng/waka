@@ -449,23 +449,38 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
        * The list closes on the press, hence re-opening it each attempt.
        */
       const openWallList = async () => {
+        /* AT HOME THE NAME PILL IS NOT THERE. It said "ME" beside the menu
+           button, which is your own name read back to you on the one screen
+           where you have not gone anywhere (founder ruling), so it now appears
+           only when where-you-are is a real question — in a room, on an
+           agent's wall, or down in the field. The caret's job moved to the
+           "Rooms and agents" row in the menu, and choosing it brings the pill
+           back with its list already open. Travel the way a person does. */
         const caret = container.querySelector<HTMLElement>(".jar-here-more");
-        if (!caret) {
-          throw new Error(
-            "no .jar-here-more — the top-left name has no caret, so there is " +
-              "no way to another wall at all. The top bar did not mount.",
-          );
+        if (caret) {
+          if (caret.getAttribute("aria-expanded") !== "true") {
+            await act(async () => {
+              caret.click();
+            });
+          }
+          return;
         }
-        if (caret.getAttribute("aria-expanded") !== "true") {
-          await act(async () => {
-            caret.click();
-          });
+        if (!container.querySelector(".jar-here-list")) {
+          await chooseFromMenu(container, "Rooms and agents");
         }
       };
 
       for (let attempt = 0; attempt < 8; attempt += 1) {
-        const here = container.querySelector(".jar-here")?.textContent ?? "";
-        if (name.test(here.trim())) break;
+        const pill = container.querySelector(".jar-here");
+        /* NO PILL MEANS HOME. It is hidden on your own wall, so "where am I"
+           has no label to read there — its absence IS the answer, and a helper
+           that only knows how to read the label would loop until it gave up. */
+        const here = (pill?.textContent ?? "").trim();
+        /* NO NAME MEANS HOME — whether the pill is absent or momentarily
+           blank mid-travel. It is hidden on your own wall, so "where am I" has
+           no label to read there and its absence IS the answer. */
+        if (!here && name.test("Me")) break;
+        if (name.test(here)) break;
         await openWallList();
         await clickByText(".jar-here-row", name);
         await step(90); /* travel eases over ~670ms */
@@ -481,7 +496,9 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
        * kind of green that let the original bug through. Better to be loud.
        */
       const here = (container.querySelector(".jar-here")?.textContent ?? "").trim();
-      if (!name.test(here)) {
+      /* No name means home — the pill is hidden on your own wall, so arriving
+         there is announced by its absence rather than by a label. */
+      if (!(!here && name.test("Me")) && !name.test(here)) {
         await openWallList();
         const offered = [...container.querySelectorAll(".jar-here-row")].map((n) =>
           (n.textContent ?? "").trim(),

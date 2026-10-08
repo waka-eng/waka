@@ -117,16 +117,21 @@ it('requires a visible audience confirmation before publishing and leaves cancel
   expect(world.container.querySelector('.jar-panel .jar-audience-note')).toBeNull();
 });
 
-it('records opening Capture before the observer debounce and keeps it through later restoration',async()=>{
+it('keeps what you typed in the box across a re-render, without opening anything',async()=>{
+  /* KEEPING IS INLINE NOW (founder ruling: "it shouldn't open up a modal, it
+     should just let the user do it right there"). So there is no `compose=1`
+     to record and no dialog to find — the thing worth proving is that the
+     words stay in the box, which is the whole promise of typing in place. */
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
   const capture=keepBox(world.container);
-  /* A field opens the composer by taking focus, not by being pressed — the
-     entry is the box itself now, so focusing it IS the gesture. */
-  expect(capture).toBeDefined();await act(async()=>capture.focus());
-  expect(location.search).toContain('compose=1');
+  await act(async()=>{
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(capture,'An unfinished spark');
+    capture.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+  expect(world.container.querySelector('[role="dialog"][aria-label="Capture inspiration"]')).toBeNull();
+  expect(location.search).not.toContain('compose=1');
   await world.rerender();await settle();
-  expect(world.container.querySelector('[role="dialog"][aria-label="Capture inspiration"]')).not.toBeNull();
-  await navigate(-1);expect(location.search).not.toContain('compose=1');
+  expect(keepBox(world.container).value).toBe('An unfinished spark');
 });
 
 it('does not let the returning-visitor greeting replace an explicitly linked reflection', async()=>{
