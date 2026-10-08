@@ -66,6 +66,7 @@ import { PrincipleRead } from "../components/PrincipleRead";
 import { publicWebOrigin } from '../lib/public-origins';
 import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlow";
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
+import { ReadingFormationHelp } from '../components/ReadingFormationHelp';
 import { DialogSurface } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { Link, useNavigate } from "react-router-dom";
@@ -12840,6 +12841,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     )}
                     {here && w.kind === 'self' && showHomeProcessing ? <InspirationProcessingNotice quiet introducePrinciples={!c.text && principles.length === 0}
                       processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null}
+                    {here && w.kind === 'self' && storageScope && !offline && atNow && !inField && !inSky ? <ReadingFormationHelp locale={locale} /> : null}
                     {here&&w.kind==='self'&&atNow&&readingLoadPhase==='ready'&&!inspirations?.length&&!fieldBeyond?<p className="jar-first-capture-hint">{say('worldFirstCaptureExample')}</p>:null}
                     {/* The dial's historical date stays attached to its read. */}
                     {c.asOf ? (

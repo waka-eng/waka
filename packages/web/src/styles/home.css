@@ -634,6 +634,14 @@
   color: var(--w-muted);
 }
 .jar-source-copy { display: grid; gap: var(--sp-4); padding-top: 2px; }
+.jar-reading-help { margin-top: var(--sp-8); color: var(--w-muted); font-size: var(--t-note); line-height: 1.5; pointer-events: auto; touch-action: pan-y; }
+.jar-reading-help > summary { box-sizing: border-box; width: fit-content; min-height: 44px; padding: var(--sp-12) 0; cursor: pointer; }
+.jar-reading-help > summary:hover, .jar-reading-help > summary:focus-visible { color: var(--w-ink); text-decoration: underline; text-underline-offset: var(--sp-4); }
+.jar-reading-help-body { border-left: 1px solid var(--jar-panel-edge); padding-left: var(--sp-12); color: var(--w-ink); user-select: text; }
+.jar-reading-help-body section { margin-bottom: var(--sp-12); }
+.jar-reading-help-body h3 { margin: 0 0 var(--sp-4); font: inherit; font-weight: 600; }
+.jar-reading-help-body p { margin: 0; }
+.jar-reading-help-body .jar-reading-help-note { margin-top: var(--sp-16); color: var(--w-muted); }
 .jar-source-hint { font-size: var(--t-note); line-height: 1.5; }
 .jar-source-mark { color: var(--jar-ink); margin-top: 2px; }
 .jar-source-mark circle { opacity: .55; }

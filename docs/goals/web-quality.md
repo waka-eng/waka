@@ -342,3 +342,25 @@ disposable loopback fixture. No provider calls were made. The [display receipt](
 and [preview](../craft/evidence/web-quality/formation-cue/preview.png) retain this
 scope. The cumulative USD 4.7823478004 evaluation used/held total is unchanged.
 Human comprehension and the outstanding operational gates remain open.
+
+### 2026 10 08 formation help
+
+Added the owner's requested small explanation as a closed-by-default “How this
+forms” disclosure on personal Home. It remains available without a processing
+receipt, before saving and after a reading settles. Three short sections explain
+raw inspirations, AI-supported patterns forming a current Top of Mind, and
+evidence-backed Principles guiding choices across situations. The coda separates
+confirmed Save from later generation, allows an unchanged reading and explains
+that human wording edits are kept. Both supported locales carry the explanation.
+
+Web types/build, vocabulary/seam checks and all 866 web tests pass. Three built
+browser checks cover English desktop/390px and Korean 320×568. Help starts closed,
+opens by keyboard, exposes all text through Home's existing scroll surface,
+retains 44px targets and visible Capture, and closes with Escape back to its
+summary. It remains available after actual Save. Opening/reading help makes
+zero requests and starts no generation. Authentication, Save and queued processing
+are real against the verified disposable loopback fixture; no provider calls
+were made. The [receipt](../craft/evidence/web-quality/formation-help/receipt.json)
+and [preview](../craft/evidence/web-quality/formation-help/preview.png) retain the
+scope. The evaluation ledger and existing human/operational gates stay open at
+their previously recorded values.
