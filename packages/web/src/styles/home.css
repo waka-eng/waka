@@ -2306,7 +2306,22 @@
      Sixteen pixels of inset plus each pill's own side padding read as a
      floating bar; the two permanent things at the top of the screen belong to
      the corners they name. */
-  padding: calc(14px + env(safe-area-inset-top)) 8px 0;
+  /**
+   * BELOW THE CORNERS, NOT IN THEM.
+   *
+   * This bar used to BE the top of the screen: it held the wall picker, the
+   * exits and the dial's handle. The picker moved into the corner row with
+   * the view switcher and the cog, and what is left here is the handle —
+   * which was still drawing at `top: 0`, straight through the picker it used
+   * to sit beside. Founder, on an agent's wall: "NOW" printed over
+   * "DEMO AGENT".
+   *
+   * "When you are" still belongs beside "where you are"; where-you-are simply
+   * moved up a row, so this sits directly under it. The reserve is the
+   * corner's own height plus its inset, named rather than guessed, for the
+   * same reason every other reserve in this file is.
+   */
+  padding: calc(var(--waka-corner) + var(--sp-20) + env(safe-area-inset-top)) var(--sp-16) 0;
   pointer-events: none;
 }
 /* The two exits sit together at the top-left, so the rest of the bar is still

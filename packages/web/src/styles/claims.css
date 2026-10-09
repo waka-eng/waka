@@ -1322,10 +1322,16 @@
    the primary action read as decoration until you typed. It keeps its fill
    and loses its light instead, which is how every other off-state here is
    shown. */
+/* DIMMED, NOT ERASED — and the text has to survive the dimming.
+   The first version kept the fill and darkened the LABEL, which on a dark
+   theme is backwards: the fill is a light grey, so a label mixed toward the
+   ground is dark text on light-dark grey and reads as an empty rectangle.
+   That is what shipped: a Keep button with no word in it. The fill dims and
+   the label stays light. */
 .waka-composer-send:disabled {
   border-color: transparent;
-  background: color-mix(in srgb, var(--ink) 22%, transparent);
-  color: color-mix(in srgb, var(--bg) 70%, var(--ink));
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  color: var(--muted);
 }
 
 .waka-composer-send:focus-visible {

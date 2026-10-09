@@ -86,7 +86,6 @@ import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-reco
 import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
 import { useReviewEntry } from '../lib/use-review-entry';
-import {PrinciplesShortcutLabel} from '../components/PrinciplesShortcutLabel';
 import { paintField } from '../space/inspiration/field-paint';
 import { Menu } from '../components/Menu';
 import { usePageMenu } from '../lib/page-menu';
@@ -1453,7 +1452,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
   const [principlesRead,setPrinciplesRead]=useState(false);
   const acceptPrinciples=useCallback((rows:ApiPrinciple[])=>{setPrinciples(rows);setPrinciplesRead(true);},[]);
-  const [groupPrincipleCounts, setGroupPrincipleCounts] = useState<Record<string, number>>({});
   /**
    * LAYER FOUR BECOMES SOMETHING YOU CAN ANSWER, not only read.
    *
@@ -12607,8 +12605,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       active={here && !offlineRef.current}
                       locale={locale}
                       refreshKey={w.kind === "group" ? groupReadTick : undefined}
-                      onRead={w.kind === "self" ? acceptPrinciples : (rows) => setGroupPrincipleCounts((counts) =>
-                        counts[w.id] === rows.length ? counts : { ...counts, [w.id]: rows.length })}
+                      /* A room's principle count had one reader: the
+                         top-centre pill that is gone. Counting them to feed
+                         nothing would be work done for a control that no
+                         longer exists. */
+                      onRead={w.kind === "self" ? acceptPrinciples : undefined}
                     /> : null}
                     {w.kind==='self'&&pick&&principlesRead&&!principles.some(row=>row.id===pick)?<p role="status" className="jar-values-sub">
                       {say('worldPrincipleUnavailable')} <button type="button" onClick={()=>{setPick(null);viewNavigation.write({...EMPTY_VIEW,section:'sky'},{replace:true});}}>{say('worldPrinciplesBack')}</button>
@@ -14815,27 +14816,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           is the opposite of what a room is for. The way up is a door to a
           place that says honestly what it holds, and that is as true standing
           in somebody else's room as in your own. */}
-      {phase === "ready" && atWall.kind!=="self" && !inField && !inSky ? (
-        <button
-          type="button"
-          /* THE SIGNPOST CARRIES THE SKY'S STATE. Dim, it is a door to a
-             place still forming; lit, the sky above this wall holds your
-             values now — light is the only meaning channel, so the word
-             itself is the announcement (founder, 2026-09-01: "make it more
-             clear that philosophies and values page exists above"). Only
-             your own wall's sky can hold anything yet, so it lights only
-             there. */
-          className={
-            ((groupPrincipleCounts[atWall.id] ?? 0) > 0)
-              ? "jar-values jar-values--held"
-              : "jar-values"
-          }
-          data-jar-chrome="1"
-          onClick={() => simApiRef.current?.toSky()}
-        >
-          <PrinciplesShortcutLabel locale={locale} count={groupPrincipleCounts[atWall.id]??null}/>
-        </button>
-      ) : null}
+      {/* THE PRINCIPLES PILL THAT STOOD HERE IS GONE.
+          It was a top-centre shortcut shown only on walls that were not your
+          own, from when the self wall had its own chrome and the others had
+          none. The view switcher covers every wall now and its middle row IS
+          Principles, so this drew a second control in the same place saying
+          the same word — founder, looking at an agent's wall: "why this
+          screen so different? it should get the full changes."
+          It was: the new chrome arrived on top of the old chrome, which had
+          never been swept because it only ever appeared where the new chrome
+          had not. */}
 
       {/* AND WHAT THE SKY SAYS, STANDING IN IT. One sentence, in prose. The
           numeral law needs nothing here: what is forming is not countable
@@ -15081,11 +15071,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
       {phase==='ready'&&(inField||inSky||!atNow)?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
         <HomeActionIcon kind="capture"/> {say('worldCaptureInspiration')}</button>:null}
-      {phase === 'ready'&&atWall.kind!=='self' ? <button type="button" className="jar-find-shortcut" data-jar-chrome="1"
-        onClick={() => setSeek('')} aria-label={say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
-        <span>{say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}</span>
-      </button> : null}
+      {/* AND SO IS FIND. Founder ruling, long since applied everywhere
+          else: "find is just it should be a search bar on the your
+          inspirations page instead." It survived here for the same reason the
+          pill did — this corner of the product was only ever drawn on walls
+          the ruling's author was not looking at. */}
       </div>
       {/* ONE DOOR ON THE LEFT, ONE ON THE RIGHT. `PersonalNavigation` used to
           sit along the bottom with Home, Inspirations, Principles and Find —
