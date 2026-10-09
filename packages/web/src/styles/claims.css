@@ -327,6 +327,22 @@
   outline-offset: 3px;
 }
 
+/**
+ * THE READING'S OWN CARD OPENS DOWNWARD, AND FROM THE LEFT.
+ *
+ * The default card sits above its trigger and hangs off its right edge,
+ * which is right for the composer's footer at the bottom of the screen and
+ * wrong for the one place a hover card now lives at the TOP of it: above
+ * would be off-screen, and right-aligned would run the card out past a title
+ * that starts at the left margin.
+ */
+.jar-reading-what .waka-hovercard-card {
+  top: calc(100% + var(--sp-8));
+  bottom: auto;
+  right: auto;
+  left: 0;
+}
+
 .waka-hovercard-card {
   position: absolute;
   right: 0;
