@@ -108,6 +108,23 @@ export interface Measured {
       leaves from the middle of the sentence that made it however many lines
       that had wrapped to. Assigned by a callback ref, hence mutable. */
   readonly mouthSpot: MutableRefObject<HTMLElement | null>;
+
+  /**
+   * WHAT THE COMPANION IS SAYING, measured because it changes the layout.
+   *
+   * This block hangs off the chin and holds whatever the creature is saying:
+   * a claim and its three answers, a keep receipt, or nothing at all. Its
+   * height is what decides how far the companion has to sit above the box,
+   * and it ARRIVES LATE — the claim is fetched, so the block grows a second
+   * or two after the world has already placed everything.
+   *
+   * Without this, the layout measured a voice block that was still empty and
+   * never looked again: the companion stayed where it had been put before it
+   * had anything to say, and the claim grew downward into the gap above the
+   * box. Founder, twice: "things feel so skewed to the bottom", and then
+   * "the page just feels unbalanced to my eyes".
+   */
+  readonly charSay: RefObject<HTMLDivElement>;
 }
 
 /**
@@ -130,6 +147,7 @@ export function useMeasured(): Measured {
       hqInner: { current: null },
       mouth: { current: null },
       mouthSpot: { current: null },
+      charSay: { current: null },
     };
   }
   return held.current;
