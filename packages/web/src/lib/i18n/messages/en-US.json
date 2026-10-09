@@ -862,5 +862,6 @@
   "worldInspirationsFail": "Couldn't open your inspirations.",
   "worldBack": "Back",
   "worldPrinciplesFailed": "Couldn't load your principles.",
-  "worldPrinciplesEmpty": "No principles yet. They take months of the same choice to form."
+  "worldPrinciplesEmpty": "No principles yet. They take months of the same choice to form.",
+  "worldCardClose": "Close"
 }

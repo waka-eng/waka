@@ -862,5 +862,6 @@
   "worldInspirationsFail": "영감을 열지 못했어요.",
   "worldBack": "뒤로",
   "worldPrinciplesFailed": "원칙을 불러오지 못했어요.",
-  "worldPrinciplesEmpty": "아직 원칙이 없어요. 같은 선택이 여러 달 쌓여야 만들어져요."
+  "worldPrinciplesEmpty": "아직 원칙이 없어요. 같은 선택이 여러 달 쌓여야 만들어져요.",
+  "worldCardClose": "닫기"
 }

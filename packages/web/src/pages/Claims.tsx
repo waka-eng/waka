@@ -29,6 +29,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { Menu } from "../components/Menu";
+import { usePageMenu } from "../lib/page-menu";
 import {
   createFeedback,
   listClaims,
@@ -50,6 +52,7 @@ export function Claims({ onWaitingChange }: ClaimsProps): JSX.Element {
   const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
 
+  const menu = usePageMenu();
   const [queue, setQueue] = useState<ApiClaim[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
   const [receipt, setReceipt] = useState<string | null>(null);
@@ -162,6 +165,7 @@ export function Claims({ onWaitingChange }: ClaimsProps): JSX.Element {
 
   return (
     <main className="waka-claims">
+      <Menu locale={locale} items={menu.items} onSettings={menu.onSettings} />
       <header className="waka-claims-head">
         <h1 className="waka-claims-title">{say("worldClaimsTitle")}</h1>
         <p className="waka-claims-count">
