@@ -6,7 +6,16 @@
   <head>
     <meta charset="utf-8" />
     <title>WAKA — Inspirations</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <!-- viewport-fit=cover is required or every env(safe-area-inset-*) in the
+         stylesheets resolves to 0 and the composer sits under the home
+         indicator.
+         interactive-widget=resizes-content is the whole Android keyboard fix:
+         the default (resizes-visual) leaves position:fixed elements where they
+         are, which means the keyboard simply covers the box you are typing
+         into. resizes-content shrinks the layout viewport so a fixed bottom
+         bar lands above the keyboard with no script at all. iOS ignores the
+         key and is handled by the visualViewport listener in the chat panel. -->
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />

@@ -1029,6 +1029,14 @@
   width: 100%;
   max-width: 680px;
   margin: 0 auto;
+  /* WHERE THE KEYBOARD IS, ON THE ONE PLATFORM THAT WILL SAY.
+     Chrome and Edge expose the keyboard's height here; everywhere else it
+     resolves to 0 and costs nothing. `interactive-widget=resizes-content` in
+     the viewport meta already lifts this bar on Android, so this is the belt
+     to that's braces for the case where a browser honours the inset but not
+     the resize. Note what does NOT solve this: dvh. The on-screen keyboard is
+     explicitly not part of the UA UI, so viewport units never move for it. */
+  margin-bottom: env(keyboard-inset-height, 0px);
 }
 
 /* ---- the drawer, above the body ---- */
@@ -1607,11 +1615,40 @@
   cursor: pointer;
 }
 
-/* Inked, not coloured: light is the only meaning channel. */
-.jar-char-claim-answers .jar-char-claim-yes {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--bg);
+/**
+ * THE THREE ANSWERS ARE PEERS. "yes" IS NOT FILLED ANY MORE.
+ *
+ * It was the inked one, on the reasoning that emphasis here is lightness and
+ * never colour. That reasoning is right about HOW to emphasise and wrong that
+ * anything should be emphasised at all, for three reasons:
+ *
+ *   1. IT BREAKS THE FIRST LAW. A filled white button is the brightest thing
+ *      on this screen after the creature itself. If light is the only meaning
+ *      channel, lighting one of three answers says THIS IS THE ANSWER — the
+ *      product pre-answering its own question about the person.
+ *   2. IT SKEWS THE CORPUS. A visually primary option among mutually
+ *      exclusive answers measurably pulls the distribution toward it, and
+ *      every principle this product will ever write is downstream of these
+ *      verdicts. A thumb on the scale here is a thumb on the scale in the
+ *      finished thing.
+ *   3. NOBODY ELSE DOES IT. Typeform, Duolingo, How We Feel and Daylio all
+ *      render peer answers at equal weight; a primary style appears only on a
+ *      separate COMMIT control. There is no commit step here — answering is
+ *      one tap, by design — so there is no slot for a primary.
+ *
+ * Light still does the work; it just does it AFTER the answer rather than
+ * before it. See the chosen state below.
+ */
+.jar-char-claim-answers button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* WHAT YOU CHOSE, once you have chosen. The press is what earns the light —
+   this is the same channel, spent on a fact instead of on a suggestion. */
+.jar-char-claim-answers button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--ink) 40%, transparent);
+  color: var(--ink);
 }
 
 .jar-char-claim-answers button:focus-visible {
