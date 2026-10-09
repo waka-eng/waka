@@ -49,6 +49,8 @@ interface ClaimRow {
   statement: string;
   status: string;
   evidenceCount: number;
+  /** The saves it was read from — see the receipts tests. */
+  from?: Array<{ id: string; preview: string }>;
 }
 
 async function seedPerson(name: string): Promise<Person> {
@@ -182,6 +184,62 @@ describe("the claims awaiting a word", () => {
     expect(queue).toHaveLength(1);
     expect(queue[0]!.status).toBe("emerging");
     expect(queue[0]!.evidenceCount).toBe(1);
+  });
+
+  it("carries the saves it was read from, in the person's own words", async () => {
+    /* THE DIFFERENCE BETWEEN A READING AND A HOROSCOPE. The queue has always
+       carried the ids a claim was derived from; ids are not something a
+       person can check. With the material visible, "not true" is correcting a
+       misreading of evidence — without it, it is being told who you are and
+       having to argue back, which is the version people defend against rather
+       than think about. */
+    const person = await seedPerson("receipts");
+    await claimWith(person, "You keep the smaller decision.", "emerging", 2);
+
+    const queue = await queueFor(person);
+
+    expect(queue[0]!.from).toHaveLength(2);
+    expect(queue[0]!.from!.every((row) => row.preview.includes("You keep the smaller decision."))).toBe(true);
+    expect(queue[0]!.from!.every((row) => typeof row.id === "string" && row.id.length > 0)).toBe(true);
+  });
+
+  it("shortens a long save rather than printing it whole under the question", async () => {
+    /* This sits beneath a sentence somebody is being asked to rule on. A
+       paragraph here makes the claim the smallest thing on the screen. */
+    const person = await seedPerson("long");
+    const [signal] = await t.sql`
+      INSERT INTO signals (profile_id, statement, status, confidence)
+      VALUES (${person.profileId}, 'You write at length.', 'emerging', 0) RETURNING id`;
+    const [kept] = await t.sql`
+      INSERT INTO inspirations (profile_id, text)
+      VALUES (${person.profileId}, ${"word ".repeat(80)}) RETURNING id`;
+    await t.sql`
+      INSERT INTO signal_evidence
+        (profile_id, owner_profile_id, signal_id, inspiration_id, material_revision)
+      VALUES (
+        ${person.profileId}, ${person.profileId}, ${signal.id}, ${kept.id},
+        (SELECT personal_revision FROM inspiration_revisions
+          WHERE profile_id = ${person.profileId} AND inspiration_id = ${kept.id})
+      )`;
+
+    const queue = await queueFor(person);
+
+    expect(queue[0]!.from![0]!.preview.length).toBeLessThanOrEqual(96);
+    expect(queue[0]!.from![0]!.preview.endsWith("\u2026")).toBe(true);
+  });
+
+  it("leaves out a save that has since been deleted rather than inventing one", async () => {
+    /* The claim still stands on whatever evidence remains. Holding a
+       placeholder for a thing a person removed would be the product keeping
+       something they threw away. */
+    const person = await seedPerson("deleted");
+    await claimWith(person, "You revisit the same question.", "emerging", 2);
+    await t.sql`DELETE FROM inspirations WHERE profile_id = ${person.profileId}
+      AND text LIKE '%kept 0'`;
+
+    const queue = await queueFor(person);
+
+    expect(queue[0]!.from).toHaveLength(1);
   });
 
   it("drops a claim once it is answered", async () => {

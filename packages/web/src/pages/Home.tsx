@@ -13861,6 +13861,32 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     thing, and saying so out loud made the creature sound like
                     it was reading a form. */}
                 <p className="jar-char-claim-statement">{claimQueue[0].statement}</p>
+                {/* WHAT IT READ THIS FROM, in your own words.
+                    A sentence about you with nothing under it can only be
+                    agreed or disagreed with on feel. The same sentence beside
+                    the things you actually kept can be CHECKED — which is the
+                    whole difference between a reading and a horoscope, and
+                    the reason the queue has carried these ids all along.
+                    It also changes what "not true" means. With the saves on
+                    screen, rejecting a claim is correcting a misreading of
+                    evidence; without them it is being told who you are and
+                    having to argue back. The second one is the version people
+                    defend against rather than think about.
+                    Pressing one opens that save. */}
+                {claimQueue[0].from?.length ? (
+                  <ul className="jar-char-claim-from">
+                    {claimQueue[0].from.map(source => (
+                      <li key={source.id}>
+                        <button
+                          type="button"
+                          onClick={() => viewNavigation.write({ ...EMPTY_VIEW, inspirationId: source.id })}
+                        >
+                          {source.preview}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 <p className="jar-char-claim-answers">
                   {(['true', 'partly', 'not_true'] as const).map(value => (
                     <button
