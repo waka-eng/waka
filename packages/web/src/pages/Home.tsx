@@ -344,7 +344,14 @@ const DIAL_H = 92;
  * every time a line of typing wrapped, which is the one thing this page does
  * not do.
  */
-const MOUTH_H = 52;
+/* The room the composer keeps at the bottom of the screen. A CONSTANT on
+   purpose — see the note where it is used: the companion must not move when
+   the composer grows a drawer or a question, so this is the reserve, not a
+   measurement. Raised from 52 when the composer gained a footer and a primary
+   action: 52 was the height of a single-line box that no longer exists, and a
+   reserve smaller than the thing it reserves for is the companion sitting on
+   its own input. */
+const MOUTH_H = 128;
 /** The least the topmost orb is ever left clear of the top edge. */
 const FIELD_EDGE = 6;
 /**
@@ -5853,7 +5860,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * overlap. When the slot is roomy — which is most of the time — the
        * preference wins and the body is where the eye expects it.
        */
-      companion.y = compactHome ? -view.h * 3 : hi >= lo ? clamp(view.h / 2, lo, hi) : (lo + hi) / 2;
+      /* THE MIDDLE OF WHAT IS LEFT, NOT THE MIDDLE OF THE SCREEN.
+         With the box pinned to the bottom, the three things on this page are
+         the reading, the companion and the box — and the founder asked for
+         equal space between them. `lo` already sits one gap below the
+         reading and `hi` one gap above the box, so the midpoint of that band
+         divides the remaining height in two equal parts by construction.
+         Centring on the viewport instead would only be even when the reading
+         and the box happened to be the same height. */
+      companion.y = compactHome ? -view.h * 3 : hi >= lo ? (lo + hi) / 2 : (lo + hi) / 2;
       /* WHAT SITS UNDER THE COMPANION, AND IN WHAT ORDER (founder, 2026-08-25:
          "keep something should be shown right below the character").
          The mouth first, directly beneath the body, because keeping something
@@ -5862,6 +5877,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          reports what the loop did, and it says so in the mouth's own slot
          rather than in a row of its own — one place, one line. */
       const chin = Math.round(companion.y + companion.size * 0.62);
+      /* The box no longer hangs off the chin — it is pinned to the bottom in
+         `home.css`. The variable stays for the compact case, which stacks
+         rather than centres. */
       root!.style.setProperty("--jar-mouth-top", `${compactHome ? activityLayout.composerTop : chin + 18}px`);
       /* AND THE CHARACTER STATES ITS SIZE, rather than being guessed at.
          The same rule as the seam and the mouth's top: chrome states its
