@@ -68,7 +68,7 @@ import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlo
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { DialogSurface } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useViewNavigation } from '../lib/use-view-navigation';
 import { EMPTY_VIEW, resolveViewWall, viewHref, type ViewLocation } from '../lib/view-location';
 import { InspirationSearch } from '../components/InspirationSearch';
@@ -202,8 +202,6 @@ import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 import type { MessageKey } from "../lib/locales";
 
 import {
-  fetchSignalDuplicates,
-  resolveSignalDuplicate,
   affirmGroupProposal,
   declineGroupProposal,
   createGroup,
@@ -234,7 +232,6 @@ import {
   deleteInspiration,
   createFeedback,
   releaseSignal,
-  restoreSignal,
   dismissTopOfMindEntry,
   restoreTopOfMindEntry,
   releaseTopOfMindEntry,
@@ -257,17 +254,10 @@ import {
   type ApiPrinciple,
   type ApiGroupFieldInspiration,
   type ApiGroupWallSignal,
-  type ApiReading,
-  fetchTheReading,
-  type ApiAntechamberRow,
-  type ApiSignalDuplicate,
   fetchTheWeather,
   ApiError,
 } from "../lib/api";
-import { AntechamberPanel } from "../components/AntechamberPanel";
-import { DuplicatesPanel } from "../components/DuplicatesPanel";
 import { LoadingHome } from "../components/LoadingHome";
-import { ReadingPanel } from "../components/ReadingPanel";
 import {
   loadInspiration,
   loadInspirations,
@@ -1279,10 +1269,8 @@ export interface FieldAudit {
 /* What is NOT "outside" for each sheet: the sheet, and the control that
    opens it — pressing that again is the control's own toggle, not a
    dismissal, and treating it as one closes and reopens in the same press. */
-const KEEP_ACCOUNT = [".jar-settings", ".jar-account"] as const;
 const KEEP_SHEET = [".jar-settings", ".jar-seek"] as const;
 const KEEP_PROV = [".jar-prov-room", ".jar-panel"] as const;
-const KEEP_ANTE = [".jar-antechamber", ".jar-settings"] as const;
 
 export default function HomePage(): JSX.Element {
   /* No gate. This is home now — it is what a signed-in person lands on, in
@@ -11287,51 +11275,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * panels hanging off the same bar is a menu bar, which this world does not
    * have.
    */
-  const [accountOpen, setAccountOpen] = useState(false);
-  /* the reading: fetched once on first open, held for the session — the
-     rules do not change under a person mid-visit */
-  const [readingOpen, setReadingOpen] = useState(false);
-  const [theReading, setTheReading] = useState<ApiReading | null>(null);
-  /* the antechamber: fetched on every open — refusals accrue while the
-     world stands, and a stale dim place would claim the ground refused
-     less than it has */
-  const [antechamberOpen, setAntechamberOpen] = useState(false);
-  const [antechamber, setAntechamber] = useState<ApiAntechamberRow[] | null>(null);
-  /* the gardener's asks: fetched on every open — proposals accrue while the
-     panel is closed, and an ask answered stays answered */
-  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
-  const [duplicates, setDuplicates] = useState<ApiSignalDuplicate[] | null>(null);
-  const [resolvedDuplicates, setResolvedDuplicates] = useState<ReadonlySet<string>>(new Set());
-  const resolveDuplicate = useCallback(
-    (id: string, act: "merge" | "keep_apart") => {
-      if (offlineRef.current) return;
-      /* answer at once; the row only comes back if the server refused */
-      setResolvedDuplicates((prev) => new Set(prev).add(id));
-      resolveSignalDuplicate(id, act).catch(() => {
-        setResolvedDuplicates((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      });
-    },
-    [],
-  );
-  /** Anchors put back from the antechamber this session, so its rows answer
-      in the same beat rather than waiting for a refetch. */
-  const [restoredAnchors, setRestoredAnchors] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
-  const restoreFromAntechamber = useCallback((anchorSignalId: string) => {
-    if (offlineRef.current) return;
-    restoreSignal(anchorSignalId)
-      .then(() => {
-        setRestoredAnchors((prev) => new Set(prev).add(anchorSignalId));
-      })
-      .catch(() => {
-        /* it did not come back; the row keeps offering */
-      });
-  }, []);
   /** The rename box, while it is open: null when nobody is renaming. */
   const [renaming, setRenaming] = useState<{ id: string; text: string; busy: boolean } | null>(
     null,
@@ -11904,16 +11847,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      their own small word, and the way out of the last sheet is never where
      the way out of this one is. See `lib/dismiss.ts` for why pointerdown and
      why Escape stops propagating. */
-  const closeAccount = useCallback(() => setAccountOpen(false), []);
   const closeSettings = useCallback(() => setSettingsFor(null), []);
   const closeJoin = useCallback(() => setPendingJoin(null), []);
   const closeProv = useCallback(() => setProv(null), []);
-  const closeAnte = useCallback(() => setAntechamberOpen(false), []);
-  useDismissAway(accountOpen, closeAccount, KEEP_ACCOUNT);
   useDismissAway(settingsFor !== null, closeSettings, KEEP_SHEET);
   useDismissAway(pendingJoin !== null, closeJoin, KEEP_SHEET);
   useDismissAway(prov !== null, closeProv, KEEP_PROV);
-  useDismissAway(antechamberOpen, closeAnte, KEEP_ANTE);
   const acceptJoin = useCallback(() => {
     if (!pendingJoin) return;
     const code = pendingJoin;
@@ -14534,28 +14473,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             It was scaffolding and said so; its rows did not vanish — the
             flat screens and the loop's two doors now live in the account
             drop, the one sheet this bar already had. */}
-        {readingOpen ? (
-          <ReadingPanel reading={theReading} onClose={() => setReadingOpen(false)} />
-        ) : null}
-
-        {antechamberOpen ? (
-          <AntechamberPanel
-            rows={antechamber}
-            onClose={() => setAntechamberOpen(false)}
-            onRestoreAnchor={restoreFromAntechamber}
-            restoredAnchorIds={restoredAnchors}
-          />
-        ) : null}
-
-        {duplicatesOpen ? (
-          <DuplicatesPanel
-            rows={duplicates}
-            onClose={() => setDuplicatesOpen(false)}
-            onResolve={resolveDuplicate}
-            resolvedIds={resolvedDuplicates}
-          />
-        ) : null}
-
         {/* THE GEAR IN THE TOP RIGHT IS THIS BUTTON NOW (founder ruling:
             "top right should be everything regarding settings"). The labelled
             pill that used to live here opened exactly the same panel, so
@@ -15041,7 +14958,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           holds three things. Every one of those verbs survives, as a row in
           the menu, so nothing was dropped to clear the screen. */}
       {phase==='ready'&&atWall.kind==='self'?<Menu locale={locale} items={menu.items}
-        onSettings={()=>{setAccountOpen(true);setSettingsFor(null);}}
+        onSettings={()=>navigate('/profile')}
         hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
@@ -15184,114 +15101,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           screen: renaming a profile, language, sessions and deletion need
           focus traps and text that reflows at 200%, and that is what
           `/profile` is for. This is the door and the label on it. */}
-      {accountOpen && phase === "ready" ? (
-        <DialogSurface
-          className="jar-settings jar-settings--at-right"
-          onClose={closeAccount}
-          data-jar-chrome="1"
-          role="dialog"
-          aria-label={say("worldYourAccount")}
-        >
-          <div className="jar-settings-head">
-            <span className="jar-label">{say("worldSignedIn")}</span>
-            <button type="button" className="jar-settings-x" onClick={() => setAccountOpen(false)}>
-              {say("worldClose")}
-            </button>
-          </div>
+      {/* THE ACCOUNT SHEET THAT STOOD HERE IS GONE.
+          The gear opened it on this screen and navigated to /profile on every
+          other one — the same corner meaning two different things depending
+          on where you were standing, which is the exact objection the founder
+          raised about the hamburger ("why is the hamburger menu changing
+          depending on what screen I'm in?"). A corner cannot be the answer to
+          "where is settings" while also being a different answer here.
 
-          <p className="jar-settings-name">{auth?.profile?.name ?? say("worldYou")}</p>
-          {auth?.account?.email ? (
-            <p className="jar-settings-note">{auth.account.email}</p>
-          ) : null}
-
-          <p className="jar-ask">
-            <Link className="jar-settings-verb" to="/profile" onClick={() => setAccountOpen(false)}>
-              {say("worldAllSettings")}
-            </Link>
-          </p>
-
-          {/* THE LOOP'S TWO DOORS. Not flat screens, so not Links: each opens
-              a panel over the world — the rules it reads you by, and the dim
-              place where its refusals stand. They lived in the ≡ drawer until
-              the founder removed it (2026-08-24); this sheet was already
-              here, so they moved in rather than growing a new toggle. */}
-          <p className="jar-ask">
-            <button
-              type="button"
-              onClick={() => {
-                setAccountOpen(false);
-                setReadingOpen(true);
-                if (!theReading) {
-                  fetchTheReading()
-                    .then(setTheReading)
-                    .catch(() => undefined);
-                }
-              }}
-            >
-              {say("worldHowItReadsYou")}
-            </button>
-            <span aria-hidden="true"> · </span>
-            <button
-              type="button"
-              onClick={() => {
-                setAccountOpen(false);
-                setAntechamberOpen(true);
-                setAntechamber(null);
-                fetchTheWeather()
-                  .then((weather) => setAntechamber(weather.antechamber))
-                  .catch(() => setAntechamber([]));
-              }}
-            >
-              {say("worldTheAntechamber")}
-            </button>
-            <span aria-hidden="true"> · </span>
-            <button
-              type="button"
-              onClick={() => {
-                setAccountOpen(false);
-                setDuplicatesOpen(true);
-                setDuplicates(null);
-                fetchSignalDuplicates()
-                  .then(setDuplicates)
-                  .catch(() => setDuplicates([]));
-              }}
-            >
-              {say("worldGardenerAsks")}
-            </button>
-          </p>
-
-          {/* THE SIX LINKS TO THE FLAT SCREENS USED TO BE HERE, and the comment
-              that held them set their own condition: "they go when the world
-              can do everything they do". The world can, as of 2026-08-26 — the
-              screens and their eleven routes were deleted — and these were
-              left behind pointing at nothing.
-
-              Pressing one closed this sheet and dropped you back in the world
-              with no message, which is the same thing the product does for an
-              address that never existed. Six controls that look like doors and
-              are not is the worst kind of navigation a settings sheet can
-              offer, and it survived the deletion because the deletion swept
-              routes and stylesheets and never swept the things POINTING at
-              them. Found by walking the surfaces for the heuristic pass rather
-              than by any gate. */}
-
-          {/* SIGNING OUT IS NOT DESTRUCTIVE, so it does not ask twice — nothing
-              is lost and signing back in restores everything. It is last
-              because it is the one thing here that ends the session. */}
-          <p className="jar-ask jar-ask--after">
-            <button
-              type="button"
-              onClick={() => {
-                setAccountOpen(false);
-                void auth?.logout();
-              }}
-            >
-              {say("worldSignOutLower")}
-            </button>
-          </p>
-        </DialogSurface>
-      ) : null}
-
+          So the gear navigates, everywhere, and this sheet's contents were
+          already at the place it navigates to: the name, the address, and
+          signing out. The three panels it also opened — how it reads you, the
+          antechamber, the gardener's question — went with it. They are
+          diagnostics, not settings, and they were living behind a gear
+          because a gear was the nearest unlocked door. */}
       {pendingJoin && phase === "ready" ? (
         <DialogSurface
           className="jar-settings"

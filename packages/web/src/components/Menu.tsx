@@ -122,15 +122,24 @@ export function Menu({ locale, items, onSettings, hidden }: MenuProps): JSX.Elem
           aria-label={t(locale, "worldSettingsOpen")}
           onClick={onSettings}
         >
+          {/* A COG, NOT A SUN.
+              What was here was a small circle with eight even rays around it,
+              and in a product whose only meaning channel is LIGHT — the
+              companion dims, the field's orbs burn, a busy day is a brighter
+              day — a radiating circle reads as brightness. Founder, pointing
+              at this corner: "doesn't look like settings." It looked like a
+              theme toggle, because it was drawn like one.
+              This is a six-toothed gear: teeth, a root circle between them,
+              and a hub. Six rather than eight so the teeth survive at 20px. */}
           <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-            <circle cx="10" cy="10" r="2.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
             <path
-              d="M10 2.6v2.1M10 15.3v2.1M3.6 10H5.7M14.3 10h2.1M5.3 5.3l1.5 1.5M13.2 13.2l1.5 1.5M14.7 5.3l-1.5 1.5M6.8 13.2l-1.5 1.5"
+              d="M10.00 4.10 A5.9 5.9 0 0 1 11.13 4.21 L12.47 2.39 A8.0 8.0 0 0 1 15.35 4.05 L14.45 6.13 A5.9 5.9 0 0 1 15.11 7.05 A5.9 5.9 0 0 1 15.58 8.08 L17.83 8.34 A8.0 8.0 0 0 1 17.83 11.66 L15.58 11.92 A5.9 5.9 0 0 1 15.11 12.95 A5.9 5.9 0 0 1 14.45 13.87 L15.35 15.95 A8.0 8.0 0 0 1 12.47 17.61 L11.13 15.79 A5.9 5.9 0 0 1 10.00 15.90 A5.9 5.9 0 0 1 8.87 15.79 L7.53 17.61 A8.0 8.0 0 0 1 4.65 15.95 L5.55 13.87 A5.9 5.9 0 0 1 4.89 12.95 A5.9 5.9 0 0 1 4.42 11.92 L2.17 11.66 A8.0 8.0 0 0 1 2.17 8.34 L4.42 8.08 A5.9 5.9 0 0 1 4.89 7.05 A5.9 5.9 0 0 1 5.55 6.13 L4.65 4.05 A8.0 8.0 0 0 1 7.53 2.39 L8.87 4.21 A5.9 5.9 0 0 1 10.00 4.10 Z"
               stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
+              strokeWidth="1.3"
+              strokeLinejoin="round"
               fill="none"
             />
+            <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.3" fill="none" />
           </svg>
         </button>
       </div>

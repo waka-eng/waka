@@ -17,7 +17,12 @@ import {
   fetchKeeperKeys,
   deleteProfile,
   fetchProfiles,
+  fetchSignalDuplicates,
+  fetchTheReading,
+  fetchTheWeather,
   renameProfile,
+  resolveSignalDuplicate,
+  restoreSignal,
   revokeAgentGrant,
   revokeAgentKey,
   revokeKeeperKey,
@@ -29,7 +34,13 @@ import {
   type ApiMintedKeeperKey,
   type ApiMintedKey,
   type ApiOwnedProfile,
+  type ApiAntechamberRow,
+  type ApiReading,
+  type ApiSignalDuplicate,
 } from "../lib/api";
+import { AntechamberPanel } from "../components/AntechamberPanel";
+import { DuplicatesPanel } from "../components/DuplicatesPanel";
+import { ReadingPanel } from "../components/ReadingPanel";
 import { useAuth } from "../lib/auth-context";
 import { whenShort } from "../lib/when";
 import {
@@ -71,6 +82,30 @@ export default function ProfilePage(): JSX.Element {
   const [deleteText, setDeleteText] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * WHAT IT READS YOU BY, WHAT IT REFUSED, AND WHAT IT THINKS IS DOUBLED.
+   *
+   * These three opened from a sheet behind the gear on the home screen — the
+   * same gear that navigated here from every other page. One corner cannot
+   * mean two things, so the gear navigates now, and these came to where it
+   * navigates to. They were never settings, but they are the right kind of
+   * thing for the page settings lives on: facts about the machinery, for the
+   * person who wants to look at it, nowhere near the screen you keep things
+   * on.
+   *
+   * The reading is fetched once and held — the rules do not change under a
+   * person mid-visit. The other two are fetched on every open, because
+   * refusals and duplicate asks accrue while the panel is closed and a stale
+   * list would claim the ground refused less than it has.
+   */
+  const [readingOpen, setReadingOpen] = useState(false);
+  const [theReading, setTheReading] = useState<ApiReading | null>(null);
+  const [antechamberOpen, setAntechamberOpen] = useState(false);
+  const [antechamber, setAntechamber] = useState<ApiAntechamberRow[] | null>(null);
+  const [restoredAnchors, setRestoredAnchors] = useState<ReadonlySet<string>>(() => new Set());
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
+  const [duplicates, setDuplicates] = useState<ApiSignalDuplicate[] | null>(null);
+  const [resolvedDuplicates, setResolvedDuplicates] = useState<ReadonlySet<string>>(() => new Set());
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const locale = preferredLocale;
@@ -762,6 +797,101 @@ export default function ProfilePage(): JSX.Element {
             {submitting ? t(locale, "profileSaving") : t(locale, "profileSave")}
           </button>
         </form>
+
+        {/* THE MACHINERY, FOR WHOEVER WANTS TO LOOK AT IT.
+            Three doors that used to be behind the gear on the home screen,
+            in a sheet only that screen had. They are not settings and they
+            are not part of the loop; they are how you check what the product
+            is doing on your behalf, which is a thing to find on the page
+            about your account rather than on the page you keep things on. */}
+        <section
+          className="profile-memories-panel"
+          aria-labelledby="profile-machinery-title"
+          hidden={tab !== "you"}
+        >
+          <div className="profile-memories-heading">
+            <p className="login-eyebrow" id="profile-machinery-title">
+              {t(locale, "profileMachineryTitle")}
+            </p>
+            <p className="login-subtitle">{t(locale, "profileMachineryHint")}</p>
+          </div>
+          <p className="profile-machinery-row">
+            <button
+              type="button"
+              onClick={() => {
+                setReadingOpen(true);
+                /* fetched once and held — the rules do not change mid-visit */
+                if (!theReading) fetchTheReading().then(setTheReading).catch(() => undefined);
+              }}
+            >
+              {t(locale, "worldHowItReadsYou")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAntechamberOpen(true);
+                setAntechamber(null);
+                fetchTheWeather()
+                  .then((weather) => setAntechamber(weather.antechamber))
+                  .catch(() => setAntechamber([]));
+              }}
+            >
+              {t(locale, "worldTheAntechamber")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDuplicatesOpen(true);
+                setDuplicates(null);
+                fetchSignalDuplicates().then(setDuplicates).catch(() => setDuplicates([]));
+              }}
+            >
+              {t(locale, "worldGardenerAsks")}
+            </button>
+          </p>
+        </section>
+
+        {readingOpen ? (
+          <ReadingPanel reading={theReading} onClose={() => setReadingOpen(false)} />
+        ) : null}
+
+        {antechamberOpen ? (
+          <AntechamberPanel
+            rows={antechamber}
+            onClose={() => setAntechamberOpen(false)}
+            /* Answer in the same beat rather than waiting for a refetch; the
+               row only comes back if the server refused. */
+            onRestoreAnchor={(anchorSignalId) => {
+              setRestoredAnchors((prev) => new Set(prev).add(anchorSignalId));
+              restoreSignal(anchorSignalId).catch(() => {
+                setRestoredAnchors((prev) => {
+                  const next = new Set(prev);
+                  next.delete(anchorSignalId);
+                  return next;
+                });
+              });
+            }}
+            restoredAnchorIds={restoredAnchors}
+          />
+        ) : null}
+
+        {duplicatesOpen ? (
+          <DuplicatesPanel
+            rows={duplicates}
+            onClose={() => setDuplicatesOpen(false)}
+            onResolve={(duplicateId, act) => {
+              setResolvedDuplicates((prev) => new Set(prev).add(duplicateId));
+              resolveSignalDuplicate(duplicateId, act).catch(() => {
+                setResolvedDuplicates((prev) => {
+                  const next = new Set(prev);
+                  next.delete(duplicateId);
+                  return next;
+                });
+              });
+            }}
+            resolvedIds={resolvedDuplicates}
+          />
+        ) : null}
         <div
           className="profile-panel profile-room"
           role="tabpanel"
