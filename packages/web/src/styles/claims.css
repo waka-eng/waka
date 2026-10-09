@@ -1655,6 +1655,12 @@
      press. They were below the floor on exactly the device that has no
      pointer to fall back on. */
   min-height: 44px;
+  /* EVEN, AND NEVER FOLDED. `flex: 1 1 0` made them equal from a ZERO basis,
+     so the longest label broke first and "not true" wrapped while the two
+     shorter ones sat on one line. A `max-content` basis keeps them even
+     while there is room and never asks a label to fold. */
+  flex: 1 1 max-content;
+  white-space: nowrap;
   padding: 0 var(--sp-16);
   border: 1px solid var(--line);
   border-radius: var(--waka-r-control);
@@ -1695,11 +1701,6 @@
    the longest label is the first to break, so "not true" wrapped while the
    two shorter ones sat on one line. A basis of `max-content` keeps them even
    while there is room and never asks a label to fold. */
-.jar-char-claim-answers button {
-  flex: 1 1 max-content;
-  white-space: nowrap;
-}
-
 /* WHAT YOU CHOSE, once you have chosen. The press is what earns the light —
    this is the same channel, spent on a fact instead of on a suggestion. */
 .jar-char-claim-answers button[aria-pressed="true"] {

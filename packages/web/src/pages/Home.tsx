@@ -9924,42 +9924,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        and guards nothing, which `measure-groups.mjs` argues against by name.) */
   }, [atWall, agents, inspirations, groupFieldTick, standing, auth?.profile?.id]);
 
-  /**
-   * HOW MANY ARE BEHIND THE DOOR, WHICH CAN BE MORE THAN ARE DRAWN.
-   *
-   * Every ground in this product is loaded up to a ceiling — ten pages of two
-   * hundred for a personal or agent archive, four hundred for a room's field.
-   * The ceilings are deliberate: following a cursor forever lets one very old
-   * account stall the world's first paint. What was not deliberate is that
-   * nothing said so. At two and a half thousand memories the door read
-   * `2000 inspirations`, the ground drew two thousand orbs, and five hundred
-   * memories were absent from both with nothing said — in a product whose
-   * whole promise is that it keeps what you give it, and whose posture is no
-   * quiet corners.
-   *
-   * The failure ran in the worst direction: it UNDERSTATED. Somebody who
-   * reached it had every reason to read it as memories lost.
-   *
-   * So the door prints both numbers when they differ. The first is still the
-   * balls in the ground the caret takes you into (founder, 2026-08-25) — the
-   * second is what the archive holds.
-   */
-  const wallTotal = useMemo<number>(() => {
-    if (atWall.kind === "agent") {
-      const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
-      return a?.inspirationTotal ?? a?.inspirations.length ?? 0;
-    }
-    if (atWall.kind === "group") {
-      /* and the remainder is NOT added: `groupBeyondRef` is what the room's
-         ceiling held back, for the ROOM, and nothing says whose those are.
-         Attributing them to the member you happen to be standing in would be
-         the same lie this door was just fixed for, pointing the other way.
-         D5's promise is kept where it can be honoured — your own archive and
-         an agent's, where the count and the remainder describe one set. */
-      return groundCount(groupFieldRef.current.get(atWall.id), standing, viewerIdRef.current);
-    }
-    return (inspirations?.length ?? 0) + fieldBeyond;
-  }, [atWall, agents, inspirations, groupFieldTick, fieldBeyond, standing, auth?.profile?.id]);
+  /* `wallTotal` went with the door that printed it. It existed so that
+     "N inspirations" could say both the number in the ground and the number
+     in the archive when they disagreed — a careful fix to a control that
+     should not have been printing a number at all. */
 
   const menu = usePageMenu(locale);
 
@@ -14600,7 +14568,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               history is read at all — removing the handle there would strand
               the whole dial, which is what trying it proved: 24 of its own
               tests went red in one run. */}
-          {dial && phase === "ready" && !dialAway && (atWall.kind !== "self" || parkedAt !== null) ? (
+          {/* NOT ON AN AGENT'S WALL. Founder: "why does the agent one have
+              now? I want to make it exactly the same as my other pages."
+              The handle appeared on every wall that was not your own, which
+              bundled two different cases under one condition. A ROOM needs
+              it: a room's board is one chain and winding it is how its
+              history is read at all, which is why removing it there stranded
+              the whole dial and turned 24 of its tests red. An agent's wall
+              needs nothing of the kind — it reads like your own wall and
+              should look like it.
+              It also still appears on your own wall once you have wound away
+              from now, which is the one case where it is the way back. */}
+          {dial && phase === "ready" && !dialAway && (atWall.kind === "group" || parkedAt !== null) ? (
             <span className="jar-when-place">
             <button
               type="button"
@@ -14958,34 +14937,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </button>
       ) : null}
 
-      {/* NOT IN THE SKY (founder, 2026-08-25: "30 inspirations should be gone
-          from here"). It is the door into the ground, printed with how much
-          is behind it — and from up here the ground is two sections away, so
-          it was a door to somewhere you cannot get to in one step, sitting
-          under a sentence about the timeless half of a mind. */}
-      {phase === "ready" && atWall.kind!=="self" && !inField&&!inSky&&wallCount>0 ? (
-        <button
-          type="button"
-          className="jar-saved"
-          data-jar-chrome="1"
-          onClick={() => simApiRef.current?.toGround()}
-        >
-          <span className="jar-saved-count">
-            {/* TWO NUMBERS ONLY WHEN THEY DISAGREE. Under the ceiling — which
-                is where every account lives for a long time — this is exactly
-                what it always was: one number and the word. Past it, the door
-                stops printing the size of what arrived as though it were the
-                size of the archive. */}
-            {wallTotal > wallCount
-              ? formatMessage(locale, "worldInspirationCountCapped", {
-                  shown: wallCount,
-                  total: wallTotal,
-                })
-              : formatMessage(locale, "worldInspirationCount", { count: wallCount })}
-          </span>
-          <span className="jar-caret" aria-hidden="true" />
-        </button>
-      ) : null}
+      /* THE "N INSPIRATIONS" DOOR IS GONE FROM HERE TOO.
+         Same stale pattern as the Principles pill and Find: a control that
+         only ever rendered on walls that were not your own, from when the
+         self wall had chrome and the others had none. Founder, on an agent's
+         wall: "I want to make it exactly the same as my other pages, but this
+         one still has the 10 inspiration bottom page and all of that."
+         It is also a numeral printed on a screen, which the product's own law
+         forbids — it survived the law for exactly as long as it was invisible
+         to whoever wrote it. The archive is a destination in the switcher on
+         every wall now. */
 
       {/* The mouth belongs below the companion, but a person can also be in
           the ground, the sky, or the room's past. From there the same act is

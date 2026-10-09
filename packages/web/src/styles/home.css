@@ -439,10 +439,25 @@
   animation: none;
 }
 /* forming state speaks in the whisper register, never the poster */
+/**
+ * WHAT A WALL SAYS BEFORE IT HAS ANYTHING TO SAY.
+ *
+ * It stood in the poster's place in an italic SERIF, because it set no face
+ * and inherited the world's. That is the "weird cursive thing" the founder
+ * named when every other surface was moved onto one face, and it survived
+ * the sweep by being an empty state nobody was looking at — it only shows on
+ * a wall with nothing on it yet.
+ *
+ * Same face as the sentence it is standing in for, and upright. An italic
+ * here reads as a caption apologising for the missing thing; this is just
+ * the true thing a new wall has to say.
+ */
 .jar-forming {
   margin: 0;
+  font-family: var(--waka-face);
   font-size: var(--t-note);
-  font-style: italic;
+  font-weight: 300;
+  font-style: normal;
   color: var(--jar-muted);
 }
 .jar-forming--attention {
