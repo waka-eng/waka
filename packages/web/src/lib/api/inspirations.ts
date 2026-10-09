@@ -81,6 +81,10 @@ export interface ApiInspiration {
   text: string;
   kind: ApiInspirationKind | null;
   source: ApiInspirationSource;
+  /** What this keep is about, in a word or two, read off the keep itself.
+      Absent on an older server and null for anything the reading could not
+      place — both mean "in all, and in nothing else". */
+  category?: string | null;
   /** Whether the rooms this account is in can see it. Never inferred. */
   visibility: ApiInspirationVisibility;
   createdAt: string;

@@ -46,7 +46,7 @@ const EXTRACTION_INPUT: SignalCandidateExtractionInput = {
   attachments: [
     { kind: "page_body", label: "example.com", text: "An article about workspaces." },
   ],
-  existingStatements: [{ id: signalId, statement: "Quiet rooms are where honest work happens." }],
+  existingCategories: [], existingStatements: [{ id: signalId, statement: "Quiet rooms are where honest work happens." }],
   relatedInspirations: [],
 };
 
@@ -172,7 +172,7 @@ describe("extractSignalCandidates", () => {
 
   it("decodes deterministically and fences the capture so it reads as data", async () => {
     process.env.GEMINI_API_KEY = "test-key";
-    const fetchFn = vi.fn().mockResolvedValue(geminiResponse({ statements: [] }));
+    const fetchFn = vi.fn().mockResolvedValue(geminiResponse({ statements: [], category: null }));
     vi.stubGlobal("fetch", fetchFn);
 
     await createGeminiModelProvider().extractSignalCandidates(EXTRACTION_INPUT);
@@ -206,7 +206,7 @@ describe("extractSignalCandidates", () => {
 
     await expect(
       createGeminiModelProvider().extractSignalCandidates(EXTRACTION_INPUT),
-    ).resolves.toEqual({ statements: [] });
+    ).resolves.toEqual({ statements: [], category: null });
   });
 
   it("throws on a malformed envelope — a malfunction is never recorded as nothing-to-learn", async () => {

@@ -103,6 +103,20 @@ export interface Inspiration {
   attachments: ApiAttachmentSummary[];
   /** Saved answers attached to this inspiration; skipped prompts do not mark it reflected. */
   reflectionCount: number;
+  /**
+   * WHAT THIS KEEP IS ABOUT, in one or two words, read off the keep itself.
+   *
+   * Not a folder and not a tag: nothing is filed and nothing is applied by
+   * hand. Saving has to cost nothing, and a taxonomy a person maintains is a
+   * cost charged at exactly the moment the product promises not to charge
+   * one — so this is derived, the same way a claim is.
+   *
+   * `null` until it has been read, and `null` forever for anything the
+   * reading could not place. The archive page groups by it and shows the row
+   * of tabs only once there is more than one; an unplaced keep is in "all"
+   * and in nothing else, which is the honest place for it.
+   */
+  category: string | null;
 }
 
 /** One inspiration, opened: the words in full and what was hanging off them. */
@@ -236,6 +250,7 @@ export function toInspiration(row: {
   visibility?: ApiInspirationVisibility;
   attachmentSummary: ApiAttachmentSummary[];
   reflectionCount: number;
+  category?: string | null;
 }): Inspiration {
   return {
     id: row.id,
@@ -244,6 +259,7 @@ export function toInspiration(row: {
     isPublic: row.visibility === "public",
     kind: row.kind,
     source: row.source,
+    category: row.category ?? null,
     capturedMs: ms(row.createdAt),
     updatedMs: ms(row.updatedAt) || ms(row.createdAt),
     attachments: Array.isArray(row.attachmentSummary) ? row.attachmentSummary : [],
@@ -474,6 +490,7 @@ export function toInspirationDetail(row: Awaited<ReturnType<typeof fetchInspirat
     text: row.text,
     kind: row.kind,
     source: row.source,
+    category: row.category ?? null,
     capturedMs: ms(row.createdAt),
     updatedMs: ms(row.updatedAt) || ms(row.createdAt),
     attachments: (row.attachments ?? []).map((a) => ({

@@ -172,7 +172,10 @@ const MAX_INSPIRATION_CHARS = 4_000;
 const MAX_ATTACHMENT_CHARS = 2_000;
 const MAX_REFLECTION_CHARS = 800;
 /** At most three candidates per capture — see the extraction instruction. */
-export const MAX_SIGNAL_CANDIDATES = 3;
+export /** A tab's worth of words. Longer than this is a sentence, not a shelf. */
+const MAX_CATEGORY_CHARS = 32;
+
+const MAX_SIGNAL_CANDIDATES = 3;
 /**
  * How many earlier captures one candidate may cite as co-witnesses. A cap on
  * apophenia: the model connecting everything to everything is the failure
@@ -444,6 +447,23 @@ Return 0 to ${MAX_SIGNAL_CANDIDATES} statements. Zero is the right answer for a
 capture that carries no meaningful pattern or interest — a logistics note, a reminder, a
 bare link with nothing said about it. Never pad, never template, never write
 a sentence you could have written before reading the capture.
+
+Separately, name what this capture is ABOUT as \`category\`: its subject, in one
+or two plain words, in the capture's own language. This is not a statement
+about the person and it is not a judgement — a capture that yields zero
+statements still has a subject, and a logistics note is still about
+something.
+
+REUSE BEFORE YOU COIN. You are shown the categories this person's archive
+already uses. If this capture belongs under one of them, return that one
+EXACTLY as written, matching its case. Only invent a category when nothing
+shown is a fair home for it, and then make it the broadest honest word rather
+than a precise one: these are the shelves of an archive, so a handful that
+each hold many is useful and fifty that each hold one is not. Prefer a plain
+noun a stranger would understand over a clever or personal label.
+
+Return \`category\` as null only when the capture is genuinely about nothing
+nameable. An empty string is not an answer.
 `.trim();
 
 const signalExtractionResponseSchema: ResponseSchema = {
@@ -478,6 +498,12 @@ const signalExtractionResponseSchema: ResponseSchema = {
         propertyOrdering: ["statement", "reason", "quote", "relatedEvidence"],
       },
     },
+    category: {
+      type: "STRING",
+      description:
+        "What this capture is about, in one or two plain words. Reuse an existing category exactly when one fits.",
+      nullable: true,
+    },
   },
   required: ["statements"],
 };
@@ -495,6 +521,7 @@ const extractedStatementsSchema = z.object({
       }),
     )
     .optional(),
+  category: z.string().nullish(),
 });
 
 function buildSignalExtractionPrompt(input: SignalCandidateExtractionInput): string {
@@ -529,6 +556,15 @@ function buildSignalExtractionPrompt(input: SignalCandidateExtractionInput): str
         : `Description of an image they saved${attachment.label ? ` (${attachment.label})` : ""}. Machine-written.`;
     sections.push(
       fence("attachment", `${provenance}\n${clip(attachment.text, MAX_ATTACHMENT_CHARS)}`),
+    );
+  }
+
+  /* Shown BEFORE the existing statements because it governs a different
+     answer, and shown at all because without it every capture coins its own
+     category — see `existingCategories` on the input type. */
+  if (input.existingCategories.length > 0) {
+    sections.push(
+      fence("existing categories", input.existingCategories.map((name) => `- ${name}`).join("\n")),
     );
   }
 
@@ -580,7 +616,7 @@ export function parseSignalCandidates(payload: unknown): SignalCandidateExtracti
     console.warn("[gemini] signal extraction payload failed validation", {
       issues: parsed.error.issues,
     });
-    return { statements: [] };
+    return { statements: [], category: null };
   }
 
   const statements = (parsed.data.statements ?? [])
@@ -609,7 +645,14 @@ export function parseSignalCandidates(payload: unknown): SignalCandidateExtracti
     .filter((candidate) => candidate.statement.length > 0)
     .slice(0, MAX_SIGNAL_CANDIDATES);
 
-  return { statements };
+  /* A shelf label, held to being one: trimmed, bounded, and never the empty
+     string wearing a category's clothes. The length cap is the tab row's —
+     a phrase that cannot be read in a tab is not a category, whatever the
+     model meant by it. */
+  const named = (parsed.data.category ?? "").trim();
+  const category = named.length > 0 && named.length <= MAX_CATEGORY_CHARS ? named : null;
+
+  return { statements, category };
 }
 
 export async function extractSignalCandidates(
@@ -621,12 +664,12 @@ export async function extractSignalCandidates(
     input.inspiration.text.trim().length > 0 ||
     input.reflections.length > 0 ||
     input.attachments.length > 0;
-  if (!hasMaterial) return { statements: [] };
+  if (!hasMaterial) return { statements: [], category: null };
 
   const payload = await callGemini(buildSignalExtractionRequest(input), "signal extraction");
   /* a considered refusal is terminal — nothing to learn, and a retry would
      be refused again */
-  if (payload === MODEL_DECLINED) return { statements: [] };
+  if (payload === MODEL_DECLINED) return { statements: [], category: null };
   /* null is the transport saying it never got a usable answer — a different
      fact from a valid answer with zero statements. Returning [] here marked
      the capture as derived-with-nothing forever; throwing fails the attempt

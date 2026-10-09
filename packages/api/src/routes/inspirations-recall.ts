@@ -187,6 +187,8 @@ export function registerRecallRoutes(
     const selection={
         id: inspirations.id,
         kind: inspirations.kind,
+        /* The shelf, so the archive page can group without a second read. */
+        category: inspirations.category,
         source: inspirations.source,
         createdAt: inspirations.createdAt,
         cursorCreatedAt:sql<string>`to_char(${inspirations.createdAt} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,

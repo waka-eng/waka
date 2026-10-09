@@ -124,7 +124,7 @@ describe("evidence uses the material that was actually read", () => {
     const f = await fixture();
     const deps = stubs("A walk by the water");
     await deriveSignalsForInspiration({ inspirationId: f.inspirationId, reason: "created" }, { db: t.db as never, ...deps });
-    vi.spyOn(deps.modelProvider, "extractSignalCandidates").mockResolvedValue({ statements: [] });
+    vi.spyOn(deps.modelProvider, "extractSignalCandidates").mockResolvedValue({ statements: [], category: null });
     const result = await deriveSignalsForInspiration({ inspirationId: f.inspirationId, reason: "edited" }, { db: t.db as never, ...deps });
     expect(result.status).toBe("no_candidates");
     expect(await t.sql`SELECT id FROM signal_evidence WHERE inspiration_id = ${f.inspirationId}`).toHaveLength(1);
@@ -146,7 +146,7 @@ describe("evidence uses the material that was actually read", () => {
     const deps = stubs("unused");
     vi.spyOn(deps.modelProvider, "extractSignalCandidates").mockImplementation(async () => {
       await t.sql`DELETE FROM reflections WHERE id = ${f.reflectionId}`;
-      return { statements: [] };
+      return { statements: [], category: null };
     });
     await expect(deriveSignalsForInspiration({ inspirationId: f.inspirationId, reason: "created" }, { db: t.db as never, ...deps }))
       .rejects.toThrow(/material changed/i);

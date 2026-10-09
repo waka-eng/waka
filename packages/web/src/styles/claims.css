@@ -445,6 +445,63 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * The shelves
+ *
+ * A row of plain words above the grid, in the pill register the chat's
+ * openers already use — quiet at rest, inked when chosen, because inking the
+ * chosen one is how this product shows selection everywhere else and light is
+ * the only channel it has.
+ *
+ * IT SCROLLS SIDEWAYS RATHER THAN WRAPPING. An archive with eleven shelves
+ * would take three lines of tabs above the thing you came to look at, and the
+ * header would grow every time the reading learned a new word. One line that
+ * slides keeps the grid where it was.
+ * ------------------------------------------------------------------------- */
+
+.waka-tabs {
+  display: flex;
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-24);
+  padding-bottom: var(--sp-4);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.waka-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.waka-tab {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  cursor: pointer;
+}
+
+.waka-tab:hover {
+  color: var(--ink);
+}
+
+/* Inked, not coloured. */
+.waka-tab--on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.waka-tab:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
  * The card grid
  *
  * Uniform tiles: a card is for a discrete item you could reorder or remove on
