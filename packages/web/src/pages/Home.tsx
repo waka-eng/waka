@@ -51,7 +51,6 @@
  */
 
 import {
-  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -13500,52 +13499,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               (`Ball.lens`) was never written from it, so it filtered nothing.
               The field field and the derive side survive for the rebuild. */}
 
-          {/* THE WAYS OUT: a neighbour's name waiting at the side it lives
-              past. They live in headquarters' own chrome, so they scroll away
-              with it — which is also how the field section ends up with none,
-              exactly as it should, since there is nothing different to travel
-              to down there.
+          {/* THE WAYS OUT ARE NOT ADVERTISED HERE ANY MORE.
+              A neighbouring wall's name used to wait at each margin — "‹ DEMO
+              AGENT" down the left edge of the home screen, a caret and a name
+              offering a walk sideways into an agent's wall or a room's.
+              Founder: "we're going to get rid of the rooms and agent related
+              stuff for now."
 
-              `.jar-way` is now the ONLY thing in these margins: the create
-              rails that shared them moved to the axis at the bottom, beside
-              the places they would join. The two once shared a class name
-              through two whole conflicting stylesheets and neither got the
-              layout it was written for; there is nothing left to collide
-              with. */}
-          {walls.map((w, i) => {
-            const left = walls[i - 1] ?? null;
-            const right = walls[i + 1] ?? null;
-            return (
-              <Fragment key={`edges-${spaceKey(w)}`}>
-                {left ? (
-                  <button
-                    type="button"
-                    className="jar-way jar-label"
-                    data-jar-chrome="1"
-                    style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col} + 10px)` }}
-                    onPointerDown={() => loadWall(left)}
-                    onClick={() => simApiRef.current?.travel(-1)}
-                  >
-                    <span className="jar-caret jar-caret--left" aria-hidden="true" />
-                    <span>{wallName(left)}</span>
-                  </button>
-                ) : null}
-                {right ? (
-                  <button
-                    type="button"
-                    className="jar-way jar-way--r jar-label"
-                    data-jar-chrome="1"
-                    style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col + 1} - 10px)` }}
-                    onPointerDown={() => loadWall(right)}
-                    onClick={() => simApiRef.current?.travel(1)}
-                  >
-                    <span>{wallName(right)}</span>
-                    <span className="jar-caret jar-caret--right" aria-hidden="true" />
-                  </button>
-                ) : null}
-              </Fragment>
-            );
-          })}
+              The walls themselves are untouched: the columns still exist, the
+              camera still travels them, and /w/:wall still answers. This is
+              the same ruling page-menu.ts already applied to the menu — they
+              are not destinations the product OFFERS, so nothing on the
+              screen the product opens on points at one. */}
         </div>
       ) : null}
 
