@@ -82,7 +82,7 @@ import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
 import { useInspirationProcessing } from '../lib/use-inspiration-processing';
 import { useAuthoredSave } from '../lib/use-authored-save';
 import { useInspirationDraft } from '../lib/use-inspiration-draft';
-import { useAudioRecording } from '../lib/use-audio-recording';
+import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
 import { useReviewEntry } from '../lib/use-review-entry';
@@ -5860,8 +5860,29 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * The features quantise against the body's own live cell instead (see
        * the eye and nub passes), which is what actually makes them agree.
        */
+      /**
+       * WHAT HANGS OFF THE CHIN COUNTS AS PART OF THE COMPANION.
+       *
+       * Founder, on a phone: "things feel so skewed to the bottom."
+       *
+       * The band below centred the BODY between the reading and the box, and
+       * that was right when the only thing under the chin was a one-line
+       * receipt. It is not right now: the claim lives there — a sentence and
+       * three answers — so the thing a person actually sees as "the creature"
+       * is a block two hundred pixels taller than the body, and centring the
+       * body left all of that growing downward into the gap above the box
+       * while the air above the body stayed untouched. The result reads as a
+       * screen with a hole in the lower third.
+       *
+       * Measured, not assumed, and for the same reason the box's own height
+       * is measured: the voice block is a claim or a receipt or nothing at
+       * all, and a constant would be wrong two of those three times.
+       */
+      const voiceH = root!.querySelector<HTMLElement>(".jar-char-say")?.offsetHeight ?? 0;
       const lo = hqH + companion.size * 0.5 + gap;
-      const hi = seam - companion.size * 0.5 - gap;
+      /* The chin sits at `size * 0.62`, so the voice block's own height is
+         what remains between the chin and the box. */
+      const hi = seam - companion.size * 0.62 - voiceH - gap;
       /*
        * THE COMPANION SITS IN THE MIDDLE OF THE SCREEN, not in the middle of
        * what is left over.
@@ -13699,6 +13720,33 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
               {!mouthOpen ? (
                 <div className="waka-composer-foot" id="jar-keep-hint">
+                  {/* SPEAKING INTO IT (founder: "I want to have a button to
+                      let someone speak into it"). It is the recorder that
+                      already exists — the one the opened composer uses — and
+                      it keeps the audio as an audio inspiration rather than
+                      transcribing it into the field. A recording is the
+                      material; a transcript is a reading of it, and this
+                      product's whole shape is that readings are made later
+                      from material kept as it arrived.
+                      Absent, not disabled, where the browser cannot record:
+                      a control that can never work is not a control. */}
+                  {supportedRecordingType() ? (
+                    <button
+                      type="button"
+                      className={`waka-composer-mic${recording.phase === 'recording' ? ' waka-composer-mic--on' : ''}`}
+                      aria-label={say(recording.phase === 'recording' ? 'worldComposerStopRecording' : 'worldComposerRecord')}
+                      aria-pressed={recording.phase === 'recording'}
+                      disabled={recording.phase === 'requesting' || recording.phase === 'finishing' || !composerDraft.available}
+                      onClick={() => { if (recording.phase === 'recording') void recording.stop(); else void recording.start(); }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                        <rect x="5.6" y="1.6" width="4.8" height="8.2" rx="2.4"
+                          stroke="currentColor" strokeWidth="1.3" fill="none" />
+                        <path d="M3.2 7.6a4.8 4.8 0 0 0 9.6 0M8 12.4V14.4"
+                          stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
+                      </svg>
+                    </button>
+                  ) : null}
                   {/* WHAT IS NOT IN THIS FOOTER ANY MORE.
                       "Enter to keep" — founder pointed at exactly this as the
                       example of a thing that is not 100% necessary. It was
@@ -13711,6 +13759,40 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       that agent needs; it is on the settings page now, beside
                       them.
                       What is left is the action. */}
+                  {/* TWO DESTINATIONS FOR ONE PIECE OF TEXT, AND THAT IS NOT
+                      TWO FEATURES.
+                      Founder: "the bottom part where you're able to capture an
+                      inspiration, I think we should also let some people just
+                      enter the chat mode from there as well. But how do we
+                      make that natural without making the same component feel
+                      like it has like two random features?"
+                      The thing that made it feel like two was the MODE TOGGLE
+                      this replaced: it asked you to declare save-or-chat
+                      before typing a word, which is classifying an intention
+                      you have not formed yet, and the cost of that hesitation
+                      landed on saving — the one act that must be free.
+                      DECIDING BEFORE YOU TYPE IS A MODE. DECIDING AFTER YOU
+                      TYPE IS AN ACTION. One box, one thing typed, and at the
+                      end of it two things you could do with what you wrote.
+                      Keeping stays the primary and the placeholder still
+                      describes only keeping, because keeping is what the
+                      product is for; asking is the quieter one beside it, for
+                      the moment you look at what you typed and realise it was
+                      a question.
+                      NOT AUTO-DETECTED. Reading a trailing "?" as "you meant
+                      to ask" would misfire on this product's own material —
+                      an archive here already holds "how do we ensure Korean is
+                      part of it?" as a kept inspiration. */}
+                  {draft.trim() ? (
+                    <button
+                      type="button"
+                      className="waka-composer-ask"
+                      disabled={talking}
+                      onClick={() => { void talkAbout({ id: '', text: draft.trim() }); }}
+                    >
+                      {say(talking ? 'worldTalkOpening' : 'worldComposerAsk')}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="waka-composer-send"

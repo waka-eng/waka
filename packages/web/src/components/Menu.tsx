@@ -84,6 +84,16 @@ export interface MenuProps {
   items: readonly MenuItem[];
   /** Which one is being looked at; `null` on a page that is none of them. */
   current?: string | null;
+  /**
+   * What to call a page that is none of the three.
+   *
+   * The switcher's job is to say where you are, and falling back to the first
+   * rung would have it say "Your inspirations" while you are in a
+   * conversation — a control that misnames your location is worse than one
+   * that says nothing. A page outside the three names itself here and the
+   * list still opens, so the way back is unchanged.
+   */
+  label?: MenuItem["label"];
   /** Everything about this account and its agents. */
   onSettings: () => void;
   /** Talking, from a day you have nothing to keep. */
@@ -92,7 +102,7 @@ export interface MenuProps {
   hidden?: boolean;
 }
 
-export function Menu({ locale, items, current, onSettings, onChat, hidden }: MenuProps): JSX.Element | null {
+export function Menu({ locale, items, current, label, onSettings, onChat, hidden }: MenuProps): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const [explaining, setExplaining] = useState(false);
   const panelId = useId();
@@ -128,6 +138,7 @@ export function Menu({ locale, items, current, onSettings, onChat, hidden }: Men
      control, because the switcher's job there is still to offer a way back
      into the three. */
   const here = items.find((item) => item.id === current) ?? items[0];
+  const name = label ?? here?.label;
 
   return (
     <>
@@ -172,7 +183,7 @@ export function Menu({ locale, items, current, onSettings, onChat, hidden }: Men
               onBlur={() => setExplaining(false)}
               onClick={() => { setExplaining(false); setOpen((value) => !value); }}
             >
-              <span>{t(locale, here.label)}</span>
+              <span>{name ? t(locale, name) : ""}</span>
               {/* The caret turns over when the list is down: the one piece of
                   motion here, and it explains rather than decorates. */}
               <svg
@@ -193,7 +204,7 @@ export function Menu({ locale, items, current, onSettings, onChat, hidden }: Men
                 />
               </svg>
             </button>
-            {explaining && !open && here.explain?.length ? (
+            {explaining && !open && !label && here.explain?.length ? (
               <span id={explainId} role="note" className="waka-switch-card">
                 {here.explain.map((line) => (
                   <span key={line}>{line}</span>

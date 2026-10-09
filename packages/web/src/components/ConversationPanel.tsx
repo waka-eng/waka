@@ -162,7 +162,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const otherDrafts=drafts.filter(row=>row.value.content.trim()&&row.value.id!==draft?.id);
   return <main ref={root} className="chat-page" data-memory-open={memoryOpen||undefined}>
     <div className="chat-top">
-      <h1 className="waka-page-title">{say('worldMenuTalk')}</h1>
+      {/* The switcher at the top of the screen names this page too, so the
+          name is not printed again here. See Menu's `label`. */}
       {/* Past conversations, and what the reply was allowed to read. Both
           open as sheets; neither is a column standing open beside a
           conversation it is not part of. */}

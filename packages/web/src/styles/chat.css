@@ -104,6 +104,8 @@
 
 .chat-top {
   display: flex;
+  /* The row is controls only now; the name is on the switcher. */
+  justify-content: flex-end;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--sp-8) var(--sp-16);
@@ -113,12 +115,6 @@
   margin: 0 auto;
   padding: calc(var(--waka-corner) + var(--sp-12) + env(safe-area-inset-top))
     clamp(20px, 6vw, 28px) var(--sp-12);
-}
-
-/* The page title is the one every other page already uses — same size,
-   same casing, same colour. It only needs to be told to take the slack. */
-.chat-top .waka-page-title {
-  margin-right: auto;
 }
 
 
