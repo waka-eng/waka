@@ -1780,3 +1780,90 @@
   color: var(--muted);
   cursor: default;
 }
+
+
+/* ---------------------------------------------------------------------------
+ * SETTINGS
+ *
+ * It was built on the sign-in page's shell — a centred card with an eyebrow
+ * and a title — which is right for a door and wrong for the room behind it.
+ * These rules unbuild the card and let the page's own sections stand on the
+ * page's own ground, the way the archive's cards and the principles' lines do.
+ * The sections keep their internal layout; only the frame changes.
+ * ------------------------------------------------------------------------- */
+
+.profile-page {
+  max-width: 44rem;
+}
+
+/* No card: the page IS the surface. A panel inside a panel on a page that
+   holds nothing else is a frame drawn around the whole window. */
+.profile-page .profile-card {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.profile-page .profile-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-12) var(--sp-20);
+  margin-bottom: var(--sp-32);
+}
+
+/* The address you are signed in as — the one fact a settings page owes you
+   on arrival, and the only thing left in the header now the title moved to
+   the switcher. */
+.profile-page .profile-email {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  color: var(--muted);
+}
+
+.profile-page .profile-signout-button {
+  min-height: var(--sp-32);
+  padding: 0 var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  cursor: pointer;
+}
+
+.profile-page .profile-signout-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+/* Each group is a section on a page, separated by a rule rather than by a
+   raised panel — one surface, as everywhere else in the product. */
+.profile-page .profile-memories-panel,
+.profile-page .profile-public-panel,
+.profile-page .profile-danger-panel {
+  padding-top: var(--sp-24);
+  margin-top: var(--sp-24);
+  border-top: 1px solid var(--line);
+}
+
+.profile-page .login-eyebrow {
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.profile-page .login-subtitle {
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  color: var(--muted);
+}
