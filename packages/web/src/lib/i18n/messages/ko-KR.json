@@ -867,5 +867,12 @@
   "worldKeepSend": "담기",
   "worldKeepItems": "{count}개 첨부",
   "worldKeepShowItems": "첨부한 것 보기",
-  "worldKeepHideItems": "첨부한 것 숨기기"
+  "worldKeepHideItems": "첨부한 것 숨기기",
+  "worldDaysTitle": "지난 날들",
+  "worldDaysLoad": "지난 날들을 여는 중…",
+  "worldDaysFail": "지난 날들을 열지 못했어요.",
+  "worldDaysEmpty": "아직 담은 게 없어요. 무언가 담은 날은 그날의 점에 불이 들어와요.",
+  "worldDaysKept": "{count}개 담음",
+  "worldDaysNone": "담은 것 없음",
+  "worldMenuDays": "지난 날들"
 }

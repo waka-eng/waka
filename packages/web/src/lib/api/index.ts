@@ -56,6 +56,7 @@ export * from "./inspiration-save-requests";
 export * from "./attachments";
 export * from "./signals";
 export * from "./claims";
+export * from "./inspiration-days";
 export * from "./principles";
 export * from "./top-of-mind";
 export * from "./groups";

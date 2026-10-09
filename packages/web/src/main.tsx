@@ -36,6 +36,7 @@ import LoginPage from "./pages/Login";
 import { Claims } from "./pages/Claims";
 import { Inspirations } from "./pages/Inspirations";
 import { Principles } from "./pages/Principles";
+import { Days } from "./pages/Days";
 import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
 import PublicProfilePage from "./pages/PublicProfile";
@@ -159,6 +160,7 @@ ReactDOM.createRoot(root).render(
               be sent. */}
           <Route path="/inspirations" element={<RequireAuth><Inspirations /></RequireAuth>} />
           <Route path="/principles" element={<RequireAuth><Principles /></RequireAuth>} />
+          <Route path="/days" element={<RequireAuth><Days /></RequireAuth>} />
           <Route path="/:handle" element={<PublicProfilePage />} />
           <Route
             path="/onboarding"

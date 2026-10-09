@@ -867,5 +867,12 @@
   "worldKeepSend": "Keep",
   "worldKeepItems": "{count} attached",
   "worldKeepShowItems": "Show what's attached",
-  "worldKeepHideItems": "Hide what's attached"
+  "worldKeepHideItems": "Hide what's attached",
+  "worldDaysTitle": "Your days",
+  "worldDaysLoad": "Opening your days…",
+  "worldDaysFail": "Couldn't open your days.",
+  "worldDaysEmpty": "Nothing kept yet. Every day you keep something, its dot lights up.",
+  "worldDaysKept": "{count} kept",
+  "worldDaysNone": "nothing kept",
+  "worldMenuDays": "Your days"
 }
