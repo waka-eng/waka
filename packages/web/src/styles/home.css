@@ -1532,7 +1532,7 @@
   margin: 0;
   font-family: Jost, Pretendard, sans-serif;
   font-weight: 300;
-  font-size: 17px;
+  font-size: var(--t-lead);
   line-height: 1.4;
   color: var(--jar-ink);
   text-wrap: balance;
@@ -1684,7 +1684,7 @@
   border-bottom: 1px solid var(--jar-panel-edge);
   color: var(--jar-ink);
   font-family: inherit;
-  font-size: 16px;
+  font-size: var(--t-input);
   outline: none;
 }
 .jar-roomform-err {
@@ -2411,7 +2411,7 @@
 
 .jar-settings-name {
   margin: 0 0 var(--sp-14);
-  font-size: 17px;
+  font-size: var(--t-lead);
   line-height: 1.35;
   color: var(--jar-ink);
   display: flex;
@@ -3156,7 +3156,7 @@
   margin: 0 0 var(--sp-10);
   font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
   font-weight: 300;
-  font-size: 16px;
+  font-size: var(--t-input);
   line-height: 1.45;
   color: var(--jar-ink);
 }
@@ -4527,7 +4527,7 @@
    point of an explicit order. Everything above in this file is in `product`.
    And `chrome.css` styles bare elements for the flat screens:
 
-       textarea { border-bottom: 1px solid var(--w-edge); font-size: 16px; }
+       textarea { border-bottom: 1px solid var(--w-edge); font-size: var(--t-input); }
        body textarea { font-size: var(--t-body); }
 
    The world's mouth is a `<textarea>`, so it was being given a form's

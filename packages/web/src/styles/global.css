@@ -341,7 +341,7 @@
 .nc-note-body {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 24px;
+  font-size: var(--t-reading);
   line-height: 1.2;
   font-weight: 450;
   letter-spacing: 0;
@@ -411,7 +411,7 @@
   }
 
   .nc-note--featured .nc-note-body {
-    font-size: 22px;
+    font-size: var(--t-lead);
   }
 
   }
@@ -1008,7 +1008,7 @@ body.dropped .bg-blob.b3 {
   padding-right: var(--sp-10);
   color: var(--ink);
   font-family: var(--font-serif);
-  font-size: 24px;
+  font-size: var(--t-reading);
   line-height: 1;
 }
 

@@ -127,7 +127,7 @@ select {
   border-radius: 0;
   color: var(--w-ink);
   font-family: inherit;
-  font-size: 16px;
+  font-size: var(--t-input);
   outline: none;
   transition: border-color 0.2s ease;
 }
@@ -1219,7 +1219,7 @@ body textarea {
   body input,
   body select,
   body textarea {
-    font-size: 16px;
+    font-size: var(--t-input);
   }
 }
 
@@ -1490,7 +1490,7 @@ body .profile-signout-button {
 @media (max-width: 600px) { .jar-attachment-transcript textarea { font-size: var(--t-lead); } }
 .jar-saved-attachment a { color: var(--w-ink); overflow-wrap: anywhere; }
 .jar-saved-attachment button { min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); color: var(--w-ink); background: none; border: 1px solid var(--w-edge); border-radius: var(--sp-8); font: inherit; cursor: pointer; }
-@media (max-width: 600px) { .jar-inspiration-composer { padding: var(--sp-16); } .jar-composer-footer { align-items: stretch; flex-direction: column; } .jar-composer-actions { justify-content: flex-end; } .jar-inspiration-composer .jar-composer-text { font-size: 16px; } }
+@media (max-width: 600px) { .jar-inspiration-composer { padding: var(--sp-16); } .jar-composer-footer { align-items: stretch; flex-direction: column; } .jar-composer-actions { justify-content: flex-end; } .jar-inspiration-composer .jar-composer-text { font-size: var(--t-input); } }
 
 /* Personal actions share a readable scale; the world and its artwork stay quiet. */
 .jar-mouth-rest:not(.jar-mouth-rest--said), .jar .jar-capture-shortcut {

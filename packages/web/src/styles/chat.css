@@ -56,7 +56,7 @@
   color: var(--ink);
   font-family: var(--waka-face);
   font-weight: 300;
-  font-size: 16px;
+  font-size: var(--t-body);
   line-height: 1.6;
   text-align: left;
 }
@@ -71,7 +71,7 @@
   background: none;
   color: var(--muted);
   font-family: var(--waka-face);
-  font-size: 13px;
+  font-size: var(--t-ui);
   font-weight: 300;
   cursor: pointer;
 }
@@ -124,7 +124,7 @@
 
 .chat-page .chat-top button {
   padding: 0;
-  font-size: 12px;
+  font-size: var(--t-fine);
 }
 
 .chat-options {
@@ -162,7 +162,7 @@
 
 .chat-options-menu label {
   display: block;
-  font-size: 12px;
+  font-size: var(--t-fine);
   color: var(--muted);
 }
 
@@ -212,7 +212,7 @@
 .chat-sending > span {
   display: block;
   margin-bottom: var(--space-2);
-  font-size: 11px;
+  font-size: var(--t-meta);
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -271,7 +271,7 @@
 .chat-welcome h2 {
   margin: 0 0 var(--space-3);
   font-family: var(--waka-face);
-  font-size: 22px;
+  font-size: var(--t-reading);
   font-weight: 300;
   line-height: 1.4;
   color: var(--ink);
@@ -280,7 +280,7 @@
 
 .chat-welcome > p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-ui);
   color: var(--muted);
 }
 
@@ -306,13 +306,13 @@
 .chat-topic {
   margin-bottom: var(--space-7);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--t-fine);
   letter-spacing: 0.06em;
 }
 
 .chat-topic blockquote {
   margin: var(--space-2) 0 0;
-  font-size: 16px;
+  font-size: var(--t-lead);
   letter-spacing: normal;
   line-height: 1.5;
   color: var(--ink);
@@ -328,7 +328,7 @@
 
 .chat-source-summary {
   margin-top: var(--space-3);
-  font-size: 12px;
+  font-size: var(--t-fine);
   color: var(--muted);
 }
 
@@ -354,7 +354,7 @@
   border: var(--space-px) solid var(--line);
   border-radius: 10px;
   text-align: left;
-  font-size: 12px;
+  font-size: var(--t-fine);
 }
 
 .chat-source-date {
@@ -369,7 +369,7 @@
 
 .chat-reading-choices > p {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-fine);
   color: var(--muted);
 }
 
@@ -389,7 +389,7 @@
   justify-content: space-between;
   gap: var(--space-3);
   width: 100%;
-  font-size: 11px;
+  font-size: var(--t-meta);
   letter-spacing: 0.06em;
   color: var(--muted);
 }
@@ -406,7 +406,7 @@
   border: var(--space-px) solid var(--line);
   border-radius: 14px;
   background: var(--waka-raised);
-  font-size: 13px;
+  font-size: var(--t-ui);
 }
 
 .chat-page .jar-conversation-actions {
@@ -420,7 +420,7 @@
 .chat-page .jar-item-actions > summary {
   margin: 0;
   padding-inline: 0;
-  font-size: 12px;
+  font-size: var(--t-fine);
 }
 
 .chat-page .jar-item-actions {
@@ -436,7 +436,7 @@
   align-items: center;
   gap: var(--space-2);
   margin-top: var(--space-3);
-  font-size: 13px;
+  font-size: var(--t-ui);
 }
 
 .chat-page .jar-conversation-adopt input {
@@ -452,7 +452,7 @@
 
 .chat-muted {
   margin: var(--space-2) 0 0;
-  font-size: 12px;
+  font-size: var(--t-fine);
   color: var(--muted);
 }
 
@@ -462,7 +462,7 @@
   box-sizing: border-box;
   margin: 0 auto;
   padding: 0 clamp(20px, 6vw, 28px) var(--space-3);
-  font-size: 12px;
+  font-size: var(--t-fine);
   color: var(--muted);
 }
 
@@ -474,7 +474,7 @@
   margin-bottom: var(--space-2);
   padding-left: var(--space-3);
   border-left: var(--space-px) solid var(--line);
-  font-size: 12px;
+  font-size: var(--t-fine);
   color: var(--muted);
 }
 
@@ -490,7 +490,7 @@
   align-items: center;
   gap: var(--space-3);
   margin-block: var(--space-7);
-  font-size: 12px;
+  font-size: var(--t-fine);
   letter-spacing: 0.06em;
   color: var(--muted);
 }
@@ -583,7 +583,7 @@
   background: transparent;
   color: var(--ink);
   font-family: var(--waka-face);
-  font-size: 16px;
+  font-size: var(--t-input);
   font-weight: 300;
   line-height: 1.45;
   resize: none;
@@ -605,7 +605,7 @@
   background: var(--bg);
   color: var(--ink);
   font-family: var(--waka-face);
-  font-size: 13px;
+  font-size: var(--t-ui);
 }
 
 /* The primary action, and the only filled control on the surface — the same
@@ -619,7 +619,7 @@
   border-radius: 8px;
   background: var(--ink);
   color: var(--bg);
-  font-size: 13px;
+  font-size: var(--t-ui);
 }
 
 .chat-page .chat-send:disabled {
@@ -633,7 +633,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
-  font-size: 12px;
+  font-size: var(--t-fine);
   color: var(--muted);
 }
 
@@ -661,7 +661,7 @@
   overflow-y: auto;
   background: var(--waka-raised);
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--t-ui);
 }
 
 .chat-page .chat-sidebar {
@@ -687,7 +687,7 @@
 .chat-memory h2 {
   margin: 0;
   font-family: var(--waka-face);
-  font-size: 12px;
+  font-size: var(--t-fine);
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -732,7 +732,7 @@
 .chat-sidebar time {
   display: block;
   margin-top: var(--space-1);
-  font-size: 11px;
+  font-size: var(--t-meta);
   color: var(--muted);
 }
 
@@ -744,7 +744,7 @@
 .chat-memory h3 {
   margin: 0 0 var(--space-2);
   font-family: var(--waka-face);
-  font-size: 11px;
+  font-size: var(--t-meta);
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -764,7 +764,7 @@
 .chat-memory small {
   display: block;
   margin-top: var(--space-1);
-  font-size: 11px;
+  font-size: var(--t-meta);
   color: var(--muted);
 }
 
