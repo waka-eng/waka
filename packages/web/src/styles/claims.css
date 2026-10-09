@@ -528,16 +528,12 @@
   color: var(--ink);
 }
 
-.waka-page-title {
-  margin: 0;
-  font-family: var(--waka-face);
-  font-size: var(--t-fine);
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-  flex: 0 0 auto;
-}
+/* `.waka-page-title` IS GONE, AND SO IS EVERY PAGE THAT WORE IT.
+   One control names the view — the switcher at the top of the screen — and
+   printing the same words again as a page heading made the name appear twice
+   on two of the three pages and once on the third. Founder, holding the three
+   side by side: "these 3 things should be same text size font color etc."
+   They are the same thing now, because they are the same element. */
 
 .waka-page-status {
   margin: 0;
@@ -962,6 +958,19 @@
 
 /* The input loses its own frame: the BODY is the frame now, which is what
    stops the composer reading as a box inside a box. */
+/**
+ * THE BOX WAS STILL WEARING A BUTTON'S CLOTHES.
+ *
+ * `.jar-mouth-rest` is the class this field inherited from the days when
+ * keeping something was a labelled BUTTON that opened a drawer. The label
+ * register came with it — wide tracking, the small-caps voice — and it stayed
+ * on after the button became a textarea, so the one field a person types into
+ * every day was set in letterspacing meant for a four-word signpost. Founder:
+ * "I don't like this design. The text font size in it also is just
+ * inconsistent with the rest of the product."
+ *
+ * It is prose now, and prose is set like the rest of the product's prose.
+ */
 .waka-composer-body .jar-keep-box {
   width: 100%;
   min-height: 56px;
@@ -974,10 +983,93 @@
   font-family: var(--waka-face);
   font-size: var(--t-input);
   font-weight: 300;
-  line-height: 1.45;
+  letter-spacing: normal;
+  text-transform: none;
+  line-height: 1.5;
+  text-align: left;
   resize: none;
   field-sizing: content;
   max-height: 8rem;
+}
+
+.waka-composer-body .jar-keep-box::placeholder {
+  color: var(--muted);
+  letter-spacing: normal;
+  text-transform: none;
+  opacity: 1;
+}
+
+/* ---- speaking into it, and the second destination ---- */
+
+/* First in the footer, where a thing you do INSTEAD of typing belongs —
+   beside the field, not beside the actions at the far end. */
+.waka-composer-mic {
+  order: -1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.waka-composer-mic:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+/* Recording is a STATE, so it renders as one: the control is inked while it
+   is listening, which is the same way every other on-state in this product
+   is shown. No red, no blinking dot. */
+.waka-composer-mic--on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.waka-composer-mic:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.waka-composer-mic:focus-visible,
+.waka-composer-ask:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Quieter than Keep, and that is the whole point: one box, one thing typed,
+   and a primary action for what the box is FOR. See the note at its render. */
+.waka-composer-ask {
+  margin-left: auto;
+  min-height: 32px;
+  padding: 0 var(--sp-12);
+  border: 1px solid transparent;
+  border-radius: var(--waka-r-control);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  cursor: pointer;
+}
+
+.waka-composer-ask:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.waka-composer-ask:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Keep stops claiming the slack once Ask is beside it: the pair sits
+   together at the end, in the order you would read them. */
+.waka-composer-ask + .waka-composer-send {
+  margin-left: var(--sp-8);
 }
 
 .waka-composer-body .jar-keep-box:focus-visible {
@@ -1283,7 +1375,11 @@
 }
 
 .jar-char-claim-answers button {
-  min-height: 36px;
+  /* 44, not 36: the smallest target a thumb reliably hits, and these three
+     are the only thing on the home screen the product asks a person to
+     press. They were below the floor on exactly the device that has no
+     pointer to fall back on. */
+  min-height: 44px;
   padding: 0 var(--sp-16);
   border: 1px solid var(--line);
   border-radius: var(--waka-r-control);

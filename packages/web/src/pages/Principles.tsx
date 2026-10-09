@@ -65,7 +65,11 @@ export function Principles(): JSX.Element {
             already has a back — a third way out of a page is not a
             convenience, it is one more thing to read in a header whose job
             is to name the page. */}
-        <h1 className="waka-page-title">{say("worldPrinciplesShortcut")}</h1>
+        {/* THE PAGE DOES NOT NAME ITSELF ANY MORE. The switcher at the top
+            of the screen names the view, and printing the same words again
+            as a heading made the name appear twice on two of the three pages
+            and once on the third — which is exactly the inconsistency the
+            founder saw between them. One namer, one style, everywhere. */}
       </header>
 
       {phase === "loading" ? (
