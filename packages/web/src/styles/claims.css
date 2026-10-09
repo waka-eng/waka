@@ -139,6 +139,54 @@
   pointer-events: none;
 }
 
+/**
+ * THE LEFT CORNER HOLDS A NAME, NOT ONLY A GLYPH.
+ *
+ * The wall picker is a word plus a caret, so the corner cannot be a fixed
+ * 44px square the way the cog is. It keeps the target height and is allowed
+ * to be as wide as its name, bounded so a long room name cannot push the
+ * centred switcher off the middle of the screen.
+ */
+.waka-corners > .jar-here-split {
+  pointer-events: auto;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 38%;
+}
+
+.waka-corners > .jar-here-split > .jar-here,
+.waka-corners > .jar-here-split > .jar-here-more {
+  min-height: var(--waka-corner);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The list hangs under the corner it opened from, like the switcher's. */
+.waka-corners > .jar-here-split > .jar-here-list {
+  position: absolute;
+  top: calc(100% + var(--sp-8));
+  left: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  max-width: calc(100vw - var(--sp-32));
+  padding: var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
+  background: var(--waka-raised);
+}
+
+/* An empty corner still holds the row's shape open, so the switcher stays
+   centred on the viewport whether or not there is a ground to pick. */
+.waka-corners > span[aria-hidden="true"].waka-corner {
+  flex: none;
+}
+
 .waka-switch {
   pointer-events: auto;
   position: relative;
@@ -180,6 +228,50 @@
 .waka-switch-trigger:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
+}
+
+/**
+ * WHAT THE SWITCHER SAYS ON HOVER.
+ *
+ * This shipped with markup and no rules, so it rendered as full-width body
+ * text laid straight over the control that opens it — the founder could not
+ * press the switcher at all: "uhh i cant change the button cuz of this text".
+ *
+ * Three things fix it and all three are load-bearing:
+ *   - It is a CARD below the trigger, not flow content beside it.
+ *   - It never takes the pointer. A card that explains a control must not be
+ *     able to block the control; the pointer passes straight through to the
+ *     button underneath.
+ *   - The lines are separate blocks. They were three sentences run together
+ *     into one paragraph with no space between them, which is how
+ *     "things.What" ended up on screen.
+ */
+.waka-switch-card {
+  position: absolute;
+  top: calc(100% + var(--sp-8));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  /* See above: this explains the control, so it can never swallow it. */
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  width: max-content;
+  max-width: min(22rem, calc(100vw - var(--sp-32)));
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
+  background: var(--waka-raised);
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-fine);
+  font-weight: 300;
+  letter-spacing: normal;
+  text-transform: none;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
 }
 
 /* The caret turns over when the list is down. The one piece of motion in the
@@ -229,28 +321,6 @@
  * The menu
  * ------------------------------------------------------------------------- */
 
-/**
- * THE LIST COMES DOWN FROM THE CONTROL THAT OPENED IT.
- *
- * The sheet used to fly out of the top-left corner because that is where the
- * hamburger stood. The switcher is centred and the list belongs under it —
- * a list that appears somewhere other than where you pressed makes you look
- * for it, and looking for a menu you just opened is the whole failure the
- * switcher exists to fix.
- *
- * The scrim stays full-screen: it is the way out, and a way out you have to
- * aim at is not one.
- */
-.waka-menu-scrim--under {
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: calc(var(--waka-corner) + var(--sp-16) + env(safe-area-inset-top));
-}
-
-.waka-menu--under {
-  width: min(16rem, calc(100vw - var(--sp-32)));
-}
-
 /* The rung you are standing on, marked by light like everything else. */
 .waka-menu-item--here {
   color: var(--ink);
@@ -281,6 +351,33 @@
    block was first written for a link that had neither. Unset explicitly: a
    light face under `color: var(--ink)` is light text on a light pill, which is
    exactly as unreadable as it sounds. */
+/**
+ * THE LIST COMES DOWN FROM THE CONTROL THAT OPENED IT.
+ *
+ * The sheet used to fly out of the top-left corner because that is where the
+ * hamburger stood. The switcher is centred and the list belongs under it —
+ * a list that appears somewhere other than where you pressed makes you look
+ * for it, and looking for a menu you just opened is the whole failure the
+ * switcher exists to fix.
+ *
+ * The scrim stays full-screen: it is the way out, and a way out you have to
+ * aim at is not one.
+ *
+ * AND IT IS DECLARED AFTER THE RULES IT MODIFIES. It was written above
+ * them, where `.waka-menu-scrim`'s own `justify-content: flex-start` won on
+ * source order — both are one class, so nothing but position separates them
+ * — and the list kept opening in the top-left corner it was moved out of.
+ */
+.waka-menu-scrim--under {
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: calc(var(--waka-corner) + var(--sp-16) + env(safe-area-inset-top));
+}
+
+.waka-menu--under {
+  width: min(16rem, calc(100vw - var(--sp-32)));
+}
+
 .waka-menu-item {
   min-height: 44px;
   width: 100%;

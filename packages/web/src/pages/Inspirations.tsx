@@ -147,7 +147,7 @@ export function Inspirations(): JSX.Element {
 
   return (
     <main className="waka-page">
-      <Menu locale={locale} items={menu.items} current={menu.current} onSettings={menu.onSettings} onChat={menu.onChat} />
+      <Menu locale={locale} items={menu.items} current={menu.current} onSettings={menu.onSettings} />
       <header className="waka-page-head">
         {/* NO BACK BUTTON. The menu is the navigation and the browser
             already has a back — a third way out of a page is not a

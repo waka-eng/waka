@@ -27,7 +27,7 @@
  *
  * A long switcher list is not the failure mode. A long home page is.
  */
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { t, type MessageKey, type SupportedLocale } from "../lib/locales";
 
@@ -96,13 +96,26 @@ export interface MenuProps {
   label?: MenuItem["label"];
   /** Everything about this account and its agents. */
   onSettings: () => void;
-  /** Talking, from a day you have nothing to keep. */
-  onChat: () => void;
+  /**
+   * WHOSE GROUND YOU ARE STANDING ON — the top-left corner's whole job.
+   *
+   * Founder: "the top left should be a drop-down modal that lets you switch
+   * between your things. So like Agent 1, me." It briefly held a speech
+   * bubble for talking, which was my mistake: talking moved into the box, as
+   * a second destination for whatever you typed, and the corner was supposed
+   * to go to the thing it was vacated for.
+   *
+   * Only the world has walls, so only the world passes this. A page with no
+   * ground to stand on leaves the corner empty rather than inventing
+   * something to put there — an empty corner is honest, and the switcher and
+   * the cog are the navigation either way.
+   */
+  left?: ReactNode;
   /** Hidden while a panel owns the screen, so two sheets never stack. */
   hidden?: boolean;
 }
 
-export function Menu({ locale, items, current, label, onSettings, onChat, hidden }: MenuProps): JSX.Element | null {
+export function Menu({ locale, items, current, label, left, onSettings, hidden }: MenuProps): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const [explaining, setExplaining] = useState(false);
   const panelId = useId();
@@ -143,25 +156,8 @@ export function Menu({ locale, items, current, label, onSettings, onChat, hidden
   return (
     <>
       <div className="waka-corners" data-jar-chrome="1" data-jar-interactive="1">
-        {/* TALKING. A speech bubble and not a hamburger: the left corner used
-            to be a list of places and is now one act, so the glyph says which
-            act rather than "there is more". */}
-        <button
-          type="button"
-          className="waka-corner"
-          aria-label={t(locale, "worldMenuTalk")}
-          onClick={onChat}
-        >
-          <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-            <path
-              d="M17 11.5a2.5 2.5 0 0 1-2.5 2.5H8.2L4.5 16.8a.4.4 0 0 1-.64-.32V14h-.36A2.5 2.5 0 0 1 1 11.5v-7A2.5 2.5 0 0 1 3.5 2h11A2.5 2.5 0 0 1 17 4.5z"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          </svg>
-        </button>
+        {/* The corner belongs to whoever is standing here. See `left`. */}
+        {left ?? <span className="waka-corner" aria-hidden="true" />}
 
         {/* WHERE YOU ARE, AND THE WAY TO THE OTHER TWO. */}
         {here ? (
