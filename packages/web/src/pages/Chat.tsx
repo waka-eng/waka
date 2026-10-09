@@ -26,7 +26,7 @@ export default function ChatPage(){
   const principleId=!id?new URLSearchParams(location.search).get('principle')??undefined:undefined;
   const owner=`${scope.accountId}:${scope.profileId}`;
   if(committed.current&&(committed.current.owner!==owner||committed.current.row.id!==id))committed.current=null;
-  return <><Menu locale={locale} items={menu.items} current={menu.current} label="worldMenuTalk" onSettings={menu.onSettings} onChat={menu.onChat}/><ConversationPanel key={`${scope.accountId}:${scope.profileId}:${id??'new'}:${principleId??''}`}
+  return <><Menu locale={locale} items={menu.items} current={menu.current} label="worldMenuTalk" onSettings={menu.onSettings}/><ConversationPanel key={`${scope.accountId}:${scope.profileId}:${id??'new'}:${principleId??''}`}
     scope={scope} id={id} initialPrincipleId={principleId} initialConversation={committed.current?.row} locale={locale}
     onCreated={row=>{if(row.profileId===scope.profileId)committed.current={owner,row};}}
     onChoose={next=>{if(next!==id||principleId)navigate(`/chat/${next??'new'}`,{replace:!id&&Boolean(next),state:location.state});}}

@@ -279,7 +279,6 @@ import { useOptionalAuth } from "../lib/auth-context";
 
 import "../styles/home.css";
 
-
 /**
  * MOONLIGHT — the surface, chosen.
  *
@@ -671,15 +670,12 @@ const PITCH_FULL = 1400;
  * lays out itself and by nothing else.
  */
 
-
 // ---------------------------------------------------------------------------
 // THE SPECIES: one companion, many beings
 // ---------------------------------------------------------------------------
 
-
 /* rgbToHsl went with the tint pairs: it existed to pick the lighter end of a
    gradient pair, and there are no pairs left to pick between. */
-
 
 
 /**
@@ -749,11 +745,9 @@ function markPassages(
 
 
 
-
 // ---------------------------------------------------------------------------
 // Walls: the horizontal axis, and what stands on it (v10)
 // ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // AGENT WALLS — each rebuilt from its agent's OWN layers
@@ -905,7 +899,6 @@ async function loadAgentBundle(
         };
 }
 
-
 interface Layout {
   wallL: number;
   wallR: number;
@@ -985,7 +978,6 @@ function computeLayout(vw: number, vh: number, dialH: number): Layout {
 
 
 
-
 // ---------------------------------------------------------------------------
 // Ambition fallback chain
 // ---------------------------------------------------------------------------
@@ -1035,7 +1027,6 @@ function computeLayout(vw: number, vh: number, dialH: number): Layout {
  *
  * ==========================================================================
  */
-
 
 /**
  * Where the reading panel sits, in viewport coordinates. Either `top` or
@@ -2124,7 +2115,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [momentWhy, setMomentWhy] = useState("");
 
 
-
   /**
    * THE CLAIM THE COMPANION IS HOLDING.
    *
@@ -2256,7 +2246,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      it fires. */
   const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
   const reviewEntry = useReviewEntry(storageScope, viewNavigation.view?.reviewId, locale);
-
 
   const localeRef = useRef(locale);
   localeRef.current = locale;
@@ -3426,9 +3415,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     return () => timers.forEach((id) => window.clearTimeout(id));
   }, [inspirations, phase]);
 
-
   /* ------------- derived data (changes only when data changes) ------------- */
-
 
   /**
    * THE DATES YOU CAN ACTUALLY GO TO (founder, 2026-08-30: "instead of this
@@ -3611,7 +3598,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      and the image branch in `field-paint`. The attachment's image is still
      fetched and still shown where a picture belongs — inside the memory when
      you open it. It simply never becomes the memory's body. */
-
 
   /** THE SKY, AS THE FORMING LINE COUNTS IT: the signals still emerging,
       each with the moment it first appeared so the dial can wind past it. */
@@ -7408,7 +7394,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       /* arrived before the data: the wall holds still until it can wake whole */
       if (trip.awaitingWake && !trip.active) tryWakeWall();
 
-
       /* the hold: down over about a second when the world has been left
          alone, and never below a fifth — still breathing, never frozen */
       const settleWant = now - stir.at > SETTLE_IDLE ? SETTLE_MIN : 1;
@@ -7425,7 +7410,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         computeInspiration();
         clock.lastActive = now;
       }
-
 
       const selActive = selectedIdRef.current !== null;
       /* The field never stops drifting, even while an orb is focused — only
@@ -9456,7 +9440,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     simApiRef.current?.hangRail();
   }, [parkedAt, timeOpen]);
 
-
   /* ---------------- the reading panel ----------------
      A focused orb's information appears BESIDE it: a small panel that cross-
      fades in, one size, anchored to the orb. Nothing slides, nothing is
@@ -9584,7 +9567,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const id = window.setTimeout(() => setCharSay(""), 4000);
     return () => window.clearTimeout(id);
   }, [charSay]);
-
 
   /* THE EVIDENCE INDEX HAS NO CHANGE SIGNAL ANY MORE, because it no longer
      changes after load. `provTick` was how React was told the ref had been
@@ -11006,7 +10988,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      "going to your rooms" switch, at the memory.
   */
 
-
   /**
    * THE STAR'S OTHER HALF — handing a sentence back.
    *
@@ -11197,7 +11178,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     },
     [whyFailed],
   );
-
 
   /* ── THE FIVE ACTS ON A PRINCIPLE ──────────────────────────────────────
      Each reloads from the server rather than patching state by hand: rank is
@@ -14459,72 +14439,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                Switching walls lives in the menu now, and the pill comes back
                with `wallPick` because the list of walls is its own child —
                choosing that row opens the pill already showing the list. */
-            atWall.kind !== 'self' || inField || inSky || wallPick ? <span className="jar-here-split">
-              <button
-                type="button"
-                className="jar-here jar-back jar-label"
-                aria-expanded={settingsFor === spaceKey(atWall)}
-                onClick={() => {
-                  setWallPick(false);
-                  setSettingsFor(
-                    settingsFor === spaceKey(atWall) ? null : spaceKey(atWall),
-                  );
-                }}
-              >
-                {atWall.kind === "group"
-                  ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
-                  : wallName(atWall)}
-              </button>
-              <button
-                type="button"
-                className="jar-here-more jar-back jar-label"
-                aria-expanded={wallPick}
-                aria-label={say("worldGoToAnotherWall")}
-                onClick={() => {
-                  setSettingsFor(null);
-                  setWallPick((v) => !v);
-                }}
-              >
-                <span aria-hidden="true">▾</span>
-              </button>
-              {wallPick ? (
-                <span className="jar-here-list" role="menu">
-                  {walls.map((w) => {
-                    const mine = w.kind === atWall.kind && w.id === atWall.id;
-                    return (
-                      <button
-                        key={spaceKey(w)}
-                        type="button"
-                        role="menuitem"
-                        className={`jar-here-row jar-label${mine ? " is-here" : ""}`}
-                        onClick={() => {
-                          setWallPick(false);
-                          simApiRef.current?.goToWall(w.col);
-                        }}
-                      >
-                        {wallName(w)}
-                      </button>
-                    );
-                  })}
-                  {/* THE LIST OF YOUR WALLS IS ALSO WHERE YOU MAKE ONE. It
-                      listed every place you could go and offered no way to
-                      make another, so a person looking for their rooms in the
-                      obvious place had to know about a `+` at the far end of
-                      the screen. */}
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="jar-here-row jar-here-row--make jar-label"
-                    onClick={() => {
-                      setWallPick(false);
-                      setNewPlace(true);
-                    }}
-                  >
-                    {say("worldAddNew")}
-                  </button>
-                </span>
-              ) : null}
-            </span> : null
+            /* THE WALL PICKER MOVED TO THE TOP-LEFT CORNER.
+               Founder: "the top left should be a drop-down modal that lets
+               you switch between your things. So like Agent 1, me." That is
+               exactly what this was — the name of the ground you are on and
+               the list of the others — and it was living in a bar that holds
+               nothing else now. It renders into `Menu`'s left corner now, so
+               it sits in the same row as the view switcher and the cog:
+               the whole navigation of the product in one row rather than two
+               bars stacked on each other. See `groundPicker`. */
+            null
           }
 
           {/* WHEN YOU ARE, BESIDE WHERE YOU ARE.
@@ -14636,7 +14560,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           The signals it counted are still derived and still write the poster —
           they are simply not somewhere a person goes. */}
 
-
       {/* AT EVERY HEIGHT, NOT JUST DOWN IN THE FIELD.
           It was gated on `inField`, so it was not even mounted at the height
           you ARRIVE at — the one moment a person needs telling that this
@@ -14653,7 +14576,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         >
           {grounds.map((m) => {
             const here = m.mine ? standing === null : standing === m.id;
-            return (
+          
+  return (
               <button
                 key={m.id}
                 type="button"
@@ -15095,8 +15019,99 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           four permanent controls on a page whose whole argument is that it
           holds three things. Every one of those verbs survives, as a row in
           the menu, so nothing was dropped to clear the screen. */}
-      {phase==='ready'&&atWall.kind==='self'?<Menu locale={locale} items={menu.items} current={menu.current}
-        onSettings={()=>navigate('/profile')} onChat={menu.onChat}
+      {/* THE CHROME IS NOT ONLY FOR YOUR OWN WALL ANY MORE.
+          This was gated on standing at home because the left corner used to
+          be a hamburger full of rows about your own material. The corner is
+          the wall picker now — the control whose entire job is to say which
+          ground you are on and take you to another — so gating it on being
+          on your own ground made it unreachable from every wall it exists to
+          get you out of. The switcher and the cog belong everywhere for the
+          same reason they belong on the other pages. */}
+      {phase==='ready'?<Menu locale={locale} items={menu.items} current={menu.current}
+        /* WHOSE GROUND YOU ARE STANDING ON, in the top-left corner.
+           Founder: "the top left should be a drop-down modal that lets you
+           switch between your things. So like Agent 1, me." The name of the
+           wall you are on, a caret, and the list of the others — your own,
+           each agent's, each room's — plus the way to make another. It used
+           to sit in a bar of its own under the chrome; it is the corner now,
+           beside the view switcher and the cog, which is the whole
+           navigation of the product in one row.
+           Offered only when where-you-are is a real question: on an agent's
+           wall, in a room, down in the field, or while the list is open. On
+           your own wall at rest it would read your own name back at you,
+           which is noise — you have not gone anywhere — so the corner stays
+           empty. Written inline because every name it closes over lives in
+           this render. */
+        left={phase === 'ready' && (atWall.kind !== 'self' || inField || inSky || wallPick)
+      ? <span className="jar-here-split">
+              <button
+                type="button"
+                className="jar-here jar-back jar-label"
+                aria-expanded={settingsFor === spaceKey(atWall)}
+                onClick={() => {
+                  setWallPick(false);
+                  setSettingsFor(
+                    settingsFor === spaceKey(atWall) ? null : spaceKey(atWall),
+                  );
+                }}
+              >
+                {atWall.kind === "group"
+                  ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
+                  : wallName(atWall)}
+              </button>
+              <button
+                type="button"
+                className="jar-here-more jar-back jar-label"
+                aria-expanded={wallPick}
+                aria-label={say("worldGoToAnotherWall")}
+                onClick={() => {
+                  setSettingsFor(null);
+                  setWallPick((v) => !v);
+                }}
+              >
+                <span aria-hidden="true">▾</span>
+              </button>
+              {wallPick ? (
+                <span className="jar-here-list" role="menu">
+                  {walls.map((w) => {
+                    const mine = w.kind === atWall.kind && w.id === atWall.id;
+                    return (
+                      <button
+                        key={spaceKey(w)}
+                        type="button"
+                        role="menuitem"
+                        className={`jar-here-row jar-label${mine ? " is-here" : ""}`}
+                        onClick={() => {
+                          setWallPick(false);
+                          simApiRef.current?.goToWall(w.col);
+                        }}
+                      >
+                        {wallName(w)}
+                      </button>
+                    );
+                  })}
+                  {/* THE LIST OF YOUR WALLS IS ALSO WHERE YOU MAKE ONE. It
+                      listed every place you could go and offered no way to
+                      make another, so a person looking for their rooms in the
+                      obvious place had to know about a `+` at the far end of
+                      the screen. */}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="jar-here-row jar-here-row--make jar-label"
+                    onClick={() => {
+                      setWallPick(false);
+                      setNewPlace(true);
+                    }}
+                  >
+                    {say("worldAddNew")}
+                  </button>
+                </span>
+              ) : null}
+            </span>
+      : null}
+        
+        onSettings={()=>navigate('/profile')}
         hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}

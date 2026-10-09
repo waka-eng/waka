@@ -19,11 +19,12 @@
  * printed above the statement; they are the control now. A label became a
  * control, and a door disappeared.
  *
- * AND THE LEFT CORNER CARRIES TALKING. Keeping something is still how a
- * conversation starts — the receipt after a save offers it, and that
- * conversation arrives with a subject. But that was the ONLY way in, which
- * made talking something you could only do in the ten seconds after saving.
- * A corner is a door you can use on a day you have nothing to keep.
+ * AND TALKING LIVES IN THE BOX, NOT IN A CORNER. It spent one commit as a
+ * speech bubble on the left, which was a misreading: the founder had asked
+ * for that corner to switch which of your things you are standing on, and
+ * said talking should be reachable from the box you type in. It is — "Chat
+ * about this" sits beside Keep, as a second destination for whatever you
+ * just wrote. The corner went back to what it was asked for.
  *
  * WHAT IS STILL NOT HERE, AND WHY:
  *
@@ -45,7 +46,6 @@ export interface PageMenu {
   /** Which of the three is being looked at, or null on a page that is none. */
   current: string | null;
   onSettings: () => void;
-  onChat: () => void;
 }
 
 /**
@@ -101,7 +101,6 @@ export function usePageMenu(locale: SupportedLocale): PageMenu {
       })),
       current: here,
       onSettings: () => navigate("/profile"),
-      onChat: () => navigate("/chat/new"),
     };
   }, [locale, navigate, pathname]);
 }
