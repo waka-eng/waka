@@ -4758,3 +4758,56 @@
     letter-spacing: normal;
   }
 }
+
+
+/* ---------------------------------------------------------------------------
+ * WHAT MOVED, IN THE ONE CHANNEL THERE IS
+ *
+ * The reading printed once: carried words quiet, words this rewrite brought
+ * lit, and underneath — faded, never omitted — the words it dropped. The
+ * poster already says it this way about the same material; this is the same
+ * sentence asked a different question.
+ * ------------------------------------------------------------------------- */
+
+.jar-drift-reading {
+  margin: var(--sp-8) 0 0;
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: var(--t-lead);
+  line-height: 1.5;
+  /* The spine of the reading: what carried over, and therefore what this
+     rewrite is NOT about. */
+  color: var(--w-muted);
+}
+
+/* The drift. Nothing moves and no hue appears — it is simply the part of the
+   sentence that is awake. */
+.jar-drift-new {
+  color: var(--w-ink);
+}
+
+.jar-drift-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4) var(--sp-8);
+  align-items: baseline;
+  margin: var(--sp-20) 0 0;
+  padding-top: var(--sp-12);
+  border-top: 1px solid var(--w-edge);
+  font-size: var(--t-ui);
+  /* Faint, because it is gone — and present, because fading never deletes. */
+  color: var(--w-faint);
+}
+
+/* The label register is declared once, in system.css, and this wears it via
+   `.jar-label` on the element rather than re-stating its casing here — which
+   is what the gate caught, correctly. */
+.jar-drift-left-label {
+  color: var(--w-muted);
+}
+
+.jar-drift-note {
+  margin: 0;
+  font-size: var(--t-ui);
+  color: var(--w-muted);
+}
