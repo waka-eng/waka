@@ -16,7 +16,7 @@ import {createConversation,deleteConversation,fetchConversation,fetchConversatio
 import {readConversationDrafts} from '../src/lib/conversation-drafts';
 import type {ConversationCitation} from '../src/lib/api/conversations';
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),deleteConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationContext:vi.fn(),fetchConversationReply:vi.fn(),requestConversationReply:vi.fn(),stopConversationReply:vi.fn(),fetchConversationCitation:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
-const scope={accountId:'owner',profileId:'profile'},id='11111111-1111-4111-8111-111111111111',choose=vi.fn(),close=vi.fn();
+const scope={accountId:'owner',profileId:'profile'},id='11111111-1111-4111-8111-111111111111',choose=vi.fn();
 it('leaves reply text clear of mobile overlay scrollbars',()=>{
   const css=readFileSync(resolve(dirname(fileURLToPath(import.meta.url)),'../src/styles/chrome.css'),'utf8');
   expect(css.match(/\.jar-conversation-body\s*\{([^}]+)\}/)?.[1]).toContain('padding-inline-end:var(--sp-8)');
@@ -32,7 +32,7 @@ beforeEach(()=>{vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clear
   host=document.createElement('div');document.body.append(host);root=createRoot(host);
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();vi.unstubAllGlobals();vi.useRealTimers();});
-const mount=(conversationId:string|null=id,owner=scope)=>act(async()=>root.render(<ConversationPanel key={`${owner.accountId}:${owner.profileId}:${conversationId}`} scope={owner} id={conversationId} locale="en-US" onChoose={choose} onClose={close} onOpenSource={openSource}/>));
+const mount=(conversationId:string|null=id,owner=scope)=>act(async()=>root.render(<ConversationPanel key={`${owner.accountId}:${owner.profileId}:${conversationId}`} scope={owner} id={conversationId} locale="en-US"  onChoose={choose} onOpenSource={openSource}/>));
 const click=(label:string)=>act(async()=>[...host.querySelectorAll('button')].find(row=>row.textContent===label)!.click());
 const type=(content:string)=>act(async()=>{const area=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,content);area.dispatchEvent(new Event('input',{bubbles:true}));});
 const tick=(ms=2000)=>act(async()=>vi.advanceTimersByTimeAsync(ms));
@@ -72,7 +72,10 @@ it('clearly saves messages without promising an assistant reply',async()=>{
 });
 it('offers a new-chat exit when a conversation is unavailable, without showing old words',async()=>{
   vi.mocked(fetchConversation).mockRejectedValueOnce(new Error('Unavailable'));await mount();
-  expect(host.querySelector('textarea')).toBeNull();await click('New conversation');expect(choose).toHaveBeenCalledWith(null);expect(createConversation).not.toHaveBeenCalled();
+  /* No box to type in, so the exit has to be visible without opening
+     anything — it sits next to the sentence that reports the failure. */
+  expect(host.querySelector('textarea')).toBeNull();expect(host.querySelector('.chat-notice')?.textContent).toContain('New conversation');
+  await click('New conversation');expect(choose).toHaveBeenCalledWith(null);expect(createConversation).not.toHaveBeenCalled();
 });
 it('reconciles a lost save response with a read, without resending',async()=>{
   const save=vi.mocked(saveConversationMessage).getMockImplementation()!;
@@ -142,7 +145,11 @@ it('sends on desktop Enter but preserves composition and Shift Enter',async()=>{
 });
 it('loads the current conversation even if its history list is unavailable',async()=>{
   vi.mocked(listConversations).mockRejectedValueOnce(new Error('List unavailable'));await mount();
-  expect(host.textContent).toContain('Couldn’t load your conversation list.');expect(host.querySelector('textarea')).not.toBeNull();
+  /* The failure is reported inside the sheet the list lives in, not as a
+     page-level alarm about a secondary list — but the conversation you are
+     actually in opens regardless, which is what this is really testing. */
+  expect(host.querySelector('textarea')).not.toBeNull();
+  await click('All conversations');expect(host.textContent).toContain('Couldn’t load your conversation list.');await click('close');
   await type('My conversation still works');await click('Save message');expect(saveConversationMessage).toHaveBeenCalledOnce();
 });
 it('restores a scoped non-bottom transcript position after reopening',async()=>{
@@ -152,11 +159,10 @@ it('restores a scoped non-bottom transcript position after reopening',async()=>{
   await act(async()=>root.unmount());root=createRoot(host);await mount();expect(host.querySelector<HTMLElement>('.jar-conversation-body')!.scrollTop).toBe(120);
   expect(fetchConversation).toHaveBeenLastCalledWith(scope.profileId,id,expect.any(AbortSignal),1);
 });
-it('keeps mobile drawers mutually exclusive and preserves the composer behind their backdrop',async()=>{
-  const media=Object.assign(new EventTarget(),{matches:true});vi.stubGlobal('matchMedia',()=>media);
+it('keeps the two sheets mutually exclusive and preserves the composer behind their backdrop',async()=>{
   vi.mocked(fetchConversationContext).mockResolvedValue({profileId:scope.profileId,generationEnabled:false,principles:[],reading:[],inspirations:[]});
   await mount();await type('A draft behind the drawer');
-  await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="All conversations"]')!.click());
+  await click('All conversations');
   expect(host.querySelector('.chat-drawer-backdrop')).not.toBeNull();expect(host.querySelectorAll('[role="dialog"]')).toHaveLength(1);
   await click('Your memory');expect(host.querySelectorAll('[role="dialog"]')).toHaveLength(1);expect(host.querySelector('.chat-sidebar')).toBeNull();
   await act(async()=>host.querySelector<HTMLButtonElement>('.chat-drawer-backdrop')!.click());
@@ -214,7 +220,7 @@ it('loads earlier words while preserving the visible scroll anchor and original 
   vi.mocked(fetchConversation).mockResolvedValueOnce({...stored,messageWindowStart:1,messages});
   await click('Load earlier messages');expect(fetchConversation).toHaveBeenLastCalledWith(scope.profileId,id,expect.any(AbortSignal),1);
   expect(host.querySelectorAll('.chat-messages > li')).toHaveLength(60);expect(scroll.scrollTop).toBe(3010);
-  expect(host.querySelector('.chat-sidebar nav')?.textContent).toContain('The original human topic');
+  await click('All conversations');expect(host.querySelector('.chat-sidebar nav')?.textContent).toContain('The original human topic');await click('close');
   expect(host.textContent).not.toContain('Load earlier messages');expect(saveConversationMessage).not.toHaveBeenCalled();
 });
 it('an earlier-read failure preserves current messages and the unfinished draft',async()=>{
@@ -278,7 +284,7 @@ it.each(['principle','inspiration'] as const)('continues from a verified %s prev
 });
 it('keeps the local sidebar title aligned with the actual human topic',async()=>{
   stored.messages=[{id:'first',role:'user',profileId:scope.profileId,conversationId:id,position:1,content:'Help me think through a choice.',createdAt:stored.createdAt},{id:'second',role:'user',profileId:scope.profileId,conversationId:id,position:2,content:'Should I take the evening course?',createdAt:stored.createdAt}];
-  await mount();expect(host.querySelector('.chat-sidebar nav')?.textContent).toContain('Should I take the evening course?');
+  await mount();await click('All conversations');expect(host.querySelector('.chat-sidebar nav')?.textContent).toContain('Should I take the evening course?');
 });
 it('sends a starter in one click instead of requiring another Send',async()=>{
   stored.generationEnabled=true;await mount();await click('What has changed in how I think?');

@@ -2136,6 +2136,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    */
   const [momentWhy, setMomentWhy] = useState("");
 
+
+
   /**
    * THE CLAIM THE COMPANION IS HOLDING.
    *
@@ -2272,6 +2274,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const say = useCallback((key: MessageKey) => t(localeRef.current, key), []);
+
   /* The self wall's NAME is canon ("Me" — it also mints the /w/me address);
      what a person reads is the catalog's word for it. User-given names —
      agents, rooms — render as given. */

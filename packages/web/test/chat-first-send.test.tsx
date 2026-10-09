@@ -32,7 +32,8 @@ it('retains the confirmed first question through the real new-to-id route withou
   expect(createConversation).toHaveBeenCalledOnce();expect(fetchConversation).not.toHaveBeenCalled();
   expect(host.querySelector('.chat-messages > li[data-role="user"]')?.textContent).toContain('What has changed in how I think?');
   expect(host.textContent).toContain('Waiting to start…');expect(host.textContent).not.toContain('This conversation couldn’t be opened.');
-  await act(async()=>button('New conversation').click());expect(host.querySelectorAll('.chat-messages > li')).toHaveLength(0);
+  /* Starting over is in the conversations sheet now, not a standing column. */
+  await act(async()=>button('All conversations').click());await act(async()=>button('New conversation').click());expect(host.querySelectorAll('.chat-messages > li')).toHaveLength(0);
 });
 it('clears the bootstrap on a profile switch instead of showing another owner’s committed question',async()=>{
   await render();await act(async()=>button('What has changed in how I think?').click());
