@@ -140,12 +140,20 @@ export function Days(): JSX.Element {
         <ol className="waka-days" aria-label={say("worldDaysTitle")}>
           {cells.map((cell) => (
             <li key={cell.key}>
-              <span
+              <button
+                type="button"
                 className="waka-day"
                 style={{ "--waka-day-glow": cell.glow.toFixed(3) } as React.CSSProperties}
                 /* The dot is the picture; the sentence is for anyone who
                    cannot read a brightness, which includes every screen
                    reader and anyone on a washed-out display. */
+                /* THE WAY INTO YOUR OWN HISTORY. The dial's handle used to
+                   be a word in the corner of the home screen; it is gone from
+                   there, so the dates themselves are how a day is reached.
+                   `?at=` is the reading's own address for a moment in time,
+                   which is why this is a link to a date rather than a second
+                   dial living on this page. */
+                onClick={() => navigate(`/?at=${Date.parse(`${cell.key}T12:00:00Z`)}`)}
                 title={`${cell.label} — ${
                   cell.kept
                     ? formatMessage(locale, "worldDaysKept", { count: cell.kept })
@@ -158,7 +166,7 @@ export function Days(): JSX.Element {
                     ? formatMessage(locale, "worldDaysKept", { count: cell.kept })
                     : say("worldDaysNone")}
                 </span>
-              </span>
+              </button>
             </li>
           ))}
         </ol>

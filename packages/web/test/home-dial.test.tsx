@@ -105,6 +105,12 @@ const VIEW_H = 900;
    so it is new with the list and it needs a case of its own below. */
 const KEPT_DAYS = [0, 4, 21, 40, 61, 80, 101];
 
+/* The top of the history, as a moment. The dial is opened by address now —
+   see the note in `beforeEach` — and the newest kept moment is where winding
+   back starts from. Noon keeps it clear of any boundary the day grouping
+   draws. */
+const NEWEST_MS = Date.now();
+
 const FACTS = {
   inspirations: KEPT_DAYS.map((daysAgo, i) => ({
     id: `own-${i}`,
@@ -163,7 +169,15 @@ beforeAll(() => {
 });
 
 beforeEach(async () => {
-  layout = await mountWorld(FACTS);
+  /* ARRIVE ON A DATE, BECAUSE THAT IS HOW THE DIAL IS REACHED NOW. Its handle
+     — the word in the top-left corner — is gone from your own wall while you
+     are standing at now: it collided with the menu button and said only that
+     today is today. `Your days` is the way in, and every dot there opens
+     `/?at=<ms>`, which is the reading's own address for a moment. So this
+     suite opens the same address rather than pressing a control a person no
+     longer has. Parked at the newest moment it is still the top of the
+     history, which is where winding back starts from. */
+  layout = await mountWorld(FACTS, { initialEntries: [`/?at=${NEWEST_MS}`] });
   /* The same rows the page was handed, asked of the same mock. Reading the
      moments back out of this rather than recomputing them from a base date
      means the test cannot drift out of agreement with the fixture helper. */
@@ -299,9 +313,15 @@ async function windToNow(): Promise<void> {
     row.click();
   });
   await layout.step(40);
-  const said = (one(".jar-when").textContent ?? "").trim();
-  if (said !== "now") {
-    throw new Error(`pressing \`now\` left the word reading ${JSON.stringify(said)}`);
+  /* ARRIVING AT NOW IS THE HANDLE GOING AWAY. The word used to sit in the
+     corner reading "now" on the one screen that is always now, on top of the
+     menu button; it is gone from your own wall at now by ruling. So the
+     check is its absence, which is a stronger statement than the old one —
+     "the word says now" was also true of a dial that had never moved. */
+  const still = layout.container.querySelector(".jar-when");
+  const said = (still?.textContent ?? "").trim();
+  if (still) {
+    throw new Error(`pressing \`now\` left the word still up, reading ${JSON.stringify(said)}`);
   }
 }
 
@@ -540,15 +560,17 @@ describe("what the list offers", () => {
     expect(said.filter((t) => t === "now").length, "the present is offered once").toBe(1);
     expect(new Set(said).size, "and no row is offered twice").toBe(said.length);
 
-    for (const label of said) {
-      if (label === "now") {
-        await windToNow();
-        continue;
-      }
+    /* `now` IS PRESSED LAST, because pressing it is how you leave: the handle
+       is gone from your own wall once you are back at the present, so a row
+       pressed after it would have no list to open. Every row is still
+       pressed and still read back — the order is the only thing the ruling
+       changed about this case. */
+    for (const label of said.filter((row) => row !== "now")) {
       const at = pastDays().find((ms) => dateWords(ms, railEnd) === label);
       expect(at, `the list offers ${label}, which is not a day this wall changed`).toBeDefined();
       await windToDay(at as number);
     }
+    await windToNow();
   });
 
   it("never offers a day with nothing standing on it", async () => {
@@ -584,8 +606,11 @@ describe("what the list offers", () => {
     await layout.toField();
     await windToDay(endOfDayOf(keptMs[0]));
     await windToNow();
-    expect(one(".jar-when").textContent, "the top of the list is the present itself").toBe("now");
-    expect(layout.audit().present, "and the present holds everything kept").toBe(keptMs.length);
+    /* `windToNow` already proves the handle went away, which is what arriving
+       at now looks like. The claim this case exists for is the one below: the
+       present holds EVERYTHING, including the four days since the newest save
+       — a list whose top row meant "your last save" would quietly lose them. */
+    expect(layout.audit().present, "the present holds everything kept").toBe(keptMs.length);
   });
 });
 
@@ -600,8 +625,11 @@ describe("the mouth while the dial is away from now", () => {
    */
   it("goes quiet in the past and comes back with now", async () => {
     await layout.toField();
-    expect(one(".jar-mouth-slot").className, "the mouth is open at now").not.toContain("--away");
-
+    /* The suite arrives on a date, so the mouth is already quiet here — the
+       rule is the same one either way: a mouth open over a wound-back dial
+       would put a memory in the ground at a time it did not exist. This case
+       follows it from the past back to now, which is the direction that has
+       a control to press. */
     const then = endOfDayOf(keptMs[2]);
     await windToDay(then);
     /* the dial really is in the past — the ground says so, not just the word.
@@ -628,7 +656,7 @@ describe("the mouth while the dial is away from now", () => {
     expect(shortcut.querySelector('[data-home-action-icon="capture"]')).not.toBeNull();
     await act(async () => shortcut.click());
     await layout.step(40);
-    expect(one(".jar-when").textContent).toBe("now");
+
     const field = one(".jar-mouth-field");
     expect(field.getAttribute("placeholder")).toBe("A thought, link, photo or recording…");
     expect(document.activeElement).toBe(field);
