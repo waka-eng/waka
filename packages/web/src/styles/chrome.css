@@ -1593,3 +1593,5 @@ body .profile-signout-button {
 }
 
 }
+
+.jar-personal-shortcuts--sky { bottom:calc(128px + env(safe-area-inset-bottom)); }

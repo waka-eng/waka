@@ -18,5 +18,5 @@ export function useReviewEntry(scope:ProfileStorageScope|null,refreshKey:string|
     return()=>{controller.abort();window.clearTimeout(timeout);};
   },[owner,reviewing]);
   const session=entry?.owner===owner?entry?.session:null;
-  return {resuming:Boolean(session),label:t(locale,session?'worldReviewResume':'worldReviewTitle')};
+  return {resuming:Boolean(session),label:t(locale,'worldReviewTitle')};
 }

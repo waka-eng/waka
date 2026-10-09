@@ -8,7 +8,7 @@ import {HomeActivities} from '../src/components/HomeActivities';
 let host:HTMLDivElement,root:Root;const review=vi.fn(),chat=vi.fn();
 beforeEach(()=>{vi.clearAllMocks();(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;host=document.createElement('div');document.body.append(host);root=createRoot(host);});
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
-const mount=(resuming=false,hasInspirations=true)=>act(async()=>root.render(<HomeActivities locale="en-US" reviewLabel={resuming?'Resume review · 3 selected':'Review your inspirations'} resuming={resuming} hasInspirations={hasInspirations} onReview={review} onChat={chat}/>));
+const mount=(resuming=false,hasInspirations=true)=>act(async()=>root.render(<HomeActivities locale="en-US" reviewLabel="Revisit your inspirations" resuming={resuming} hasInspirations={hasInspirations} onReview={review} onChat={chat}/>));
 it('gives review and chat their own named activity cards and distinct destinations',async()=>{
   await mount();const buttons=host.querySelectorAll('button');expect(buttons).toHaveLength(2);
   for(const button of buttons){expect(document.getElementById(button.getAttribute('aria-labelledby')!)).not.toBeNull();expect(document.getElementById(button.getAttribute('aria-describedby')!)).not.toBeNull();}
@@ -21,8 +21,8 @@ it('gives review and chat their own named activity cards and distinct destinatio
   await act(async()=>buttons[1].click());expect(chat).toHaveBeenCalledOnce();
 });
 it('shows resume state without implying a new review, and leaves empty review understandable',async()=>{
-  await mount(true);expect(host.textContent).toContain('Resume review · 3 selected');expect(host.textContent).toContain('Continue where you left off.');
-  await mount(false,false);expect(host.querySelectorAll('button')).toHaveLength(1);expect(host.textContent).toContain('Talk with WAKA');expect(host.textContent).not.toContain('Review your inspirations');
+  await mount(true);expect(host.textContent).toContain('Revisit your inspirations');expect(host.textContent).toContain('Continue where you left off.');
+  await mount(false,false);expect(host.querySelectorAll('button')).toHaveLength(1);expect(host.textContent).toContain('Talk with WAKA');expect(host.textContent).not.toContain('Revisit your inspirations');
 });
 it('keeps visual cues decorative and the Korean action names explicit',async()=>{
   await act(async()=>root.render(<HomeActivities locale="ko-KR" reviewLabel="영감 돌아보기" resuming={false} hasInspirations onReview={review} onChat={chat}/>));
