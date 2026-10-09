@@ -14,7 +14,7 @@ import {fetchPrinciples,type ApiInspiration,type ApiPrinciple} from '../lib/api'
 import {t,type SupportedLocale} from '../lib/locales';
 import {readConversationDrafts,storeConversationDraft,clearConversationDraft,clearConversationDrafts,type ConversationDraft as Draft,type StoredConversationDraft} from '../lib/conversation-drafts';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onClose,onOpenSource,onInspirationSaved,onPrincipleUpdated}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onClose:()=>void;onOpenSource?:(kind:ConversationSourceKind,id:string)=>void;onInspirationSaved?:(row:ApiInspiration)=>void;onPrincipleUpdated?:(row:ApiPrinciple)=>void}){
+export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onOpenSource,onInspirationSaved,onPrincipleUpdated}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onOpenSource?:(kind:ConversationSourceKind,id:string)=>void;onInspirationSaved?:(row:ApiInspiration)=>void;onPrincipleUpdated?:(row:ApiPrinciple)=>void}){
   const journal=id??`new:${initialPrincipleId??'general'}`;
   const initial=initialConversation?.id===id&&initialConversation.profileId===scope.profileId?initialConversation:null;
   const bootstrap=useRef(initial);
@@ -161,21 +161,31 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const first=conversation?.initialPrinciple??focusPrinciple,canCompose=!id||Boolean(conversation);
   const otherDrafts=drafts.filter(row=>row.value.content.trim()&&row.value.id!==draft?.id);
   return <main ref={root} className="chat-page" data-memory-open={memoryOpen||undefined}>
-    <header className="chat-header"><button type="button" aria-label={say('worldChatBack')} onClick={onClose}>← <span className="chat-home-label">{say('worldChatBack')}</span></button><h1>{say('worldConversationWaka')}</h1>
-      <button className="chat-history-toggle" type="button" aria-label={say('worldConversationHistory')} aria-expanded={historyOpen} onClick={()=>{closeMemory();setHistoryOpen(value=>!value);}}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <div className="chat-top">
+      <h1 className="waka-page-title">{say('worldMenuTalk')}</h1>
+      {/* Past conversations, and what the reply was allowed to read. Both
+          open as sheets; neither is a column standing open beside a
+          conversation it is not part of. */}
+      <button type="button" aria-expanded={historyOpen} onClick={()=>{closeMemory();setHistoryOpen(value=>!value);}}>{say('worldConversationHistory')}</button>
       <button type="button" aria-expanded={memoryOpen} onClick={()=>memoryOpen?closeMemory():void memory()}>{say('worldChatMemory')}</button>
-      {id||otherDrafts.length?<details className="chat-options"><summary aria-label={say('worldConversationOptions')}>⋯</summary><div className="chat-options-menu">
+      {id||otherDrafts.length?<details className="chat-options"><summary aria-label={say('worldConversationOptions')}>···</summary><div className="chat-options-menu">
         {otherDrafts.length?<label>{say('worldShareDrafts')}<select value="" disabled={busy||Boolean(draft?.pending)||storageFailed} onChange={event=>{const selected=drafts.find(row=>row.value.id===event.target.value);if(selected){receipt.current=selected;draftRef.current=selected.value;setDraft(selected.value);}}}>
           <option value="">{say('worldConversationMessage')}</option>{otherDrafts.map(row=><option key={row.key} value={row.value.id}>{row.value.content.slice(0,50)}</option>)}
         </select></label>:null}
         {id?<button type="button" disabled={busy} onClick={()=>void remove()}>{say('worldConversationDelete')}</button>:null}
       </div></details>:null}
-    </header>
-    {mobile&&(historyOpen||memoryOpen)?<button type="button" className="chat-drawer-backdrop" aria-hidden="true" tabIndex={-1} onClick={()=>{setHistoryOpen(false);closeMemory();}}/>:null}
-    <ConversationHistory rows={rows} id={id} locale={locale} mobile={mobile} open={historyOpen} failed={historyFailed} onRetry={loadHistory} onClose={()=>setHistoryOpen(false)} onChoose={next=>{if(next===null&&!id&&!initialPrincipleId)editor.current?.focus();else onChoose(next);}}/>
+    </div>
+    {historyOpen||memoryOpen?<button type="button" className="chat-drawer-backdrop" aria-hidden="true" tabIndex={-1} onClick={()=>{setHistoryOpen(false);closeMemory();}}/>:null}
+    <ConversationHistory rows={rows} id={id} locale={locale} open={historyOpen} failed={historyFailed} onRetry={loadHistory} onClose={()=>setHistoryOpen(false)} onChoose={next=>{if(next===null&&!id&&!initialPrincipleId)editor.current?.focus();else onChoose(next);}}/>
     <section className="chat-main" aria-label={say('worldConversationTitle')}>
       {generationEnabled===false?<p className="chat-notice">{say('worldConversationFoundation')}</p>:null}
-      {error?<div className="chat-notice" role="alert">{error} {!draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldRoomHistoryRetry')}</button>:null}</div>:null}
+      {error?<div className="chat-notice" role="alert">{error} {!draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldRoomHistoryRetry')}</button>:null}
+        {/* THE WAY OUT SITS BESIDE THE FAILURE. When a conversation cannot be
+            opened there is no box to type in, so starting a fresh one is the
+            only move left — and it used to be a button in a column down the
+            side of the page. It belongs next to the sentence that says the
+            conversation is gone. */}
+        {!conversation&&!draft?.pending?<button type="button" disabled={busy} onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button>:null}</div>:null}
       {loading?<p className="chat-notice" role="status">{say('worldChatLoading')}</p>:null}
       {focusFailed?<p className="chat-notice" role="alert">{say('worldPrincipleUnavailable')} <button type="button" onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button></p>:null}
       <div className="jar-conversation-body chat-scroll" ref={body} onScroll={()=>{const node=body.current;if(!node)return;nearBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<80;if(nearBottom.current)setNewMessages(false);try{sessionStorage.setItem(scrollKey,JSON.stringify({top:node.scrollTop,nearBottom:nearBottom.current,...(conversationRef.current?.messageWindowStart!==undefined?{messageWindowStart:conversationRef.current.messageWindowStart}:{})}));}catch{/* The transcript remains available. */}}}>
@@ -186,7 +196,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             {(['worldConversationStarterChoice','worldConversationStarterMeaning','worldConversationStarterChange'] as const).map(key=><button key={key} type="button" disabled={suggestionBlocked} onClick={()=>sendSuggestion(say(key))}>{say(key)}</button>)}
           </div></section>:null}
           <ol className="chat-messages" aria-label={say('worldConversationMessages')} aria-live="polite" aria-relevant="additions">
-            {(conversation?.messages??[]).map(message=><li key={message.id} data-role={message.role}><div className="chat-message-heading"><span>{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</span><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleTimeString(locale,{hour:'numeric',minute:'2-digit'})}</time></div>
+            {(conversation?.messages??[]).map(message=><li key={message.id} data-role={message.role}><p className="chat-message-heading">{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</p>
               {message.memoryChanged?<p className="chat-muted">{say('worldConversationMemoryChanged')}</p>:null}
               <ConversationText text={message.content}/>{message.followUpQuestion?<ConversationText text={message.followUpQuestion}/>:null}
               {message.correctsMessageId?<><p className="chat-muted">{say('worldChatCorrectionSaved')}</p><ConversationPrincipleEdit scope={scope} contextId={`${id}:${message.id}`} locale={locale} onUpdated={row=>{onPrincipleUpdated?.(row);void refresh();reply.check();}}/></>:null}
@@ -234,6 +244,6 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         {(conversation?.revision??0)>=(generationEnabled?199:200)?<p>{say('worldConversationFull')}</p>:null}
       </footer>:null}
     </section>
-    {memoryOpen?<ConversationMemory context={context} startingPrinciple={first} locale={locale} busy={memoryBusy} error={memoryFailed} mobile={mobile} canRead={Boolean(id&&conversation)} onRead={()=>void memory()} onClose={closeMemory}/>:null}
+    {memoryOpen?<ConversationMemory context={context} startingPrinciple={first} locale={locale} busy={memoryBusy} error={memoryFailed} canRead={Boolean(id&&conversation)} onRead={()=>void memory()} onClose={closeMemory}/>:null}
   </main>;
 }

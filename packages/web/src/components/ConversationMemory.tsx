@@ -3,7 +3,7 @@ import {t,type SupportedLocale} from '../lib/locales';
 import {DialogSurface} from './DialogSurface';
 import {ConversationSourceDate} from './ConversationSourceDate';
 
-export function ConversationMemory({context,startingPrinciple,locale,busy,error,mobile,canRead,onRead,onClose}:{context:ConversationContext|null;startingPrinciple?:{statement:string;state:string}|null;locale:SupportedLocale;busy:boolean;error:boolean;mobile:boolean;canRead:boolean;onRead:()=>void;onClose:()=>void}){
+export function ConversationMemory({context,startingPrinciple,locale,busy,error,canRead,onRead,onClose}:{context:ConversationContext|null;startingPrinciple?:{statement:string;state:string}|null;locale:SupportedLocale;busy:boolean;error:boolean;canRead:boolean;onRead:()=>void;onClose:()=>void}){
   const content=<><header><h2>{t(locale,'worldChatMemory')}</h2><button type="button" onClick={onClose}>{t(locale,'worldClose')}</button></header>
     <p className="chat-muted">{t(locale,'worldChatMemoryExplanation')}</p>
     {!canRead?<p>{t(locale,'worldChatMemoryOnSend')}</p>:<button type="button" disabled={busy} onClick={onRead}>{t(locale,'worldConversationMemoryCheck')}</button>}
@@ -14,5 +14,6 @@ export function ConversationMemory({context,startingPrinciple,locale,busy,error,
       {'state' in row&&row.state==='contested'?<small>{t(locale,'worldConversationContested')}</small>:null}
       {'supportCurrent' in row&&!row.supportCurrent?<small>{t(locale,'worldConversationUnconfirmed')}</small>:null}
     </li>)}</ul></section>:null)}{![...context.principles,...context.reading,...context.inspirations].length?<p>{t(locale,'worldChatMemoryEmpty')}</p>:null}</>:null}</>;
-  return mobile?<DialogSurface className="chat-memory" aria-label={t(locale,'worldChatMemory')} onClose={onClose}>{content}</DialogSurface>:<aside className="chat-memory" aria-label={t(locale,'worldChatMemory')}>{content}</aside>;
+  /* A sheet at every width, for the same reason the history is one. */
+  return <DialogSurface className="chat-memory" aria-label={t(locale,'worldChatMemory')} onClose={onClose}>{content}</DialogSurface>;
 }

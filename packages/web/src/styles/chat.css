@@ -1,106 +1,790 @@
 @layer chrome {
-.chat-page { --jar-panel:var(--w-ground); position:fixed; top:var(--chat-top,0px); inset-inline:0; height:var(--chat-height,100dvh); display:grid; grid-template-columns:240px minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); overflow:hidden; background:var(--w-ground); color:var(--w-ink); font-size:var(--t-body); text-align:left; }
-.chat-page[data-memory-open] { grid-template-columns:220px minmax(0,1fr) 300px; }
-.chat-page button,.chat-page summary { min-height:var(--sp-44); box-sizing:border-box; padding:var(--sp-8) var(--sp-12); border:1px solid transparent; border-radius:var(--sp-12); background:none; color:inherit; font:inherit; cursor:pointer; }
-.chat-page button:hover,.chat-page summary:hover { background:var(--w-raised); }
-.chat-page button:disabled { opacity:.45; cursor:default; }
-.chat-page button:focus-visible,.chat-page summary:focus-visible,.chat-page textarea:focus-visible { outline:2px solid var(--w-muted); outline-offset:2px; }
-.chat-header { grid-column:1 / -1; display:flex; align-items:center; gap:var(--sp-12); padding:var(--sp-12) var(--sp-20); border-bottom:1px solid var(--w-edge); }
-.chat-header h1 { flex:1; margin:0; font-size:var(--t-lead); font-weight:500; }
-.chat-header .chat-history-toggle { display:none; }
-.chat-options { position:relative; }
-.chat-options summary { list-style:none; display:flex; align-items:center; justify-content:center; min-width:var(--sp-44); }
-.chat-options summary::-webkit-details-marker { display:none; }
-.chat-options-menu { position:absolute; right:0; top:100%; width:260px; max-width:calc(100vw - var(--sp-24)); padding:var(--sp-8); box-sizing:border-box; z-index:5; background:var(--w-ground); border:1px solid var(--w-edge); border-radius:var(--sp-12); }
-.chat-options-menu > button { width:100%; text-align:left; }
-.chat-options-menu label { display:block; font-size:var(--t-note); padding:var(--sp-8); }
-.chat-sidebar { grid-column:1; min-height:0; padding:var(--sp-20) var(--sp-12); border-right:1px solid var(--w-edge); overflow-y:auto; }
-.chat-sidebar header,.chat-memory header { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-8); }
-.chat-sidebar h2,.chat-memory h2 { margin:0 0 var(--sp-12); font-size:var(--t-body); font-weight:500; }
-.chat-sidebar ul,.chat-memory ul,.chat-messages { list-style:none; margin:0; padding:0; }
-.chat-sidebar .chat-new { width:100%; border:1px solid var(--w-edge); margin-bottom:var(--sp-20); text-align:left; }
-.chat-sidebar nav button { display:block; width:100%; text-align:left; margin-bottom:var(--sp-4); }
-.chat-sidebar nav button[aria-current] { background:var(--w-raised); border-color:var(--w-edge); }
-.chat-sidebar nav span { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
-.chat-sidebar time { display:block; font-size:var(--t-note); color:var(--w-faint); margin-top:var(--sp-6); }
-.chat-main { grid-column:2; min-width:0; min-height:0; display:flex; flex-direction:column; }
-.chat-scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:var(--sp-24); scrollbar-gutter:stable; }
-.chat-transcript { max-width:720px; margin-inline:auto; }
-.chat-topic { border-left:2px solid var(--w-edge); padding:var(--sp-8) var(--sp-16); color:var(--w-muted); margin-bottom:var(--sp-24); }
-.chat-topic blockquote { margin:var(--sp-8) 0; color:var(--w-ink); }
-.chat-welcome { padding-block:clamp(24px,10vh,96px); }
-.chat-welcome h2 { font-size:calc(var(--t-lead) * 1.5); font-weight:400; line-height:1.4; margin-bottom:var(--sp-12); }
-.chat-welcome > p { color:var(--w-muted); }
-.chat-starters { display:flex; flex-wrap:wrap; gap:var(--sp-8); margin-top:var(--sp-24); }
-.chat-starters button { border:1px solid var(--w-edge); text-align:left; }
-.chat-messages > li { margin-block:var(--sp-24); min-width:0; overflow-wrap:anywhere; }
-.chat-messages > li[data-role="user"] { width:fit-content; max-width:88%; margin-left:auto; padding:var(--sp-12) var(--sp-16); border:1px solid var(--w-edge); border-radius:var(--sp-16); background:var(--w-raised); }
-.chat-message-heading { display:flex; align-items:center; gap:var(--sp-12); color:var(--w-muted); font-size:var(--t-note); margin-bottom:var(--sp-8); }
-.chat-message-heading time { color:var(--w-faint); font-size:var(--t-note); }
-.chat-message-text { line-height:1.7; }
-.chat-message-text p { white-space:pre-wrap; margin:var(--sp-8) 0; }
-.chat-message-text ul,.chat-message-text ol { padding-left:var(--sp-24); margin-block:var(--sp-12); }
-.chat-message-text code { background:var(--w-raised); padding:2px var(--sp-4); border-radius:var(--sp-4); }
-.chat-page .jar-conversation-actions { display:flex; flex-wrap:wrap; gap:var(--sp-12); }
-.chat-page .jar-conversation-actions button { margin:0; padding-inline:0; font-size:var(--t-note); color:var(--w-muted); }
-.chat-page .jar-item-actions { margin-left:0; }
-.chat-page .jar-item-actions > summary { padding-inline:0; }
-.chat-source-summary { margin-top:var(--sp-8); font-size:var(--t-note); color:var(--w-muted); }
-.chat-source-summary > summary { display:flex; align-items:center; min-height:var(--sp-44); cursor:pointer; }
-.chat-source-summary > summary:hover,.chat-source-summary > summary:focus-visible { color:var(--w-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
-.chat-page .jar-conversation-thought section { margin-block:var(--sp-12); }
-.chat-page .jar-conversation-adopt { display:flex; align-items:center; gap:var(--sp-8); min-height:var(--sp-44); }
-.chat-page .jar-conversation-adopt input { width:var(--sp-20); height:var(--sp-20); flex:none; }
-.chat-citations { display:flex; flex-wrap:wrap; gap:var(--sp-8); }
-.chat-citations button { max-width:100%; border:1px solid var(--w-edge); text-align:left; font-size:var(--t-note); }
-.chat-source-date { display:block; }
-.chat-reading-choices { display:grid; gap:var(--sp-8); margin-block:var(--sp-16); }
-.chat-reading-choices > p { margin:0; }
-.chat-page .chat-reading-choice { display:flex; flex-direction:column; gap:var(--sp-6); width:100%; text-align:left; border:1px solid var(--w-edge); padding:var(--sp-12); }
-.chat-reading-choice-heading { display:flex; justify-content:space-between; gap:var(--sp-12); width:100%; color:var(--w-muted); font-size:var(--t-note); }
-.chat-reading-choice-text { line-height:1.6; overflow-wrap:anywhere; }
-.chat-page .jar-conversation-reference { border:1px solid var(--w-edge); border-radius:var(--sp-12); padding:var(--sp-12); }
-.chat-page blockquote { margin-inline:0; line-height:1.6; }
-.chat-muted { color:var(--w-muted); font-size:var(--t-note); }
-.chat-notice { margin:var(--sp-8) var(--sp-24); font-size:var(--t-note); }
-.chat-thinking { display:flex; align-items:center; gap:var(--sp-12); color:var(--w-muted); min-height:var(--sp-44); }
-.chat-thinking-dots { display:flex; gap:var(--sp-4); align-items:center; }
-.chat-thinking-dots i { width:var(--sp-4); height:var(--sp-4); border-radius:50%; background:currentColor; animation:chat-thinking-pulse 1.2s ease-in-out infinite; }
-.chat-thinking-dots i:nth-child(2) { animation-delay:160ms; }
-.chat-thinking-dots i:nth-child(3) { animation-delay:320ms; }
-@keyframes chat-thinking-pulse { 0%,70%,100% { opacity:.3; transform:translateY(0); } 35% { opacity:1; transform:translateY(calc(-1 * var(--sp-2))); } }
-@media (prefers-reduced-motion:reduce) { .chat-thinking-dots i { animation:none; opacity:.6; } }
-.chat-composer { flex-shrink:0; width:100%; max-width:768px; box-sizing:border-box; margin-inline:auto; padding:var(--sp-12) var(--sp-24) calc(var(--sp-16) + env(safe-area-inset-bottom)); }
-.chat-input-row { display:flex; align-items:flex-end; gap:var(--sp-8); padding:var(--sp-8); border:1px solid var(--w-edge); border-radius:var(--sp-16); background:var(--w-raised); }
-.chat-input-label { flex:1; min-width:0; }
-.chat-input-label > span { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-.chat-page textarea,.chat-page select { display:block; width:100%; box-sizing:border-box; min-height:var(--sp-44); font:inherit; font-size:var(--t-lead); line-height:1.5; color:var(--w-ink); background:var(--w-ground); border:1px solid var(--w-edge); border-radius:var(--sp-8); padding:var(--sp-8); }
-.chat-input-row textarea { resize:none; border:0; background:none; max-height:180px; }
-.chat-composer .chat-send { background:var(--w-ink); color:var(--w-ground); flex-shrink:0; }
-.chat-reply-status,.chat-correction { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-8); font-size:var(--t-note); }
-.chat-reply-status p { flex:1; margin:var(--sp-8) 0; }
-.chat-correction { margin-bottom:var(--sp-8); border-left:2px solid var(--w-edge); padding-left:var(--sp-12); }
-.chat-memory { grid-column:3; min-height:0; overflow-y:auto; border-left:1px solid var(--w-edge); padding:var(--sp-20); background:var(--w-ground); }
-.chat-memory section { padding-block:var(--sp-12); border-bottom:1px solid var(--w-edge); }
-.chat-memory h3 { font-size:var(--t-body); font-weight:500; }
-.chat-memory p { line-height:1.6; overflow-wrap:anywhere; }
-.chat-memory small { display:block; color:var(--w-muted); }
-.chat-page .chat-drawer-backdrop,.chat-page .chat-drawer-backdrop:hover { position:absolute; inset:60px 0 0; z-index:3; margin:0; padding:0; border:0; border-radius:0; background:var(--w-ground); opacity:.5; }
-@media (max-width:1100px) {
-  .chat-page[data-memory-open] { grid-template-columns:220px minmax(0,1fr); }
-  .chat-memory { position:absolute; inset:68px 0 0 auto; width:min(340px,100%); box-sizing:border-box; z-index:4; box-shadow:0 0 0 100vmax var(--w-raised); }
+/**
+ * TALK — THE SAME ROOM, STOOD CLOSER.
+ *
+ * This surface used to be a different product. It had an app header with a
+ * back arrow and a title, a 240px history column pinned down its left side,
+ * and a 300px memory column pinned down its right — three pieces of chrome
+ * around a conversation, on a product whose every other screen is one column
+ * on a dark ground with two corner buttons. Founder: "the design language is
+ * so different from what we have in the top of mind page."
+ *
+ * It was different because it was built as a place you GO. It is not. The box
+ * on the home screen keeps, and what the companion says back is answerable —
+ * answering is how you arrive here. So this is the same room; you have simply
+ * stood closer to the one thing you answered. The ground, the face, the
+ * corners and the composer are the ones you were already looking at. What
+ * changes between there and here is which direction the box points: there it
+ * keeps, here it replies.
+ *
+ * WHAT YOU SAID IS DIM; WHAT IT SAID IS LIT. There are no bubbles in this
+ * transcript, no borders, no alternating backgrounds, no right-aligned
+ * column. The founder law is that light is the only meaning channel, and the
+ * transcript obeys it like everything else: your own turns sit in `--muted`
+ * and the reply sits in `--ink`. That is the whole distinction, and it needs
+ * no second one.
+ *
+ * NO NUMERALS. A clock beside every turn is a number printed where a sentence
+ * should be read, on a product whose rule is that states render and numerals
+ * never. The order of the transcript already says when.
+ *
+ * HISTORY AND MEMORY ARE SHEETS, NEVER COLUMNS. Both were permanent furniture
+ * at desk widths and a drawer on a phone. A column you are not reading is a
+ * column spending attention, so they are drawers at every width now — the
+ * same overlay the rest of the product opens things in.
+ *
+ * EVERY SIZE COMES FROM THE SCALE IN global.css, and the face is the one
+ * `claims.css` names. This file introduces no token and no colour.
+ */
+
+/* ---------------------------------------------------------------------------
+ * The page: one column, like every other one
+ * ------------------------------------------------------------------------- */
+
+.chat-page {
+  /* The dialog surfaces this page opens composite over the page's own
+     ground rather than the canvas world's. */
+  --jar-panel: var(--bg);
+  position: fixed;
+  top: var(--chat-top, 0px);
+  inset-inline: 0;
+  height: var(--chat-height, 100dvh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-weight: 300;
+  font-size: 16px;
+  line-height: 1.6;
+  text-align: left;
 }
-@media (max-width:760px) {
-  .chat-page,.chat-page[data-memory-open] { grid-template-columns:minmax(0,1fr); }
-  .chat-header { padding:var(--sp-8); gap:var(--sp-4); }
-  .chat-header .chat-history-toggle { display:block; }
-  .chat-home-label { display:none; }
-  .chat-main { grid-column:1; }
-  .chat-sidebar { position:absolute; inset:60px auto 0 0; width:min(320px,100%); z-index:4; box-sizing:border-box; background:var(--w-ground); box-shadow:0 0 0 100vmax var(--w-raised); }
-  .chat-memory { top:60px; width:100%; }
-  .chat-scroll { padding:var(--sp-16); }
-  .chat-composer { padding:var(--sp-8) var(--sp-12) calc(var(--sp-12) + env(safe-area-inset-bottom)); }
-  .chat-welcome { padding-block:var(--sp-24); }
-  .chat-welcome h2 { font-size:calc(var(--t-lead) * 1.25); }
+
+/* One quiet control register for the whole surface. The composer's send
+   button opts back out below — it is the only filled control here, exactly
+   as it is the only filled control on the home screen. */
+.chat-page button,
+.chat-page summary {
+  box-sizing: border-box;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: 13px;
+  font-weight: 300;
+  cursor: pointer;
+}
+
+.chat-page button:hover,
+.chat-page summary:hover {
+  color: var(--ink);
+}
+
+.chat-page button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.chat-page button:focus-visible,
+.chat-page summary:focus-visible,
+.chat-page textarea:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---------------------------------------------------------------------------
+ * What this conversation is about
+ *
+ * The header is gone. The corners are the navigation, as they are on every
+ * page, and the room they need is reserved here — they are pinned to the
+ * viewport and are not in this flow.
+ * ------------------------------------------------------------------------- */
+
+.chat-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+  width: 100%;
+  max-width: 680px;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: calc(var(--waka-corner) + var(--space-3) + env(safe-area-inset-top))
+    clamp(20px, 6vw, 28px) var(--space-3);
+}
+
+/* The page title is the one every other page already uses — same size,
+   same casing, same colour. It only needs to be told to take the slack. */
+.chat-top .waka-page-title {
+  margin-right: auto;
+}
+
+
+.chat-page .chat-top button {
+  padding: 0;
+  font-size: 12px;
+}
+
+.chat-options {
+  position: relative;
+}
+
+.chat-options summary {
+  list-style: none;
+}
+
+.chat-options summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-options-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-2));
+  width: 260px;
+  max-width: calc(100vw - var(--space-6));
+  box-sizing: border-box;
+  z-index: 5;
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--waka-raised);
+  border: var(--space-px) solid var(--line);
+  border-radius: 14px;
+}
+
+.chat-options-menu > button {
+  width: 100%;
+  text-align: left;
+}
+
+.chat-options-menu label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * The transcript
+ * ------------------------------------------------------------------------- */
+
+.chat-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 clamp(20px, 6vw, 28px);
+  scrollbar-gutter: stable;
+}
+
+.chat-transcript {
+  max-width: 680px;
+  margin-inline: auto;
+  padding-bottom: var(--space-6);
+}
+
+.chat-messages,
+.chat-sidebar ul,
+.chat-memory ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chat-messages > li {
+  margin-block: var(--space-7);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The eyebrow is the same small-caps register the claim's "is this true of
+   you?" is set in — the one voice this product labels things with. */
+.chat-message-heading,
+.chat-sending > span {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.chat-message-text {
+  line-height: 1.6;
+}
+
+.chat-message-text p {
+  white-space: pre-wrap;
+  margin: var(--space-3) 0;
+}
+
+.chat-message-text p:first-child {
+  margin-top: 0;
+}
+
+.chat-message-text p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message-text ul,
+.chat-message-text ol {
+  padding-left: var(--space-5);
+  margin-block: var(--space-3);
+}
+
+.chat-message-text li {
+  margin-block: var(--space-1);
+}
+
+.chat-message-text code {
+  padding: 2px var(--space-1);
+  border-radius: 4px;
+  background: var(--waka-raised);
+  font-size: 0.9em;
+}
+
+/* YOUR OWN TURN IS DIMMER. The entire speaker distinction, in one line.
+   No bubble, no border, no background, no change of side. */
+.chat-messages > li[data-role="user"] .chat-message-text,
+.chat-sending .chat-message-text {
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * The opening, before anything is said
+ * ------------------------------------------------------------------------- */
+
+.chat-welcome {
+  padding-block: clamp(var(--space-7), 8vh, var(--space-9));
+}
+
+.chat-welcome h2 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--waka-face);
+  font-size: 22px;
+  font-weight: 300;
+  line-height: 1.4;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.chat-welcome > p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.chat-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+}
+
+.chat-page .chat-starters button {
+  padding: var(--space-2) var(--space-4);
+  border: var(--space-px) solid var(--line);
+  border-radius: 999px;
+  text-align: left;
+}
+
+.chat-page .chat-starters button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+/* What the conversation started from — a principle, or a reading. */
+.chat-topic {
+  margin-bottom: var(--space-7);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.chat-topic blockquote {
+  margin: var(--space-2) 0 0;
+  font-size: 16px;
+  letter-spacing: normal;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.chat-earlier {
+  margin-bottom: var(--space-6);
+}
+
+/* ---------------------------------------------------------------------------
+ * Sources, corrections, notices
+ * ------------------------------------------------------------------------- */
+
+.chat-source-summary {
+  margin-top: var(--space-3);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chat-source-summary > summary {
+  cursor: pointer;
+}
+
+.chat-source-summary > summary:hover,
+.chat-source-summary > summary:focus-visible {
+  color: var(--ink);
+}
+
+.chat-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.chat-page .chat-citations button {
+  max-width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: var(--space-px) solid var(--line);
+  border-radius: 10px;
+  text-align: left;
+  font-size: 12px;
+}
+
+.chat-source-date {
+  display: block;
+}
+
+.chat-reading-choices {
+  display: grid;
+  gap: var(--space-2);
+  margin-block: var(--space-4);
+}
+
+.chat-reading-choices > p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chat-page .chat-reading-choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3);
+  border: var(--space-px) solid var(--line);
+  border-radius: 12px;
+  text-align: left;
+}
+
+.chat-reading-choice-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.chat-reading-choice-text {
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.chat-page .jar-conversation-reference {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border: var(--space-px) solid var(--line);
+  border-radius: 14px;
+  background: var(--waka-raised);
+  font-size: 13px;
+}
+
+.chat-page .jar-conversation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.chat-page .jar-conversation-actions button,
+.chat-page .jar-item-actions > summary {
+  margin: 0;
+  padding-inline: 0;
+  font-size: 12px;
+}
+
+.chat-page .jar-item-actions {
+  margin-left: 0;
+}
+
+.chat-page .jar-conversation-thought section {
+  margin-block: var(--space-3);
+}
+
+.chat-page .jar-conversation-adopt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  font-size: 13px;
+}
+
+.chat-page .jar-conversation-adopt input {
+  width: var(--space-4);
+  height: var(--space-4);
+  flex: none;
+}
+
+.chat-page blockquote {
+  margin-inline: 0;
+  line-height: 1.5;
+}
+
+.chat-muted {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chat-notice {
+  width: 100%;
+  max-width: 680px;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 6vw, 28px) var(--space-3);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chat-correction {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+  padding-left: var(--space-3);
+  border-left: var(--space-px) solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * Waiting
+ *
+ * The one motion on this surface, and it explains rather than decorates: it
+ * is the only thing on screen saying a reply is still being written.
+ * ------------------------------------------------------------------------- */
+
+.chat-thinking {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block: var(--space-7);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.chat-thinking-dots {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.chat-thinking-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: chat-thinking-pulse 1.2s ease-in-out infinite;
+}
+
+.chat-thinking-dots i:nth-child(2) { animation-delay: 160ms; }
+.chat-thinking-dots i:nth-child(3) { animation-delay: 320ms; }
+
+@keyframes chat-thinking-pulse {
+  0%, 70%, 100% { opacity: 0.3; transform: translateY(0); }
+  35% { opacity: 1; transform: translateY(-2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-thinking-dots i { animation: none; opacity: 0.6; }
+}
+
+/* ---------------------------------------------------------------------------
+ * The box
+ *
+ * Same anatomy as the one on the home screen, down to the class names it
+ * borrows for its frame. There it keeps; here it replies.
+ * ------------------------------------------------------------------------- */
+
+.chat-composer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 680px;
+  box-sizing: border-box;
+  margin-inline: auto;
+  padding: var(--space-3) clamp(20px, 6vw, 28px)
+    calc(var(--space-5) + env(safe-area-inset-bottom));
+}
+
+.chat-input-row {
+  display: flex;
+  flex-direction: column;
+  border: var(--space-px) solid var(--line);
+  border-radius: 14px;
+  background: var(--waka-raised);
+  overflow: hidden;
+}
+
+.chat-input-row:focus-within {
+  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+.chat-input-label {
+  display: block;
+  min-width: 0;
+}
+
+/* The label is for anyone who cannot see where the cursor is. */
+.chat-input-label > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.chat-page textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 56px;
+  max-height: 8rem;
+  margin: 0;
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1.45;
+  resize: none;
+  field-sizing: content;
+}
+
+.chat-page textarea:focus-visible {
+  outline: none;
+}
+
+.chat-page select {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: var(--space-1);
+  padding: var(--space-2);
+  border: var(--space-px) solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: 13px;
+}
+
+/* The primary action, and the only filled control on the surface — the same
+   one the home screen's box ends with. */
+.chat-page .chat-send {
+  align-self: flex-end;
+  min-height: 32px;
+  margin: 0 var(--space-3) var(--space-3);
+  padding: 0 var(--space-4);
+  border: var(--space-px) solid var(--ink);
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 13px;
+}
+
+.chat-page .chat-send:disabled {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+.chat-reply-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chat-reply-status p {
+  flex: 1;
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * The two sheets
+ *
+ * Past conversations, and what the reply was allowed to read. Drawers at
+ * every width — see the note at the top of the file.
+ * ------------------------------------------------------------------------- */
+
+.chat-page .chat-sidebar,
+.chat-page .chat-memory {
+  position: absolute;
+  inset-block: 0;
+  z-index: 4;
+  width: min(340px, 100%);
+  box-sizing: border-box;
+  padding: calc(var(--waka-corner) + var(--space-4) + env(safe-area-inset-top))
+    clamp(20px, 6vw, 28px) calc(var(--space-5) + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background: var(--waka-raised);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.chat-page .chat-sidebar {
+  inset-inline: 0 auto;
+  border-right: var(--space-px) solid var(--line);
+}
+
+.chat-page .chat-memory {
+  inset-inline: auto 0;
+  border-left: var(--space-px) solid var(--line);
+}
+
+.chat-sidebar header,
+.chat-memory header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.chat-sidebar h2,
+.chat-memory h2 {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.chat-page .chat-sidebar .chat-new {
+  width: 100%;
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: var(--space-px) solid var(--line);
+  border-radius: 12px;
+  text-align: left;
+}
+
+.chat-page .chat-sidebar nav button {
+  display: block;
+  width: 100%;
+  margin-bottom: var(--space-1);
+  padding: var(--space-3);
+  border-radius: 10px;
+  text-align: left;
+}
+
+.chat-page .chat-sidebar nav button:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.chat-page .chat-sidebar nav button[aria-current] {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  color: var(--ink);
+}
+
+.chat-sidebar nav span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.chat-sidebar time {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.chat-memory section {
+  padding-block: var(--space-4);
+  border-bottom: var(--space-px) solid var(--line);
+}
+
+.chat-memory h3 {
+  margin: 0 0 var(--space-2);
+  font-family: var(--waka-face);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.chat-memory p {
+  margin: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.chat-memory li + li {
+  margin-top: var(--space-3);
+}
+
+.chat-memory small {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.chat-page .chat-drawer-backdrop,
+.chat-page .chat-drawer-backdrop:hover {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  opacity: 0.55;
+}
+
+@media (max-width: 760px) {
+  .chat-page .chat-sidebar,
+  .chat-page .chat-memory {
+    width: 100%;
+  }
 }
 }
