@@ -1021,3 +1021,65 @@
   box-shadow: 0 0 10px
     color-mix(in srgb, var(--jar-live, #fff2dc) calc(var(--waka-day-glow, 0) * 55%), transparent);
 }
+
+/* ---------------------------------------------------------------------------
+ * The moment
+ *
+ * Asked while the photo is still in your hands, between the drawer that holds
+ * it and the body you are writing in — so the question sits with the thing it
+ * is about rather than arriving after it.
+ * ------------------------------------------------------------------------- */
+
+.waka-moment {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: var(--space-px) solid var(--line);
+  border-radius: 12px;
+  background: var(--waka-raised);
+}
+
+/* The question is the one warm line in the composer: it is the only thing
+   here that is asking rather than waiting. */
+.waka-moment-ask {
+  font-family: var(--waka-face);
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.waka-moment-why {
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-2) var(--space-3);
+  border: var(--space-px) solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.45;
+  resize: none;
+  field-sizing: content;
+  max-height: 7rem;
+}
+
+.waka-moment-why::placeholder {
+  color: var(--muted);
+}
+
+.waka-moment-why:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+/* Quiet on purpose: it is permission, not an instruction. */
+.waka-moment-skip {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: 11px;
+  color: var(--muted);
+}

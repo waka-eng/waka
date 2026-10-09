@@ -874,5 +874,8 @@
   "worldDaysEmpty": "아직 담은 게 없어요. 무언가 담은 날은 그날의 점에 불이 들어와요.",
   "worldDaysKept": "{count}개 담음",
   "worldDaysNone": "담은 것 없음",
-  "worldMenuDays": "지난 날들"
+  "worldMenuDays": "지난 날들",
+  "worldMomentAsk": "이 순간은 왜 특별하게 느껴졌나요?",
+  "worldMomentPlaceholder": "떠오르는 대로 적어도 괜찮아요",
+  "worldMomentSkip": "말하지 않고 담기"
 }
