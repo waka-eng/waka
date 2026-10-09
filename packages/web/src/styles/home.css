@@ -77,10 +77,22 @@
    hue that encodes a theme, a kind or a category anywhere on this page, and
    there must never be one again. */
 .jar {
-  --jar-deep: #06080d;
+  /**
+   * PRE-COMPENSATED FOR THE FILM ON TOP OF IT.
+   *
+   * The grain blends normally now, so it lifts whatever is under it by
+   * opacity x (128 - ground) — about 4 LSB. These two are the values that
+   * composite back to the ground this world is actually meant to be:
+   * 0.965 x #020409 + 0.035 x mid-grey = #06080d, and likewise for the sky.
+   *
+   * Only the world's own ground moves. `--moon-ground` is the page ground for
+   * surfaces that carry no film — the archive, the principles, a conversation
+   * — and compensating those would make them four points too dark.
+   */
+  --jar-deep: #020409;
   --jar-atmos: #06080d;
   /* the sky: the same ground, a few percent thinner */
-  --jar-sky: #0a0d14;
+  --jar-sky: #060910;
   --jar-ink: #e8edf4;
   --jar-muted: rgba(232, 237, 244, 0.55);
   --jar-faint: rgba(232, 237, 244, 0.3);
@@ -1875,7 +1887,10 @@
      the companion is placed at the midpoint of what is left so the two gaps
      are equal by construction rather than by eye. */
   top: auto;
-  bottom: env(safe-area-inset-bottom);
+  /* At least a thumb's clearance, and more where the device asks for it —
+     `max()` rather than the bare inset, which is 0 on most phones and left
+     the box flush against the bottom edge. */
+  bottom: max(var(--sp-8), env(safe-area-inset-bottom));
   /* the air between the last word and the field's top edge */
   padding: 0 var(--sp-20) var(--sp-14);
   text-align: center;
@@ -2241,11 +2256,27 @@
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  mix-blend-mode: overlay;
-  /* Judged against a real black in frame. Overlay leaves black black by
-     construction, so this reads on the midtones — the orbs, the companion and
-     the type — and never lifts the ground, which is the whole point. */
-  opacity: 0.09;
+  /**
+   * NORMAL, NOT OVERLAY — and that reverses this layer's old purpose.
+   *
+   * The note above said overlay "leaves black black by construction, so this
+   * reads on the midtones and never lifts the ground, which is the whole
+   * point." That was the whole point, and it is why the glow bands: overlay's
+   * multiply branch runs wherever the backdrop is below half, so on a ground
+   * this dark the noise contributes about two percent of its amplitude. The
+   * film was deliberately doing nothing in the one region that needs it.
+   *
+   * Banding is a near-black problem. The companion's glow falls off across
+   * ~250px of almost-black, which an 8-bit ramp quantises into flat bands up
+   * to 26px wide — 78 device pixels on a 3x phone, invisible on the desktop
+   * LCD this was judged on. A dither has to perturb the darks, so it blends
+   * normally and the ground is pre-compensated for the lift (see `--jar-deep`).
+   */
+  mix-blend-mode: normal;
+  /* 0.035 with full-range noise is 2.6 LSB of perturbation: enough to
+     dissolve a contour step, below the threshold where it reads as grain.
+     Under ~0.025 the banding survives; over ~0.05 it becomes texture. */
+  opacity: 0.035;
   background-repeat: repeat;
   will-change: opacity;
 }

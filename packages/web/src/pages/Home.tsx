@@ -10843,6 +10843,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * IGNORING IT COSTS NOTHING. The receipt is as skippable as it was before;
    * this adds a door beside it, not a question in front of it.
    */
+  /** Whether this input can drag at all, which decides what the box offers. */
+  const [touchOnly, setTouchOnly] = useState(
+    () => window.matchMedia?.('(pointer: coarse)').matches ?? false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia?.('(pointer: coarse)');
+    if (!mq) return;
+    const change = () => setTouchOnly(mq.matches);
+    mq.addEventListener('change', change);
+    return () => mq.removeEventListener('change', change);
+  }, []);
   const [talking, setTalking] = useState(false);
   const talkAbout = useCallback(async (kept: { id: string; text: string }) => {
     const profileId = storageScope?.profileId;
@@ -13676,7 +13687,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 rows={1}
                 style={mouthOpen ? { visibility: 'hidden' } : undefined}
                 value={draft}
-                placeholder={say('worldKeepPlaceholder')}
+                /* THERE IS NO DROP ON A PHONE. "Type, paste, or drop a file"
+                   is desktop copy, and it was shipping to a device where a
+                   third of it describes a gesture that does not exist. The
+                   pointer query is the honest test — it asks whether this
+                   input can drag, not how wide the window happens to be. */
+                placeholder={say(touchOnly ? 'worldKeepPlaceholderTouch' : 'worldKeepPlaceholder')}
                 aria-label={say('worldCaptureInspiration')}
                 aria-describedby="jar-keep-hint"
                 onChange={event => { draftRef.current = event.target.value; setDraft(event.target.value); setCharSay(''); setMouthNote(''); }}
@@ -13850,7 +13866,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     <button
                       key={value}
                       type="button"
-                      className={value === 'true' ? 'jar-char-claim-yes' : undefined}
+                      /* NO PRIMARY. The three answers are peers — see the
+                         note in claims.css for why lighting "yes" both broke
+                         the light-is-the-only-channel law and put a thumb on
+                         the scale of every principle written downstream. */
                       onClick={() => {
                         const claim = claimQueue[0]!;
                         /* Advance first: a judgement about yourself should not

@@ -841,6 +841,7 @@
   "worldSettingsOpen": "Settings",
   "worldMenuField": "Your inspirations",
   "worldMenuTalk": "Talk with WAKA",
+  "worldKeepPlaceholderTouch": "Type or paste",
   "worldKeepPlaceholder": "Type, paste, or drop a file",
   "worldKeepViaAgent": "Save inspirations with MCP",
   "worldKeepMcpWhat": "Point an agent at WAKA and it can keep things here while you work.",

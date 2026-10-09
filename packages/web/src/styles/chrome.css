@@ -67,9 +67,29 @@ body {
   --moon-ink: #e8edf4;
   /* readable on this ground at body sizes — the world can afford dimmer
      because its faint type is ornament over light; a form cannot */
-  --moon-muted: rgba(232, 237, 244, 0.72);
-  --moon-faint: rgba(232, 237, 244, 0.52);
-  --moon-edge: rgba(255, 255, 255, 0.08);
+  /**
+   * THE QUIET TIERS, RE-SPEC'D AGAINST THE GROUND THEY SIT ON.
+   *
+   * These were picked to look right, which on a near-black ground is the one
+   * method that does not work: WCAG's 4.5:1 is calibrated on light grounds
+   * and overstates legibility as a colour approaches black, so a grey that
+   * "passes" here can be a glance-only tier in practice. Measured against
+   * `#06080d`:
+   *
+   *   muted at .72  ->  8.9:1   under the floor for anything sentence-length
+   *   faint at .52  ->  5.0:1   under the floor for a readable label
+   *   edge  at .08  ->  1.17:1  a hairline nobody can see
+   *
+   * Raised to 10.9:1, 6.7:1 and 1.41:1. The ink above is deliberately NOT
+   * pure white and stays that way — at 17:1 it is already at the top of the
+   * usable range, and #ffffff on Jost 300 blooms on a dark ground, thinning
+   * the stems it is supposed to make legible. Pure white is reserved for the
+   * two things that are actually light: the creature's core, and the one
+   * filled control on the screen.
+   */
+  --moon-muted: rgba(232, 237, 244, 0.8);
+  --moon-faint: rgba(232, 237, 244, 0.62);
+  --moon-edge: rgba(255, 255, 255, 0.14);
   --moon-raised: rgba(255, 255, 255, 0.035);
   --moon-warm: #fff2dc;
 
@@ -1180,7 +1200,10 @@ body {
 body .field-hint,
 body .login-subtitle,
 body .profile-email {
-  color: rgba(232, 237, 244, 0.62);
+  /* The token, not its value: this followed `--moon-faint` up to 6.7:1 the
+     moment the tier was re-spec'd, which is the whole reason the tier has a
+     name. The gate caught it written out by hand. */
+  color: var(--moon-faint);
   font-size: var(--t-ui);
 }
 /* labels name the thing under them: they may be quiet, not faint */
