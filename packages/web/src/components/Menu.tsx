@@ -1,28 +1,31 @@
 /**
- * THE MENU — where every destination lives, so the home page holds none.
+ * THE WHOLE TOP OF THE SCREEN: where you are, where else you could be, and
+ * the two things that are not places.
  *
- * This exists to be the answer to feature accretion. The pattern it replaces:
- * a feature ships, it needs a way in, and the way in becomes another control
- * on the main screen — until the screen is a list of everything the product
- * can do and no longer says what it is for. The two changes merged immediately
- * before this was written were a cue explaining how inspirations form a
- * reading and a help line explaining the same thing again, both added beside
- * everything else, because the loop was not legible and copy is the cheapest
- * thing to add.
+ * WHAT THIS REPLACED, AND WHY. It was a hamburger on the left and a cog on
+ * the right. The hamburger held four rows and could tell you that other
+ * places existed, but never which one you were standing in — a door with no
+ * label. Three of its four rows were not unrelated places at all: your
+ * inspirations, your top of mind and your principles are the SAME MATERIAL AT
+ * THREE DEPTHS, and the honest control for one axis is a switcher that names
+ * the rung you are on.
  *
- * So the rule this encodes, founder ruling: THE HOME PAGE HOLDS THREE THINGS —
- * the top of mind, the character, and the box you keep things in. Everything
- * else is behind the hamburger on the left; everything about the account and
- * its agents is behind the gear on the right. Nothing earns a permanent place
- * on the home page by being new, important, or recently broken.
+ * So the centre names the view and opens the other two. The right corner is
+ * everything about the account, as it always was. The left corner is talking,
+ * which until now could only be reached in the ten seconds after a save — the
+ * receipt still offers it and that conversation still arrives with a subject,
+ * but a corner is a door you can use on a day you have nothing to keep.
  *
- * ITEMS CARRY ACTIONS, NOT URLS. Home navigates by moving a camera through its
- * own world, not by changing the path, so a menu of links could only reach the
- * handful of screens that happen to have addresses. Taking a callback per item
- * is what lets this hold "Inspirations", which is a place in the field, beside
- * "Claims", which is a route — without the menu knowing which is which.
+ * IT COSTS THE HOME SCREEN NOTHING. "Top of mind" was already printed above
+ * the statement. A label became a control, and a door disappeared.
  *
- * A long menu is not the failure mode. A long home page is.
+ * The rule the old file encoded still holds and still matters: THE HOME PAGE
+ * HOLDS THREE THINGS — the top of mind, the character, and the box you keep
+ * things in. Nothing earns a permanent place on it by being new, important,
+ * or recently broken. This is the chrome around that page, and it is three
+ * controls, which is the whole navigation of the product.
+ *
+ * A long switcher list is not the failure mode. A long home page is.
  */
 import { useEffect, useId, useRef, useState } from "react";
 
@@ -47,6 +50,23 @@ export interface MenuItem {
   /** Carried onto the row so the field's own styles and tests still find it. */
   className?: string;
   /**
+   * HOW THIS VIEW IS MADE, in plain lines, shown on hover of the switcher.
+   *
+   * Founder, on the top of mind: "show hover card to explain how this is
+   * created." The sentence under that label is the product's whole claim
+   * about a person, and they are entitled to know how it was arrived at
+   * before deciding whether to believe it.
+   *
+   * It hangs off the switcher rather than off a second label beside the
+   * statement, because the switcher is now the only place the view is named
+   * — and two labels saying "Top of mind" on one screen is the duplication
+   * this whole change removed.
+   *
+   * Hovering explains, pressing switches. They are separate states on
+   * purpose: a person reaching to read is not reaching to navigate.
+   */
+  explain?: string[];
+  /**
    * How much is behind this door, announced but not printed.
    *
    * The archive's size rode on the old Inspirations button as a screen-reader
@@ -60,17 +80,23 @@ export interface MenuItem {
 
 export interface MenuProps {
   locale: SupportedLocale;
-  /** Ordered as the loop runs. The caller owns the order — see Home. */
+  /** The three views, ordered as the loop runs. */
   items: readonly MenuItem[];
+  /** Which one is being looked at; `null` on a page that is none of them. */
+  current?: string | null;
   /** Everything about this account and its agents. */
   onSettings: () => void;
+  /** Talking, from a day you have nothing to keep. */
+  onChat: () => void;
   /** Hidden while a panel owns the screen, so two sheets never stack. */
   hidden?: boolean;
 }
 
-export function Menu({ locale, items, onSettings, hidden }: MenuProps): JSX.Element | null {
+export function Menu({ locale, items, current, onSettings, onChat, hidden }: MenuProps): JSX.Element | null {
   const [open, setOpen] = useState(false);
+  const [explaining, setExplaining] = useState(false);
   const panelId = useId();
+  const explainId = useId();
   /* Focus lands on the first destination, not on a way out — see below. */
   const first = useRef<HTMLButtonElement | null>(null);
 
@@ -97,28 +123,85 @@ export function Menu({ locale, items, onSettings, hidden }: MenuProps): JSX.Elem
 
   if (hidden) return null;
 
+  /* The name on the trigger is the view you are in; a page that is none of
+     them (settings, a conversation) says the first rung rather than a blank
+     control, because the switcher's job there is still to offer a way back
+     into the three. */
+  const here = items.find((item) => item.id === current) ?? items[0];
+
   return (
     <>
       <div className="waka-corners" data-jar-chrome="1" data-jar-interactive="1">
+        {/* TALKING. A speech bubble and not a hamburger: the left corner used
+            to be a list of places and is now one act, so the glyph says which
+            act rather than "there is more". */}
         <button
           type="button"
           className="waka-corner"
-          aria-label={t(locale, "worldMenuOpen")}
-          aria-expanded={open}
-          aria-controls={panelId}
-          onClick={() => setOpen(true)}
+          aria-label={t(locale, "worldMenuTalk")}
+          onClick={onChat}
         >
-          {/* Three rules, not an icon font: the glyph is the shape it means. */}
           <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
             <path
-              d="M3 6h14M3 10h14M3 14h14"
+              d="M17 11.5a2.5 2.5 0 0 1-2.5 2.5H8.2L4.5 16.8a.4.4 0 0 1-.64-.32V14h-.36A2.5 2.5 0 0 1 1 11.5v-7A2.5 2.5 0 0 1 3.5 2h11A2.5 2.5 0 0 1 17 4.5z"
               stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
+              strokeWidth="1.4"
+              strokeLinejoin="round"
               fill="none"
             />
           </svg>
         </button>
+
+        {/* WHERE YOU ARE, AND THE WAY TO THE OTHER TWO. */}
+        {here ? (
+          <div
+            className="waka-switch"
+            /* The explanation follows the pointer, not the list: opening the
+               list closes it, because a card over the rungs you are choosing
+               between is in the way of the choice. */
+            onPointerEnter={() => setExplaining(true)}
+            onPointerLeave={() => setExplaining(false)}
+          >
+            <button
+              type="button"
+              className="waka-switch-trigger"
+              aria-expanded={open}
+              aria-controls={panelId}
+              aria-describedby={explaining && !open ? explainId : undefined}
+              onFocus={() => setExplaining(true)}
+              onBlur={() => setExplaining(false)}
+              onClick={() => { setExplaining(false); setOpen((value) => !value); }}
+            >
+              <span>{t(locale, here.label)}</span>
+              {/* The caret turns over when the list is down: the one piece of
+                  motion here, and it explains rather than decorates. */}
+              <svg
+                className="waka-switch-caret"
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path
+                  d="M2 4l3 3 3-3"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </svg>
+            </button>
+            {explaining && !open && here.explain?.length ? (
+              <span id={explainId} role="note" className="waka-switch-card">
+                {here.explain.map((line) => (
+                  <span key={line}>{line}</span>
+                ))}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
 
         <button
           type="button"
@@ -126,15 +209,6 @@ export function Menu({ locale, items, onSettings, hidden }: MenuProps): JSX.Elem
           aria-label={t(locale, "worldSettingsOpen")}
           onClick={onSettings}
         >
-          {/* A COG, NOT A SUN.
-              What was here was a small circle with eight even rays around it,
-              and in a product whose only meaning channel is LIGHT — the
-              companion dims, the field's orbs burn, a busy day is a brighter
-              day — a radiating circle reads as brightness. Founder, pointing
-              at this corner: "doesn't look like settings." It looked like a
-              theme toggle, because it was drawn like one.
-              This is a six-toothed gear: teeth, a root circle between them,
-              and a hub. Six rather than eight so the teeth survive at 20px. */}
           <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
             <path
               d="M10.00 4.10 A5.9 5.9 0 0 1 11.13 4.21 L12.47 2.39 A8.0 8.0 0 0 1 15.35 4.05 L14.45 6.13 A5.9 5.9 0 0 1 15.11 7.05 A5.9 5.9 0 0 1 15.58 8.08 L17.83 8.34 A8.0 8.0 0 0 1 17.83 11.66 L15.58 11.92 A5.9 5.9 0 0 1 15.11 12.95 A5.9 5.9 0 0 1 14.45 13.87 L15.35 15.95 A8.0 8.0 0 0 1 12.47 17.61 L11.13 15.79 A5.9 5.9 0 0 1 10.00 15.90 A5.9 5.9 0 0 1 8.87 15.79 L7.53 17.61 A8.0 8.0 0 0 1 4.65 15.95 L5.55 13.87 A5.9 5.9 0 0 1 4.89 12.95 A5.9 5.9 0 0 1 4.42 11.92 L2.17 11.66 A8.0 8.0 0 0 1 2.17 8.34 L4.42 8.08 A5.9 5.9 0 0 1 4.89 7.05 A5.9 5.9 0 0 1 5.55 6.13 L4.65 4.05 A8.0 8.0 0 0 1 7.53 2.39 L8.87 4.21 A5.9 5.9 0 0 1 10.00 4.10 Z"
@@ -150,14 +224,14 @@ export function Menu({ locale, items, onSettings, hidden }: MenuProps): JSX.Elem
 
       {open ? (
         <div
-          className="waka-menu-scrim"
+          className="waka-menu-scrim waka-menu-scrim--under"
           data-jar-chrome="1"
           data-jar-interactive="1"
           onClick={() => setOpen(false)}
         >
           <nav
             id={panelId}
-            className="waka-menu"
+            className="waka-menu waka-menu--under"
             aria-label={t(locale, "worldMenuLabel")}
             onClick={(event) => event.stopPropagation()}
           >
@@ -166,7 +240,12 @@ export function Menu({ locale, items, onSettings, hidden }: MenuProps): JSX.Elem
                 key={item.id}
                 ref={index === 0 ? first : undefined}
                 type="button"
-                className={`waka-menu-item${item.className ? ` ${item.className}` : ""}`}
+                className={`waka-menu-item${item.id === current ? " waka-menu-item--here" : ""}${item.className ? ` ${item.className}` : ""}`}
+                /* The rung you are standing on is marked and still pressable:
+                   pressing it closes the list, which is the same thing the
+                   caret does and the thing a person expects from a control
+                   they opened by mistake. */
+                aria-current={item.id === current ? "page" : undefined}
                 disabled={item.disabled}
                 onClick={() => {
                   setOpen(false);
