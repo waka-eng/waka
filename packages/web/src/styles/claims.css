@@ -33,6 +33,46 @@
    * instead of layered over whatever happens to be behind it.
    */
   --waka-raised: color-mix(in srgb, var(--bg) 96%, #ffffff 4%);
+
+  /**
+   * THE GROUND BEHIND A SHEET, named because it was three values.
+   *
+   * The menu's scrim was 55%, the card sheet's was 62%, and the chat's
+   * drawer backdrop was a flat black at 0.55 opacity — the same role, told
+   * three different ways, which is precisely the drift the founder meant by
+   * "everything is so inconsistent and all over the place". One sheet should
+   * not sink the page further than another just because it was written later.
+   *
+   * DARKEN, NEVER WASH. Mixing `--ink` was right on parchment and wrong here:
+   * in the moon palette the ink IS the light colour, so a scrim built from it
+   * lifted the whole page toward white instead of sinking it. A scrim is
+   * shadow, so it is built from black regardless of which way the palette
+   * runs.
+   */
+  --waka-scrim: color-mix(in srgb, #000 58%, transparent);
+
+  /**
+   * TWO RADII, BY ROLE — because there were six.
+   *
+   * Controls were rounded 8px, 10px and 12px depending on which screen and
+   * which week; surfaces were 12px, 14px and 16px. Nothing was wrong on its
+   * own, which is why it survived, and it is most of what the founder saw as
+   * "everything is so inconsistent and all over the place": a button is a
+   * slightly different shape on the page you just came from.
+   *
+   * A NOTE ON THE LAW THIS DOES NOT FOLLOW. `system.css` states a polar
+   * position — 2px for paper, 999px for controls, "nothing in between; the
+   * 6-to-12px middle is what makes a page read as a generic dashboard" — and
+   * that governs the landing surface, where it is kept. The app has never
+   * followed it: home.css and chrome.css have rounded their panels 8 and
+   * 12px since before this file existed. Flipping the whole product to polar
+   * is a design decision, not a tidy-up, and it is not one to make inside a
+   * consistency pass. So these two steps are the app's middle, said once.
+   *
+   * Pills stay `--r-pill` and circles stay 50%: those are shapes, not steps.
+   */
+  --waka-r-control: 10px;
+  --waka-r-surface: 14px;
 }
 
 /**
@@ -84,7 +124,7 @@
   z-index: 40;
   display: flex;
   justify-content: space-between;
-  padding: calc(var(--space-3) + env(safe-area-inset-top)) var(--space-4) 0;
+  padding: calc(var(--sp-12) + env(safe-area-inset-top)) var(--sp-16) 0;
   pointer-events: none;
 }
 
@@ -121,23 +161,20 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  /* DARKEN, NEVER WASH. Mixing `--ink` was right on parchment and wrong here:
-     in the moon palette the ink IS the light colour, so the scrim lifted the
-     whole page toward white instead of sinking it. A scrim is shadow. */
-  background: color-mix(in srgb, #000 55%, transparent);
+  background: var(--waka-scrim);
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
-  padding: max(var(--space-6), env(safe-area-inset-top)) var(--space-4);
+  padding: max(var(--sp-24), env(safe-area-inset-top)) var(--sp-16);
 }
 
 .waka-menu {
   display: flex;
   flex-direction: column;
   min-width: 13rem;
-  padding: var(--space-3);
-  border: var(--space-px) solid var(--line);
-  border-radius: 12px;
+  padding: var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
 }
 
@@ -150,9 +187,9 @@
   width: 100%;
   display: flex;
   align-items: center;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--sp-12) var(--sp-16);
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--waka-r-control);
   background: transparent;
   color: var(--ink);
   text-decoration: none;
@@ -179,10 +216,10 @@
 .waka-menu-close {
   min-height: 44px;
   width: 100%;
-  margin-top: var(--space-2);
-  padding: var(--space-3) var(--space-4);
+  margin-top: var(--sp-8);
+  padding: var(--sp-12) var(--sp-16);
   border: 0;
-  border-top: var(--space-px) solid var(--line);
+  border-top: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
   color: var(--muted);
@@ -220,9 +257,9 @@
   /* Two lines of room at rest: a one-line slot reads as a search field, and
      this is a place to put a thought. */
   min-height: 64px;
-  padding: var(--space-4) var(--space-4);
-  border: var(--space-px) solid var(--line);
-  border-radius: 14px;
+  padding: var(--sp-16) var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
   color: var(--ink);
   font-family: var(--waka-face);
@@ -293,16 +330,16 @@
 .waka-hovercard-card {
   position: absolute;
   right: 0;
-  bottom: calc(100% + var(--space-3));
+  bottom: calc(100% + var(--sp-12));
   z-index: 60;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   width: max-content;
   max-width: 19rem;
-  padding: var(--space-4);
-  border: var(--space-px) solid var(--line);
-  border-radius: 12px;
+  padding: var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
   color: var(--ink);
   font-family: var(--waka-face);
@@ -338,8 +375,8 @@
      on top of "Back" and the search field ran under the gear. The reserve is
      the corner's own height plus the inset it keeps, written once here rather
      than as a guessed margin on each thing that might collide. */
-  padding: calc(var(--waka-corner) + var(--space-4) + env(safe-area-inset-top))
-    clamp(20px, 5vw, 32px) calc(var(--space-9) + env(safe-area-inset-bottom));
+  padding: calc(var(--waka-corner) + var(--sp-16) + env(safe-area-inset-top))
+    clamp(20px, 5vw, 32px) calc(var(--sp-56) + env(safe-area-inset-bottom));
   background: var(--bg);
 }
 
@@ -355,13 +392,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--space-3) var(--space-4);
-  margin-bottom: var(--space-8);
+  gap: var(--sp-12) var(--sp-16);
+  margin-bottom: var(--sp-40);
 }
 
 .waka-page-back {
   min-height: 44px;
-  padding: 0 var(--space-2) 0 0;
+  padding: 0 var(--sp-8) 0 0;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -396,10 +433,10 @@
 
 .waka-page-retry {
   min-height: 44px;
-  margin-top: var(--space-4);
-  padding: var(--space-3) var(--space-5);
-  border: var(--space-px) solid var(--line);
-  border-radius: 8px;
+  margin-top: var(--sp-16);
+  padding: var(--sp-12) var(--sp-20);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
   background: var(--waka-raised);
   color: var(--ink);
   font-family: var(--waka-face);
@@ -419,7 +456,7 @@
 .waka-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--space-5);
+  gap: var(--sp-20);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -436,8 +473,8 @@
   height: 208px;
   padding: 0;
   overflow: hidden;
-  border: var(--space-px) solid var(--line);
-  border-radius: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
   color: var(--ink);
   text-align: left;
@@ -473,7 +510,7 @@
   display: block;
   flex: 1 1 auto;
   min-height: 0;
-  padding: var(--space-4);
+  padding: var(--sp-16);
   overflow: hidden;
   /* Long keeps fade out rather than ending in an ellipsis mid-word: the grid
      is for finding the thing, and the whole text is one press away. */
@@ -493,7 +530,7 @@
    kept sentence at reading size, and a tile is for recognising the thing
    rather than for reading it twice. */
 .waka-card--text .waka-card-body {
-  padding: var(--space-4);
+  padding: var(--sp-16);
 }
 
 .waka-card--text .waka-card-text {
@@ -509,7 +546,7 @@
 .waka-statements {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   max-width: 34rem;
   margin: 0;
   padding: 0;
@@ -519,9 +556,9 @@
 .waka-statement {
   display: block;
   width: 100%;
-  padding: var(--space-4) 0;
+  padding: var(--sp-16) 0;
   border: 0;
-  border-bottom: var(--space-px) solid var(--line);
+  border-bottom: 1px solid var(--line);
   background: transparent;
   color: var(--ink);
   font-family: var(--waka-face);
@@ -565,19 +602,19 @@
   align-items: center;
   justify-content: center;
   padding: clamp(16px, 5vw, 40px);
-  background: color-mix(in srgb, #000 62%, transparent);
+  background: var(--waka-scrim);
 }
 
 .waka-sheet {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--sp-16);
   width: min(34rem, 100%);
   max-height: 86dvh;
   overflow: auto;
-  padding: var(--space-6);
-  border: var(--space-px) solid var(--line);
-  border-radius: 16px;
+  padding: var(--sp-24);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
   box-shadow: 0 24px 60px rgb(0 0 0 / 55%);
 }
@@ -586,7 +623,7 @@
   width: 100%;
   max-height: 46dvh;
   object-fit: contain;
-  border-radius: 10px;
+  border-radius: var(--waka-r-control);
 }
 
 .waka-sheet-text {
@@ -602,9 +639,9 @@
 .waka-sheet-close {
   align-self: flex-start;
   min-height: 44px;
-  padding: var(--space-2) var(--space-4);
-  border: var(--space-px) solid var(--line);
-  border-radius: 8px;
+  padding: var(--sp-8) var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
   background: transparent;
   color: var(--muted);
   font-family: var(--waka-face);
@@ -634,7 +671,7 @@
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   width: 100%;
   max-width: 680px;
   margin: 0 auto;
@@ -645,17 +682,17 @@
 .waka-composer-drawer {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: var(--space-px) solid var(--line);
-  border-radius: 12px;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
 }
 
 .waka-drawer-toggle {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   min-height: 32px;
   padding: 0;
   border: 0;
@@ -684,8 +721,8 @@
   justify-content: center;
   min-width: 20px;
   height: 20px;
-  padding: 0 6px;
-  border-radius: 10px;
+  padding: 0 var(--sp-6);
+  border-radius: var(--waka-r-control);
   background: var(--ink);
   color: var(--bg);
   font-size: var(--t-meta);
@@ -695,7 +732,7 @@
 .waka-drawer-items {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -704,9 +741,9 @@
 .waka-drawer-items li {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
-  border: var(--space-px) solid var(--line);
+  gap: var(--sp-8);
+  padding: var(--sp-4) var(--sp-8) var(--sp-4) var(--sp-12);
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--bg);
   font-family: var(--waka-face);
@@ -741,8 +778,8 @@
 .waka-composer-body {
   display: flex;
   flex-direction: column;
-  border: var(--space-px) solid var(--line);
-  border-radius: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
   overflow: hidden;
 }
@@ -757,7 +794,7 @@
   width: 100%;
   min-height: 56px;
   margin: 0;
-  padding: var(--space-4) var(--space-4) var(--space-2);
+  padding: var(--sp-16) var(--sp-16) var(--sp-8);
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -779,8 +816,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-3);
-  padding: 0 var(--space-3) var(--space-3);
+  gap: var(--sp-8) var(--sp-12);
+  padding: 0 var(--sp-12) var(--sp-12);
   font-family: var(--waka-face);
   font-size: var(--t-meta);
   color: var(--muted);
@@ -794,9 +831,9 @@
 .waka-composer-send {
   margin-left: auto;
   min-height: 32px;
-  padding: 0 var(--space-4);
-  border: var(--space-px) solid var(--ink);
-  border-radius: 8px;
+  padding: 0 var(--sp-16);
+  border: 1px solid var(--ink);
+  border-radius: var(--waka-r-control);
   background: var(--ink);
   color: var(--bg);
   font-family: var(--waka-face);
@@ -837,7 +874,7 @@
      reads the way a calendar does rather than as a ribbon. */
   grid-template-rows: repeat(7, 1fr);
   grid-auto-flow: column;
-  gap: 6px;
+  gap: var(--sp-6);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -859,7 +896,7 @@
 .waka-day[style*="--waka-day-glow"] {
   background: color-mix(
     in srgb,
-    var(--jar-live, #fff2dc) calc(var(--waka-day-glow, 0) * 100%),
+    var(--jar-live) calc(var(--waka-day-glow, 0) * 100%),
     color-mix(in srgb, var(--ink) 9%, transparent)
   );
 }
@@ -873,7 +910,7 @@
   height: 100%;
   border-radius: 50%;
   box-shadow: 0 0 10px
-    color-mix(in srgb, var(--jar-live, #fff2dc) calc(var(--waka-day-glow, 0) * 55%), transparent);
+    color-mix(in srgb, var(--jar-live) calc(var(--waka-day-glow, 0) * 55%), transparent);
 }
 
 /* ---------------------------------------------------------------------------
@@ -887,10 +924,10 @@
 .waka-moment {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  border: var(--space-px) solid var(--line);
-  border-radius: 12px;
+  gap: var(--sp-8);
+  padding: var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
 }
 
@@ -907,9 +944,9 @@
 .waka-moment-why {
   width: 100%;
   min-height: 48px;
-  padding: var(--space-2) var(--space-3);
-  border: var(--space-px) solid var(--line);
-  border-radius: 8px;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
   background: var(--bg);
   color: var(--ink);
   font-family: var(--waka-face);
@@ -949,9 +986,9 @@
   max-width: 24rem;
   margin-left: auto;
   min-height: 36px;
-  padding: 0 var(--space-3);
-  border: var(--space-px) solid var(--line);
-  border-radius: 8px;
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
   background: var(--waka-raised);
   color: var(--ink);
   font-family: var(--waka-face);
@@ -994,7 +1031,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   padding: 0 clamp(20px, 6vw, 28px);
   text-align: center;
   /* The world below stays draggable; the controls inside opt back in. */
@@ -1014,7 +1051,7 @@
    * is not.
    */
   max-height: calc(
-    100dvh - var(--jar-mouth-top, 58%) - var(--jar-mouth-h, 128px) - var(--space-5)
+    100dvh - var(--jar-mouth-top, 58%) - var(--jar-mouth-h, 128px) - var(--sp-20)
   );
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1047,19 +1084,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-12);
   width: min(30rem, 100%);
-  padding: var(--space-2) 0;
+  padding: var(--sp-8) 0;
 }
 
-.jar-char-claim-ask {
-  margin: 0;
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
 
 /* The one sentence with weight. Same face and the same light weight as the
    reading above it — it is the same kind of thing, said earlier. */
@@ -1077,15 +1106,15 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   margin: 0;
 }
 
 .jar-char-claim-answers button {
   min-height: 36px;
-  padding: 0 var(--space-4);
-  border: var(--space-px) solid var(--line);
-  border-radius: 8px;
+  padding: 0 var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
   background: transparent;
   color: var(--ink);
   font-family: var(--waka-face);
@@ -1110,7 +1139,7 @@
    spacing come from the stylesheet that defines that design. Only the things
    the world's panel gets from being IN the world are restated here. */
 .jar-panel-card {
-  gap: var(--space-3);
+  gap: var(--sp-12);
 }
 
 .jar-panel-card .jar-panel-head {
@@ -1134,9 +1163,9 @@
    when you start changing them. */
 .jar-panel-card textarea.jar-panel-text {
   min-height: 7rem;
-  padding: var(--space-3);
-  border: var(--space-px) solid var(--line);
-  border-radius: 8px;
+  padding: var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
   background: var(--bg);
   resize: none;
   field-sizing: content;
@@ -1147,7 +1176,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--sp-16);
   margin: 0;
   width: 100%;
 }

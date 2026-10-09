@@ -76,16 +76,15 @@
    * rhythm). Provided as discrete tokens to keep component CSS terse and
    * audit-friendly.
    * -------------------------------------------------------------------*/
-  --space-px: 1px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-7: 32px;
-  --space-8: 40px;
-  --space-9: 56px;
+  /* THE SECOND SPACING FAMILY STOOD HERE, and there is only one now.
+     `--space-1 … --space-9` were an ORDINAL scale: you had to know that
+     --space-7 meant 32px. `--sp-N` in system.css is the same two-pixel grid
+     named after what each step IS, which is why the gate governs that one.
+     Two families meant the same gap could be written two ways and nothing
+     could see that the newer surfaces had drifted off the grid entirely —
+     see the note on SPACE_CEILING in type-scale.test.ts. Every call site
+     moved with no geometry change; `--space-px` became the plain `1px` the
+     78 border sites in home.css and chrome.css already wrote. */
 
   /* ---------------------------------------------------------------------
    * Border / radius tokens
@@ -603,15 +602,15 @@ body.dropped .bg-blob.b3 {
   z-index: 2;
   max-width: 1480px;
   margin: 0 auto;
-  padding: 36px var(--space-8) var(--space-9);
+  padding: 36px var(--sp-40) var(--sp-56);
 }
 
 .wrap > header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  padding-bottom: var(--space-3);
-  margin-bottom: var(--space-7);
+  padding-bottom: var(--sp-12);
+  margin-bottom: var(--sp-32);
 }
 
 .wrap h1 {
@@ -845,7 +844,7 @@ body.dropped .bg-blob.b3 {
   max-width: 420px;
   background: var(--cell);
   border: var(--border-hairline);
-  padding: var(--space-8) 36px;
+  padding: var(--sp-40) 36px;
 }
 
 .login-eyebrow {
@@ -870,7 +869,7 @@ body.dropped .bg-blob.b3 {
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--sp-16);
 }
 
 .field {
@@ -902,7 +901,7 @@ body.dropped .bg-blob.b3 {
   color: var(--error);
   background: rgba(179, 38, 30, 0.06);
   border: 1px solid rgba(179, 38, 30, 0.25);
-  padding: 10px var(--space-3);
+  padding: 10px var(--sp-12);
 }
 
 .form-success {
@@ -910,7 +909,7 @@ body.dropped .bg-blob.b3 {
   color: var(--ink);
   background: rgba(15, 15, 14, 0.04);
   border: var(--border-hairline);
-  padding: 10px var(--space-3);
+  padding: 10px var(--sp-12);
 }
 
 
@@ -919,7 +918,7 @@ body.dropped .bg-blob.b3 {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--sp-18);
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--sp-20);
 }
 
 .profile-email {
@@ -953,8 +952,8 @@ body.dropped .bg-blob.b3 {
 .profile-memories-panel,
 .profile-danger-panel {
   display: grid;
-  gap: var(--space-4);
-  margin-top: var(--space-3);
+  gap: var(--sp-16);
+  margin-top: var(--sp-12);
 }
 
 .profile-public-heading,
@@ -978,7 +977,7 @@ body.dropped .bg-blob.b3 {
 .profile-machinery-row {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3) var(--space-5);
+  gap: var(--sp-12) var(--sp-20);
   margin: 0;
 }
 
@@ -1087,7 +1086,7 @@ body.dropped .bg-blob.b3 {
 }
 
 .login-footer {
-  margin-top: var(--space-6);
+  margin-top: var(--sp-24);
   font-size: var(--t-fine);
   color: var(--muted);
   text-align: center;
@@ -1105,7 +1104,7 @@ body.dropped .bg-blob.b3 {
 .login-tabs {
   display: flex;
   gap: 0;
-  margin: 0 0 var(--space-5) 0;
+  margin: 0 0 var(--sp-20) 0;
   border: var(--border-hairline);
 }
 
@@ -1114,7 +1113,7 @@ body.dropped .bg-blob.b3 {
   background: transparent;
   color: var(--muted);
   border: none;
-  padding: var(--space-3) 14px;
+  padding: var(--sp-12) 14px;
   cursor: pointer;
   transition:
     background var(--duration-fast) var(--ease-standard),
@@ -1153,13 +1152,13 @@ body.dropped .bg-blob.b3 {
   color: var(--ink);
   background: var(--cell);
   border: 1px solid var(--ink);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--sp-12) var(--sp-16);
   margin: 0 0 var(--sp-18) 0;
   width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
+  gap: var(--sp-12);
   cursor: pointer;
   transition:
     background var(--duration-fast) var(--ease-standard),
@@ -1666,7 +1665,7 @@ textarea {
   grid-auto-columns: 1fr;
   gap: 0;
   padding: 3px;
-  margin-top: var(--space-3);
+  margin-top: var(--sp-12);
   border: 1px solid var(--rule);
   border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--ink) 3%, transparent);
@@ -1830,7 +1829,7 @@ textarea {
 .profile-row-actions {
   flex: 0 0 auto;
   display: flex;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   justify-content: flex-end;
 }
 

@@ -57,8 +57,20 @@ import { describe, expect, it } from "vitest";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STYLES = resolve(HERE, "../src/styles");
 
-/** The stylesheets the product is keeping. `surface.css` is exempt — see above. */
-const GOVERNED = ["home.css", "chrome.css", "global.css"] as const;
+/**
+ * The stylesheets the product is keeping. `surface.css` is exempt — see above.
+ *
+ * `claims.css` and `chat.css` JOINED ON 2026-10-08, and the fact that they
+ * could be written and grow without ever being listed here is the whole
+ * reason the founder could say "font sizes, type, placement — everything is
+ * so inconsistent and all over the place" while every gate was green. The
+ * governed files were the ones that existed when this was written; the pages
+ * built on top of them inherited the rules in spirit and nothing in fact.
+ *
+ * A gate with a hand-written list of what it watches only watches the past.
+ * Anything added to `src/styles` belongs in this list on the day it is added.
+ */
+const GOVERNED = ["home.css", "chrome.css", "global.css", "claims.css", "chat.css"] as const;
 
 /**
  * THE CEILING, and it is a number to be lowered.
@@ -147,7 +159,13 @@ function spacingIn(file: string): string[] {
   const decl = /\b(padding|margin|gap|row-gap|column-gap)(-top|-right|-bottom|-left)?:\s*([^;{}]+);/g;
   for (const m of read(file).matchAll(decl)) {
     const value = m[3]!;
-    if (/var\(|calc\(|env\(/.test(value)) continue;
+    /* `clamp(` joins them on 2026-10-08. A fluid gutter is a CHOSEN CURVE,
+       not a value that drifted off the grid — the page padding that narrows
+       from 28px to 20px on a phone is one decision, and flagging it as two
+       stray literals asks for it to be replaced by a fixed step, which is a
+       worse page. The type half of this same file has always counted
+       `clamp()` as on the scale; this is the spacing half agreeing. */
+    if (/var\(|calc\(|env\(|clamp\(/.test(value)) continue;
     for (const px of value.matchAll(/\b\d+px\b/g)) out.push(`${file}: ${m[1]}${m[2] ?? ""}: ${px[0]}`);
   }
   return out;
@@ -203,10 +221,24 @@ describe("the spacing grid is one grid", () => {
  * forced. Colour is the most design-sensitive of the three scales, and a blind
  * mapping of 97 values is a redesign nobody asked for.
  */
-const COLOUR_CEILING = 104;
+const COLOUR_CEILING = 109;
 /* 125 -> 104 on 2026-08-26. Nobody drained twenty-one colours: the dead rules
    that held them were deleted by `e2e:dead-css`, and this ceiling had no way
-   to notice, which is the whole point of the test added below. */
+   to notice, which is the whole point of the test added below.
+
+   104 -> 109 on 2026-10-08, and this is the ONE direction this number is not
+   supposed to move. It moved because the GOVERNED list grew: `claims.css` and
+   `chat.css` had been written and grown entirely outside it, so their colours
+   were never counted by anything. Raising the ceiling to admit them is a
+   one-time rebase of the BASELINE, not slack handed to a call site — the
+   alternative is leaving two live stylesheets unwatched, which is how they
+   drifted in the first place.
+   The five admitted are real: the raised surface's whisper of white, the
+   scrim's black, and two mask stops that are opacity rather than colour.
+   Three scrims written three ways (55%, 62%, and a flat black at .55
+   opacity) became one `--waka-scrim` in the same pass, and a `var(--jar-live,
+   #fff2dc)` fallback that duplicated its own token went out — so the count
+   admitted is already lower than what was found. From here it only falls. */
 
 /** Colour literals, per governed file. */
 function coloursIn(file: string): string[] {
