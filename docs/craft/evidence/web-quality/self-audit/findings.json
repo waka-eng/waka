@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-08",
+  "reviewedRevision": "d07ac1c3dd414615975babcb8af82c121a52f8b1",
+  "scope": "Self-directed product usability audit of the built app, using synthetic accounts and real local auth/API/SQL. Desktop 1280x720 and phone 390x844.",
+  "accounts": [
+    "empty",
+    "four-inspiration account with seeded reading and principles",
+    "2002-inspiration account with a public group member"
+  ],
+  "externalProviderCalls": 0,
+  "productCodeChanged": false,
+  "findings": [
+    {
+      "priority": 1,
+      "area": "Keyboard and accessibility",
+      "observed": "On populated Home, the first three Tab stops were Principle buttons above the visible viewport. They were also exposed in the accessibility tree.",
+      "fix": "Make inactive spatial sections inert and hidden from accessibility until they become active. Preserve intentional focus when moving between sections.",
+      "evidence": [
+        "keyboard-focus.json",
+        "home-desktop.png"
+      ],
+      "source": "packages/web/src/pages/Home.tsx"
+    },
+    {
+      "priority": 1,
+      "area": "Browse saved inspirations",
+      "observed": "The 2002-item archive displayed 2000 unlabeled orbs, without readable titles, snippets, or dates in the main view.",
+      "fix": "Provide a readable browsing view with snippets and dates; retain the spatial view as an optional view. Show recent inspirations before a search term is entered.",
+      "evidence": [
+        "archive-2000-desktop.png"
+      ],
+      "source": "packages/web/src/pages/Home.tsx"
+    },
+    {
+      "priority": 1,
+      "area": "Empty archive",
+      "observed": "An empty Inspirations screen showed an otherwise blank field and a Revisit your inspirations button. Clicking it opened Nothing to review yet.",
+      "fix": "Show a clear empty-state explanation and one Capture action; hide Revisit when there is nothing to revisit.",
+      "evidence": [
+        "empty-inspirations-390.png"
+      ],
+      "source": "packages/web/src/pages/Home.tsx:14741"
+    },
+    {
+      "priority": 2,
+      "area": "Search feedback and scope",
+      "observed": "One-character queries produced neither results nor explanatory feedback. In Bo’s public view, searching destination returned nothing although Bo’s visible public inspiration contained that word; the search is scoped to the viewer’s own profile.",
+      "fix": "Show recent items for an empty query and explain any query-length requirement. In a member or room view, search the visible public collection with an explicit scope.",
+      "evidence": [
+        "find-one-character-390.png",
+        "group-search-desktop.png"
+      ],
+      "source": [
+        "packages/web/src/components/InspirationSearch.tsx:32",
+        "packages/web/src/pages/Home.tsx:14756"
+      ]
+    },
+    {
+      "priority": 2,
+      "area": "Visible directional navigation",
+      "observed": "The return caret had an approximately 8.5px visible bounding box, inherited rgba(232,237,244,0.3), and its own opacity of 0.8. Its button hit target was larger.",
+      "fix": "Increase the visible caret size and resting contrast; optionally show its destination label.",
+      "source": "packages/web/src/styles/home.css:1211"
+    },
+    {
+      "priority": 2,
+      "area": "Audience clarity",
+      "observed": "Capture offers Share with rooms and a general explanation, but does not identify the rooms or explain all-room scope; the choice is also offered on an account with no rooms.",
+      "fix": "Use explicit all-room wording, expose the audience names/count, and explain visibility when the account has no rooms.",
+      "evidence": [
+        "capture-audience-390.png"
+      ],
+      "source": "packages/web/src/components/InspirationComposer.tsx:104"
+    }
+  ]
+}
