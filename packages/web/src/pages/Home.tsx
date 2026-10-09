@@ -5864,7 +5864,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * is measured: the voice block is a claim or a receipt or nothing at
        * all, and a constant would be wrong two of those three times.
        */
-      const voiceH = root!.querySelector<HTMLElement>(".jar-char-say")?.offsetHeight ?? 0;
+      const voiceH = measured.charSay.current?.offsetHeight ?? 0;
       const lo = hqH + companion.size * 0.5 + gap;
       /* The chin sits at `size * 0.62`, so the voice block's own height is
          what remains between the chin and the box. */
@@ -8469,6 +8469,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     /* HQ's content grows when the ambition and the band arrive, which moves
        the companion's slot — so that block's height is observed too */
     if (measured.hqInner.current) ro.observe(measured.hqInner.current);
+    /* AND SO IS WHAT THE COMPANION SAYS, for exactly the same reason.
+       The voice block arrives late — the claim is fetched — so the pass that
+       placed the companion measured an empty block and never looked again.
+       The companion stayed where it had been put before it had anything to
+       say, and the claim grew downward into the gap above the box. That is
+       the whole of "the page just feels unbalanced to my eyes": the lift was
+       computed correctly and then never recomputed. */
+    if (measured.charSay.current) ro.observe(measured.charSay.current);
 
     measure();
     /* `measure` is the first moment `vw` is real, so the horizontal camera can
@@ -13800,7 +13808,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               from the creature. They are its speech, so they sit where its
               mouth is: `--jar-mouth-top` is still written from the chin every
               layout pass, and it means the chin again. */}
-          <div className="jar-char-say" data-jar-chrome="1" data-jar-interactive="1">
+          <div ref={measured.charSay} className="jar-char-say" data-jar-chrome="1" data-jar-interactive="1">
             {/* WHAT IT THINKS ABOUT YOU, ASKED WHERE YOU ALREADY ARE. The
                 claims page is gone: this is the one thing the product needs
                 from a person and cannot do alone, so it is asked by the thing
