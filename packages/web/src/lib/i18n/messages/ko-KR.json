@@ -846,7 +846,6 @@
   "worldInspirationsEmpty": "아직 담은 게 없어요. 홈 화면의 입력창에 무엇이든 넣어 보세요.",
   "worldInspirationsLoad": "영감을 여는 중…",
   "worldInspirationsFail": "영감을 열지 못했어요.",
-  "worldBack": "뒤로",
   "worldPrinciplesFailed": "원칙을 불러오지 못했어요.",
   "worldPrinciplesEmpty": "아직 원칙이 없어요. 같은 선택이 여러 달 쌓여야 만들어져요.",
   "worldCardClose": "닫기",
@@ -867,5 +866,6 @@
   "worldMenuTopOfMind": "지금 마음",
   "worldInspirationsSearch": "담아 둔 것 검색",
   "worldInspirationsNoHits": "일치하는 것이 없어요.",
-  "worldClaimAsks": "이게 너에 대한 말로 맞나요?"
+  "worldClaimAsks": "이게 너에 대한 말로 맞나요?",
+  "worldEditWording": "고치기"
 }

@@ -846,7 +846,6 @@
   "worldInspirationsEmpty": "Nothing kept yet. The box on the home screen takes anything.",
   "worldInspirationsLoad": "Opening your inspirations…",
   "worldInspirationsFail": "Couldn't open your inspirations.",
-  "worldBack": "Back",
   "worldPrinciplesFailed": "Couldn't load your principles.",
   "worldPrinciplesEmpty": "No principles yet. They take months of the same choice to form.",
   "worldCardClose": "Close",
@@ -867,5 +866,6 @@
   "worldMenuTopOfMind": "Top of mind",
   "worldInspirationsSearch": "Search what you kept",
   "worldInspirationsNoHits": "Nothing here matches that.",
-  "worldClaimAsks": "Is this true of you?"
+  "worldClaimAsks": "Is this true of you?",
+  "worldEditWording": "edit"
 }
