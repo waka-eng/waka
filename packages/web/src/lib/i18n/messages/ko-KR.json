@@ -834,7 +834,6 @@
   "worldMenuTalk": "WAKA와 이야기",
   "worldKeepPlaceholder": "적거나 붙여넣거나 파일을 놓으세요",
   "worldKeepViaAgent": "MCP로 영감 담기",
-  "worldKeepHint": "엔터로 담기",
   "worldKeepMcpWhat": "에이전트를 WAKA에 연결하면 일하는 중에도 대신 담아 둬요.",
   "worldKeepMcpTools": "도구는 여섯 개예요: 영감 담기, 목록 보기, 시그널·원칙·프로필 읽기.",
   "worldKeepMcpWhere": "에이전트의 MCP 설정에 waka-mcp를 추가하세요.",

@@ -834,7 +834,6 @@
   "worldMenuTalk": "Talk with WAKA",
   "worldKeepPlaceholder": "Type, paste, or drop a file",
   "worldKeepViaAgent": "Save inspirations with MCP",
-  "worldKeepHint": "Enter to keep",
   "worldKeepMcpWhat": "Point an agent at WAKA and it can keep things here while you work.",
   "worldKeepMcpTools": "It gets six tools: save an inspiration, list them, and read your signals, principles and profile.",
   "worldKeepMcpWhere": "Add waka-mcp to your agent's MCP config.",

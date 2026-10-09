@@ -90,7 +90,6 @@ import {PrinciplesShortcutLabel} from '../components/PrinciplesShortcutLabel';
 import { paintField } from '../space/inspiration/field-paint';
 import { Menu } from '../components/Menu';
 import { usePageMenu } from '../lib/page-menu';
-import { HoverCard } from '../components/HoverCard';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
@@ -5902,6 +5901,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          `home.css`. The variable stays for the compact case, which stacks
          rather than centres. */
       root!.style.setProperty("--jar-mouth-top", `${compactHome ? activityLayout.composerTop : chin + 18}px`);
+      /* AND HOW TALL THE BOX IS, so the companion's voice can never reach it.
+         The voice block hangs from the chin and grows DOWNWARD; the box is
+         pinned to the bottom and grows UPWARD. Nothing stopped them meeting,
+         and on a short window they met — the claim's card sat on the box's
+         top edge and the keep receipt was printed through it (founder: "so
+         crowded!"). Measured rather than assumed: MOUTH_H was a constant for
+         this once and went stale the moment the composer grew a footer, and
+         a reserve that drifts from the thing it reserves for is a collision
+         waiting for a narrower window. */
+      const slot = root!.querySelector<HTMLElement>(".jar-mouth-slot");
+      if (slot) root!.style.setProperty("--jar-mouth-h", `${Math.round(slot.offsetHeight)}px`);
       /* AND THE CHARACTER STATES ITS SIZE, rather than being guessed at.
          The same rule as the seam and the mouth's top: chrome states its
          place, nothing guesses at it. It is a constant now (CHAR_SIZE), and
@@ -13667,17 +13677,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
               {!mouthOpen ? (
                 <div className="waka-composer-foot" id="jar-keep-hint">
-                  <span className="waka-composer-hint">{say('worldKeepHint')}</span>
-                  <HoverCard label={say('worldKeepViaAgent')} className="jar-keep-via">
-                    <span>{say('worldKeepMcpWhat')}</span>
-                    <span>{say('worldKeepMcpTools')}</span>
-                    <span>{say('worldKeepMcpWhere')}</span>
-                    <a href="https://github.com/waka-eng/waka-mcp" target="_blank" rel="noreferrer noopener">
-                      {say('worldKeepMcpOpen')}
-                    </a>
-                  </HoverCard>
-                  {/* The primary action. Required by the pattern, and absent
-                      before this: a keyboard shortcut is not a control. */}
+                  {/* WHAT IS NOT IN THIS FOOTER ANY MORE.
+                      "Enter to keep" — founder pointed at exactly this as the
+                      example of a thing that is not 100% necessary. It was
+                      also FALSE on a touch keyboard, where Enter makes a line,
+                      and it described a shortcut for the button standing
+                      beside it.
+                      "Save inspirations with MCP" — a setup instruction,
+                      printed under the box you type in every day. Setting up
+                      an agent is a once-ever act and it belongs with the keys
+                      that agent needs; it is on the settings page now, beside
+                      them.
+                      What is left is the action. */}
                   <button
                     type="button"
                     className="waka-composer-send"
