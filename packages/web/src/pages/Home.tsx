@@ -65,6 +65,7 @@ import { PrincipleRead } from "../components/PrincipleRead";
 import { publicWebOrigin } from '../lib/public-origins';
 import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlow";
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
+import { createConversation } from "../lib/api/conversations";
 import { DialogSurface } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { useNavigate } from "react-router-dom";
@@ -10808,6 +10809,51 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    */
   const [reflectOn, setReflectOn] = useState<{ id: string; text: string; attachments: InspirationDetail['attachments'] } | null>(null);
   const [recentInspiration,setRecentInspiration]=useState<{owner:string;id:string;text:string;attachments:InspirationDetail['attachments']}|null>(null);
+  /**
+   * FROM KEEPING A THING TO TALKING ABOUT IT.
+   *
+   * Founder: "from saving inspirations to going into a chat experience should
+   * actually feel quite natural... having a separate entry point into saving
+   * an inspiration versus talking about it with WAKA shouldn't be separate."
+   *
+   * It is not a second entry point and it is not a mode on the box. The box
+   * has one job and never asks you to classify what you are about to type —
+   * that hesitation would land on the save, which is the one act that must
+   * have none. Saving is a deposit; talking is a withdrawal; a box that might
+   * do either makes you decide which before you have written anything.
+   *
+   * So talking is a CONSEQUENCE of keeping. You keep something, the creature
+   * says what it did, and that moment carries one way forward. Pressing it
+   * opens a conversation that already has a subject — your own words, sent as
+   * the first thing said, with a reply asked for. Which is also why there is
+   * no blank "talk to WAKA" room worth having: a conversation with no subject
+   * is the one kind this product cannot be better at than anything else.
+   *
+   * IGNORING IT COSTS NOTHING. The receipt is as skippable as it was before;
+   * this adds a door beside it, not a question in front of it.
+   */
+  const [talking, setTalking] = useState(false);
+  const talkAbout = useCallback(async (kept: { id: string; text: string }) => {
+    const profileId = storageScope?.profileId;
+    if (!profileId || talking) return;
+    setTalking(true);
+    try {
+      const conversationId = crypto.randomUUID();
+      await createConversation(profileId, conversationId, undefined, undefined, {
+        id: crypto.randomUUID(),
+        content: kept.text,
+        requestReply: true,
+      });
+      setRecentInspiration(null);
+      navigate(`/chat/${conversationId}`);
+    } catch {
+      /* The keep itself already landed — this failed to open a room to talk
+         about it in, which is a different and much smaller thing to say. */
+      setCharSay(say('worldTalkFailed'));
+    } finally {
+      setTalking(false);
+    }
+  }, [navigate, say, storageScope?.profileId, talking]);
   const inspirationOwner=storageScope?`${storageScope.accountId}:${storageScope.profileId}`:null;
   const visibleInspiration=recentInspiration?.owner===inspirationOwner?recentInspiration:null;
 
@@ -12702,7 +12748,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           {pick === pr.id && !pDraft ? (
                             <div className="jar-ask jar-principle-actions">
                               {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:pr.id,sharePrinciple:true})}>{say('worldSharePrinciple')}</button>:null}
-                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new',principleId:pr.id})}>{say('worldConversationFromPrinciple')}</button>:null}
+                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new',principleId:pr.id})}>{say('worldTalkAboutThis')}</button>:null}
                               {pr.citedSignals.length > 0 ? (
                                 <>
                                   <button
@@ -13715,7 +13761,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             ) : null}
             {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
             {!mouthOpen&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}
-            {!mouthOpen&&visibleInspiration?<div className="jar-capture-receipt"><span role="status">{say('worldSavedWord')}</span><button type="button" onClick={()=>{setReflectOn(visibleInspiration);setRecentInspiration(null);}}>{say('worldReflect')}</button></div>:null}
+            {/* WHAT THE RECEIPT OFFERS IS THE CONVERSATION, not a second door to
+                a note. "Reflect" opened a private note on the thing just kept
+                — and the thing just kept already carries that door, on its own
+                card, where a note about a thing belongs. This is the move the
+                moment is actually for.
+                It is offered only when there are words to talk about: a keep
+                that is a file and nothing else has not said anything yet. */}
+            {!mouthOpen&&visibleInspiration?<div className="jar-capture-receipt"><span role="status">{say('worldSavedWord')}</span>
+              {visibleInspiration.text.trim()?<button type="button" disabled={talking} onClick={()=>{void talkAbout(visibleInspiration);}}>{say(talking?'worldTalkOpening':'worldTalkAboutThis')}</button>:null}
+            </div>:null}
           </div>
         </div>
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
