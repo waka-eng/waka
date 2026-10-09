@@ -2105,6 +2105,11 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     writeProfileText(storageScope, "keepPublic", keepPublic ? "1" : "");
   }, [keepPublic, storageScope]);
   const [mouthOpen, setMouthOpen] = useState(() => readProfileText(storageScope, "draft") !== "");
+  /* The attachment drawer's disclosure. Open on arrival of a file — you just
+     dropped it and the one thing you want is to see that it landed — and
+     collapsible from there, which is the only state the pattern's count
+     badge is for. */
+  const [drawerOpen, setDrawerOpen] = useState(true);
   const composerOpenRef = useRef(mouthOpen); composerOpenRef.current = mouthOpen;
   useEffect(() => { if (!mouthOpen && recording.phase !== 'idle') void recording.stop(); }, [mouthOpen, recording.phase, recording.stop]);
   const [newInspirationRequested, setNewInspirationRequested] = useState(false);
@@ -13548,65 +13553,122 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               it already in hand. Nothing about the save path changed — the
               draft store, the upload queue and the save intent below are the
               ones that were already here. */}
-          <textarea
-            ref={element => { measured.mouthSpot.current = element; }}
-            className="jar-mouth-rest jar-keep-box"
-            rows={1}
-            style={mouthOpen ? { visibility: 'hidden' } : undefined}
-            value={draft}
-            placeholder={say('worldKeepPlaceholder')}
-            aria-label={say('worldCaptureInspiration')}
-            aria-describedby="jar-keep-hint"
-            onChange={event => { draftRef.current = event.target.value; setDraft(event.target.value); setCharSay(''); setMouthNote(''); }}
-            onKeyDown={event => {
-              /* Enter keeps, Shift+Enter makes a line. Keeping is the common
-                 case and should cost one key; a person writing two sentences
-                 must not have the first one saved out from under them. */
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                void keepIt();
-              }
-            }}
-            onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
-            onDrop={event => {
-              if (!event.dataTransfer.files.length) return;
-              event.preventDefault();
-              setCharSay('');
-              void addInspirationFiles([...event.dataTransfer.files]);
-            }}
-            onPaste={event => {
-              if (!event.clipboardData.files.length) return;
-              event.preventDefault();
-              setCharSay('');
-              void addInspirationFiles([...event.clipboardData.files]);
-            }}
-          />
-          {/* WHAT YOU DROPPED, UNDER THE BOX. A file that vanished into a
-              drawer you cannot see is a file you cannot be sure you attached. */}
-          {!mouthOpen && inputMedia.length ? <ul className="jar-keep-media">
-            {inputMedia.map(item => <li key={item.id}>
-              <span>{item.name}</span>
-              <button type="button" aria-label={`${say('worldRemoveLower')} ${item.name}`}
-                onClick={() => composerDraft.setMedia(composerDraft.current.current.media.filter(row => row.id !== item.id))}>×</button>
-              {item.uploadError ? <small role="alert">{item.uploadError}</small> : null}
-            </li>)}
-          </ul> : null}
-          {!mouthOpen && mouthNote ? <p className="jar-keep-note" role="alert">{mouthNote}</p> : null}
-          {/* WHERE ELSE THINGS COME IN FROM. An agent holding a keeper key can
-              write here through waka-mcp, and a person who does not know that
-              has no way to find out from inside the product. One line, under
-              the box it is about, rather than a panel explaining the idea. */}
-          {!mouthOpen ? <p className="jar-keep-foot" id="jar-keep-hint">
-            <span>{say('worldKeepHint')}</span>
-            <HoverCard label={say('worldKeepViaAgent')} className="jar-keep-via">
-              <span>{say('worldKeepMcpWhat')}</span>
-              <span>{say('worldKeepMcpTools')}</span>
-              <span>{say('worldKeepMcpWhere')}</span>
-              <a href="https://github.com/waka-eng/waka-mcp" target="_blank" rel="noreferrer noopener">
-                {say('worldKeepMcpOpen')}
-              </a>
-            </HoverCard>
-          </p> : null}
+          {/* THE COMPOSER, IN THE ANATOMY ITS PATTERN NAMES.
+              Founder: use ChatComposerDrawer. Its documented shape is a frame
+              holding a DRAWER above the body, a body carrying the input and a
+              footer, a required primary action, and a status message outside
+              the body — and the drawer's own job is "supplementary content
+              such as attachments, context chips, or previews", collapsible
+              behind a count when there is something to collapse.
+
+              What was here was an input with chips loose underneath it and no
+              send control at all: Enter was the only way to keep, which is a
+              shortcut standing in for a button. The structure below is the
+              pattern's, wearing this product's tokens. */}
+          <div className="waka-composer">
+            {!mouthOpen && inputMedia.length ? (
+              <div className="waka-composer-drawer">
+                <button
+                  type="button"
+                  className="waka-drawer-toggle"
+                  aria-expanded={drawerOpen}
+                  aria-label={say(drawerOpen ? 'worldKeepHideItems' : 'worldKeepShowItems')}
+                  onClick={() => setDrawerOpen(value => !value)}
+                >
+                  <span className="waka-drawer-count">{inputMedia.length}</span>
+                  <span>{formatMessage(locale, 'worldKeepItems', { count: inputMedia.length })}</span>
+                </button>
+                {/* Collapsed descendants are out of the keyboard's reach as
+                    well as out of sight — the pattern is explicit that a
+                    collapsed drawer hides its content from assistive
+                    technology too, so this unmounts rather than hides. */}
+                {drawerOpen ? (
+                  <ul className="waka-drawer-items">
+                    {inputMedia.map(item => (
+                      <li key={item.id}>
+                        <span>{item.name}</span>
+                        <button
+                          type="button"
+                          aria-label={`${say('worldRemoveLower')} ${item.name}`}
+                          onClick={() => composerDraft.setMedia(composerDraft.current.current.media.filter(row => row.id !== item.id))}
+                        >
+                          ×
+                        </button>
+                        {item.uploadError ? <small role="alert">{item.uploadError}</small> : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="waka-composer-body">
+              <textarea
+                ref={element => { measured.mouthSpot.current = element; }}
+                className="jar-mouth-rest jar-keep-box"
+                rows={1}
+                style={mouthOpen ? { visibility: 'hidden' } : undefined}
+                value={draft}
+                placeholder={say('worldKeepPlaceholder')}
+                aria-label={say('worldCaptureInspiration')}
+                aria-describedby="jar-keep-hint"
+                onChange={event => { draftRef.current = event.target.value; setDraft(event.target.value); setCharSay(''); setMouthNote(''); }}
+                onKeyDown={event => {
+                  /* Enter keeps, Shift+Enter makes a line. The button below is
+                     the primary action; this is the shortcut for it, not the
+                     only way in. */
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    void keepIt();
+                  }
+                }}
+                onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
+                onDrop={event => {
+                  if (!event.dataTransfer.files.length) return;
+                  event.preventDefault();
+                  setCharSay('');
+                  setDrawerOpen(true);
+                  void addInspirationFiles([...event.dataTransfer.files]);
+                }}
+                onPaste={event => {
+                  if (!event.clipboardData.files.length) return;
+                  event.preventDefault();
+                  setCharSay('');
+                  setDrawerOpen(true);
+                  void addInspirationFiles([...event.clipboardData.files]);
+                }}
+              />
+
+              {!mouthOpen ? (
+                <div className="waka-composer-foot" id="jar-keep-hint">
+                  <span className="waka-composer-hint">{say('worldKeepHint')}</span>
+                  <HoverCard label={say('worldKeepViaAgent')} className="jar-keep-via">
+                    <span>{say('worldKeepMcpWhat')}</span>
+                    <span>{say('worldKeepMcpTools')}</span>
+                    <span>{say('worldKeepMcpWhere')}</span>
+                    <a href="https://github.com/waka-eng/waka-mcp" target="_blank" rel="noreferrer noopener">
+                      {say('worldKeepMcpOpen')}
+                    </a>
+                  </HoverCard>
+                  {/* The primary action. Required by the pattern, and absent
+                      before this: a keyboard shortcut is not a control. */}
+                  <button
+                    type="button"
+                    className="waka-composer-send"
+                    disabled={!draft.trim() && inputMedia.length === 0}
+                    onClick={() => { void keepIt(); }}
+                  >
+                    {say('worldKeepSend')}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Status sits OUTSIDE the body, as the pattern places it. */}
+            {!mouthOpen && mouthNote ? (
+              <p className="waka-composer-status" role="alert">{mouthNote}</p>
+            ) : null}
+          </div>
           {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
           {!mouthOpen&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}
           {!mouthOpen&&visibleInspiration?<div className="jar-capture-receipt"><span role="status">{say('worldSavedWord')}</span><button type="button" onClick={()=>{setReflectOn(visibleInspiration);setRecentInspiration(null);}}>{say('worldReflect')}</button></div>:null}

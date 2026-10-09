@@ -863,5 +863,9 @@
   "worldBack": "Back",
   "worldPrinciplesFailed": "Couldn't load your principles.",
   "worldPrinciplesEmpty": "No principles yet. They take months of the same choice to form.",
-  "worldCardClose": "Close"
+  "worldCardClose": "Close",
+  "worldKeepSend": "Keep",
+  "worldKeepItems": "{count} attached",
+  "worldKeepShowItems": "Show what's attached",
+  "worldKeepHideItems": "Hide what's attached"
 }
