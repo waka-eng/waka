@@ -126,39 +126,44 @@ export function Claims({ onWaitingChange }: ClaimsProps): JSX.Element {
     [report, say],
   );
 
-  if (phase === "loading") {
-    return (
-      <main className="waka-claims">
-        <p className="waka-claims-status" role="status">
-          {say("worldClaimsLoading")}
-        </p>
-      </main>
-    );
-  }
+  const [current, ...rest] = queue;
 
-  if (phase === "failed") {
-    return (
-      <main className="waka-claims">
+  /**
+   * THE WAY OUT IS NOT A STATE.
+   *
+   * This used to be four returns — loading, failed, caught up, and a claim —
+   * each with its own `<main>`, and the menu was added to exactly one of them.
+   * So walking into Claims with an empty queue removed the only way out of it,
+   * which is the same bug as a door that disappears once you are through it.
+   * The shell is written once and the BODY is what changes.
+   */
+  const body =
+    phase === "loading" ? (
+      <p className="waka-claims-status" role="status">
+        {say("worldClaimsLoading")}
+      </p>
+    ) : phase === "failed" ? (
+      <>
         <p className="waka-claims-status" role="alert">
           {say("worldClaimsFailed")}
         </p>
         <button type="button" className="waka-claim-retry" onClick={() => void load()}>
           {say("worldClaimsRetry")}
         </button>
-      </main>
-    );
-  }
+      </>
+    ) : !current ? (
+      <div className="waka-claims-empty">
+        {/* Caught up is an achievement, so it is said before the invitation. */}
+        <p className="waka-claims-done">{say("worldClaimsCaughtUp")}</p>
+        <p className="waka-claims-hint">{say("worldClaimsEmpty")}</p>
+      </div>
+    ) : null;
 
-  const [current, ...rest] = queue;
-
-  if (!current) {
+  if (body) {
     return (
-      <main className="waka-claims">
-        <div className="waka-claims-empty">
-          {/* Caught up is an achievement, so it is said before the invitation. */}
-          <p className="waka-claims-done">{say("worldClaimsCaughtUp")}</p>
-          <p className="waka-claims-hint">{say("worldClaimsEmpty")}</p>
-        </div>
+      <main className="waka-claims waka-claims--quiet">
+        <Menu locale={locale} items={menu.items} onSettings={menu.onSettings} />
+        {body}
       </main>
     );
   }
