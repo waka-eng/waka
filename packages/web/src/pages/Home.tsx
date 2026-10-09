@@ -15126,31 +15126,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            render. */
         left={phase === 'ready'
       ? <span className="jar-here-split">
-              {/* THE WHOLE CORNER OPENS THE LIST.
-                  The name half used to open that wall's own settings panel,
-                  which was the right split when the corner answered "where am
-                  I, and what can I do about it". It is a character switcher
-                  now, and on a switcher the obvious press is "show me the
-                  others" — a name that opens a settings sheet instead is a
-                  surprise every time. Settings for the wall you are on moved
-                  onto its row inside the list, which is where every account
-                  switcher puts it. */}
+              {/* ONE BUTTON, NOT A SPLIT.
+                  Founder: "make top left a button, not thing split dropdown."
+                  It was a split because the halves did different things — the
+                  name opened that wall's settings, the caret opened the list.
+                  When the whole corner became a switcher both halves started
+                  opening the same list, and a split button whose halves agree
+                  is two targets, two focus stops and two hover states spent on
+                  one action. The caret is inside the button now, where it
+                  belongs: it describes what the press does rather than being
+                  a second press. */}
               <button
                 type="button"
                 className="jar-here jar-back jar-label"
-                aria-expanded={wallPick}
-                onClick={() => {
-                  setSettingsFor(null);
-                  setWallPick((v) => !v);
-                }}
-              >
-                {atWall.kind === "group"
-                  ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
-                  : wallName(atWall)}
-              </button>
-              <button
-                type="button"
-                className="jar-here-more jar-back jar-label"
                 aria-expanded={wallPick}
                 aria-label={say("worldGoToAnotherWall")}
                 onClick={() => {
@@ -15158,7 +15146,28 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   setWallPick((v) => !v);
                 }}
               >
-                <span aria-hidden="true">▾</span>
+                <span className="jar-here-name">
+                  {atWall.kind === "group"
+                    ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
+                    : wallName(atWall)}
+                </span>
+                <svg
+                  className="jar-here-caret"
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path
+                    d="M2 4l3 3 3-3"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill="none"
+                  />
+                </svg>
               </button>
               {wallPick ? (
                 <span className="jar-here-list" role="menu">
