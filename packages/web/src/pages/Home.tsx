@@ -13749,46 +13749,66 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       What is left is the action. */}
                   {/* TWO DESTINATIONS FOR ONE PIECE OF TEXT, AND THAT IS NOT
                       TWO FEATURES.
-                      Founder: "the bottom part where you're able to capture an
-                      inspiration, I think we should also let some people just
-                      enter the chat mode from there as well. But how do we
-                      make that natural without making the same component feel
-                      like it has like two random features?"
-                      The thing that made it feel like two was the MODE TOGGLE
-                      this replaced: it asked you to declare save-or-chat
-                      before typing a word, which is classifying an intention
-                      you have not formed yet, and the cost of that hesitation
-                      landed on saving — the one act that must be free.
-                      DECIDING BEFORE YOU TYPE IS A MODE. DECIDING AFTER YOU
-                      TYPE IS AN ACTION. One box, one thing typed, and at the
-                      end of it two things you could do with what you wrote.
-                      Keeping stays the primary and the placeholder still
-                      describes only keeping, because keeping is what the
-                      product is for; asking is the quieter one beside it, for
-                      the moment you look at what you typed and realise it was
-                      a question.
-                      NOT AUTO-DETECTED. Reading a trailing "?" as "you meant
-                      to ask" would misfire on this product's own material —
-                      an archive here already holds "how do we ensure Korean is
-                      part of it?" as a kept inspiration. */}
-                  {draft.trim() ? (
+
+                      Founder, first: "how do we make that natural without
+                      making the same component feel like it has like two
+                      random features?" Then, looking at the built version:
+                      "the fact that a single component is trying to achieve
+                      two things of saving inspiration and chatting about
+                      paths like inspiration, top of mind and principles
+                      doesn't feel confusing — really think about how to best
+                      design this."
+
+                      THE ANSWER IS NOT A MODE. Asking you to declare
+                      save-or-chat before typing classifies an intention you
+                      have not formed, and the cost of that hesitation lands
+                      on saving — the one act that must be free. Deciding
+                      before you type is a mode; deciding after you type is an
+                      action.
+
+                      WHAT MAKES IT READ AS ONE CHOICE RATHER THAN TWO
+                      FEATURES IS THE SHAPE. Three things do the work:
+
+                      1. BOTH ARE ALWAYS HERE. The second one used to appear
+                         the moment you typed a character, and a control that
+                         materialises mid-sentence is the single clearest way
+                         to tell someone a component has a hidden second job.
+                         They are both present and both inert until there is
+                         something to send; the footer never changes shape.
+                      2. THEY SHARE A SHAPE AND SIT TOGETHER. A text link
+                         beside a filled button reads as a feature parked next
+                         to a feature. Two buttons of the same size in the
+                         same group, one filled and one outlined, read as one
+                         question — where is this going — with two answers.
+                      3. THE MIC IS NOT ONE OF THEM. It is how you put words
+                         IN, not where they go, so it sits at the far end,
+                         away from the pair.
+
+                      Keep is the filled one because keeping is what the
+                      product is for and what the placeholder describes.
+
+                      NOT AUTO-DETECTED from a trailing "?" — an archive here
+                      already holds "how do we ensure Korean is part of it?"
+                      as a kept inspiration, so detection would misfire on
+                      this product's own material. */}
+                  <span className="waka-composer-where">
                     <button
                       type="button"
                       className="waka-composer-ask"
-                      disabled={talking}
+                      disabled={talking || !draft.trim()}
                       onClick={() => { void talkAbout({ id: '', text: draft.trim() }); }}
                     >
                       {say(talking ? 'worldTalkOpening' : 'worldComposerAsk')}
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="waka-composer-send"
-                    disabled={!draft.trim() && inputMedia.length === 0}
-                    onClick={() => { void keepIt(); }}
-                  >
-                    {say('worldKeepSend')}
-                  </button>
+                    <button
+                      type="button"
+                      className="waka-composer-send"
+                      disabled={!draft.trim() && inputMedia.length === 0}
+                      onClick={() => { void keepIt(); }}
+                    >
+                      {say('worldKeepSend')}
+                    </button>
+                  </span>
                 </div>
               ) : null}
             </div>

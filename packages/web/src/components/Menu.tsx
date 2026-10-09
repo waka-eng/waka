@@ -118,6 +118,9 @@ export interface MenuProps {
 export function Menu({ locale, items, current, label, left, onSettings, hidden }: MenuProps): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const [explaining, setExplaining] = useState(false);
+  /** Which row has its lines open, if any. One at a time: a list where every
+      row can be expanded at once is a page of prose wearing a list's shape. */
+  const [explained, setExplained] = useState<string | null>(null);
   const panelId = useId();
   const explainId = useId();
   /* Focus lands on the first destination, not on a way out — see below. */
@@ -143,6 +146,12 @@ export function Menu({ locale, items, current, label, left, onSettings, hidden }
   useEffect(() => {
     if (hidden) setOpen(false);
   }, [hidden]);
+
+  /* Closing the list forgets which row was explained: reopening to a sheet
+     you left mid-thought is the small haunt the rule above avoids. */
+  useEffect(() => {
+    if (!open) setExplained(null);
+  }, [open]);
 
   if (hidden) return null;
 
@@ -243,25 +252,65 @@ export function Menu({ locale, items, current, label, left, onSettings, hidden }
             onClick={(event) => event.stopPropagation()}
           >
             {items.map((item, index) => (
-              <button
-                key={item.id}
-                ref={index === 0 ? first : undefined}
-                type="button"
-                className={`waka-menu-item${item.id === current ? " waka-menu-item--here" : ""}${item.className ? ` ${item.className}` : ""}`}
-                /* The rung you are standing on is marked and still pressable:
-                   pressing it closes the list, which is the same thing the
-                   caret does and the thing a person expects from a control
-                   they opened by mistake. */
-                aria-current={item.id === current ? "page" : undefined}
-                disabled={item.disabled}
-                onClick={() => {
-                  setOpen(false);
-                  item.onSelect();
-                }}
-              >
-                {t(locale, item.label)}
-                {item.note ? <span className="sr-only jar-saved-count">{item.note}</span> : null}
-              </button>
+              /* A ROW IS THE DESTINATION PLUS WHAT IT IS.
+                 Founder: "there should be like an info icon next to each of
+                 the top of mind, principles, the inspirations so that users
+                 can see what these are."
+                 The explanation used to hang off the switcher's own trigger,
+                 which could only ever describe the view you were ALREADY on —
+                 so the one person it could not help was the one who does not
+                 yet know what these three are. Per row it can be read before
+                 going anywhere, which is the whole point of asking. */
+              <span key={item.id} className="waka-menu-row">
+                <button
+                  ref={index === 0 ? first : undefined}
+                  type="button"
+                  className={`waka-menu-item${item.id === current ? " waka-menu-item--here" : ""}${item.className ? ` ${item.className}` : ""}`}
+                  /* The rung you are standing on is marked and still pressable:
+                     pressing it closes the list, which is the same thing the
+                     caret does and the thing a person expects from a control
+                     they opened by mistake. */
+                  aria-current={item.id === current ? "page" : undefined}
+                  disabled={item.disabled}
+                  onClick={() => {
+                    setOpen(false);
+                    item.onSelect();
+                  }}
+                >
+                  {t(locale, item.label)}
+                  {item.note ? <span className="sr-only jar-saved-count">{item.note}</span> : null}
+                </button>
+                {item.explain?.length ? (
+                  <>
+                    {/* PRESS, NOT HOVER. This list is opened by a press and is
+                        used on a phone, where there is no hover to reveal
+                        anything with — an explanation only a mouse can reach
+                        is not an explanation. It opens the lines IN PLACE
+                        rather than over the rows, so the list never covers
+                        the thing you are choosing between. */}
+                    <button
+                      type="button"
+                      className="waka-menu-why"
+                      aria-expanded={explained === item.id}
+                      aria-label={t(locale, "worldWhatIsThis")}
+                      onClick={() => setExplained((shown) => (shown === item.id ? null : item.id))}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" focusable="false">
+                        <circle cx="7.5" cy="7.5" r="6.1" stroke="currentColor" strokeWidth="1.2" fill="none" />
+                        <path d="M7.5 6.6v4.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                        <circle cx="7.5" cy="4.5" r="0.85" fill="currentColor" />
+                      </svg>
+                    </button>
+                    {explained === item.id ? (
+                      <span className="waka-menu-explain" role="note">
+                        {item.explain.map((line) => (
+                          <span key={line}>{line}</span>
+                        ))}
+                      </span>
+                    ) : null}
+                  </>
+                ) : null}
+              </span>
             ))}
             {/* NO "CLOSE MENU" ROW. Founder, pointing at it: "this also is so
                 useless." It was, and three ways out already exist and always

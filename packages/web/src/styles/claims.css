@@ -353,6 +353,63 @@
  * The menu
  * ------------------------------------------------------------------------- */
 
+/**
+ * A ROW: THE DESTINATION, AND WHAT IT IS.
+ *
+ * The name takes the slack so the question mark sits at the row's far edge,
+ * and the explanation drops BELOW both on its own line — it is the row's own
+ * content when it is open, never a card floating over the rows you are
+ * choosing between.
+ */
+.waka-menu-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: var(--sp-4);
+}
+
+.waka-menu-why {
+  grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sp-32);
+  height: var(--sp-32);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.waka-menu-why:hover,
+.waka-menu-why[aria-expanded="true"] {
+  color: var(--ink);
+}
+
+.waka-menu-why:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.waka-menu-explain {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  margin: 0 0 var(--sp-8);
+  padding: 0 var(--sp-12) 0;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-fine);
+  font-weight: 300;
+  letter-spacing: normal;
+  text-transform: none;
+  line-height: 1.5;
+  text-align: left;
+}
+
 /* The rung you are standing on, marked by light like everything else. */
 .waka-menu-item--here {
   color: var(--ink);
@@ -1102,9 +1159,13 @@
  */
 .waka-composer-body .jar-keep-box {
   width: 100%;
-  min-height: 56px;
+  /* A RESTING BOX IS ONE LINE TALL. 56 plus a footer made an empty field
+     most of the bottom third of a phone — a lot of screen spent on nothing
+     typed yet. It grows with what you write (`field-sizing: content`), so
+     the height a person sees is the height their words need. */
+  min-height: 44px;
   margin: 0;
-  padding: var(--sp-16) var(--sp-16) var(--sp-8);
+  padding: var(--sp-12) var(--sp-16) var(--sp-4);
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -1130,8 +1191,10 @@
 
 /* ---- speaking into it, and the second destination ---- */
 
-/* First in the footer, where a thing you do INSTEAD of typing belongs —
-   beside the field, not beside the actions at the far end. */
+/* First in the footer, and deliberately far from the pair at the other end:
+   the mic is how words get IN, not where they go. Grouping it with the
+   destinations would make the footer read as three things you could press to
+   finish, one of which does not finish anything. */
 .waka-composer-mic {
   order: -1;
   display: inline-flex;
@@ -1171,35 +1234,56 @@
   outline-offset: 2px;
 }
 
-/* Quieter than Keep, and that is the whole point: one box, one thing typed,
-   and a primary action for what the box is FOR. See the note at its render. */
-.waka-composer-ask {
+/**
+ * WHERE WHAT YOU TYPED IS GOING — the pair, at the end of the footer.
+ *
+ * Grouped and sharing a shape on purpose: two buttons of the same size, one
+ * filled and one outlined, read as ONE question with two answers. A quiet
+ * text link beside a filled button reads as a feature parked next to a
+ * feature, which is exactly what the founder saw. See the note at the render.
+ */
+.waka-composer-where {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
   margin-left: auto;
+}
+
+.waka-composer-ask {
   min-height: 32px;
   padding: 0 var(--sp-12);
-  border: 1px solid transparent;
+  border: 1px solid var(--line);
   border-radius: var(--waka-r-control);
   background: transparent;
-  color: var(--muted);
+  color: var(--ink);
   font-family: var(--waka-face);
   font-size: var(--t-ui);
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .waka-composer-ask:hover:not(:disabled) {
-  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
 }
 
-.waka-composer-ask:disabled {
-  opacity: 0.45;
+/* BOTH GO QUIET TOGETHER, and neither disappears. An empty box offers both
+   and can act on neither, which is a truthful and unchanging shape. */
+.waka-composer-ask:disabled,
+.waka-composer-send:disabled {
   cursor: default;
 }
 
-/* Keep stops claiming the slack once Ask is beside it: the pair sits
-   together at the end, in the order you would read them. */
-.waka-composer-ask + .waka-composer-send {
-  margin-left: var(--sp-8);
+.waka-composer-ask:disabled {
+  color: var(--muted);
+  opacity: 0.55;
 }
+
+.waka-composer-ask:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+
 
 .waka-composer-body .jar-keep-box:focus-visible {
   outline: none;
@@ -1234,11 +1318,15 @@
   cursor: pointer;
 }
 
+/* STILL A BUTTON WHEN IT CANNOT BE PRESSED. It used to go to transparent
+   with muted text, which on this ground is very close to not being drawn —
+   the primary action read as decoration until you typed. It keeps its fill
+   and loses its light instead, which is how every other off-state here is
+   shown. */
 .waka-composer-send:disabled {
-  border-color: var(--line);
-  background: transparent;
-  color: var(--muted);
-  cursor: default;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  color: color-mix(in srgb, var(--bg) 70%, var(--ink));
 }
 
 .waka-composer-send:focus-visible {
