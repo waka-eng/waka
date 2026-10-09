@@ -15,7 +15,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { Menu } from "../components/Menu";
 import { fetchPrinciples, type ApiPrinciple } from "../lib/api";
+import { usePageMenu } from "../lib/page-menu";
 import { useOptionalAuth } from "../lib/auth-context";
 import { normalizeSupportedLocale, t } from "../lib/locales";
 
@@ -26,6 +28,7 @@ export function Principles(): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   const navigate = useNavigate();
 
+  const menu = usePageMenu();
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
@@ -56,6 +59,7 @@ export function Principles(): JSX.Element {
 
   return (
     <main className="waka-page">
+      <Menu locale={locale} items={menu.items} onSettings={menu.onSettings} />
       <header className="waka-page-head">
         <button type="button" className="waka-page-back" onClick={() => navigate("/")}>
           {say("worldBack")}

@@ -87,6 +87,7 @@ import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
 import { useReviewEntry } from '../lib/use-review-entry';
 import {PrinciplesShortcutLabel} from '../components/PrinciplesShortcutLabel';
+import { paintField } from '../space/inspiration/field-paint';
 import { Menu, type MenuItem } from '../components/Menu';
 import { HoverCard } from '../components/HoverCard';
 import { HomeActionIcon } from '../components/HomeActionIcon';
@@ -165,7 +166,6 @@ import {
   EASE_GLOW_IN,
   EASE_GLOW_OUT,
 } from "../space/inspiration/field";
-import { paintField } from "../space/inspiration/field-paint";
 import {
   bornBall,
   makeAgentBall,
@@ -316,30 +316,6 @@ const SPARKS = 26;
  * time dial. A fixed promise at EVERY viewport height — the founder's
  * most-repeated note.
  */
-/**
- * HOW MUCH OF THE GROUND IS ALREADY ON SCREEN AT HEADQUARTERS.
- *
- * 96 became 140 on 2026-08-28. The founder: "overall balancing feels kinda
- * off.. some places are more crowded than others. which is exacerbated on
- * mobile." Measured, the imbalance was one gap, and it was always the same
- * gap — between the mouth and this line:
- *
- *   the mouth -> the peek line   336px on 2000x1150
- *                                211px on 1440x900
- *                                183px on 390x844
- *
- * while the three things along the top of a phone sat 8px and 3px apart. And
- * it grows with the screen because the character is anchored to the middle of
- * the viewport while the field is anchored to the bottom, so every pixel of
- * extra height lands in that one band and nowhere else.
- *
- * THE ANSWER IS NOT MORE SPACING SOMEWHERE ELSE. That band is empty because
- * the ground was held down, and the thing that belongs in it is the ground.
- * Raising the peek fills it with the world's own content — more of what you
- * keep, already on screen when you arrive — rather than distributing the void
- * more evenly. The world is what the space is for.
- */
-const PEEK = 140;
 /**
  * The dial's strip, as a FALLBACK ONLY — the real number is measured off the
  * dial itself every time the world is measured (see `measure`).
@@ -984,7 +960,20 @@ function computeLayout(vw: number, vh: number, dialH: number): Layout {
     /* The peek line sits clear of the time dial, which is fixed to the
        bottom of the viewport in both sections — otherwise the topmost orbs
        and the dial occupy the same strip. */
-    fieldTop: vh - dialH - PEEK,
+    /* NO PEEK (founder ruling: no scrolling down, and no dots along the
+       bottom). The field used to start `PEEK` pixels above the fold so a strip
+       of memories showed under the home screen — an invitation to scroll down,
+       back when scrolling down was how you reached them. The archive is a page
+       now, so the ground begins exactly at the bottom edge: nothing of it is in
+       frame at rest, and all of it is there the moment the camera goes down.
+       Done here rather than by skipping the paint, because a field that stops
+       drawing while the camera is easing cannot tell "not here" from "not yet"
+       — which is flaky in exactly the way its own suite then reports.
+
+       `vh` exactly, not `vh - dialH`: the dial's strip is chrome drawn OVER
+       the bottom of the viewport, so reserving it still left the topmost orbs
+       inside the frame. The ground begins where the screen ends. */
+    fieldTop: vh,
     /* AND THE FIELD ENDS EXACTLY WHERE THE DIAL BEGINS — not forty pixels of
        air above it. The reserve is a real, measured piece of chrome, so it is
        the only thing the field owes the bottom of the screen. */
@@ -4347,11 +4336,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       return best;
     };
     /** Snap a coordinate to the machine's grid, by however machine it is. */
-    const grid = (v: number): number => {
-      if (mech < 0.02) return v;
-      const q = 1 + mech * 7;
-      return Math.round(v / q) * q;
-    };
     /**
      * THE FRAME LOOP'S OWN STATE — whether it is turning, and since when.
      *
@@ -6403,7 +6387,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      * out here rather than inside `draw` so the frame does not allocate a
      * closure sixty times a second to ask one question.
      */
-    const panelOpen = () => panelOpenRef.current;
+
+    const grid = (v: number): number => {
+      if (mech < 0.02) return v;
+      const q = 1 + mech * 7;
+      return Math.round(v / q) * q;
+    };
 
     function draw(now: number) {
       const pal = paletteRef.current;
@@ -6411,8 +6400,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       ctx!.clearRect(cam.x, cam.y, view.w, view.h);
       if (!pal) return;
       const t = now / 1000;
-      const selId = selectedIdRef.current;
-      const depthSpan = Math.max(view.layout.fieldBottom - view.layout.fieldTop, 1);
 
       /* pass 0 — the deep background: dim sparkle points, then drifting dust
          motes. Together they are the air in front of the camera, and they are
@@ -6453,12 +6440,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         cam,
         view,
         t,
-        depthSpan,
-        selId,
+        depthSpan: Math.max(view.layout.fieldBottom - view.layout.fieldTop, 1),
+        selId: selectedIdRef.current,
         still: pour.active,
         mech,
         grid,
-        panelOpen,
+        panelOpen: () => panelOpenRef.current,
       });
 
       /* No connection visuals. The founder was explicit after seeing them:
@@ -8076,7 +8063,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             ? 2
             : 1;
       }
-      const dy = e.clientY - gesture.lastY;
+      /* The pointer's vertical travel is still TRACKED — the gesture router
+         below compares it against the horizontal to decide whether this drag
+         is a wall crossing — it just no longer moves the camera. */
       gesture.lastY = e.clientY;
       const dxm = e.clientX - gesture.lastX;
       gesture.lastX = e.clientX;
@@ -8119,10 +8108,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         wake();
         return;
       }
-      const out = cam.y < minCamNow() || cam.y > view.layout.maxCam;
-      cam.y -= dy * (out ? 0.35 : 1);
-      /* reduced motion keeps the direct 1:1 drag but drops the inertia */
-      if (!view.reduced) cam.vel = lerp(cam.vel, -dy / dts, kd(EASE_VEL, dts));
+      /* AND NOT BY DRAG EITHER. Same ruling as the wheel: there is nowhere
+         above or below to go, so dragging the world vertically only carried
+         the reading off the screen. The inertia goes with it — velocity that
+         can never be spent is a spring with nothing on the end of it. */
       gesture.lastT = nowT;
       wake();
     };
@@ -8250,12 +8239,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         }
         return;
       }
+      /* NO VERTICAL TRAVEL BY GESTURE (founder ruling, asked for repeatedly).
+         The wheel used to drive `cam.y` between the sky and the ground, which
+         is how a person reached their principles and their archive. Both are
+         PAGES now, so the gesture has nowhere left to go and scrolling the
+         world only moved the reading off the screen.
+
+         The camera's range is untouched on purpose: `toSky`, `toGround` and
+         the deep links that open one memory still move it programmatically,
+         and the panels that live in those bands — a principle being edited,
+         a memory's own card — are reached that way. What is removed is the
+         gesture, not the geometry. */
       gesture.wheelXAcc = 0;
-      cam.y = clamp(cam.y + e.deltaY, minCamNow() - 60, view.layout.maxCam + 60);
-      cam.aiming = false;
-      /* snap once the wheel goes quiet */
-      gesture.snapAt = nowW + 150;
-      wake();
     };
     const onKey = (e: KeyboardEvent) => {
       // This guard precedes ALL shortcuts, including slash. Editors and IME

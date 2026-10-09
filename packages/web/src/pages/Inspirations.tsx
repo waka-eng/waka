@@ -22,11 +22,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { Menu } from "../components/Menu";
 import {
   attachmentPreviewImageUrl,
   fetchInspirations,
   type ApiInspirationSummary,
 } from "../lib/api";
+import { usePageMenu } from "../lib/page-menu";
 import { useOptionalAuth } from "../lib/auth-context";
 import { normalizeSupportedLocale, t } from "../lib/locales";
 
@@ -44,7 +46,9 @@ export function Inspirations(): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   const navigate = useNavigate();
 
+  const menu = usePageMenu();
   const [rows, setRows] = useState<ApiInspirationSummary[]>([]);
+  const [open, setOpen] = useState<ApiInspirationSummary | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
 
@@ -74,6 +78,7 @@ export function Inspirations(): JSX.Element {
 
   return (
     <main className="waka-page">
+      <Menu locale={locale} items={menu.items} onSettings={menu.onSettings} />
       <header className="waka-page-head">
         <button type="button" className="waka-page-back" onClick={() => navigate("/")}>
           {say("worldBack")}
@@ -105,7 +110,12 @@ export function Inspirations(): JSX.Element {
                 <button
                   type="button"
                   className={`waka-card${picture ? "" : " waka-card--text"}`}
-                  onClick={() => navigate(`/inspirations/${row.id}`)}
+                  /* OPENS HERE, NOT SOMEWHERE ELSE (founder ruling). Pressing
+                     a tile used to throw you into the world at the memory's
+                     own place, which is a page change, a camera flight and a
+                     lost scroll position to read one thing. It opens over the
+                     grid and closes back onto it. */
+                  onClick={() => setOpen(row)}
                 >
                   {picture ? (
                     <span className="waka-card-picture">
@@ -123,6 +133,26 @@ export function Inspirations(): JSX.Element {
           })}
         </ul>
       )}
+
+      {open ? (
+        <div className="waka-sheet-scrim" onClick={() => setOpen(null)}>
+          <article
+            className="waka-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={say("worldInspirationsTitle")}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {pictureOf(open) ? (
+              <img className="waka-sheet-picture" src={pictureOf(open)!} alt="" />
+            ) : null}
+            <p className="waka-sheet-text">{open.textPreview}</p>
+            <button type="button" className="waka-sheet-close" onClick={() => setOpen(null)}>
+              {say("worldCardClose")}
+            </button>
+          </article>
+        </div>
+      ) : null}
     </main>
   );
 }

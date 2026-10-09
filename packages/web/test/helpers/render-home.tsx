@@ -511,17 +511,34 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
       }
     },
     async toField() {
-      const canvas = container.querySelector("canvas");
-      if (!canvas) throw new Error("no canvas — the layout never mounted");
-      for (let i = 0; i < 12; i += 1) {
-        await act(async () => {
-          canvas.dispatchEvent(
-            new WheelEvent("wheel", { deltaY: 240, bubbles: true, cancelable: true }),
-          );
-        });
-        await step(4);
+      /* THE WHEEL NO LONGER TRAVELS. Dragging and scrolling the world
+         vertically were removed — the archive and the principles are pages,
+         so there is nowhere above or below to go by gesture. The PLACE is
+         still there and the camera still visits it (a deep link to one
+         memory, the dial, a principle's evidence), so this drives the same
+         command those paths use instead of a gesture a person no longer has. */
+      const sim = (window as unknown as { wakaSim?: () => { toGround(): void } | null }).wakaSim;
+      if (!sim) throw new Error("window.wakaSim is absent — the simulation never started");
+      const api = sim();
+      if (!api) throw new Error("the simulation is not running");
+      /* `toGround` REFUSES WHILE A WALL TRIP IS IN FLIGHT, by design — two
+         travels at once is how a camera ends up between places. A test that
+         crosses to a room and then asks for its ground is asking inside
+         exactly that window, and the command is dropped silently. So ask
+         until it takes, rather than guessing at a wait long enough to cover
+         it: a fixed delay is either flaky or slow, and usually both. */
+      for (let attempt = 0; attempt < 14; attempt += 1) {
+        await act(async () => api.toGround());
+        await step(30);
+        /* ARRIVAL IS `camY` REACHING `fieldRest`, which the audit publishes
+           for exactly this reason: "where the camera was standing when this
+           was counted" beside "where it has to stand for the count to mean
+           anything". Stopping the moment it lands matters — every extra
+           iteration is thirty more frames of a live simulation, and the
+           camera is not the only thing moving in them. */
+        const where = audit();
+        if (Math.abs(where.camY - where.fieldRest) < 1) break;
       }
-      await step(60); /* the camera snaps to a rest point, then the pour lands */
     },
     async standIn(name) {
       await clickByText(".jar-grounds-row", name);

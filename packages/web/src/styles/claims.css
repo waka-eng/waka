@@ -1,4 +1,20 @@
 /**
+ * ONE FACE, EVERYWHERE (founder ruling: "can we make the font consistent
+ * across all the experience? I don't know what the weird cursive thing is.").
+ *
+ * The cursive thing was the serif, which these surfaces borrowed for anything
+ * that counted as a person's own material. It reads as a second voice, and on
+ * a screen that already holds a reading, a claim and a kept thought, a second
+ * voice is a second system. `--waka-face` is the poster's own stack — Jost at
+ * 300, the geometric the top of mind has always been set in — and everything
+ * here wears it. Hierarchy comes from SIZE and WEIGHT, never from a change of
+ * face.
+ */
+:root {
+  --waka-face: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+}
+
+/**
  * THE MENU AND THE CLAIM.
  *
  * Mobile first, and mobile only in its assumptions: a thumb reaches the bottom
@@ -50,7 +66,7 @@
 
 .waka-claims-title {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.1em;
@@ -60,7 +76,7 @@
 
 .waka-claims-count {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -68,7 +84,7 @@
 
 .waka-claim-origin {
   margin: 0 0 var(--space-3);
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 11px;
   letter-spacing: 0.06em;
   color: var(--muted);
@@ -84,7 +100,7 @@
  */
 .waka-claim-statement {
   margin: 0;
-  font-family: var(--font-serif);
+  font-family: var(--waka-face);
   font-size: clamp(25px, 7vw, 33px);
   line-height: 1.24;
   color: var(--ink);
@@ -105,7 +121,7 @@
   border-radius: 7px;
   background: var(--cell);
   color: var(--ink);
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 14px;
   cursor: pointer;
 }
@@ -125,7 +141,7 @@
 .waka-claim-receipt,
 .waka-claim-error {
   margin: var(--space-4) 0 0;
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -146,14 +162,14 @@
   border-radius: 7px;
   background: var(--cell);
   color: var(--ink);
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 14px;
   cursor: pointer;
 }
 
 .waka-claims-status {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 13px;
   color: var(--muted);
 }
@@ -168,7 +184,7 @@
 
 .waka-claims-done {
   margin: 0 0 var(--space-2);
-  font-family: var(--font-serif);
+  font-family: var(--waka-face);
   font-size: clamp(23px, 6vw, 29px);
   line-height: 1.25;
   color: var(--ink);
@@ -176,7 +192,7 @@
 
 .waka-claims-hint {
   margin: 0;
-  font-family: var(--font-sans);
+  font-family: var(--waka-face);
   font-size: 15px;
   line-height: 1.5;
   color: var(--muted);
@@ -189,7 +205,7 @@
 
 .waka-claims-next-label {
   margin: 0 0 var(--space-2);
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -200,7 +216,7 @@
    not a second claim competing with the one you are answering. */
 .waka-claims-next-statement {
   margin: 0;
-  font-family: var(--font-serif);
+  font-family: var(--waka-face);
   font-size: 17px;
   line-height: 1.35;
   color: var(--muted);
@@ -295,7 +311,7 @@
   color: var(--ink);
   text-decoration: none;
   text-align: left;
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 14px;
   cursor: pointer;
 }
@@ -324,7 +340,7 @@
   border-radius: 0;
   background: transparent;
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 12px;
   text-align: left;
   cursor: pointer;
@@ -363,7 +379,7 @@
   border-radius: 14px;
   background: var(--cell);
   color: var(--ink);
-  font-family: var(--font-sans);
+  font-family: var(--waka-face);
   font-size: 16px;
   line-height: 1.45;
   resize: none;
@@ -415,7 +431,7 @@
   border: var(--space-px) solid var(--line);
   border-radius: 999px;
   background: var(--cell);
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 11px;
   color: var(--ink);
 }
@@ -436,7 +452,7 @@
 .jar-keep-note {
   max-width: 680px;
   margin: var(--space-2) auto 0;
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 11px;
   color: var(--error);
 }
@@ -449,7 +465,7 @@
   gap: var(--space-4);
   max-width: 680px;
   margin: var(--space-2) auto 0;
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 11px;
   letter-spacing: 0.03em;
   color: var(--muted);
@@ -503,7 +519,7 @@
   border-radius: 12px;
   background: var(--cell);
   color: var(--ink);
-  font-family: var(--font-sans);
+  font-family: var(--waka-face);
   font-size: 13px;
   line-height: 1.45;
   letter-spacing: 0;
@@ -514,7 +530,7 @@
 
 .waka-hovercard-card a {
   color: var(--ink);
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 11px;
 }
 
@@ -548,7 +564,7 @@
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 12px;
   cursor: pointer;
 }
@@ -560,7 +576,7 @@
 
 .waka-page-title {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.1em;
@@ -570,7 +586,7 @@
 
 .waka-page-status {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 13px;
   color: var(--muted);
 }
@@ -583,7 +599,7 @@
   border-radius: 8px;
   background: var(--cell);
   color: var(--ink);
-  font-family: var(--font-mono);
+  font-family: var(--waka-face);
   font-size: 13px;
   cursor: pointer;
 }
@@ -660,7 +676,7 @@
 }
 
 .waka-card-text {
-  font-family: var(--font-sans);
+  font-family: var(--waka-face);
   font-size: 14px;
   line-height: 1.45;
   color: var(--ink);
@@ -672,7 +688,7 @@
 }
 
 .waka-card--text .waka-card-text {
-  font-family: var(--font-serif);
+  font-family: var(--waka-face);
   font-size: 19px;
   line-height: 1.32;
 }
@@ -699,7 +715,7 @@
   border-bottom: var(--space-px) solid var(--line);
   background: transparent;
   color: var(--ink);
-  font-family: var(--font-serif);
+  font-family: var(--waka-face);
   font-size: clamp(19px, 4.4vw, 23px);
   line-height: 1.3;
   text-align: left;
@@ -711,4 +727,84 @@
 .waka-statement:focus-visible {
   color: var(--ink);
   border-bottom-color: var(--ink);
+}
+
+/* The one face is a LIGHT geometric; at display sizes anything heavier loses
+   the even stroke the poster is set for. Weight carries hierarchy instead of
+   a change of family. */
+.waka-card-text,
+.waka-statement,
+.waka-claim-statement,
+.waka-sheet-text,
+.waka-claims-done {
+  font-weight: 300;
+  letter-spacing: 0.005em;
+}
+
+/* ---------------------------------------------------------------------------
+ * A kept thing, opened over its own grid
+ *
+ * Pressing a tile used to leave the page entirely. This opens where you are
+ * and closes back onto the same scroll position.
+ * ------------------------------------------------------------------------- */
+
+.waka-sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(16px, 5vw, 40px);
+  background: color-mix(in srgb, #000 62%, transparent);
+}
+
+.waka-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: min(34rem, 100%);
+  max-height: 86dvh;
+  overflow: auto;
+  padding: var(--space-6);
+  border: var(--space-px) solid var(--line);
+  border-radius: 16px;
+  background: var(--cell);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 55%);
+}
+
+.waka-sheet-picture {
+  width: 100%;
+  max-height: 46dvh;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+.waka-sheet-text {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: 19px;
+  font-weight: 300;
+  line-height: 1.45;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+.waka-sheet-close {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-4);
+  border: var(--space-px) solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.waka-sheet-close:hover,
+.waka-sheet-close:focus-visible {
+  color: var(--ink);
+  border-color: var(--ink);
 }
