@@ -67,6 +67,7 @@ import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlo
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { createConversation } from "../lib/api/conversations";
 import { DialogSurface } from "../components/DialogSurface";
+import { HoverCard } from "../components/HoverCard";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { useNavigate } from "react-router-dom";
 import { useViewNavigation } from '../lib/use-view-navigation';
@@ -12868,8 +12869,32 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     {/* R01 makes the personal reading explicit while keeping
                         the existing field, headline and companion layout. */}
                     {here&&w.kind==='self'&&(inspirations?.length||fieldBeyond||readingLoadPhase!=='ready')?<div className="jar-reading-heading" data-jar-chrome="1">
-                      <span>{say(atNow?'worldReadingTitle':'worldReadingEarlier')}</span>
-                      {atNow&&topOfMind&&topOfMind.createdMs>0?<time dateTime={new Date(topOfMind.createdMs).toISOString()}>{new Date(topOfMind.createdMs).toLocaleDateString(locale,{month:'short',day:'numeric'})}</time>:null}
+                      {/* THE TITLE SAYS WHERE THE SENTENCE CAME FROM, ON ASK.
+                          "Top of mind" names the thing but explains nothing,
+                          and the sentence under it is the product's whole
+                          claim about you — a person is entitled to know how it
+                          was arrived at before deciding whether to believe it.
+                          It is a hover card and not a line on the page for the
+                          same reason everything else left this screen: the
+                          explanation is wanted once, and the sentence is
+                          wanted every time.
+                          Only at now. Wound back, the line is naming a date
+                          rather than describing a live reading, and an
+                          explanation of how today's is made would be the
+                          wrong answer to the question being asked. */}
+                      {atNow
+                        ? <HoverCard label={say('worldReadingTitle')} className="jar-reading-what">
+                            <span>{say('worldReadingWhatMade')}</span>
+                            <span>{say('worldReadingWhatCounts')}</span>
+                            <span>{say('worldReadingWhatChanges')}</span>
+                          </HoverCard>
+                        : <span>{say('worldReadingEarlier')}</span>}
+                      {/* THE DATE IS GONE (founder, pointing at "Oct 8").
+                          It stamped the reading with the day it was written,
+                          beside a line whose job is to be true NOW — and a
+                          date next to a statement about you reads as an expiry
+                          on it. When the reading is not current the title
+                          already says so in words. */}
                       {/* "Changes" left the home screen with the other two
                           explainers. What moved in the reading since last time
                           is worth having, but it is a thing to go and look at,

@@ -290,7 +290,6 @@
   transition: text-shadow 0.2s ease;
 }
 .jar-reading-heading { display:flex; align-items:baseline; flex-wrap:wrap; gap:var(--sp-12); margin:0 0 var(--sp-8); color:var(--w-muted); font-size:var(--t-note); line-height:1.5; }
-.jar-reading-heading time { font-size:var(--t-label); }
 .jar-reading-actions { display:flex; flex-wrap:wrap; gap:var(--sp-4) var(--sp-12); margin-top:var(--sp-8); pointer-events:auto; }
 .jar-reading-actions button { min-height:var(--sp-44); padding:var(--sp-8) 0; border:0; background:none; color:var(--w-muted); font:inherit; font-size:var(--t-body); text-align:left; cursor:pointer; }
 .jar-forming.jar-forming--personal { font-size:var(--t-body); font-style:normal; color:var(--w-muted); line-height:1.6; }
