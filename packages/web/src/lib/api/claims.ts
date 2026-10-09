@@ -15,7 +15,26 @@
 import { apiPath, getJson, type ProfileScoped } from "./http";
 import type { ApiSignal } from "./signals";
 
-export type ApiClaim = ApiSignal;
+/**
+ * One save a claim was read from, in the person's own words.
+ *
+ * A claim with no material under it can only be agreed or disagreed with on
+ * vibes; with the saves visible it can be CHECKED, which is the whole
+ * difference between a reading and a horoscope. It also changes what "not
+ * true" means — with the evidence on screen, rejecting a claim is correcting
+ * a misreading rather than being told who you are and having to argue back.
+ */
+export interface ApiClaimSource {
+  id: string;
+  /** Enough to recognise it, never the whole save — see the route's cap. */
+  preview: string;
+}
+
+export type ApiClaim = ApiSignal & {
+  /** Up to four of the saves behind it. Absent on an older server, and empty
+      when every save it stood on has since been deleted. */
+  from?: ApiClaimSource[];
+};
 
 export interface ApiClaimQueue {
   claims: ApiClaim[];
@@ -42,5 +61,18 @@ export async function listClaims(
   /* A malformed body reads as an empty queue rather than throwing: an empty
      Claims tab is an honest "nothing to confirm", and the alternative is a
      page that breaks because the shape moved. */
-  return { claims: body.claims ?? [], more: body.more ?? false };
+  /* The sources are normalised here rather than trusted: a claim that
+     arrives with a malformed `from` renders as a claim with no receipts,
+     which is the old behaviour and still honest — never as a crash under a
+     sentence someone is being asked to rule on. */
+  const claims = (body.claims ?? []).map((claim) => ({
+    ...claim,
+    from: Array.isArray(claim.from)
+      ? claim.from.filter(
+          (row): row is ApiClaimSource =>
+            typeof row?.id === "string" && typeof row?.preview === "string" && row.preview.length > 0,
+        )
+      : [],
+  }));
+  return { claims, more: body.more ?? false };
 }

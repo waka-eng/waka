@@ -1591,6 +1591,61 @@
   text-wrap: pretty;
 }
 
+/**
+ * WHAT THE CLAIM WAS READ FROM.
+ *
+ * Quiet and small on purpose: these are the grounds, not the question. The
+ * sentence above stays the largest thing in the block, and these sit under it
+ * the way a citation sits under a line — close enough to belong to it, light
+ * enough that the eye reads the claim first.
+ *
+ * Each one is pressable and opens that save. A receipt you cannot follow is
+ * an assertion with a footnote; a receipt you can follow is evidence.
+ */
+.jar-char-claim-from {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.jar-char-claim-from button {
+  display: block;
+  width: 100%;
+  padding: var(--sp-6) var(--sp-8);
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-fine);
+  font-weight: 300;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+  /* One line each. Four saves under a claim is context; four paragraphs is a
+     reading list, and the thing being asked stops being the thing on screen. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jar-char-claim-from button:hover,
+.jar-char-claim-from button:focus-visible {
+  border-left-color: var(--ink);
+  color: var(--ink);
+}
+
+.jar-char-claim-from button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
 .jar-char-claim-answers {
   display: flex;
   flex-wrap: wrap;
