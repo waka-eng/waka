@@ -39,6 +39,8 @@ import {
   type ApiSignalDuplicate,
 } from "../lib/api";
 import { AntechamberPanel } from "../components/AntechamberPanel";
+import { Menu } from "../components/Menu";
+import { usePageMenu } from "../lib/page-menu";
 import { HoverCard } from "../components/HoverCard";
 import { DuplicatesPanel } from "../components/DuplicatesPanel";
 import { ReadingPanel } from "../components/ReadingPanel";
@@ -68,6 +70,7 @@ const PROFILE_TABS: ReadonlyArray<{ id: ProfileTab; labelKey: MessageKey }> = [
 export default function ProfilePage(): JSX.Element {
   const { account, profile, logout, updateProfile, updatePreferredLocale, deleteAccount } = useAuth();
   const navigate = useNavigate();
+  const menu = usePageMenu(normalizeSupportedLocale(profile?.preferredLocale));
   const [name, setName] = useState(profile?.name ?? "");
   const [publicHandle, setPublicHandle] = useState(profile?.publicHandle ?? "");
   const [publicProfileEnabled, setPublicProfileEnabled] = useState(
@@ -599,15 +602,37 @@ export default function ProfilePage(): JSX.Element {
   }
 
   return (
-    <main className="login-shell profile-shell">
-      <section className="login-card profile-card" aria-labelledby="profile-title">
+    /**
+     * SETTINGS WEARS THE PRODUCT'S OWN CLOTHES NOW.
+     *
+     * Founder, pointing at the gear: "doesn't look like settings." Half of
+     * that was the glyph, which became a cog. The other half was here: this
+     * page was built on `login-shell` and `login-card` — the SIGN-IN page's
+     * language, a centred card with an eyebrow and a title, which is right
+     * for a door and wrong for the room behind it. Nothing about it said you
+     * were still inside the product.
+     *
+     * It is a `waka-page` like the archive and the principles, and it carries
+     * the same chrome as every other screen — which also fixes the thing
+     * nobody had reported: the cog brought you here and there was no way back
+     * except the browser's own button. The switcher names the page, so the
+     * card's eyebrow and title are gone rather than repeated.
+     */
+    <main className="waka-page profile-page">
+      <Menu
+        locale={locale}
+        items={menu.items}
+        current={menu.current}
+        label="profileTitle"
+        onSettings={() => navigate("/profile")}
+      />
+      <section className="profile-card" aria-labelledby="profile-title">
         <header className="profile-header">
           <div>
-            <p className="login-eyebrow">{t(locale, "profileEyebrow")}</p>
-            <h1 id="profile-title" className="login-title">
+            <h1 id="profile-title" className="sr-only">
               {t(locale, "profileTitle")}
             </h1>
-            <p className="login-subtitle profile-email">{account?.email}</p>
+            <p className="profile-email">{account?.email}</p>
           </div>
           <button
             className="profile-signout-button"
