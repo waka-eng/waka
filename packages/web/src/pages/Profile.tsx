@@ -841,6 +841,33 @@ export default function ProfilePage(): JSX.Element {
             </p>
             <p className="login-subtitle">{t(locale, "profileMachineryHint")}</p>
           </div>
+
+          {/* HOW ONE LAYER BECOMES THE NEXT — re-homed, not restored.
+              This was "How this forms": a disclosure on the home screen
+              explaining the whole loop, and it went when the home screen was
+              cut to three things. Founder, looking at what is missing against
+              the deployed build: "most things I want to find a new home in
+              the experience rather than completely removed."
+              Its new home is here because of what it IS. The switcher's info
+              icons answer "what is this view" at the moment you are choosing
+              between views — the right answer in the right place. This
+              answers a different question: what is the product DOING with
+              what I give it, and in what order. That is read once, carefully,
+              by somebody who wants to know how the machine works — which is
+              the question every other thing in this section answers too. */}
+          <dl className="profile-forms">
+            <dt>{t(locale, "worldMenuField")}</dt>
+            <dd>{t(locale, "worldFormationInspirations")}</dd>
+            <dt>{t(locale, "worldMenuTopOfMind")}</dt>
+            <dd>{t(locale, "worldFormationReading")}</dd>
+            <dt>{t(locale, "worldPrinciplesShortcut")}</dt>
+            <dd>{t(locale, "worldFormationPrinciples")}</dd>
+          </dl>
+          {/* What the loop promises and what it does not. It sat at the foot
+              of the disclosure and it belongs at the foot of this: a person
+              reading how the machine works is owed the part where it says
+              what it cannot do. */}
+          <p className="profile-forms-note">{t(locale, "worldFormationKeep")}</p>
           <p className="profile-machinery-row">
             <button
               type="button"
