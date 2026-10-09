@@ -174,6 +174,16 @@ export const CONFIDENCE_SOURCE_DIVERSITY_BONUS = 8;
  */
 export const MATCH_CANDIDATE_SCAN_LIMIT = 500;
 
+/**
+ * HOW MANY SHELVES THE READING IS SHOWN WHEN IT NAMES A CAPTURE'S CATEGORY.
+ *
+ * Enough that a capture nearly always finds a home among them, few enough
+ * that the list stays a list rather than becoming the prompt. They are shown
+ * busiest-first, so this cap drops the long tail of one-offs rather than the
+ * handful of shelves that actually organise the archive.
+ */
+export const MAX_EXISTING_CATEGORIES = 24;
+
 /*
  * -----------------------------------------------------------------------
  * Related captures — recurrence the extractor is allowed to SEE.

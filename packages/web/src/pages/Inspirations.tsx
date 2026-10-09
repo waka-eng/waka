@@ -55,6 +55,23 @@ export function Inspirations(): JSX.Element {
      anywhere. Filtering happens here, over what is already loaded, so typing
      narrows in place with no round trip and no empty frame between keys. */
   const [query, setQuery] = useState("");
+  /**
+   * WHICH CATEGORY IS BEING LOOKED AT, with `null` meaning all of them.
+   *
+   * Founder: "for the inspirations that I saved, I want to add tabs. So it's
+   * like all and then we create categories based on the inspirations."
+   *
+   * BASED ON THEM, NOT IMPOSED ON THEM. There is no folder to file a keep
+   * into and no tag to remember to apply — saving must cost nothing, and a
+   * taxonomy you maintain is a cost paid at exactly the moment the product
+   * promises not to charge one. The category is read off what was saved,
+   * the same way a claim is.
+   *
+   * THE ROW ONLY APPEARS WHEN IT DIVIDES SOMETHING. One tab is not a choice,
+   * and two tabs where one holds everything is a control that looks like it
+   * does something and does not. See `categories` below.
+   */
+  const [category, setCategory] = useState<string | null>(null);
   /* HOW MUCH IS BEHIND THIS DOOR. The archive's size was announced on the
      menu row that used to lead here; it is a fact about this page, so it
      moved onto it when the row stopped carrying one. `total` is what the
@@ -107,9 +124,26 @@ export function Inspirations(): JSX.Element {
      grid can actually see. Matching text they cannot read would return cards
      with no visible reason for being there. */
   const needle = query.trim().toLowerCase();
-  const shown = needle
-    ? rows.filter((row) => row.preview.toLowerCase().includes(needle))
-    : rows;
+
+  /* Ordered by how much each holds, largest first: the tab you are most
+     likely to want is the one with the most behind it, and an alphabetical
+     row would put that wherever its first letter happened to fall. */
+  const categories = (() => {
+    const counts = new Map<string, number>();
+    for (const row of rows) if (row.category) counts.set(row.category, (counts.get(row.category) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name]) => name);
+  })();
+
+  /* A chosen category that no longer exists — the last keep in it was edited
+     or deleted — shows everything rather than an empty grid under a tab that
+     is no longer in the row to press again. */
+  const active = category && categories.includes(category) ? category : null;
+
+  const shown = rows.filter(
+    (row) =>
+      (!needle || row.preview.toLowerCase().includes(needle)) &&
+      (!active || row.category === active),
+  );
 
   return (
     <main className="waka-page">
@@ -138,6 +172,33 @@ export function Inspirations(): JSX.Element {
           />
         ) : null}
       </header>
+
+      {/* The row divides nothing until there are two things to divide into. */}
+      {phase === "ready" && categories.length > 1 ? (
+        <div className="waka-tabs" role="tablist" aria-label={say("worldInspirationsCategories")}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={active === null}
+            className={`waka-tab${active === null ? " waka-tab--on" : ""}`}
+            onClick={() => setCategory(null)}
+          >
+            {say("worldInspirationsAll")}
+          </button>
+          {categories.map((name) => (
+            <button
+              key={name}
+              type="button"
+              role="tab"
+              aria-selected={active === name}
+              className={`waka-tab${active === name ? " waka-tab--on" : ""}`}
+              onClick={() => setCategory(name)}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {phase === "loading" ? (
         <p className="waka-page-status" role="status">

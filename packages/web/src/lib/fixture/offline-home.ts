@@ -118,6 +118,9 @@ function offlineSignal(
   return {
     id,
     preview: text,
+    /* The fixture reads nothing, so it places nothing — which is also what
+       the archive page should look like before a reading has happened. */
+    category: null,
     /* the dev fixture keeps everything to itself */
     isPublic: false,
     kind: "note",

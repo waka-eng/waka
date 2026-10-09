@@ -47,7 +47,7 @@ function inputWith(attachmentText: string): SignalCandidateExtractionInput {
     },
     reflections: [],
     attachments: [{ kind: "page_body", label: "example.com", text: attachmentText }],
-    existingStatements: [],
+    existingCategories: [], existingStatements: [],
     relatedInspirations: [],
   };
 }

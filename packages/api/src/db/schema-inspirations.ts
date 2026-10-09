@@ -86,6 +86,28 @@ export const inspirations = pgTable(
     textSearchVector:tsvector('text_search_vector'),
     textSearchVectorPolicy:integer('text_search_vector_policy'),
     kind: inspirationKindEnum("kind"),
+    /**
+     * WHAT THIS KEEP IS ABOUT, in a word or two — the archive's shelves.
+     *
+     * Derived, never filed. There is no folder to put a keep in and no tag to
+     * remember to apply: saving has to cost nothing, and a taxonomy a person
+     * maintains is a cost charged at exactly the moment the product promises
+     * not to charge one. The reading names it, the same pass that names a
+     * signal, from the same material.
+     *
+     * FREE TEXT, NOT AN ENUM, and deliberately so. An enum would be a
+     * taxonomy decided here, in advance, for everybody — and the whole claim
+     * of this product is that what a person keeps about is particular to
+     * them. The vocabulary converges instead by showing the model the
+     * shelves this archive already has (see `existingCategories` in
+     * signal-derivation), which is a convergence per person rather than a
+     * constraint across everyone.
+     *
+     * NULL is a real answer and the default: a keep the reading could not
+     * place sits in "all" and in nothing else, which is honest. Nothing
+     * downstream may treat null as a category named "null".
+     */
+    category: text("category"),
     source: inspirationSourceEnum("source").notNull().default("app"),
     visibility: inspirationVisibilityEnum("visibility").notNull().default("private"),
     /**
