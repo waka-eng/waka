@@ -1868,3 +1868,50 @@
   font-size: var(--t-ui);
   color: var(--muted);
 }
+
+
+/* ---------------------------------------------------------------------------
+ * HOW ONE LAYER BECOMES THE NEXT
+ *
+ * A definition list, because that is what it is: three names and what each
+ * one is made of. The names wear the label register so they read as the same
+ * three things the switcher offers, and the prose sits quiet beneath each.
+ * ------------------------------------------------------------------------- */
+
+.profile-forms {
+  display: grid;
+  gap: var(--sp-4);
+  margin: 0;
+}
+
+.profile-forms dt {
+  margin-top: var(--sp-12);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.profile-forms dt:first-of-type {
+  margin-top: 0;
+}
+
+.profile-forms dd {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  font-weight: 300;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+/* What it cannot promise, at the foot of what it does. */
+.profile-forms-note {
+  margin: var(--sp-16) 0 0;
+  font-family: var(--waka-face);
+  font-size: var(--t-fine);
+  line-height: 1.55;
+  color: var(--muted);
+}
