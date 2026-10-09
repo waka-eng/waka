@@ -1,62 +1,107 @@
 /**
- * THE MENU — ONE LIST, THE SAME ON EVERY SCREEN.
+ * THE THREE VIEWS OF YOUR OWN MATERIAL, and the two corners beside them.
  *
- * CLAIMS IS NOT A ROW. It was a page, and it is not any more: the companion
- * asks on the top of mind, where the founder wants every journey to start.
- * A menu row pointing at a question that is already being asked on the screen
- * you land on would be a second door into the same room.
+ * THIS WAS A HAMBURGER AND IT IS NOT ANY MORE. Founder: "maybe the top center
+ * of the page should stay top of mind with a carrot and then clicking that can
+ * let the user change to your inspirations and principles... then the left
+ * button we no longer need a hamburger and maybe that can be the entry point
+ * into the chat."
  *
- * YOUR DAYS IS NOT OFFERED EITHER, for now, by ruling. The page and its route
- * are untouched — `/days` still answers, and every dot on it still opens the
- * reading on that date — it is simply not one of the places the menu names.
+ * WHY THIS IS RIGHT, AND NOT JUST SMALLER. A hamburger is a door with no
+ * label: it can tell you that other places exist but never which one you are
+ * standing in. These three are not unrelated places that happen to need a
+ * list — they are the SAME MATERIAL AT THREE DEPTHS. What you kept, what it
+ * adds up to now, and what has endured. One axis, so the honest control is a
+ * switcher that names the rung you are on, not a menu that hides all of them
+ * equally.
  *
- * It was two. Home built its own set out of camera verbs and live field
- * state while every other page used a shorter one from here, so the menu
- * changed depending on where you were standing — which is the thing a menu
- * exists not to do. Founder: "why is the hamburger menu changing depending on
- * what screen I'm in? That's also weird." It was, and it was duplication
- * wearing the costume of context.
+ * It also costs the home screen nothing. The words "Top of mind" were already
+ * printed above the statement; they are the control now. A label became a
+ * control, and a door disappeared.
  *
- * So this is the only definition. Home imports it exactly as the pages do,
- * and there is nowhere left for a second one to drift.
+ * AND THE LEFT CORNER CARRIES TALKING. Keeping something is still how a
+ * conversation starts — the receipt after a save offers it, and that
+ * conversation arrives with a subject. But that was the ONLY way in, which
+ * made talking something you could only do in the ten seconds after saving.
+ * A corner is a door you can use on a day you have nothing to keep.
  *
- * WHAT IS NOT HERE, AND WHY:
+ * WHAT IS STILL NOT HERE, AND WHY:
  *
- *   - Rooms and agents. Set aside for now by ruling. The walls still exist
- *     and the space switcher still reaches them; they are simply not
- *     destinations the menu offers.
- *   - Review. Claims is the one place that asks you to rule on something, and
- *     two surfaces for "go back through your own material" is the duplication
- *     this list is being cut to remove.
- *   - Find. It is a thing you do TO your inspirations, so it belongs on that
- *     page as a search field rather than as a destination of its own — a verb
- *     in a list of places was always the odd one out.
+ *   - Rooms and agents. Set aside by ruling. The walls exist and the camera
+ *     still travels them; they are not places the product offers.
+ *   - Your days. Set aside by ruling. `/days` still answers and every dot on
+ *     it still opens the reading on that date.
+ *   - Find. It is a thing you do TO your inspirations, so it is a search
+ *     field on that page rather than a destination of its own.
  */
 import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import type { MenuItem } from "../components/Menu";
+import { t, type SupportedLocale } from "./locales";
 
 export interface PageMenu {
   items: MenuItem[];
+  /** Which of the three is being looked at, or null on a page that is none. */
+  current: string | null;
   onSettings: () => void;
+  onChat: () => void;
 }
 
-export function usePageMenu(): PageMenu {
+/**
+ * The three, in the order the loop runs — and each says how it is made.
+ *
+ * Founder, on the top of mind: "show hover card to explain how this is
+ * created." The other two get the same treatment because the question is the
+ * same question: a person looking at a page of their own material should be
+ * able to find out, without asking anyone, where it came from.
+ */
+const VIEWS: ReadonlyArray<{
+  id: string;
+  label: MenuItem["label"];
+  path: string;
+  explain: ReadonlyArray<MenuItem["label"]>;
+}> = [
+  {
+    id: "inspirations",
+    label: "worldMenuField",
+    path: "/inspirations",
+    explain: ["worldFieldWhatMade", "worldFieldWhatShelves"],
+  },
+  {
+    id: "top-of-mind",
+    label: "worldMenuTopOfMind",
+    path: "/",
+    explain: ["worldReadingWhatMade", "worldReadingWhatCounts", "worldReadingWhatChanges"],
+  },
+  {
+    id: "principles",
+    label: "worldPrinciplesShortcut",
+    path: "/principles",
+    explain: ["worldPrinciplesWhatMade", "worldPrinciplesWhatChanges"],
+  },
+];
+
+export function usePageMenu(locale: SupportedLocale): PageMenu {
   const navigate = useNavigate();
-  return useMemo(
-    () => ({
-      /* Ordered as the loop runs: what you kept, what was read from it and is
-         waiting on you, what it adds up to now, what endured — then the two
-         that are about the whole of it rather than a step in it. */
-      items: [
-        { id: "inspirations", label: "worldMenuField", onSelect: () => navigate("/inspirations") },
-        { id: "top-of-mind", label: "worldMenuTopOfMind", onSelect: () => navigate("/") },
-        { id: "principles", label: "worldPrinciplesShortcut", onSelect: () => navigate("/principles") },
-        { id: "talk", label: "worldMenuTalk", onSelect: () => navigate("/chat/new") },
-      ],
+  const { pathname } = useLocation();
+  return useMemo(() => {
+    /* Longest path first, so "/" does not claim "/inspirations". */
+    const here =
+      [...VIEWS]
+        .sort((a, b) => b.path.length - a.path.length)
+        .find((view) => (view.path === "/" ? pathname === "/" : pathname.startsWith(view.path)))
+        ?.id ?? null;
+    return {
+      items: VIEWS.map((view) => ({
+        id: view.id,
+        label: view.label,
+        onSelect: () => navigate(view.path),
+        explain: view.explain.map((key) => t(locale, key)),
+      })),
+      current: here,
       onSettings: () => navigate("/profile"),
-    }),
-    [navigate],
-  );
+      onChat: () => navigate("/chat/new"),
+    };
+  }, [locale, navigate, pathname]);
 }

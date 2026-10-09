@@ -28,7 +28,7 @@ export function Principles(): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   const navigate = useNavigate();
 
-  const menu = usePageMenu();
+  const menu = usePageMenu(locale);
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
@@ -59,7 +59,7 @@ export function Principles(): JSX.Element {
 
   return (
     <main className="waka-page">
-      <Menu locale={locale} items={menu.items} onSettings={menu.onSettings} />
+      <Menu locale={locale} items={menu.items} current={menu.current} onSettings={menu.onSettings} onChat={menu.onChat} />
       <header className="waka-page-head">
         {/* NO BACK BUTTON. The menu is the navigation and the browser
             already has a back — a third way out of a page is not a

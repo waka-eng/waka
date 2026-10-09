@@ -16,7 +16,8 @@ export default function ChatPage(){
      list no other screen has. The founder removed Back from every page
      because the menu is always there; it is always there on this page now
      too, and it is the same menu, in the same two corners. */
-  const menu=usePageMenu();
+  const locale=normalizeSupportedLocale(auth.profile?.preferredLocale);
+  const menu=usePageMenu(locale);
   // One immediately committed response, not persistent or cross-owner memory.
   const committed=useRef<{owner:string;row:ApiConversation}|null>(null);
   const scope=useMemo(()=>auth.account&&auth.profile?{accountId:auth.account.id,profileId:auth.profile.id}:null,[auth.account?.id,auth.profile?.id]);
@@ -25,8 +26,8 @@ export default function ChatPage(){
   const principleId=!id?new URLSearchParams(location.search).get('principle')??undefined:undefined;
   const owner=`${scope.accountId}:${scope.profileId}`;
   if(committed.current&&(committed.current.owner!==owner||committed.current.row.id!==id))committed.current=null;
-  return <><Menu locale={normalizeSupportedLocale(auth.profile?.preferredLocale)} items={menu.items} onSettings={menu.onSettings}/><ConversationPanel key={`${scope.accountId}:${scope.profileId}:${id??'new'}:${principleId??''}`}
-    scope={scope} id={id} initialPrincipleId={principleId} initialConversation={committed.current?.row} locale={normalizeSupportedLocale(auth.profile?.preferredLocale)}
+  return <><Menu locale={locale} items={menu.items} current={menu.current} onSettings={menu.onSettings} onChat={menu.onChat}/><ConversationPanel key={`${scope.accountId}:${scope.profileId}:${id??'new'}:${principleId??''}`}
+    scope={scope} id={id} initialPrincipleId={principleId} initialConversation={committed.current?.row} locale={locale}
     onCreated={row=>{if(row.profileId===scope.profileId)committed.current={owner,row};}}
     onChoose={next=>{if(next!==id||principleId)navigate(`/chat/${next??'new'}`,{replace:!id&&Boolean(next),state:location.state});}}
     onOpenSource={(kind,sourceId)=>navigate(kind==='principle'?`/principles/${encodeURIComponent(sourceId)}`:`/inspirations/${encodeURIComponent(sourceId)}`)}/></>;

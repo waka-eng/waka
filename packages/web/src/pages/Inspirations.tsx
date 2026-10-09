@@ -47,7 +47,7 @@ export function Inspirations(): JSX.Element {
   const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
 
-  const menu = usePageMenu();
+  const menu = usePageMenu(locale);
   const [rows, setRows] = useState<Inspiration[]>([]);
   /* FIND IS A THING YOU DO TO YOUR INSPIRATIONS, so it lives on the page that
      holds them rather than as a destination of its own. It was a row in the
@@ -147,7 +147,7 @@ export function Inspirations(): JSX.Element {
 
   return (
     <main className="waka-page">
-      <Menu locale={locale} items={menu.items} onSettings={menu.onSettings} />
+      <Menu locale={locale} items={menu.items} current={menu.current} onSettings={menu.onSettings} onChat={menu.onChat} />
       <header className="waka-page-head">
         {/* NO BACK BUTTON. The menu is the navigation and the browser
             already has a back — a third way out of a page is not a

@@ -232,7 +232,30 @@
      every other signpost is given. 10.6vh reaches the full 72 at a 679px
      viewport — the same 680 the column caps at and the same 680 the claim's
      own height cap lands on, so all three stop growing together. */
-  padding: calc(clamp(48px, 10.6vh, 72px) + env(safe-area-inset-top)) 20px 0;
+  /* AND NOW THE FLOOR IS THE BAR, NOT A MEASURED GUESS.
+     The signposts that 48 was measured against are gone; what stands at the
+     top of the screen is the switcher, and the sentence has to clear THAT.
+     The bar is a 44px target with 12px of inset above it, so 64 is the
+     nearest step on the grid that clears it and still leaves the sentence
+     reading as the thing the switcher names. The ceiling and the curve are
+     untouched: the air above the claim is still the first thing to give way
+     on a short window, because it is still the only thing here that costs
+     nothing to lose. */
+  padding: calc(clamp(64px, 10.6vh, 72px) + env(safe-area-inset-top)) 20px 0;
+  /**
+   * CENTRED, BECAUSE ITS LABEL IS.
+   *
+   * Founder: "if we move the text like top of mind to the center, then the
+   * text below it should also be pretty close proximity to it in the center.
+   * So it's clear that this is the top of mind."
+   *
+   * That is proximity doing the work a repeated word used to do. The name
+   * moved to the middle of the top of the screen; a sentence still ranged
+   * left under a centred label reads as two unrelated things, and the only
+   * way to tie them back together would be to print the name again. Centre
+   * it and the grouping is free.
+   */
+  text-align: center;
 }
 /* ═══ THE LAYER TAKES NO POINTER; ITS CONTROLS TAKE IT BACK, ALL OF THEM ═══
    `.jar-hq` is `pointer-events: none` so the world underneath stays draggable
@@ -289,8 +312,8 @@
   cursor: pointer;
   transition: text-shadow 0.2s ease;
 }
-.jar-reading-heading { display:flex; align-items:baseline; flex-wrap:wrap; gap:var(--sp-12); margin:0 0 var(--sp-8); color:var(--w-muted); font-size:var(--t-note); line-height:1.5; }
-.jar-reading-actions { display:flex; flex-wrap:wrap; gap:var(--sp-4) var(--sp-12); margin-top:var(--sp-8); pointer-events:auto; }
+.jar-reading-heading { display:flex; align-items:baseline; flex-wrap:wrap; justify-content:center; gap:var(--sp-12); margin:0 0 var(--sp-8); color:var(--w-muted); font-size:var(--t-note); line-height:1.5; }
+.jar-reading-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:var(--sp-4) var(--sp-12); margin-top:var(--sp-8); pointer-events:auto; }
 .jar-reading-actions button { min-height:var(--sp-44); padding:var(--sp-8) 0; border:0; background:none; color:var(--w-muted); font:inherit; font-size:var(--t-body); text-align:left; cursor:pointer; }
 .jar-forming.jar-forming--personal { font-size:var(--t-body); font-style:normal; color:var(--w-muted); line-height:1.6; }
 .jar-first-capture-hint { margin:var(--sp-8) 0; color:var(--w-muted); font-size:var(--t-note); line-height:1.6; }
@@ -3494,6 +3517,12 @@
 }
 /* pressable, but not a button: it is a quotation you can walk into */
 .jar-prov-row {
+  /* THE COLUMN CENTRES; A QUOTATION DOES NOT. The block above went centred
+     so the sentence would read as the thing the switcher names, and that
+     inherits. A quotation is marked by a rule down its left edge, and
+     centred text inside a left rule is a quotation that has come loose from
+     its own mark. */
+  text-align: left;
   display: block;
   width: 100%;
   margin: 0;

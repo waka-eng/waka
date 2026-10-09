@@ -67,7 +67,6 @@ import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlo
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { createConversation } from "../lib/api/conversations";
 import { DialogSurface } from "../components/DialogSurface";
-import { HoverCard } from "../components/HoverCard";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { useNavigate } from "react-router-dom";
 import { useViewNavigation } from '../lib/use-view-navigation';
@@ -9957,7 +9956,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     return (inspirations?.length ?? 0) + fieldBeyond;
   }, [atWall, agents, inspirations, groupFieldTick, fieldBeyond, standing, auth?.profile?.id]);
 
-  const menu = usePageMenu();
+  const menu = usePageMenu(locale);
 
   /**
    * THE REACH — the ground, addressable without a pointer.
@@ -12869,32 +12868,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     {/* R01 makes the personal reading explicit while keeping
                         the existing field, headline and companion layout. */}
                     {here&&w.kind==='self'&&(inspirations?.length||fieldBeyond||readingLoadPhase!=='ready')?<div className="jar-reading-heading" data-jar-chrome="1">
-                      {/* THE TITLE SAYS WHERE THE SENTENCE CAME FROM, ON ASK.
-                          "Top of mind" names the thing but explains nothing,
-                          and the sentence under it is the product's whole
-                          claim about you — a person is entitled to know how it
-                          was arrived at before deciding whether to believe it.
-                          It is a hover card and not a line on the page for the
-                          same reason everything else left this screen: the
-                          explanation is wanted once, and the sentence is
-                          wanted every time.
-                          Only at now. Wound back, the line is naming a date
-                          rather than describing a live reading, and an
-                          explanation of how today's is made would be the
-                          wrong answer to the question being asked. */}
-                      {atNow
-                        ? <HoverCard label={say('worldReadingTitle')} className="jar-reading-what">
-                            <span>{say('worldReadingWhatMade')}</span>
-                            <span>{say('worldReadingWhatCounts')}</span>
-                            <span>{say('worldReadingWhatChanges')}</span>
-                          </HoverCard>
-                        : <span>{say('worldReadingEarlier')}</span>}
-                      {/* THE DATE IS GONE (founder, pointing at "Oct 8").
-                          It stamped the reading with the day it was written,
-                          beside a line whose job is to be true NOW — and a
-                          date next to a statement about you reads as an expiry
-                          on it. When the reading is not current the title
-                          already says so in words. */}
+                      {/* THE NAME AND ITS EXPLANATION MOVED TO THE SWITCHER.
+                          Both stood here: "Top of mind", and a hover card
+                          saying how it is made. The switcher at the top of
+                          the screen now names the view, so printing the same
+                          two words again sixty pixels below it was the exact
+                          duplication that change removed everywhere else.
+                          The explanation went with the name — it belongs on
+                          the thing that names the view, not on a second label
+                          beside it.
+                          What is left here is the one thing that is about
+                          THIS reading rather than about the view: whether you
+                          are looking at a current one. */}
+                      {atNow ? null : <span>{say('worldReadingEarlier')}</span>}
                       {/* "Changes" left the home screen with the other two
                           explainers. What moved in the reading since last time
                           is worth having, but it is a thing to go and look at,
@@ -15027,8 +15013,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           four permanent controls on a page whose whole argument is that it
           holds three things. Every one of those verbs survives, as a row in
           the menu, so nothing was dropped to clear the screen. */}
-      {phase==='ready'&&atWall.kind==='self'?<Menu locale={locale} items={menu.items}
-        onSettings={()=>navigate('/profile')}
+      {phase==='ready'&&atWall.kind==='self'?<Menu locale={locale} items={menu.items} current={menu.current}
+        onSettings={()=>navigate('/profile')} onChat={menu.onChat}
         hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
