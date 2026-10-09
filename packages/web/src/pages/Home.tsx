@@ -7878,7 +7878,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        already covered by the first word in this list. */
     const isInteractive = (t: EventTarget | null) =>
       t instanceof Element &&
-      (isNativeSurface(t) || t.closest("button, a, textarea, input, select") !== null);
+      /* `[role="button"]` IS IN THIS LIST NOW. The poster is an `<h1>` that
+         declares itself a button — "the sentence itself is the control, there
+         is no button beside it" (founder, 2026-08-24) — and a selector that
+         only names real `<button>` elements read it as page, captured the
+         pointer for a drag, and swallowed the press. So the one control that
+         was deliberately not shaped like a button was the one control that
+         could not be pressed, and what the reading rests on has been
+         unreachable by pointer ever since. Anything that tells assistive
+         technology it is a button owns its own press. */
+      (isNativeSurface(t) ||
+        t.closest('button, a, textarea, input, select, [role="button"]') !== null);
 
     /** Hand the world back: the capture and the identity always go together. */
     const releaseOwner = (id: number) => {
@@ -13245,7 +13255,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     !offline &&
                     lead &&
                     !editing.open &&
-                    (posterAsk || board.step !== "rest" || readingMessage !== null) ? (
+                    /* ONLY WHEN ASKED FOR. These four — refresh, hold up, edit
+                       wording, not this — are how you MANAGE the reading, and
+                       the home screen holds the reading, the character and the
+                       box. The row used to force itself open whenever
+                       `readingMessage` was set, which is any time the reading
+                       has fallen behind its own support, so a four-verb toolbar
+                       appeared under the sentence without anyone asking for one.
+
+                       Pressing the sentence is already how you ask it what it
+                       rests on (founder, 2026-08-24). Its verbs belong in that
+                       same gesture rather than printed beside it.
+
+                       `board.step !== "rest"` stays: a confirmation already in
+                       flight must not be hidden out from under the person who
+                       started it. */
+                    (posterAsk || board.step !== "rest") ? (
                       <div className={`jar-board-acts${readingMessage !== null ? " jar-reading-status" : ""}`} data-jar-chrome="1">
                         {readingRefresh.busy ? (
                           <span className="jar-board-act jar-label" role="status">{say(readingMessage ?? "worldReadingNow")}</span>

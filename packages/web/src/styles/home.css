@@ -279,6 +279,13 @@
    sentence just carries a little light while the hand is on it, which is the
    same physics as every other lit thing in this world. */
 .jar-poster[role="button"] {
+  /* `.jar-hq` is `pointer-events: none` so the world stays draggable through
+     it, and the property INHERITS — every control inside has to opt back in.
+     This one never did. It carried a pointer cursor and an `aria-expanded`
+     and could not be clicked at all, so "the sentence itself is the control"
+     (founder, 2026-08-24) was true of the markup and false on the screen, and
+     what the reading rests on has been unreachable by pointer ever since. */
+  pointer-events: auto;
   cursor: pointer;
   transition: text-shadow 0.2s ease;
 }
