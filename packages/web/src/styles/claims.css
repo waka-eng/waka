@@ -13,6 +13,12 @@
 :root {
   --waka-face: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
 
+  /* The fixed corner buttons' target size. Named because two things depend on
+     it — the buttons themselves and the room every page reserves for them —
+     and a reserve that drifts from the thing it reserves for is a collision
+     waiting for a narrower window. */
+  --waka-corner: 44px;
+
   /**
    * AN OPAQUE RAISED SURFACE.
    *
@@ -61,8 +67,10 @@
   min-height: 100dvh;
   max-width: 34rem;
   margin: 0 auto;
-  padding: max(var(--space-6), env(safe-area-inset-top)) clamp(20px, 6vw, 28px)
-    calc(var(--space-5) + env(safe-area-inset-bottom));
+  /* Same reserve as every other page: the corners are pinned to the viewport
+     and are not in this flow, so the room for them is made here. */
+  padding: calc(var(--waka-corner) + var(--space-4) + env(safe-area-inset-top))
+    clamp(20px, 6vw, 28px) calc(var(--space-5) + env(safe-area-inset-bottom));
 }
 
 .waka-claim-foot {
@@ -73,9 +81,10 @@
 
 .waka-claims-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
   margin-bottom: var(--space-8);
 }
 
@@ -263,8 +272,8 @@
   align-items: center;
   justify-content: center;
   /* 44px, the smallest target a thumb reliably hits. */
-  width: 44px;
-  height: 44px;
+  width: var(--waka-corner);
+  height: var(--waka-corner);
   border: 0;
   border-radius: 50%;
   background: none;
@@ -501,15 +510,30 @@
   min-height: 100dvh;
   max-width: 1040px;
   margin: 0 auto;
-  padding: max(var(--space-6), env(safe-area-inset-top)) clamp(20px, 5vw, 32px)
-    calc(var(--space-9) + env(safe-area-inset-bottom));
+  /* THE CORNERS ARE FIXED, SO THE PAGE RESERVES THEIR ROOM.
+     `.waka-corners` is a 44px target row pinned to the top of the VIEWPORT —
+     it is not in this page's flow, so nothing here knows it is there. It sat
+     on top of "Back" and the search field ran under the gear. The reserve is
+     the corner's own height plus the inset it keeps, written once here rather
+     than as a guessed margin on each thing that might collide. */
+  padding: calc(var(--waka-corner) + var(--space-4) + env(safe-area-inset-top))
+    clamp(20px, 5vw, 32px) calc(var(--space-9) + env(safe-area-inset-bottom));
   background: var(--bg);
 }
 
+/**
+ * THE PAGE HEADER WRAPS BEFORE IT COLLIDES.
+ *
+ * Back, the title, the count and the search share one row while there is room
+ * and take two when there is not — `flex-wrap` plus a search that is allowed
+ * to grow and allowed to shrink. The alternative, a media query at one width,
+ * is a guess about a window; this answers to the content it actually has.
+ */
 .waka-page-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--space-4);
+  gap: var(--space-3) var(--space-4);
   margin-bottom: var(--space-8);
 }
 
@@ -522,6 +546,7 @@
   font-family: var(--waka-face);
   font-size: 12px;
   cursor: pointer;
+  flex: 0 0 auto;
 }
 
 .waka-page-back:hover,
@@ -537,6 +562,7 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
+  flex: 0 0 auto;
 }
 
 .waka-page-status {
@@ -923,8 +949,9 @@
 
 .waka-composer-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
   padding: 0 var(--space-3) var(--space-3);
   font-family: var(--waka-face);
   font-size: 11px;
@@ -933,6 +960,26 @@
 
 .waka-composer-hint {
   white-space: nowrap;
+}
+
+/**
+ * "ENTER TO KEEP" IS NOT TRUE ON A TOUCH KEYBOARD.
+ *
+ * There, Enter is a newline key — the shortcut this line describes does not
+ * exist, and the button beside it is the control. A hint that is false on the
+ * device it is crowding is worse than no hint, so it goes where it is wrong
+ * and stays where it is right. It also gives the footer back the room it was
+ * short of at 360px.
+ */
+@media (pointer: coarse) {
+  .waka-composer-hint {
+    display: none;
+  }
+}
+
+/* The primary action never shrinks to fit a hint. */
+.waka-composer-send {
+  flex: 0 0 auto;
 }
 
 /* The primary action sits at the end of the footer, where the pattern puts
@@ -1087,8 +1134,13 @@
 /* Find, on the page it acts on. Sits in the header beside the title, because
    it narrows what is below it rather than navigating anywhere. */
 .waka-page-search {
+  /* Takes the rest of the row when there is one, and the whole of the next
+     row when there is not. `min-width` is what lets it shrink instead of
+     pushing the row wider than the page. */
+  flex: 1 1 14rem;
+  min-width: 0;
+  max-width: 24rem;
   margin-left: auto;
-  min-width: 14rem;
   min-height: 36px;
   padding: 0 var(--space-3);
   border: var(--space-px) solid var(--line);
