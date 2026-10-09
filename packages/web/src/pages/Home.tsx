@@ -8258,12 +8258,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (e.defaultPrevented || e.isComposing || e.metaKey || e.ctrlKey || e.altKey || isEditableTarget(e.target)) return;
       // A reading card owns its paging arrows; other panels keep their keys.
       if (isNativeSurface(e.target) && !(e.target instanceof Element && e.target.closest(".jar-panel"))) return;
-      const step =
-        e.key === "ArrowDown" || e.key === "PageDown"
-          ? 1
-          : e.key === "ArrowUp" || e.key === "PageUp"
-            ? -1
-            : 0;
+      /* THE VERTICAL KEYS DO NOT TRAVEL EITHER (founder ruling). The wheel and
+         the drag were stopped first and this was missed, so Arrow Up, Arrow
+         Down, PageUp and PageDown still walked the camera between the sky and
+         the ground — the same journey by a third instrument. Every way of
+         making that journey has to go, or the one that is left IS the
+         journey. */
+      const step = 0;
       const horiz = e.key === "ArrowLeft" || e.key === "ArrowRight";
       /* "/" IS FIND, EVERYWHERE. The gesture people already have for searching
          a page, and it puts the verb on the layout rather than in a menu. */
