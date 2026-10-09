@@ -819,7 +819,6 @@
   "worldSaveEditDraft": "초안 수정",
   "worldSaveStartAgain": "다시 시작",
   "worldSaveResetConfirm": "초안은 남아 있어요. 먼저 영감 목록을 확인해 주세요. 다시 시작하면 중복으로 저장될 수 있어요.",
-  "worldPersonalHome": "홈",
   "worldFirstCaptureExample": "떠오른 생각, 링크, 눈길을 끈 것을 남겨 보세요.",
   "worldMoreActions": "더 보기",
   "worldReviewItemActions": "영감에 대한 동작",
@@ -845,12 +844,9 @@
   "worldMenuLabel": "어디로 갈까요",
   "worldSettingsOpen": "설정",
   "worldMenuField": "담아 둔 것",
-  "worldMenuReview": "되새기기",
   "worldMenuTalk": "WAKA와 이야기",
-  "worldMenuFind": "찾기",
   "worldKeepPlaceholder": "적거나 붙여넣거나 파일을 놓으세요",
   "worldKeepViaAgent": "MCP로 영감 담기",
-  "worldMenuWalls": "룸과 에이전트",
   "worldKeepHint": "엔터로 담기",
   "worldKeepMcpWhat": "에이전트를 WAKA에 연결하면 일하는 중에도 대신 담아 둬요.",
   "worldKeepMcpTools": "도구는 여섯 개예요: 영감 담기, 목록 보기, 시그널·원칙·프로필 읽기.",
@@ -877,5 +873,8 @@
   "worldMenuDays": "지난 날들",
   "worldMomentAsk": "이 순간은 왜 특별하게 느껴졌나요?",
   "worldMomentPlaceholder": "떠오르는 대로 적어도 괜찮아요",
-  "worldMomentSkip": "말하지 않고 담기"
+  "worldMomentSkip": "말하지 않고 담기",
+  "worldMenuTopOfMind": "지금 마음",
+  "worldInspirationsSearch": "담아 둔 것 검색",
+  "worldInspirationsNoHits": "일치하는 것이 없어요."
 }

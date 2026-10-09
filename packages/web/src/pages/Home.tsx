@@ -88,7 +88,8 @@ import { ReviewPanel } from '../components/ReviewPanel';
 import { useReviewEntry } from '../lib/use-review-entry';
 import {PrinciplesShortcutLabel} from '../components/PrinciplesShortcutLabel';
 import { paintField } from '../space/inspiration/field-paint';
-import { Menu, type MenuItem } from '../components/Menu';
+import { Menu } from '../components/Menu';
+import { usePageMenu } from '../lib/page-menu';
 import { HoverCard } from '../components/HoverCard';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
@@ -9896,50 +9897,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     return (inspirations?.length ?? 0) + fieldBeyond;
   }, [atWall, agents, inspirations, groupFieldTick, fieldBeyond, standing, auth?.profile?.id]);
 
-  /**
-   * EVERY VERB THE HOME PAGE USED TO WEAR, IN ONE LIST.
-   *
-   * Founder ruling: the page keeps the top of mind, the character and the box;
-   * everything else moves behind the hamburger. These rows are literally the
-   * controls that were removed — the four from `PersonalNavigation` along the
-   * bottom and the two from `HomeActivities` beside the character — so the
-   * screen got shorter without the product getting smaller.
-   *
-   * Ordered as the loop runs: what you kept, what was read from it and is
-   * waiting on you, what it adds up to over time, then the surfaces that are
-   * about talking and other people rather than about the loop.
-   */
-  const menuItems = useMemo<MenuItem[]>(() => [
-    /* BOTH OF THESE ARE PAGES NOW (founder ruling, twice). They used to be the
-       bottom and the top of a vertical axis — travel the camera down for the
-       archive, up for the principles — and that axis is what the ruling
-       removes. A page has an address, a Back that works, and a link you can
-       send; a camera position has none of those. The field's own loading and
-       retry state goes with it: it belongs to the page that does the loading,
-       not to a menu row pointing at one. */
-    { id: 'inspirations', label: 'worldMenuField',
-      className: 'jar-navigation-inspirations',
-      note: wallTotal === null ? undefined
-        : wallTotal > wallCount
-          ? formatMessage(locale, 'worldInspirationCountCapped', { shown: wallCount, total: wallTotal })
-          : formatMessage(locale, 'worldInspirationCount', { count: wallTotal }),
-      onSelect: () => navigate('/inspirations') },
-    { id: 'claims', label: 'worldTabClaims', onSelect: () => navigate('/claims') },
-    { id: 'principles', label: 'worldPrinciplesShortcut',
-      onSelect: () => navigate('/principles') },
-    { id: 'review', label: 'worldMenuReview',
-      onSelect: () => viewNavigation.write({ ...EMPTY_VIEW, reviewId: 'new' }) },
-    { id: 'talk', label: 'worldMenuTalk',
-      onSelect: () => viewNavigation.write({ ...EMPTY_VIEW, conversationId: 'new' }) },
-    { id: 'days', label: 'worldMenuDays', onSelect: () => navigate('/days') },
-    { id: 'find', label: 'worldMenuFind', onSelect: () => setSeek('') },
-    /* The caret half of the "ME ▾" pill. The pill is gone from the home
-       screen, so the question it answered — which other walls exist, take me
-       there — is asked here instead. */
-    { id: 'walls', label: 'worldMenuWalls', onSelect: () => { setSettingsFor(null); setWallPick(true); } },
-    { id: 'home', label: 'worldPersonalHome',
-      onSelect: () => viewNavigation.write({ ...EMPTY_VIEW }) },
-  ], [locale, navigate, viewNavigation, wallCount, wallTotal]);
+  const menu = usePageMenu();
 
   /**
    * THE REACH — the ground, addressable without a pointer.
@@ -14951,7 +14909,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           four permanent controls on a page whose whole argument is that it
           holds three things. Every one of those verbs survives, as a row in
           the menu, so nothing was dropped to clear the screen. */}
-      {phase==='ready'&&atWall.kind==='self'?<Menu locale={locale} items={menuItems}
+      {phase==='ready'&&atWall.kind==='self'?<Menu locale={locale} items={menu.items}
         onSettings={()=>{setAccountOpen(true);setSettingsFor(null);}}
         hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
       {seek !== null ? (

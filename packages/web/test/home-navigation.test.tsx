@@ -51,12 +51,11 @@ it('keeps named personal destinations available and records section navigation f
   await chooseFromMenu(world.container,'Principles');await settle();
   expect(location.pathname).toBe('/principles');
   await navigate(-1);expect(location.pathname).toBe('/inspirations');
-  /* Find was the fourth button on the old bottom bar. It is a menu row now,
-     and still reachable — a destination that moved must not become one that
-     vanished. */
-  await navigate('/');await settle();
-  await chooseFromMenu(world.container,'Find');await settle();
-  expect(world.container.querySelector('.jar-seek')).not.toBeNull();
+  /* Find left the menu entirely: it is a thing you do TO your inspirations,
+     so it is a search field on that page now rather than a destination. The
+     menu holds places; it held one verb, and that was the odd one out. */
+  await chooseFromMenu(world.container,'Top of mind');await settle();
+  expect(location.pathname).toBe('/');
 });
 
 it('keeps the selected principle and its route after editing, so Back returns to the prior view',async()=>{
@@ -93,11 +92,14 @@ it('hides a principle’s expanded evidence when Back closes that principle',asy
 it('starts a review beside the personal reading and restores home through Back',async()=>{
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
   expect(world.container.querySelector('.jar-reading-heading')?.textContent).toContain('Top of mind');
-  /* Review was an activity card beside the character; it is a menu row now.
-     The original point of this test stands: starting a review must not be a
-     verb hanging off the reading itself. */
+  /* Review is not offered any more. It was an activity card beside the
+     character, then a menu row, and it is now merged away: Claims is the one
+     place that asks a person to rule on their own material, and two surfaces
+     for "go back through what you kept" was the duplication the menu was cut
+     to remove. The route still works for anything already holding a link —
+     what went is the offer. */
   expect(world.container.querySelector('.jar-reading-actions')?.textContent).not.toContain('Review your inspirations');
-  await chooseFromMenu(world.container,'Review');await settle();expect(location.pathname).toBe('/review/new');
+  await navigate('/review/new');await settle();expect(location.pathname).toBe('/review/new');
   await navigate(-1);expect(location.pathname).toBe('/');
 });
 it('requires a visible audience confirmation before publishing and leaves cancel private',async()=>{

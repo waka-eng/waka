@@ -23,21 +23,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Menu } from "../components/Menu";
-import {
-  attachmentPreviewImageUrl,
-  fetchInspirations,
-  type ApiInspirationSummary,
-} from "../lib/api";
+import { attachmentPreviewImageUrl } from "../lib/api";
+/* THE SAME DOOR THE WORLD USES. `loadInspirations` is the archive's own
+   reader — it pages, it carries the total the server reports, and it holds
+   the invariant that a total is never smaller than what arrived. Reaching
+   past it to the HTTP layer would have been a second way to read one thing,
+   with its own pagination and its own idea of what the archive holds. */
+import { loadInspirations, type Inspiration } from "../lib/data";
 import { usePageMenu } from "../lib/page-menu";
 import { useOptionalAuth } from "../lib/auth-context";
-import { normalizeSupportedLocale, t } from "../lib/locales";
+import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 
 type Phase = "loading" | "ready" | "failed";
 
 /** The first image on a keep, if it has one. Links and audio do not qualify:
     a tile's picture has to be a picture, not a favicon standing in for one. */
-function pictureOf(row: ApiInspirationSummary): string | null {
-  const image = row.attachmentSummary?.find((item) => item.type === "image");
+function pictureOf(row: Inspiration): string | null {
+  const image = row.attachments?.find((item) => item.type === "image");
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
@@ -47,8 +49,20 @@ export function Inspirations(): JSX.Element {
   const navigate = useNavigate();
 
   const menu = usePageMenu();
-  const [rows, setRows] = useState<ApiInspirationSummary[]>([]);
-  const [open, setOpen] = useState<ApiInspirationSummary | null>(null);
+  const [rows, setRows] = useState<Inspiration[]>([]);
+  /* FIND IS A THING YOU DO TO YOUR INSPIRATIONS, so it lives on the page that
+     holds them rather than as a destination of its own. It was a row in the
+     menu — a verb among places — and the one entry there that did not go
+     anywhere. Filtering happens here, over what is already loaded, so typing
+     narrows in place with no round trip and no empty frame between keys. */
+  const [query, setQuery] = useState("");
+  /* HOW MUCH IS BEHIND THIS DOOR. The archive's size was announced on the
+     menu row that used to lead here; it is a fact about this page, so it
+     moved onto it when the row stopped carrying one. `total` is what the
+     archive holds, which is not the same as how many arrived — an older
+     server omits it, and then the length of what came is the best there is. */
+  const [total, setTotal] = useState<number | null>(null);
+  const [open, setOpen] = useState<Inspiration | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
 
@@ -62,9 +76,17 @@ export function Inspirations(): JSX.Element {
   const load = useCallback(async () => {
     setPhase("loading");
     try {
-      const kept = await fetchInspirations({ limit: 120 });
+      const field = await loadInspirations();
       if (!mounted.current) return;
-      setRows(kept);
+      /* Newest first here: a grid is read from the top left, and the archive's
+         own order is oldest first because the ground lays them down that way. */
+      setRows([...field.inspirations].reverse());
+      /* NEVER A NUMBER SMALLER THAN WHAT IS ON SCREEN. A stale or wrong total
+         coming back below the count of cards would print "4 of 2" — the page
+         contradicting itself in one line, which is worse than saying nothing.
+         `loadInspirations` already holds this; holding it here too means the
+         page cannot be made to lie by a reader that stops holding it. */
+      setTotal(Math.max(field.total, field.inspirations.length));
       setPhase("ready");
     } catch {
       if (!mounted.current) return;
@@ -76,6 +98,14 @@ export function Inspirations(): JSX.Element {
     void load();
   }, [load]);
 
+  /* Case-folded substring over the preview, which is what a person reading the
+     grid can actually see. Matching text they cannot read would return cards
+     with no visible reason for being there. */
+  const needle = query.trim().toLowerCase();
+  const shown = needle
+    ? rows.filter((row) => row.preview.toLowerCase().includes(needle))
+    : rows;
+
   return (
     <main className="waka-page">
       <Menu locale={locale} items={menu.items} onSettings={menu.onSettings} />
@@ -84,6 +114,23 @@ export function Inspirations(): JSX.Element {
           {say("worldBack")}
         </button>
         <h1 className="waka-page-title">{say("worldInspirationsTitle")}</h1>
+        {total !== null ? (
+          <p className="waka-page-count jar-saved-count">
+            {total > rows.length
+              ? formatMessage(locale, "worldInspirationCountCapped", { shown: rows.length, total })
+              : formatMessage(locale, "worldInspirationCount", { count: total })}
+          </p>
+        ) : null}
+        {rows.length ? (
+          <input
+            type="search"
+            className="waka-page-search"
+            value={query}
+            placeholder={say("worldInspirationsSearch")}
+            aria-label={say("worldInspirationsSearch")}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        ) : null}
       </header>
 
       {phase === "loading" ? (
@@ -101,9 +148,11 @@ export function Inspirations(): JSX.Element {
         </>
       ) : rows.length === 0 ? (
         <p className="waka-page-status">{say("worldInspirationsEmpty")}</p>
+      ) : shown.length === 0 ? (
+        <p className="waka-page-status">{say("worldInspirationsNoHits")}</p>
       ) : (
         <ul className="waka-cards">
-          {rows.map((row) => {
+          {shown.map((row) => {
             const picture = pictureOf(row);
             return (
               <li key={row.id}>
@@ -125,7 +174,7 @@ export function Inspirations(): JSX.Element {
                     </span>
                   ) : null}
                   <span className="waka-card-body">
-                    <span className="waka-card-text">{row.textPreview}</span>
+                    <span className="waka-card-text">{row.preview}</span>
                   </span>
                 </button>
               </li>
@@ -146,7 +195,7 @@ export function Inspirations(): JSX.Element {
             {pictureOf(open) ? (
               <img className="waka-sheet-picture" src={pictureOf(open)!} alt="" />
             ) : null}
-            <p className="waka-sheet-text">{open.textPreview}</p>
+            <p className="waka-sheet-text">{open.preview}</p>
             <button type="button" className="waka-sheet-close" onClick={() => setOpen(null)}>
               {say("worldCardClose")}
             </button>

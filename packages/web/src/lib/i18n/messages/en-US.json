@@ -819,7 +819,6 @@
   "worldSaveEditDraft": "Edit draft",
   "worldSaveStartAgain": "Start again",
   "worldSaveResetConfirm": "Your draft will stay. Check your inspirations first—starting again could create a second copy.",
-  "worldPersonalHome": "Home",
   "worldFirstCaptureExample": "A thought, a link, or something you noticed.",
   "worldMoreActions": "More",
   "worldReviewItemActions": "Inspiration actions",
@@ -845,12 +844,9 @@
   "worldMenuLabel": "Where to go",
   "worldSettingsOpen": "Settings",
   "worldMenuField": "Your inspirations",
-  "worldMenuReview": "Review",
   "worldMenuTalk": "Talk with WAKA",
-  "worldMenuFind": "Find",
   "worldKeepPlaceholder": "Type, paste, or drop a file",
   "worldKeepViaAgent": "Save inspirations with MCP",
-  "worldMenuWalls": "Rooms and agents",
   "worldKeepHint": "Enter to keep",
   "worldKeepMcpWhat": "Point an agent at WAKA and it can keep things here while you work.",
   "worldKeepMcpTools": "It gets six tools: save an inspiration, list them, and read your signals, principles and profile.",
@@ -877,5 +873,8 @@
   "worldMenuDays": "Your days",
   "worldMomentAsk": "What made this moment feel like something?",
   "worldMomentPlaceholder": "Say it however it comes out",
-  "worldMomentSkip": "Keep it without saying"
+  "worldMomentSkip": "Keep it without saying",
+  "worldMenuTopOfMind": "Top of mind",
+  "worldInspirationsSearch": "Search what you kept",
+  "worldInspirationsNoHits": "Nothing here matches that."
 }
