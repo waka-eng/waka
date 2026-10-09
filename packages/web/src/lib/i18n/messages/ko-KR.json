@@ -828,17 +828,7 @@
   "worldComposerCancelLink": "링크 빼기",
   "worldComposerLinkReady": "저장할 때 이 링크도 함께 남겨요.",
   "worldComposerInvalidLink": "2,048자 이내의 HTTP 또는 HTTPS 링크를 입력해 주세요.",
-  "worldTabClaims": "읽은 것",
-  "worldClaimsTitle": "읽은 것",
-  "worldClaimsWaiting": "{count}개 기다리고 있어요",
-  "worldClaimsFrom": "담아 둔 {count}개에서",
-  "worldClaimsEmpty": "확인할 것이 없어요. 더 담으면 WAKA가 읽어요.",
-  "worldClaimsCaughtUp": "다 확인했어요.",
-  "worldClaimsLoading": "읽은 것을 여는 중…",
-  "worldClaimsFailed": "읽은 것을 열지 못했어요.",
-  "worldClaimsRetry": "다시 시도",
-  "worldClaimsNext": "다음",
-  "worldClaimFailed": "답을 저장하지 못했어요. 아직 기다리고 있어요.",
+  "worldRetry": "다시 시도",
   "worldMenuOpen": "메뉴",
   "worldMenuClose": "메뉴 닫기",
   "worldMenuLabel": "어디로 갈까요",
@@ -876,5 +866,6 @@
   "worldMomentSkip": "말하지 않고 담기",
   "worldMenuTopOfMind": "지금 마음",
   "worldInspirationsSearch": "담아 둔 것 검색",
-  "worldInspirationsNoHits": "일치하는 것이 없어요."
+  "worldInspirationsNoHits": "일치하는 것이 없어요.",
+  "worldClaimAsks": "이게 너에 대한 말로 맞나요?"
 }

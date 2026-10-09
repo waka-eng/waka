@@ -77,7 +77,7 @@ export function Principles(): JSX.Element {
             {say("worldPrinciplesFailed")}
           </p>
           <button type="button" className="waka-page-retry" onClick={() => void load()}>
-            {say("worldClaimsRetry")}
+            {say("worldRetry")}
           </button>
         </>
       ) : rows.length === 0 ? (

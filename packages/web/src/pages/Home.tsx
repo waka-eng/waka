@@ -99,6 +99,7 @@ import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
+import { listClaims, type ApiClaim } from '../lib/api';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
 import { inspectInspirationPhoto } from '../lib/inspiration-photo';
 import { uploadInspirationMedia } from '../lib/inspiration-media-upload';
@@ -2134,6 +2135,35 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * reason it is worth asking for.
    */
   const [momentWhy, setMomentWhy] = useState("");
+
+  /**
+   * THE CLAIM THE COMPANION IS HOLDING.
+   *
+   * Founder: claims belong on the top of mind, shown as the agent asking you
+   * to confirm — "I want the top of mind to be where the user always starts
+   * their journey." So there is no claims page to visit: the one thing WAKA
+   * needs from a person and cannot do alone is asked where the person already
+   * is, by the thing that did the reading.
+   *
+   * ONE AT A TIME. The queue is fetched a page deep so answering can advance
+   * without a round trip, but only the head of it is ever on screen — the
+   * founder's own rule for this surface is one line at a time, and a list of
+   * claims under the character would be the dense version of exactly the
+   * thing that ruling removed.
+   */
+  const [claimQueue, setClaimQueue] = useState<ApiClaim[]>([]);
+  const loadClaims = useCallback(() => {
+    void listClaims({ limit: 8 })
+      .then(({ claims }) => setClaimQueue(claims))
+      /* A queue that cannot be fetched is silence, not an error on the home
+         screen: nothing here is broken for the person, there is simply
+         nothing being asked. */
+      .catch(() => setClaimQueue([]));
+  }, []);
+  useEffect(() => {
+    if (phase !== 'ready' || offline) return;
+    loadClaims();
+  }, [phase, offline, loadClaims]);
   const composerOpenRef = useRef(mouthOpen); composerOpenRef.current = mouthOpen;
   useEffect(() => { if (!mouthOpen && recording.phase !== 'idle') void recording.stop(); }, [mouthOpen, recording.phase, recording.stop]);
   const [newInspirationRequested, setNewInspirationRequested] = useState(false);
@@ -13733,7 +13763,38 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               from the creature. They are its speech, so they sit where its
               mouth is: `--jar-mouth-top` is still written from the chin every
               layout pass, and it means the chin again. */}
-          <div className="jar-char-say" data-jar-chrome="1">
+          <div className="jar-char-say" data-jar-chrome="1" data-jar-interactive="1">
+            {/* WHAT IT THINKS ABOUT YOU, ASKED WHERE YOU ALREADY ARE. The
+                claims page is gone: this is the one thing the product needs
+                from a person and cannot do alone, so it is asked by the thing
+                that did the reading, on the screen everyone starts on. One at
+                a time — a list of claims under the face would be the dense
+                version of the thing "one line at a time" removed. */}
+            {!mouthOpen && claimQueue[0] ? (
+              <div className="jar-char-claim">
+                <p className="jar-char-claim-ask jar-label">{say('worldClaimAsks')}</p>
+                <p className="jar-char-claim-statement">{claimQueue[0].statement}</p>
+                <p className="jar-char-claim-answers">
+                  {(['true', 'partly', 'not_true'] as const).map(value => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={value === 'true' ? 'jar-char-claim-yes' : undefined}
+                      onClick={() => {
+                        const claim = claimQueue[0]!;
+                        /* Advance first: a judgement about yourself should not
+                           wait on a round trip, and `sayVerdict` already puts
+                           the answer on the record and says what it taught. */
+                        setClaimQueue(queue => queue.slice(1));
+                        sayVerdict(claim.id, value, undefined, claim.contested, claim.statementRevision);
+                      }}
+                    >
+                      {say(value === 'true' ? 'worldYes' : value === 'partly' ? 'worldPartly' : 'worldNotTrue')}
+                    </button>
+                  ))}
+                </p>
+              </div>
+            ) : null}
             {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
             {!mouthOpen&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}
             {!mouthOpen&&visibleInspiration?<div className="jar-capture-receipt"><span role="status">{say('worldSavedWord')}</span><button type="button" onClick={()=>{setReflectOn(visibleInspiration);setRecentInspiration(null);}}>{say('worldReflect')}</button></div>:null}

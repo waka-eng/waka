@@ -38,6 +38,8 @@ export interface ApiSignal {
   lastEvidenceAt: string | null;
   locked: boolean;
   unsupported: boolean;
+  /** Which wording a verdict would be about; see the API's own note. */
+  statementRevision?: string;
   /** Thrown out by its owner — the row and evidence stay, and the server
       refuses new candidates near it, on the record. Reads as `retired`. */
   dismissed: boolean;
