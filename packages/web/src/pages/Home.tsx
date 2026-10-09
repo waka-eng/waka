@@ -13723,9 +13723,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               <p className="waka-composer-status" role="alert">{mouthNote}</p>
             ) : null}
           </div>
-          {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
-          {!mouthOpen&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}
-          {!mouthOpen&&visibleInspiration?<div className="jar-capture-receipt"><span role="status">{say('worldSavedWord')}</span><button type="button" onClick={()=>{setReflectOn(visibleInspiration);setRecentInspiration(null);}}>{say('worldReflect')}</button></div>:null}
+          </div>
+          {/* WHAT THE COMPANION SAYS, UNDER THE COMPANION.
+              These three — the save notice, the narration line and the keep
+              receipt — used to live in the mouth's own slot, which was right
+              under the chin at the time. The box moved to the bottom of the
+              screen and they went with it, so the creature's own voice ended
+              up printed under the text field, the length of the page away
+              from the creature. They are its speech, so they sit where its
+              mouth is: `--jar-mouth-top` is still written from the chin every
+              layout pass, and it means the chin again. */}
+          <div className="jar-char-say" data-jar-chrome="1">
+            {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
+            {!mouthOpen&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}
+            {!mouthOpen&&visibleInspiration?<div className="jar-capture-receipt"><span role="status">{say('worldSavedWord')}</span><button type="button" onClick={()=>{setReflectOn(visibleInspiration);setRecentInspiration(null);}}>{say('worldReflect')}</button></div>:null}
           </div>
         </div>
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}

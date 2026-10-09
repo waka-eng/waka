@@ -1169,3 +1169,31 @@
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------------------------------------------------------------------
+ * The companion's voice
+ *
+ * Sits at the chin — `--jar-mouth-top`, which the layout pass still writes
+ * from the companion's own body every frame. It used to share the mouth's
+ * slot, and when the box moved to the bottom of the screen the creature's
+ * speech went with it. Speech belongs to the thing speaking.
+ * ------------------------------------------------------------------------- */
+
+.jar-char-say {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--jar-mouth-top, 58%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 clamp(20px, 6vw, 28px);
+  text-align: center;
+  /* The world below stays draggable; the controls inside opt back in. */
+  pointer-events: none;
+}
+
+.jar-char-say > * {
+  pointer-events: auto;
+}
