@@ -459,6 +459,7 @@
 }
 
 .waka-menu-item {
+  white-space: nowrap;
   min-height: 44px;
   width: 100%;
   display: flex;
@@ -762,6 +763,7 @@
 
 .waka-tab {
   flex: 0 0 auto;
+  white-space: nowrap;
   min-height: 32px;
   padding: 0 var(--sp-16);
   border: 1px solid var(--line);
@@ -1307,6 +1309,7 @@
 .waka-composer-send {
   margin-left: auto;
   min-height: 32px;
+  white-space: nowrap;
   padding: 0 var(--sp-16);
   border: 1px solid var(--ink);
   border-radius: var(--waka-r-control);
@@ -1643,6 +1646,40 @@
   outline-offset: 2px;
 }
 
+/* The sentence, handed back for you to say properly. Same width as the
+   claim it replaces, so pressing partly does not resize the block under the
+   companion. */
+.jar-char-claim-mine {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  width: 100%;
+}
+
+.jar-char-claim-edit {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--sp-12);
+  border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  border-radius: var(--waka-r-surface);
+  background: var(--waka-raised);
+  color: var(--ink);
+  font-family: var(--waka-face);
+  /* The same size the claim was. You are editing that sentence, not filling
+     in a form about it. */
+  font-size: var(--t-lead);
+  font-weight: 300;
+  line-height: 1.35;
+  text-align: center;
+  resize: none;
+  field-sizing: content;
+}
+
+.jar-char-claim-edit:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
 .jar-char-claim-answers {
   display: flex;
   flex-wrap: wrap;
@@ -1691,9 +1728,15 @@
  * Light still does the work; it just does it AFTER the answer rather than
  * before it. See the chosen state below.
  */
+/* A BUTTON IS ONE LINE, ALWAYS (founder: "All buttons should be a single
+   line. Never make it into a two line thing."). `flex: 1 1 0` made the three
+   equal — which is right, they are peers — but equal from a zero basis means
+   the longest label is the first to break, so "not true" wrapped while the
+   two shorter ones sat on one line. A basis of `max-content` keeps them even
+   while there is room and never asks a label to fold. */
 .jar-char-claim-answers button {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 1 1 max-content;
+  white-space: nowrap;
 }
 
 /* WHAT YOU CHOSE, once you have chosen. The press is what earns the light —

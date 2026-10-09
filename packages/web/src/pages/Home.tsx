@@ -13888,6 +13888,47 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     ))}
                   </ul>
                 ) : null}
+                {/* SAYING IT IN YOUR OWN WORDS — what "partly" opens.
+                    The three answers are cheap on purpose, and a cheap middle
+                    option is the one a person reaches for when they would
+                    rather not think: it collects whoever is satisficing and
+                    teaches the loop nothing, because "sort of" is not a fact
+                    about anybody. So partly costs ONE SENTENCE and buys
+                    ownership of it — what you type becomes the claim's
+                    wording, locked, and the generator will not rewrite it on
+                    the next pass.
+                    That is the difference between a verdict and scaffolding.
+                    Agreeing is receiving a sentence about yourself; rewriting
+                    it is writing one, and the line that reaches your
+                    principles is then a line you wrote. */}
+                {editing.open?.kind === 'signal' && editing.open.id === claimQueue[0].id ? (
+                  <div className="jar-char-claim-mine">
+                    <textarea
+                      className="jar-char-claim-edit"
+                      aria-label={say('worldPatternInYourWords')}
+                      value={editing.open.text}
+                      rows={2}
+                      autoFocus
+                      onChange={e => editing.retype(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); editing.leave(); } }}
+                    />
+                    <p className="jar-char-claim-answers">
+                      <button type="button" disabled={editing.open.saving} onClick={() => {
+                        const claim = claimQueue[0]!;
+                        void Promise.resolve(editing.keep()).then(() => {
+                          /* The claim only leaves once the person's words are
+                             on the record. Advancing first — which the other
+                             two answers do — would pull the sentence out from
+                             under the editor they are typing into. */
+                          setClaimQueue(queue => queue.filter(row => row.id !== claim.id));
+                        });
+                      }}>
+                        {say(editing.open.saving ? 'worldSaving' : 'worldSave')}
+                      </button>
+                      <button type="button" onClick={editing.leave}>{say('worldLeaveIt')}</button>
+                    </p>
+                  </div>
+                ) : (
                 <p className="jar-char-claim-answers">
                   {(['true', 'partly', 'not_true'] as const).map(value => (
                     <button
@@ -13899,17 +13940,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          the scale of every principle written downstream. */
                       onClick={() => {
                         const claim = claimQueue[0]!;
-                        /* Advance first: a judgement about yourself should not
-                           wait on a round trip, and `sayVerdict` already puts
-                           the answer on the record and says what it taught. */
-                        setClaimQueue(queue => queue.slice(1));
                         sayVerdict(claim.id, value, undefined, claim.contested, claim.statementRevision);
+                        /* PARTLY STAYS, because partly is the one answer that
+                           is not finished. The verdict is already on the
+                           record; what opens now is the wording, so the person
+                           can say it the way it is actually true. The other
+                           two advance at once — a judgement about yourself
+                           should not wait on a round trip. */
+                        if (value === 'partly') {
+                          editing.begin('signal', claim.id, claim.statement);
+                          return;
+                        }
+                        setClaimQueue(queue => queue.slice(1));
                       }}
                     >
                       {say(value === 'true' ? 'worldYes' : value === 'partly' ? 'worldPartly' : 'worldNotTrue')}
                     </button>
                   ))}
                 </p>
+                )}
               </div>
             ) : null}
             {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
