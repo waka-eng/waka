@@ -68,12 +68,27 @@ const GOVERNED = ["home.css", "chrome.css", "global.css"] as const;
  * `16px`, `17px`, `9px`, and the display-cluster one-offs (`20`–`44px`) that
  * belong to headings nobody has decided the scale for yet.
  */
-const CEILING = 13;
+const CEILING = 2;
 /* 21 -> 13 on 2026-08-26. Not a pass over the call sites: `e2e:dead-css`
    deleted ninety-six unreachable selectors and eight of the remaining
    literals went out inside them. A ratchet only ratchets if it follows the
    count down, and these two tightened themselves by failing the moment the
-   slack opened. */
+   slack opened.
+
+   13 -> 2 on 2026-10-08, and this one WAS a pass over the call sites.
+   Founder: "font sizes, type, placement — everything is so inconsistent and
+   all over the place." It was, and the cause was two parallel systems: the
+   older surfaces wore the named steps while the pages built on top of them
+   (`claims.css`, `chat.css`) wrote raw pixels — so the same ROLE came out at
+   three sizes depending on which screen you were standing on. An eyebrow was
+   10px on one screen, 11px on another and 12px on a third; a quiet control
+   was 12px here and 13px there.
+   Every one of those is a named step now, chosen by role rather than by
+   eye — eyebrow `--t-meta`, quiet meta `--t-fine`, quiet control `--t-ui`,
+   list text `--t-note`, prose `--t-body`, fields `--t-input`, a sentence of
+   yours `--t-lead`, the one with weight `--t-reading`. A whole dead claims
+   stylesheet went out in the same pass, taking a third set of sizes with it.
+   What is left is the two display one-offs on the landing page. */
 
 /**
  * READ THE RULES, NOT THE PROSE.

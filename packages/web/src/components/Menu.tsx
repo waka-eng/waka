@@ -71,13 +71,17 @@ export interface MenuProps {
 export function Menu({ locale, items, onSettings, hidden }: MenuProps): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const panelId = useId();
-  const closer = useRef<HTMLButtonElement | null>(null);
+  /* Focus lands on the first destination, not on a way out — see below. */
+  const first = useRef<HTMLButtonElement | null>(null);
 
   /* Escape closes, and focus moves into the sheet when it opens — a sheet you
-     cannot leave by keyboard is a sheet that traps a person on this screen. */
+     cannot leave by keyboard is a sheet that traps a person on this screen.
+     Focus goes to the FIRST DESTINATION rather than to a close control:
+     opening a menu is a reach for somewhere to go, so the first thing under
+     the keyboard should be somewhere to go. */
   useEffect(() => {
     if (!open) return;
-    closer.current?.focus();
+    first.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
@@ -157,9 +161,10 @@ export function Menu({ locale, items, onSettings, hidden }: MenuProps): JSX.Elem
             aria-label={t(locale, "worldMenuLabel")}
             onClick={(event) => event.stopPropagation()}
           >
-            {items.map((item) => (
+            {items.map((item, index) => (
               <button
                 key={item.id}
+                ref={index === 0 ? first : undefined}
                 type="button"
                 className={`waka-menu-item${item.className ? ` ${item.className}` : ""}`}
                 disabled={item.disabled}
@@ -172,14 +177,13 @@ export function Menu({ locale, items, onSettings, hidden }: MenuProps): JSX.Elem
                 {item.note ? <span className="sr-only jar-saved-count">{item.note}</span> : null}
               </button>
             ))}
-            <button
-              type="button"
-              ref={closer}
-              className="waka-menu-close"
-              onClick={() => setOpen(false)}
-            >
-              {t(locale, "worldMenuClose")}
-            </button>
+            {/* NO "CLOSE MENU" ROW. Founder, pointing at it: "this also is so
+                useless." It was, and three ways out already exist and always
+                did: the scrim behind it, Escape, and choosing any destination.
+                A row that only undoes the press that opened the sheet is a row
+                you read every time you look for a place to go — and it sat at
+                the bottom of a four-item list, where it was a quarter of what
+                the menu appeared to offer. */}
           </nav>
         </div>
       ) : null}
