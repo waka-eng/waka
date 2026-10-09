@@ -6,6 +6,10 @@
  * A menu row pointing at a question that is already being asked on the screen
  * you land on would be a second door into the same room.
  *
+ * YOUR DAYS IS NOT OFFERED EITHER, for now, by ruling. The page and its route
+ * are untouched — `/days` still answers, and every dot on it still opens the
+ * reading on that date — it is simply not one of the places the menu names.
+ *
  * It was two. Home built its own set out of camera verbs and live field
  * state while every other page used a shorter one from here, so the menu
  * changed depending on where you were standing — which is the thing a menu
@@ -50,7 +54,6 @@ export function usePageMenu(): PageMenu {
         { id: "top-of-mind", label: "worldMenuTopOfMind", onSelect: () => navigate("/") },
         { id: "principles", label: "worldPrinciplesShortcut", onSelect: () => navigate("/principles") },
         { id: "talk", label: "worldMenuTalk", onSelect: () => navigate("/chat/new") },
-        { id: "days", label: "worldMenuDays", onSelect: () => navigate("/days") },
       ],
       onSettings: () => navigate("/profile"),
     }),
