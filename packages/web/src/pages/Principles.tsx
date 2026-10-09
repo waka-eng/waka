@@ -61,9 +61,10 @@ export function Principles(): JSX.Element {
     <main className="waka-page">
       <Menu locale={locale} items={menu.items} onSettings={menu.onSettings} />
       <header className="waka-page-head">
-        <button type="button" className="waka-page-back" onClick={() => navigate("/")}>
-          {say("worldBack")}
-        </button>
+        {/* NO BACK BUTTON. The menu is the navigation and the browser
+            already has a back — a third way out of a page is not a
+            convenience, it is one more thing to read in a header whose job
+            is to name the page. */}
         <h1 className="waka-page-title">{say("worldPrinciplesShortcut")}</h1>
       </header>
 

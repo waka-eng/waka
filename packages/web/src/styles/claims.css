@@ -607,8 +607,11 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  /* The constant that makes rows line up. Picture or no picture. */
-  height: 300px;
+  /* The constant that makes rows line up, picture or no picture. 300 was a
+     tile that could hold a paragraph; a kept thing is usually a sentence, so
+     the card was mostly empty and the grid mostly scrolling past air
+     (founder: shorter, width is good). */
+  height: 208px;
   padding: 0;
   overflow: hidden;
   border: var(--space-px) solid var(--line);
@@ -632,7 +635,7 @@
 .waka-card-picture {
   display: block;
   flex: 0 0 auto;
-  height: 168px;
+  height: 112px;
   overflow: hidden;
   background: var(--sunk, var(--bg));
 }
@@ -658,20 +661,23 @@
 
 .waka-card-text {
   font-family: var(--waka-face);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.45;
   color: var(--ink);
 }
 
-/* With no picture, the words get the whole tile and a size that earns it. */
+/* With no picture the words get the whole tile — a step up from a captioned
+   card, not the display size they were at. The founder's reference sets a
+   kept sentence at reading size, and a tile is for recognising the thing
+   rather than for reading it twice. */
 .waka-card--text .waka-card-body {
-  padding: var(--space-5);
+  padding: var(--space-4);
 }
 
 .waka-card--text .waka-card-text {
   font-family: var(--waka-face);
-  font-size: 19px;
-  line-height: 1.32;
+  font-size: 15px;
+  line-height: 1.4;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1269,4 +1275,74 @@
 .jar-char-claim-answers button:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
+}
+
+
+/* The opened card wears `.jar-panel`'s own inner classes, so its type and
+   spacing come from the stylesheet that defines that design. Only the things
+   the world's panel gets from being IN the world are restated here. */
+.jar-panel-card {
+  gap: var(--space-3);
+}
+
+.jar-panel-card .jar-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.jar-panel-card .jar-panel-text {
+  margin: 0;
+  width: 100%;
+  font-family: var(--waka-face);
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+/* Editing keeps the reading's own measure and face, so the words do not move
+   when you start changing them. */
+.jar-panel-card textarea.jar-panel-text {
+  min-height: 7rem;
+  padding: var(--space-3);
+  border: var(--space-px) solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  resize: none;
+  field-sizing: content;
+  max-height: 18rem;
+}
+
+.jar-panel-card .jar-panel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: 0;
+  width: 100%;
+}
+
+.jar-panel-card .jar-panel-foot button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.jar-panel-card .jar-panel-foot button:hover,
+.jar-panel-card .jar-panel-foot button:focus-visible {
+  color: var(--ink);
+}
+
+.jar-panel-card .jar-panel-foot button.jar-panel-save {
+  color: var(--ink);
+}
+
+.jar-panel-card .jar-panel-foot button:disabled {
+  color: var(--muted);
+  cursor: default;
 }

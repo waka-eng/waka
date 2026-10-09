@@ -20,10 +20,10 @@
  * itself — the grid is for finding the thing, not for reading it.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import { Menu } from "../components/Menu";
-import { attachmentPreviewImageUrl } from "../lib/api";
+import { attachmentPreviewImageUrl, updateInspiration } from "../lib/api";
+import { dateStamp } from "../lib/words";
 /* THE SAME DOOR THE WORLD USES. `loadInspirations` is the archive's own
    reader — it pages, it carries the total the server reports, and it holds
    the invariant that a total is never smaller than what arrived. Reaching
@@ -46,7 +46,6 @@ function pictureOf(row: Inspiration): string | null {
 export function Inspirations(): JSX.Element {
   const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
-  const navigate = useNavigate();
 
   const menu = usePageMenu();
   const [rows, setRows] = useState<Inspiration[]>([]);
@@ -62,6 +61,12 @@ export function Inspirations(): JSX.Element {
      archive holds, which is not the same as how many arrived — an older
      server omits it, and then the length of what came is the best there is. */
   const [total, setTotal] = useState<number | null>(null);
+  /* Editing is a state of the OPEN card, not of the page: closing is how you
+     leave it, and a page-level edit flag would survive a card it no longer
+     belongs to. */
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState<Inspiration | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
@@ -110,9 +115,10 @@ export function Inspirations(): JSX.Element {
     <main className="waka-page">
       <Menu locale={locale} items={menu.items} onSettings={menu.onSettings} />
       <header className="waka-page-head">
-        <button type="button" className="waka-page-back" onClick={() => navigate("/")}>
-          {say("worldBack")}
-        </button>
+        {/* NO BACK BUTTON. The menu is the navigation and the browser
+            already has a back — a third way out of a page is not a
+            convenience, it is one more thing to read in a header whose job
+            is to name the page. */}
         <h1 className="waka-page-title">{say("worldInspirationsTitle")}</h1>
         {total !== null ? (
           <p className="waka-page-count jar-saved-count">
@@ -184,21 +190,93 @@ export function Inspirations(): JSX.Element {
       )}
 
       {open ? (
-        <div className="waka-sheet-scrim" onClick={() => setOpen(null)}>
+        <div className="waka-sheet-scrim" onClick={() => { setOpen(null); setEditing(false); }}>
+          {/* THE CARD THE PRODUCT ALREADY HAS (founder: bring back this card
+              design). It wears `.jar-panel`'s own inner classes — the date
+              stamp, the text, the footer row — so the design comes from the
+              one stylesheet that defines it rather than from a lookalike that
+              would drift the first time the original moved. Only the
+              positioning is this page's: in the world the panel flies in from
+              a memory's own place, and here it opens over the grid it was
+              pressed on.
+
+              WITHOUT THE VISIBILITY PAIR OR THE LINK (founder: remove this).
+              Private/public and the copy-link both still exist on the card in
+              the world; this surface is for reading what you kept and fixing
+              its words. */}
           <article
-            className="waka-sheet"
+            className="waka-sheet jar-panel-card"
             role="dialog"
             aria-modal="true"
-            aria-label={say("worldInspirationsTitle")}
+            aria-label={open.preview.slice(0, 60)}
             onClick={(event) => event.stopPropagation()}
           >
+            <div className="jar-panel-head">
+              <span className="jar-panel-when jar-label">
+                {dateStamp(open.capturedMs, locale)}
+              </span>
+            </div>
+
             {pictureOf(open) ? (
               <img className="waka-sheet-picture" src={pictureOf(open)!} alt="" />
             ) : null}
-            <p className="waka-sheet-text">{open.preview}</p>
-            <button type="button" className="waka-sheet-close" onClick={() => setOpen(null)}>
-              {say("worldCardClose")}
-            </button>
+
+            {editing ? (
+              <textarea
+                className="jar-panel-text jar-panel-edit"
+                value={draft}
+                aria-label={say("worldEditWording")}
+                onChange={(event) => setDraft(event.target.value)}
+              />
+            ) : (
+              <p className="jar-panel-text">{open.preview}</p>
+            )}
+
+            <p className="jar-ask jar-ask--after jar-panel-foot">
+              <span className="jar-panel-foot-l">
+                {editing ? (
+                  <button
+                    type="button"
+                    className="jar-panel-save"
+                    disabled={saving || !draft.trim() || draft === open.preview}
+                    onClick={() => {
+                      const words = draft.trim();
+                      setSaving(true);
+                      void updateInspiration(open.id, { text: words })
+                        .then(() => {
+                          /* The grid holds what the page loaded, so the card
+                             and the tile behind it have to agree without a
+                             refetch — otherwise closing reveals the old words. */
+                          setRows((all) =>
+                            all.map((row) => (row.id === open.id ? { ...row, preview: words } : row)),
+                          );
+                          setOpen((card) => (card ? { ...card, preview: words } : card));
+                          setEditing(false);
+                        })
+                        .catch(() => undefined)
+                        .finally(() => setSaving(false));
+                    }}
+                  >
+                    {say("worldSave")}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setDraft(open.preview); setEditing(true); }}
+                  >
+                    {say("worldEditWording")}
+                  </button>
+                )}
+              </span>
+              <span className="jar-panel-foot-r">
+                <button
+                  type="button"
+                  onClick={() => (editing ? setEditing(false) : setOpen(null))}
+                >
+                  {say(editing ? "worldCancelEdit" : "worldCardClose")}
+                </button>
+              </span>
+            </p>
           </article>
         </div>
       ) : null}
