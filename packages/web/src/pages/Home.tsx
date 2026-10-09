@@ -15044,23 +15044,39 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            to sit in a bar of its own under the chrome; it is the corner now,
            beside the view switcher and the cog, which is the whole
            navigation of the product in one row.
-           Offered only when where-you-are is a real question: on an agent's
-           wall, in a room, down in the field, or while the list is open. On
-           your own wall at rest it would read your own name back at you,
-           which is noise — you have not gone anywhere — so the corner stays
-           empty. Written inline because every name it closes over lives in
-           this render. */
-        left={phase === 'ready' && (atWall.kind !== 'self' || inField || inSky || wallPick)
+           ALWAYS, INCLUDING ON YOUR OWN WALL. There was a ruling against
+           exactly that — it read your own name back at you beside a menu
+           button, which was noise, because the corner only answered "where
+           am I", and at home you had not gone anywhere. The corner answers a
+           different question now: WHICH CHARACTER ARE YOU. Founder: "also
+           add back button on top left to change character... to my agent,
+           etc etc (eventually rooms when we bring that concept back)".
+           A switch that disappears whenever you are on the default option is
+           a switch you cannot use to leave the default, so the old ruling
+           does not survive the corner's new job.
+           The list is already the right list: your own wall, each agent's,
+           and each room's when rooms come back — they are all walls, so
+           rooms return to this control for free.
+           Written inline because every name it closes over lives in this
+           render. */
+        left={phase === 'ready'
       ? <span className="jar-here-split">
+              {/* THE WHOLE CORNER OPENS THE LIST.
+                  The name half used to open that wall's own settings panel,
+                  which was the right split when the corner answered "where am
+                  I, and what can I do about it". It is a character switcher
+                  now, and on a switcher the obvious press is "show me the
+                  others" — a name that opens a settings sheet instead is a
+                  surprise every time. Settings for the wall you are on moved
+                  onto its row inside the list, which is where every account
+                  switcher puts it. */}
               <button
                 type="button"
                 className="jar-here jar-back jar-label"
-                aria-expanded={settingsFor === spaceKey(atWall)}
+                aria-expanded={wallPick}
                 onClick={() => {
-                  setWallPick(false);
-                  setSettingsFor(
-                    settingsFor === spaceKey(atWall) ? null : spaceKey(atWall),
-                  );
+                  setSettingsFor(null);
+                  setWallPick((v) => !v);
                 }}
               >
                 {atWall.kind === "group"
@@ -15084,18 +15100,38 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   {walls.map((w) => {
                     const mine = w.kind === atWall.kind && w.id === atWall.id;
                     return (
-                      <button
-                        key={spaceKey(w)}
-                        type="button"
-                        role="menuitem"
-                        className={`jar-here-row jar-label${mine ? " is-here" : ""}`}
-                        onClick={() => {
-                          setWallPick(false);
-                          simApiRef.current?.goToWall(w.col);
-                        }}
-                      >
-                        {wallName(w)}
-                      </button>
+                      <span key={spaceKey(w)} className="jar-here-rowline">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className={`jar-here-row jar-label${mine ? " is-here" : ""}`}
+                          onClick={() => {
+                            setWallPick(false);
+                            simApiRef.current?.goToWall(w.col);
+                          }}
+                        >
+                          {wallName(w)}
+                        </button>
+                        {/* SETTINGS FOR A WALL SIT ON THAT WALL'S ROW, and
+                            only on the one you are standing in: renaming a
+                            room, taking someone out of it or closing it are
+                            things you do to where you ARE, and offering them
+                            against a wall you are only pointing at would be
+                            offering to change a place from outside it. */}
+                        {mine ? (
+                          <button
+                            type="button"
+                            className="jar-here-row-settings"
+                            aria-label={say("worldSettingsOpen")}
+                            onClick={() => {
+                              setWallPick(false);
+                              setSettingsFor(spaceKey(w));
+                            }}
+                          >
+                            <span aria-hidden="true">⋯</span>
+                          </button>
+                        ) : null}
+                      </span>
                     );
                   })}
                   {/* THE LIST OF YOUR WALLS IS ALSO WHERE YOU MAKE ONE. It

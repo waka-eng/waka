@@ -181,6 +181,38 @@
   background: var(--waka-raised);
 }
 
+/* A row in the list is the name plus, on the one you are standing in, its
+   own settings. The name takes the slack so the dots sit at the far edge. */
+.waka-corners .jar-here-rowline {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.waka-corners .jar-here-rowline > .jar-here-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+
+.waka-corners .jar-here-row-settings {
+  flex: none;
+  min-width: var(--sp-32);
+  min-height: var(--sp-32);
+  padding: 0;
+  border: 0;
+  border-radius: var(--waka-r-control);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  cursor: pointer;
+}
+
+.waka-corners .jar-here-row-settings:hover,
+.waka-corners .jar-here-row-settings:focus-visible {
+  color: var(--ink);
+}
+
 /* An empty corner still holds the row's shape open, so the switcher stays
    centred on the viewport whether or not there is a ground to pick. */
 .waka-corners > span[aria-hidden="true"].waka-corner {
