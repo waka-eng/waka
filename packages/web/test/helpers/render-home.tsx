@@ -436,79 +436,53 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
     },
     async travelTo(name) {
       /*
-       * THE ROUTE A PERSON ACTUALLY HAS.
+       * TRAVEL BY COMMAND, BECAUSE THE DOORS KEEP MOVING.
        *
-       * This used to click the wall-names strip along the bottom of the
-       * screen. That strip is gone (founder, 2026-08-24: "remove") — every
-       * wall now hangs off the caret beside the name in the top-left corner,
-       * and a helper that still reaches for the old strip finds an empty list
-       * and fails twelve tests with a message about the group mock, which is
-       * not what is wrong.
+       * This has now chased three of them: a wall-names strip along the
+       * bottom, then the caret beside the name in the top-left, then a
+       * "Rooms and agents" row in the menu. Each was the route a person
+       * actually had at the time, and each was removed by a ruling — rooms
+       * and agents are set aside entirely for now, so at the moment there is
+       * no door at all.
        *
-       * So travel the way the person travels: open the list, press the row.
-       * The list closes on the press, hence re-opening it each attempt.
+       * A suite about what a ROOM holds should not keep breaking because the
+       * way in moved. So it goes through `wakaSim`, the same dev seam the
+       * ground uses, and finds its wall by asking where it landed: columns
+       * are signed with the owner at zero, so walking outward from there and
+       * checking `audit().wallId` arrives without knowing the layout.
        */
-      const openWallList = async () => {
-        /* AT HOME THE NAME PILL IS NOT THERE. It said "ME" beside the menu
-           button, which is your own name read back to you on the one screen
-           where you have not gone anywhere (founder ruling), so it now appears
-           only when where-you-are is a real question — in a room, on an
-           agent's wall, or down in the field. The caret's job moved to the
-           "Rooms and agents" row in the menu, and choosing it brings the pill
-           back with its list already open. Travel the way a person does. */
-        const caret = container.querySelector<HTMLElement>(".jar-here-more");
-        if (caret) {
-          if (caret.getAttribute("aria-expanded") !== "true") {
-            await act(async () => {
-              caret.click();
-            });
-          }
-          return;
-        }
-        if (!container.querySelector(".jar-here-list")) {
-          await chooseFromMenu(container, "Rooms and agents");
-        }
-      };
+      const sim = (window as unknown as {
+        wakaSim?: () => { goToWall(col: number): void } | null;
+      }).wakaSim;
+      if (!sim) throw new Error("window.wakaSim is absent — the simulation never started");
+      const api = sim();
+      if (!api) throw new Error("the simulation is not running");
 
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        const pill = container.querySelector(".jar-here");
-        /* NO PILL MEANS HOME. It is hidden on your own wall, so "where am I"
-           has no label to read there — its absence IS the answer, and a helper
-           that only knows how to read the label would loop until it gave up. */
-        const here = (pill?.textContent ?? "").trim();
-        /* NO NAME MEANS HOME — whether the pill is absent or momentarily
-           blank mid-travel. It is hidden on your own wall, so "where am I" has
-           no label to read there and its absence IS the answer. */
-        if (!here && name.test("Me")) break;
-        if (name.test(here)) break;
-        await openWallList();
-        await clickByText(".jar-here-row", name);
-        await step(90); /* travel eases over ~670ms */
+      const wanted = (id: string, kind: string) =>
+        name.test("Me") ? kind === "self" : name.test(id) || name.test(nameOfWall(id));
+
+      /* The fixture's own names, so a regexp written against what a person
+         reads still selects the right wall. */
+      const nameOfWall = (id: string): string =>
+        (facts.groups ?? []).find((group) => group.id === id)?.name ?? "";
+
+      /* A crossing already in flight refuses the next one, by design, so let
+         whatever the test did before this settle before asking. */
+      await step(60);
+      for (const col of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          await act(async () => api.goToWall(col));
+          await step(70);
+          const where = audit();
+          if (wanted(where.wallId, where.wallKind)) return;
+        }
       }
-      await step(30);
-      /*
-       * ARRIVAL IS ASSERTED, NEVER ASSUMED.
-       *
-       * `goToWall` clamps its target to the walls that actually exist, so if
-       * the group never reached the list the click is a silent no-op and the
-       * camera stays where it was. A test that then checked the ground would
-       * be checking the wall it started on and passing — which is exactly the
-       * kind of green that let the original bug through. Better to be loud.
-       */
-      const here = (container.querySelector(".jar-here")?.textContent ?? "").trim();
-      /* No name means home — the pill is hidden on your own wall, so arriving
-         there is announced by its absence rather than by a label. */
-      if (!(!here && name.test("Me")) && !name.test(here)) {
-        await openWallList();
-        const offered = [...container.querySelectorAll(".jar-here-row")].map((n) =>
-          (n.textContent ?? "").trim(),
-        );
-        throw new Error(
-          `travelTo(${name}) did not arrive — still standing on "${here}". ` +
-            `The wall list offers: ${JSON.stringify(offered)}. ` +
-            `If the wall is missing from that list, the group fetch mock is wrong.`,
-        );
-      }
+
+      const here = audit();
+      throw new Error(
+        `travelTo(${name}) did not arrive — standing on ${here.wallKind} "${here.wallId}". ` +
+          `If the wall is missing, the group fetch mock is wrong.`,
+      );
     },
     async toField() {
       /* THE WHEEL NO LONGER TRAVELS. Dragging and scrolling the world
@@ -595,4 +569,16 @@ export async function openMenu(container: HTMLElement): Promise<void> {
   const opener = container.querySelector<HTMLButtonElement>(".waka-corners button[aria-controls]");
   if (!opener) throw new Error("the menu button is not on this screen");
   if (!container.querySelector(".waka-menu")) await act(async () => opener.click());
+}
+
+/**
+ * Open the archive's own page.
+ *
+ * Facts about the archive live on the archive now — its size, its search —
+ * rather than on whichever control happens to point at it. Three of those
+ * controls have been removed in turn, so a suite about what the archive SAYS
+ * should go to it rather than chase the door.
+ */
+export async function goToInspirations(container: HTMLElement): Promise<void> {
+  await chooseFromMenu(container, "Your inspirations");
 }

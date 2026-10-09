@@ -56,7 +56,12 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
-import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld , openMenu} from "./helpers/render-home";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
+import { createElement } from "react";
+
+import { apiMockFrom, dataMockFrom, VIEWER_ID } from "./helpers/render-home";
 
 /** Nine kept, and — as far as this world is concerned — nine held. */
 const FACTS = {
@@ -111,7 +116,6 @@ vi.mock("../src/lib/auth-context", async (importOriginal) => {
   return { ...actual, useOptionalAuth: () => session, useAuth: () => session };
 });
 
-let layout: MountedWorld;
 
 beforeAll(() => {
   installCanvasStub();
@@ -120,22 +124,50 @@ beforeAll(() => {
 });
 
 afterEach(() => {
-  layout?.unmount();
+  if (root) act(() => root!.unmount());
+  host?.remove();
+  root = null;
+  host = null;
 });
 
-/** The door into the ground, printed with how much is behind it. */
+/**
+ * THE COUNT IS ON THE PAGE IT COUNTS.
+ *
+ * It rode the bottom bar's Inspirations button, then the menu row that
+ * replaced that, and both are gone — a fact about the archive belongs on the
+ * archive rather than on whatever happens to point at it. So this mounts the
+ * archive's own page. Same span, same words, same `loadInspirations` behind
+ * it, which is where the "never smaller than what arrived" invariant lives.
+ */
+let root: Root | null = null;
+let host: HTMLElement | null = null;
+
 async function doorText(): Promise<string> {
-  /* The count rides the Inspirations row in the menu now, which is where the
-     destination itself went. Same span, same words — one door further in. */
-  await openMenu(layout.container);
-  const door = layout.container.querySelector(".jar-saved-count");
+  const { Inspirations } = await import("../src/pages/Inspirations");
+  const { AuthProvider } = await import("../src/lib/auth-context");
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(AuthProvider, null, createElement(Inspirations)),
+      ),
+    );
+  });
+  /* The page fetches its own archive; the count cannot be read before it has. */
+  for (let turn = 0; turn < 12 && !host.querySelector(".jar-saved-count"); turn += 1) {
+    await act(async () => { await Promise.resolve(); });
+  }
+  const door = host.querySelector(".jar-saved-count");
   return (door?.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
 describe("the count under the door", () => {
   it("is one number when the walk reached the end of the archive", async () => {
     heldTotal = 9;
-    layout = await mountWorld(FACTS);
     /* The ordinary case, and the one every account lives in for a long time:
        nine kept, nine held, and nothing said about a ceiling nobody met. */
     expect(await doorText()).toBe("9 inspirations");
@@ -143,7 +175,6 @@ describe("the count under the door", () => {
 
   it("says both when the archive holds more than the walk reached", async () => {
     heldTotal = 2500;
-    layout = await mountWorld(FACTS);
     /* The first number is still the orbs in the ground the caret takes you
        into (founder, 2026-08-25). The second is what is actually kept. */
     expect(await doorText()).toBe("9 of 2500 inspirations");
@@ -165,7 +196,6 @@ describe("the count under the door", () => {
      * ordinary case rather than printed.
      */
     heldTotal = 2;
-    layout = await mountWorld(FACTS);
     expect(await doorText()).toBe("9 inspirations");
   });
 });
