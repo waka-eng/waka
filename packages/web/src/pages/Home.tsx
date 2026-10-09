@@ -14374,7 +14374,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               say you had wound back. This says `now`, or the day you are
               parked at — so the fact lives in a word that is always there and
               the rail can be genuinely absent until you reach for it. */}
-          {dial && phase === "ready" && !dialAway ? (
+          {/* NO "NOW" IN YOUR OWN CORNER (founder ruling). It is the dial's
+              handle — where you are standing in your own history — and on the
+              home screen it sat in the top left underneath the menu button,
+              two controls in one corner. It is also the least useful one
+              there: pressing a word to learn that today is today, on the one
+              screen that is always today, while "Your days" is a page with
+              every day on it.
+
+              IT STAYS IN A ROOM, and it stays once you have wound away from
+              now. A room's board is one chain and winding it is how its
+              history is read at all — removing the handle there would strand
+              the whole dial, which is what trying it proved: 24 of its own
+              tests went red in one run. */}
+          {dial && phase === "ready" && !dialAway && (atWall.kind !== "self" || parkedAt !== null) ? (
             <span className="jar-when-place">
             <button
               type="button"
