@@ -972,6 +972,32 @@ body.dropped .bg-blob.b3 {
   margin: 0;
 }
 
+/* THE THREE DOORS INTO THE MACHINERY.
+   Quiet text, wrapping rather than colliding — they are things to look at
+   once, not controls to reach for, so none of them is a filled button. */
+.profile-machinery-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  margin: 0;
+}
+
+.profile-machinery-row button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.profile-machinery-row button:hover,
+.profile-machinery-row button:focus-visible {
+  color: var(--ink);
+}
+
 .profile-handle-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
