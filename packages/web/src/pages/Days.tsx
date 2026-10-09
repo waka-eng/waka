@@ -131,7 +131,7 @@ export function Days(): JSX.Element {
             {say("worldDaysFail")}
           </p>
           <button type="button" className="waka-page-retry" onClick={() => void load()}>
-            {say("worldClaimsRetry")}
+            {say("worldRetry")}
           </button>
         </>
       ) : kept === 0 ? (

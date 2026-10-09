@@ -1197,3 +1197,76 @@
 .jar-char-say > * {
   pointer-events: auto;
 }
+
+/* ---------------------------------------------------------------------------
+ * The claim the companion is holding
+ *
+ * Sits in its voice block, under its face, on the screen everyone starts on.
+ * One at a time: the statement is the only thing here with weight, the ask
+ * above it is a label, and the three answers are the whole interaction.
+ * ------------------------------------------------------------------------- */
+
+.jar-char-claim {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  width: min(30rem, 100%);
+  padding: var(--space-4) var(--space-5);
+  border: var(--space-px) solid var(--line);
+  border-radius: 14px;
+  background: var(--waka-raised);
+}
+
+.jar-char-claim-ask {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The one sentence with weight. Same face and the same light weight as the
+   reading above it — it is the same kind of thing, said earlier. */
+.jar-char-claim-statement {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: clamp(16px, 2.4vw, 19px);
+  font-weight: 300;
+  line-height: 1.35;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
+.jar-char-claim-answers {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.jar-char-claim-answers button {
+  min-height: 36px;
+  padding: 0 var(--space-4);
+  border: var(--space-px) solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Inked, not coloured: light is the only meaning channel. */
+.jar-char-claim-answers .jar-char-claim-yes {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.jar-char-claim-answers button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}

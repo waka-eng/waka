@@ -1,6 +1,11 @@
 /**
  * THE MENU — ONE LIST, THE SAME ON EVERY SCREEN.
  *
+ * CLAIMS IS NOT A ROW. It was a page, and it is not any more: the companion
+ * asks on the top of mind, where the founder wants every journey to start.
+ * A menu row pointing at a question that is already being asked on the screen
+ * you land on would be a second door into the same room.
+ *
  * It was two. Home built its own set out of camera verbs and live field
  * state while every other page used a shorter one from here, so the menu
  * changed depending on where you were standing — which is the thing a menu
@@ -42,7 +47,6 @@ export function usePageMenu(): PageMenu {
          that are about the whole of it rather than a step in it. */
       items: [
         { id: "inspirations", label: "worldMenuField", onSelect: () => navigate("/inspirations") },
-        { id: "claims", label: "worldTabClaims", onSelect: () => navigate("/claims") },
         { id: "top-of-mind", label: "worldMenuTopOfMind", onSelect: () => navigate("/") },
         { id: "principles", label: "worldPrinciplesShortcut", onSelect: () => navigate("/principles") },
         { id: "talk", label: "worldMenuTalk", onSelect: () => navigate("/chat/new") },

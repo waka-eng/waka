@@ -143,7 +143,7 @@ export function Inspirations(): JSX.Element {
             {say("worldInspirationsFail")}
           </p>
           <button type="button" className="waka-page-retry" onClick={() => void load()}>
-            {say("worldClaimsRetry")}
+            {say("worldRetry")}
           </button>
         </>
       ) : rows.length === 0 ? (

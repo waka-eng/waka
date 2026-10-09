@@ -828,17 +828,7 @@
   "worldComposerCancelLink": "Remove link",
   "worldComposerLinkReady": "This link will be included when you save.",
   "worldComposerInvalidLink": "Use an HTTP or HTTPS link up to 2,048 characters.",
-  "worldTabClaims": "Claims",
-  "worldClaimsTitle": "Claims",
-  "worldClaimsWaiting": "{count} waiting",
-  "worldClaimsFrom": "from {count} things you saved",
-  "worldClaimsEmpty": "Nothing to confirm. Save more and WAKA will read it.",
-  "worldClaimsCaughtUp": "You're caught up.",
-  "worldClaimsLoading": "Opening your claims…",
-  "worldClaimsFailed": "Couldn't open your claims.",
-  "worldClaimsRetry": "Try again",
-  "worldClaimsNext": "next",
-  "worldClaimFailed": "Couldn't save your answer. It is still waiting for you.",
+  "worldRetry": "Try again",
   "worldMenuOpen": "Menu",
   "worldMenuClose": "Close menu",
   "worldMenuLabel": "Where to go",
@@ -876,5 +866,6 @@
   "worldMomentSkip": "Keep it without saying",
   "worldMenuTopOfMind": "Top of mind",
   "worldInspirationsSearch": "Search what you kept",
-  "worldInspirationsNoHits": "Nothing here matches that."
+  "worldInspirationsNoHits": "Nothing here matches that.",
+  "worldClaimAsks": "Is this true of you?"
 }

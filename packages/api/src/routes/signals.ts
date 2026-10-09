@@ -155,6 +155,16 @@ export interface SignalSummary {
       suppression anchor — derivation refuses candidates near it, on the
       record. Dismissed rows also read `status: "retired"`. */
   dismissed: boolean;
+  /**
+   * WHICH WORDING A VERDICT WOULD BE ABOUT.
+   *
+   * A verdict is bound to the words it was given about, not to the id — see
+   * `feedbackWordingCurrent()`. A caller that answers without sending this
+   * writes `target_revision` null, which `coalesce(…, 1)` reads as revision
+   * one, so the answer counts as current only for a statement that was never
+   * rewritten and the claim returns to the queue forever otherwise.
+   */
+  statementRevision?: string;
   /** Standing in an unresolved contradicts pair — awaiting the owner's
       arbitration, which is the only kind there is. Computed from the pair
       rows at serve time, never stored on the signal. */
@@ -473,6 +483,7 @@ export async function listClaimsAwaitingVerdict(
       unsupportedAt: signals.unsupportedAt,
       dismissedAt: signals.dismissedAt,
       createdAt: signals.createdAt,
+      statementRevision: signals.statementRevision,
     })
     .from(signals)
     .where(
@@ -503,7 +514,12 @@ export async function listClaimsAwaitingVerdict(
   /* The origins ride along: a claim shown with no sense of where it came from
      is a horoscope, and "from 4 things you saved" is the cheapest honest
      answer. Owner-scoped by construction — this read is never a group path. */
-  return decorateSignals(db, input.profileId, rows, true);
+  const decorated = await decorateSignals(db, input.profileId, rows, true);
+  /* And the WORDING a verdict would be about. Without it the answer binds to
+     revision one and a reworded claim can never be answered — see the field's
+     own note on `SignalSummary`. */
+  const revisions = new Map(rows.map((row) => [row.id, row.statementRevision.toString()]));
+  return decorated.map((row) => ({ ...row, statementRevision: revisions.get(row.id) }));
 }
 
 export async function getProfileSignal(
