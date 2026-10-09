@@ -178,7 +178,13 @@ it('restores an older card, its earlier reflection and date across Back/Forward 
   expect(world.container.querySelector<HTMLDetailsElement>('.jar-reflection-turns')?.open).toBe(true);
   expect(loadInspiration).toHaveBeenCalledWith('older', VIEWER_ID, expect.any(AbortSignal));
   await navigate('/w/group-id/old-name?view=sky');
-  expect(world.audit().wallId).toBe('group-id'); expect(world.container.querySelector('.jar-here')?.textContent).toContain('Renamed room');
+  /* THE CORNER NO LONGER NAMES A ROOM. It is a two-state switch — me, my
+     agent — because those are the two places the product currently holds, so
+     a room's name has nowhere to render there until rooms come back.
+     What this line was really protecting survives and is still asserted: the
+     URL carries a STALE slug (`old-name`) and the world still resolves it to
+     the right wall rather than trusting the words in the address. */
+  expect(world.audit().wallId).toBe('group-id');
   await navigate(-1);
   expect(location.search).toContain(`at=${date}`); expect(world.container.textContent).toContain('My earlier words');
   expect(world.audit().wallKind).toBe('self');

@@ -1746,9 +1746,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * One sheet, two doors into it, and the choice is made inside it where
    * there is room to say what each thing IS.
    */
-  const [newPlace, setNewPlace] = useState(false);
   /** Whether the top-left split button is listing the other walls. */
-  const [wallPick, setWallPick] = useState(false);
   /** Which pattern in the sky is being read. Its verdict row belongs to it. */
   /**
    * WHOSE GROUNDS ARE OPEN — and why the grounds are not simply always shown.
@@ -2252,11 +2250,9 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /* The self wall's NAME is canon ("Me" — it also mints the /w/me address);
      what a person reads is the catalog's word for it. User-given names —
      agents, rooms — render as given. */
-  const wallName = useCallback(
-    (w: { kind: string; name: string }): string =>
-      w.kind === "self" ? t(localeRef.current, "worldMe") : w.name,
-    [],
-  );
+  /* `wallName` went with the list it labelled: the corner is a two-state
+     switch now and names its two sides itself, in words chosen for a person
+     ("me", "my agent") rather than from the wall's stored name. */
   /**
    * WHO IS ASKING — and offline, which invented person is.
    *
@@ -15015,54 +15011,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           nothing like each other: one is people, one is a machine that writes
           on its own wall. Two words in a strip could not carry that, so the
           choice is made here, where a sentence fits. */}
-      {newPlace ? (
-        <>
-          {/* THE WAY OUT IS THE WORLD (founder, 2026-08-27: "remove not now
-              button. if click outside modal, close it"). A dialog offering
-              two places to go does not need a third control saying you would
-              rather stay — pressing anywhere that is not the dialog says that
-              already, and says it in the gesture a person already has. The
-              sheet is transparent and covers everything, so the world behind
-              it is what you press. Escape works too, and always did. */}
-          <div
-            className="jar-newplace-away"
-            data-jar-chrome="1"
-            aria-hidden="true"
-            onPointerDown={() => setNewPlace(false)}
-          />
-        <DialogSurface
-          className="jar-seek jar-newplace"
-          onClose={() => setNewPlace(false)}
-          data-jar-chrome="1"
-          role="dialog"
-          aria-label={say("worldMakeAnotherPlace")}
-        >
-          <p className="jar-prov-lead jar-label">{say("worldMakeAnotherPlace")}</p>
-          <button
-            type="button"
-            className="jar-newplace-row"
-            onClick={() => {
-              setNewPlace(false);
-              setGroupForm({ mode: "make", text: "", busy: false, error: null });
-            }}
-          >
-            <span className="jar-newplace-name">{say("worldARoom")}</span>
-            <span className="jar-newplace-what">{say("worldRoomWhat")}</span>
-          </button>
-          <button
-            type="button"
-            className="jar-newplace-row"
-            onClick={() => {
-              setNewPlace(false);
-              setAgentName("");
-            }}
-          >
-            <span className="jar-newplace-name">{say("worldAnAgent")}</span>
-            <span className="jar-newplace-what">{say("worldAgentWhat")}</span>
-          </button>
-        </DialogSurface>
-        </>
-      ) : null}
+      /* MAKING A PLACE WENT WITH THE LIST THAT OFFERED IT.
+         The only door into this sheet was the last row of the wall dropdown,
+         and that dropdown is a two-state switch now — me, my agent — because
+         those are the two places the product currently holds. A sheet nothing
+         can open is not a feature in reserve, it is a branch the next reader
+         has to work out is unreachable. Rooms come back with their own door;
+         git holds this until they do. */
 
       {/* ---------------- THE REFLECTION, ON ITS OWN ----------------
           Founder, 2026-08-25: "have reflect workflow in modal."
@@ -15164,110 +15119,55 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            Written inline because every name it closes over lives in this
            render. */
         left={phase === 'ready'
-      ? <span className="jar-here-split">
-              {/* ONE BUTTON, NOT A SPLIT.
-                  Founder: "make top left a button, not thing split dropdown."
-                  It was a split because the halves did different things — the
-                  name opened that wall's settings, the caret opened the list.
-                  When the whole corner became a switcher both halves started
-                  opening the same list, and a split button whose halves agree
-                  is two targets, two focus stops and two hover states spent on
-                  one action. The caret is inside the button now, where it
-                  belongs: it describes what the press does rather than being
-                  a second press. */}
-              <button
-                type="button"
-                className="jar-here jar-back jar-label"
-                aria-expanded={wallPick}
-                aria-label={say("worldGoToAnotherWall")}
-                onClick={() => {
-                  setSettingsFor(null);
-                  setWallPick((v) => !v);
-                }}
-              >
-                <span className="jar-here-name">
-                  {atWall.kind === "group"
-                    ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
-                    : wallName(atWall)}
-                </span>
-                <svg
-                  className="jar-here-caret"
-                  width="10"
-                  height="10"
-                  viewBox="0 0 10 10"
-                  aria-hidden="true"
-                  focusable="false"
-                >
-                  <path
-                    d="M2 4l3 3 3-3"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill="none"
-                  />
-                </svg>
-              </button>
-              {wallPick ? (
-                <span className="jar-here-list" role="menu">
-                  {walls.map((w) => {
-                    const mine = w.kind === atWall.kind && w.id === atWall.id;
-                    return (
-                      <span key={spaceKey(w)} className="jar-here-rowline">
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className={`jar-here-row jar-label${mine ? " is-here" : ""}`}
-                          onClick={() => {
-                            setWallPick(false);
-                            simApiRef.current?.goToWall(w.col);
-                          }}
-                        >
-                          {wallName(w)}
-                        </button>
-                        {/* SETTINGS FOR A WALL SIT ON THAT WALL'S ROW, and
-                            only on the one you are standing in: renaming a
-                            room, taking someone out of it or closing it are
-                            things you do to where you ARE, and offering them
-                            against a wall you are only pointing at would be
-                            offering to change a place from outside it. */}
-                        {mine ? (
-                          <button
-                            type="button"
-                            className="jar-here-row-settings"
-                            aria-label={say("worldSettingsOpen")}
-                            onClick={() => {
-                              setWallPick(false);
-                              setSettingsFor(spaceKey(w));
-                            }}
-                          >
-                            <span aria-hidden="true">⋯</span>
-                          </button>
-                        ) : null}
-                      </span>
-                    );
-                  })}
-                  {/* THE LIST OF YOUR WALLS IS ALSO WHERE YOU MAKE ONE. It
-                      listed every place you could go and offered no way to
-                      make another, so a person looking for their rooms in the
-                      obvious place had to know about a `+` at the far end of
-                      the screen. */}
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="jar-here-row jar-here-row--make jar-label"
-                    onClick={() => {
-                      setWallPick(false);
-                      setNewPlace(true);
-                    }}
-                  >
-                    {say("worldAddNew")}
-                  </button>
-                </span>
-              ) : null}
-            </span>
-      : null}
-        
+      ? (() => {
+              /**
+               * ME, AND MY AGENT — a switch, not a list.
+               *
+               * Founder: "since we're only going to have 'me' and 'my agent',
+               * let's just make the top left a switcher between 'me' and 'my
+               * agent'... rather than a drop down, have that instead."
+               *
+               * And the dropdown was the wrong shape for two options anyway:
+               * a list costs a press to open, a press to choose, and a read
+               * of every row in between — to move between two places you can
+               * already see. Both are on screen, the one you are standing on
+               * is inked, and switching is a single press on the other.
+               *
+               * WHEN THERE IS NO AGENT THERE IS NOTHING TO SWITCH. A toggle
+               * showing one option is a label wearing a control's clothes, so
+               * the corner stays empty until a second wall exists.
+               *
+               * This is deliberately the two-wall shape and not the general
+               * one: walls, rooms and the way to make another all still exist
+               * in the model, and when rooms come back this becomes a list
+               * again. It is shaped to what the product currently holds.
+               */
+              const mine = walls.find(w => w.kind === 'self');
+              const agent = walls.find(w => w.kind === 'agent');
+              if (!mine || !agent) return null;
+              const here = atWall.kind === 'agent' ? agent : mine;
+              return <span className="jar-here-split" role="group" aria-label={say('worldGoToAnotherWall')}>
+                {[mine, agent].map(w => {
+                  const standing = w.kind === here.kind && w.id === here.id;
+                  return (
+                    <button
+                      key={spaceKey(w)}
+                      type="button"
+                      className={`jar-here jar-label${standing ? ' jar-here--standing' : ''}`}
+                      aria-pressed={standing}
+                      onClick={() => { if (!standing) simApiRef.current?.goToWall(w.col); }}
+                    >
+                      {w.kind === 'self' ? say('worldWallMe') : say('worldWallMyAgent')}
+                    </button>
+                  );
+                })}
+              </span>;
+            })()
+          : null}
+          /* THE LIST THAT STOOD HERE IS GONE WITH THE DROPDOWN. Walls,
+             rooms and the way to make another all still exist in the model;
+             when rooms come back this corner becomes a list again. It is
+             shaped to the two places the product currently holds. */
         onSettings={()=>navigate('/profile')}
         hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
       {seek !== null ? (

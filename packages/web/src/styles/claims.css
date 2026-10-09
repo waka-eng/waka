@@ -149,99 +149,60 @@
  */
 .waka-corners > .jar-here-split {
   pointer-events: auto;
-  position: relative;
   display: inline-flex;
   align-items: center;
+  gap: var(--sp-4);
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 38%;
 }
 
-/* ONE control: the name, and a caret that describes what pressing it does.
-   The caret used to be a button of its own beside this one — two targets for
-   one action, which is what the split was. */
+/**
+ * ME / MY AGENT — both on screen, the one you are standing on inked.
+ *
+ * A two-option dropdown costs a press to open, a press to choose, and a read
+ * of every row in between, to move between two places you can already see.
+ * Both sides are visible and switching is one press on the other.
+ *
+ * Inked, never coloured: the standing side wears the same fill every other
+ * chosen thing in this product wears.
+ */
 .waka-corners > .jar-here-split > .jar-here {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-6);
-  max-width: 100%;
-  min-height: var(--waka-corner);
-  padding: 0 var(--sp-8);
-  border: 0;
-  border-radius: var(--waka-r-control);
-  background: transparent;
-  cursor: pointer;
-}
-
-.waka-corners > .jar-here-split > .jar-here .jar-here-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.waka-corners .jar-here-caret {
-  flex: none;
-  transition: transform 0.18s ease;
-}
-
-.waka-corners > .jar-here-split > .jar-here[aria-expanded="true"] .jar-here-caret {
-  transform: rotate(180deg);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .waka-corners .jar-here-caret {
-    transition: none;
-  }
-}
-
-/* The list hangs under the corner it opened from, like the switcher's. */
-.waka-corners > .jar-here-split > .jar-here-list {
-  position: absolute;
-  top: calc(100% + var(--sp-8));
-  left: 0;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  min-width: 12rem;
-  max-width: calc(100vw - var(--sp-32));
-  padding: var(--sp-12);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-surface);
-  background: var(--waka-raised);
-}
-
-/* A row in the list is the name plus, on the one you are standing in, its
-   own settings. The name takes the slack so the dots sit at the far edge. */
-.waka-corners .jar-here-rowline {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-}
-
-.waka-corners .jar-here-rowline > .jar-here-row {
-  flex: 1 1 auto;
-  min-width: 0;
-  text-align: left;
-}
-
-.waka-corners .jar-here-row-settings {
-  flex: none;
-  min-width: var(--sp-32);
+  justify-content: center;
   min-height: var(--sp-32);
-  padding: 0;
-  border: 0;
-  border-radius: var(--waka-r-control);
+  padding: 0 var(--sp-12);
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--muted);
-  font-family: var(--waka-face);
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.waka-corners .jar-here-row-settings:hover,
-.waka-corners .jar-here-row-settings:focus-visible {
+.waka-corners > .jar-here-split > .jar-here:hover {
   color: var(--ink);
 }
+
+.waka-corners > .jar-here-split > .jar-here--standing {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
+  cursor: default;
+}
+
+.waka-corners > .jar-here-split > .jar-here:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+
+
+
+/* The caret, the list and its rows all went with the dropdown — the corner
+   shows both of its two sides at once and has nothing to open. */
+
+
 
 /* An empty corner still holds the row's shape open, so the switcher stays
    centred on the viewport whether or not there is a ground to pick. */
