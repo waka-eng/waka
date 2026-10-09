@@ -484,3 +484,13 @@ swipes. At 320px the upward target is 44×44 and unoccluded. Evidence is in
 The disposable loopback fixture made zero provider calls. Initial checks caught
 a deferred member-switch regression and duplicate CSS layout declaration; both
 were repaired before the full passing run. Human/operational gates remain open.
+
+### 2026 10 08 self-audit retained for follow-up
+
+The owner asked to keep the self-audit noted and push the remaining work to dev.
+PR 368's implementation and deployment were already complete. Recorded all six
+findings as open follow-ups in the [roadmap](../plans/2026-10-07-web-quality-roadmap.md#observed-usability-follow-ups--2026-10-08),
+with priorities, acceptance checks, screenshots and a keyboard-focus trace.
+The review covers the built app at dev `d07ac1c3`; its synthetic local fixtures
+made zero external provider calls and were cleaned up afterward. The findings
+remain pending implementation, and the human/operational gates remain open.
