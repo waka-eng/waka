@@ -964,30 +964,9 @@
   color: var(--muted);
 }
 
-.waka-composer-hint {
-  white-space: nowrap;
-}
-
-/**
- * "ENTER TO KEEP" IS NOT TRUE ON A TOUCH KEYBOARD.
- *
- * There, Enter is a newline key — the shortcut this line describes does not
- * exist, and the button beside it is the control. A hint that is false on the
- * device it is crowding is worse than no hint, so it goes where it is wrong
- * and stays where it is right. It also gives the footer back the room it was
- * short of at 360px.
- */
-@media (pointer: coarse) {
-  .waka-composer-hint {
-    display: none;
-  }
-}
-
-/* The primary action never shrinks to fit a hint. */
-.waka-composer-send {
-  flex: 0 0 auto;
-}
-
+/* The footer holds one thing now: the action. The hint that stood at its
+   left ("Enter to keep") and the agent note beside it are gone — see the
+   note where they were rendered. */
 /* The primary action sits at the end of the footer, where the pattern puts
    it, and is the only filled control on the screen. */
 .waka-composer-send {
@@ -1198,6 +1177,25 @@
   text-align: center;
   /* The world below stays draggable; the controls inside opt back in. */
   pointer-events: none;
+  /**
+   * AND IT CANNOT REACH THE BOX.
+   *
+   * This hangs from the chin and grows downward; the box is pinned to the
+   * bottom and grows upward. Nothing stopped them meeting, and on a short
+   * window they met — the claim sat on the box's top edge and the keep
+   * receipt printed straight through it. Founder: "so crowded!"
+   *
+   * The loop writes `--jar-mouth-h` from the box's own measured height every
+   * layout pass, so this is the room actually left between the chin and the
+   * box, not a guess at it. Overflowing is better than colliding: a claim
+   * that scrolls is still readable, and a claim printed through a textarea
+   * is not.
+   */
+  max-height: calc(
+    100dvh - var(--jar-mouth-top, 58%) - var(--jar-mouth-h, 128px) - var(--space-5)
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .jar-char-say > * {
@@ -1212,16 +1210,24 @@
  * above it is a label, and the three answers are the whole interaction.
  * ------------------------------------------------------------------------- */
 
+/**
+ * NO CARD. The claim was a bordered, raised rectangle sitting directly under
+ * the companion's face, which made the one screen the product opens on read
+ * as three stacked boxes: a reading, a card, and a field. It is not a card —
+ * it is the creature SAYING something, and nothing else it says is boxed.
+ *
+ * What made it legible as a question was never the border; it is the small
+ * uppercase ask above the sentence, which is still there. Removing the frame
+ * gives back the border, the radius, two lines of padding and the raised
+ * ground — which is most of the crowding, and all of it was chrome.
+ */
 .jar-char-claim {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-3);
   width: min(30rem, 100%);
-  padding: var(--space-4) var(--space-5);
-  border: var(--space-px) solid var(--line);
-  border-radius: 14px;
-  background: var(--waka-raised);
+  padding: var(--space-2) 0;
 }
 
 .jar-char-claim-ask {

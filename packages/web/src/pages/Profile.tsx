@@ -39,6 +39,7 @@ import {
   type ApiSignalDuplicate,
 } from "../lib/api";
 import { AntechamberPanel } from "../components/AntechamberPanel";
+import { HoverCard } from "../components/HoverCard";
 import { DuplicatesPanel } from "../components/DuplicatesPanel";
 import { ReadingPanel } from "../components/ReadingPanel";
 import { useAuth } from "../lib/auth-context";
@@ -1125,6 +1126,22 @@ export default function ProfilePage(): JSX.Element {
               {t(locale, "profileAgentKeysTitle")}
             </p>
             <p className="login-subtitle">{t(locale, "profileAgentKeysHint")}</p>
+            {/* HOW AN AGENT ACTUALLY SAVES, BESIDE THE KEYS IT NEEDS TO.
+                This line stood under the box on the home screen, where it was
+                a setup instruction printed beneath the thing you use every
+                day. Connecting an agent is a once-ever act and the keys for
+                it are in this section, so it reads here and takes up no room
+                on the screen the product opens on. */}
+            <p className="profile-machinery-row">
+              <HoverCard label={t(locale, "worldKeepViaAgent")} className="jar-keep-via">
+                <span>{t(locale, "worldKeepMcpWhat")}</span>
+                <span>{t(locale, "worldKeepMcpTools")}</span>
+                <span>{t(locale, "worldKeepMcpWhere")}</span>
+                <a href="https://github.com/waka-eng/waka-mcp" target="_blank" rel="noreferrer noopener">
+                  {t(locale, "worldKeepMcpOpen")}
+                </a>
+              </HoverCard>
+            </p>
           </div>
 
           <ul className="profile-list">
