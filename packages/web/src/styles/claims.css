@@ -12,6 +12,21 @@
  */
 :root {
   --waka-face: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+
+  /**
+   * AN OPAQUE RAISED SURFACE.
+   *
+   * `--cell` is `rgba(255,255,255,0.035)` — a TINT, not a colour. Over the
+   * world's dark canvas that reads as a lifted panel, which is what it was
+   * built for. Over a page of cards it reads as nothing at all: the sheet
+   * that opens on a kept thing was see-through, with the grid's own text
+   * showing straight through the words on top of it.
+   *
+   * Anything that FLOATS over content needs a ground of its own. This is the
+   * page's ground with the same whisper of light mixed in, composited once
+   * instead of layered over whatever happens to be behind it.
+   */
+  --waka-raised: color-mix(in srgb, var(--bg) 96%, #ffffff 4%);
 }
 
 /**
@@ -119,7 +134,7 @@
   padding: var(--space-3) var(--space-5);
   border: var(--space-px) solid var(--line);
   border-radius: 7px;
-  background: var(--cell);
+  background: var(--waka-raised);
   color: var(--ink);
   font-family: var(--waka-face);
   font-size: 14px;
@@ -160,7 +175,7 @@
   padding: var(--space-3) var(--space-5);
   border: var(--space-px) solid var(--line);
   border-radius: 7px;
-  background: var(--cell);
+  background: var(--waka-raised);
   color: var(--ink);
   font-family: var(--waka-face);
   font-size: 14px;
@@ -292,7 +307,7 @@
   padding: var(--space-3);
   border: var(--space-px) solid var(--line);
   border-radius: 12px;
-  background: var(--cell);
+  background: var(--waka-raised);
 }
 
 /* A <button> brings the UA's own border and button-face background, and this
@@ -377,7 +392,7 @@
   padding: var(--space-4) var(--space-4);
   border: var(--space-px) solid var(--line);
   border-radius: 14px;
-  background: var(--cell);
+  background: var(--waka-raised);
   color: var(--ink);
   font-family: var(--waka-face);
   font-size: 16px;
@@ -430,7 +445,7 @@
   padding: var(--space-1) var(--space-3);
   border: var(--space-px) solid var(--line);
   border-radius: 999px;
-  background: var(--cell);
+  background: var(--waka-raised);
   font-family: var(--waka-face);
   font-size: 11px;
   color: var(--ink);
@@ -517,7 +532,7 @@
   padding: var(--space-4);
   border: var(--space-px) solid var(--line);
   border-radius: 12px;
-  background: var(--cell);
+  background: var(--waka-raised);
   color: var(--ink);
   font-family: var(--waka-face);
   font-size: 13px;
@@ -597,7 +612,7 @@
   padding: var(--space-3) var(--space-5);
   border: var(--space-px) solid var(--line);
   border-radius: 8px;
-  background: var(--cell);
+  background: var(--waka-raised);
   color: var(--ink);
   font-family: var(--waka-face);
   font-size: 13px;
@@ -632,7 +647,7 @@
   overflow: hidden;
   border: var(--space-px) solid var(--line);
   border-radius: 14px;
-  background: var(--cell);
+  background: var(--waka-raised);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
@@ -769,7 +784,7 @@
   padding: var(--space-6);
   border: var(--space-px) solid var(--line);
   border-radius: 16px;
-  background: var(--cell);
+  background: var(--waka-raised);
   box-shadow: 0 24px 60px rgb(0 0 0 / 55%);
 }
 
