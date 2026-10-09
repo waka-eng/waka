@@ -426,66 +426,6 @@
   text-decoration: underline;
 }
 
-/* Dropped files, listed under the box rather than inside a drawer. */
-.jar-keep-media {
-  pointer-events: auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  max-width: 680px;
-  margin: var(--space-2) auto 0;
-  padding: 0;
-  list-style: none;
-}
-
-.jar-keep-media li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  border: var(--space-px) solid var(--line);
-  border-radius: 999px;
-  background: var(--waka-raised);
-  font-family: var(--waka-face);
-  font-size: 11px;
-  color: var(--ink);
-}
-
-.jar-keep-media button {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.jar-keep-media small {
-  color: var(--error);
-}
-
-.jar-keep-note {
-  max-width: 680px;
-  margin: var(--space-2) auto 0;
-  font-family: var(--waka-face);
-  font-size: 11px;
-  color: var(--error);
-}
-
-/* The two quiet lines under the box: how to keep, and who else can. */
-.jar-keep-foot {
-  pointer-events: auto;
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-4);
-  max-width: 680px;
-  margin: var(--space-2) auto 0;
-  font-family: var(--waka-face);
-  font-size: 11px;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-}
-
 /* ---------------------------------------------------------------------------
  * The hover card
  *
@@ -822,4 +762,209 @@
 .waka-sheet-close:focus-visible {
   color: var(--ink);
   border-color: var(--ink);
+}
+
+/* ---------------------------------------------------------------------------
+ * The composer
+ *
+ * The anatomy its pattern names: a FRAME holding a drawer above the body, a
+ * body carrying the input and a footer, a required primary action, and the
+ * status message outside the body. The drawer collapses behind a count,
+ * because that is the only thing a count badge is for.
+ *
+ * Width is borrowed from `.jar-hq-inner` (680px) so the composer lines up with
+ * the reading above it rather than running the width of the window.
+ * ------------------------------------------------------------------------- */
+
+.waka-composer {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+/* ---- the drawer, above the body ---- */
+
+.waka-composer-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--space-px) solid var(--line);
+  border-radius: 12px;
+  background: var(--waka-raised);
+}
+
+.waka-drawer-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.waka-drawer-toggle:hover,
+.waka-drawer-toggle[aria-expanded="true"] {
+  color: var(--ink);
+}
+
+.waka-drawer-toggle:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* The count badge: the collapsed summary's whole job is to say how much is
+   behind the toggle without opening it. */
+.waka-drawer-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.waka-drawer-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.waka-drawer-items li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  border: var(--space-px) solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  font-family: var(--waka-face);
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.waka-drawer-items button {
+  min-width: 20px;
+  min-height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.waka-drawer-items button:hover,
+.waka-drawer-items button:focus-visible {
+  color: var(--ink);
+}
+
+.waka-drawer-items small {
+  color: var(--error);
+  font-size: 11px;
+}
+
+/* ---- the body: input, then footer ---- */
+
+.waka-composer-body {
+  display: flex;
+  flex-direction: column;
+  border: var(--space-px) solid var(--line);
+  border-radius: 14px;
+  background: var(--waka-raised);
+  overflow: hidden;
+}
+
+.waka-composer-body:focus-within {
+  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+/* The input loses its own frame: the BODY is the frame now, which is what
+   stops the composer reading as a box inside a box. */
+.waka-composer-body .jar-keep-box {
+  width: 100%;
+  min-height: 56px;
+  margin: 0;
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1.45;
+  resize: none;
+  field-sizing: content;
+  max-height: 8rem;
+}
+
+.waka-composer-body .jar-keep-box:focus-visible {
+  outline: none;
+}
+
+.waka-composer-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-3) var(--space-3);
+  font-family: var(--waka-face);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.waka-composer-hint {
+  white-space: nowrap;
+}
+
+/* The primary action sits at the end of the footer, where the pattern puts
+   it, and is the only filled control on the screen. */
+.waka-composer-send {
+  margin-left: auto;
+  min-height: 32px;
+  padding: 0 var(--space-4);
+  border: var(--space-px) solid var(--ink);
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--bg);
+  font-family: var(--waka-face);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.waka-composer-send:disabled {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+}
+
+.waka-composer-send:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.waka-composer-status {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: 12px;
+  color: var(--error);
 }
