@@ -157,12 +157,42 @@
   max-width: 38%;
 }
 
-.waka-corners > .jar-here-split > .jar-here,
-.waka-corners > .jar-here-split > .jar-here-more {
+/* ONE control: the name, and a caret that describes what pressing it does.
+   The caret used to be a button of its own beside this one — two targets for
+   one action, which is what the split was. */
+.waka-corners > .jar-here-split > .jar-here {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-6);
+  max-width: 100%;
   min-height: var(--waka-corner);
+  padding: 0 var(--sp-8);
+  border: 0;
+  border-radius: var(--waka-r-control);
+  background: transparent;
+  cursor: pointer;
+}
+
+.waka-corners > .jar-here-split > .jar-here .jar-here-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.waka-corners .jar-here-caret {
+  flex: none;
+  transition: transform 0.18s ease;
+}
+
+.waka-corners > .jar-here-split > .jar-here[aria-expanded="true"] .jar-here-caret {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waka-corners .jar-here-caret {
+    transition: none;
+  }
 }
 
 /* The list hangs under the corner it opened from, like the switcher's. */
@@ -262,49 +292,10 @@
   outline-offset: 2px;
 }
 
-/**
- * WHAT THE SWITCHER SAYS ON HOVER.
- *
- * This shipped with markup and no rules, so it rendered as full-width body
- * text laid straight over the control that opens it — the founder could not
- * press the switcher at all: "uhh i cant change the button cuz of this text".
- *
- * Three things fix it and all three are load-bearing:
- *   - It is a CARD below the trigger, not flow content beside it.
- *   - It never takes the pointer. A card that explains a control must not be
- *     able to block the control; the pointer passes straight through to the
- *     button underneath.
- *   - The lines are separate blocks. They were three sentences run together
- *     into one paragraph with no space between them, which is how
- *     "things.What" ended up on screen.
- */
-.waka-switch-card {
-  position: absolute;
-  top: calc(100% + var(--sp-8));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 60;
-  /* See above: this explains the control, so it can never swallow it. */
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  width: max-content;
-  max-width: min(22rem, calc(100vw - var(--sp-32)));
-  padding: var(--sp-12) var(--sp-16);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-surface);
-  background: var(--waka-raised);
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-fine);
-  font-weight: 300;
-  letter-spacing: normal;
-  text-transform: none;
-  line-height: 1.5;
-  text-align: left;
-  white-space: normal;
-}
+/* THE HOVER CARD THAT STOOD HERE IS GONE. Each row of the list carries its
+   own explanation now, which is both reachable by a finger and readable
+   BEFORE you go somewhere — the hover version could only ever describe the
+   view you had already arrived at. */
 
 /* The caret turns over when the list is down. The one piece of motion in the
    bar, and it explains rather than decorates: it says which way the thing it

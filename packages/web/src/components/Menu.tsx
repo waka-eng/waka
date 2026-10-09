@@ -117,12 +117,10 @@ export interface MenuProps {
 
 export function Menu({ locale, items, current, label, left, onSettings, hidden }: MenuProps): JSX.Element | null {
   const [open, setOpen] = useState(false);
-  const [explaining, setExplaining] = useState(false);
   /** Which row has its lines open, if any. One at a time: a list where every
       row can be expanded at once is a page of prose wearing a list's shape. */
   const [explained, setExplained] = useState<string | null>(null);
   const panelId = useId();
-  const explainId = useId();
   /* Focus lands on the first destination, not on a way out — see below. */
   const first = useRef<HTMLButtonElement | null>(null);
 
@@ -172,21 +170,13 @@ export function Menu({ locale, items, current, label, left, onSettings, hidden }
         {here ? (
           <div
             className="waka-switch"
-            /* The explanation follows the pointer, not the list: opening the
-               list closes it, because a card over the rungs you are choosing
-               between is in the way of the choice. */
-            onPointerEnter={() => setExplaining(true)}
-            onPointerLeave={() => setExplaining(false)}
           >
             <button
               type="button"
               className="waka-switch-trigger"
               aria-expanded={open}
               aria-controls={panelId}
-              aria-describedby={explaining && !open ? explainId : undefined}
-              onFocus={() => setExplaining(true)}
-              onBlur={() => setExplaining(false)}
-              onClick={() => { setExplaining(false); setOpen((value) => !value); }}
+              onClick={() => setOpen((value) => !value)}
             >
               <span>{name ? t(locale, name) : ""}</span>
               {/* The caret turns over when the list is down: the one piece of
@@ -209,13 +199,14 @@ export function Menu({ locale, items, current, label, left, onSettings, hidden }
                 />
               </svg>
             </button>
-            {explaining && !open && !label && here.explain?.length ? (
-              <span id={explainId} role="note" className="waka-switch-card">
-                {here.explain.map((line) => (
-                  <span key={line}>{line}</span>
-                ))}
-              </span>
-            ) : null}
+            {/* NOTHING ON HOVER. This carried the explanation of whichever
+                view you were on, and the per-row icons in the list replaced
+                it — founder: "since u added info icon next to dropdown items,
+                remove text that shows when hovering on dropdown button".
+                Two places saying the same thing is one too many, and this was
+                the weaker of them: it could only ever describe the view you
+                had already arrived at, and it could only be reached by a
+                pointer. */}
           </div>
         ) : null}
 
