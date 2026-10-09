@@ -461,3 +461,26 @@ was requested; the provider console is signed out and the available local key
 has inference permissions only. Actual recurring limits, provider privacy,
 source/proxy attestation and external alert delivery cannot be marked verified.
 The goal stays open for those human/administrative/operational requirements.
+
+### 2026 10 08 member and spatial navigation repairs
+
+Group avatar taps previously only named the member. They now open that member's
+public inspirations in the current room, immediately recording the member and
+section in history. The name buttons do the same; members with no visible public
+inspirations get a named empty view. Selection uses the painted room, so a fast
+tap after travel cannot accidentally open the personal field before the route
+observer catches up. This uses the existing membership/public-only projection.
+
+Review keeps one invitation, “Revisit your inspirations”, while retaining the
+owned unfinished session and its accessible continuation hint. Personal Home
+again exposes Principles above and Inspirations below, with return carets and
+44px targets. Phone spacing clears the tab bar, Capture and the header.
+
+Verification: web types/build and all 872 tests across 117 suites pass. Real
+built-browser checks cover desktop and 390px avatar navigation, opening exact
+public words, personal return controls, Page Down/Page Up, wheel and vertical
+swipes. At 320px the upward target is 44×44 and unoccluded. Evidence is in
+[the navigation receipt](../craft/evidence/web-quality/group-navigation/verification.json).
+The disposable loopback fixture made zero provider calls. Initial checks caught
+a deferred member-switch regression and duplicate CSS layout declaration; both
+were repaired before the full passing run. Human/operational gates remain open.
