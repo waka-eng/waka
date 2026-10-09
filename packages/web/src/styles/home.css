@@ -1842,7 +1842,18 @@
      measure landed (founder's recording: "shown at bottom then moves up").
      The companion rests near the middle at every viewport, so mid-viewport is
      a fallback the real number only nudges. */
-  top: var(--jar-mouth-top, 58%);
+  /* AT THE BOTTOM OF THE SPACE (founder, 2026-10-08: "place this text input
+     box at the bottom of the space. so i want equal space between the top of
+     mind, character, and input box").
+     It used to hang off the companion's chin — `--jar-mouth-top`, written by
+     the loop — under an earlier ruling that keeping should sit "right below
+     the character". That put the three things on the screen at uneven
+     intervals: a tight pair under a lot of air. Pinned to the bottom, the
+     reading, the companion and the box divide the height between them, and
+     the companion is placed at the midpoint of what is left so the two gaps
+     are equal by construction rather than by eye. */
+  top: auto;
+  bottom: env(safe-area-inset-bottom);
   /* the air between the last word and the field's top edge */
   padding: 0 var(--sp-20) var(--sp-14);
   text-align: center;
