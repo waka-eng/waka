@@ -33,6 +33,7 @@ export function usePageMenu(): PageMenu {
         { id: "inspirations", label: "worldMenuField", onSelect: () => navigate("/inspirations") },
         { id: "claims", label: "worldTabClaims", onSelect: () => navigate("/claims") },
         { id: "principles", label: "worldPrinciplesShortcut", onSelect: () => navigate("/principles") },
+        { id: "days", label: "worldMenuDays", onSelect: () => navigate("/days") },
         { id: "home", label: "worldPersonalHome", onSelect: () => navigate("/") },
       ],
       /* A page has no account panel of its own; settings is a route from here. */

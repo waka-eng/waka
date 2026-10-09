@@ -9915,6 +9915,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       onSelect: () => viewNavigation.write({ ...EMPTY_VIEW, reviewId: 'new' }) },
     { id: 'talk', label: 'worldMenuTalk',
       onSelect: () => viewNavigation.write({ ...EMPTY_VIEW, conversationId: 'new' }) },
+    { id: 'days', label: 'worldMenuDays', onSelect: () => navigate('/days') },
     { id: 'find', label: 'worldMenuFind', onSelect: () => setSeek('') },
     /* The caret half of the "ME ▾" pill. The pill is gone from the home
        screen, so the question it answered — which other walls exist, take me
