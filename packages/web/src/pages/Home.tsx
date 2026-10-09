@@ -2110,6 +2110,22 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      collapsible from there, which is the only state the pattern's count
      badge is for. */
   const [drawerOpen, setDrawerOpen] = useState(true);
+  /**
+   * WHY THIS MOMENT, ASKED WHILE THE MOMENT IS STILL IN YOUR HANDS.
+   *
+   * Founder: people share photos of their most inspiring moments, and "as
+   * they upload each photo" they say why it felt special. At upload, not
+   * later in a queue — a photo you chose ten seconds ago is a thing you can
+   * still answer about, and the same photo next Tuesday is a thing you have
+   * to reconstruct.
+   *
+   * It rides the save as a REFLECTION, which already exists as "the short
+   * human-authored Q&A hanging off a capture… the person's own words, and
+   * input to extraction". So the answer is not a caption sitting beside the
+   * picture — it is material the reading is drawn from, which is the only
+   * reason it is worth asking for.
+   */
+  const [momentWhy, setMomentWhy] = useState("");
   const composerOpenRef = useRef(mouthOpen); composerOpenRef.current = mouthOpen;
   useEffect(() => { if (!mouthOpen && recording.phase !== 'idle') void recording.stop(); }, [mouthOpen, recording.phase, recording.stop]);
   const [newInspirationRequested, setNewInspirationRequested] = useState(false);
@@ -10385,13 +10401,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (attachments.length > 5) throw new Error('Keep up to five attachments in one inspiration.');
       const reference = await composerDraft.flush(); current();
       const kind = attachments.length === 1 && !text ? attachments[0]!.type : attachments.length ? 'mixed' : 'note';
+      /* Said at upload, kept with the thing it is about. Unanswered is not
+         recorded at all: an empty reflection row is a question the person was
+         asked and did not answer, which is a different fact from one they
+         were never asked, and only one of those is true here. */
+      const why = momentWhy.trim();
+      const reflections = why
+        ? [{ question: say('worldMomentAsk'), answer: why }]
+        : undefined;
       inspirationSave.start({ operation: 'inspiration', input: { text, kind, source: 'app',
-        ...(attachments.length ? { attachments } : {}), ...(keepPublic ? { visibility: 'public' as const } : {}) },
+        ...(attachments.length ? { attachments } : {}), ...(reflections ? { reflections } : {}),
+        ...(keepPublic ? { visibility: 'public' as const } : {}) },
         reflect: andReflect, ...(reference ? { draft: reference } : {}) });
+      setMomentWhy('');
       setCharSay('');
     } catch (reason) { if (composerEpoch.current === epoch) setMouthNote(reason instanceof ApiError ? say('worldComposerUploadFailed') : reason instanceof Error ? reason.message : 'Could not save this inspiration. Your draft is here.'); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
-  }, [keepPublic, inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase]);
+  }, [keepPublic, inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
 
   const addInspirationFiles = async (files: File[], audio = false) => {
     const epoch = fileOwnerEpoch.current;
@@ -13600,6 +13626,32 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     ))}
                   </ul>
                 ) : null}
+              </div>
+            ) : null}
+
+            {/* A PICTURE GETS ASKED ABOUT; A LINK DOES NOT. The question is
+                "what made this moment feel like something", and a moment is
+                what a photograph is of. Asking it of a pasted URL would be
+                asking a question that does not fit the thing, which is how a
+                prompt becomes a toll. */}
+            {!mouthOpen && inputMedia.some(item => item.type === 'image') ? (
+              <div className="waka-moment">
+                <label className="waka-moment-ask" htmlFor="waka-moment-why">
+                  {say('worldMomentAsk')}
+                </label>
+                <textarea
+                  id="waka-moment-why"
+                  className="waka-moment-why"
+                  rows={2}
+                  value={momentWhy}
+                  placeholder={say('worldMomentPlaceholder')}
+                  onChange={event => setMomentWhy(event.target.value)}
+                />
+                {/* Leaving is free and says so. The founder's rule is that
+                    saving is never gatekept, so a question that must be
+                    answered before a photo can be kept would be a gate with a
+                    friendly face on it. */}
+                <p className="waka-moment-skip">{say('worldMomentSkip')}</p>
               </div>
             ) : null}
 

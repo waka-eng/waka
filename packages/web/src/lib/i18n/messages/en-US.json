@@ -874,5 +874,8 @@
   "worldDaysEmpty": "Nothing kept yet. Every day you keep something, its dot lights up.",
   "worldDaysKept": "{count} kept",
   "worldDaysNone": "nothing kept",
-  "worldMenuDays": "Your days"
+  "worldMenuDays": "Your days",
+  "worldMomentAsk": "What made this moment feel like something?",
+  "worldMomentPlaceholder": "Say it however it comes out",
+  "worldMomentSkip": "Keep it without saying"
 }
