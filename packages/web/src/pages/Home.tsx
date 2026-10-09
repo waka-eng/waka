@@ -13736,7 +13736,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 version of the thing "one line at a time" removed. */}
             {!mouthOpen && claimQueue[0] ? (
               <div className="jar-char-claim">
-                <p className="jar-char-claim-ask jar-label">{say('worldClaimAsks')}</p>
+                {/* NO "IS THIS TRUE OF YOU?" ABOVE IT. Founder: "where this
+                    text appears and 'is this true of you' kind of is too much
+                    like information." It was a label explaining three buttons
+                    that already explain themselves — a sentence about you with
+                    yes / partly / not true underneath can only be asking one
+                    thing, and saying so out loud made the creature sound like
+                    it was reading a form. */}
                 <p className="jar-char-claim-statement">{claimQueue[0].statement}</p>
                 <p className="jar-char-claim-answers">
                   {(['true', 'partly', 'not_true'] as const).map(value => (
@@ -13760,7 +13766,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               </div>
             ) : null}
             {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
-            {!mouthOpen&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}
+            {/* ONE THING FROM ONE MOUTH. The narration ("you kept two memories
+                today") stacked under the claim, so the creature was reporting
+                the weather and asking you a question in the same breath — a
+                third block of words in a column that already had two. The
+                codebase's own whisper rule is one clause at a time; this is
+                that rule holding across the two things that can speak, not
+                just within each. The line comes back the moment the claim is
+                answered. */}
+            {!mouthOpen&&!claimQueue[0]&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}
             {/* WHAT THE RECEIPT OFFERS IS THE CONVERSATION, not a second door to
                 a note. "Reflect" opened a private note on the thing just kept
                 — and the thing just kept already carries that door, on its own

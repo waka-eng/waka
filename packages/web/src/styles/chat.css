@@ -91,7 +91,7 @@
 .chat-page textarea:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 /* ---------------------------------------------------------------------------
@@ -106,13 +106,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--space-2) var(--space-4);
+  gap: var(--sp-8) var(--sp-16);
   width: 100%;
   max-width: 680px;
   box-sizing: border-box;
   margin: 0 auto;
-  padding: calc(var(--waka-corner) + var(--space-3) + env(safe-area-inset-top))
-    clamp(20px, 6vw, 28px) var(--space-3);
+  padding: calc(var(--waka-corner) + var(--sp-12) + env(safe-area-inset-top))
+    clamp(20px, 6vw, 28px) var(--sp-12);
 }
 
 /* The page title is the one every other page already uses — same size,
@@ -142,17 +142,17 @@
 .chat-options-menu {
   position: absolute;
   right: 0;
-  top: calc(100% + var(--space-2));
+  top: calc(100% + var(--sp-8));
   width: 260px;
-  max-width: calc(100vw - var(--space-6));
+  max-width: calc(100vw - var(--sp-24));
   box-sizing: border-box;
   z-index: 5;
   display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3);
+  gap: var(--sp-8);
+  padding: var(--sp-12);
   background: var(--waka-raised);
-  border: var(--space-px) solid var(--line);
-  border-radius: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
 }
 
 .chat-options-menu > button {
@@ -189,7 +189,7 @@
 .chat-transcript {
   max-width: 680px;
   margin-inline: auto;
-  padding-bottom: var(--space-6);
+  padding-bottom: var(--sp-24);
 }
 
 .chat-messages,
@@ -201,7 +201,7 @@
 }
 
 .chat-messages > li {
-  margin-block: var(--space-7);
+  margin-block: var(--sp-32);
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -211,7 +211,7 @@
 .chat-message-heading,
 .chat-sending > span {
   display: block;
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--sp-8);
   font-size: var(--t-meta);
   font-weight: 500;
   letter-spacing: 0.1em;
@@ -225,7 +225,7 @@
 
 .chat-message-text p {
   white-space: pre-wrap;
-  margin: var(--space-3) 0;
+  margin: var(--sp-12) 0;
 }
 
 .chat-message-text p:first-child {
@@ -238,19 +238,19 @@
 
 .chat-message-text ul,
 .chat-message-text ol {
-  padding-left: var(--space-5);
-  margin-block: var(--space-3);
+  padding-left: var(--sp-20);
+  margin-block: var(--sp-12);
 }
 
 .chat-message-text li {
-  margin-block: var(--space-1);
+  margin-block: var(--sp-4);
 }
 
 .chat-message-text code {
-  padding: 2px var(--space-1);
-  border-radius: 4px;
+  padding: 2px var(--sp-4);
+  border-radius: var(--radius-sm);
   background: var(--waka-raised);
-  font-size: 0.9em;
+  font-size: var(--t-fine);
 }
 
 /* YOUR OWN TURN IS DIMMER. The entire speaker distinction, in one line.
@@ -265,11 +265,11 @@
  * ------------------------------------------------------------------------- */
 
 .chat-welcome {
-  padding-block: clamp(var(--space-7), 8vh, var(--space-9));
+  padding-block: clamp(var(--sp-32), 8vh, var(--sp-56));
 }
 
 .chat-welcome h2 {
-  margin: 0 0 var(--space-3);
+  margin: 0 0 var(--sp-12);
   font-family: var(--waka-face);
   font-size: var(--t-reading);
   font-weight: 300;
@@ -287,13 +287,13 @@
 .chat-starters {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-6);
+  gap: var(--sp-8);
+  margin-top: var(--sp-24);
 }
 
 .chat-page .chat-starters button {
-  padding: var(--space-2) var(--space-4);
-  border: var(--space-px) solid var(--line);
+  padding: var(--sp-8) var(--sp-16);
+  border: 1px solid var(--line);
   border-radius: 999px;
   text-align: left;
 }
@@ -304,14 +304,14 @@
 
 /* What the conversation started from — a principle, or a reading. */
 .chat-topic {
-  margin-bottom: var(--space-7);
+  margin-bottom: var(--sp-32);
   color: var(--muted);
   font-size: var(--t-fine);
   letter-spacing: 0.06em;
 }
 
 .chat-topic blockquote {
-  margin: var(--space-2) 0 0;
+  margin: var(--sp-8) 0 0;
   font-size: var(--t-lead);
   letter-spacing: normal;
   line-height: 1.5;
@@ -319,7 +319,7 @@
 }
 
 .chat-earlier {
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--sp-24);
 }
 
 /* ---------------------------------------------------------------------------
@@ -327,7 +327,7 @@
  * ------------------------------------------------------------------------- */
 
 .chat-source-summary {
-  margin-top: var(--space-3);
+  margin-top: var(--sp-12);
   font-size: var(--t-fine);
   color: var(--muted);
 }
@@ -344,15 +344,15 @@
 .chat-citations {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
+  gap: var(--sp-8);
+  margin-top: var(--sp-12);
 }
 
 .chat-page .chat-citations button {
   max-width: 100%;
-  padding: var(--space-2) var(--space-3);
-  border: var(--space-px) solid var(--line);
-  border-radius: 10px;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
   text-align: left;
   font-size: var(--t-fine);
 }
@@ -363,8 +363,8 @@
 
 .chat-reading-choices {
   display: grid;
-  gap: var(--space-2);
-  margin-block: var(--space-4);
+  gap: var(--sp-8);
+  margin-block: var(--sp-16);
 }
 
 .chat-reading-choices > p {
@@ -376,18 +376,18 @@
 .chat-page .chat-reading-choice {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   width: 100%;
-  padding: var(--space-3);
-  border: var(--space-px) solid var(--line);
-  border-radius: 12px;
+  padding: var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
   text-align: left;
 }
 
 .chat-reading-choice-heading {
   display: flex;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--sp-12);
   width: 100%;
   font-size: var(--t-meta);
   letter-spacing: 0.06em;
@@ -401,10 +401,10 @@
 }
 
 .chat-page .jar-conversation-reference {
-  margin-top: var(--space-3);
-  padding: var(--space-4);
-  border: var(--space-px) solid var(--line);
-  border-radius: 14px;
+  margin-top: var(--sp-12);
+  padding: var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
   font-size: var(--t-ui);
 }
@@ -412,8 +412,8 @@
 .chat-page .jar-conversation-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
-  margin-top: var(--space-3);
+  gap: var(--sp-16);
+  margin-top: var(--sp-12);
 }
 
 .chat-page .jar-conversation-actions button,
@@ -428,20 +428,20 @@
 }
 
 .chat-page .jar-conversation-thought section {
-  margin-block: var(--space-3);
+  margin-block: var(--sp-12);
 }
 
 .chat-page .jar-conversation-adopt {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
+  gap: var(--sp-8);
+  margin-top: var(--sp-12);
   font-size: var(--t-ui);
 }
 
 .chat-page .jar-conversation-adopt input {
-  width: var(--space-4);
-  height: var(--space-4);
+  width: var(--sp-16);
+  height: var(--sp-16);
   flex: none;
 }
 
@@ -451,7 +451,7 @@
 }
 
 .chat-muted {
-  margin: var(--space-2) 0 0;
+  margin: var(--sp-8) 0 0;
   font-size: var(--t-fine);
   color: var(--muted);
 }
@@ -461,7 +461,7 @@
   max-width: 680px;
   box-sizing: border-box;
   margin: 0 auto;
-  padding: 0 clamp(20px, 6vw, 28px) var(--space-3);
+  padding: 0 clamp(20px, 6vw, 28px) var(--sp-12);
   font-size: var(--t-fine);
   color: var(--muted);
 }
@@ -470,10 +470,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-2);
-  padding-left: var(--space-3);
-  border-left: var(--space-px) solid var(--line);
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-8);
+  padding-left: var(--sp-12);
+  border-left: 1px solid var(--line);
   font-size: var(--t-fine);
   color: var(--muted);
 }
@@ -488,8 +488,8 @@
 .chat-thinking {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  margin-block: var(--space-7);
+  gap: var(--sp-12);
+  margin-block: var(--sp-32);
   font-size: var(--t-fine);
   letter-spacing: 0.06em;
   color: var(--muted);
@@ -497,7 +497,7 @@
 
 .chat-thinking-dots {
   display: flex;
-  gap: var(--space-1);
+  gap: var(--sp-4);
   align-items: center;
 }
 
@@ -532,20 +532,20 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   width: 100%;
   max-width: 680px;
   box-sizing: border-box;
   margin-inline: auto;
-  padding: var(--space-3) clamp(20px, 6vw, 28px)
-    calc(var(--space-5) + env(safe-area-inset-bottom));
+  padding: var(--sp-12) clamp(20px, 6vw, 28px)
+    calc(var(--sp-20) + env(safe-area-inset-bottom));
 }
 
 .chat-input-row {
   display: flex;
   flex-direction: column;
-  border: var(--space-px) solid var(--line);
-  border-radius: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
   overflow: hidden;
 }
@@ -577,7 +577,7 @@
   min-height: 56px;
   max-height: 8rem;
   margin: 0;
-  padding: var(--space-4) var(--space-4) var(--space-2);
+  padding: var(--sp-16) var(--sp-16) var(--sp-8);
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -598,10 +598,10 @@
   display: block;
   width: 100%;
   box-sizing: border-box;
-  margin-top: var(--space-1);
-  padding: var(--space-2);
-  border: var(--space-px) solid var(--line);
-  border-radius: 8px;
+  margin-top: var(--sp-4);
+  padding: var(--sp-8);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
   background: var(--bg);
   color: var(--ink);
   font-family: var(--waka-face);
@@ -613,10 +613,10 @@
 .chat-page .chat-send {
   align-self: flex-end;
   min-height: 32px;
-  margin: 0 var(--space-3) var(--space-3);
-  padding: 0 var(--space-4);
-  border: var(--space-px) solid var(--ink);
-  border-radius: 8px;
+  margin: 0 var(--sp-12) var(--sp-12);
+  padding: 0 var(--sp-16);
+  border: 1px solid var(--ink);
+  border-radius: var(--waka-r-control);
   background: var(--ink);
   color: var(--bg);
   font-size: var(--t-ui);
@@ -632,7 +632,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sp-12);
   font-size: var(--t-fine);
   color: var(--muted);
 }
@@ -656,8 +656,8 @@
   z-index: 4;
   width: min(340px, 100%);
   box-sizing: border-box;
-  padding: calc(var(--waka-corner) + var(--space-4) + env(safe-area-inset-top))
-    clamp(20px, 6vw, 28px) calc(var(--space-5) + env(safe-area-inset-bottom));
+  padding: calc(var(--waka-corner) + var(--sp-16) + env(safe-area-inset-top))
+    clamp(20px, 6vw, 28px) calc(var(--sp-20) + env(safe-area-inset-bottom));
   overflow-y: auto;
   background: var(--waka-raised);
   color: var(--ink);
@@ -666,12 +666,12 @@
 
 .chat-page .chat-sidebar {
   inset-inline: 0 auto;
-  border-right: var(--space-px) solid var(--line);
+  border-right: 1px solid var(--line);
 }
 
 .chat-page .chat-memory {
   inset-inline: auto 0;
-  border-left: var(--space-px) solid var(--line);
+  border-left: 1px solid var(--line);
 }
 
 .chat-sidebar header,
@@ -679,8 +679,8 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: var(--space-3);
-  margin-bottom: var(--space-5);
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-20);
 }
 
 .chat-sidebar h2,
@@ -696,19 +696,19 @@
 
 .chat-page .chat-sidebar .chat-new {
   width: 100%;
-  margin-bottom: var(--space-5);
-  padding: var(--space-3) var(--space-4);
-  border: var(--space-px) solid var(--line);
-  border-radius: 12px;
+  margin-bottom: var(--sp-20);
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
   text-align: left;
 }
 
 .chat-page .chat-sidebar nav button {
   display: block;
   width: 100%;
-  margin-bottom: var(--space-1);
-  padding: var(--space-3);
-  border-radius: 10px;
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-12);
+  border-radius: var(--waka-r-control);
   text-align: left;
 }
 
@@ -731,18 +731,18 @@
 
 .chat-sidebar time {
   display: block;
-  margin-top: var(--space-1);
+  margin-top: var(--sp-4);
   font-size: var(--t-meta);
   color: var(--muted);
 }
 
 .chat-memory section {
-  padding-block: var(--space-4);
-  border-bottom: var(--space-px) solid var(--line);
+  padding-block: var(--sp-16);
+  border-bottom: 1px solid var(--line);
 }
 
 .chat-memory h3 {
-  margin: 0 0 var(--space-2);
+  margin: 0 0 var(--sp-8);
   font-family: var(--waka-face);
   font-size: var(--t-meta);
   font-weight: 500;
@@ -758,12 +758,12 @@
 }
 
 .chat-memory li + li {
-  margin-top: var(--space-3);
+  margin-top: var(--sp-12);
 }
 
 .chat-memory small {
   display: block;
-  margin-top: var(--space-1);
+  margin-top: var(--sp-4);
   font-size: var(--t-meta);
   color: var(--muted);
 }
@@ -777,8 +777,7 @@
   padding: 0;
   border: 0;
   border-radius: 0;
-  background: #000;
-  opacity: 0.55;
+  background: var(--waka-scrim);
 }
 
 @media (max-width: 760px) {
