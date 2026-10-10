@@ -28,6 +28,8 @@ export interface CreateFeedbackRequest {
   value: ApiFeedbackValue;
   correctionText?: string;
   targetRevision?: string;
+  /** Which of the account's profiles is answering. Omit for your own. */
+  profile?: string;
 }
 
 /** POST /feedback — "true", "partly", or "not true", about one thing. */

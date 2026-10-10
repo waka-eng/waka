@@ -70,7 +70,7 @@ const PROFILE_TABS: ReadonlyArray<{ id: ProfileTab; labelKey: MessageKey }> = [
 export default function ProfilePage(): JSX.Element {
   const { account, profile, logout, updateProfile, updatePreferredLocale, deleteAccount } = useAuth();
   const navigate = useNavigate();
-  const menu = usePageMenu(normalizeSupportedLocale(profile?.preferredLocale));
+  const menu = usePageMenu(normalizeSupportedLocale(profile?.preferredLocale), account?.id);
   const [name, setName] = useState(profile?.name ?? "");
   const [publicHandle, setPublicHandle] = useState(profile?.publicHandle ?? "");
   const [publicProfileEnabled, setPublicProfileEnabled] = useState(

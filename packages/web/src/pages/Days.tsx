@@ -27,6 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Menu } from "../components/Menu";
+import { WallSwitch } from "../components/WallSwitch";
 import { listKeptDays, type ApiKeptDay } from "../lib/api";
 import { useOptionalAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
@@ -73,10 +74,11 @@ function buildGrid(rows: ApiKeptDay[], now: Date): Cell[] {
 }
 
 export function Days(): JSX.Element {
-  const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
+  const auth = useOptionalAuth();
+  const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   const navigate = useNavigate();
-  const menu = usePageMenu(locale);
+  const menu = usePageMenu(locale, auth?.account?.id);
 
   const [rows, setRows] = useState<ApiKeptDay[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
@@ -113,7 +115,7 @@ export function Days(): JSX.Element {
 
   return (
     <main className="waka-page">
-      <Menu locale={locale} items={menu.items} current={menu.current} label="worldDaysTitle" onSettings={menu.onSettings} />
+      <Menu locale={locale} items={menu.items} current={menu.current} left={<WallSwitch menu={menu} locale={locale} />} label="worldDaysTitle" onSettings={menu.onSettings} />
       <header className="waka-page-head">
         {/* NO BACK BUTTON. The menu is the navigation and the browser
             already has a back — a third way out of a page is not a
