@@ -40,9 +40,21 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import type { MenuItem } from "../components/Menu";
 import { t, type SupportedLocale } from "./locales";
+import { setStanding, useStanding, type Standing } from "./standing";
 
 export interface PageMenu {
   items: MenuItem[];
+  /**
+   * ME / MY AGENT, on a page that has no world to travel.
+   *
+   * The corner is a wall switch, and on the home screen pressing it moves a
+   * camera. On the archive and the principles there is no camera — there is
+   * only whose material is being read — so the same control writes the stance
+   * directly and the page reloads under it. One control, one meaning, two
+   * mechanisms, because the two surfaces are genuinely different machines.
+   */
+  standing: Standing;
+  stand: (next: Standing | null) => void;
   /** Which of the three is being looked at, or null on a page that is none. */
   current: string | null;
   onSettings: () => void;
@@ -82,9 +94,14 @@ const VIEWS: ReadonlyArray<{
   },
 ];
 
-export function usePageMenu(locale: SupportedLocale): PageMenu {
+/* The account comes from the caller, the way the locale does. Reaching into
+   auth from here would make a hook every page uses depend on a context those
+   pages already hold — and would make it unmountable in any test that does
+   not happen to mock that context. */
+export function usePageMenu(locale: SupportedLocale, accountId?: string | null): PageMenu {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const standing = useStanding(accountId);
   return useMemo(() => {
     /* Longest path first, so "/" does not claim "/inspirations". */
     const here =
@@ -100,7 +117,9 @@ export function usePageMenu(locale: SupportedLocale): PageMenu {
         explain: view.explain.map((key) => t(locale, key)),
       })),
       current: here,
+      standing,
+      stand: (next: Standing | null) => setStanding(accountId, next),
       onSettings: () => navigate("/profile"),
     };
-  }, [locale, navigate, pathname]);
+  }, [accountId, locale, navigate, pathname, standing]);
 }

@@ -130,6 +130,7 @@ import {
   type Palette,
 } from "../canvas/palette";
 import { useMeasured } from "../canvas/measured";
+import { setStanding as publishStanding } from "../lib/standing";
 import { renderScale } from "../canvas/scale";
 import { BODY_TIERS, bodyPath } from "../character/raster";
 import { GroupPanel } from "../space-kinds/GroupPanel";
@@ -2126,17 +2127,37 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * claims under the character would be the dense version of exactly the
    * thing that ruling removed.
    */
+  /* Whose wall a verdict is being given on, read at the moment of the press
+     rather than closed over — `sayVerdict` is built once and the wall moves
+     under it. */
+  const answeringAsRef = useRef<string | undefined>(undefined);
   const [claimQueue, setClaimQueue] = useState<ApiClaim[]>([]);
+  /**
+   * AND THE QUEUE BELONGS TO THE WALL YOU ARE STANDING ON.
+   *
+   * Founder: "the claims should also be different per my agent and me no?"
+   * They should, and for a sharper reason than consistency: a claim is a
+   * reading of what someone has KEPT, and an agent keeps its own things on
+   * its own wall. Asking you to rule on a sentence drawn from your archive
+   * while you are standing in your agent's is asking the wrong person about
+   * the wrong material — and the verdict would be recorded against whichever
+   * profile the request happened to default to.
+   */
+  const claimsFor = atWall.kind === 'agent' ? atWall.id : undefined;
+  answeringAsRef.current = claimsFor;
   const loadClaims = useCallback(() => {
-    void listClaims({ limit: 8 })
+    void listClaims({ limit: 8, ...(claimsFor ? { profile: claimsFor } : {}) })
       .then(({ claims }) => setClaimQueue(claims))
       /* A queue that cannot be fetched is silence, not an error on the home
          screen: nothing here is broken for the person, there is simply
          nothing being asked. */
       .catch(() => setClaimQueue([]));
-  }, []);
+  }, [claimsFor]);
   useEffect(() => {
     if (phase !== 'ready' || offline) return;
+    /* The wall changed under the queue, so the old wall's question must not
+       stay on screen while the new one is in flight. */
+    setClaimQueue([]);
     loadClaims();
   }, [phase, offline, loadClaims]);
   const composerOpenRef = useRef(mouthOpen); composerOpenRef.current = mouthOpen;
@@ -2235,6 +2256,23 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
   const auth = useOptionalAuth();
+  /**
+   * THE WORLD IS WHERE "WHOSE" IS DECIDED, AND IT SAYS SO OUT LOUD.
+   *
+   * The three views are routes and a route cannot see which wall a camera is
+   * parked on, so without this you could stand on your agent's wall, open
+   * Principles, and read your own. One writer and many readers, deliberately:
+   * the wall is the truth here — it moves with the camera, with the back
+   * button, with a link someone sent you — and the pages follow it rather
+   * than keeping a second idea of the same fact. See `lib/standing`.
+   */
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    publishStanding(
+      auth?.account?.id,
+      atWall.kind === 'agent' ? { id: atWall.id, name: atWall.name } : null,
+    );
+  }, [phase, atWall.kind, atWall.id, atWall.name, auth?.account?.id]);
   /* THE WORLD SPEAKS THE PROFILE'S LANGUAGE. One normalized value for this
      render, one ref for the closures the sim and the handlers hold across
      renders, and one stable `say` that always reads the ref — so a callback
@@ -9929,7 +9967,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      in the archive when they disagreed — a careful fix to a control that
      should not have been printing a number at all. */
 
-  const menu = usePageMenu(locale);
+  const menu = usePageMenu(locale, auth?.account?.id);
 
   /**
    * THE REACH — the ground, addressable without a pointer.
@@ -10884,7 +10922,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           ? say(RECEIPTS.verdictNo.messageKey)
           : say(RECEIPTS.verdictKept.messageKey);
       if (offlineRef.current) return;
-      createFeedback({ targetType: "signal", targetId: targetId ?? id, value, ...(targetRevision ? { targetRevision } : {}) })
+      /* Filed by whoever is standing here. A claim read from an agent's wall
+         is about the agent, and a verdict on it under your own profile is a
+         verdict about a signal you do not own — which the server refuses, as
+         it should. */
+      createFeedback({ targetType: "signal", targetId: targetId ?? id, value,
+        ...(targetRevision ? { targetRevision } : {}),
+        ...(answeringAsRef.current ? { profile: answeringAsRef.current } : {}) })
         .then(() => {
           if (!readingMountedRef.current) return;
           setVerdictReceipt({ id, text: receipt });

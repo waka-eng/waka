@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Menu } from "../components/Menu";
+import { WallSwitch } from "../components/WallSwitch";
 import { attachmentPreviewImageUrl, updateInspiration } from "../lib/api";
 import { dateStamp } from "../lib/words";
 /* THE SAME DOOR THE WORLD USES. `loadInspirations` is the archive's own
@@ -32,6 +33,7 @@ import { dateStamp } from "../lib/words";
 import { loadInspirations, type Inspiration } from "../lib/data";
 import { usePageMenu } from "../lib/page-menu";
 import { useOptionalAuth } from "../lib/auth-context";
+import { useStanding } from "../lib/standing";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 
 type Phase = "loading" | "ready" | "failed";
@@ -44,10 +46,21 @@ function pictureOf(row: Inspiration): string | null {
 }
 
 export function Inspirations(): JSX.Element {
-  const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
+  const auth = useOptionalAuth();
+  const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
+  /**
+   * WHOSE ARCHIVE THIS IS.
+   *
+   * Founder: "my agent should have its own top of mind, your inspirations,
+   * principles." The corner switch moved the camera and nothing else, so
+   * standing on an agent's wall and opening this page read your own keeps
+   * back at you. The reader already took a profile; nothing was handing it
+   * one. See `lib/standing`.
+   */
+  const standing = useStanding(auth?.account?.id);
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
 
-  const menu = usePageMenu(locale);
+  const menu = usePageMenu(locale, auth?.account?.id);
   const [rows, setRows] = useState<Inspiration[]>([]);
   /* FIND IS A THING YOU DO TO YOUR INSPIRATIONS, so it lives on the page that
      holds them rather than as a destination of its own. It was a row in the
@@ -98,7 +111,7 @@ export function Inspirations(): JSX.Element {
   const load = useCallback(async () => {
     setPhase("loading");
     try {
-      const field = await loadInspirations();
+      const field = await loadInspirations(standing.id ?? undefined);
       if (!mounted.current) return;
       /* Newest first here: a grid is read from the top left, and the archive's
          own order is oldest first because the ground lays them down that way. */
@@ -114,7 +127,7 @@ export function Inspirations(): JSX.Element {
       if (!mounted.current) return;
       setPhase("failed");
     }
-  }, []);
+  }, [standing.id]);
 
   useEffect(() => {
     void load();
@@ -147,7 +160,7 @@ export function Inspirations(): JSX.Element {
 
   return (
     <main className="waka-page">
-      <Menu locale={locale} items={menu.items} current={menu.current} onSettings={menu.onSettings} />
+      <Menu locale={locale} items={menu.items} current={menu.current} left={<WallSwitch menu={menu} locale={locale} />} onSettings={menu.onSettings} />
       <header className="waka-page-head">
         {/* NO BACK BUTTON. The menu is the navigation and the browser
             already has a back — a third way out of a page is not a

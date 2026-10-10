@@ -41,6 +41,7 @@ import { resolveContestedPairs } from "../lib/contested-pairs.js";
 import { getDb } from "../lib/db.js";
 import { enqueueGroupTopOfMindRefresh } from "../lib/queue.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 import { enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { validationDetails } from "../lib/validation.js";
 
@@ -74,6 +75,9 @@ const createFeedbackRequestSchema = z
     targetId: z.string().uuid("targetId must be a uuid"),
     value: z.enum(feedbackValueValues),
     targetRevision: z.string().regex(/^[1-9]\d{0,18}$/).refine((value) => BigInt(value) <= 9223372036854775807n).optional(),
+    /* Which of the account's profiles is answering. Absent means the session's
+       own, which is every caller that existed before agents had claims. */
+    profile: z.string().uuid("profile must be a uuid").optional(),
     correctionText: z
       .string()
       .trim()
@@ -137,6 +141,7 @@ export interface FeedbackRouteDependencies {
   authMiddleware?: MiddlewareHandler<AuthEnv>;
   createFeedback?: (db: WakaDb, input: CreateFeedbackInput) => Promise<FeedbackRecord | null>;
   listFeedback?: (db: WakaDb, input: ListFeedbackInput) => Promise<FeedbackRecord[]>;
+  loadProfile?: typeof loadProfileTarget;
 }
 
 function serializeFeedback(row: Feedback): FeedbackRecord {
@@ -494,9 +499,35 @@ export function createFeedbackRoutes(
     }
 
     const session = c.get("session");
+    /**
+     * WHOSE VERDICT THIS IS.
+     *
+     * An account's agent keeps its own things and is read for its own
+     * claims, so a person standing on their agent's wall is answering a
+     * sentence about the AGENT. Filed under the session's own profile that
+     * verdict is about a signal the session does not own, and
+     * `targetBelongsToProfile` rejects it — correctly, and with an error
+     * that makes it look like the claim was broken rather than the stance.
+     *
+     * So the same scope resolution every read route uses, asked for WRITE.
+     * It is not a widening: `profileAccessError` already decides who may act
+     * as whom, a profile in another account answers exactly like one that
+     * does not exist, and an agent session reaching for its human is still
+     * refused. This route simply stops being the one place that could not
+     * ask the question.
+     */
+    const scope = await resolveProfileScope(
+      getDatabase(),
+      session,
+      parsed.data.profile,
+      "write",
+      deps.loadProfile ?? loadProfileTarget,
+    );
+    if (!scope.ok) return c.json(scope.body, scope.status);
+
     let row: FeedbackRecord | null;
     try { row = await createFeedback(getDatabase(), {
-      profileId: session.profile.id,
+      profileId: scope.profileId,
       targetType: parsed.data.targetType,
       targetId: parsed.data.targetId,
       value: parsed.data.value,

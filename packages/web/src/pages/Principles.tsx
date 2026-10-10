@@ -16,19 +16,24 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Menu } from "../components/Menu";
+import { WallSwitch } from "../components/WallSwitch";
 import { fetchPrinciples, type ApiPrinciple } from "../lib/api";
 import { usePageMenu } from "../lib/page-menu";
 import { useOptionalAuth } from "../lib/auth-context";
+import { useStanding } from "../lib/standing";
 import { normalizeSupportedLocale, t } from "../lib/locales";
 
 type Phase = "loading" | "ready" | "failed";
 
 export function Principles(): JSX.Element {
-  const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
+  const auth = useOptionalAuth();
+  const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
+  /* Whose principles these are — see `lib/standing` and Inspirations. */
+  const standing = useStanding(auth?.account?.id);
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   const navigate = useNavigate();
 
-  const menu = usePageMenu(locale);
+  const menu = usePageMenu(locale, auth?.account?.id);
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
@@ -43,7 +48,7 @@ export function Principles(): JSX.Element {
   const load = useCallback(async () => {
     setPhase("loading");
     try {
-      const held = await fetchPrinciples();
+      const held = await fetchPrinciples(standing.id ? { profile: standing.id } : {});
       if (!mounted.current) return;
       setRows(held);
       setPhase("ready");
@@ -51,7 +56,7 @@ export function Principles(): JSX.Element {
       if (!mounted.current) return;
       setPhase("failed");
     }
-  }, []);
+  }, [standing.id]);
 
   useEffect(() => {
     void load();
@@ -59,7 +64,7 @@ export function Principles(): JSX.Element {
 
   return (
     <main className="waka-page">
-      <Menu locale={locale} items={menu.items} current={menu.current} onSettings={menu.onSettings} />
+      <Menu locale={locale} items={menu.items} current={menu.current} left={<WallSwitch menu={menu} locale={locale} />} onSettings={menu.onSettings} />
       <header className="waka-page-head">
         {/* NO BACK BUTTON. The menu is the navigation and the browser
             already has a back — a third way out of a page is not a
