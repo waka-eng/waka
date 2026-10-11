@@ -67,3 +67,20 @@ export async function saveAnInspiration(
   await press(".jar-note-save");
   await page.waitForTimeout(4_500);
 }
+
+/**
+ * OPEN THE NOTEPAD AND LEAVE IT OPEN, for gates that need its rules on
+ * screen rather than a saved row — `dead-css` walks the composer to find out
+ * which of its selectors still decide anything.
+ *
+ * Same door, same reason as `saveAnInspiration`: `.jar-mouth-rest` is the
+ * CLOSED composer slot at `opacity: 0`, and clicking it now fails outright
+ * because the world's own canvas is in front of it. It was never a door; it
+ * was a thing a gate could reach and a person could not.
+ */
+export async function openTheNotepad(page: Page): Promise<void> {
+  await page.locator(".waka-dock-item--new").first().click();
+  await page.waitForTimeout(400);
+  await page.locator(".waka-new-one").first().click();
+  await page.waitForTimeout(900);
+}

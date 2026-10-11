@@ -46,6 +46,7 @@
  */
 import { type Browser, type Page } from "playwright";
 import { launchChromium } from "./browser";
+import { openTheNotepad } from "./keep";
 interface Finding {
   check: string;
   surface: string;
@@ -210,7 +211,7 @@ async function walk(browser: Browser, negative: boolean): Promise<Finding[]> {
   await page.waitForTimeout(9_000);
   found.push(...(await audit(page, "the world")));
 
-  await page.locator(".jar-mouth-rest").first().click();
+  await openTheNotepad(page);
   await page.waitForTimeout(900);
   found.push(...(await audit(page, "the mouth open")));
 

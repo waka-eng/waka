@@ -112,7 +112,14 @@ body {
      which carries the reasoning and the measurements. These two must be the
      same value: a page one shade off the world it opens over is the "why is
      this screen different" complaint in its purest form. */
-  --moon-ground: #0d131f;
+  /* DARKER THAN THE FIRST ATTEMPT AT THIS. Founder, with the archive beside
+     the world: "too bright. I prefer this darker navy." The world reads
+     darker than the pages at the SAME token value, because the canvas
+     composites its own vignette over it while a page gets the flat value
+     plus a lamp — so matching the numbers made the pages lighter than the
+     thing they are supposed to be part of. Matched by eye against the world
+     rather than by arithmetic against itself. */
+  --moon-ground: #0a0e18;
   /**
    * THE INK IS WARM NOW, AND THE CONTRAST IS THE SAME NUMBER.
    *
@@ -1114,8 +1121,8 @@ a:focus-visible {
   background:
     radial-gradient(
       120% 90% at 50% 38%,
-      color-mix(in srgb, var(--moon-warm) 3.5%, transparent) 0%,
-      color-mix(in srgb, var(--moon-warm) 1.4%, transparent) 42%,
+      color-mix(in srgb, var(--moon-warm) 2%, transparent) 0%,
+      color-mix(in srgb, var(--moon-warm) 0.8%, transparent) 42%,
       transparent 72%
     );
 }

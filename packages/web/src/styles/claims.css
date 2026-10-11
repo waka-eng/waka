@@ -1344,6 +1344,70 @@
    classes, so the design comes from the stylesheet that defines the card
    rather than from a lookalike that would drift the first time the original
    moved. */
+/* ═══ A SAVED THOUGHT, OPENED, IS A PAGE YOU WRITE ON ════════════════════
+ *
+ * Founder: "don't have a separate button that says edit, just let the user
+ * edit it directly." So the words are a field that never looks like one —
+ * no border, no fill, no label, the same blank page the notepad gives a new
+ * thought. A thing you wrote reads the same whether it is ten seconds or ten
+ * months old, which is the whole argument for autosave here: if the two
+ * surfaces look identical then they had better behave identically.
+ *
+ * IT GROWS WITH THE WORDS. `field-sizing: content` between a floor and the
+ * column's own height, which is the one mechanism that does this without a
+ * measurement — see the note in `ConversationPanel` about four mechanisms
+ * fighting over the same textarea. */
+.waka-note-page {
+  /* Read, not operated — see `--waka-read`. A saved thought is the thing
+     this product is for, so it is set like one. (The old serif rule keyed
+     off `.jar-panel-card`, which this element stopped wearing when the card
+     became a page.) */
+  font-family: var(--waka-read);
+  font-size: var(--t-lead);
+  line-height: 1.6;
+  width: 100%;
+  min-height: 40vh;
+  field-sizing: content;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  resize: none;
+}
+
+.waka-note-page:focus-visible {
+  outline: none;
+}
+
+/* ERASING, AND IT IS THE QUIETEST THING ON THE PAGE. A destructive verb sits
+   at the bottom of a note you are reading, in the meta register, and asks
+   before it does anything — the same two-press shape the chats list uses for
+   the same act, because one of your own things going away is the only move
+   in this product that cannot be undone. */
+.waka-note-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  margin: var(--sp-24) 0 0;
+}
+
+.waka-note-foot button {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.waka-note-foot button:hover,
+.waka-note-foot button:focus-visible {
+  color: var(--ink);
+}
+
 .waka-over-one {
   display: flex;
   flex-direction: column;
@@ -2955,8 +3019,15 @@
 
 .jar-char-claim--reading .jar-char-claim-statement {
   color: var(--ink);
-  /* Read, not operated — see `--waka-read`. */
-  font-family: var(--waka-read);
+  /* THE COMPANION SPEAKS IN THE INTERFACE FACE, NOT THE READING ONE.
+     Founder, shown the same bubble set both ways: "I prefer this font
+     over [the serif]." The reading face stays where a person settles in to
+     READ — a page's name, a saved thought opened, a conversation's turns,
+     a principle. A bubble is a line somebody SAYS, it is five words long,
+     and at that length a serif reads as a pull quote rather than as
+     speech. The claim keeps the same voice because it comes from the same
+     mouth. */
+  font-family: var(--waka-face);
 }
 
 .jar-char-claim-statement {
@@ -3674,8 +3745,15 @@
 .jar-char-bubble-reading {
   display: block;
   max-width: 24rem;
-  /* Read, not operated — see `--waka-read`. */
-  font-family: var(--waka-read);
+  /* THE COMPANION SPEAKS IN THE INTERFACE FACE, NOT THE READING ONE.
+     Founder, shown the same bubble set both ways: "I prefer this font
+     over [the serif]." The reading face stays where a person settles in to
+     READ — a page's name, a saved thought opened, a conversation's turns,
+     a principle. A bubble is a line somebody SAYS, it is five words long,
+     and at that length a serif reads as a pull quote rather than as
+     speech. The claim keeps the same voice because it comes from the same
+     mouth. */
+  font-family: var(--waka-face);
   font-size: var(--t-ui);
   font-weight: inherit;
   line-height: 1.45;

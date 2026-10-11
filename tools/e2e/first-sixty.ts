@@ -54,7 +54,7 @@
  */
 import { type BrowserContext, type Page, type Route } from "playwright";
 import { launchChromium } from "./browser";
-import { saveAnInspiration } from "./keep";
+import { openTheNotepad, saveAnInspiration } from "./keep";
 /**
  * TWO EMPTIES, NOT ONE.
  *
@@ -326,7 +326,7 @@ const SURFACES: Surface[] = [
   {
     name: "the mouth, opened",
     open: async (page) => {
-      await page.locator(".jar-mouth-rest").first().click({ timeout: 8_000 });
+      await openTheNotepad(page);
       await page.waitForTimeout(1_000);
     },
   },

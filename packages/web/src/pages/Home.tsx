@@ -126,7 +126,6 @@ import {
   type BeingSprites,
   type Palette,
 } from "../canvas/palette";
-import { ReadingPage } from "../components/ReadingPage";
 import { SavesOverlay } from "../components/SavesOverlay";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { ClaimsOverlay } from "../components/ClaimsOverlay";
@@ -14901,9 +14900,42 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          because there is nothing on the other side of it —
                          a control that opens an empty page is worse than no
                          control. */
+                      /* ═══ WHAT IT SAYS IS THE DOOR, AND THE DOOR IS A CHAT
+                         Founder, twice: "no matter what the character is
+                         saying, clicking on what it says should open up a
+                         chat. So even when user clicks on a top of mind, it
+                         should open up a chat" — and then, pinning the one
+                         exception: "except when it says 'feeling inspired,
+                         save it', then that should open a new inspiration."
+
+                         ONE RULE INSTEAD OF THREE. This bubble had a
+                         different destination per sentence: the offer opened
+                         the notepad, a reading opened `?open=reading`, and
+                         the empty line opened nothing at all — so what
+                         pressing the bubble did depended on which of three
+                         states it happened to be in, and two of them were
+                         unguessable. Now the sentence always leads into a
+                         conversation ABOUT itself, and the one exception is
+                         the one whose own words name a different act.
+
+                         WHY A CHAT RATHER THAN THE READING PAGE. The reading
+                         surface was built on "the user can click on it to go
+                         to a new page where the user can engage with it",
+                         and a chat is that sentence answered better: it is
+                         where engaging actually happens, and the statement
+                         arrives in it as the thing being talked about rather
+                         than as a heading with controls underneath.
+
+                         THE EMPTY LINE IS STILL NOT A DOOR. "I haven't
+                         formed anything yet" has nothing on the other side
+                         of it — a conversation seeded with a sentence about
+                         having nothing to say is a worse first chat than no
+                         chat, and a control that opens one is the "opens an
+                         empty page" failure this branch already refused. */
                       lead ? (
                         <button type="button" className="jar-char-bubble-reading jar-char-bubble-open"
-                          onClick={() => openOverHome('reading')}>
+                          disabled={talking}
+                          onClick={() => { void talkAbout({ id: '', text: lead.body }); }}>
                           {lead.body}
                         </button>
                       ) : (
@@ -14918,21 +14950,31 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           {!mouthOpen && charSay && charSay !== say('worldSavedWord') ? (
             <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
               <div className="jar-char-bubble-body">
-                <p role="status">{charSay}</p>
-                {/* NOT A BUTTON. Founder: "talk about this rather than put
-                    it in a button." A pill inside a speech bubble is a dialog
+                {/* THE SENTENCE IS THE DOOR — there is no longer a second
+                    line under it offering to open one.
+
+                    Founder: "no matter what the character is saying, clicking
+                    on what it says should open up a chat." A "Talk about
+                    this" beneath the words was already most of the way there
+                    — it was deliberately not a pill, for the reason below —
+                    but it still made a person read two lines to act on one,
+                    and it put the verb somewhere other than the thing the
+                    verb is about.
+
+                    KEPT FROM THE OLD NOTE, because the reasoning survives
+                    the control: "a pill inside a speech bubble is a dialog
                     box with an OK in it — the bubble stops reading as
                     something said and starts reading as something that wants
-                    an answer. It is a line of the same speech, underlined,
-                    the way an offer is made in a sentence rather than
-                    presented as a control. */}
+                    an answer." That is still why this is a line of speech
+                    wearing a press, and not a button. */}
                 <button
                   type="button"
-                  className="jar-char-bubble-go"
+                  className="jar-char-bubble-reading jar-char-bubble-open"
                   disabled={talking}
+                  role="status"
                   onClick={() => { void talkAbout({ id: '', text: charSay }); }}
                 >
-                  {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
+                  {charSay}
                 </button>
               </div>
             </div>
@@ -16655,25 +16697,24 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           an unrelated statement would be a second anonymous surface. The
           title follows the wall rather than the stored stance, so it cannot
           disagree with the world it is covering. */}
-      {/* ═══ THE READING'S OWN PAGE ═══════════════════════════════════════
-          Founder: "the speech bubble should show its top of mind at the
-          moment. And the user can click on it to go to a new page where the
-          user can engage with it."
+      {/* ═══ THE READING PAGE IS GONE, AND THE BUBBLE IS WHY ═══════════
+          It was reached from exactly one place: pressing the top of mind in
+          the creature's bubble, under "the user can click on it to go to a
+          new page where the user can engage with it". That press opens a
+          CONVERSATION now — founder: "even when user clicks on a top of
+          mind, it should open up a chat" — which is that sentence answered
+          better, because a chat is where engaging actually happens.
 
-          Only where there is one to engage with: the bubble renders the
-          reading as a door only when `lead` exists, and this guards the same
-          fact rather than trusting it — a cold link to `?open=reading` on an
-          account with no reading has to land somewhere honest. It closes to
-          the world, which is where that link's reader already is. */}
-      {viewNavigation.view?.open==='reading' ? (lead ? <ReadingPage locale={locale}
-        statement={lead.body} whenMs={lead.createdMs ?? null}
-        grounds={posterGrounds}
-        builtFrom={posterChain.length > 0 || posterReviewSignalIds.length > 0}
-        onGround={(id, value, contested, revision) => sayVerdict(id, value, undefined, contested, revision)}
-        onBuiltFrom={() => { setProvPick(null); setProv({ lead: lead.body, rows: posterChain, reviewSignalIds: posterReviewSignalIds }); }}
-        talking={talking}
-        onTalk={() => { void talkAbout({ id: '', text: lead.body }); }}
-        onClose={viewNavigation.closeOpen} /> : null) : null}
+          So the page had no door left. A surface nobody can reach is not a
+          feature in reserve, it is a thing that still compiles, still gets
+          read by whoever opens this file, and still has to be kept working
+          by everyone who changes the data under it. `?open=reading` goes
+          out of `ViewOpen` with it, so an old link fails honestly rather
+          than resolving to a blank world.
+
+          WHAT WENT WITH IT: `ReadingPage`, its provenance list, and the
+          copy that only it printed. `ReadingPanel` is untouched — it is a
+          different component and `/profile` still renders it. */}
       {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}

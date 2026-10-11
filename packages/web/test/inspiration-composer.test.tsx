@@ -51,8 +51,15 @@ it('saves once without asking the user to choose reflection, and blocks an unres
 it('opens straight into the words, under the moment and the way back',async()=>{
   await mount();
   expect(host.querySelector('h2')).toBeNull();
+  /* THE WAY BACK SAYS WHERE IT GOES, in words, rather than carrying the
+     destination in an `aria-label` that only a screen reader ever heard.
+     Founder, with a screenshot of the boxed chevron this replaced: "why is
+     this still here?" — it was the one back control in the product wearing
+     a box and the one naming its destination invisibly. It is the same
+     chevron-and-name the archive, the chats and an open note all use, and
+     `worldBackToAll` is the archive's own words. */
   const back=host.querySelector<HTMLButtonElement>('.jar-note-back')!;
-  expect(back.getAttribute('aria-label')).toBe('Past inspirations');
+  expect(back.textContent?.trim()).toBe('All inspirations');
   await act(async()=>back.click());
   expect(props.onPast).toHaveBeenCalledOnce();
   /* The one fact a blank page can state. Not asserted to an exact string —

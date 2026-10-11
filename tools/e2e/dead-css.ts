@@ -65,7 +65,7 @@ import { fileURLToPath } from "node:url";
 
 import { type BrowserContext, type CDPSession, type Page } from "playwright";
 import { launchChromium } from "./browser";
-import { saveAnInspiration } from "./keep";
+import { openTheNotepad, saveAnInspiration } from "./keep";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STYLES = resolve(HERE, "../../packages/web/src/styles");
 /** The sheets a rule can be attributed back to, in load order. */
@@ -520,7 +520,7 @@ async function surfaces(
   }
   await walkSurface(cdp, page, "the world", seen, ask);
 
-  await page.locator(".jar-mouth-rest").first().click();
+  await openTheNotepad(page);
   await page.waitForTimeout(1_000);
   await walkSurface(cdp, page, "the mouth open", seen, ask);
 

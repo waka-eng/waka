@@ -104,10 +104,18 @@ export function InspirationComposer(props: {
         row was a title and a Close — a dialog announcing itself in a bar,
         which is the one thing the reference's note page does not do. */}
     <div className="jar-note-top">
-      <button type="button" className="jar-note-back" aria-label={say('worldNotePast')} onClick={props.onPast}>
-        <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true" focusable="false">
-          <path d="M8 2 3.5 6.5 8 11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      {/* NAMED, LIKE EVERY OTHER WAY BACK IN THE PRODUCT. A bare chevron in
+          a box said nothing about where it went — founder, pointing at it:
+          "why is this still here?" — while the archive, the chats and an
+          open note all return with a chevron and the name of the place.
+          `worldBackToAll` is the archive's own words, which is exactly
+          where this goes. */}
+      <button type="button" className="jar-note-back" onClick={props.onPast}>
+        <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
+          <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
+            strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
+        {say('worldBackToAll')}
       </button>
       <span className="jar-note-when">{momentStamp(when.current, props.locale)}</span>
       {/* THE AUDIENCE PAIR IS GONE, AND SO IS WHAT IT CHOSE BETWEEN.

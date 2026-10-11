@@ -42,7 +42,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { launchChromium } from "./browser";
-import { saveAnInspiration } from "./keep";
+import { openTheNotepad, saveAnInspiration } from "./keep";
 
 async function main() {
   const out = process.argv[2] ?? "snap.json";
@@ -104,7 +104,7 @@ async function main() {
   await p.goto(base + "/", { waitUntil: "domcontentloaded" });
   await p.waitForTimeout(6000);
   snap["world"] = JSON.parse((await p.evaluate(PROBE)) as string);
-  await p.locator(".jar-mouth-rest").first().click();
+  await openTheNotepad(p);
   await p.waitForTimeout(1200);
   snap["world-mouth"] = JSON.parse((await p.evaluate(PROBE)) as string);
   writeFileSync(out, JSON.stringify(snap));
