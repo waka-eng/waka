@@ -108,7 +108,11 @@ body {
    * vocabulary is an alias of one of them, so a colour changes in exactly
    * one place and the two vocabularies cannot drift apart.
    * ------------------------------------------------------------- */
-  --moon-ground: #06080d;
+  /* The same night the world is made of — see `--jar-atmos` in `home.css`,
+     which carries the reasoning and the measurements. These two must be the
+     same value: a page one shade off the world it opens over is the "why is
+     this screen different" complaint in its purest form. */
+  --moon-ground: #0d131f;
   /**
    * THE INK IS WARM NOW, AND THE CONTRAST IS THE SAME NUMBER.
    *
