@@ -61,6 +61,7 @@ import postgres from "postgres";
 
 import { launchChromium } from "./browser";
 import { settleAfterArrival } from "./arrival";
+import { saveAnInspiration } from "./keep";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
 
@@ -147,10 +148,7 @@ const run = async (base: string): Promise<number> => {
       "and a third, nearer the present",
     ];
     for (const t of kept) {
-      await page.locator(".jar-mouth-rest").first().click();
-      await page.waitForTimeout(450);
-      await page.fill('textarea[aria-label="Capture inspiration"]', t);
-      await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
+      await saveAnInspiration(page, t);
       await page.waitForTimeout(2_800);
       await page.keyboard.press("Escape");
       await page.waitForTimeout(300);

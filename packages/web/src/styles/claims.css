@@ -331,7 +331,20 @@
    its time removing. */
 .waka-new-away {
   position: fixed;
-  z-index: 61;
+  /* UNDER THE BAR, NOT OVER IT. This was 61 and the sheet it dismisses was
+     62, which worked while the sheet was `fixed` and ranked against the same
+     scale. The sheet is the plus's own child now, so its `z-index` is
+     resolved INSIDE the dock's stacking context and the whole thing ranks at
+     the dock's 60 — one below this, which then sat over the two rows it
+     exists to let you walk away from and swallowed every press on them.
+
+     59 is the correct side of the bar. Everything the ground is for — the
+     world, a destination behind it — is below the dock; everything that must
+     stay pressable while the sheet is up is the dock and the sheet, which
+     are above. It also means a press on another dock row still goes to that
+     row rather than being spent on a dismissal, which is what a person
+     pressing "Chats" with the sheet open is asking for. */
+  z-index: 59;
   inset: 0;
   padding: 0;
   border: 0;
@@ -341,15 +354,38 @@
 
 /* OVER THE DOCK, NOT IN THE MIDDLE OF THE SCREEN. A sheet that answers a
    press belongs where the press happened. */
+/* THE SLOT THE PLUS STANDS IN, so what it raises can be centred on IT rather
+   than on the window. The dock does not clip, so an absolute child reaches
+   above it without anything having to be told how tall the bar is. */
+.waka-dock-slot {
+  position: relative;
+  display: inline-flex;
+}
+
 .waka-new {
-  position: fixed;
+  /* ANCHORED TO THE BUTTON, AND THEREFORE CORRECT IN EVERY LOCALE.
+     `fixed; left: 50%` centred this on the viewport while the plus is
+     centred in a row of four words of unequal length — two pixels apart in
+     English at 1280, and however far apart the labels happen to put them in
+     Korean. There is no number here to keep in step: the sheet is centred on
+     its parent and its parent IS the plus. */
+  position: absolute;
   z-index: 62;
   left: 50%;
-  bottom: calc(var(--sp-20) + var(--waka-corner) + var(--sp-12) + var(--sp-12) + env(safe-area-inset-bottom));
+  /* The plus is the anchor, so the air has to clear the BAR the plus sits
+     in: the dock's own padding, and then the twelve pixels that separated
+     the two before this moved. Written as the sum rather than as one number
+     so whoever changes the dock's padding can see that this follows it. */
+  bottom: calc(100% + var(--sp-6) + var(--sp-12));
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
-  min-width: 13rem;
+  /* IT HUGS ITS TWO WORDS. `13rem` was a floor set when this floated free of
+     everything, and against a small centred glyph a 208px slab holding two
+     short labels does not read as anchored to it — it reads as a panel that
+     happens to be nearby. Sized to its contents, the sheet is about as wide
+     as the words in it and the plus sits under its middle, which is the
+     whole of what makes the two look related. */
   padding: var(--sp-6);
   border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
@@ -368,7 +404,11 @@
   font-size: var(--t-ui);
   letter-spacing: normal;
   text-transform: none;
-  text-align: left;
+  /* CENTRED, BECAUSE THE THING THAT RAISED THIS IS. A left-aligned column of
+     rows is right for a menu dropped from a corner; this one hangs off a
+     glyph in the middle of a bar, and left-aligning its rows put their text
+     start a hundred pixels to the left of the press that opened them. */
+  text-align: center;
   white-space: nowrap;
   cursor: pointer;
   transition: color 0.2s ease;
@@ -3669,15 +3709,31 @@
   letter-spacing: normal;
   text-transform: none;
   text-align: center;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  /* NO UNDERLINE. Founder: "the feeling inspired save it should not have an
+     underline."
+
+     WHAT IS GIVEN UP, because this file's own rule is that underline is the
+     page's single interactivity signal: the words no longer carry a mark
+     saying they can be pressed. What they have instead is stronger and was
+     already true — the bubble appeared BECAUSE the person just pressed the
+     creature, so it is an answer to their own gesture rather than a control
+     they have to discover, and it is the only thing in the bubble. A rule
+     drawn under a five-word reply to a press you just made is explaining a
+     thing the press already explained.
+
+     THE KEYBOARD STILL NEEDS ONE, AND THE UNDERLINE WAS IT. `global.css`
+     sets `:focus-visible { outline: none }` and makes every control supply
+     its own, so deleting the rule below would have left this with no focus
+     state at all — which `e2e:by-keyboard` fails the build over, correctly.
+     A ring is not an underline: it appears only when reached by key, so it
+     is absent from the thing the founder was looking at. */
   cursor: pointer;
 }
 
-.jar-char-offer:hover,
 .jar-char-offer:focus-visible {
-  text-decoration-color: currentColor;
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: var(--waka-r-hand-sm);
 }
 
 .jar-char-bubble {

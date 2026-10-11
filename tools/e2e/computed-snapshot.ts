@@ -42,6 +42,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { launchChromium } from "./browser";
+import { saveAnInspiration } from "./keep";
 
 async function main() {
   const out = process.argv[2] ?? "snap.json";
@@ -97,10 +98,7 @@ async function main() {
     "a register worn in two places is two registers",
     "the same words, the same voice, on every surface",
   ]) {
-    await p.locator(".jar-mouth-rest").first().click();
-    await p.waitForTimeout(700);
-    await p.fill('textarea[aria-label="Capture inspiration"]', text);
-    await p.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
+    await saveAnInspiration(p, text);
     await p.waitForTimeout(4500);
   }
   await p.goto(base + "/", { waitUntil: "domcontentloaded" });

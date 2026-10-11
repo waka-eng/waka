@@ -47,6 +47,7 @@
 import { type Browser, type BrowserContext, type Page, type Route } from "playwright";
 import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
+import { saveAnInspiration } from "./keep";
 interface Args {
   baseUrl: string;
   negative: boolean;
@@ -183,10 +184,7 @@ async function keepInWorld(page: Page, base: string, text: string): Promise<numb
     await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(6_000);
   }
-  await page.locator(".jar-mouth-rest").first().click();
-  await page.waitForTimeout(700);
-  await page.fill('textarea[aria-label="Capture inspiration"]', text);
-  await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
+  await saveAnInspiration(page, text);
   /* WHAT THE WORLD SAID, READ WHILE IT IS SAYING IT. The character's voice
      clears itself after four seconds, so a caller that waits for the keep to
      settle and THEN reads the page finds the resting label and concludes
@@ -653,10 +651,7 @@ const JOURNEYS: Journey[] = [
          opens the question over it in one press, with the question already
          written. So the harness no longer has to know the shape of a
          two-field form; it answers the question the world asked. */
-      await page.locator(".jar-mouth-rest").first().click();
-      await page.waitForTimeout(700);
-      await page.fill('textarea[aria-label="Capture inspiration"]', phrase);
-      await page.locator(".jar-mouth-where button", { hasText: /^reflect$/ }).first().click();
+      await saveAnInspiration(page, phrase);
       await page.waitForTimeout(5_000);
 
       const box = await page.$(".jar-reflect-room .jar-reflect-box");
