@@ -81,15 +81,7 @@ export function citedWords(titles: string[], locale: WordsLocale = "en-US"): str
  * numerals never"; see the note inside `dateWords` for why a date is not one
  * of the states that rule is about.
  */
-const ORD_ONES = [
-  "zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
-  "eighth", "ninth", "tenth", "eleventh", "twelfth", "thirteenth", "fourteenth",
-  "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth",
-];
-const ORD_TENS = [
-  "", "", "twentieth", "thirtieth", "fortieth", "fiftieth", "sixtieth",
-  "seventieth", "eightieth", "ninetieth",
-];
+/* The two ordinal tables went with `ordWords`, their only reader. */
 const TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
 const ONES = [
   "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
@@ -303,17 +295,13 @@ export function givenName(full: string): string {
  * if the drawing ever needs words back.
  */
 
-/** Ordinals as words — "twenty-fifth" / "스물다섯 번째", never "25th". */
-export function ordWords(n: number, locale: WordsLocale = "en-US"): string {
-  if (locale === "ko-KR") {
-    if (n < 1 || n > 99) return String(n);
-    return n === 1 ? "첫 번째" : `${koNativeCount(n)} 번째`;
-  }
-  if (n < 20) return ORD_ONES[n] ?? String(n);
-  if (n > 99) return String(n);
-  const o = n % 10;
-  return o === 0 ? ORD_TENS[Math.floor(n / 10)] : `${TENS[Math.floor(n / 10)]}-${ORD_ONES[o]}`;
-}
+/* `ordWords` IS GONE — ordinals as words, "twenty-fifth" rather than "25th",
+   called by nothing. The one ordinal this product still prints is the
+   archive's row number, and the founder's ruling put that in DIGITS on
+   purpose: "it's like your fifth inspiration, your 100th inspiration", set
+   as an italic accent numeral (`.waka-list-index`). A spelled-out ordinal
+   would make a person do arithmetic to find out which save they are looking
+   at, which is the same argument `dateWords` makes about dates. */
 /**
  * A year the way it is spoken — "twenty twenty-six", never "2026". The
  * two-thousands take the other form ("two thousand seven") until the tens

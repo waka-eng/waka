@@ -269,15 +269,10 @@ export function carryOf(input: {
  */
 export const BULB_FLOOR = 0.12;
 
-/**
- * The character's light, 0..1, from days since the last thing was kept.
- *
- * A negative or absent number is treated as "just now" rather than as an
- * error: a clock that disagrees with the server by a second should brighten
- * the bulb, never blank it.
- */
-export function bulbGlow(quietDays: number): number {
-  const quiet = Number.isFinite(quietDays) ? Math.max(0, quietDays) : 0;
-  const decayed = Math.pow(2, -quiet / FIELD_DECAY_HALF_LIFE_DAYS);
-  return BULB_FLOOR + (1 - BULB_FLOOR) * decayed;
-}
+/* `bulbGlow` IS GONE — the character's light from days-since-last-kept,
+   called by nothing. The creature's brightness comes from the FIELD now
+   (`lit`, which the frame loop derives from what is alive in it), which is
+   the same idea measured from the material rather than from a clock: a
+   quiet fortnight dims it because nothing in the jar is bright, not because
+   a timer said so. `BULB_FLOOR` and `FIELD_DECAY_HALF_LIFE_DAYS` stay —
+   they are read by what replaced it. */
