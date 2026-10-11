@@ -21,8 +21,8 @@ export type ViewSection = 'top' | 'field' | 'sky';
  * because two of these open at once is not a state anyone meant and a
  * boolean trio makes it representable.
  */
-export type ViewOpen = 'saves' | 'principles' | 'conversations';
-const OPEN: readonly ViewOpen[] = ['saves', 'principles', 'conversations'];
+export type ViewOpen = 'saves' | 'claims' | 'principles' | 'conversations';
+const OPEN: readonly ViewOpen[] = ['saves', 'claims', 'principles', 'conversations'];
 export interface ViewLocation {
   wallId: string | null;
   label?: string;

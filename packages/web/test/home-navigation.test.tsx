@@ -96,18 +96,40 @@ it('opens your own material over a world that never leaves, and the world is one
   expect(new URLSearchParams(location.search).get('open')).toBe('conversations');
 });
 
-it('offers the three depths in the centre and nothing else',async()=>{
-  /* The centre answers WHICH — the same material at three depths. It does not
+it('offers the four depths in the centre, in the order of the ladder, and nothing else',async()=>{
+  /* The centre answers WHICH — the same material at four depths. It does not
      answer WHOSE (the creature's two faces do) and it does not answer what
      you have talked about (the corner does). Each of those was in here at
      some point and each one made the control answer a question it was not
-     shaped for. */
+     shaped for.
+
+     CLAIMS JOINED ON 2026-10-11, and the ORDER is the assertion that matters:
+     the data model has always been inspiration -> signal -> top of mind ->
+     principle, and the signals were the one layer with no door — reachable
+     only one at a time, in the creature's mouth, on the home screen. Putting
+     the row anywhere but second would make the switcher a menu of places
+     instead of a ladder, which is the thing that lets a person read the whole
+     product off one control. */
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  /* Laid out, not listed: the three are on screen without a press, which is
-     the whole of the change. A person can see that the other two exist — and
+  /* Laid out, not listed: all four are on screen without a press, which is
+     the whole of the change. A person can see that the others exist — and
      that they are an axis — without opening anything. */
   const rows=[...world.container.querySelectorAll('.waka-rungs .waka-rung')].map(node=>node.textContent?.trim());
-  expect(rows).toEqual(['Your inspirations','Your top of mind','Your principles']);
+  expect(rows).toEqual(['Your inspirations','Your claims','Your top of mind','Your principles']);
+});
+
+it('opens the claims room from the centre, and names it while it is open',async()=>{
+  /* The rung is a door, not a label — the shape this codebase keeps
+     relearning is a control that renders, is labelled, and does nothing. And
+     the switcher must name the rung being READ while the overlay is up:
+     `page-menu` once passed an `open` value it had no row for, so the control
+     whose whole job is to say where you are said somewhere else. */
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
+  await chooseFromMenu(world.container,'Your claims');await settle();
+  expect(new URLSearchParams(location.search).get('open')).toBe('claims');
+  expect(location.pathname).toBe('/');
+  await closeOverlay(world.container);await settle();
+  expect(new URLSearchParams(location.search).get('open')).toBeNull();
 });
 
 it('keeps the selected principle and its route after editing, so Back returns to the prior view',async()=>{

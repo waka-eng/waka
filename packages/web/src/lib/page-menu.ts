@@ -1,5 +1,5 @@
 /**
- * THE THREE VIEWS IN THE CENTRE, CONVERSATIONS IN THE CORNER, IDENTITY ON THE
+ * THE FOUR VIEWS IN THE CENTRE, CONVERSATIONS IN THE CORNER, IDENTITY ON THE
  * CREATURE.
  *
  * Founder: "top left button should be chat history since moving between
@@ -23,10 +23,10 @@
  * So the three controls now ask three different questions and none of them
  * can answer another's:
  *
- *   WHICH — the centre. Your inspirations, your top of mind, your principles.
- *   The same material at three depths: what you kept, what it adds up to now,
- *   and what has endured. One axis, so the honest control names the rung you
- *   are on.
+ *   WHICH — the centre. The same material at four depths: what you kept, what
+ *   it is noticing, what it adds up to now, and what has endured. One axis,
+ *   so the honest control names the rung you are on. Claims joined on
+ *   2026-10-11: the data model's four layers, finally all with doors.
  *
  *   WHOSE — the creature. Two faces, one companion.
  *
@@ -82,7 +82,7 @@ export interface PageMenu {
 }
 
 /**
- * THE THREE THINGS YOU OPEN, and each says what it is made of.
+ * THE FOUR THINGS YOU OPEN, and each says what it is made of.
  *
  * Founder, on the top of mind: "show hover card to explain how this is
  * created." All of them get it, because the question is the same question: a
@@ -110,6 +110,13 @@ const VIEWS: ReadonlyArray<{
    */
 }> = [
   { what: "saves", id: "saves", label: "worldMenuField", agentLabel: "worldAgentField" },
+  /* THE RUNG THAT HAD NO DOOR. The data model has always had four layers —
+     inspiration, signal, top of mind, principle — and the signals were
+     reachable only one at a time, in the creature's mouth, on the home
+     screen. That is the right place for ONE of them and the wrong place for a
+     queue; see `ClaimsOverlay`. Second, because that is where it sits on the
+     ladder: between what you kept and what it adds up to. */
+  { what: "claims", id: "claims", label: "worldMenuClaims", agentLabel: "worldAgentClaims" },
   { what: null, id: "top-of-mind", label: "worldMenuTopOfMind", agentLabel: "worldAgentTopOfMind" },
   { what: "principles", id: "principles", label: "worldPrinciplesShortcut", agentLabel: "worldAgentPrinciples" },
 ];
@@ -173,7 +180,8 @@ export function usePageMenu(
        * of your material, so the honest answer while one is open is the rung
        * underneath it — which is what this now says.
        */
-      current: open === "saves" || open === "principles" ? open : "top-of-mind",
+      current:
+        open === "saves" || open === "claims" || open === "principles" ? open : "top-of-mind",
       standing,
       stand: (next: Standing | null) => setStanding(accountId, next),
       onSettings: () => navigate("/profile"),
