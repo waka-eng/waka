@@ -1754,6 +1754,31 @@
    the mic is how words get IN, not where they go. Grouping it with the
    destinations would make the footer read as three things you could press to
    finish, one of which does not finish anything. */
+/* THE RECORDER SAYS WHAT IT IS DOING, AND WHAT WENT WRONG.
+   Founder: "speech to text not working." It was running and unable to speak —
+   the hook's `error`, `notice` and `seconds` were rendered by nothing, so four
+   different failures all looked identical from the outside, which is to say
+   like a dead button. Quiet, beside the control, in the register the rest of
+   the footer uses; the failure takes the ink because it is the one a person
+   has to act on. */
+.waka-composer-recording,
+.waka-composer-recording-why {
+  font-family: var(--waka-face);
+  font-size: var(--t-fine);
+  color: var(--muted);
+  /* ONE LINE, ALWAYS — it sits in a row of controls the founder asked never
+     to wrap. A long failure sentence ellipsises rather than reflowing the
+     footer under the box. */
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.waka-composer-recording-why[role="alert"] {
+  color: var(--ink);
+}
+
 .waka-composer-mic {
   order: -1;
   display: inline-flex;

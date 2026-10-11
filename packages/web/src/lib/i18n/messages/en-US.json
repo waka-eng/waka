@@ -239,6 +239,7 @@
   "worldComposerOpening": "Opening your draft…",
   "worldComposerPhoto": "＋ Photo",
   "worldComposerRecord": "● Record",
+  "worldComposerRecordingFor": "Recording · {seconds}s",
   "worldComposerSeparateDraft": "Keep as a separate draft",
   "worldComposerStop": "Stop recording",
   "worldComposerStopRecording": "Stop recording",

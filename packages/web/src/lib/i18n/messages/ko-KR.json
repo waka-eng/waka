@@ -239,6 +239,7 @@
   "worldComposerOpening": "초안을 여는 중…",
   "worldComposerPhoto": "＋ 사진",
   "worldComposerRecord": "● 녹음",
+  "worldComposerRecordingFor": "녹음 중 · {seconds}초",
   "worldComposerSeparateDraft": "별도 초안으로 보관",
   "worldComposerStop": "녹음 마치기",
   "worldComposerStopRecording": "녹음 멈추기",
