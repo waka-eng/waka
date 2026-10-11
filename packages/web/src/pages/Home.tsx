@@ -13974,6 +13974,34 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       </svg>
                     </button>
                   ) : null}
+                  {/* WHAT THE MICROPHONE IS DOING, AND WHAT WENT WRONG.
+                      Founder: "speech to text not working."
+
+                      It was working, in the sense that the code ran. What it
+                      could not do was SAY anything: `error`, `notice` and
+                      `seconds` were all computed by the hook and rendered by
+                      nobody. So a refused permission, a browser that cannot
+                      record, a disconnected microphone and a clip over the
+                      size limit were four different failures that each
+                      produced exactly one outcome on screen — nothing. The
+                      button looked pressed and the product looked broken,
+                      which is the same thing from the outside.
+
+                      This repo states the rule it was breaking: never turn a
+                      visible failure into a silent one. And the elapsed count
+                      is here for the same reason — a recorder with no
+                      running number is a control you have to trust rather
+                      than one you can watch. */}
+                  {recording.phase === 'recording' ? (
+                    <span className="waka-composer-recording" role="status">
+                      {formatMessage(locale, 'worldComposerRecordingFor', { seconds: recording.seconds })}
+                    </span>
+                  ) : null}
+                  {recording.error || recording.notice ? (
+                    <span className="waka-composer-recording-why" role={recording.error ? 'alert' : 'status'}>
+                      {recording.error || recording.notice}
+                    </span>
+                  ) : null}
                   {/* WHAT IS NOT IN THIS FOOTER ANY MORE.
                       "Enter to keep" — founder pointed at exactly this as the
                       example of a thing that is not 100% necessary. It was
