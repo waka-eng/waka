@@ -702,7 +702,11 @@ describe("board acts leave receipts", () => {
     expect(refreshState.requests).toBe(0);
   });
   it("does not call queued work a completed redraw", async () => {
-    await press(".jar-board-act", /refresh reading/i);
+    /* "Refresh reading" -> "Write a new one". Founder: "i dont get what
+       these 4 options mean." The verb is unchanged and so is everything these
+       three cases protect; "refresh" described the mechanism, and the new
+       name describes what happens to you. */
+    await press(".jar-board-act", /write a new one/i);
     await press(".jar-board-act", /^read again$/i);
     expect(refreshState.requests).toBe(1);
     expect(posterText()).toBe(FIRST);
@@ -712,7 +716,7 @@ describe("board acts leave receipts", () => {
   it("shows the completed current headline instead of the boot-time override", async () => {
     refreshState.body = "We now test assumptions with a small experiment";
     refreshState.status = "succeeded";
-    await press(".jar-board-act", /refresh reading/i);
+    await press(".jar-board-act", /write a new one/i);
     await press(".jar-board-act", /^read again$/i);
     await layout.step(20);
     expect(posterText()).toBe(refreshState.body);
@@ -720,7 +724,7 @@ describe("board acts leave receipts", () => {
 
   it("keeps an empty completion visible after the old headline disappears", async () => {
     refreshState.empty = true; refreshState.status = "succeeded";
-    await press(".jar-board-act", /refresh reading/i);
+    await press(".jar-board-act", /write a new one/i);
     await press(".jar-board-act", /^read again$/i);
     await layout.step(10);
     expect(layout.container.textContent).not.toContain(FIRST);

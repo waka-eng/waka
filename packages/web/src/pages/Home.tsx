@@ -3361,7 +3361,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setCharSay(fallback());
       return;
     }
-    fetchTheWeather({ antechamber: false })
+    /* The wall says whose day this is. `atWallRef` rather than `atWall`
+       because this callback is built once and must read the CURRENT wall,
+       not the one that existed when it was made — the same reason every
+       other seam in this file reaches through a ref. */
+    fetchTheWeather({ antechamber: false,
+      ...(atWallRef.current.kind === 'agent' ? { profile: atWallRef.current.id } : {}) })
       .then((weather) => {
         const day = weather.days[0];
         /* counts only, and no day label — the founder liked the sentence
@@ -13432,7 +13437,29 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                            sentence somebody wrote by hand, and saying so is
                            more useful than an empty band */
                         <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
-                          <p className="jar-prov-lead jar-label">{say(w.kind === "self" && lead?.supportChanged ? "worldReadingSupportChanged" : "worldWrittenByHand")}</p>
+                          {/* THE LABEL NAMES WHAT THIS IS; IT DOES NOT REPEAT
+                              WHAT IT SAYS. Founder, on a screenshot of this
+                              band: "has duplicatives + i dont get what it
+                              means."
+
+                              Both halves were true. When a reading's support
+                              had changed, this printed
+                              `worldReadingSupportChanged` — "This reading
+                              needs another look." — in the uppercase label
+                              register, with the SAME sentence set directly
+                              beneath it as the statement. One string, twice,
+                              in two voices, which reads as a stutter rather
+                              than as emphasis. Somebody had already noticed
+                              half of it: the branch further down suppresses
+                              the same repeat in the other place it could
+                              happen, and stopped there.
+
+                              And a status is not a provenance. This band's
+                              job is to say where the sentence came from —
+                              by hand, or from the chain above it. "Needs
+                              another look" is a state of the reading, and
+                              the sentence below is already carrying it. */}
+                          <p className="jar-prov-lead jar-label">{say("worldWrittenByHand")}</p>
                         </div>
                       )
                     ) : null}
@@ -13448,25 +13475,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             </span>
                             <button
                               type="button"
-                              className="jar-board-act jar-label"
+                              className="jar-board-act"
                               onClick={() => rereadGroupBoard(w.id)}
                             >
                               {say("worldReadAgain")}
                             </button>
                             <button
                               type="button"
-                              className="jar-board-act jar-label"
+                              className="jar-board-act"
                               onClick={() => setGroupReading("rest")}
                             >
                               {say("worldLeaveItCap")}
                             </button>
                           </>
                         ) : groupReading === "working" ? (
-                          <span className="jar-board-act jar-label">{say("worldReadingNow")}</span>
+                          <span className="jar-board-act">{say("worldReadingNow")}</span>
                         ) : (
                           <button
                             type="button"
-                            className="jar-board-act jar-label"
+                            className="jar-board-act"
                             onClick={() => setGroupReading("asking")}
                           >
                             {say("worldReadItAgain")}
@@ -13542,7 +13569,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       <p className="jar-board-acts jar-reading-status" role="status" data-jar-chrome="1">
                         {readingMessage === "worldReadingSupportChanged" ? null : say(readingMessage)}
                         {!readingRefresh.busy && (readingCheckFailed || readingChecking || topOfMind?.supportChanged || readingRefresh.canResume || ["error", "failed", "unknown"].includes(readingRefresh.phase)) ? (
-                          <button className="jar-board-act jar-label" type="button" disabled={readingChecking}
+                          <button className="jar-board-act" type="button" disabled={readingChecking}
                             onClick={() => readingCheckFailed ? verifyReadingRef.current(true) : void readingRefresh.start()}>
                             {say(readingCheckFailed || readingChecking ? "worldReadingCheckAgain" : readingRefresh.canResume ? "worldReadCheck" : "worldReadAgain")}
                           </button>
@@ -13572,7 +13599,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     (posterAsk || board.step !== "rest") ? (
                       <div className={`jar-board-acts${readingMessage !== null ? " jar-reading-status" : ""}`} data-jar-chrome="1">
                         {readingRefresh.busy ? (
-                          <span className="jar-board-act jar-label" role="status">{say(readingMessage ?? "worldReadingNow")}</span>
+                          <span className="jar-board-act" role="status">{say(readingMessage ?? "worldReadingNow")}</span>
                         ) : board.step === "asking" ? (
                           <>
                             {/* WHAT WILL CHANGE, BEFORE IT CHANGES. Frostpunk's
@@ -13587,14 +13614,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             </span>
                             <button
                               type="button"
-                              className="jar-board-act jar-label"
+                              className="jar-board-act"
                               onClick={rebuildBoard}
                             >
                               {say("worldReadAgain")}
                             </button>
                             <button
                               type="button"
-                              className="jar-board-act jar-label"
+                              className="jar-board-act"
                               onClick={() => setBoard({ step: "rest" })}
                             >
                               {say("worldLeaveItCap")}
@@ -13607,26 +13634,64 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                 {readingMessage ? say(readingMessage) : boardToast}
                               </span>
                             ) : null}
+                            {/* "REFRESH READING" -> "WRITE A NEW ONE", because
+                                the name was the defect and not the verb.
+                                Founder: "i dont get what these 4 options
+                                mean."
+
+                                "Refresh" is what you do to a web page. It
+                                describes a mechanism — re-run the generator —
+                                rather than the thing that happens, which is
+                                that WAKA writes you a new sentence from what
+                                you have saved since. Said that way it is the
+                                one verb here nobody has to be taught.
+
+                                An earlier attempt at this REMOVED the verb,
+                                on the argument that a reading re-forms when
+                                its material changes so a manual refresh says
+                                the promise is not trusted. That argument is
+                                decent and the change was wrong: it orphaned
+                                the confirm step below it, leaving a branch
+                                with nothing able to open it — the exact
+                                unreachable-code shape this file has spent the
+                                night deleting elsewhere. A control nobody
+                                understands is fixed by naming it. */}
                             <button
                               type="button"
-                              className="jar-board-act jar-label"
+                              className="jar-board-act"
                               disabled={readingChecking}
                               onClick={() => readingCheckFailed ? verifyReadingRef.current(true)
                                 : readingRefresh.canResume ? void readingRefresh.start() : setBoard({ step: "asking" })}
                             >
-                              {say(readingCheckFailed || readingChecking ? "worldReadingCheckAgain" : readingRefresh.canResume ? "worldReadCheck" : "worldReadItAgain")}
+                              {say(readingCheckFailed || readingChecking ? "worldReadingCheckAgain" : readingRefresh.canResume ? "worldReadCheck" : "worldWriteANewOne")}
                             </button>
-                            {/* Holding is the person overruling the ordering:
+                            {/* HOLDING IS A STATE, AND IT STOPS SITTING IN THE
+                                ROW OF VERBS. Founder: "i dont get what these
+                                4 options mean (held up isnt even clickable)."
+
+                                Exactly — it never was. `holdTopOfMindEntry`
+                                has no inverse BY DESIGN, stated where it is
+                                implemented: "you either keep a statement or
+                                you say it is not you; a toggle back through
+                                'held' would be a third state that means
+                                nothing." That reasoning is right and it is
+                                not what was wrong. What was wrong is that a
+                                state was drawn in the same uppercase label
+                                register, at the same size, in the same row,
+                                as three things you press — so the only way to
+                                discover it was not a control was to press it
+                                and get nothing. A dead press is the shape
+                                this codebase keeps relearning.
+
+                                Holding is the person overruling the ordering:
                                 the server keeps feeding the entry but never
-                                moves it off the poster again. */}
-                            {lead.pinned ? (
-                              <span className="jar-board-act jar-label jar-board-act--held">
-                                {say("worldHeldUp")}
-                              </span>
-                            ) : (
+                                moves it off the poster again. Said once, in
+                                the statement's own provenance band, where the
+                                other facts about this sentence already live. */}
+                            {lead.pinned ? null : (
                               <button
                                 type="button"
-                                className="jar-board-act jar-label"
+                                className="jar-board-act"
                                 onClick={() => holdLead(lead)}
                               >
                                 {say("worldKeepThisOneUp")}
@@ -13634,7 +13699,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             )}
                             <button
                               type="button"
-                              className="jar-board-act jar-label"
+                              className="jar-board-act"
                               onClick={() => editing.begin("entry", lead.id, lead.body)}
                             >
                               {say("worldSayItInMyWordsCap")}
@@ -13647,14 +13712,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   </span>
                                   <button
                                     type="button"
-                                    className="jar-board-act jar-label"
+                                    className="jar-board-act"
                                     onClick={() => entrustLead(lead.id)}
                                   >
                                     {say("worldHandItBackCap")}
                                   </button>
                                   <button
                                     type="button"
-                                    className="jar-board-act jar-label"
+                                    className="jar-board-act"
                                     onClick={() => setEntrusting(null)}
                                   >
                                     {say("worldLeaveItAsItIsCap")}
@@ -13663,7 +13728,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               ) : (
                                 <button
                                   type="button"
-                                  className="jar-board-act jar-label jar-star-act"
+                                  className="jar-board-act jar-star-act"
                                   title={say(RECEIPTS.starHeld.messageKey)}
                                   onClick={() => setEntrusting(lead.id)}
                                 >
@@ -13673,7 +13738,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             ) : null}
                             <button
                               type="button"
-                              className="jar-board-act jar-label jar-board-act--quiet"
+                              className="jar-board-act jar-board-act--quiet"
                               onClick={() => dropLead(lead)}
                             >
                               {say("worldNotThis")}

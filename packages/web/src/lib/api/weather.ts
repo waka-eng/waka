@@ -42,10 +42,21 @@ export interface ApiWeather {
 }
 
 export async function fetchTheWeather(
-  options: { since?: Date; antechamber?: boolean } = {},
+  options: { since?: Date; antechamber?: boolean; profile?: string } = {},
 ): Promise<ApiWeather> {
   const params = new URLSearchParams();
   if (options.since) params.set("since", options.since.toISOString());
+  /* WHOSE DAY IS BEING REPORTED. Founder: "the speech bubble text for me and
+     my agent is same - should never be like this."
+
+     The route has always read across profiles under the same matrix as every
+     other layer — `?profile=`, through `resolveProfileScope` — and this
+     client simply never sent one, so the companion reported YOUR day in
+     whatever form it was wearing. An agent that has its own saves, its own
+     signals and its own top of mind was speaking somebody else's news, which
+     is worse than saying nothing: it is the one surface where the two
+     profiles are visibly different and it insisted they were the same. */
+  if (options.profile) params.set("profile", options.profile);
   /* false = the telling only. Event counts carry no one's memory, so the
      server writes no consultation for that serve — which is what lets the
      companion be asked for the weather without the asking inflating the
