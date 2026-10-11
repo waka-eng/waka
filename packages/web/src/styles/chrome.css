@@ -10,7 +10,47 @@
    `test/type-scale.test.ts` carries a note about the day those ninety-six
    were removed and took twenty-one colour literals with them, which the
    ratchet had no way to notice. Dead rules are not inert. They are slack.
-   `.jar-conversation-body` stays: `ConversationPanel` still wears it. */
+   `.jar-conversation-body` stays: `ConversationPanel` still wears it.
+
+   FORTY MORE WENT OUT ON 2026-10-10, finishing the sweep that one started.
+   Founder, three separate times: "remove all unused and deadcode across the
+   codebase." Every name below was put to every .tsx file under src, to the
+   test suite, and to `tools/` first — and in both plain and template-literal
+   form. `.jar-mark` plus a double-dash and `spark` LOOKS dead to a plain grep
+   and is built at `Home.tsx:750` from the tier name, so a string search alone
+   would have deleted a live rule.
+
+   NEVER WRITE A FILE GLOB IN A CSS COMMENT. The line above used to say "every
+   .tsx under src" with the shell glob, and the star-slash inside the
+   extension pattern CLOSED THIS COMMENT seventeen lines in. Everything after
+   it parsed as CSS, PostCSS died on `Unknown word sp.tier`, and the founder's
+   page went blank — from a sentence in a comment. A brace-balance check sees
+   nothing wrong (376/376 while it was broken); the check that catches it is
+   fetching the sheet and expecting 200, or `vite build`. What went:
+
+     `.jar-find-shortcut` (4)   the find control moved onto the saves
+                                overlay's own search box — #53
+     `.jar-conversation` (19)   the console this dressed is `chat.css`'s now;
+                                only `-body` survived the first sweep because
+                                only `-body` is still worn
+     `.jar-review-choices`,     a two-button footer the review dialogue
+     `.jar-review-footer-
+       actions` (6)             stopped drawing
+     `.jar-activity-card`,      the home activities grid's rows
+       `-icon`, `-copy`,
+       `-arrow`, `-hint` (8)
+     `.jar-conversation-
+       actions`, `.jar-citation-preview` (3)
+
+   AND TWO ARE DELIBERATELY STILL HERE, which is the honest half of this.
+   `.jar-home-activities` and `.jar-activity-title` dress the grid whose five
+   row classes just went out, and no `.tsx` renders either — but
+   `tools/performance/run.ts` and `tools/e2e/web-quality.ts` still NAME them
+   in their own selectors, so deleting the rules would be deleting the only
+   remaining description of a surface two harnesses are still trying to click.
+   That is a `Home.tsx` decision (the grid was replaced by
+   `.jar-personal-shortcuts`), not a stylesheet one, and the rule for this
+   sweep was: a selector is dead only when NOTHING in the tree names it. */
 /*
  * THE FLAT SCREENS, WEARING THE WORLD'S SKIN.
  *
@@ -1385,7 +1425,6 @@ body .profile-signout-button {
   letter-spacing: 0;
 }
 
-.jar-find-shortcut { position: absolute; z-index: 6; right: var(--sp-22); bottom: calc(var(--sp-12) + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: var(--sp-8); min-width: var(--sp-44); min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-22); background: var(--jar-panel); color: var(--w-ink); font: inherit; font-size: var(--t-note); cursor: pointer; }
 .jar-inspiration-search { width: min(560px, calc(100vw - var(--sp-44))); color: var(--w-ink); font-size: var(--t-body); }
 .jar-search-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
 .jar-search-heading p { margin: 0; }
@@ -1408,9 +1447,8 @@ body .profile-signout-button {
   .jar-panel-head > .jar-copy-link { grid-column:2; }
 }
 .jar-copy-link { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
-.jar-find-shortcut:focus-visible, .jar-inspiration-search button:focus-visible, .jar-copy-link:focus-visible, .jar-navigation-notice button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
+.jar-inspiration-search button:focus-visible, .jar-copy-link:focus-visible, .jar-navigation-notice button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
 .jar-navigation-notice { position: absolute; z-index: 60; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(400px, calc(100vw - var(--sp-44))); padding: var(--sp-22); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: var(--jar-panel); color: var(--w-ink); font-size: var(--t-body); }
-@media (max-width: 600px) { .jar-find-shortcut { right: var(--sp-8); padding: var(--sp-8); } .jar-find-shortcut span { display: none; } }
 
 .jar-room-patterns { margin: var(--sp-12) 0 var(--sp-22); color: var(--w-ink); font-size: var(--t-note); line-height: 1.5; }
 .jar-room-patterns ul { list-style: none; padding: 0; margin: 0; }
@@ -1429,7 +1467,6 @@ body .profile-signout-button {
 .jar-seek.jar-inspiration-search[data-visual-viewport],
 .jar-seek.jar-review[data-visual-viewport],
 .jar-seek.jar-principle-share[data-visual-viewport],
-.jar-seek.jar-conversation[data-visual-viewport],
 .jar-seek.jar-reflect-room[data-visual-viewport] {
   position: fixed;
   top: calc(var(--dialog-visible-top) + var(--dialog-visible-height) / 2);
@@ -1518,13 +1555,7 @@ body .profile-signout-button {
 /* The lead step has a 16px floor, avoiding iOS input zoom. */
 .jar-review-single .jar-reflect-box { font-size:var(--t-lead); }
 .jar-review summary { min-height:var(--sp-44); cursor:pointer; }
-.jar-review-choices { display:flex; gap:var(--sp-12); margin-top:var(--sp-16); }
-.jar-review-choices button { flex:1; }
 .jar-review footer { display:flex; flex-direction:column; align-items:stretch; gap:var(--sp-4); }
-.jar-review footer .jar-review-choices { margin-top:0; }
-.jar-review-choices button:last-child { background:var(--w-raised); }
-.jar-review-footer-actions { display:flex; justify-content:space-between; gap:var(--sp-4); flex-wrap:wrap; }
-.jar-review-footer-actions button { border-color:transparent; padding-inline:var(--sp-4); }
 .jar-review ul { padding-left:var(--sp-22); }
 .jar-review-dialogue { border-top:1px solid var(--w-edge); margin-top:var(--sp-16); padding-top:var(--sp-16); }
 .jar-review-dialogue p { line-height:1.6; overflow-wrap:anywhere; }
@@ -1542,25 +1573,7 @@ body .profile-signout-button {
 .jar-reading-comparison button { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); color:var(--w-ink); background:none; border:1px solid var(--w-edge); border-radius:var(--sp-12); font:inherit; cursor:pointer; }
 .jar-seek.jar-principle-share { box-sizing:border-box; z-index:8; width:min(980px,calc(100vw - var(--sp-24))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-24)); display:flex; flex-direction:column; color:var(--w-ink); font-size:var(--t-body); line-height:1.5; text-align:left; user-select:text; touch-action:pan-y; }
 .jar-share-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; }
-.jar-seek.jar-conversation { z-index:8; width:min(680px,calc(100vw - var(--sp-24))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-24)); display:flex; flex-direction:column; box-sizing:border-box; color:var(--w-ink); font-size:var(--t-body); text-align:left; user-select:text; }
-.jar-conversation header { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-12); }
-.jar-conversation h2 { font-size:var(--t-lead); font-weight:500; }
 .jar-conversation-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; padding-inline-end:var(--sp-8); }
-.jar-conversation button,.jar-conversation summary { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); font:inherit; color:inherit; background:transparent; border:1px solid var(--w-edge); border-radius:var(--sp-8); cursor:pointer; }
-.jar-conversation button:disabled { color:var(--w-muted); cursor:progress; }
-.jar-conversation ul,.jar-conversation ol { list-style:none; padding:0; }
-.jar-conversation li { padding-block:var(--sp-12); border-bottom:1px solid var(--w-edge); overflow-wrap:anywhere; }
-.jar-conversation li p { white-space:pre-wrap; }
-.jar-conversation li[data-role="assistant"] { border-left:2px solid var(--w-edge); padding-left:var(--sp-12); }
-.jar-conversation blockquote { margin:var(--sp-12) 0; white-space:pre-wrap; overflow-wrap:anywhere; }
-.jar-conversation-reply { display:flex; align-items:center; flex-wrap:wrap; gap:var(--sp-8); }
-.jar-conversation-reply p { flex:1 1 140px; margin:0; }
-.jar-conversation footer > .jar-review-context { margin-block:var(--sp-6); }
-.jar-conversation-options { margin-block:var(--sp-8); }
-.jar-conversation time { display:block; font-size:var(--t-body); opacity:.7; }
-.jar-conversation footer { flex-shrink:0; border-top:1px solid var(--w-edge); padding-top:var(--sp-12); }
-.jar-conversation label { display:block; }
-.jar-conversation textarea,.jar-conversation select { display:block; box-sizing:border-box; width:100%; min-height:var(--sp-44); max-height:25dvh; font:inherit; font-size:var(--t-lead); color:inherit; background:var(--jar-panel); border:1px solid var(--w-edge); padding:var(--sp-8); border-radius:var(--sp-8); }
 .jar-principle-share header,.jar-principle-share footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; flex-shrink:0; gap:var(--sp-12); }
 .jar-principle-share h2 { font-size:var(--t-lead); font-weight:500; }
 .jar-principle-share label { display:flex; flex-direction:column; gap:var(--sp-6); margin-block:var(--sp-12); font-size:var(--t-body); }
@@ -1670,23 +1683,12 @@ body .profile-signout-button {
 .jar-home-activities { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--sp-32); margin-top:var(--sp-32); pointer-events:auto; }
 .jar-hq-inner.jar-hq-inner--compact { margin-top:calc(clamp(48px,10.6vh,72px) + env(safe-area-inset-top)); padding-top:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; pointer-events:auto; touch-action:pan-y; }
 .jar-hq-inner--compact:focus-visible { outline:1px solid var(--w-muted); outline-offset:-2px; }
-.jar-activity-card { display:grid; grid-template-columns:var(--sp-24) minmax(0,1fr) var(--sp-16); align-items:center; gap:var(--sp-10); text-align:left; box-sizing:border-box; min-width:0; min-height:var(--sp-44); padding:var(--sp-8) var(--sp-4); border:0; border-radius:var(--sp-8); background:none; color:var(--w-ink); font:inherit; cursor:pointer; }
-.jar-activity-icon { display:grid; place-items:center; width:var(--sp-24); height:var(--sp-24); color:var(--w-muted); }
-.jar-activity-icon svg { width:var(--sp-20); height:var(--sp-20); }
-.jar-activity-copy { display:flex; flex-direction:column; gap:0; min-width:0; }
-.jar-activity-arrow { color:var(--w-muted); }
-.jar-activity-card:hover,.jar-activity-card:focus-visible { background:color-mix(in srgb,var(--w-ink) 4%,transparent); }
-.jar-activity-card:focus-visible { outline:2px solid var(--w-muted); outline-offset:2px; }
 .jar-activity-title { font-size:var(--t-body); line-height:1.5; font-weight:400; overflow-wrap:anywhere; }
-.jar-activity-hint { font-size:var(--t-note); line-height:1.5; color:var(--w-muted); }
 @media (max-width:560px) { .jar-hq-inner.jar-hq-inner--compact { margin-top:calc(118px + env(safe-area-inset-top)); } .jar-home-activities { grid-template-columns:minmax(0,1fr); gap:var(--sp-4); margin-top:var(--sp-24); } }
 .jar-review-steps { display:flex; gap:var(--sp-16); list-style:none; margin:var(--sp-8) 0 0; padding:0; font-size:var(--t-note); color:var(--w-muted); }
 .jar-review-steps li[aria-current] { color:var(--w-ink); border-bottom:1px solid currentColor; }
 .jar-source-details { font-size:var(--t-note); }
 .jar-source-details summary { min-height:var(--sp-44); display:flex; align-items:center; cursor:pointer; color:var(--w-muted); }
-.jar-conversation-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-4) var(--sp-12); }
-.jar-conversation .jar-conversation-actions button { margin:0; padding-inline:0; border:0; border-radius:0; font-size:var(--t-note); text-decoration:underline; text-underline-offset:var(--sp-4); }
-.jar-citation-preview { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; color:var(--w-muted); margin-top:var(--sp-4); }
 .jar-panel .jar-panel-vis button,.jar-panel .jar-panel-foot button,.jar-panel .jar-panel-askrow button,.jar-reflection-flow button { min-height:var(--sp-44); }
 .jar-reflection-delete { margin-top:var(--sp-12); padding-top:var(--sp-8); border-top:1px solid var(--w-edge); }
 .jar-reflection-delete-actions { display:flex; flex-wrap:wrap; gap:var(--sp-12); }
@@ -1698,12 +1700,10 @@ body .profile-signout-button {
 .jar-personal-shortcuts > button { position:static; transform:none; pointer-events:auto; min-width:0; max-width:100%; white-space:normal; }
 .jar-personal-shortcuts .jar-review-shortcut { grid-column:1; justify-self:start; }
 .jar-personal-shortcuts .jar-capture-shortcut { grid-column:2; justify-content:center; }
-.jar-personal-shortcuts .jar-find-shortcut { grid-column:3; justify-self:end; min-width:var(--sp-44); }
 @media (max-width:600px) {
   .jar-personal-shortcuts { grid-template-columns:minmax(0,1fr) var(--sp-44); }
   .jar-personal-shortcuts .jar-review-shortcut { grid-row:1; grid-column:1 / -1; }
   .jar-personal-shortcuts .jar-capture-shortcut { grid-row:2; grid-column:1; }
-  .jar-personal-shortcuts .jar-find-shortcut { grid-row:2; grid-column:2; }
   .jar-review-steps { gap:var(--sp-12); }
 }
 
