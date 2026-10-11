@@ -44,6 +44,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DialogSurface } from "./DialogSurface";
+import { useFirstVisit } from "../lib/first-visit";
 import { fetchPrinciples, type ApiPrinciple } from "../lib/api";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 
@@ -89,6 +90,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
   onShare?: (id: string) => void;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
+  const newHere = useFirstVisit(profileId ? { accountId: "p", profileId } : null, "principles");
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
@@ -128,15 +130,14 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
           <h2 className="waka-over-title">{title}</h2>
         </header>
 
-        {/* THE SURFACE NO LONGER EXPLAINS ITSELF, AND NEITHER DOES THE
-            ARCHIVE. Founder, originally: "there should be like an info icon
-            next to each of the top of mind, principles, the inspirations so
-            that users can see what these are" — answered with a sentence
-            rather than an icon, which was the right shape for the question.
-            Founder, since: "only the most absolutely necessary things should
-            be shown." Thirty-four words of definition above a set of cards
-            that are the definition is read once, by one person, and stepped
-            over by every eye afterwards — including theirs. */}
+        {/* SAID ONCE, ON THE SURFACE IT IS ABOUT — see `useFirstVisit`.
+            The permanent version of this line went out under "only the
+            most absolutely necessary things should be shown", and the
+            founder's later question was the other half of the same
+            thought: "how to add the descriptions for like this without
+            overwhelming the space we have?" Borrowed for one visit rather
+            than held forever. */}
+        {newHere ? <p className="waka-over-what">{say("worldPrinciplesWhatIs")}</p> : null}
         {phase === "loading" ? (
           <p className="waka-over-status" role="status">
             {say("worldPrinciplesLoading")}

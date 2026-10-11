@@ -50,6 +50,7 @@ import {
   updateInspiration,
   uploadToPresignedUrl,
 } from "../lib/api";
+import { useFirstVisit } from "../lib/first-visit";
 import { supportedRecordingType, useAudioRecording } from "../lib/use-audio-recording";
 import { HomeActionIcon } from "./HomeActionIcon";
 import { archiveChapter, dateStamp, dateWords } from "../lib/words";
@@ -74,7 +75,7 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, onClose }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onClose }: {
   locale: SupportedLocale;
   /** Whose archive. The caller already knows whose world is on screen; this
       surface should never work it out a second way and risk disagreeing. */
@@ -98,9 +99,34 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
    * own left edge was cutting the corner one in half, so it read "MY AGE".
    * One control, uncut, on every surface rather than on one of four.
    */
+  /**
+   * WHICH SAVES THIS CLAIM WAS READ FROM, when you arrived by asking.
+   *
+   * Founder: "how do we help the user deep dive into what inspirations led
+   * to this top of mind?" — and, of a chat for it, "I feel like somehow
+   * taking to the chat is the best but I don't know."
+   *
+   * The interpretive half went to a chat, which is right for "that's not
+   * quite me". This is the other half, and it is the half a chat is wrong
+   * for: WHICH saves a claim came from is a FACT, known exactly, sitting in
+   * `claim.from`. A generated sentence about it can paraphrase or name the
+   * wrong one, and the product's whole proposition is that its account of
+   * you is checkable. It is also prose — you cannot open the four things
+   * from a paragraph.
+   *
+   * So it is the archive, filtered. No new surface: this list already
+   * scrolls, already groups by chapter, already opens a row into the whole
+   * note. You land somewhere you know, holding exactly what made the
+   * sentence.
+   */
+  focus?: { label: string; ids: readonly string[] } | null;
+  onClearFocus?: () => void;
   onClose: () => void;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
+  /* Scoped to whose archive this is: being new to your own is not being new
+     to your agent's. */
+  const newHere = useFirstVisit(profileId ? { accountId: "p", profileId } : null, "saves");
   const [rows, setRows] = useState<Inspiration[]>([]);
   /* FIND IS A THING YOU DO TO YOUR INSPIRATIONS, so it lives on the page that
      holds them rather than as a destination of its own. It was a row in the
@@ -309,10 +335,12 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
      is no longer in the row to press again. */
   const active = category && categories.includes(category) ? category : null;
 
+  const focused = focus ? new Set(focus.ids) : null;
   const shown = rows.filter(
     (row) =>
       (!needle || row.preview.toLowerCase().includes(needle)) &&
-      (!active || row.category === active),
+      (!active || row.category === active) &&
+      (!focused || focused.has(row.id)),
   );
   /* Newest first, so the first row carries the largest number — the archive
      counts up as it grows, the way a person counts their own. Built from the
@@ -382,8 +410,19 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
             </button>
           ) : (
           <span className="waka-over-name">
-            <h2 className="waka-over-title">{title}</h2>
-            {total !== null ? (
+            <h2 className="waka-over-title">{focus ? focus.label : title}</h2>
+            {/* THE WAY OUT OF THE FILTER, WHICH IS NOT THE WAY OUT OF THE
+                PAGE. A filtered archive with no visible way back to all of
+                it is the trap Law 2 is about, and the dock cannot do this
+                one — pressing Inspirations from here is where you already
+                are. It takes the count's place rather than sitting beside
+                it, because while a subset is showing, how many the whole
+                archive holds is not the fact this line is for. */}
+            {focus && onClearFocus ? (
+              <button type="button" className="waka-over-count waka-over-unfocus" onClick={onClearFocus}>
+                {say("worldBackToAll")}
+              </button>
+            ) : total !== null ? (
               <span className="waka-over-count jar-saved-count">
                 {total > rows.length
                   ? formatMessage(locale, "worldInspirationCountCapped", { shown: rows.length, total })
@@ -410,6 +449,29 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
             own. Filtering happens over what is already loaded, so typing
             narrows in place with no round trip and no empty frame between
             keys. */}
+        {/* ═══ WHAT THIS PLACE IS, SAID ONCE ══════════════════════════
+            Founder: "how to add the descriptions for like this without
+            overwhelming the space we have?"
+
+            The answer is not to find room for it. A description is read
+            ONCE, by one person, on one visit, and then stepped over by
+            every eye afterwards — including theirs, which is why the three
+            permanent explainer paragraphs went out earlier under "only the
+            most absolutely necessary things should be shown".
+
+            So it is temporal rather than spatial. The line is here the
+            first time you open this place and never again; nothing has to
+            be dismissed, and the space it occupies is borrowed for one
+            visit rather than spent forever. `firstVisit` writes the flag
+            on mount, so it is one visit and not one render.
+
+            IT IS NOT A TOUR. One line, on the surface it describes, at the
+            moment somebody is standing on it and might wonder — which is
+            the same argument that moved it off the switcher originally:
+            three info icons answered the question "in the one place it is
+            least useful, before you arrive, about a thing you have not
+            seen". */}
+        {newHere && !open ? <p className="waka-over-what">{say("worldFieldWhatIs")}</p> : null}
         {/* THE FIELD APPEARS WHEN THERE IS SOMETHING TO FIND IN.
             It rendered from the first save — a full-width search bar, in the
             input register, directly under the title, above three rows a
@@ -624,7 +686,17 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
         ) : rows.length === 0 ? (
           <p className="waka-over-status">{say("worldInspirationsEmpty")}</p>
         ) : shown.length === 0 ? (
-          <p className="waka-over-status">{say("worldInspirationsNoHits")}</p>
+          /* A FILTER MUST NOT BE A TRAP — this file's own standing rule, one
+             block up: "a chosen category that no longer exists shows
+             everything rather than an empty grid under a tab that is no
+             longer in the row to press again". A claim's saves are the one
+             filter that cannot fall back that way, because falling back
+             would silently answer a different question from the one asked.
+             So it says what happened, and the way out of the filter is in
+             the header where it always is. */
+          <p className="waka-over-status">
+            {say(focus ? "worldClaimFromGone" : "worldInspirationsNoHits")}
+          </p>
         ) : (
           /* ═══ THE ARCHIVE READS AS A NOTES LIST ════════════════════════
              Founder, with the Apple Notes list on screen: "copy this for

@@ -78,6 +78,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DialogSurface } from "./DialogSurface";
+import { useFirstVisit } from "../lib/first-visit";
 import { listClaims, type ApiClaim } from "../lib/api/claims";
 import { t, type SupportedLocale } from "../lib/locales";
 
@@ -103,6 +104,7 @@ export interface ClaimsOverlayProps {
 
 export function ClaimsOverlay({ locale, onClose, onAsk, answered }: ClaimsOverlayProps) {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
+  const newHere = useFirstVisit(null, "claims");
   const [phase, setPhase] = useState<Phase>("loading");
   const [rows, setRows] = useState<ApiClaim[]>([]);
   const alive = useRef(true);
@@ -147,14 +149,11 @@ export function ClaimsOverlay({ locale, onClose, onAsk, answered }: ClaimsOverla
           <h2 className="waka-over-title">{title}</h2>
         </header>
 
-        {/* THE ONE LINE WENT FROM ALL THREE SURFACES THAT CARRIED IT, and
-            this was the longest of them: forty-one words of definition above
-            a queue of claims that are the definition. Founder: "only the
-            most absolutely necessary things should be shown." The whole
-            point of it being "the same one line the other three overlays
-            carry" holds in the other direction too — a sentence removed
-            everywhere is still one material. */}
-
+        {/* SAID ONCE — see `useFirstVisit`. The queue is the surface where
+            a stranger is least likely to guess what is being asked of
+            them, so it is the one that most wants a sentence on a first
+            visit and least wants one on the fortieth. */}
+        {newHere ? <p className="waka-over-what">{say("worldClaimsWhatIs")}</p> : null}
         {phase === "loading" ? (
           <p className="waka-over-status" role="status">
             {say("worldClaimsLoading")}

@@ -3134,6 +3134,51 @@
   font-family: var(--waka-face);
 }
 
+/* WHERE THE CLAIM CAME FROM — one quiet line, in the same register the
+   principles' proof line wears, and a door rather than a label. It sits
+   under the statement and above the answers: you read what it says about
+   you, then how it knows, then you answer. */
+.jar-char-claim-from {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.jar-char-claim-from:hover,
+.jar-char-claim-from:focus-visible {
+  color: var(--ink);
+}
+
+.jar-char-claim-from:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+  border-radius: var(--waka-r-hand-sm);
+}
+
+/* The way out of a filtered archive, in the count's seat — see the note at
+   its call site for why it replaces the count rather than joining it. */
+.waka-over-unfocus {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.2s ease;
+}
+
+.waka-over-unfocus:hover,
+.waka-over-unfocus:focus-visible {
+  color: var(--ink);
+}
+
 .jar-char-claim-statement {
   margin: 0;
   font-family: var(--waka-face);

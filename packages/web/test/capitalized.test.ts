@@ -265,14 +265,21 @@ describe("every string a person reads begins with a capital", () => {
      * name. A third render site that forgets is the failure mode, and the
      * only honest defence is that the list is short and stated here.
      */
+    /* COUNTED, NOT JUST PRESENT. The first version of this asked whether
+       each file mentioned `asSentence` at all, and `Home.tsx` passed with
+       one of its TWO sites wired — the away-window sentence went on saying
+       "you kept a memory." in the bubble, and was caught by a probe
+       printing what the creature actually said rather than by this. A file
+       that speaks two clauses needs two calls. */
     const SPEAKS_A_CLAUSE_ALONE = [
-      ["pages/Home.tsx", "the creature, when it is asked what has been happening"],
-      ["components/ReadingPanel.tsx", "the record, one clause per line"],
+      ["pages/Home.tsx", 2, "the creature asked what has been happening, and the away-window sentence"],
+      ["components/ReadingPanel.tsx", 1, "the record, one clause per line"],
     ] as const;
     const bare: string[] = [];
-    for (const [file, why] of SPEAKS_A_CLAUSE_ALONE) {
+    for (const [file, wanted, why] of SPEAKS_A_CLAUSE_ALONE) {
       const text = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../src", file), "utf8");
-      if (!/\basSentence\s*\(/.test(text)) bare.push(`${file} — ${why}`);
+      const calls = text.match(/\basSentence\s*\(/g)?.length ?? 0;
+      if (calls < wanted) bare.push(`${file} — ${calls} of ${wanted} wired — ${why}`);
     }
     expect(
       bare,
