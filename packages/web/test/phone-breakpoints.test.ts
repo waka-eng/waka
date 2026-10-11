@@ -94,6 +94,43 @@ function block(file: string, selector: string): string {
   return rules(file).slice(open + 1, close);
 }
 
+/**
+ * THE CONTENTS OF THE COARSE-POINTER BLOCKS, AND NOTHING ELSE.
+ *
+ * This read used to be `split(/@media \(pointer: coarse\) \{/)` and keep
+ * everything after the brace — which is every rule to the END OF THE FILE,
+ * not the rules inside the block. It passed for two months because the
+ * coarse blocks happened to sit last in both sheets.
+ *
+ * On 2026-10-11 a new coarse block was added EARLY in `claims.css` for the
+ * me/my-agent switch, and two of the eight acts below started failing while
+ * their coarse rules sat in the file untouched: the search was finding each
+ * selector's ORDINARY rule first, because that rule now came after a coarse
+ * open brace. The gate was wrong, not the stylesheet.
+ *
+ * The same flaw passes a false positive, which is the half that matters: a
+ * `min-height: var(--waka-corner)` written at any pointer would have
+ * satisfied a gate whose whole purpose is to ask for it at coarse ONLY —
+ * "44 everywhere" being the ruling the house declined, because it moves a
+ * composition the founder signed off on. So count braces.
+ */
+function coarseRules(file: string): string {
+  const text = rules(file);
+  const open = /@media\s*\(pointer:\s*coarse\)\s*\{/g;
+  const blocks: string[] = [];
+  for (let m = open.exec(text); m; m = open.exec(text)) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    const from = i;
+    for (; i < text.length && depth > 0; i += 1) {
+      if (text[i] === "{") depth += 1;
+      else if (text[i] === "}") depth -= 1;
+    }
+    blocks.push(text.slice(from, i - 1));
+  }
+  return blocks.join("\n");
+}
+
 describe("the phone is a width somebody measured", () => {
   it("has breakpoints at all, which is where this started", () => {
     /* THE FINDING, AS A TEST. Zero width media queries in 80 KB holding the
@@ -277,15 +314,11 @@ describe("the acts are reachable by a thumb", () => {
 
   for (const [file, selector, what] of ACTS) {
     it(`grows ${selector} to a thumb's target on a coarse pointer`, () => {
-      /* Asked of the COARSE BLOCK specifically, not of the file: a rule that
+      /* Asked of the COARSE BLOCKS specifically, not of the file: a rule that
          gave every pointer 44 would be the "44 everywhere" the house ruling
          declined, and it would move the desktop composition the founder
          signed off on. */
-      const coarse = source(file)
-        .replace(/\/\*[\s\S]*?\*\//g, " ")
-        .split(/@media\s*\(pointer:\s*coarse\)\s*\{/)
-        .slice(1)
-        .join("\n");
+      const coarse = coarseRules(file);
       const at = coarse.indexOf(selector);
       const body = at === -1 ? "" : coarse.slice(at, coarse.indexOf("}", at));
       expect(
