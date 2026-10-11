@@ -452,7 +452,10 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
        * checking `audit().wallId` arrives without knowing the layout.
        */
       const sim = (window as unknown as {
-        wakaSim?: () => { goToWall(col: number): void } | null;
+        wakaSim?: () => {
+          goToWall(col: number): void;
+          navigationState(): { moving: boolean };
+        } | null;
       }).wakaSim;
       if (!sim) throw new Error("window.wakaSim is absent — the simulation never started");
       const api = sim();
@@ -466,13 +469,40 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
       const nameOfWall = (id: string): string =>
         (facts.groups ?? []).find((group) => group.id === id)?.name ?? "";
 
-      /* A crossing already in flight refuses the next one, by design, so let
-         whatever the test did before this settle before asking. */
-      await step(60);
+      /**
+       * WAIT FOR THE CROSSING, DO NOT GUESS AT ITS LENGTH.
+       *
+       * A crossing already in flight refuses the next one, by design. This
+       * used to answer that with a fixed `step(70)` per attempt, and that
+       * worked for one reason nobody had written down: rooms were at column
+       * +1, so the first non-zero try arrived immediately and no crossing
+       * ever had to be waited out.
+       *
+       * The moment the axis changed — agents to the right, rooms to the left,
+       * because the founder asked three times for the creature to move RIGHT
+       * — the first try landed on the agent and the walk had to cross back
+       * through zero to reach a room. That is a longer flight than 70ms of
+       * fake time, so the next `goToWall` was refused, the loop kept asking
+       * from the wrong place, and twenty-four room suites reported the
+       * PRODUCT as broken when what was wrong was this helper's assumption
+       * about which side rooms live on.
+       *
+       * Asking `navigationState().moving` removes the assumption entirely.
+       * The seam already exists and the world's own URL canonicaliser already
+       * polls it for exactly this reason.
+       */
+      const settle = async () => {
+        for (let turn = 0; turn < 40; turn += 1) {
+          if (!api.navigationState().moving) return;
+          await step(40);
+        }
+      };
+      await settle();
       for (const col of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
         for (let attempt = 0; attempt < 3; attempt += 1) {
           await act(async () => api.goToWall(col));
-          await step(70);
+          await settle();
+          await step(40);
           const where = audit();
           if (wanted(where.wallId, where.wallKind)) return;
         }

@@ -279,3 +279,51 @@ it('shows an unavailable link without silently opening another room and can retu
   await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.jar-navigation-notice button')].find(button => button.textContent === 'Me')!.click()); await settle();
   expect(world.container.querySelector('.jar-navigation-notice')).toBeNull(); expect(world.audit().wallKind).toBe('self');
 });
+
+/**
+ * THE CREATURE CHANGES FORM WHERE IT STANDS.
+ *
+ * Founder: "I kind of want to give the feeling of like rather than my agent
+ * like moving rooms it kind of like switching itself up to its agent form."
+ * And, in three separate messages: "the agent the character shouldn't move
+ * left It should move right."
+ *
+ * Those read as two requests and are one. The second was taken literally for
+ * a long time — move the agent to the other side of the axis — and the axis
+ * is the wrong place: agents sit at negative columns and rooms at positive,
+ * so swapping them moves rooms for a reason that has nothing to do with
+ * rooms. Measured on a quiet tree it costs twenty-four room-suite failures,
+ * and the first attempt at it was abandoned on a failure count nobody had
+ * attributed.
+ *
+ * The direction only matters because there is a glide to have a direction.
+ * So the form switch arrives WITHOUT a crossing, and nothing slides either
+ * way. This asserts the absence of travel, because that is the whole fix and
+ * it is invisible in a screenshot — a glide that still happens would look
+ * identical one frame before and one frame after.
+ */
+it('changes form in place instead of travelling to the agent', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  expect(world.audit().wallKind).toBe('self');
+
+  const face = (label: string) =>
+    [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-face')]
+      .find(button => button.textContent?.trim() === label);
+  const toAgent = face('My agent');
+  expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
+
+  /* ONE FRAME. `step(0)` advances the world without letting a crossing run,
+     so arriving here means there was never a crossing to run. A glide would
+     still be mid-flight on the column it started from. */
+  await act(async () => toAgent!.click());
+  await world.step(0);
+  expect(world.audit().wallKind, 'the form switch is still flying the camera').toBe('agent');
+
+  /* AND BACK, in the same single frame — the complaint was asymmetric
+     ("no way to get back to my top of mind"), so the return is checked too. */
+  const toMe = face('Me');
+  expect(toMe).toBeTruthy();
+  await act(async () => toMe!.click());
+  await world.step(0);
+  expect(world.audit().wallKind).toBe('self');
+});

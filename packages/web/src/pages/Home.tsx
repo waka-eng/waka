@@ -1124,7 +1124,35 @@ interface SimApi {
   /** The traveler: one column left or right, the companion leading. */
   travel: (dir: 1 | -1) => void;
   /** Walk to a wall by column, from the axis map along the bottom. */
-  goToWall: (col: number) => void;
+  /**
+   * TRAVEL TO A WALL — or, with `instant`, BE THERE WITHOUT TRAVELLING.
+   *
+   * Founder: "I kind of want to give the feeling of like rather than my agent
+   * like moving rooms it kind of like switching itself up to its agent form.
+   * Do you get what I mean?" And, three separate times: "the agent the
+   * character shouldn't move left It should move right."
+   *
+   * Those are one request, and `instant` is the answer to both. The second
+   * sentence was read literally for a long time — put the agent on the other
+   * side of the axis — and the axis is the wrong place to fix it: agents sit
+   * at negative columns, rooms at positive, and swapping them moves rooms
+   * for a reason that has nothing to do with rooms. Measured, it costs
+   * twenty-four room-suite failures and a harness that silently assumed
+   * which side rooms live on.
+   *
+   * But the direction only matters BECAUSE there is a glide to have a
+   * direction. The founder's own words say the creature should change rather
+   * than travel — and the canvas already believed that: the change of form is
+   * a dissolve, and the aura is deliberately never pixelated because "its
+   * colour temperature is one of the two invariants that say this is still
+   * the same companion." The navigation was the only thing still insisting
+   * these were two PLACES.
+   *
+   * So the form switch arrives without a crossing. Nothing slides left,
+   * nothing slides right, and one account with two profiles reads as one
+   * companion with two faces — which is what it is.
+   */
+  goToWall: (col: number, instant?: boolean) => void;
   /* `revealMemory` LIVED HERE and is gone. It flew the camera from a statement
      down to the memory it was read from — the only navigation in the world
      caused by reading rather than by moving, and the founder ruled it out
@@ -9103,7 +9131,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * longer, but never five times longer. Nothing settles in between,
        * because nothing arrives in between.
        */
-      goToWall: (target: number) => {
+      goToWall: (target: number, instant?: boolean) => {
         const go = () => {
           lastGoRef.current = `enter col=${trip.col} target=${target}`;
           if (trip.col === target) {
@@ -9131,7 +9159,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           cam.xTarget = dest * view.w;
           cam.xBack = false;
           gesture.leadOn = false;
-          if (view.reduced) {
+          /* `instant` takes the path reduced motion already takes, which is
+             the whole reason this is a small change: arriving without a glide
+             is a journey the world has always known how to make, and it was
+             only ever offered to people who asked for less motion. */
+          if (view.reduced || instant) {
             trip.col = dest;
             cam.x = cam.xTarget;
             companion.off = 0;
@@ -14013,7 +14045,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       type="button"
                       className={`jar-char-face jar-label${standing ? ' jar-char-face--standing' : ''}`}
                       aria-pressed={standing}
-                      onClick={() => { if (!standing) simApiRef.current?.goToWall(wall ? wall.col : 0); }}
+                      /* NO CROSSING. The creature changes form where it is
+                         standing; it does not walk to another column to do
+                         it. Founder: "rather than my agent like moving rooms
+                         it kind of like switching itself up to its agent
+                         form" — and, three times, "the character shouldn't
+                         move left It should move right", which stops being a
+                         question the moment nothing slides either way. */
+                      onClick={() => { if (!standing) simApiRef.current?.goToWall(wall ? wall.col : 0, true); }}
                     >
                       {say(wall ? 'worldWallMyAgent' : 'worldWallMe')}
                     </button>
