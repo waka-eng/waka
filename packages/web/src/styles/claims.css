@@ -1226,6 +1226,46 @@
  * the dock above it. The depth that scrim bought is bought instead by the
  * dock never moving: you can see from inside a room exactly how to leave it.
  */
+/* ═══ THE COMPANION ON A PAGE, AND ITS LIGHT ════════════════════════════
+   The aura is the point. Without it the creature is a pebble sitting on a
+   dark page; with it, it is the thing the page is lit BY — which is the one
+   property the founder's favourite screen has and no other screen had.
+
+   THE BOX IS BIGGER THAN THE BODY, deliberately. The first attempt put the
+   glow on a `::before` with a negative inset, so it reached outside the
+   element and was clipped by the first scroller it met. A companion whose
+   own light is cropped by a container is worse than no light. The wrapper is
+   sized to the falloff and the body is centred in it, so the whole thing is
+   one box that contains its own lamp.
+
+   `--jar-live` is the world's own bloom ivory, so the two are one lamp. */
+.waka-companion {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  /* FOUR TIMES THE BODY, which is the world's own reach rather than a
+     guess: the loop's `auraR` is `size * lerp(1.25, 2.1, lit)` and a page's
+     creature is always fully lit, so its glow has to carry to about 2.1
+     body radii. At three times the box the stops below ran out at 0.78 of
+     the body's width and the creature read as a pebble with a rim. */
+  width: calc(var(--waka-companion-size) * 4);
+  height: calc(var(--waka-companion-size) * 4);
+  /* It is light, not an object, so it never takes a press and never pushes
+     the thing beside it around. */
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--jar-live) 22%, transparent) 0%,
+    color-mix(in srgb, var(--jar-live) 9%, transparent) 15%,
+    transparent 55%
+  );
+}
+
+.waka-companion-body {
+  display: block;
+}
+
 .waka-over {
   display: flex;
   flex-direction: column;
@@ -1379,16 +1419,26 @@
   outline: none;
 }
 
-/* ERASING, AND IT IS THE QUIETEST THING ON THE PAGE. A destructive verb sits
-   at the bottom of a note you are reading, in the meta register, and asks
-   before it does anything — the same two-press shape the chats list uses for
-   the same act, because one of your own things going away is the only move
-   in this product that cannot be undone. */
+/* THE NOTE'S TOP ROW: when it is on the left, the one destructive verb on the
+   right. The bottom-left corner belongs to ATTACHING on the notepad, and a
+   slot that means "add" on one note page and "destroy" on the other is the
+   mistake this arrangement exists to undo. */
+.waka-note-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-16);
+}
+
+/* ERASING, AND IT IS THE QUIETEST THING ON THE PAGE. It asks before it does
+   anything — the same two-press shape the chats list uses for the same act,
+   because one of your own things going away is the only move in this product
+   that cannot be undone. */
 .waka-note-foot {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--sp-12);
-  margin: var(--sp-24) 0 0;
+  margin: 0;
 }
 
 .waka-note-foot button {

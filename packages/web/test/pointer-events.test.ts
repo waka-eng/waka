@@ -241,6 +241,17 @@ describe("nothing visible loses its press", () => {
                does not match but which has the same effect for everything
                pressable in it */
             ".jar-when-story",
+            /* THE COMPANION ON A PAGE IS LIGHT, AND LIGHT TAKES NO PRESSES.
+               Its box is three times the body so it can hold its own aura
+               (see `.waka-companion`), which means most of it is empty warm
+               gradient lying over whatever the page put there. A press
+               target that size, holding nothing, would swallow the sentence
+               under it — which is exactly what it does on the chat's
+               opening. Nothing inside it is pressable: it is one `<canvas>`
+               with `role="img"`. On the WORLD the creature is pressable, and
+               that is a real button of its own (`.jar-char-press`) rather
+               than this. */
+            ".waka-companion",
           ].includes(selector),
       );
     expect(

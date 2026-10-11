@@ -83,6 +83,7 @@ import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createConversation,fetchConversation,listConversations,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
 import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage';
 import {useConversationReply} from '../lib/use-conversation-reply';
+import {Companion} from './Companion';
 import {ConversationText} from './ConversationText';
 import {fetchPrinciples,type ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
@@ -275,35 +276,27 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               word under it ("Marked as disputed") went, because a principle's
               standing is the principles surface's sentence to say. */}
           {first?<div className="chat-topic"><span>{say('worldConversationStartingFrom')}</span><blockquote>{first.statement}</blockquote></div>:null}
-          {/* ONE LINE WHERE THE FIRST REPLY WILL SIT, so the first real turn
-              replaces it in place and nothing jumps. It goes on the first
-              keystroke rather than the first send — a statement of what this
-              is for, not a greeting, and not a question, because the box
-              below already asks one. The three starter pills that used to
-              live here sent a message on a single press; they are not coming
-              back. */}
-          {/* ONE LINE WHERE THE FIRST REPLY WILL SIT, so the first real turn
-              replaces it in place and nothing jumps.
+          {/* ═══ THE ONE YOU ARE TALKING TO IS ON SCREEN ════════════════
+              Founder, of the home screen: "this is my only favorite screen
+              of the experience." Of this one, empty: "nothing here feels
+              몽글몽글." The difference between those two sentences was
+              standing right here — a conversation with WAKA with no WAKA in
+              it, which is a form, and read as one.
 
-              THE COMPANION BELONGS HERE AND IS NOT HERE YET. Founder, of the
-              home screen: "this is my only favorite screen of the
-              experience" — and of this one: "nothing here feels 몽글몽글."
-              The difference between those two sentences is that one of them
-              has the creature in it. A conversation with WAKA with no WAKA
-              in it is a form, which is what it reads as.
+              It sits where the first turn will sit, so the first real turn
+              replaces it in place and nothing jumps — the seat argument
+              above is unchanged.
 
-              IT WAS TRIED AND TAKEN BACK OUT, and the reason is worth
-              keeping. `rasterBody` bakes the SILHOUETTE; the eyes and the
-              nubs are live passes in the frame loop, entangled with yaw,
-              pitch, blink, the machine-cell grid and the glow the nubs
-              swell with. A page-side creature therefore came out as a
-              faceless dome — worse than none — and drawing the face a
-              second time here would put two drawers of the product's most
-              important object in the tree with nothing holding them in
-              step. The work is to give `character/raster.ts` a rest pose
-              that both the loop and a page call. Until then this surface
-              says its line and no more. */}
-          {!conversation?.messages.length&&!draft?.content&&!loading&&!error?<p className="chat-opening">{say('worldConversationOpening')}</p>:null}
+              AT THE OPENING ONLY. Once there are turns on screen the
+              companion is speaking IN them, and a portrait above the
+              transcript would be a second claim to the same voice. It holds
+              the empty page the way it holds the home screen, and then it
+              gets out of the way. */}
+          {!conversation?.messages.length&&!draft?.content&&!loading&&!error?
+            <div className="chat-opening">
+              <Companion size={64}/>
+              <p>{say('worldConversationOpening')}</p>
+            </div>:null}
           <ol className="chat-messages" aria-label={say('worldConversationMessages')} aria-live="polite" aria-relevant="additions">
             {(conversation?.messages??[]).map(message=><li key={message.id} data-role={message.role}><p className="chat-said">{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</p>
               <ConversationText text={message.content}/>{message.followUpQuestion?<ConversationText text={message.followUpQuestion}/>:null}

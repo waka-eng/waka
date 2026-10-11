@@ -524,8 +524,26 @@
  * someone unsure whether a thing is loading, broken, or simply empty — which
  * is exactly what an empty transcript was.
  */
+/* IT IS A BLOCK NOW, BECAUSE THE COMPANION IS IN IT. The creature and its
+   line stack and centre, with the creature's own aura doing the lighting —
+   the same arrangement as the home screen, which is the arrangement the
+   founder calls their favourite. The negative margin pulls the line back up
+   through the aura's lower falloff: the glow box is three times the body, so
+   without it the sentence sits a creature's height below the creature. */
 .chat-opening {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   margin: 0;
+  text-align: center;
+}
+
+.chat-opening p {
+  /* The glow box is four times the body, so without pulling the line back
+     up through its lower falloff the sentence sits a creature and a half
+     below the creature. */
+  margin: calc(var(--sp-20) - 96px) 0 0;
+  max-width: 44ch;
   color: var(--muted);
   line-height: 1.6;
 }
