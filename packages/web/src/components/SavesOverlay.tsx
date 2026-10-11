@@ -54,6 +54,10 @@ import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 
 type Phase = "loading" | "ready" | "failed";
 
+/** How many kept things it takes before finding one is a real act rather
+    than a glance. Roughly a screenful at the archive's row height. */
+const SEARCHABLE = 12;
+
 /** The first image on a keep, if it has one. Links and audio do not qualify:
     a tile's picture has to be a picture, not a favicon standing in for one. */
 function pictureOf(row: Inspiration): string | null {
@@ -61,7 +65,7 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClose }: {
+export function SavesOverlay({ locale, profileId, title, onClose }: {
   locale: SupportedLocale;
   /** Whose archive. The caller already knows whose world is on screen; this
       surface should never work it out a second way and risk disagreeing. */
@@ -70,26 +74,21 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
       behind is yours or your agent's. */
   title: string;
   /**
-   * WHOSE ARCHIVE THIS COULD BE INSTEAD — and switching moves the world too.
+   * WHOSE ARCHIVE THIS COULD BE INSTEAD — asked in the corner, not here.
    *
    * Founder: "From the inspirations modal, it should always let the user
    * switch between your inspirations and your agent's inspirations as well.
    * And if the user changes it in the modal, then the page behind it should
    * also change."
    *
-   * That second sentence is the whole design. A switch that changed only
-   * what this overlay showed would leave the world behind it disagreeing —
-   * the creature wearing one face while the grid in front of it held someone
-   * else's saves — and the product would be saying two things about whose
-   * material you are reading. So the press changes the ADDRESS, and this
-   * overlay follows it the way everything else does, rather than holding a
-   * second opinion about the owner.
-   *
-   * Absent when the account has no agent: a switcher with one row is a label
-   * pretending to be a control.
+   * The second sentence is the design and it is unchanged: switching moves
+   * the world and this surface together. What went is this surface's OWN
+   * pair of buttons. `ME / MY AGENT` already stands in the top-left corner
+   * of every screen in the product doing the identical thing, so the two of
+   * them were one act offered twice in two registers — and this overlay's
+   * own left edge was cutting the corner one in half, so it read "MY AGE".
+   * One control, uncut, on every surface rather than on one of four.
    */
-  owners?: ReadonlyArray<{ id: string | null; name: string; here: boolean }>;
-  onOwner?: (id: string | null) => void;
   onClose: () => void;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
@@ -267,28 +266,6 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
             ) : null}
           </span>
           )}
-          {/* THE SURFACE EXPLAINS ITSELF, WHERE THE QUESTION IS ASKED.
-              Founder, originally: "there should be like an info icon next to
-              each of the top of mind, principles, the inspirations so that
-              users can see what these are." Three icons in the switcher
-              answered that in the one place it is least useful — before you
-              arrive, about a thing you have not seen — and they went with the
-              dropdown. One line here costs no press and no icon. */}
-          {!open && owners && owners.length > 1 && onOwner ? (
-            <span className="waka-over-owners" role="group" aria-label={title}>
-              {owners.map((owner) => (
-                <button
-                  key={owner.id ?? "me"}
-                  type="button"
-                  className={`waka-over-owner${owner.here ? " waka-over-owner--here" : ""}`}
-                  aria-pressed={owner.here}
-                  onClick={() => { if (!owner.here) onOwner(owner.id); }}
-                >
-                  {owner.name}
-                </button>
-              ))}
-            </span>
-          ) : null}
           <button type="button" className="waka-over-close" aria-label={say("worldCardClose")} onClick={onClose}>
             <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
               <path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -312,8 +289,19 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
             own. Filtering happens over what is already loaded, so typing
             narrows in place with no round trip and no empty frame between
             keys. */}
-        {!open ? <p className="waka-over-what">{say("worldFieldWhatIs")}</p> : null}
-        {!open && rows.length ? (
+        {/* THE FIELD APPEARS WHEN THERE IS SOMETHING TO FIND IN.
+            It rendered from the first save — a full-width search bar, in the
+            input register, directly under the title, above three rows a
+            person can read in one glance. Founder: "only the most absolutely
+            necessary things should be shown." Searching an archive you can
+            see all of is not a thing anybody does, and it was the second
+            thing the eye hit on the surface.
+
+            The threshold is the same argument the category row already makes
+            one block down — "the row only appears when it divides something"
+            — and the number is a screenful: past about a dozen rows the list
+            stops being glanceable and finding becomes a real act. */}
+        {!open && rows.length > SEARCHABLE ? (
           <input
             type="search"
             className="waka-over-search"
@@ -410,14 +398,23 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
                     </button>
                   )}
                 </span>
-                <span className="jar-panel-foot-r">
-                  <button
-                    type="button"
-                    onClick={() => (editing ? setEditing(false) : setOpen(null))}
-                  >
-                    {say(editing ? "worldCancelEdit" : "worldCardClose")}
-                  </button>
-                </span>
+                {/* ONE WAY OUT, NOT THREE. At rest this said "Close", under
+                    a header already carrying "‹ All inspirations" on the left
+                    and a ✕ on the right — three controls, all leaving, on a
+                    surface holding one sentence. Founder: "only the most
+                    absolutely necessary things should be shown."
+
+                    The one it keeps is the one that is NOT a duplicate:
+                    Cancel, which abandons an edit rather than the surface,
+                    and which is the only move here the chevron and the ✕
+                    cannot make. */}
+                {editing ? (
+                  <span className="jar-panel-foot-r">
+                    <button type="button" onClick={() => setEditing(false)}>
+                      {say("worldCancelEdit")}
+                    </button>
+                  </span>
+                ) : null}
               </p>
             </article>
         ) : phase === "loading" ? (
@@ -465,11 +462,11 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
              be scannable; a list of lead lines does not, and an image column
              would make every text-only save look like a row with something
              missing. An attachment still opens with its keep. */
-          <div className="waka-notes">
+          <div className="waka-list">
             {chapters.map((chapter) => (
-              <section key={chapter.key} className="waka-chapter">
-                <h3 className="waka-chapter-when">{chapter.words}</h3>
-                <ul className="waka-chapter-rows">
+              <section key={chapter.key} className="waka-list-chapter">
+                <h3 className="waka-list-when">{chapter.words}</h3>
+                <ul className="waka-list-rows">
                   {chapter.rows.map((row) => {
                     const words = row.preview.trim();
                     const breakAt = words.indexOf("\n");
@@ -477,9 +474,9 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
                     const rest = (breakAt > 0 ? words.slice(breakAt + 1) : "").trim();
                     return (
                       <li key={row.id}>
-                        <button type="button" className="waka-note" onClick={() => setOpen(row)}>
-                          <span className="waka-note-lead">{lead}</span>
-                          <span className="waka-note-meta">
+                        <button type="button" className="waka-list-row" onClick={() => setOpen(row)}>
+                          <span className="waka-list-lead">{lead}</span>
+                          <span className="waka-list-meta">
                             {/* WHICH ONE THIS IS, AND IT IS A NAME RATHER THAN
                                 A MEASUREMENT. Founder, on the reference's
                                 numbered list: "it works well with ours too
@@ -496,11 +493,11 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
 
                                 FROM THE WHOLE ARCHIVE, NOT THE VISIBLE LIST,
                                 so a search never renames anything. */}
-                            <span className="waka-note-index" aria-hidden="true">
+                            <span className="waka-list-index" aria-hidden="true">
                               {ordinals.get(row.id)}
                             </span>
-                            <span className="waka-note-when">{dateWords(row.capturedMs, now, locale)}</span>
-                            {rest ? <span className="waka-note-rest">{rest}</span> : null}
+                            <span className="waka-list-date">{dateWords(row.capturedMs, now, locale)}</span>
+                            {rest ? <span className="waka-list-rest">{rest}</span> : null}
                           </span>
                         </button>
                       </li>

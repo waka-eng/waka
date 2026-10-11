@@ -377,20 +377,76 @@ it('changes form in place instead of travelling to the agent', async () => {
  *
  * So this presses the X and asserts the ADDRESS, not the markup. A test that
  * checked the button was on screen would have passed throughout.
+ *
+ * IT OPENS THE CONVERSATION THROUGH THE DOCK NOW. It used to press a "New
+ * chat" pill at the top of the chats list, which is gone: that pill was the
+ * only boxed control on any of the four destinations and the dock's plus
+ * already offers the same two verbs from everywhere. Pressing the door that
+ * exists is also the more honest setup — a test that reaches a surface by a
+ * control nobody else can reach it by proves the surface works and not that
+ * anyone can get to it.
  */
+async function openANewChat(root: HTMLElement) {
+  await act(async () => root.querySelector<HTMLButtonElement>('.waka-dock-item--new')!.click());
+  await settle();
+  const rows = [...root.querySelectorAll<HTMLButtonElement>('.waka-new-one')];
+  const chat = rows.at(-1);
+  expect(chat, 'the plus offers no way to start a chat').toBeTruthy();
+  await act(async () => chat!.click());
+  await settle();
+}
+
 it('closes a conversation from its own X, which the overlay handler could not', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
-  await pressChatCorner(world.container); await settle();
-  expect(new URLSearchParams(location.search).get('open')).toBe('conversations');
-
-  /* Open one, so the surface under test is the conversation rather than the
-     list that offered it. */
-  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-rail-new')!.click());
-  await settle();
+  await openANewChat(world.container);
   expect(location.pathname.startsWith('/chat/'), 'the conversation never opened').toBe(true);
 
   const close = world.container.querySelector<HTMLButtonElement>('.waka-over--talk .waka-over-close');
   expect(close, 'a conversation offers no visible way out').toBeTruthy();
   await act(async () => close!.click()); await settle();
   expect(location.pathname, 'the X still does nothing').not.toContain('/chat/');
+});
+
+/**
+ * AND IT STEPS BACK TO THE LIST, which is the other half of the way out.
+ *
+ * Founder: "chat and inspirations should have same look and feel and
+ * workflow and experience." An open inspiration had a chevron reading "All
+ * inspirations" AND a ✕ AND a "Close"; an open chat had only the ✕, and the
+ * ✕ leaves for the world rather than for the chats it came from. So the one
+ * surface in the product with no step back was the one the founder has
+ * reported being lost in most.
+ *
+ * Pressed, not counted — `six-laws.md` Law 8: the previous one-press return
+ * in this product rendered, read correctly, was enabled, and did nothing.
+ */
+it('steps back from a conversation to the list of them', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await openANewChat(world.container);
+  expect(location.pathname.startsWith('/chat/'), 'the conversation never opened').toBe(true);
+
+  const back = world.container.querySelector<HTMLButtonElement>('.waka-over--talk .waka-over-back');
+  expect(back, 'a conversation offers no way back to its own list').toBeTruthy();
+  await act(async () => back!.click()); await settle();
+  expect(location.pathname, 'it stayed in the conversation').not.toContain('/chat/');
+  expect(
+    new URLSearchParams(location.search).get('open'),
+    'the step back did not land on the chats',
+  ).toBe('conversations');
+});
+
+/**
+ * THE DOCK STANDS ON AN OPEN CHAT, as it does on every other destination.
+ *
+ * It was hidden there and shown on all three peers — including an open
+ * inspiration, which is the same depth of the same gesture — so reading one
+ * conversation was the single state in the product with no bottom bar.
+ */
+it('keeps the dock standing while a conversation is open', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await openANewChat(world.container);
+  expect(
+    world.container.querySelector('.waka-dock'),
+    'the bottom bar goes missing on the one surface that most needs it',
+  ).toBeTruthy();
 });

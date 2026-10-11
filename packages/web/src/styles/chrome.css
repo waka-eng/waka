@@ -1261,9 +1261,18 @@ body .profile-list[hidden] {
   display: none !important;
 }
 
-/* the save verb joins the row of words rather than shouting between them —
+/* THE SAVE VERB JOINS THE ROW OF WORDS rather than shouting between them —
    the world has one uppercase register and it belongs to eyebrows, never to
-   things you press */
+   things you press.
+
+   IT LEFT THE EYEBROW REGISTER AND LANDED PAST SENTENCE CASE. `lowercase`
+   rendered "sign in", "sign out" and "save profile" against the founder's
+   own ruling — "make sure that like everything has the first character of
+   the word capitalized" — and `capitalized.test.ts` could not see it,
+   because that gate reads the string catalogue and a stylesheet had changed
+   the string after the catalogue was done with it. A rule enforced on the
+   value and overridden on the render is not enforced. `none` is the whole
+   fix: the catalogue already says "Sign in". */
 body .login-form .btn-primary,
 body .profile-form .btn-primary,
 body .profile-card .btn-primary {
@@ -1271,7 +1280,7 @@ body .profile-card .btn-primary {
   color: var(--w-ink);
   font-size: var(--t-ui);
   letter-spacing: 0;
-  text-transform: lowercase;
+  text-transform: none;
 }
 /* ---------- THE DOORWAY'S OWN VERB ----------
 
@@ -1479,10 +1488,11 @@ body .profile-disclose-inline:hover,
 body .profile-disclose-inline:focus-visible {
   color: var(--w-muted);
 }
-/* sign out leaves the header and joins the foot, where leaving belongs */
+/* Sign out leaves the header and joins the foot, where leaving belongs. Its
+   `lowercase` went with the primary's, for the same reason. */
 body .profile-signout-button {
   font-size: var(--t-ui);
-  text-transform: lowercase;
+  text-transform: none;
   letter-spacing: 0;
 }
 

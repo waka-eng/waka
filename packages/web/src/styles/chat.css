@@ -50,7 +50,16 @@
  * The page: one column, like every other one
  * ------------------------------------------------------------------------- */
 
-.chat-page {
+/* THE MEASURE REACHES THE SHEET'S HEADER TOO.
+   A conversation is rendered inside `.waka-over--talk`, and that sheet's
+   HEADER is a sibling of `.chat-page` rather than a descendant — so when the
+   header was told to stand on the transcript's own left edge,
+   `var(--chat-measure)` resolved to nothing there and the two edges stayed
+   28px apart. Custom properties inherit down and not sideways, so the token
+   now LIVES here, one level up, and `.chat-page` inherits it. Declaring it
+   in both places would be the drift this token exists to prevent — the
+   reasoning below is why the number is 545 and it travels with it. */
+.waka-over--talk {
   /* ONE COLUMN WIDTH, NAMED ONCE — AND THE NUMBER CAME FROM THE FONT.
      The transcript and the box you type into must stand on the same column.
      They were "a few pixels apart, which reads as a mistake rather than a
@@ -76,6 +85,9 @@
      39% wider than a character of real text. "60ch" would have given 83
      characters, not 60. */
   --chat-measure: 545px;
+}
+
+.chat-page {
   /* The dialog surfaces this page opens composite over the page's own
      ground rather than the canvas world's. */
   --jar-panel: var(--bg);

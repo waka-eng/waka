@@ -5184,6 +5184,24 @@
   overflow: hidden;
 }
 
+/* THE HEADER STANDS ON THE TRANSCRIPT'S OWN LEFT EDGE.
+   Measured at 1280: the chevron began at x=339, the reply at x=449 and the
+   composer at x=369 — three left edges on one surface, which is the
+   founder's "placement is all over the place" in its most literal form. The
+   cause is honest enough: `.waka-over` sets the sheet's padding and
+   `.chat-main` adds its own gutter inside it, so the header was measured
+   from the sheet and everything below it from the column.
+
+   The column wins, because `--chat-measure` is the one number here derived
+   from something — eighty characters — and the header is derived from
+   nothing. So the head takes the same measure and the same centring, and
+   the surface has one edge. */
+.waka-over--talk .waka-over-head {
+  width: 100%;
+  max-width: var(--chat-measure);
+  margin-inline: auto;
+}
+
 .waka-over--talk .chat-page {
   position: static;
   top: auto;

@@ -342,3 +342,53 @@ it('bounds automatic progress reads and then says to come back later',async()=>{
   expect(vi.mocked(fetchConversationReply).mock.calls.length-initialCalls).toBeLessThanOrEqual(35);
   expect(host.textContent).toContain('Still working. You can come back later.');
 });
+
+/**
+ * ═══ IT DOES NOT SAY IT FAILED WHEN IT SUCCEEDED ═══════════════════════════
+ *
+ * Found by walking the real surface against the real API on 2026-10-11:
+ * every request returned 200, the transcript rendered, and above it the page
+ * read "This conversation couldn't be opened. Try again."
+ *
+ * The cause was a guard asking the wrong object. Each async routine here
+ * decided whether it had been cancelled by reading `lifecycle.current` — the
+ * controller for the run happening NOW — instead of the one it was started
+ * under. When the effect re-runs it REPLACES that ref, so the abandoned
+ * run's `catch` asked about its successor, was told "not aborted", and
+ * printed a failure over the successor's perfectly good result.
+ *
+ * `id` goes from `null` to the new conversation's id on the first send of
+ * every new chat, so this fires on the most ordinary path through the
+ * surface rather than only under StrictMode.
+ *
+ * WHAT THIS PRESSES, and why it is shaped like this: remounting with a
+ * different `id` is exactly what that navigation does, and the assertion is
+ * on what a person READS, not on an internal flag — the defect was visible
+ * only as a sentence on screen and every existing test passed throughout.
+ */
+it('does not print a read failure after a re-aimed load succeeds',async()=>{
+  const second='33333333-3333-4333-8333-333333333333';
+  /* THE KEY IS HELD CONSTANT ON PURPOSE. A changed key remounts, which gives
+     the abandoned run a `lifecycle` ref of its own and hides the defect
+     entirely — the first version of this test did that and passed against
+     the bug. What the product actually does on a first send is keep the
+     component and change `id`, so the effect re-runs IN PLACE and the one
+     ref is overwritten under the run still in flight. That is the race. */
+  const aim=(which:string|null)=>act(async()=>root.render(
+    <ConversationPanel key="held" scope={scope} id={which} locale="en-US" onChoose={choose}/>));
+  let releaseFirst:()=>void=()=>undefined;
+  const firstInFlight=new Promise<void>(resolve=>{releaseFirst=resolve;});
+  vi.mocked(fetchConversation).mockImplementation(async(_profile,which)=>{
+    if(which===id){await firstInFlight;throw new Error('Conversation request stopped');}
+    return structuredClone({...stored,id:second,messages:[{id:'m1',profileId:scope.profileId,conversationId:second,position:1,role:'user' as const,content:'probe one',createdAt:'2026-10-03T01:00:00Z'}]});
+  });
+  await aim(id);
+  await aim(second);
+  releaseFirst();
+  await tick();
+  expect(host.textContent,'the transcript never arrived, so this proves nothing').toContain('probe one');
+  expect(
+    host.textContent,
+    'the surface says the conversation could not be opened while showing it',
+  ).not.toContain('couldn’t be opened');
+});
