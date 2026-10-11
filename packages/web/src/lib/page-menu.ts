@@ -104,7 +104,12 @@ const OPENS: ReadonlyArray<{
 }> = [
   { what: "saves", label: "worldMenuField", agentLabel: "worldAgentField", explain: "worldFieldWhatIs" },
   { what: "principles", label: "worldPrinciplesShortcut", agentLabel: "worldAgentPrinciples", explain: "worldPrinciplesWhatIs" },
-  { what: "conversations", label: "worldOpenConversations", agentLabel: "worldAgentConversations" },
+  /* THE THIRD ROW GETS ONE TOO, LATE. Founder: "there should be like an info
+     icon next to each of the top of mind, principles, the inspirations so
+     that users can see what these are." Conversations joined this list after
+     that ruling and never got one — so the least self-explanatory of the
+     three was the only one that could not say what it was. */
+  { what: "conversations", label: "worldOpenConversations", agentLabel: "worldAgentConversations", explain: "worldConversationsWhatIs" },
 ];
 
 /* The account comes from the caller, the way the locale does. Reaching into
