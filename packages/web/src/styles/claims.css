@@ -52,6 +52,20 @@
   --waka-scrim: color-mix(in srgb, #000 58%, transparent);
 
   /**
+   * THE INK THAT SITS ON THE CREATURE'S OWN LIGHT.
+   *
+   * Everywhere else in this product the ink is light and the ground is dark.
+   * The speech bubble inverts that — it IS the light — so it needs the one
+   * dark ink in the palette, and it is named rather than written out at the
+   * four places that spend it.
+   *
+   * Not the page ground: `--bg` is near-black and reads as a hole punched in
+   * a lit surface. This is a shade above it, the way ink on paper is never
+   * quite black.
+   */
+  --waka-on-light: #11131a;
+
+  /**
    * TWO RADII, BY ROLE — because there were six.
    *
    * Controls were rounded 8px, 10px and 12px depending on which screen and
@@ -442,13 +456,6 @@
   max-height: calc(100dvh - var(--waka-corner) - var(--sp-40));
   overflow-y: auto;
   overscroll-behavior: contain;
-}
-
-/* The break between your three and your agent's three. */
-.waka-menu-row--new {
-  margin-top: var(--sp-8);
-  padding-top: var(--sp-8);
-  border-top: 1px solid var(--line);
 }
 
 .waka-menu-item {
@@ -1979,38 +1986,83 @@
   pointer-events: none;
 }
 
+/**
+ * A BUBBLE THAT LOOKS LIKE SPEECH, AND IT IS THE LIGHT TALKING.
+ *
+ * Founder: "I don't like this speech bubble because it doesn't look like
+ * it's speaking, it just looks like a box, it's ugly. I want a more dreamy
+ * speech bubble — I want this to be white."
+ *
+ * It was a raised dark panel: the same card every sheet in the product
+ * wears, floating above the creature with nothing tying it to the creature.
+ * A card near a thing is a card. A bubble is only a bubble because of the
+ * TAIL, and nothing else makes that shape read as a voice.
+ *
+ * WHITE IS NOT A PALETTE EXCEPTION HERE, it is the point. The companion is
+ * the only light in this world and everything it does is light — so what it
+ * says is a lit thing, not a dark panel reporting that it spoke. It is the
+ * creature's own body colour rather than pure white, so the two read as made
+ * of the same material, and it carries the same soft halo the body does,
+ * which is what makes it dreamy rather than flat.
+ */
 .jar-char-bubble-body {
   pointer-events: auto;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--sp-8);
-  max-width: min(26rem, 100%);
-  padding: var(--sp-12) var(--sp-16);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-surface);
-  background: var(--waka-raised);
+  max-width: min(24rem, 100%);
+  padding: var(--sp-16) var(--sp-20);
+  border: 0;
+  /* The pill shape of something said, not the rounded rectangle of a panel. */
+  border-radius: 22px;
+  background: var(--jar-live);
+  color: var(--waka-on-light);
   text-align: center;
+  /* The same falloff the companion's own glow has: a tight bright ring, then
+     three doublings out into nothing. A single shadow reads as a sticker. */
+  box-shadow:
+    0 0 14px color-mix(in srgb, var(--jar-live) 42%, transparent),
+    0 0 36px color-mix(in srgb, var(--jar-live) 22%, transparent),
+    0 0 80px color-mix(in srgb, var(--jar-live) 11%, transparent);
+}
+
+/* THE TAIL, pointing at the thing that said it. A rotated square rather than
+   a triangle so its two visible edges carry the bubble's own curve, and it
+   sits one pixel INTO the body so no seam shows between them. */
+.jar-char-bubble-body::after {
+  content: "";
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 3px;
+  background: inherit;
 }
 
 .jar-char-bubble-body p {
   margin: 0;
   font-family: var(--waka-face);
   font-size: var(--t-ui);
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1.5;
-  color: var(--ink);
+  /* Dark on light now, so the weight steps up: 300 on a bright ground is
+     thin where 300 on a dark one is delicate. */
+  color: inherit;
 }
 
 /* The door into a conversation about what it just said — the one thing on
    screen that came from the product rather than from you. */
 .jar-char-bubble-body button {
   min-height: var(--sp-32);
-  padding: 0 var(--sp-12);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-control);
+  padding: 0 var(--sp-16);
+  border: 1px solid color-mix(in srgb, var(--waka-on-light) 22%, transparent);
+  border-radius: var(--r-pill);
   background: transparent;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--waka-on-light) 72%, transparent);
   font-family: var(--waka-face);
   font-size: var(--t-fine);
   white-space: nowrap;
@@ -2018,8 +2070,13 @@
 }
 
 .jar-char-bubble-body button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
-  color: var(--ink);
+  border-color: var(--waka-on-light);
+  color: var(--waka-on-light);
+}
+
+.jar-char-bubble-body button:focus-visible {
+  outline: 2px solid var(--waka-on-light);
+  outline-offset: 2px;
 }
 
 /* ---------------------------------------------------------------------------

@@ -147,11 +147,22 @@ export function usePageMenu(
      * of the row you pressed, which is the only way a person can be sure
      * what they are about to read.
      */
-    const owners: Array<{ id: string | null; name: string }> = [
-      { id: null, name: "" },
-      ...(agent ? [{ id: agent.id, name: agent.name }] : []),
-    ];
-
+    /**
+     * THREE ROWS, AND THEY FOLLOW THE CREATURE.
+     *
+     * Founder: "I don't like that there are six options — this should be
+     * dynamically changing depending on what I selected in the character."
+     *
+     * Right, and six was me answering the wrong question. The six rows were
+     * a fix for a real bug — the switcher could not say WHOSE material a row
+     * led to — but the identity already has a control, and it is the
+     * creature. Offering both owners here made the switcher answer a
+     * question the creature had already answered, and a list that repeats a
+     * choice you have made is a list you have to read twice.
+     *
+     * So the views follow the stance: three rows, named for whoever you are
+     * currently being. The creature says who; this says which.
+     */
     /* Longest path first, so "/" does not claim "/inspirations". A wall
        address is the agent's top of mind, which no VIEWS path matches. */
     const onAWall = pathname.startsWith("/w/");
@@ -168,42 +179,28 @@ export function usePageMenu(
     const current = view ? `${owner ?? "me"}:${view}` : null;
 
     return {
-      items: owners.flatMap((who, owned) =>
-        VIEWS.map((row, index) => ({
-          id: `${who.id ?? "me"}:${row.id}`,
-          /* A rule between the two sets of three. Six rows with no break
-             read as one list of six unrelated places; the break is what says
-             the same three views are being offered twice, about two
-             different people. */
-          startsGroup: owned > 0 && index === 0,
-          label: who.id ? row.agentLabel : row.label,
-          /**
-           * PICKING A ROW SETS BOTH HALVES.
-           *
-           * The stance is written first and the navigation follows, so the
-           * page that mounts is already scoped to the owner whose name was
-           * on the row. Writing it the other way round would mount the page
-           * against the previous owner and correct itself a frame later,
-           * which is a visible flash of somebody else's material.
-           *
-           * THE TOP OF MIND IS A WALL. "/" is YOUR wall specifically, not
-           * "the top of mind" in general — the agent's has its own address,
-           * and a row that always navigated to "/" answered a different
-           * question than the one asked.
-           */
-          onSelect: () => {
-            setStanding(accountId, who.id ? { id: who.id, name: who.name } : null);
-            navigate(
-              row.id === "top-of-mind"
-                ? who.id
-                  ? `/w/${encodeURIComponent(who.id)}`
-                  : "/"
-                : row.path,
-            );
-          },
-          explain: t(locale, row.explain),
-        })),
-      ),
+      items: VIEWS.map((row) => ({
+        id: `${standing.id ?? "me"}:${row.id}`,
+        /* Named for the owner you are standing as. The creature's own label
+           says the same thing; this says it again where a person is about to
+           act on it, which is the one place repetition earns its place. */
+        label: standing.id ? row.agentLabel : row.label,
+        /**
+         * THE TOP OF MIND IS A WALL. "/" is YOUR wall specifically, not "the
+         * top of mind" in general — the agent's has its own address, and a
+         * row that always navigated to "/" answered a different question
+         * than the one asked.
+         */
+        onSelect: () =>
+          navigate(
+            row.id === "top-of-mind"
+              ? standing.id
+                ? `/w/${encodeURIComponent(standing.id)}`
+                : "/"
+              : row.path,
+          ),
+        explain: t(locale, row.explain),
+      })),
       current,
       standing,
       stand: (next: Standing | null) => setStanding(accountId, next),
