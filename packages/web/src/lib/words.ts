@@ -336,3 +336,32 @@ export function numWords(n: number, locale: WordsLocale = "en-US"): string {
   const o = n % 10;
   return o === 0 ? t : `${t}-${ONES[o]}`;
 }
+
+/**
+ * ═══ A CLAUSE BECOMING A SENTENCE TAKES A CAPITAL ══════════════════════
+ *
+ * The weather's clauses are written to be joined — "you kept a memory",
+ * "your memory was consulted 170 times" — so the API composes them lower
+ * case on purpose, and that is right for a clause. The moment one is spoken
+ * ALONE, by the creature or on its own line, it stops being a clause and
+ * becomes a sentence, and the founder's ruling covers every sentence a
+ * person reads: *"make sure that like everything has the first character of
+ * the word capitalized."*
+ *
+ * `capitalized.test.ts` could not see these. It reads the web's own
+ * catalogue, and these strings are assembled on the server out of row
+ * counts — so "you kept a memory." has been in the creature's mouth, lower
+ * case, for as long as the weather has existed. Same shape as the
+ * `text-transform: lowercase` found earlier the same day: a rule enforced
+ * on one layer and undone on another.
+ *
+ * HANGUL IS LEFT ALONE, because it has no case to change — the same reason
+ * `capitalized.test.ts` is silent on the Korean catalogue. `toLocaleUpperCase`
+ * on a Hangul syllable returns the syllable, so this is a no-op there rather
+ * than a special case, but it is written down so nobody "fixes" it later.
+ */
+export function asSentence(clause: string, locale: WordsLocale = "en-US"): string {
+  const words = clause.trimStart();
+  if (!words) return clause;
+  return words[0]!.toLocaleUpperCase(locale) + words.slice(1);
+}

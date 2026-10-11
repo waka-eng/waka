@@ -193,6 +193,7 @@ import type { AgentBundle } from "../lib/agent-contract";
 import { MOCK_AGENTS, MOCK_AGENT_BUNDLES } from "../lib/fixture/agent-walls";
 import { offlineHome, type OfflineHome } from "../lib/fixture/offline-home";
 import {
+  asSentence,
   dateStamp,
   citedWords,
   dateWords,
@@ -3643,8 +3644,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            sentence somebody says. The label was already a phrase that reads
            as an ending — "today", "two days ago" — so it only ever wanted to
            be there. */
+        /* SPOKEN ALONE, SO IT TAKES A CAPITAL. The API writes these as
+           CLAUSES, lower case, because the full record joins them; the
+           creature says one on its own, which makes it a sentence. See
+           `asSentence` — and note that `capitalized.test.ts` cannot see
+           these at all, because they are assembled on the server rather
+           than drawn from the catalogue it reads. */
         const lines = spoken.map(
-          (x) => `${x.sentence.text} ${day?.label ?? "today"}.`,
+          (x) => asSentence(`${x.sentence.text} ${day?.label ?? "today"}.`, localeRef.current),
         );
         if (lines.length > 0) {
           const key = lines.join("|");
