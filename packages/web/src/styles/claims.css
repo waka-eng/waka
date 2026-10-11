@@ -2036,6 +2036,23 @@
  * text link beside a filled button reads as a feature parked next to a
  * feature, which is exactly what the founder saw. See the note at the render.
  */
+/**
+ * THE TWO DESTINATIONS GOT SHORTER, AND THE FIELD GOT THE WIDTH BACK.
+ *
+ * "Chat about this" and "Save inspiration" cost about 330px of a 680px bar
+ * between them, which left the field 298px and pushed the placeholder onto a
+ * second line at full width. They are "Ask" and "Save" now, and the field is
+ * the thing that grew.
+ *
+ * AND THE PLACEHOLDER NAMES ONE PURPOSE. It was "Save a thought, or ask about
+ * the ones you kept" — an enumeration of both destinations, which is the one
+ * thing every shipping composer avoids. Slack says "Message #channel".
+ * ChatGPT says "Ask anything". Drafts says nothing at all. A placeholder that
+ * lists the destinations moves the routing decision to the moment of least
+ * capacity: the person has a thought and has not typed it yet. It names the
+ * dominant verb, and the chrome beside it carries the second — which is what
+ * the Ask button is for.
+ */
 .waka-composer-where {
   display: flex;
   align-items: center;
