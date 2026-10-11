@@ -33,6 +33,7 @@ import { dateStamp } from "../lib/words";
    with its own pagination and its own idea of what the archive holds. */
 import { loadInspirations, type Inspiration } from "../lib/data";
 import { usePageMenu } from "../lib/page-menu";
+import { useAgent } from "../lib/use-agent";
 import { useOptionalAuth } from "../lib/auth-context";
 import { useStanding } from "../lib/standing";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
@@ -62,7 +63,8 @@ export function Inspirations(): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
 
   const navigate = useNavigate();
-  const menu = usePageMenu(locale, auth?.account?.id);
+  const agent = useAgent();
+  const menu = usePageMenu(locale, auth?.account?.id, agent);
   const [rows, setRows] = useState<Inspiration[]>([]);
   /* FIND IS A THING YOU DO TO YOUR INSPIRATIONS, so it lives on the page that
      holds them rather than as a destination of its own. It was a row in the

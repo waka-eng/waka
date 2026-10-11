@@ -41,6 +41,7 @@ import {
 import { AntechamberPanel } from "../components/AntechamberPanel";
 import { Menu } from "../components/Menu";
 import { usePageMenu } from "../lib/page-menu";
+import { useAgent } from "../lib/use-agent";
 import { HoverCard } from "../components/HoverCard";
 import { DuplicatesPanel } from "../components/DuplicatesPanel";
 import { ReadingPanel } from "../components/ReadingPanel";
@@ -70,7 +71,8 @@ const PROFILE_TABS: ReadonlyArray<{ id: ProfileTab; labelKey: MessageKey }> = [
 export default function ProfilePage(): JSX.Element {
   const { account, profile, logout, updateProfile, updatePreferredLocale, deleteAccount } = useAuth();
   const navigate = useNavigate();
-  const menu = usePageMenu(normalizeSupportedLocale(profile?.preferredLocale), account?.id);
+  const agent = useAgent();
+  const menu = usePageMenu(normalizeSupportedLocale(profile?.preferredLocale), account?.id, agent);
   const [name, setName] = useState(profile?.name ?? "");
   const [publicHandle, setPublicHandle] = useState(profile?.publicHandle ?? "");
   const [publicProfileEnabled, setPublicProfileEnabled] = useState(

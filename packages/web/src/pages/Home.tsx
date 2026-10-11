@@ -9990,7 +9990,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      in the archive when they disagreed — a careful fix to a control that
      should not have been printing a number at all. */
 
-  const menu = usePageMenu(locale, auth?.account?.id);
+  const menu = usePageMenu(locale, auth?.account?.id, agentWall ? { id: agentWall.id, name: agentWall.name } : null);
 
   /**
    * THE REACH — the ground, addressable without a pointer.
