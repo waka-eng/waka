@@ -126,7 +126,6 @@ import {
   type BeingSprites,
   type Palette,
 } from "../canvas/palette";
-import { ChatCorner } from "../components/ChatCorner";
 import { SavesOverlay } from "../components/SavesOverlay";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { ClaimsOverlay } from "../components/ClaimsOverlay";
@@ -1800,8 +1799,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      place the box before it has re-measured it this frame. `MOUTH_H` is the
      first-paint fallback and nothing more. */
   const slotH = useRef(0);
-  /* Whether the creature is holding up its offer to write. */
-  const [capturing, setCapturing] = useState(false);
   /* The panel and the selection are ONE state: opening is selecting, and
      closing — by Esc, by a tap on the dimmed field, by tapping the same orb
      again — releases. It lags `selectedId` at BOTH ends: it does not appear
@@ -14500,51 +14497,40 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               it is the only thing on screen that came from the product rather
               than from you — so it carries the door into a conversation
               about itself. */}
-          {/* ═══ PRESSING THE CREATURE IS HOW YOU SAVE ══════════════════
-              Founder: "rather than clicking on save a thought, can we just
-              make clicking on the character and it would have a speech
-              bubble to say save inspiration and clicking on that opens up a
-              brand new note page."
+          {/* ═══ PRESSING THE CREATURE OPENS THE NOTEPAD ════════════════
+              Founder: "clicking on character should open save inspirations
+              note pad", with a mockup of the creature holding a PENCIL in its
+              speech bubble.
 
-              The reference's character holds up a pebble in one state and a
-              pencil in another — the one thing addressed to you comes from
-              the creature, never from a bar bolted to the bottom of the
-              screen. So the creature carries BOTH offers: the note below its
-              chin is the claim waiting on you, and its own bubble is the
-              invitation to write.
+              So the bubble is not a step — it is the label for the gesture.
+              It is always up when the creature has nothing else to say, the
+              way the reference's character always holds up a pebble or a
+              pencil, and it says what pressing the body will do. One press,
+              straight into the note; no toggle in between.
 
-              A WORD UNDER IT, NOT A MYSTERY. This file already rules that
-              "pressing a creature is not a discoverable gesture" — which is
-              why the form switch is named underneath it. The same applies
-              here: the bubble opens on a press, and the press target is the
-              body itself, positioned off the two variables the layout pass
-              already writes for the bubble above it. */}
+              A PENCIL RATHER THAN THE WORDS. The reference puts an object in
+              the bubble, not a sentence, and an object is why the bubble can
+              share the screen with the claim below without competing: a glyph
+              is not a second thing to read. This is the creature's own
+              illustration register — the same place the body and its aura
+              live — not a UI icon set, which this product still does not have
+              and is not getting. */}
           {!mouthOpen && !charSay ? (
-            <button
-              type="button"
-              className="jar-char-press"
-              aria-label={say('worldSaveInspiration')}
-              aria-expanded={capturing}
-              data-jar-chrome="1"
-              data-jar-interactive="1"
-              onClick={() => setCapturing(v => !v)}
-            />
-          ) : null}
-          {!mouthOpen && !charSay && capturing ? (
-            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
-              <div className="jar-char-bubble-body">
-                {/* A LINE OF THE SAME SPEECH, not a pill. The rule is already
-                    written on the bubble next door: "a pill inside a speech
-                    bubble is a dialog box with an OK in it." */}
-                <button
-                  type="button"
-                  className="jar-char-bubble-go"
-                  onClick={() => { setCapturing(false); openMouth(); }}
-                >
-                  {say('worldSaveInspiration')}
-                </button>
+            <>
+              <button
+                type="button"
+                className="jar-char-press"
+                aria-label={say('worldSaveInspiration')}
+                data-jar-chrome="1"
+                data-jar-interactive="1"
+                onClick={() => viewNavigation.write({ ...EMPTY_VIEW, compose: true })}
+              />
+              <div className="jar-char-bubble" aria-hidden="true" data-jar-chrome="1">
+                <span className="jar-char-bubble-body jar-char-bubble-body--offer">
+                  <span className="jar-char-offer">✏️</span>
+                </span>
               </div>
-            </div>
+            </>
           ) : null}
           {!mouthOpen && charSay && charSay !== say('worldSavedWord') ? (
             <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
@@ -14601,31 +14587,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 IS the identity: the canvas already dissolves between the two
                 forms and holds the aura constant to say it is the same
                 companion throughout. */}
-            {!mouthOpen && agentWall ? (
-              <span className="jar-char-form" role="group" aria-label={say('worldWallMyAgent')}>
-                {([null, agentWall] as const).map(wall => {
-                  const standing = wall ? atWall.kind === 'agent' : atWall.kind !== 'agent';
-                  return (
-                    <button
-                      key={wall ? wall.id : 'me'}
-                      type="button"
-                      className={`jar-char-face jar-label${standing ? ' jar-char-face--standing' : ''}`}
-                      aria-pressed={standing}
-                      /* NO CROSSING. The creature changes form where it is
-                         standing; it does not walk to another column to do
-                         it. Founder: "rather than my agent like moving rooms
-                         it kind of like switching itself up to its agent
-                         form" — and, three times, "the character shouldn't
-                         move left It should move right", which stops being a
-                         question the moment nothing slides either way. */
-                      onClick={() => { if (!standing) simApiRef.current?.goToWall(wall ? wall.col : 0, true); }}
-                    >
-                      {say(wall ? 'worldWallMyAgent' : 'worldWallMe')}
-                    </button>
-                  );
-                })}
-              </span>
-            ) : null}
+            {/* THE FORM SWITCH MOVED TO THE TOP-LEFT CORNER. Founder:
+                "switch between me and my agent should go in top left now that
+                we have new entry point for chat." The corner was the chat
+                door until the dock took that job, and whose material you are
+                looking at is a better use of a fixed corner than a second
+                entrance to a room the dock already names. */}
             {!mouthOpen && claimQueue[0] ? (
               <div className="jar-char-claim">
                 {/* NO "IS THIS TRUE OF YOU?" ABOVE IT. Founder: "where this
@@ -16053,7 +16020,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {phase==='ready'&&!viewNavigation.view?.conversationId&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
           {([
-            { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open, go: () => viewNavigation.closeOpen() },
+            { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open && !viewNavigation.view?.compose, go: () => viewNavigation.closeOpen() },
+            /* SAVE IS A PLACE. Founder: "it should be its dedicated full page.
+               save should be a bottom bar navigation. so clicking on it just
+               leads to that note pad." `?compose=1` was already an address —
+               it just had no door. Pressing the creature writes the same one,
+               so the two entrances are one destination rather than two
+               features. */
+            { id: 'save', label: 'worldDockSave' as const, here: Boolean(viewNavigation.view?.compose), go: () => viewNavigation.write({ ...EMPTY_VIEW, compose: true }) },
             /* INSPIRATIONS KEEPS A DOOR UNTIL HOME HOLDS THE LIST. The plan
                is that your saves live on the home screen under the note, at
                which point this row goes the way the claims row already has —
@@ -16104,7 +16078,31 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            are a history rather than a depth of your own material, which is
            why they never sat among the three and why this corner is where
            they belong. */
-        left={storageScope ? <ChatCorner locale={locale} onOpen={() => openOverHome('conversations')} /> : null}
+        left={agentWall ? (
+              <span className="jar-char-form" role="group" aria-label={say('worldWallMyAgent')}>
+                {([null, agentWall] as const).map(wall => {
+                  const standing = wall ? atWall.kind === 'agent' : atWall.kind !== 'agent';
+                  return (
+                    <button
+                      key={wall ? wall.id : 'me'}
+                      type="button"
+                      className={`jar-char-face jar-label${standing ? ' jar-char-face--standing' : ''}`}
+                      aria-pressed={standing}
+                      /* NO CROSSING. The creature changes form where it is
+                         standing; it does not walk to another column to do
+                         it. Founder: "rather than my agent like moving rooms
+                         it kind of like switching itself up to its agent
+                         form" — and, three times, "the character shouldn't
+                         move left It should move right", which stops being a
+                         question the moment nothing slides either way. */
+                      onClick={() => { if (!standing) simApiRef.current?.goToWall(wall ? wall.col : 0, true); }}
+                    >
+                      {say(wall ? 'worldWallMyAgent' : 'worldWallMe')}
+                    </button>
+                  );
+                })}
+              </span>
+            ) : null}
         onSettings={()=>navigate('/profile')}
         account={auth?.account ? { name: auth.profile?.name, email: auth.account.email } : null}
         onSignOut={auth ? () => { void auth.logout(); } : undefined}

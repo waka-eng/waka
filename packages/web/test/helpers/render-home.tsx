@@ -596,15 +596,21 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
  * to `chooseFromMenu`, where they started.
  */
 export async function pressChatCorner(container: HTMLElement): Promise<void> {
-  const corner = [...container.querySelectorAll<HTMLButtonElement>(".waka-corners button")]
-    .find((node) => node.getAttribute("aria-label") === "Your conversations");
-  if (!corner) {
-    const had = [...container.querySelectorAll<HTMLButtonElement>(".waka-corners button")]
-      .map((node) => node.getAttribute("aria-label"))
+  /* CHAT MOVED OUT OF THE CORNER AND INTO THE DOCK. Founder: "switch between
+     me and my agent should go in top left now that we have new entry point
+     for chat" — the corner holds the form switch now, and conversations are a
+     dock row like the other places. The name stays so every suite that
+     reaches for the conversations door keeps reading the same; only where
+     that door is has changed. */
+  const row = [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")]
+    .find((node) => node.textContent?.trim() === "Conversations");
+  if (!row) {
+    const had = [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")]
+      .map((node) => node.textContent?.trim())
       .join(" | ");
-    throw new Error(`no chat corner on this screen. The corners offer: ${had}`);
+    throw new Error(`no conversations row in the dock. The dock offers: ${had}`);
   }
-  await act(async () => corner.click());
+  await act(async () => row.click());
 }
 
 /** Dismissing an overlay the way a person does: the visible close. Escape and

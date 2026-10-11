@@ -1662,6 +1662,8 @@
   width: min(420px, calc(100vw - 48px));
   pointer-events: auto;
 }
+
+
 .jar-seek .jar-ask { margin-top: var(--sp-8); }
 
 /* A scrollable surface ends the world's gesture chain, on touch as on wheel. */
@@ -4582,6 +4584,64 @@
    belongs: it is not a form control on a page of forms, it is the one place
    the world listens. Nothing else in here reaches beyond the mouth. */
 @layer chrome {
+  /**
+   * ═══ THE NOTEPAD IS A PAGE, NOT A DIALOG ════════════════════════════════
+   *
+   * Founder: "it should be its dedicated full page. save should be a bottom bar
+   * navigation. so clicking on it just leads to that note pad."
+   *
+   * `.jar-seek` is a 420px floating card — right for the small asks it was
+   * built for, wrong for the one surface in this product whose whole job is to
+   * give somebody room to write. The reference's writing screen has no card and
+   * no input chrome at all: a prompt, a quiet line of meta, and then the page.
+   *
+   * So the composer stops being a dialog and becomes the screen. It keeps its
+   * own scroll and stops short of the dock, which is the one piece of chrome
+   * that stays — because the dock is how you leave.
+   *
+   * DECLARED AFTER `.jar-seek`, never before it. A modifier written above the
+   * thing it modifies loses at equal specificity, which is how a block ended up
+   * ragged left under a centred sentence earlier this week.
+   */
+  /* BOTH SELECTORS, AND THE TRANSFORM CLEARED. `.jar-seek` surfaces are
+     centred with `top: 50%` plus a translate, and `chrome.css` re-states that
+     at `.jar-seek.jar-inspiration-composer[data-visual-viewport]` — higher
+     specificity, same layer — which DialogSurface stamps on as soon as it
+     tracks the visual viewport. So the page kept being re-centred and
+     half-translated off the left edge. A page has no centre to be pulled to. */
+  .jar-seek.jar-inspiration-composer,
+  .jar-seek.jar-inspiration-composer[data-visual-viewport] {
+    position: fixed;
+    z-index: 58;
+    inset: 0;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    display: flex;
+    flex-direction: column;
+    padding: calc(var(--sp-24) + env(safe-area-inset-top)) clamp(20px, 6vw, 28px)
+      calc(var(--sp-20) + var(--waka-corner) + var(--sp-24) + env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: 0;
+    background: var(--jar-atmos);
+    transform: none;
+  }
+
+  /* One column down the middle of the page, at the measure the rest of the
+     product reads at. */
+  .jar-inspiration-composer > * {
+    width: 100%;
+    max-width: 34rem;
+    margin-inline: auto;
+  }
+
+  /* IN THE CHROME LAYER, AND THAT IS THE WHOLE FIX. The first attempt put
+     this in `@layer product` and nothing happened: `.jar-inspiration-composer`
+     is declared in `chrome.css`, and `layers.css` orders the layers
+     `base, product, chrome, register` — so a later layer beats an earlier one
+     no matter how specific the earlier selector is. Specificity never enters
+     it. The composer stayed a 640px dialog, positioned off the left edge. */
+
   /**
    * THE FIXED BAND IS A DESKTOP SHAPE, AND COMPACT MODE IS NOT ONE.
    *

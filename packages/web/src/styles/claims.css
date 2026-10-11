@@ -3297,6 +3297,20 @@
   pointer-events: none;
 }
 
+/* IN THE CORNER NOW, SO IT SITS ON THE BAR'S BASELINE RATHER THAN FLOATING
+   UNDER A CHIN. Founder: "switch between me and my agent should go in top
+   left now that we have new entry point for chat." The two faces keep their
+   own register — see `.jar-char-face` — and only their placement changed. */
+.waka-corners > .jar-char-form {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex: 0 1 auto;
+  min-width: 0;
+  position: static;
+}
+
 .jar-char-press {
   position: absolute;
   left: 50%;
