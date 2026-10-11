@@ -96,10 +96,15 @@ it("offers the owners instead, on a surface that is one of them", async () => {
   await act(async () => {
     root.render(<Menu locale="en-US" items={owners(mine, theirs)} current="me" onSettings={() => undefined} />);
   });
-  expect(host.querySelector(".waka-switch-trigger")?.textContent).toContain("Your top of mind");
-  await act(async () => host.querySelector<HTMLButtonElement>(".waka-switch-trigger")!.click());
-  /* Pressing it on the world OPENS THE LIST rather than navigating, so
-     nothing is selected yet. */
+  /* LAID OUT, NOT LISTED. Founder: "i dont like current dropdown way to do
+     it." On the world there is no trigger and no sheet — the rungs are the
+     control, all of them visible, each a single press. So the boundary this
+     case guards is now the clearer one: the back control appears only where
+     `label` says you did not travel here on purpose. */
+  expect(host.querySelector(".waka-switch-trigger")).toBeNull();
+  const rungs = [...host.querySelectorAll<HTMLButtonElement>(".waka-rungs .waka-rung")];
+  expect(rungs.map((node) => node.textContent?.trim())).toEqual(["Your top of mind", "Your agent's top of mind"]);
+  await act(async () => rungs[1]!.click());
+  expect(theirs, "a rung is one press, with nothing to open first").toHaveBeenCalledOnce();
   expect(mine).not.toHaveBeenCalled();
-  expect(host.querySelectorAll(".waka-menu .waka-menu-item").length).toBe(2);
 });

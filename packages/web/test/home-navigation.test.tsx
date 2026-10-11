@@ -103,9 +103,10 @@ it('offers the three depths in the centre and nothing else',async()=>{
      some point and each one made the control answer a question it was not
      shaped for. */
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  const opener=world.container.querySelector<HTMLButtonElement>('.waka-corners button[aria-controls]')!;
-  await act(async()=>opener.click());
-  const rows=[...world.container.querySelectorAll('.waka-menu .waka-menu-item')].map(node=>node.textContent?.trim());
+  /* Laid out, not listed: the three are on screen without a press, which is
+     the whole of the change. A person can see that the other two exist — and
+     that they are an axis — without opening anything. */
+  const rows=[...world.container.querySelectorAll('.waka-rungs .waka-rung')].map(node=>node.textContent?.trim());
   expect(rows).toEqual(['Your inspirations','Your top of mind','Your principles']);
 });
 
@@ -146,7 +147,8 @@ it('starts a review beside the personal reading and restores home through Back',
      printed again in the reading's own heading sixty pixels below it, which
      is the duplication the switcher replaced — so the name is asserted where
      it now lives. */
-  expect(world.container.querySelector('.waka-switch-trigger')?.textContent).toContain('Your top of mind');
+  expect([...world.container.querySelectorAll('.waka-rungs .waka-rung--here')].map(n=>n.textContent?.trim()))
+    .toEqual(['Your top of mind']);
   /* Review is not offered any more. It was an activity card beside the
      character, then a menu row, and it is now merged away: Claims is the one
      place that asks a person to rule on their own material, and two surfaces

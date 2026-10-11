@@ -58,7 +58,7 @@ import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import type { MenuItem } from "../components/Menu";
-import { t, type SupportedLocale } from "./locales";
+import type { SupportedLocale } from "./locales";
 import { setStanding, useStanding, type Standing } from "./standing";
 import type { ViewOpen } from "./view-location";
 
@@ -108,11 +108,10 @@ const VIEWS: ReadonlyArray<{
    * specification — things you are expected to retain — when the question is
    * only "what is this".
    */
-  explain: MenuItem["label"];
 }> = [
-  { what: "saves", id: "saves", label: "worldMenuField", agentLabel: "worldAgentField", explain: "worldFieldWhatIs" },
-  { what: null, id: "top-of-mind", label: "worldMenuTopOfMind", agentLabel: "worldAgentTopOfMind", explain: "worldReadingWhatIs" },
-  { what: "principles", id: "principles", label: "worldPrinciplesShortcut", agentLabel: "worldAgentPrinciples", explain: "worldPrinciplesWhatIs" },
+  { what: "saves", id: "saves", label: "worldMenuField", agentLabel: "worldAgentField" },
+  { what: null, id: "top-of-mind", label: "worldMenuTopOfMind", agentLabel: "worldAgentTopOfMind" },
+  { what: "principles", id: "principles", label: "worldPrinciplesShortcut", agentLabel: "worldAgentPrinciples" },
 ];
 
 /* The account comes from the caller, the way the locale does. Reaching into
@@ -155,7 +154,6 @@ export function usePageMenu(
           : navigate(
               `${owner ? `/w/${encodeURIComponent(owner)}` : "/"}${row.what ? `?open=${row.what}` : ""}`,
             ),
-      explain: t(locale, row.explain),
     }));
 
     return {

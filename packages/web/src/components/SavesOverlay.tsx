@@ -211,6 +211,20 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
               with nothing saying what of theirs you were looking at. The
               overlay has to name itself — there is no switcher above it and
               the world behind is showing somebody's top of mind. */}
+          {/* THE NAME BECOMES THE WAY BACK. Founder: "with a button to go
+              back to all." It replaces the title rather than sitting beside
+              it, because at this depth the title would be naming a place you
+              are not in — and two controls that both lead out is the stack
+              this change exists to remove. */}
+          {open ? (
+            <button type="button" className="waka-over-back" onClick={() => { setOpen(null); setEditing(false); }}>
+              <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
+                <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
+                  strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {say("worldBackToAll")}
+            </button>
+          ) : (
           <span className="waka-over-name">
             <h2 className="waka-over-title">{title}</h2>
             {total !== null ? (
@@ -221,7 +235,15 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
               </span>
             ) : null}
           </span>
-          {owners && owners.length > 1 && onOwner ? (
+          )}
+          {/* THE SURFACE EXPLAINS ITSELF, WHERE THE QUESTION IS ASKED.
+              Founder, originally: "there should be like an info icon next to
+              each of the top of mind, principles, the inspirations so that
+              users can see what these are." Three icons in the switcher
+              answered that in the one place it is least useful — before you
+              arrive, about a thing you have not seen — and they went with the
+              dropdown. One line here costs no press and no icon. */}
+          {!open && owners && owners.length > 1 && onOwner ? (
             <span className="waka-over-owners" role="group" aria-label={title}>
               {owners.map((owner) => (
                 <button
@@ -259,7 +281,8 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
             own. Filtering happens over what is already loaded, so typing
             narrows in place with no round trip and no empty frame between
             keys. */}
-        {rows.length ? (
+        {!open ? <p className="waka-over-what">{say("worldFieldWhatIs")}</p> : null}
+        {!open && rows.length ? (
           <input
             type="search"
             className="waka-over-search"
@@ -297,86 +320,9 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
           </div>
         ) : null}
 
-        {phase === "loading" ? (
-          <p className="waka-over-status" role="status">
-            {say("worldInspirationsLoad")}
-          </p>
-        ) : phase === "failed" ? (
-          <>
-            <p className="waka-over-status" role="alert">
-              {say("worldInspirationsFail")}
-            </p>
-            <button type="button" className="waka-over-retry" onClick={() => void load()}>
-              {say("worldRetry")}
-            </button>
-          </>
-        ) : rows.length === 0 ? (
-          <p className="waka-over-status">{say("worldInspirationsEmpty")}</p>
-        ) : shown.length === 0 ? (
-          <p className="waka-over-status">{say("worldInspirationsNoHits")}</p>
-        ) : (
-          <ul className="waka-cards">
-            {shown.map((row) => {
-              const picture = pictureOf(row);
-              return (
-                <li key={row.id}>
-                  <button
-                    type="button"
-                    className={`waka-card${picture ? "" : " waka-card--text"}`}
-                    /* OPENS HERE, NOT SOMEWHERE ELSE (founder ruling). Pressing
-                       a tile used to throw you into the world at the memory's
-                       own place, which is a page change, a camera flight and a
-                       lost scroll position to read one thing. It opens over the
-                       grid and closes back onto it. */
-                    onClick={() => setOpen(row)}
-                  >
-                    {picture ? (
-                      <span className="waka-card-picture">
-                        {/* Decorative here: the words below are the label, and a
-                            filename read aloud before them would bury it. */}
-                        <img src={picture} alt="" loading="lazy" />
-                      </span>
-                    ) : null}
-                    <span className="waka-card-body">
-                      <span className="waka-card-text">{row.preview}</span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
         {open ? (
-          <div className="waka-sheet-scrim" onClick={() => { setOpen(null); setEditing(false); }}>
-            {/* THE CARD THE PRODUCT ALREADY HAS (founder: bring back this card
-                design). It wears `.jar-panel`'s own inner classes — the date
-                stamp, the text, the footer row — so the design comes from the
-                one stylesheet that defines it rather than from a lookalike that
-                would drift the first time the original moved. Only the
-                positioning is this page's: in the world the panel flies in from
-                a memory's own place, and here it opens over the grid it was
-                pressed on.
-
-                WITHOUT THE VISIBILITY PAIR OR THE LINK (founder: remove this).
-                Private/public and the copy-link both still exist on the card in
-                the world; this surface is for reading what you kept and fixing
-                its words. */}
-            {/* A DIALOG INSIDE A DIALOG, deliberately. Escape has to mean
-                "close the card" while a card is open and "close the archive"
-                when none is — one key, the innermost thing first, which is what
-                every other stacked surface in this product does. A plain
-                <article> could not do that: the key would reach the archive and
-                dismiss both at once, losing the grid position as a side effect
-                of closing a card. DialogSurface stops the key at the first
-                surface that handles it. */}
-            <DialogSurface
-              className="waka-sheet jar-panel-card"
-              aria-label={open.preview.slice(0, 60)}
-              onClose={() => { setOpen(null); setEditing(false); }}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="jar-panel-head">
+          <article className="waka-over-one jar-panel-card">
+            <div className="jar-panel-head">
                 <span className="jar-panel-when jar-label">
                   {dateStamp(open.capturedMs, locale)}
                 </span>
@@ -442,9 +388,73 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
                   </button>
                 </span>
               </p>
-            </DialogSurface>
-          </div>
-        ) : null}
+            </article>
+        ) : phase === "loading" ? (
+          <p className="waka-over-status" role="status">
+            {say("worldInspirationsLoad")}
+          </p>
+        ) : phase === "failed" ? (
+          <>
+            <p className="waka-over-status" role="alert">
+              {say("worldInspirationsFail")}
+            </p>
+            <button type="button" className="waka-over-retry" onClick={() => void load()}>
+              {say("worldRetry")}
+            </button>
+          </>
+        ) : rows.length === 0 ? (
+          <p className="waka-over-status">{say("worldInspirationsEmpty")}</p>
+        ) : shown.length === 0 ? (
+          <p className="waka-over-status">{say("worldInspirationsNoHits")}</p>
+        ) : (
+          <ul className="waka-cards">
+            {shown.map((row) => {
+              const picture = pictureOf(row);
+              return (
+                <li key={row.id}>
+                  <button
+                    type="button"
+                    className={`waka-card${picture ? "" : " waka-card--text"}`}
+                    /* OPENS HERE, NOT SOMEWHERE ELSE (founder ruling). Pressing
+                       a tile used to throw you into the world at the memory's
+                       own place, which is a page change, a camera flight and a
+                       lost scroll position to read one thing. It opens over the
+                       grid and closes back onto it. */
+                    onClick={() => setOpen(row)}
+                  >
+                    {picture ? (
+                      <span className="waka-card-picture">
+                        {/* Decorative here: the words below are the label, and a
+                            filename read aloud before them would bury it. */}
+                        <img src={picture} alt="" loading="lazy" />
+                      </span>
+                    ) : null}
+                    <span className="waka-card-body">
+                      <span className="waka-card-text">{row.preview}</span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {/* ONE SURFACE, TWO STATES — NOT A SHEET OVER A SHEET.
+            Founder: "modal and a modal is bad, so when user clicks on a box,
+            then switch this whole page to that inspiration with a button to
+            go back to all."
+
+            Right, and the second layer was never earning its separateness. A
+            dialog inside a dialog has two scrims, two Escapes and two ways
+            out, and a person who presses Escape has to know which of the two
+            they are dismissing — the cost of a stack is paid every time, by
+            everyone, for a depth nobody asked for. The archive and one kept
+            thing are the same surface at two depths, so the surface simply
+            goes to that depth and offers the way back.
+
+            The grid keeps its scroll position because it is not unmounted —
+            `open` only decides which half renders — so coming back lands you
+            where you were rather than at the top of a reloaded page. */}
       </DialogSurface>
     </div>
   );

@@ -713,6 +713,75 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * THE THREE RUNGS, LAID OUT
+ *
+ * Founder: "brainstorm better way to help users see their inspirations and
+ * principles. i dont like current dropdown way to do it."
+ *
+ * They were a caret and a sheet. A dropdown is the wrong instrument for these
+ * particular three, because they are not unrelated destinations that happen
+ * to need a list — they are the same material at three depths, which is one
+ * axis, and an axis wants to be SEEN. Behind a caret a person cannot discover
+ * that the other two exist without opening something, and the relationship
+ * between them, which is the idea of the product, stays invisible until they
+ * do.
+ *
+ * Laid out, the three words teach the model for free: left to right is
+ * upstream to downstream, and moving rightward is moving forward through your
+ * own thinking. The one you are on is the one that is lit — light is this
+ * product's only meaning channel, so there is no pill, no underline and no
+ * rule under anything.
+ *
+ * It scrolls sideways rather than wrapping on a narrow screen, for the same
+ * reason the shelves do: two lines of chrome above a reading pushes the
+ * reading down, and the bar's height is load-bearing for where the creature
+ * sits.
+ * ------------------------------------------------------------------------- */
+
+.waka-rungs {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(14px, 3vw, 26px);
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.waka-rungs::-webkit-scrollbar {
+  display: none;
+}
+
+.waka-rung {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  /* ONE LINE, ALWAYS (founder: "all buttons single line, never wrapping"). */
+  white-space: nowrap;
+}
+
+.waka-rung:hover,
+.waka-rung:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+/* THE ONE YOU ARE ON, said in light and nothing else. It stays pressable —
+   pressing the rung you are standing on is what a person does when they
+   aimed at it by mistake, and it costs nothing. */
+.waka-rung--here {
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------------------
  * WHAT YOU HOLD UP IN FRONT OF THE WORLD
  *
  * Founder: "for your inspirations, after I click on it, I feel like I'm lost
@@ -803,6 +872,19 @@
 }
 
 /* The field is alone on its row now, so it simply takes it. */
+/* WHAT THIS SURFACE IS, in one line, where a person is standing when they
+   wonder. It replaces three info icons in a list that could only ever answer
+   the question before you arrived. Quiet — it is read once and then never
+   again, so it must not compete with the thing it describes. */
+.waka-over-what {
+  margin: 0;
+  max-width: 62ch;
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 .waka-over-search {
   width: 100%;
 }
@@ -853,6 +935,44 @@
 .waka-over-owner--here {
   color: var(--ink);
   cursor: default;
+}
+
+/* ONE KEPT THING, AT THE SAME DEPTH AS THE GRID IT REPLACED. Founder:
+   "modal and a modal is bad... switch this whole page to that inspiration
+   with a button to go back to all." It wears `.jar-panel-card`'s own inner
+   classes, so the design comes from the stylesheet that defines the card
+   rather than from a lookalike that would drift the first time the original
+   moved. */
+.waka-over-one {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-height: 0;
+}
+
+/* THE WAY BACK IS THE NAME. Quiet at rest and inked on approach, like every
+   other secondary act — it is a return, not a destination, and a return that
+   shouts is a page that does not expect you to stay. */
+.waka-over-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-lead);
+  font-weight: 300;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.waka-over-back:hover,
+.waka-over-back:focus-visible {
+  color: var(--ink);
+  outline: none;
 }
 
 .waka-over-title {
@@ -1148,7 +1268,17 @@
   top: 0;
   bottom: 0;
   left: 0;
-  width: min(21rem, 86vw);
+  /* MEASURED 2026-10-11 at 1280x900: a flat `min(21rem, 86vw)` is 336px
+     wide, and the composer — 680px centred — starts at 300. So the rail's
+     hairline edge cut through the composer's bottom-left corner, taking the
+     microphone with it. The world behind a rail is dimmed and not
+     interactive, so being BEHIND it is fine; being sliced by it is not, and a
+     control half-under an edge reads as something broken rather than
+     something covered. A share of the viewport instead of a flat width keeps
+     it clear of that column at every width where the composer is centred,
+     and the floor keeps it usable on a phone, where the composer is full
+     width and the rail covers it outright anyway. */
+  width: clamp(15rem, 22vw, 21rem);
   display: flex;
   flex-direction: column;
   gap: var(--sp-16);
