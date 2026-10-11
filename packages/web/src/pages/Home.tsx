@@ -7519,6 +7519,28 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         /* the aura: layered pastel blooms at different radii, drifting on
            slow independent orbits. Additive, so it reads as emitted light. */
         ctx!.globalCompositeOperation = "lighter";
+        /* ═══ THE REACH IS THE READING, WHICH IS WHY IT STAYS SMALL ═══
+           This was widened to 3.4 on 2026-10-11, chasing auwa.life — whose
+           creature sits in a bloom five body-widths across with no edge
+           anywhere — and the founder stopped it before it shipped:
+
+             "no I like the small warm glow. Maybe auwa's bloom isn't best
+              here because the glowness is supposed to be showing how
+              inspired I am. So it's like the character is like a light
+              bulb. So glow is better in this case, no?"
+
+           It is, and the argument is already in this line: `lerp` between
+           1.25 and 2.1 ON `lit`. The reach IS the reading. A lamp that is
+           always huge cannot report anything, so the change would have
+           spent the product's clearest signal — how alive your field is,
+           read before a word — on looking like a reference.
+
+           THE REFERENCE IS A STILL AND THIS IS AN INSTRUMENT. auwa's
+           creature has one state and can afford a bloom tuned for that
+           frame; this one has a range, and the range is the point. Noted
+           here rather than in a document because the next person to put
+           the two screenshots side by side will reach for exactly this
+           number. */
         const auraR = companion.size * lerp(1.25, 2.1, lit) * (1 + companion.flare * 0.25);
         for (let i = 0; i < 4; i++) {
           const ph = t * (0.16 + i * 0.05) + i * 1.9;
