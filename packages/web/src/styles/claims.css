@@ -32,7 +32,27 @@
    * page's ground with the same whisper of light mixed in, composited once
    * instead of layered over whatever happens to be behind it.
    */
-  --waka-raised: color-mix(in srgb, var(--bg) 96%, #ffffff 4%);
+  /**
+   * ═══ THE WARM SURFACE ═══════════════════════════════════════════════
+   *
+   * Founder, having shown 썸원 (Som-one) as the reference: "이게 난 엄청 맘에
+   * 드는 듯. 얘네 디자인이랑 느낌 따라해보자." — and, choosing how far the
+   * palette moves: keep the near-black, borrow the warmth.
+   *
+   * WHAT 썸원 ACTUALLY DOES, and it is three things, none of them colour on
+   * the surfaces themselves: a ground with visible PAPER TEXTURE rather than
+   * a flat fill; cards separated from that ground by VALUE and never by a
+   * hairline; and corners large enough to read as soft objects rather than
+   * as rectangles with the edges filed off.
+   *
+   * This lifts the raised tone from 4% white to 7% and shifts it WARM — the
+   * ivory the creature is already lit with, rather than a neutral grey. On a
+   * near-black ground a neutral lift reads as dirty glass; the same lift with
+   * a warm bias reads as paper under a lamp. The grain this world already
+   * paints over everything does the texture half for free, which is why this
+   * reference transfers at all.
+   */
+  --waka-raised: color-mix(in srgb, var(--bg) 93%, var(--moon-warm) 7%);
 
   /**
    * THE GROUND BEHIND A SHEET, named because it was three values.
@@ -49,7 +69,12 @@
    * shadow, so it is built from black regardless of which way the palette
    * runs.
    */
-  --waka-scrim: color-mix(in srgb, #000 58%, transparent);
+  /* 58% -> 78%. The scrim used to sit under a panel that did the separating;
+     it does the separating itself now (see `.waka-over`). Deep enough that
+     the world is clearly behind, translucent enough that the grain and the
+     stars still come through — the surface reads as this place dimmed, not
+     as a page that replaced it. */
+  --waka-scrim: color-mix(in srgb, #000 78%, transparent);
 
   /**
    * THE SHADOW UNDER A FLOATING SURFACE, named because it was copied.
@@ -102,7 +127,11 @@
    * Pills stay `--r-pill` and circles stay 50%: those are shapes, not steps.
    */
   --waka-r-control: 10px;
-  --waka-r-surface: 14px;
+  /* 14 -> 24. The single most legible thing about the reference's surfaces
+     is how round they are: 14px reads as a rectangle that has been tidied,
+     24px reads as a soft object. Controls keep their own smaller radius —
+     a button that round becomes a pill and starts shouting. */
+  --waka-r-surface: 24px;
 }
 
 /**
@@ -157,6 +186,79 @@
  * one corner changes is the kind of wrongness a reader feels without being
  * able to name.
  */
+/**
+ * ═══ THE DOCK — A FLOATING BAR, THE WAY A PHONE DOES IT ═════════════════
+ *
+ * Founder: "have a bottom navbar. A floating navbar works for now, right?"
+ *
+ * Floating rather than seated on the edge, because this world has no edges —
+ * the ground runs to the bezel and a bar welded to the bottom would be the
+ * first hard line in it. It is an object resting near the bottom instead,
+ * wearing the same warm raised tone and the same large radius as the note
+ * the creature holds up, so the two read as the same material.
+ *
+ * NO BORDER. Separation by value is the whole of how the reference builds
+ * surfaces, and it is the one thing that stops a dark UI looking like a
+ * wireframe.
+ *
+ * WHERE YOU ARE IS SAID BY LIGHT, as everywhere else here: the current place
+ * is ink, the rest are muted, and nothing is underlined, filled or boxed.
+ */
+.waka-dock {
+  position: fixed;
+  z-index: 55;
+  left: 50%;
+  bottom: calc(var(--sp-20) + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  max-width: calc(100vw - var(--sp-32));
+  padding: var(--sp-6);
+  border-radius: var(--r-pill);
+  background: var(--waka-raised);
+  pointer-events: auto;
+}
+
+.waka-dock-item {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: var(--waka-corner);
+  padding: 0 var(--sp-16);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  /* NOT THE UPPERCASE REGISTER. That voice belongs to eyebrows, and a bar of
+     four letterspaced capitals is the loudest thing on a quiet screen — the
+     reference's bar is four small icons you barely notice until you need
+     them. Sentence case at the fine step does the same job here. */
+  font-size: var(--t-fine);
+  letter-spacing: normal;
+  font-weight: 400;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.waka-dock-item:hover,
+.waka-dock-item:focus-visible {
+  color: var(--ink);
+}
+
+.waka-dock-item--here {
+  color: var(--ink);
+}
+
+/* The composer and the dock both want the bottom of the screen, and the dock
+   is the thing that is always there — so the box sits above it. */
+.waka-dock ~ * .jar-mouth-slot,
+.jar-mouth-slot {
+  margin-bottom: 0;
+}
+
 .waka-corners {
   position: fixed;
   inset-inline: 0;
@@ -850,6 +952,30 @@
   background: var(--waka-scrim);
 }
 
+/**
+ * ═══ THE SHEET DISSOLVES ════════════════════════════════════════════════
+ *
+ * Founder, on these surfaces: "this overall I feel like is such an ugly
+ * design that doesn't match the vibe of what I created here... I want to
+ * maximize for beautiful aesthetics and this should feel like your little
+ * narrative ground for your inspirations."
+ *
+ * WHAT WAS HERE: a 1040px rounded rectangle with a hairline border, a raised
+ * fill and a drop shadow — a modal out of a component library, floating over
+ * a world made of grain, glow and warm ivory light. The world has no edges
+ * like that anywhere. Nothing else in this product is a slab.
+ *
+ * So the slab is gone. The scrim deepens instead, the world recedes behind
+ * it, and the content stands on the world's OWN ground — same grain, same
+ * vignette, same black. An archive is not a dialog you summon over a place;
+ * it is that place, holding up what you kept.
+ *
+ * THE SCRIM IS STILL TRANSLUCENT, and that is the whole trick. The film and
+ * the stars stay faintly visible through it, so the surface reads as the
+ * world dimmed rather than as a new page that has replaced it — which is the
+ * only reason losing the panel's edge does not lose the sense of depth with
+ * it. Light separates. It is the only thing that ever did here.
+ */
 .waka-over {
   display: flex;
   flex-direction: column;
@@ -859,10 +985,6 @@
   overflow: auto;
   overscroll-behavior: contain;
   padding: var(--sp-24);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-surface);
-  background: var(--waka-raised);
-  box-shadow: var(--waka-lift);
 }
 
 /**
@@ -1043,13 +1165,24 @@
   flex: 1 1 12rem;
   min-width: 0;
   min-height: 44px;
-  padding: 0 var(--sp-12);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-control);
+  /* A RULE, NOT A BOX. The archive has no boxes left in it — the saves are
+     text on a hairline and the sheet around them is gone — so a bordered
+     input was the last rectangle on the surface, and it read as the one
+     thing somebody had forgotten to finish. An underline is what a search
+     field is: a place to write, on a line. */
+  padding: 0 0 var(--sp-8);
+  border: 0;
+  border-bottom: 1px solid var(--jar-panel-edge);
+  border-radius: 0;
   background: transparent;
   color: var(--ink);
   font-family: var(--waka-face);
   font-size: var(--t-input);
+}
+
+.waka-over-search:focus-visible {
+  outline: none;
+  border-bottom-color: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
 .waka-over-search::placeholder {
@@ -1543,29 +1676,31 @@
  * card with its words filling the space the picture would have held.
  * ------------------------------------------------------------------------- */
 
+/**
+ * ═══ WHAT YOU KEPT IS TEXT, SO IT IS SET AS TEXT ════════════════════════
+ *
+ * This was a grid of `208px` boxes, each with a border and a raised fill, and
+ * most of them held one sentence — so the archive was a wall of equal grey
+ * rectangles with a few words rattling around inside each, and the eye read
+ * the RECTANGLES. A person's own thoughts rendered as database rows.
+ *
+ * They are a reading column now: one thing per line, in the product's own
+ * reading face, with air between them and nothing drawn around them. The
+ * only thing marking a save is the save itself. Length means something again
+ * — a long one looks long — and the grid's worst habit is gone with it, which
+ * was making a six-word thought and a paragraph occupy identical space.
+ *
+ * TWO COLUMNS ONLY WHERE THERE IS ROOM, and wide ones. Not because a grid is
+ * wanted back, but because thirty-six entries in one column on a 1512px
+ * window is a very long scroll past a very empty screen. The measure is
+ * capped so a line never runs past what the eye can track.
+ */
 .waka-cards {
   display: grid;
-  /**
-   * THE TRACK CANNOT BE WIDER THAN THE PAGE IT IS ON.
-   *
-   * MEASURED 2026-10-10 at 320px: the overlay's content box is 230px wide and
-   * this track was a flat 260px minimum, so the grid was 30px wider than the
-   * surface holding it and `.waka-over` grew a sideways scrollbar. The
-   * archive — the one page in this product a person opens to browse — slid
-   * left and right under the thumb on the narrowest phone.
-   *
-   * `min(260px, 100%)` is the guard, and it is not a new idea here:
-   * `.waka-held` eight hundred lines up already writes
-   * `minmax(min(22rem, 100%), 1fr)` for exactly this reason. Two grids, one
-   * rule, and only one of them had learned it — which is Law 3 in four
-   * characters of CSS.
-   *
-   * It is intrinsic rather than a breakpoint on purpose: the number that
-   * matters is the width of the CONTAINER, not of the window, and this grid
-   * also sits inside a 680px column on a wide screen.
-   */
-  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
-  gap: var(--sp-20);
+  grid-template-columns: repeat(auto-fit, minmax(min(30rem, 100%), 1fr));
+  column-gap: var(--sp-40);
+  row-gap: 0;
+  align-items: start;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1573,21 +1708,34 @@
 
 .waka-card {
   display: flex;
-  flex-direction: column;
+  /* The number and the sentence share a line; the number keeps its own
+     column so a stack of them reads as a column. */
+  flex-direction: row;
+  align-items: baseline;
+  gap: var(--sp-16);
   width: 100%;
-  /* The constant that makes rows line up, picture or no picture. 300 was a
-     tile that could hold a paragraph; a kept thing is usually a sentence, so
-     the card was mostly empty and the grid mostly scrolling past air
-     (founder: shorter, width is good). */
-  height: 208px;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-surface);
-  background: var(--waka-raised);
-  color: var(--ink);
+  /* NO FIXED HEIGHT, NO BORDER, NO FILL. See `.waka-cards`. A hairline above
+     each one is the only mark, and it is there to separate rather than to
+     enclose — the thing a rule does that a box cannot. */
+  padding: var(--sp-20) 0;
+  border: 0;
+  border-top: 1px solid var(--jar-panel-edge);
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
   text-align: left;
   cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+/* The first in each column has nothing above it to be separated from. */
+.waka-cards > li:first-child .waka-card {
+  border-top: 0;
+}
+
+.waka-card:hover,
+.waka-card:focus-visible {
+  color: var(--ink);
 }
 
 .waka-card:hover,
@@ -1616,6 +1764,8 @@
 }
 
 .waka-card-body {
+  flex: 1 1 auto;
+  min-width: 0;
   display: block;
   flex: 1 1 auto;
   min-height: 0;
@@ -1627,11 +1777,55 @@
   -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
 }
 
+/**
+ * ═══ THE INDEX IS THE ACCENT, AND IT IS MADE OF LIGHT ═══════════════════
+ *
+ * 썸원 sets its index numbers in coral against black text, so the number is
+ * findable without being loud. WAKA has no coral and is not getting one —
+ * the founder held the law in the same breath as asking for this: warmth
+ * comes from ground, texture, radius and type, and "no colour decision ever
+ * enters the product."
+ *
+ * So the accent is the same idea carried by the only channel there is. The
+ * number is QUIETER than the sentence, never brighter, and it is findable by
+ * FORM instead: a different slope, tabular figures so the column of them
+ * lines up down the page, and tracking that no prose in this product has.
+ * You can run your eye down the numbers without ever reading one, which is
+ * the whole job colour was doing in the reference.
+ *
+ * `font-variant-numeric: tabular-nums` is the load-bearing line. Proportional
+ * figures make 11 narrower than 88, so a stack of them wanders and stops
+ * reading as a column — and a column is the only reason these are on the
+ * left rather than tucked after the text.
+ */
+.waka-card-index {
+  flex: none;
+  min-width: 3.5ch;
+  font-size: var(--t-fine);
+  font-style: italic;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  /* `--jar-faint` is 2.3:1 on this ground — not dimmer text, text you cannot
+     read. A number nobody can read is not a name. `--jar-muted` clears 4.5:1
+     and still sits well under the sentence beside it. */
+  color: var(--jar-muted);
+  transition: color 0.2s ease;
+}
+
+.waka-card:hover .waka-card-index,
+.waka-card:focus-visible .waka-card-index {
+  color: var(--ink);
+}
+
 .waka-card-text {
   font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  line-height: 1.45;
-  color: var(--ink);
+  /* The reading step, not the UI step. These are sentences somebody wrote on
+     purpose; they were being set at the size of a button label. */
+  font-size: var(--t-lead);
+  line-height: 1.5;
+  color: inherit;
+  text-wrap: pretty;
 }
 
 /* With no picture the words get the whole tile — a step up from a captioned
@@ -2368,13 +2562,35 @@
  * gives back the border, the radius, two lines of padding and the raised
  * ground — which is most of the crowding, and all of it was chrome.
  */
+/**
+ * ═══ THE CLAIM IS THE NOTE ══════════════════════════════════════════════
+ *
+ * Founder, pointing at the ribboned card along the bottom of 썸원's home —
+ * the one that says "오늘도 반가워요!" — "the main screen should be just the
+ * character and then the claim should always show there. Because that's
+ * like the first thing that the user should answer."
+ *
+ * That card is the one thing on their home screen that is ADDRESSED TO YOU,
+ * and it is given a surface of its own so you cannot mistake it for
+ * scenery. The claim is WAKA's version of it, and the inversion is right on
+ * the evidence as well as the feeling: a claim can exist from the first
+ * thing a person saves, while a top of mind needs three pieces of evidence
+ * behind a signal. The screen was leading with what takes longest to exist
+ * and burying what was ready on day one.
+ *
+ * So it stops being loose text under the chin and becomes an object: the
+ * warm raised tone, a large radius, real padding, and NO BORDER — separated
+ * from the ground by value, which is the whole of how the reference does it.
+ */
 .jar-char-claim {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--sp-12);
-  width: min(30rem, 100%);
-  padding: var(--sp-8) 0;
+  gap: var(--sp-16);
+  width: min(32rem, 100%);
+  padding: var(--sp-24) var(--sp-24) var(--sp-20);
+  border-radius: var(--waka-r-surface);
+  background: var(--waka-raised);
 }
 
 
@@ -2393,8 +2609,11 @@
   font-family: var(--waka-face);
   font-size: var(--t-lead);
   font-weight: 300;
-  line-height: 1.35;
+  /* 1.35 -> 1.5. A sentence asking somebody to consult themselves is read,
+     not scanned, and the reference sets everything it wants read loosely. */
+  line-height: 1.5;
   color: var(--ink);
+  text-align: center;
   text-wrap: pretty;
 }
 

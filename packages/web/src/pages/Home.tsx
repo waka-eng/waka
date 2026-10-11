@@ -12853,7 +12853,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   };
 
   return (
-    <div ref={measured.root} className="jar" aria-label="Waka">
+    <div
+      ref={measured.root}
+      /* ═══ THE WORLD STANDS DOWN WHILE AN ARCHIVE IS OPEN ═══════════════
+         The scrim over these surfaces is deliberately translucent so the
+         grain and the creature stay faintly behind them — that is what makes
+         an archive read as THIS PLACE holding up what you kept, rather than
+         as a page that replaced it. But translucency does not discriminate:
+         the save box, the creature's voice and the processing line came
+         through it too, and a composer drawn across a sentence somebody
+         wrote is not depth, it is a collision.
+         So the world's CHROME steps back and the world itself does not. */
+      className={`jar${viewNavigation.view?.open ? " jar--aside" : ""}`}
+      aria-label="Waka"
+    >
       {/* the world's early face, until the first real frame: the same ground,
           the companion already home, one honest word. Shared with the auth
           splash so the whole way in is one unbroken place (founder,
@@ -15913,7 +15926,59 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           on your own ground made it unreachable from every wall it exists to
           get you out of. The switcher and the cog belong everywhere for the
           same reason they belong on the other pages. */}
-      {phase==='ready'?<Menu locale={locale} items={menu.items} current={menu.current}
+      {/* ═══ THE DOCK ════════════════════════════════════════════════════
+          Founder: "Do it like the mobile app where there are bottom buttons
+          so that we can move across sections. Like, have a bottom navbar."
+
+          THE FOUR RUNGS ACROSS THE TOP ARE GONE WITH IT. They named
+          inspirations and claims, and both of those now live ON the home
+          screen — so two of the four were doors to rooms you were already
+          standing in. What is left is genuinely separate places, and places
+          belong at the bottom where a thumb is.
+
+          CAPTURE IS A DESTINATION HERE, NOT A SECOND DEMAND. Founder, on the
+          screen with the note and the box on it at once: "there is a claim,
+          there is save a thought, there's too many things that are happening
+          at once here." The reference has no input on its home at all —
+          capture there is a door you press. This is that door, and saving is
+          still one gesture, which is the ruling that mattered.
+
+          WORDS, NOT ICONS. The reference uses a five-icon bar; this product
+          has one typeface and no icon set, and inventing one for the dock
+          would be a second meaning channel arriving through the back. Four
+          short words in the register this product already labels things in. */}
+      {phase==='ready'&&!viewNavigation.view?.conversationId&&!viewNavigation.view?.sharePrinciple ? (
+        <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
+          {([
+            { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open, go: () => viewNavigation.closeOpen() },
+            /* INSPIRATIONS KEEPS A DOOR UNTIL HOME HOLDS THE LIST. The plan
+               is that your saves live on the home screen under the note, at
+               which point this row goes the way the claims row already has —
+               a door to a room you are standing in is not navigation. Until
+               that is built, retiring the rung without this would have left
+               the archive reachable from nowhere.
+
+               NO `SAVE` ROW. Capture is about to become the creature's own
+               offer — a pencil in its speech bubble, beside the claim it
+               holds up — and two front doors to one room is the duplication
+               this product has already paid for once. */
+            { id: 'saves', label: 'worldDockSaves' as const, here: viewNavigation.view?.open === 'saves', go: () => openOverHome('saves') },
+            { id: 'principles', label: 'worldDockPrinciples' as const, here: viewNavigation.view?.open === 'principles', go: () => openOverHome('principles') },
+            { id: 'talk', label: 'worldDockTalk' as const, here: viewNavigation.view?.open === 'conversations', go: () => openOverHome('conversations') },
+          ]).map(item => (
+            <button
+              key={item.id}
+              type="button"
+              className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}`}
+              aria-current={item.here ? 'page' : undefined}
+              onClick={item.go}
+            >
+              {say(item.label)}
+            </button>
+          ))}
+        </nav>
+      ) : null}
+      {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
            Founder: "I kind of want to give the feeling of, rather than my
            agent moving rooms, it kind of switches itself up to its agent

@@ -570,15 +570,17 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
  * carries that one difference and the assertions stay where they were.
  */
 export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
-  /* THE THREE ARE LAID OUT NOW, NOT LISTED. Founder: "i dont like current
-     dropdown way to do it." So there is no trigger to press first — the rung
-     IS the control. What every suite using this helper was testing is
-     unchanged; only the number of presses it takes to get there is. */
-  const rows = [...container.querySelectorAll<HTMLButtonElement>(".waka-rungs .waka-rung")];
+  /* THE PLACES MOVED TO THE BOTTOM. Founder: "have a bottom navbar." The
+     four rungs across the top are gone and the dock holds what is left — and
+     what is left is PLACES, which is why two of the four did not survive the
+     move: claims are answered on the home screen and saves are moving there.
+     What every suite using this helper tests is unchanged; only where the
+     control lives is. */
+  const rows = [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")];
   const row = rows.find((node) => node.textContent?.trim().startsWith(label));
   if (!row) {
     throw new Error(
-      `no rung named ${label}. The bar offers: ${rows.map((n) => n.textContent?.trim()).join(", ")}`,
+      `no dock row named ${label}. The dock offers: ${rows.map((n) => n.textContent?.trim()).join(", ")}`,
     );
   }
   await act(async () => row.click());
