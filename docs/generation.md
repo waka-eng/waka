@@ -347,7 +347,7 @@ recency = 2^(−quiet_days / 45)          quiet = days since newest; 45 = CONFID
 confidence = round( 55·support + 30·spread + 15·recency + diversity + affirmed )
              where diversity = CONFIDENCE_SOURCE_DIVERSITY_BONUS (8)
              when evidence spans app AND agent capture, else 0
-             and affirmed = CONFIDENCE_AFFIRMED_BONUS (8)
+             and affirmed = CONFIDENCE_AFFIRMED_BONUS (30)
              when the owner's LATEST verdict on the signal is "true", else 0
              — clamped to 0..100
 ```
@@ -1069,7 +1069,7 @@ The authoritative values. Machine-checked against code — see
 | `CONFIDENCE_SATURATION_SPREAD_DAYS` | 30 | Spread saturates at this many days |
 | `CONFIDENCE_RECENCY_HALF_LIFE_DAYS` | 45 | Recency half-life |
 | `CONFIDENCE_SOURCE_DIVERSITY_BONUS` | 8 | Added when app and agent evidence corroborate |
-| `CONFIDENCE_AFFIRMED_BONUS` | 8 | Added when the owner's latest verdict on the signal is "true" |
+| `CONFIDENCE_AFFIRMED_BONUS` | 30 | Added when the owner's latest verdict on the signal is "true". Borrowed from `CONFIDENCE_SPREAD_WEIGHT`: saying "this is me" is worth what a month of recurrence is worth. Was 8 — the same as the source-diversity bonus — which reached selection as +3.6 of 100 against the -36 that rejecting the same claim produced |
 | `MATCH_CANDIDATE_SCAN_LIMIT` | 500 | Most-recently-evidenced signals scanned per match |
 | `RELATED_INSPIRATION_SCAN_LIMIT` | 500 | Most recent capture vectors scanned for relatedness |
 | `RELATED_INSPIRATION_MIN_COSINE` | 0.6 | Floor below which an earlier capture is not offered as context |
