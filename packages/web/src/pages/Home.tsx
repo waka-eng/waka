@@ -1903,6 +1903,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      lives in the address; a press on the plus is not going anywhere yet, so
      it stays here — putting it in the URL would make "I was about to make
      something" a page you could link to and come back to. */
+  /** The picker the dock's making-slot opens while a note is being written. */
+  const dockFileInput = useRef<HTMLInputElement>(null);
   const [makingNew, setMakingNew] = useState(false);
   /* The box's own measured height, kept across frames so the layout pass can
      place the box before it has re-measured it this frame. `MOUTH_H` is the
@@ -16682,6 +16684,71 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                dismiss target, and only then to "New inspiration". Beside the
                plus in source order, Tab goes straight into it. */
             <span key={item.id} className={item.id === 'new' ? 'waka-dock-slot' : undefined}>
+            {/* ═══ THE BAR TRANSFORMS, IN THE ONE SLOT THAT SHOULD ═══════
+                Founder: "when the user is in inspirations, maybe this
+                bottom bar should transform so that the icons turn into the
+                speech or the image or a file — but then still a quick way
+                to access the navigation."
+
+                BOTH HALVES, WHICH IS THE WHOLE DIFFICULTY. A bar that
+                replaces itself wholesale costs a press to get the
+                navigation back, and the loudest complaint of the same day
+                was "I have to click now like four times to actually get
+                there". So the four PLACES never move. What changes is the
+                one slot that is not a place: the plus means "make
+                something", and while you are already making something that
+                slot is where the making happens.
+
+                It also empties the bottom-left corner, which is where the
+                tools used to float as a second object above the bar — the
+                "double layer" in its last remaining form, and the corner
+                the founder asked about twice.
+
+                A CHAT DOES NOT GET THIS, and the reason is arithmetic
+                rather than taste: a message field cannot fold into a 56px
+                slot beside four labels, and giving the bar over to it
+                entirely would put the navigation a press further away on
+                the surface people have most often reported being stuck in.
+                Its field already sits on the ground as a rule rather than
+                a second pill, so there is no layer to remove there. */}
+            {item.id === 'new' && viewNavigation.view?.compose ? (
+              <span className="waka-dock-making" role="group" aria-label={say('worldCaptureInspiration')}>
+                {supportedRecordingType() ? (
+                  recording.phase === 'idle' ? (
+                    <button type="button" className="waka-dock-tool"
+                      aria-label={say(inputMedia.some(m => m.type === 'audio') ? 'worldComposerRecordAgain' : 'worldComposerRecord')}
+                      disabled={!composerDraft.available}
+                      onClick={() => void recording.start()}><HomeActionIcon kind="record"/></button>
+                  ) : (
+                    <>
+                      {/* STOP KEEPS IT, CANCEL THROWS IT AWAY — both, because a
+                          recording you can start and stop but not discard is
+                          worse than one you cannot start. The clock is words
+                          rather than a glyph for the reason the composer gave:
+                          a red dot cannot say how long you have been talking. */}
+                      <button type="button" className="waka-dock-tool waka-dock-tool--wide"
+                        aria-label={say('worldComposerStop')}
+                        disabled={recording.phase === 'finishing'}
+                        onClick={() => void recording.stop()}>
+                        {Math.floor(recording.seconds / 60)}:{String(recording.seconds % 60).padStart(2, '0')}
+                      </button>
+                      <button type="button" className="waka-dock-tool waka-dock-tool--wide"
+                        disabled={recording.phase === 'finishing'}
+                        onClick={() => void recording.cancel()}>
+                        {say('worldComposerCancelRecording')}
+                      </button>
+                    </>
+                  )
+                ) : null}
+                <button type="button" className="waka-dock-tool" aria-label={say('worldComposerPhoto')}
+                  disabled={!composerDraft.available || recording.phase !== 'idle'}
+                  onClick={() => dockFileInput.current?.click()}><HomeActionIcon kind="photo"/></button>
+                <input ref={dockFileInput} type="file" multiple hidden
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif"
+                  onChange={event => { const files = [...event.target.files ?? []]; event.target.value = '';
+                    if (files.length) void addInspirationFiles(files); }} />
+              </span>
+            ) : (
             <button
               type="button"
               className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}${item.id === 'new' ? ' waka-dock-item--new' : ''}`}
@@ -16696,6 +16763,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   </svg>
                 : say(item.label)}
             </button>
+            )}
             {item.id === 'new' && makingNew ? (
               <div className="waka-new" role="menu" aria-label={say('worldDockNew')} data-jar-chrome="1" data-jar-interactive="1"
                 onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setMakingNew(false); } }}>

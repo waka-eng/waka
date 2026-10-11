@@ -162,11 +162,14 @@ it('refuses unsafe link schemes without submitting or discarding the draft',asyn
 it('renders exactly one of each corner, never two', async () => {
   props.text = ''; props.media = []; await mount();
   const count = (selector: string) => host.querySelectorAll(selector).length;
-  expect(count('.jar-note-tools'), 'the attach corner is doubled').toBe(1);
   expect(count('.jar-note-back'), 'the way back is doubled').toBe(1);
   expect(count('.jar-note-when'), 'the moment is doubled').toBe(1);
-  expect(
-    count('.jar-note-tools button'),
-    'the attach corner should hold exactly two glyphs — record and photo',
-  ).toBe(2);
+  /* AND THE ATTACH CORNER IS NOT HERE AT ALL ANY MORE. Record and photo
+     moved into the dock's making-slot — founder, of this corner, "I don't
+     like this thing on the left", and of the shape of the bottom of the
+     screen, "this double layer is so weird". Two glyphs floating beside a
+     bar are a second bar with two buttons in it. Asserted as ZERO rather
+     than deleted, because the corner reappearing is the regression this
+     case now exists to catch. */
+  expect(count('.jar-note-tools'), 'the attach corner came back beside the bar').toBe(0);
 });

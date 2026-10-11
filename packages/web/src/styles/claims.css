@@ -348,6 +348,55 @@
  * it cannot join that scale. It sits at full ink always, which is also how a
  * person finds the one control on the bar that MAKES something.
  */
+/* ═══ THE SLOT, WHILE SOMETHING IS BEING MADE ══════════════════════════
+   The plus is the only entry in the bar that is not a PLACE, which is why
+   it is the only one that may change: the four nouns stay exactly where
+   they are, so leaving is still one press from inside a note. What sits
+   here instead is the making itself — record and photo — in the same
+   drawn-glyph register the plus uses, so the bar does not grow a different
+   kind of thing in the middle of itself. */
+.waka-dock-making {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.waka-dock-tool {
+  display: grid;
+  place-items: center;
+  width: var(--waka-corner);
+  min-width: var(--waka-corner);
+  min-height: var(--waka-corner);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+/* Wide enough for the running clock, which is the one state that is words
+   rather than a glyph — a red dot cannot say how long you have been
+   talking. */
+.waka-dock-tool--wide {
+  width: auto;
+  padding: 0 var(--sp-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.waka-dock-tool:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.waka-dock-tool:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
 .waka-dock-item--new {
   display: grid;
   place-items: center;
