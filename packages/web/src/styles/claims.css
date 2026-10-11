@@ -3311,16 +3311,50 @@
      so the longest label broke first and "not true" wrapped while the two
      shorter ones sat on one line. A `max-content` basis keeps them even
      while there is room and never asks a label to fold. */
-  flex: 1 1 max-content;
+  flex: 0 0 auto;
   white-space: nowrap;
-  padding: 0 var(--sp-16);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-control);
-  background: transparent;
-  color: var(--ink);
+  /* ═══ WORDS, NOT PILLS ════════════════════════════════════════════════
+     Founder: "the yes / partly / not true button is a little bit weird."
+
+     Measured on screen, it was three bordered pills inside a bordered card
+     sitting directly above the dock's pill — a box inside a box above a
+     box, four drawn shapes stacked at the bottom of a screen whose whole
+     material is "no boxes except the dock". The card's outline is the
+     founder's own choice for this block ("maybe it should just be this
+     outlined box as we have before for the chat") and it stays; what goes
+     is the second and third layer inside it.
+
+     IT COSTS THEM NO AFFORDANCE, because they never had one worth keeping:
+     at `--line` the border measures 1.41:1 against this ground, which is
+     under every visibility floor there is — so the pills were drawing a
+     shape nobody could quite see and spending the card's whole interior on
+     it. Three words under a sentence, in the register every other verb in
+     this product now wears — the note's Delete, the chats list's verbs,
+     the plus sheet's two rows.
+
+     THE 44px FLOOR SURVIVES, which is the half that was load-bearing: these
+     are still the only thing on the home screen a person is asked to press,
+     and a thumb still has to hit them. Padding carries it instead of a
+     border. */
+  padding: 0 var(--sp-12);
+  border: 0;
+  background: none;
+  color: var(--muted);
   font-family: var(--waka-face);
   font-size: var(--t-ui);
   cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.jar-char-claim-answers button:hover,
+.jar-char-claim-answers button:focus-visible {
+  color: var(--ink);
+}
+
+.jar-char-claim-answers button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+  border-radius: var(--waka-r-hand-sm);
 }
 
 /**
