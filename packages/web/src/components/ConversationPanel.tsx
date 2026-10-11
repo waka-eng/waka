@@ -106,7 +106,13 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
   useEffect(()=>{const media=window.matchMedia?.('(max-width:760px)');if(!media)return;const change=()=>setMobile(media.matches);media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
   useLayoutEffect(()=>{const viewport=window.visualViewport,node=root.current;if(!viewport||!node)return;const update=()=>{if(!Number.isFinite(viewport.height)||viewport.height<=0||!Number.isFinite(viewport.offsetTop))return;node.style.setProperty('--chat-height',`${viewport.height}px`);node.style.setProperty('--chat-top',`${viewport.offsetTop}px`);if(nearBottom.current&&body.current)body.current.scrollTop=body.current.scrollHeight;};update();viewport.addEventListener('resize',update);viewport.addEventListener('scroll',update);return()=>{viewport.removeEventListener('resize',update);viewport.removeEventListener('scroll',update);};},[]);
-  useLayoutEffect(()=>{const node=editor.current;if(!node)return;node.style.height='auto';node.style.height=`${Math.max(52,Math.min(node.scrollHeight,180))}px`;},[draft?.content,conversation?.id,loading]);
+  /* THE TEXTAREA SIZES ITSELF, AND ONLY ONE THING DECIDES HOW. Four
+     mechanisms used to fight over this element: a CSS `min-height`, a CSS
+     `max-height`, `field-sizing: content`, and a `Math.max(52, Math.min(
+     scrollHeight, 180))` written here — whose floor contradicted the CSS
+     floor and whose cap contradicted the CSS cap. `field-sizing: content`
+     between the two CSS bounds does the whole job, so the inline style that
+     fought them is gone rather than reconciled. */
   const run=async<T,>(work:(signal:AbortSignal)=>Promise<T>)=>{
     const owner=lifecycle.current,request=new AbortController(),abort=()=>request.abort();owner.signal.addEventListener('abort',abort,{once:true});const timer=window.setTimeout(abort,15000);
     const stopped=()=>rejectStopped(new Error('Conversation request stopped'));let rejectStopped!:(error:Error)=>void;
@@ -211,7 +217,6 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         it was, on a product whose other screens have one bar and two corner
         buttons. The corners are the navigation here as everywhere. */}
     <section className="chat-main" aria-label={say('worldConversationTitle')}>
-      {generationEnabled===false?<p className="chat-notice">{say('worldConversationFoundation')}</p>:null}
       {error?<div className="chat-notice" role="alert">{error} {!draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldRoomHistoryRetry')}</button>:null}
         {/* THE WAY OUT SITS BESIDE THE FAILURE. When a conversation cannot be
             opened there is no box to type in, so starting a fresh one is the
@@ -233,8 +238,16 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               word under it ("Marked as disputed") went, because a principle's
               standing is the principles surface's sentence to say. */}
           {first?<div className="chat-topic"><span>{say('worldConversationStartingFrom')}</span><blockquote>{first.statement}</blockquote></div>:null}
+          {/* ONE LINE WHERE THE FIRST REPLY WILL SIT, so the first real turn
+              replaces it in place and nothing jumps. It goes on the first
+              keystroke rather than the first send — a statement of what this
+              is for, not a greeting, and not a question, because the box
+              below already asks one. The three starter pills that used to
+              live here sent a message on a single press; they are not coming
+              back. */}
+          {!conversation?.messages.length&&!draft?.content&&!loading&&!error?<p className="chat-opening">{say('worldConversationOpening')}</p>:null}
           <ol className="chat-messages" aria-label={say('worldConversationMessages')} aria-live="polite" aria-relevant="additions">
-            {(conversation?.messages??[]).map(message=><li key={message.id} data-role={message.role}><p className="chat-message-heading">{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</p>
+            {(conversation?.messages??[]).map(message=><li key={message.id} data-role={message.role}><p className="chat-said">{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</p>
               <ConversationText text={message.content}/>{message.followUpQuestion?<ConversationText text={message.followUpQuestion}/>:null}
               {/* Under each reply there used to be: an actions disclosure, a
                   takeaway editor with an adoption checkbox, a correction
@@ -254,6 +267,14 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         </div>
       </div>
       {canCompose?<footer className="chat-composer">
+        {/* WHAT THE BOX WILL DO WHEN YOU PRESS SEND, BESIDE THE BOX. This
+            notice used to be a band pinned to the panel's top edge — the far
+            end of a 950px panel from the only control it describes — and
+            because the transcript below it sat on the bottom, the two of
+            them framed 500px of nothing. It is a standing fact about this
+            install, not an event in the conversation, so it annotates the
+            control it constrains. */}
+        {generationEnabled===false?<p className="chat-notice">{say('worldConversationFoundation')}</p>:null}
         {generationEnabled&&replyNotice?<p className="chat-reply-status" role="status">{say(replyNotice)}</p>:null}
         <div className="chat-input-row"><label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
           {/* ONE BUTTON, THREE STATES. It used to carry five labels, two of

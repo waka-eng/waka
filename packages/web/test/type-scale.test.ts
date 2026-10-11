@@ -232,10 +232,21 @@ describe("the spacing grid is one grid", () => {
  * forced. Colour is the most design-sensitive of the three scales, and a blind
  * mapping of 97 values is a redesign nobody asked for.
  */
-const COLOUR_CEILING = 89;
+const COLOUR_CEILING = 90;
 /* 125 -> 104 on 2026-08-26. Nobody drained twenty-one colours: the dead rules
    that held them were deleted by `e2e:dead-css`, and this ceiling had no way
    to notice, which is the whole point of the test added below.
+
+   89 -> 90 on 2026-10-11, and UP, which a ratchet is not supposed to do. The
+   one literal is `--moon-field-edge: rgba(255, 255, 255, 0.38)` in the palette
+   block of `chrome.css`. It is the case this ratchet's own failure message
+   asks for by name — "if it is a tier the palette should own, name it" — and
+   naming a tier costs exactly one literal, at the declaration, which is where
+   every literal is supposed to be. Measured first: the two composers in this
+   product were drawn with a 1.41:1 hairline on a ground where 3:1 is the
+   floor at which a boundary can be relied on to be seen at all. Raising
+   `--moon-edge` instead would have cost zero literals and repainted every
+   border in the product to buy two inputs an edge.
 
    109 -> 90 on 2026-10-10. Nobody drained nineteen colours by hand: the 37
    dead `.nc-*` rules in `global.css` went out and the literals went with

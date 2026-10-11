@@ -135,6 +135,43 @@ body {
   --moon-muted: rgba(232, 237, 244, 0.8);
   --moon-faint: rgba(232, 237, 244, 0.62);
   --moon-edge: rgba(255, 255, 255, 0.14);
+  /**
+   * THE EDGE OF A THING YOU TYPE INTO, WHICH IS NOT THE EDGE OF A CARD.
+   *
+   * MEASURED 2026-10-11 on this ground (#06080d), in WCAG 2 ratios:
+   *
+   *   `--moon-edge` hairline      1.41:1   below any visibility floor
+   *   `--moon-raised` fill        1.07:1   below Material's own 1dp step
+   *   `--waka-lift` shadow        1.03:1   there is no darkness left to spend
+   *
+   * So the two composers in this product — the save box on the home screen
+   * and the conversation's box — were each drawn with a fill that does
+   * nothing, a hairline under the floor, and a shadow that physically cannot
+   * darken a ground whose luminance is 0.0024. Rendered, that is a smudge
+   * rather than an object, and "ugly" is what a smudge looks like when
+   * nothing is technically broken.
+   *
+   * WHY A SECOND TOKEN RATHER THAN RAISING `--moon-edge`. WCAG 1.4.11 asks
+   * 3:1 of a CONTROL's boundary, and its stated reason is that the boundary
+   * is how you know the control is there — its own failure example is "a
+   * text input lacks any form of label to hint at its presence". A card is
+   * not a control and does not carry that duty; raising every border in the
+   * product to 3:1 would turn dozens of quiet panels into drawn boxes to buy
+   * one input an edge. So this is the field register, and it has exactly two
+   * users.
+   *
+   * WHY 38% AND NOT 35%. 35% gives 3.11:1 against the ground but 2.91:1
+   * against the fill, and both are "adjacent colours" under 1.4.11. 38%
+   * clears both — 3.48:1 and 3.26:1 — and still leaves room for focus to be
+   * a 3:1 CHANGE from it (SC 2.4.13), which `--ink` at 80% is: 3.12.
+   *
+   * WHITE, NOT `--moon-ink`. At this alpha ink lands at 3.13:1 against the
+   * ground, under the fill's 3:1 once composited. The note above reserves
+   * pure white for "the two things that are actually light" because white
+   * BLOOMS on Jost 300 and thins the stems — true of a glyph, and the reason
+   * is stroke rendering, which a one-pixel rule has no stems to lose.
+   */
+  --moon-field-edge: rgba(255, 255, 255, 0.38);
   --moon-raised: rgba(255, 255, 255, 0.035);
   --moon-warm: #fff2dc;
 
@@ -144,6 +181,7 @@ body {
   --w-muted: var(--moon-muted);
   --w-faint: var(--moon-faint);
   --w-edge: var(--moon-edge);
+  --w-field-edge: var(--moon-field-edge);
   --w-raised: var(--moon-raised);
   --w-warm: var(--moon-warm);
 
@@ -157,6 +195,9 @@ body {
   --accent: var(--moon-ink);
   --muted: var(--moon-muted);
   --line: var(--moon-edge);
+  /* The one border in this product that has to be seen rather than sensed.
+     See `--moon-field-edge`. */
+  --field-edge: var(--moon-field-edge);
   --rule: var(--moon-edge);
   --cell: var(--moon-raised);
   --error: var(--moon-muted);
@@ -1565,7 +1606,13 @@ body .profile-signout-button {
 .jar-reading-comparison button { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); color:var(--w-ink); background:none; border:1px solid var(--w-edge); border-radius:var(--sp-12); font:inherit; cursor:pointer; }
 .jar-seek.jar-principle-share { box-sizing:border-box; z-index:8; width:min(980px,calc(100vw - var(--sp-24))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-24)); display:flex; flex-direction:column; color:var(--w-ink); font-size:var(--t-body); line-height:1.5; text-align:left; user-select:text; touch-action:pan-y; }
 .jar-share-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; }
-.jar-conversation-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; padding-inline-end:var(--sp-8); }
+/* NO `padding-inline-end` HERE. It made the transcript's right gutter 8px
+   wider than its left and 8px wider than the composer's — which is the exact
+   defect `chat.css` opens by claiming it fixed: "the words and the box you
+   type them into stood on two columns a few pixels apart — close enough to
+   look like a mistake rather than a choice." It was still true, from this
+   file. The gutters are `.chat-scroll`'s to set, symmetrically. */
+.jar-conversation-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; }
 .jar-principle-share header,.jar-principle-share footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; flex-shrink:0; gap:var(--sp-12); }
 .jar-principle-share h2 { font-size:var(--t-lead); font-weight:500; }
 .jar-principle-share label { display:flex; flex-direction:column; gap:var(--sp-6); margin-block:var(--sp-12); font-size:var(--t-body); }

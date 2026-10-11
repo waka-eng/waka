@@ -29,9 +29,25 @@ import {createConversation,fetchConversation,fetchConversationReply,listConversa
 import {readConversationDrafts} from '../src/lib/conversation-drafts';
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),stopConversationReply:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
 const scope={accountId:'owner',profileId:'profile'},id='11111111-1111-4111-8111-111111111111',choose=vi.fn();
-it('leaves reply text clear of mobile overlay scrollbars',()=>{
-  const css=readFileSync(resolve(dirname(fileURLToPath(import.meta.url)),'../src/styles/chrome.css'),'utf8');
-  expect(css.match(/\.jar-conversation-body\s*\{([^}]+)\}/)?.[1]).toContain('padding-inline-end:var(--sp-8)');
+/* THE SAME JOB, DONE BY THE RULE THAT CAN DO IT SYMMETRICALLY.
+   This asked `.jar-conversation-body` in `chrome.css` for
+   `padding-inline-end: var(--sp-8)` — a gutter on the END side only, to keep
+   an overlay scrollbar off the words. It worked, and it also made the
+   transcript's right gutter 8px wider than its left and 8px wider than the
+   composer's, which was half of the misalignment `chat.css` opens by claiming
+   it had fixed.
+
+   `scrollbar-gutter: stable both-edges` reserves the same room on BOTH sides,
+   so the scrollbar still never lands on the text and the column stays
+   centred. `both-edges` rather than bare `stable` for the same reason: bare
+   `stable` reserves one side and shifts the column by the gutter's width
+   wherever classic scrollbars exist. */
+it('leaves reply text clear of scrollbars without moving the column',()=>{
+  const css=readFileSync(resolve(dirname(fileURLToPath(import.meta.url)),'../src/styles/chat.css'),'utf8');
+  const scroll=css.match(/\.chat-scroll\s*\{([^}]+)\}/)?.[1]??'';
+  expect(scroll).toContain('scrollbar-gutter: stable both-edges');
+  const chrome=readFileSync(resolve(dirname(fileURLToPath(import.meta.url)),'../src/styles/chrome.css'),'utf8');
+  expect(chrome.match(/\.jar-conversation-body\s*\{([^}]+)\}/)?.[1]).not.toContain('padding-inline-end');
 });
 let root:Root,host:HTMLDivElement,stored:ApiConversation,replyState:ConversationReplyState;
 const replyId='22222222-2222-4222-8222-222222222222';
@@ -71,7 +87,7 @@ function completeReply(){stored={...stored,revision:stored.revision+1,messages:[
    whether they did something wrong. What this case protects is unchanged:
    the surface must not imply a reply is coming when none can. */
 it('clearly saves messages without promising an assistant reply',async()=>{
-  await mount();expect(host.textContent).toContain('WAKA can’t reply here yet');await type('I want quiet mornings.');await click('Send');
+  await mount();expect(host.textContent).toContain('WAKA can’t reply yet');await type('I want quiet mornings.');await click('Send');
   expect(host.textContent).toContain('I want quiet mornings.');expect(host.querySelector('textarea')!.value).toBe('');expect(stored.messages).toHaveLength(1);expect(readConversationDrafts(scope,id)).toEqual([]);
 });
 it('offers a new-chat exit when a conversation is unavailable, without showing old words',async()=>{
