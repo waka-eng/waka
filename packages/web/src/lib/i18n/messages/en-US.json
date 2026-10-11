@@ -256,6 +256,7 @@
   "worldConversationFull": "This conversation is full. Start another to continue.",
   "worldConversationMessage": "Your message",
   "worldConversationMessages": "Saved messages",
+  "worldConversationNeedsWords": "Write something first.",
   "worldConversationNew": "New chat",
   "worldConversationOpening": "Say what’s on your mind. WAKA answers from what you’ve saved.",
   "worldConversationReadFailed": "This conversation couldn’t be opened.",

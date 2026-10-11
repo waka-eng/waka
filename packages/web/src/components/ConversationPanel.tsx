@@ -245,6 +245,26 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      check — and one of them, `stale`, was a word about the model's context
      rather than about anything the person did. What a person needs from a
      reply that did not arrive is to know it did not arrive. */
+  /**
+   * WHY SEND CANNOT BE PRESSED, in the order a person would meet the
+   * reasons. `null` means it can.
+   *
+   * This was an inline boolean of eight terms with no way to ask it what it
+   * meant, so the button could be dead for half a dozen different causes
+   * and looked identical in all of them. `e2e:usability` H7 — "no control
+   * is disabled with no reason" — caught it the first time that gate was
+   * pointed at a conversation. Naming each cause is what lets the control
+   * carry its own reason, and it also makes the condition readable, which
+   * eight `||`s were not.
+   */
+  const whyNoSend = storageFailed ? 'worldConversationDraftFailed' as const
+    : focusFailed ? 'worldPrincipleUnavailable' as const
+    : full ? 'worldConversationFull' as const
+    : loading||generationEnabled===null ? 'worldChatLoading' as const
+    : awaitingReply ? 'worldConversationThinking' as const
+    : busy ? 'worldChatSending' as const
+    : !draft?.content.trim() ? 'worldConversationNeedsWords' as const
+    : null;
   const replyNotice=reply.error?'worldConversationReplyCheckFailed' as const
     :reply.state?.retryAfter&&reply.state.phase!=='ready'?'worldConversationReplyLimit' as const
     :reply.state?.phase==='failed'?'worldConversationReplyFailed' as const
@@ -333,7 +353,13 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               connected) rather than an act. The notice above the transcript
               already says replies are not connected; the button says Send
               either way, because sending is what you are doing. */}
-          <button className="chat-send" type="button" disabled={busy||loading||generationEnabled===null||awaitingReply||storageFailed||focusFailed||!draft?.content.trim()||full} onClick={()=>void save()}>{say(busy&&draft?.pending?'worldChatSending':draft?.pending?'worldConversationRetry':'worldConversationSend')}</button>
+          {/* AND IT SAYS WHY IT CANNOT BE PRESSED — see `whyNoSend`. A `title`
+              rather than visible copy: the reason belongs to the control, is
+              wanted only by somebody who has just tried to press it, and
+              printing six possible sentences beside a button would be the
+              clutter this surface was stripped to remove. The two states
+              worth saying out loud already print their own line above. */}
+          <button className="chat-send" type="button" title={say(whyNoSend ?? 'worldConversationSend')} disabled={Boolean(whyNoSend)} onClick={()=>void save()}>{say(busy&&draft?.pending?'worldChatSending':draft?.pending?'worldConversationRetry':'worldConversationSend')}</button>
         </div>
         {storageFailed?<p className="chat-muted" role="alert">{say('worldConversationDraftFailed')}</p>:null}
         {/* A SAVE THAT WAS NOT CONFIRMED KEEPS ITS ONE WAY OUT. This reads
