@@ -3,6 +3,26 @@ export type ArtifactFormat='square'|'portrait';
 export interface PrincipleArtifactContent {
   items:Array<{text:string;label?:string;date?:string}>;
   name:string;appearance:ArtifactAppearance;format:ArtifactFormat;
+  /**
+   * THE PROOF, AND IT IS THE HEADLINE RATHER THAN THE FOOTNOTE.
+   *
+   * Founder: "how we can make the principal page something that people would
+   * want to like share on their social media and stuff."
+   *
+   * The thing people actually post about themselves is never the sentiment —
+   * it is the EVIDENCE that the sentiment was earned. Spotify Wrapped is a
+   * stat; the songs are only the proof of it. A principle posted alone is a
+   * fortune cookie and reads as one, because a stranger has no way to tell it
+   * from something typed that morning. "847 things kept over seven months,
+   * and these are what stayed" is the half a stranger cannot fake, and it is
+   * the half that makes them wonder what theirs would say.
+   *
+   * So it sits ABOVE the statements, in the muted ink, at a size that reads
+   * before them — the frame a person is posting, with the content inside it.
+   * It carries no ids and no evidence text: see the note below, which this
+   * does not relax.
+   */
+  proof?:string;
 }
 export class ArtifactLayoutError extends Error {
   constructor(readonly code:'empty'|'too_long'|'unavailable'){super(code);}
@@ -46,7 +66,11 @@ export async function renderPrincipleArtifact(content:PrincipleArtifactContent):
   const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
   const ctx=canvas.getContext('2d');if(!ctx)throw new ArtifactLayoutError('unavailable');
   const family=fallbackFont?'Arial, "Apple SD Gothic Neo", sans-serif':'Pretendard, sans-serif';
-  const maxWidth=width-padding*2,nameSpace=content.name?92:0,available=height-padding*2-nameSpace;
+  if(content.proof&&content.proof.length>160)throw new ArtifactLayoutError('too_long');
+  /* The proof's own band, reserved before the statements are fitted so they
+     are never sized into space it is about to take. */
+  const proofSpace=content.proof?96:0;
+  const maxWidth=width-padding*2,nameSpace=content.name?92:0,available=height-padding*2-nameSpace-proofSpace;
   let selected:{size:number;height:number;items:Array<{lines:string[];label?:string;date?:string}>}|null=null;
   for(let size=72;size>=44;size-=2){
     ctx.font=`400 ${size}px ${family}`;
@@ -59,7 +83,13 @@ export async function renderPrincipleArtifact(content:PrincipleArtifactContent):
     {background:'#f4f0e8',text:'#18202b',muted:'#5e6269',edge:'#d5cfc4'};
   ctx.fillStyle=colors.background;ctx.fillRect(0,0,width,height);
   ctx.strokeStyle=colors.edge;ctx.lineWidth=2;ctx.strokeRect(40,40,width-80,height-80);
-  ctx.textBaseline='top';let y=padding+(available-selected.height)/2;
+  ctx.textBaseline='top';
+  if(content.proof){
+    ctx.font=`400 34px ${family}`;ctx.fillStyle=colors.muted;
+    if(ctx.measureText(content.proof).width>maxWidth)throw new ArtifactLayoutError('too_long');
+    ctx.fillText(content.proof,padding,padding);
+  }
+  let y=padding+proofSpace+(available-selected.height)/2;
   for(const [index,item] of selected.items.entries()){
     if(index){ctx.strokeStyle=colors.edge;ctx.beginPath();ctx.moveTo(padding,y-24);ctx.lineTo(width-padding,y-24);ctx.stroke();}
     if(item.label||item.date){
