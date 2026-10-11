@@ -236,31 +236,45 @@
   max-width: 680px;
   margin: 0 auto;
   /**
-   * THE TOP OF MIND KEEPS ITS SPACE WHETHER OR NOT THERE IS ONE.
+   * ═══ A FIXED BAND, AND THE STATEMENT STANDS AT ITS FOOT ═══════════════
    *
-   * Founder: "make sure character is always at same position so changing
-   * between me and my agent doesn't change position of the agent... there
-   * should be dedicated space for the top of mind text to be there and like
-   * the claim to be there regardless of what I'm selected." And: "Even if the
-   * agent hasn't formed anything, the height where the top of mind goes
-   * should always be the same so that the character doesn't move vertically."
+   * This was `min-height: calc(var(--t-reading) * 1.25 * 3)` — a floor that
+   * held three lines of reading type open whether or not there was a reading,
+   * installed so that the creature below would not move. The founder's rule
+   * it served is quoted in `Home.tsx` at the layout pass and is unchanged.
    *
-   * The companion is centred in the band between this block and the box
-   * (`lo`/`hi` in `Home.tsx`), and `lo` is measured off this block's real
-   * height. So an agent that has not formed a reading yet — which is most
-   * agents, most of the time, and is now the ONLY state an agent's wall can
-   * be in for claims — made this short, which raised `lo`, which lifted the
-   * creature. Switching faces moved the companion, and nothing had moved it:
-   * the content under it had simply stopped existing.
+   * WHAT CHANGED IS THAT NOTHING MEASURES THIS BLOCK ANY MORE. `companion.y`
+   * read `hqH` — this element's LIVE height — so the creature drifted up to
+   * 75px with the length of the statement, and the floor was a patch over
+   * that rather than a design. The position is now a function of the window
+   * alone, so the floor has no job and a blank reserve is the one thing every
+   * design system refuses: Carbon's rule is "empty states should REPLACE the
+   * element that would ordinarily show", and the layout-shift literature that
+   * justifies reserving space scopes it to "a network request that may take a
+   * while to complete" — milliseconds, not the ten days it takes a signal to
+   * reach three pieces of evidence.
    *
-   * Three lines of the reading's own type is the reserve. It is expressed in
-   * the type step rather than a pixel count so it tracks the clamp that sets
-   * the sentence's size — on a phone the reading is smaller and the slot
-   * follows it down, which is the behaviour a fixed height would lose. A
-   * longer reading still grows past it; what the floor removes is the JUMP
-   * between nothing, a short sentence, and a usual one.
+   * A FIXED BAND INSTEAD OF A FLOOR, AND THE CONTENT SITS AT THE BOTTOM OF
+   * IT. `justify-content: flex-end` is the whole trick, and it is Google's:
+   * a short statement leaves its air ABOVE itself, against the top edge,
+   * where air reads as margin; a long one grows UPWARD into that same air
+   * instead of downward into the creature. Either way the foot of the block
+   * is in the same place, which is what the creature's `Y_MIN` is measured
+   * against, and the statement and its verbs cluster just above the body
+   * rather than floating at the top of a tall void.
+   *
+   * `190px` IS `POSTER_SLOT` IN `Home.tsx` AND THE TWO MUST MATCH — three
+   * lines of `--t-reading` at its desktop ceiling plus the provenance band
+   * and the verbs. `overflow-y: auto` rather than a clip, because WCAG 1.4.10
+   * sets a 256px height floor for reflow and a hard-capped band with no
+   * scroll fails it at 400% zoom.
    */
-  min-height: calc(var(--t-reading) * 1.25 * 3);
+  height: 190px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   /* THE COLUMN IS A CONTAINER, SO THE CLAIM CAN BE SET AGAINST IT. See
      `.jar-poster`'s size for why. Inline-size only: the column's width comes
      from the layer above it, never from its contents, so containing that axis
@@ -1889,7 +1903,20 @@
   /* At least a thumb's clearance, and more where the device asks for it —
      `max()` rather than the bare inset, which is 0 on most phones and left
      the box flush against the bottom edge. */
-  bottom: max(var(--sp-8), env(safe-area-inset-bottom));
+  /* ═══ AND THE COMPOSITION HAS A CEILING NOW, which is the vertical twin of
+     the `max-width: 680px` the column has always had. That cap was the one
+     thing missing: the horizontal axis stopped growing and the vertical axis
+     never did, so every pixel of extra window height became air.
+
+     Past a 1040px band the box stops travelling with the bottom edge and the
+     surplus falls BELOW it, where it is the margin of a page rather than a
+     hole inside a composition. The founder's instruction — "place this text
+     input box at the bottom of the space" — is honoured against the space the
+     composition occupies rather than against whatever height a monitor
+     happens to have; on every window shorter than the band, which is every
+     phone and most laptops, `max()` picks the inset and nothing changes at
+     all. */
+  bottom: max(var(--sp-8), env(safe-area-inset-bottom), calc((100dvh - 1040px) / 2));
   /* the air between the last word and the field's top edge */
   padding: 0 var(--sp-20) var(--sp-14);
   text-align: center;
