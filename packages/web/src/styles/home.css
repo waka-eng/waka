@@ -235,6 +235,32 @@
 .jar-hq-inner {
   max-width: 680px;
   margin: 0 auto;
+  /**
+   * THE TOP OF MIND KEEPS ITS SPACE WHETHER OR NOT THERE IS ONE.
+   *
+   * Founder: "make sure character is always at same position so changing
+   * between me and my agent doesn't change position of the agent... there
+   * should be dedicated space for the top of mind text to be there and like
+   * the claim to be there regardless of what I'm selected." And: "Even if the
+   * agent hasn't formed anything, the height where the top of mind goes
+   * should always be the same so that the character doesn't move vertically."
+   *
+   * The companion is centred in the band between this block and the box
+   * (`lo`/`hi` in `Home.tsx`), and `lo` is measured off this block's real
+   * height. So an agent that has not formed a reading yet — which is most
+   * agents, most of the time, and is now the ONLY state an agent's wall can
+   * be in for claims — made this short, which raised `lo`, which lifted the
+   * creature. Switching faces moved the companion, and nothing had moved it:
+   * the content under it had simply stopped existing.
+   *
+   * Three lines of the reading's own type is the reserve. It is expressed in
+   * the type step rather than a pixel count so it tracks the clamp that sets
+   * the sentence's size — on a phone the reading is smaller and the slot
+   * follows it down, which is the behaviour a fixed height would lose. A
+   * longer reading still grows past it; what the floor removes is the JUMP
+   * between nothing, a short sentence, and a usual one.
+   */
+  min-height: calc(var(--t-reading) * 1.25 * 3);
   /* THE COLUMN IS A CONTAINER, SO THE CLAIM CAN BE SET AGAINST IT. See
      `.jar-poster`'s size for why. Inline-size only: the column's width comes
      from the layer above it, never from its contents, so containing that axis

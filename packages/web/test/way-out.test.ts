@@ -125,9 +125,14 @@ function closedByAVisibleButton(span: string): boolean {
  * "It has Escape" is not a reason. "Nobody has complained" is not a reason.
  */
 const NO_VISIBLE_WAY_OUT: Record<string, string> = {
-  "components/OpenCorner.tsx":
-    "A menu. Each of its three rows opens something and closes this, so the " +
-    "only control it could add is the row the founder cut as useless.",
+  /* EMPTY, AND IT EMPTIED ITSELF. Both entries named corner MENUS — lists
+     whose every row leaves them, so the only control they could add is the
+     "Close menu" row the founder cut as useless. Neither is a menu now: the
+     left corner became one press that opens conversations, and the
+     conversations list it opens is an overlay with a visible close like every
+     other. The ratchet below caught the stale entries the same day, which is
+     the behaviour it exists for — an exemption that outlives its reason
+     excuses nothing while reading as if it does. */
 };
 
 function sourceFiles(dir: string, found: string[] = []): string[] {

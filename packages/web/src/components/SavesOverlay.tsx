@@ -61,7 +61,7 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, onClose }: {
+export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClose }: {
   locale: SupportedLocale;
   /** Whose archive. The caller already knows whose world is on screen; this
       surface should never work it out a second way and risk disagreeing. */
@@ -69,6 +69,27 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
   /** Named by the caller, because only the caller knows whether the world
       behind is yours or your agent's. */
   title: string;
+  /**
+   * WHOSE ARCHIVE THIS COULD BE INSTEAD — and switching moves the world too.
+   *
+   * Founder: "From the inspirations modal, it should always let the user
+   * switch between your inspirations and your agent's inspirations as well.
+   * And if the user changes it in the modal, then the page behind it should
+   * also change."
+   *
+   * That second sentence is the whole design. A switch that changed only
+   * what this overlay showed would leave the world behind it disagreeing —
+   * the creature wearing one face while the grid in front of it held someone
+   * else's saves — and the product would be saying two things about whose
+   * material you are reading. So the press changes the ADDRESS, and this
+   * overlay follows it the way everything else does, rather than holding a
+   * second opinion about the owner.
+   *
+   * Absent when the account has no agent: a switcher with one row is a label
+   * pretending to be a control.
+   */
+  owners?: ReadonlyArray<{ id: string | null; name: string; here: boolean }>;
+  onOwner?: (id: string | null) => void;
   onClose: () => void;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
@@ -178,7 +199,26 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
         onClick={(event) => event.stopPropagation()}
       >
         <header className="waka-over-head">
-          <h2 className="waka-over-title">{title}</h2>
+          {owners && owners.length > 1 && onOwner ? (
+            /* THE TITLE IS THE SWITCH. Two rows of the same words — a heading
+               that names the archive and a control that changes it — would be
+               the duplication the view switcher was rebuilt to remove. */
+            <span className="waka-over-owners" role="group" aria-label={title}>
+              {owners.map((owner) => (
+                <button
+                  key={owner.id ?? "me"}
+                  type="button"
+                  className={`waka-over-owner${owner.here ? " waka-over-owner--here" : ""}`}
+                  aria-pressed={owner.here}
+                  onClick={() => { if (!owner.here) onOwner(owner.id); }}
+                >
+                  {owner.name}
+                </button>
+              ))}
+            </span>
+          ) : (
+            <h2 className="waka-over-title">{title}</h2>
+          )}
           {/* THE WAY OUT IS VISIBLE, not only known. Escape and the scrim
               both work and neither announces itself, and this surface exists
               because a person could not find the way back from its

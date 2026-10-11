@@ -8,7 +8,7 @@ import { act } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, chooseFromCorner, closeOverlay, keepBox, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressChatCorner, closeOverlay, keepBox, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { loadInspirations, loadInspiration, type InspirationDetail } from '../src/lib/data';
 import {fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
 
@@ -65,50 +65,48 @@ it('opens your own material over a world that never leaves, and the world is one
   /* ONE — THE PATHNAME DOES NOT MOVE. This is the whole fix in one
      assertion: an overlay is a parameter on the world's own address, so the
      world is never unmounted and the camera never forgets where it was. If
-     this ever reads '/inspirations' again, "I'm lost how to go back" is
-     back with it. */
-  await chooseFromCorner(world.container,'Your inspirations');await settle();
+     this ever reads '/inspirations' again, "I'm lost how to go back" is back
+     with it. */
+  await chooseFromMenu(world.container,'Your inspirations');await settle();
   expect(location.pathname).toBe('/');
   expect(new URLSearchParams(location.search).get('open')).toBe('saves');
 
-  /* TWO — THERE IS A WAY OUT THAT CAN BE SEEN. Escape and the scrim both
-     work, and neither announces itself; the founder got lost on a surface
-     whose exits were all invisible, so the seen one is the one under test.
-     It lands back on the world with nothing held up. */
-  await closeOverlay(world.container);await settle();
+  /* TWO — YOUR TOP OF MIND IS A CLOSE, NOT A TRIP. It is the world itself,
+     so its row puts down whatever is held up rather than navigating. That is
+     why pressing it can no longer strand you — "I didn't realise clicking on
+     top of mind would leave me there" is now impossible rather than merely
+     fixed. */
+  await chooseFromMenu(world.container,'Your top of mind');await settle();
   expect(location.pathname).toBe('/');
   expect(new URLSearchParams(location.search).get('open')).toBeNull();
 
-  /* The other two open the same way, because three things of the same kind
-     that opened differently would be the next bug report. */
-  await chooseFromCorner(world.container,'Your principles');await settle();
+  await chooseFromMenu(world.container,'Your principles');await settle();
   expect(new URLSearchParams(location.search).get('open')).toBe('principles');
-  await closeOverlay(world.container);await settle();
-  await chooseFromCorner(world.container,'Your conversations');await settle();
-  expect(new URLSearchParams(location.search).get('open')).toBe('conversations');
-  await closeOverlay(world.container);await settle();
 
-  /* THREE — THE SWITCHER ASKS ONE QUESTION AND CANNOT STRAND YOU. It offers
-     owners and nothing else, so pressing it can never put you on a different
-     KIND of surface — which is what "I didn't realise clicking on top of
-     mind would leave me there" was describing. Going to the agent and back
-     is one press each way, and the way back exists without having to travel
-     further into the agent to find it. */
-  await chooseFromMenu(world.container,"Your agent's top of mind");await settle();
-  expect(location.pathname.startsWith('/w/')).toBe(true);
-  await chooseFromMenu(world.container,'Your top of mind');await settle();
-  expect(location.pathname).toBe('/');
+  /* THREE — AND THE VISIBLE WAY OUT STILL WORKS. Escape and the scrim do
+     too; the founder got lost on a surface whose every exit was invisible,
+     so the seen one is the one under test. */
+  await closeOverlay(world.container);await settle();
+  expect(new URLSearchParams(location.search).get('open')).toBeNull();
+
+  /* FOUR — CONVERSATIONS ARE THE CORNER'S, in one press. They are a history
+     rather than a depth of your own material, which is why they are not in
+     the three above. */
+  await pressChatCorner(world.container);await settle();
+  expect(new URLSearchParams(location.search).get('open')).toBe('conversations');
 });
 
-/* FIND LEFT THE LIST ENTIRELY, and stays gone: it is a thing you do TO your
-   inspirations, so it is a search field on that overlay rather than a
-   destination. Both lists hold nouns now; this one held the only verb. */
-it('offers owners in the switcher and things to open in the corner, and never mixes them',async()=>{
+it('offers the three depths in the centre and nothing else',async()=>{
+  /* The centre answers WHICH — the same material at three depths. It does not
+     answer WHOSE (the creature's two faces do) and it does not answer what
+     you have talked about (the corner does). Each of those was in here at
+     some point and each one made the control answer a question it was not
+     shaped for. */
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  const opener=[...world.container.querySelectorAll<HTMLButtonElement>('.waka-corners button[aria-controls]')][0]!;
+  const opener=world.container.querySelector<HTMLButtonElement>('.waka-corners button[aria-controls]')!;
   await act(async()=>opener.click());
   const rows=[...world.container.querySelectorAll('.waka-menu .waka-menu-item')].map(node=>node.textContent?.trim());
-  expect(rows).toEqual(['Your top of mind',"Your agent's top of mind"]);
+  expect(rows).toEqual(['Your inspirations','Your top of mind','Your principles']);
 });
 
 it('keeps the selected principle and its route after editing, so Back returns to the prior view',async()=>{
