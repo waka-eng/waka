@@ -16,6 +16,50 @@
      the world finally read in the same voice — see the note there for why
      they did not, and what the web build was actually rendering instead. */
   --waka-face: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  /**
+   * ═══ THE READING FACE ═══════════════════════════════════════════════
+   *
+   * Founder, linking auwa.life: "this is the vibe I want." Rendered and
+   * measured, that site is a dark blue-slate ground, warm cream ink, and
+   * EB Garamond at 32–70px for everything a person READS — with a small
+   * clean sans kept for interface microcopy only. The serif at reading
+   * size is the single largest carrier of the feeling they have been
+   * asking for in four different words: 몽글몽글, 소중소중, dreamy, "not
+   * aesthetically pleasing".
+   *
+   * A SERIF HAS BEEN HERE BEFORE AND IT WENT BADLY, which is the reason
+   * this comment is long. `global.css` records it: the flat screens paired
+   * Instrument Serif with Inter Tight while the world was built on Jost, so
+   * the product had two typographic systems — and NEITHER serif was
+   * actually loaded, so the login's headline rendered in Times New Roman.
+   * Founder: "I don't know what the weird cursive thing is." Everything
+   * collapsed to one face to fix it.
+   *
+   * That was a LOADING BUG being fixed, not a verdict on serifs, and the
+   * distinction matters because the collapse is what left this product
+   * with nothing to read prose in. Two things are different now:
+   *
+   *   IT IS LOADED. `index.html` already fetches Fraunces — it has all
+   *   along, which is part of why the old failure was so confusing — and
+   *   `@fontsource-variable/fraunces` is a dependency for the mobile
+   *   build. Both targets have the real face.
+   *
+   *   IT IS NOT TIMES. Instrument Serif is the other loaded serif and is
+   *   deliberately NOT chosen: it is a Times-adjacent display face, and
+   *   Times is the exact thing the founder reacted to. Fraunces is an
+   *   old-style variable with optical sizing, soft wedge serifs and a
+   *   warm axis — closest of what is loaded to the reference, and
+   *   unmistakably not a browser default.
+   *
+   * WHERE IT IS WORN, AND THE LINE IS SHARP: things a person READS — a
+   * statement about them, a saved thought, a reply, a principle, a page's
+   * name. NOT the interface: the dock, labels, meta lines, buttons and
+   * fields stay Jost. That is the reference's own split, and it is also
+   * what keeps this from becoming the two-systems problem again — the
+   * division is by ROLE, stated here once, rather than by which screen a
+   * rule happens to live on.
+   */
+  --waka-read: Fraunces, "Fraunces Variable", Pretendard, Georgia, serif;
 
   /* The fixed corner buttons' target size. Named because two things depend on
      it — the buttons themselves and the room every page reserves for them —
@@ -1334,7 +1378,8 @@
 
 .waka-over-title {
   margin: 0;
-  font-family: var(--waka-face);
+  /* Read, not operated — see `--waka-read`. */
+  font-family: var(--waka-read);
   /* A STEP UP, AND A WEIGHT. The reference's list heading is the largest
      thing on its screen by a distance, which is what makes a page of rows
      feel like a place rather than a result set. */
@@ -1344,11 +1389,6 @@
   color: var(--ink);
 }
 
-/* THE WAY OUT IS VISIBLE, not merely known. Escape works and the scrim works
-   and neither announces itself — and this surface exists because a person
-   could not find the way back from its predecessor, so the one that can be
-   seen is not optional. Quiet at rest, inked on approach: light is the only
-   meaning channel. */
 /* `.waka-over-close` IS GONE FROM EVERY SURFACE THAT WORE IT.
    Founder: "how do we even need the close button for inspiration and chat?
    I mean, it's supposed to just be moving around. I mean for principles too.
@@ -1586,7 +1626,8 @@
 }
 
 .waka-held-words {
-  font-family: var(--waka-face);
+  /* Read, not operated — see `--waka-read`. */
+  font-family: var(--waka-read);
   font-size: var(--t-reading);
   font-weight: 300;
   line-height: 1.25;
@@ -2914,6 +2955,8 @@
 
 .jar-char-claim--reading .jar-char-claim-statement {
   color: var(--ink);
+  /* Read, not operated — see `--waka-read`. */
+  font-family: var(--waka-read);
 }
 
 .jar-char-claim-statement {
@@ -3194,7 +3237,8 @@
 .jar-panel-card .jar-panel-text {
   margin: 0;
   width: 100%;
-  font-family: var(--waka-face);
+  /* Read, not operated — see `--waka-read`. */
+  font-family: var(--waka-read);
   font-size: var(--t-body);
   font-weight: 300;
   line-height: 1.5;
@@ -3630,7 +3674,8 @@
 .jar-char-bubble-reading {
   display: block;
   max-width: 24rem;
-  font-family: inherit;
+  /* Read, not operated — see `--waka-read`. */
+  font-family: var(--waka-read);
   font-size: var(--t-ui);
   font-weight: inherit;
   line-height: 1.45;

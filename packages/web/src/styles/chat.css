@@ -316,6 +316,13 @@
  * So: a question opens a pair, and the reply closes it.
  */
 .chat-messages > li {
+  /* A TURN IS PROSE, SO IT IS SET IN THE READING FACE — see `--waka-read`
+     in `claims.css`. A reply here is paragraphs and lists, which is the
+     reference's own argument for a serif at reading size, and it is the
+     longest thing anybody reads in this product. The speaker labels, the
+     notices and the composer around it stay in the interface face. */
+  /* Read, not operated — see `--waka-read`. */
+  font-family: var(--waka-read);
   margin-block: 0;
   min-width: 0;
   overflow-wrap: anywhere;

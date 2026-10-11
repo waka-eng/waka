@@ -98,8 +98,29 @@
    * surfaces that carry no film — the archive, the principles, a conversation
    * — and compensating those would make them four points too dark.
    */
-  --jar-deep: #020409;
-  --jar-atmos: #06080d;
+  /* ═══ THE GROUND IS A NIGHT, NOT AN ABSENCE ═════════════════════════
+     Founder, linking auwa.life: "this is the vibe I want." Measured, that
+     site's body is `rgb(15, 22, 35)` — a dark blue SLATE. It never reaches
+     black anywhere, and that is most of why it reads as a lit room at dusk
+     rather than as a screen that is off.
+
+     `#020409` and `#06080d` are, to an eye, black. Nothing can be dimmer
+     than them, so the vignette had no room to fall off into and the lamp
+     had almost nothing to lift; every soft effect in this product was
+     being spent climbing out of a hole. Lifted and turned blue, the same
+     effects have somewhere to go.
+
+     MEASURED, because the ink above sits on this: at `#0d131f` the ink
+     reads 15.81:1, muted 10.34:1 and faint 6.60:1 — every tier still far
+     over `contrast.test.ts`'s 4.5 floor, and the ratios the palette note
+     in `chrome.css` reasons about are unchanged in kind.
+
+     THE CANVAS COMES WITH IT. `buildPalette` reads these same properties
+     off the root, so the world's ground and the pages' ground are one
+     value and cannot drift — which is the whole reason they are declared
+     here rather than in each surface. */
+  --jar-deep: #070b14;
+  --jar-atmos: #0d131f;
   /* the sky: the same ground, a few percent thinner */
   --jar-sky: #060910;
   --jar-ink: #e8edf4;
@@ -485,7 +506,8 @@
 
 .jar-poster {
   margin: 0;
-  font-family: var(--waka-face);
+  /* Read, not operated — see `--waka-read`. */
+  font-family: var(--waka-read);
   /* 300, never heavier: in a geometric the elegance is in the thin even stroke
      and the air around it, and weight is what killed the last attempt. */
   font-weight: 300;
@@ -591,7 +613,8 @@
  */
 .jar-forming {
   margin: 0;
-  font-family: var(--waka-face);
+  /* Read, not operated — see `--waka-read`. */
+  font-family: var(--waka-read);
   font-size: var(--t-ui);
   font-weight: 300;
   font-style: normal;
