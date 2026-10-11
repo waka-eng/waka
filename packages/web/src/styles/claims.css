@@ -1830,10 +1830,16 @@
 
 /* ---- the body: input, then footer ---- */
 
+/* THE BOX READS AS A BOX. `1px solid var(--line)` measured 1.41:1 on this
+   ground — under the floor at which a hairline can be relied on to be seen
+   at all — so the save box was a smudge with a `--waka-raised` fill that is
+   itself 1.07:1. `--field-edge` is the field register: see its note in
+   `chrome.css` for why an input's boundary earns 3:1 and a card's does not,
+   and why the conversation's box next door wears the same token. */
 .waka-composer-body {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-edge);
   border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
   overflow: hidden;

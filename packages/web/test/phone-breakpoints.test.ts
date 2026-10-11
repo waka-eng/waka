@@ -274,13 +274,30 @@ describe("the four breaks that a browser found and reading did not", () => {
         "conversation is not clipped, it is gone. `margin-block-start: auto` " +
         "on the transcript does the same job and yields to overflow.",
     ).toBe(false);
-    expect(
-      /margin-block-start:\s*auto/.test(block("chat.css", ".chat-transcript")),
-      "`.chat-transcript` has lost `margin-block-start: auto`, which is the " +
-        "half of that fix that keeps a SHORT conversation sitting on the box " +
-        "instead of stranded at the top of a tall frame. Founder on that " +
-        "version: \"so ugly.\"",
-    ).toBe(true);
+    /* AND NOTHING ELSE MAY PUSH IT OFF THE ORIGIN EITHER. On 2026-10-11 the
+       transcript stopped being bottom-pinned at all: this is an assistant
+       transcript, not a messaging app, and those flow from the top (see
+       `.chat-scroll`'s note for the two families and why the mix of them is
+       what the founder was looking at when he said "so ugly").
+
+       That is a STRONGER guarantee than the auto margin this gate used to
+       require, not a weaker one. The auto margin was safe because it yields
+       to overflow; content that flows from the top is safe because there is
+       no block-start overflow for a scroller to hide. So the assertion is
+       now the whole bug class rather than the one escape from it: neither
+       rule that moves content off a scroller's scrollable origin may come
+       back to this element. */
+    for (const banned of ["margin-block-start:\\s*auto", "justify-content:\\s*flex-end"]) {
+      expect(
+        new RegExp(banned).test(block("chat.css", ".chat-transcript")),
+        `\`.chat-transcript\` has \`${banned.replace("\\s*", ": ")}\` again. ` +
+          "Both bottom-pin the transcript, and this surface is read from the " +
+          "top — the reply is long-form prose, and prose is read from its " +
+          "beginning. `justify-content` additionally re-opens the measured " +
+          "bug above: 442px of conversation above the frame at 320×568 with " +
+          "the scroller reporting no overflow at all.",
+      ).toBe(false);
+    }
   });
 });
 

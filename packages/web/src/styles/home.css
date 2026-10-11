@@ -4666,11 +4666,58 @@
  * concurrent write.
  * ------------------------------------------------------------------------- */
 
-/* A fixed height rather than a cap, so the transcript inside has something
-   definite to be `flex: 1` of — `max-height` alone leaves the column free to
-   collapse to its content and the composer floats mid-air. */
+/**
+ * THE PANEL IS THE SIZE OF THE CONVERSATION IN IT, UP TO 88dvh.
+ *
+ * This was a fixed `height: 88dvh`, with the reasoning that "`max-height`
+ * alone leaves the column free to collapse to its content and the composer
+ * floats mid-air". Measured 2026-10-11, with the transcript now flowing from
+ * the top, that is not what happens — the composer sits 24px under the last
+ * turn, which is not floating, it is hugging:
+ *
+ *             fixed 88dvh                 auto up to 88dvh
+ *   1512x900, 2 turns   792px panel, 423px of air below the last turn
+ *                                       393px panel,  24px
+ *   1512x900, 12 turns  792px, scrolls   792px, scrolls   — IDENTICAL
+ *    390x844, 2 turns   743px, 196px     570px,  24px
+ *    390x844, 12 turns  743px, scrolls   743px, scrolls   — IDENTICAL
+ *
+ * So the cap changes nothing at all about a conversation long enough to fill
+ * the panel, and on a short one it is the difference between the founder's
+ * "roughly 500 vertical pixels of nothing" and no nothing. Top-aligning the
+ * transcript moved that hole from above the messages to below them; this is
+ * what closes it.
+ *
+ * AND THE RESIZE IS NOT A VIOLATION OF "the world never moves unless the user
+ * moved it". The panel grows when a turn arrives, which happens because
+ * somebody pressed Send — the growth is the consequence of their own act, in
+ * the same frame as the words that caused it. It is also bounded: it happens
+ * a handful of times at the start of a conversation and never again after the
+ * cap is reached. It is deliberately NOT transitioned; a height animation on
+ * a box containing a scroller fights the scroller, and new words appearing
+ * explain the new height by themselves.
+ */
 .waka-over--talk {
-  height: 88dvh;
+  /* SIZED TO ITS COLUMN, NOT TO THE GRID OVERLAY'S. `.waka-over` is
+     `min(1040px, 100%)` because the saves overlay holds a card grid that
+     wants the width. A conversation holds ONE column, and at 1040 that left
+     about 180px of dead ground down each side — the "large empty area on the
+     right" in the screenshot this work started from.
+
+     THE ARITHMETIC, so the next person can check it rather than trust it:
+     `--chat-measure` is 545px (80 characters — see its note in `chat.css`),
+     `.chat-main` adds a 28px gutter each side at this width, and
+     `.waka-over` adds its own `--sp-24` of padding each side. 545 + 56 + 48
+     = 649. Rounded up to 650 so the gutter is never squeezed below its own
+     clamp by a rounding error.
+
+     What is left over is now the margin of a page rather than a vacancy, and
+     the fix is NOT to give the old gutter a job: the two side columns that
+     used to fill it were deleted on 2026-10-10 for a recorded reason — "so
+     many different buttons that I have no idea what its supposed to do". */
+  width: min(650px, 100%);
+  height: auto;
+  max-height: 88dvh;
   /* The composer is the bottom edge of this surface, so the shell stops
      reserving air under it. */
   padding-bottom: 0;
