@@ -4,8 +4,10 @@
  * `lib/api` supplies the claim queue and the feedback write, because those two
  * are the seams the world reads itself through — the claim comes from
  * `listClaims` and the answer leaves through `createFeedback`, and both have
- * to be observable for a press to be checkable at all. `lib/auth-context`
- * supplies the viewer. `helpers/render-home` and `helpers/canvas-stub` replace
+ * to be observable for a press to be checkable at all. `lib/api/conversations`
+ * joined them when the two soft answers started opening a chat: that is now
+ * a third thing a press DOES, so it is a third thing that has to be
+ * watchable. `lib/auth-context` supplies the viewer. `helpers/render-home` and `helpers/canvas-stub` replace
  * time, frames, randomness and drawing, not Home's behavior; the simulation,
  * the layout and every state transition under test are the shipped ones.
  *
@@ -24,21 +26,44 @@
  * server, or asserts that nothing did. None of them check that anything is
  * visible for its own sake.
  *
- * WHAT IT IS GUARDING, SPECIFICALLY. The correction field replaced five
- * components (`ReviewPanel`, `ReviewDialogue`, `ReviewResult`,
- * `ReflectionFlow`, and the review's own evidence surface) on the founder's
- * instruction: *"Collapse all five into 'correct a claim' — one text field,
- * reached only after 'not quite'."* Those five carried a draft store, so a
- * half-written answer survived a reload. This field deliberately does not —
- * the draft lifecycle is the thing that was cut. What replaces that
- * protection is the last case here: a correction that does not land keeps the
- * words on screen and says so, rather than closing over them.
+ * ── THE CORRECTION FIELD IS GONE, AND FOUR CASES WENT WITH IT ─────────────
+ *
+ * Founder, 2026-10-11: *"the yes / partly / not true button is a little bit
+ * weird. And then when the user clicks on partly and not true, can we open a
+ * chat experience rather than asking user to answer in that small space?"*
+ *
+ * TOMBSTONED RATHER THAN DELETED, because what they guarded was real and the
+ * next person should know it was considered. `records a correction and the
+ * verdict it belongs to in one write, and only on Save`, `files not true
+ * with no correction when the field is left empty`, `leaves the claim
+ * unanswered when the correction is abandoned`, and `keeps the words and
+ * says so when the correction does not land` all pressed a two-row textarea
+ * that opened under the claim when you said "Not true". That field had
+ * itself replaced five components on an earlier instruction — *"Collapse all
+ * five into 'correct a claim' — one text field, reached only after 'not
+ * quite'"* — and the last of the four was the replacement for the draft
+ * store those five carried: a failed write kept the words on screen rather
+ * than closing over them.
+ *
+ * None of that protection is lost, it has MOVED. The words a person wants to
+ * say now go into a conversation, which has its own draft store, its own
+ * failure sentence and its own history — all of it stronger than a textarea
+ * with no localStorage behind it. What IS given up is `correctionText`:
+ * nothing writes one any more. `ReviewEvidence` still quotes the ones
+ * already on record and the server still accepts the field, so the loss is a
+ * source, not a reader — see the note at the answer row in `Home.tsx`.
+ *
+ * So the cases below press the same three buttons and assert the two things
+ * that now have to be true: the verdict reaches the server IMMEDIATELY for
+ * all three, and the two soft answers carry on into a conversation seeded
+ * with the claim.
  */
 import { act } from "react";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
 import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 import { createFeedback, listClaims } from "../src/lib/api";
+import { createConversation } from "../src/lib/api/conversations";
 
 const FACTS = { inspirations: [{ id: "kept-1", text: "An original capture", daysAgo: 3 }], groups: [] };
 const CLAIM = {
@@ -65,6 +90,13 @@ vi.mock("../src/lib/api", async (original) => ({
   ...apiMockFrom({ inspirations: [{ id: "kept-1", text: "An original capture", daysAgo: 3 }], groups: [] }),
   listClaims: vi.fn(),
   createFeedback: vi.fn(),
+}));
+/* THE SEAM THE TWO SOFT ANSWERS LEAVE THROUGH. `talkAbout` creates a
+   conversation and then navigates to it, so a press is only checkable if
+   this is observable — same argument as `createFeedback` above. */
+vi.mock("../src/lib/api/conversations", async (original) => ({
+  ...await original<typeof import("../src/lib/api/conversations")>(),
+  createConversation: vi.fn(),
 }));
 vi.mock("../src/lib/auth-context", async (original) => ({
   ...await original<typeof import("../src/lib/auth-context")>(),
@@ -94,111 +126,75 @@ function answer(label: string): HTMLButtonElement {
   return found;
 }
 const statement = () => world.container.querySelector(".jar-char-claim-statement")?.textContent ?? "";
-const field = () => world.container.querySelector<HTMLTextAreaElement>("textarea.jar-char-claim-edit");
-/* TYPED THROUGH THE NATIVE SETTER, as every other suite here types. Assigning
-   `.value` on a controlled textarea leaves React's own tracker holding the old
-   string, so the change event is treated as a no-op and the state never moves
-   — a test that does it the obvious way passes an empty correction and proves
-   nothing. */
-const correct = (words: string) => act(async () => {
-  const box = field()!;
-  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(box, words);
-  box.dispatchEvent(new Event("input", { bubbles: true }));
-});
-
+/* `field` AND `correct` WENT WITH THE TEXTAREA. They read and typed into
+   `textarea.jar-char-claim-edit`, which no surface renders — see the
+   tombstone in this file's header. */
 async function withClaims(...claims: Array<typeof CLAIM>) {
   vi.mocked(listClaims).mockResolvedValue({ claims, more: false });
   world = await mountWorld(FACTS);
   expect(statement(), "the claim queue is not on screen, so nothing below presses anything").toContain(claims[0]!.statement);
 }
 
-it("records a correction and the verdict it belongs to in one write, and only on Save", async () => {
+/** The one conversation this press opened, if it opened one. */
+const openedChat = () => vi.mocked(createConversation).mock.calls[0];
+
+it("files not true at once and carries it into a conversation about the claim", async () => {
   vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  vi.mocked(createConversation).mockResolvedValue({} as Awaited<ReturnType<typeof createConversation>>);
   await withClaims(CLAIM, SECOND);
 
   await act(async () => answer("Not true").click());
-  /* NOTHING IS ON THE RECORD YET, and that is the whole reason this answer
-     costs a second press. The field below may still change what gets filed,
-     and a verdict sent now would be a second row for one answer. */
-  expect(createFeedback).not.toHaveBeenCalled();
-  expect(field(), "saying not true opens the one field this product types into").not.toBeNull();
 
-  await correct("It is more about not starting from nothing.");
-  await act(async () => answer("Save").click());
-
+  /* IMMEDIATELY, which is the reversal. This answer used to send nothing on
+     the first press, because a two-row field below it could still change
+     what got filed. A conversation is not a row, so there is nothing to
+     wait for — and an answer that depended on finishing a chat would be an
+     answer lost whenever somebody closed the tab. */
   expect(createFeedback).toHaveBeenCalledTimes(1);
   expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({
-    targetType: "signal", targetId: "claim-1", value: "not_true",
-    correctionText: "It is more about not starting from nothing.",
-    targetRevision: "7",
+    targetType: "signal", targetId: "claim-1", value: "not_true", targetRevision: "7",
   });
-  /* AND THE CLAIM LEAVES ONLY ONCE THE WORDS ARE FILED. Advancing first would
-     pull the sentence out from under the field being typed into. */
-  expect(statement()).toContain(SECOND.statement);
-  expect(field()).toBeNull();
-});
-
-it("files not true with no correction when the field is left empty", async () => {
-  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
-  await withClaims(CLAIM);
-  await act(async () => answer("Not true").click());
-  await act(async () => answer("Save").click());
-  /* OPTIONAL ON PURPOSE. The verdict is a complete answer without a sentence
-     beside it, and a product that refused to accept "no" without an essay
-     would teach people to pick a different answer. `correctionText` is absent
-     rather than empty: the route rejects an empty string, and an empty
-     correction is not a thing a person said. */
-  expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "not_true" });
+  /* AND NOTHING CARRIES A CORRECTION ANY MORE. Asserted rather than assumed:
+     the field is gone, so a `correctionText` appearing here would mean some
+     other path had started producing one silently. */
   expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).not.toHaveProperty("correctionText");
+
+  /* THE WORDS GO SOMEWHERE A PERSON CAN SAY THEM. Seeded with the claim —
+     the same shape the other two doors into a conversation use — and the
+     verdict just filed reaches the reply on its own, because
+     `recentFeedback()` passes every value into the generation payload. */
+  const chat = openedChat();
+  expect(chat, "saying not true opened no conversation").toBeTruthy();
+  expect(chat?.[4]).toMatchObject({ content: CLAIM.statement });
 });
 
-it("leaves the claim unanswered when the correction is abandoned", async () => {
-  await withClaims(CLAIM);
-  await act(async () => answer("Not true").click());
-  await act(async () => answer("Leave it").click());
-  /* THE WAY OUT RECORDS NOTHING, which is the truth: the person opened an
-     answer and did not give one, so the claim is still being asked. Law 2
-     wants this press to exist; Law 1 wants it to mean what it says. */
-  expect(createFeedback).not.toHaveBeenCalled();
-  expect(field()).toBeNull();
-  expect(statement()).toContain(CLAIM.statement);
-  expect(answer("Not true")).toBeTruthy();
-});
-
-it("keeps yes and partly at one press, with no field between them and the record", async () => {
+it("gives partly the same door, which it never had at all", async () => {
   vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  vi.mocked(createConversation).mockResolvedValue({} as Awaited<ReturnType<typeof createConversation>>);
   await withClaims(CLAIM, SECOND);
+
   await act(async () => answer("Partly").click());
-  /* PARTLY USED TO OPEN A REWRITE OF THE CLAIM'S OWN WORDING HERE. The
-     founder's instruction put the one text field behind "not quite" only, so
-     partly is now exactly as cheap as yes — and it is still read, by the
-     generator, which is told a partly verdict is an invitation to sharpen
-     rather than an arbitration (`docs/six-laws.md`, Law 10). Rewriting a
-     signal in your own words survives on the reading's ground rows. */
-  expect(field()).toBeNull();
+
+  /* THE ANSWER WITH THE MOST LEFT UNSAID WAS THE ONE GIVEN NOWHERE TO SAY
+     IT. "Partly" filed in silence and advanced; only "not true" earned a
+     field. Both soft answers open the same door now. */
   expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "partly" });
-  expect(statement()).toContain(SECOND.statement);
+  expect(openedChat()?.[4], "partly still files in silence").toMatchObject({ content: CLAIM.statement });
+});
+
+it("keeps yes at one press and on this screen, so the sitting can continue", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  vi.mocked(createConversation).mockResolvedValue({} as Awaited<ReturnType<typeof createConversation>>);
+  await withClaims(CLAIM, SECOND);
+
   await act(async () => answer("Yes").click());
-  expect(vi.mocked(createFeedback).mock.calls[1]?.[0]).toMatchObject({ targetId: "claim-2", value: "true" });
+
+  /* AGREEING IS FINISHED THE MOMENT IT IS PRESSED — there is nothing to add
+     to it — so it is the one answer that does not leave. Taking somebody to
+     a conversation after "yes" would end a sitting they had not finished,
+     which is the opposite of the terminal beat the queue is built around. */
+  expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "true" });
+  expect(openedChat(), "yes should not take anybody anywhere").toBeUndefined();
+  expect(statement(), "the next claim did not come up").toContain(SECOND.statement);
 });
 
-it("keeps the words and says so when the correction does not land", async () => {
-  vi.mocked(createFeedback).mockRejectedValue(new Error("The write was lost"));
-  await withClaims(CLAIM);
-  await act(async () => answer("Not true").click());
-  await correct("It is more about not starting from nothing.");
-  await act(async () => answer("Save").click());
-
-  /* THE REPLACEMENT FOR THE DRAFT STORE THAT WAS DELETED. There is no
-     localStorage behind this field, so the only thing standing between a
-     failed write and lost writing is that the field does not close and the
-     failure is stated in words. A silent close here would be the one failure
-     this product refuses — see Law 8's note on a dead press reading as the
-     product being broken. */
-  expect(field()?.value).toBe("It is more about not starting from nothing.");
-  expect(world.container.querySelector('.jar-char-claim-mine [role="alert"]')?.textContent)
-    .toBe("That didn’t save. Your words are still here.");
-  expect(statement(), "a claim whose answer did not land is still being asked").toContain(CLAIM.statement);
-  /* and it can be pressed again rather than needing a reload */
-  expect(answer("Save").disabled).toBe(false);
-});
