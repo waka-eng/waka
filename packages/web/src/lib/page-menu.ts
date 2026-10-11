@@ -71,6 +71,8 @@ export interface PageMenu {
 const VIEWS: ReadonlyArray<{
   id: string;
   label: MenuItem["label"];
+  /** The same view, named as the agent's. */
+  agentLabel: MenuItem["label"];
   path: string;
   /**
    * ONE PARAGRAPH, NOT A LIST OF FACTS.
@@ -90,18 +92,21 @@ const VIEWS: ReadonlyArray<{
   {
     id: "inspirations",
     label: "worldMenuField",
+    agentLabel: "worldAgentField",
     path: "/inspirations",
     explain: "worldFieldWhatIs",
   },
   {
     id: "top-of-mind",
     label: "worldMenuTopOfMind",
+    agentLabel: "worldAgentTopOfMind",
     path: "/",
     explain: "worldReadingWhatIs",
   },
   {
     id: "principles",
     label: "worldPrinciplesShortcut",
+    agentLabel: "worldAgentPrinciples",
     path: "/principles",
     explain: "worldPrinciplesWhatIs",
   },
@@ -111,50 +116,98 @@ const VIEWS: ReadonlyArray<{
    auth from here would make a hook every page uses depend on a context those
    pages already hold — and would make it unmountable in any test that does
    not happen to mock that context. */
-export function usePageMenu(locale: SupportedLocale, accountId?: string | null): PageMenu {
+export function usePageMenu(
+  locale: SupportedLocale,
+  accountId?: string | null,
+  /** The account's agent, when it has one. Named here so the list can say
+      whose material each row leads to. */
+  agent?: { id: string; name: string } | null,
+): PageMenu {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const standing = useStanding(accountId);
   return useMemo(() => {
-    /* Longest path first, so "/" does not claim "/inspirations". */
-    const here =
-      [...VIEWS]
-        .sort((a, b) => b.path.length - a.path.length)
-        .find((view) => (view.path === "/" ? pathname === "/" : pathname.startsWith(view.path)))
-        ?.id ?? null;
+    /**
+     * THE LIST SAYS WHOSE, ROW BY ROW.
+     *
+     * Founder: "clicking on your inspirations leads to not my agent's
+     * inspiration but mine. Maybe this dropdown should be more clear: your
+     * inspirations, your top of mind, your principles, and then your agent's
+     * inspirations, your agent's top of mind, your agent's principles."
+     *
+     * That is the fix for three separate bugs, and they had one cause: whose
+     * material you were looking at was a HIDDEN STANCE, and the rows named
+     * only the view. So the label said "Your inspirations" while standing as
+     * the agent, picking a row changed the view but not the owner, and the
+     * control that was supposed to say where you are could not say the one
+     * thing that had actually changed.
+     *
+     * Six rows, each naming both halves of the answer. The stance stops
+     * being something you set elsewhere and remember — it is a consequence
+     * of the row you pressed, which is the only way a person can be sure
+     * what they are about to read.
+     */
+    const owners: Array<{ id: string | null; name: string }> = [
+      { id: null, name: "" },
+      ...(agent ? [{ id: agent.id, name: agent.name }] : []),
+    ];
+
+    /* Longest path first, so "/" does not claim "/inspirations". A wall
+       address is the agent's top of mind, which no VIEWS path matches. */
+    const onAWall = pathname.startsWith("/w/");
+    const view =
+      onAWall
+        ? "top-of-mind"
+        : [...VIEWS]
+            .sort((a, b) => b.path.length - a.path.length)
+            .find((row) => (row.path === "/" ? pathname === "/" : pathname.startsWith(row.path)))
+            ?.id ?? null;
+    const owner = onAWall
+      ? pathname.split("/")[2] ?? null
+      : standing.id;
+    const current = view ? `${owner ?? "me"}:${view}` : null;
+
     return {
-      items: VIEWS.map((view) => ({
-        id: view.id,
-        label: view.label,
-        /**
-         * THE TOP OF MIND IS A WALL, AND THE WALL YOU ARE IN IS THE ONE YOU
-         * GET.
-         *
-         * Founder: "when I go to my agent and click on top of mind, it moves
-         * me to me. That's not the right interpretation."
-         *
-         * It is not. "/" is YOUR wall specifically, not "the top of mind" in
-         * general — so a row that always navigated there silently answered a
-         * different question than the one asked. Standing as your agent and
-         * asking for the top of mind means the AGENT's, and the agent's top
-         * of mind has an address: its own wall.
-         *
-         * The archive and the principles do not need this. They are one page
-         * each, scoped by the stance they read from `lib/standing`, so they
-         * already serve whoever you are standing as.
-         */
-        onSelect: () =>
-          navigate(
-            view.id === "top-of-mind" && standing.id
-              ? `/w/${encodeURIComponent(standing.id)}`
-              : view.path,
-          ),
-        explain: t(locale, view.explain),
-      })),
-      current: here,
+      items: owners.flatMap((who, owned) =>
+        VIEWS.map((row, index) => ({
+          id: `${who.id ?? "me"}:${row.id}`,
+          /* A rule between the two sets of three. Six rows with no break
+             read as one list of six unrelated places; the break is what says
+             the same three views are being offered twice, about two
+             different people. */
+          startsGroup: owned > 0 && index === 0,
+          label: who.id ? row.agentLabel : row.label,
+          /**
+           * PICKING A ROW SETS BOTH HALVES.
+           *
+           * The stance is written first and the navigation follows, so the
+           * page that mounts is already scoped to the owner whose name was
+           * on the row. Writing it the other way round would mount the page
+           * against the previous owner and correct itself a frame later,
+           * which is a visible flash of somebody else's material.
+           *
+           * THE TOP OF MIND IS A WALL. "/" is YOUR wall specifically, not
+           * "the top of mind" in general — the agent's has its own address,
+           * and a row that always navigated to "/" answered a different
+           * question than the one asked.
+           */
+          onSelect: () => {
+            setStanding(accountId, who.id ? { id: who.id, name: who.name } : null);
+            navigate(
+              row.id === "top-of-mind"
+                ? who.id
+                  ? `/w/${encodeURIComponent(who.id)}`
+                  : "/"
+                : row.path,
+            );
+          },
+          explain: t(locale, row.explain),
+        })),
+      ),
+      current,
       standing,
       stand: (next: Standing | null) => setStanding(accountId, next),
       onSettings: () => navigate("/profile"),
     };
-  }, [accountId, locale, navigate, pathname, standing]);
+  }, [accountId, agent?.id, agent?.name, locale, navigate, pathname, standing]);
 }

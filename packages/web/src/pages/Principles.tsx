@@ -19,6 +19,7 @@ import { Menu } from "../components/Menu";
 import { ChatCorner } from "../components/ChatCorner";
 import { fetchPrinciples, type ApiPrinciple } from "../lib/api";
 import { usePageMenu } from "../lib/page-menu";
+import { useAgent } from "../lib/use-agent";
 import { useOptionalAuth } from "../lib/auth-context";
 import { useStanding } from "../lib/standing";
 import { normalizeSupportedLocale, t } from "../lib/locales";
@@ -33,7 +34,8 @@ export function Principles(): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   const navigate = useNavigate();
 
-  const menu = usePageMenu(locale, auth?.account?.id);
+  const agent = useAgent();
+  const menu = usePageMenu(locale, auth?.account?.id, agent);
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);

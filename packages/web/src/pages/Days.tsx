@@ -32,6 +32,7 @@ import { listKeptDays, type ApiKeptDay } from "../lib/api";
 import { useOptionalAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 import { usePageMenu } from "../lib/page-menu";
+import { useAgent } from "../lib/use-agent";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -78,7 +79,8 @@ export function Days(): JSX.Element {
   const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   const navigate = useNavigate();
-  const menu = usePageMenu(locale, auth?.account?.id);
+  const agent = useAgent();
+  const menu = usePageMenu(locale, auth?.account?.id, agent);
 
   const [rows, setRows] = useState<ApiKeptDay[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");

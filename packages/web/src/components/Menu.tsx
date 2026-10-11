@@ -66,6 +66,8 @@ export interface MenuItem {
    * purpose: a person reaching to read is not reaching to navigate.
    */
   explain?: string;
+  /** A rule above this row: the first of a new owner's three. */
+  startsGroup?: boolean;
   /**
    * How much is behind this door, announced but not printed.
    *
@@ -280,7 +282,7 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
                  so the one person it could not help was the one who does not
                  yet know what these three are. Per row it can be read before
                  going anywhere, which is the whole point of asking. */
-              <span key={item.id} className="waka-menu-row">
+              <span key={item.id} className={`waka-menu-row${item.startsGroup ? " waka-menu-row--new" : ""}`}>
                 <button
                   ref={index === 0 ? first : undefined}
                   type="button"

@@ -6,6 +6,7 @@ import {ConversationPanel} from '../components/ConversationPanel';
 import {Menu} from '../components/Menu';
 import {ChatCorner} from '../components/ChatCorner';
 import {usePageMenu} from '../lib/page-menu';
+import {useAgent} from '../lib/use-agent';
 import type {ApiConversation} from '../lib/api/conversations';
 import '../styles/chat.css';
 
@@ -18,7 +19,8 @@ export default function ChatPage(){
      because the menu is always there; it is always there on this page now
      too, and it is the same menu, in the same two corners. */
   const locale=normalizeSupportedLocale(auth.profile?.preferredLocale);
-  const menu=usePageMenu(locale, auth.account?.id);
+  const agent=useAgent();
+  const menu=usePageMenu(locale, auth.account?.id, agent);
   // One immediately committed response, not persistent or cross-owner memory.
   const committed=useRef<{owner:string;row:ApiConversation}|null>(null);
   const scope=useMemo(()=>auth.account&&auth.profile?{accountId:auth.account.id,profileId:auth.profile.id}:null,[auth.account?.id,auth.profile?.id]);
