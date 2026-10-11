@@ -10593,10 +10593,26 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * not matched a state it could be pressed in; this one was born in the
    * same change that made it reachable.
    */
-  /** Whether you are standing somewhere other than the world, which is the
-      whole of the question "does this press move me, or deepen me". */
+  /**
+   * Whether you are standing somewhere other than the world, which is the
+   * whole of the question "does this press move me, or deepen me".
+   *
+   * `compose` BELONGS IN HERE AND WAS LEFT OUT, and the founder found it
+   * twice: "bottom bar seems to be opening on top of things rather than
+   * switching the pages", and then exactly — "if I click on inspirations,
+   * then chat, then new inspiration, then new chat, and then click now, I
+   * have to click now like four times to actually get there."
+   *
+   * Four surfaces, four presses, because the notepad was the one place this
+   * predicate did not recognise as being away from the world. Everything
+   * that opens from a destination REPLACES it, so the depth from the world
+   * stays one and a close is one press — except the notepad, which pushed,
+   * and then every surface opened after it pushed on top of that. Each
+   * press of Now then walked back exactly one entry, through the whole
+   * chain, which is what being made to press it four times IS.
+   */
   const standingAway = (view: ViewLocation | null | undefined) =>
-    Boolean(view?.open || view?.conversationId);
+    Boolean(view?.open || view?.conversationId || view?.compose);
 
   const openOverHome = useCallback((what: ViewOpen | null) => {
     const nav = viewNavigationRef.current;
@@ -10941,8 +10957,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        the notepad — the two surfaces the founder caught in one screenshot,
        with the dock greyed out between them. The notepad is a place, and
        arriving at a place means leaving the last one. */
+    /* REPLACING WHATEVER YOU WERE STANDING ON, for the reason in
+       `standingAway`: the notepad is a place you MOVE to, not a depth you
+       add, and pushing one made every close after it a step through a
+       chain rather than a return to the world. */
     nav.write({...EMPTY_VIEW,...nav.view,section:'top',at:null,compose:true,find:false,open:null,
-      inspirationId:null,reflectionId:null,principleId:null,sharePrinciple:false,conversationId:null});
+      inspirationId:null,reflectionId:null,principleId:null,sharePrinciple:false,conversationId:null},
+      standingAway(nav.view) ? { replace: true } : {});
   }, []);
 
   /** The shortcut returns to the present wall before putting the pen in hand. */
