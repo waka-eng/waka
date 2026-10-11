@@ -193,7 +193,9 @@ describe("nothing visible loses its press", () => {
          That is strictly better than this test's own list and is the pattern
          to copy — `.waka-rungs` would never have happened under it.
 
-         A STATE THAT IS LEAVING OR BUSY. `--away`, `--out`, `--busy`. Here
+         A STATE THAT IS LEAVING, BUSY OR SHUT. `--away`, `--out`, `--busy`,
+         and `--closed` — the save box at rest, which exists only once
+         somebody presses the creature to ask for it. Here
          `pointer-events: none` IS the feature: a panel on its way out must
          not take a press on the way, and `one-class-one-thing` already holds
          these modifiers to meaning exactly that. */
@@ -208,7 +210,7 @@ describe("nothing visible loses its press", () => {
       .filter((selector) => /^\.[a-z][a-z0-9-]*$/.test(selector))
       .filter((selector) => !covered.has(selector))
       .filter((selector) => !revivesItsChildren(selector))
-      .filter((selector) => !/--(away|out|busy|gone|leaving|hidden)$/.test(selector))
+      .filter((selector) => !/--(away|out|busy|gone|leaving|hidden|closed)$/.test(selector))
       /* WHAT IS LEFT IS ARTWORK, and each was opened and checked for a
          control on 2026-10-11 rather than assumed: the canvas and the
          atmosphere are `aria-hidden` paint, the skeleton is a loading

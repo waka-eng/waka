@@ -2604,6 +2604,17 @@
    the one thing that slot cannot hold. The ids are still on the claim and the
    reasoning for showing them is kept in `Home.tsx` where it happened. */
 
+/* THE READING WEARS THE SAME NOTE AS THE QUESTION — same seat, same
+   material — and is a shade quieter, because it is something to read rather
+   than something waiting on you. */
+.jar-char-claim--reading {
+  color: var(--muted);
+}
+
+.jar-char-claim--reading .jar-char-claim-statement {
+  color: var(--ink);
+}
+
 .jar-char-claim-statement {
   margin: 0;
   font-family: var(--waka-face);
@@ -3269,6 +3280,42 @@
  * companion's middle and its size every layout pass, so the bubble's bottom
  * edge sits a fixed gap above the top of its body at every viewport.
  * ------------------------------------------------------------------------- */
+
+/**
+ * THE CREATURE'S OWN PRESS TARGET.
+ *
+ * The body is drawn on the canvas, so there is nothing in the DOM to click —
+ * this is the hit area over it, positioned off the two variables the layout
+ * pass already writes for the bubble above it (`--jar-char-mid`, `--jar-char`).
+ * Invisible on purpose: the creature is already the most legible thing on the
+ * screen and a ring around it would be a second mark saying what the first
+ * one already says.
+ */
+/* Nothing to show until somebody asks for it — see the note in Home.tsx. */
+.jar-mouth-slot--closed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.jar-char-press {
+  position: absolute;
+  left: 50%;
+  top: var(--jar-char-mid, 50%);
+  width: var(--jar-char, 120px);
+  height: var(--jar-char, 120px);
+  transform: translate(-50%, -50%);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.jar-char-press:focus-visible {
+  outline: 2px solid var(--jar-muted);
+  outline-offset: var(--sp-8);
+}
 
 .jar-char-bubble {
   position: absolute;
