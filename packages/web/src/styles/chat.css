@@ -634,13 +634,31 @@
   flex-direction: row;
   align-items: flex-end;
   gap: var(--sp-8);
-  /* `--field-edge`, not `--line`: 3.48:1 instead of 1.41:1. See its note in
-     `chrome.css` — the home screen's save box took the same token in the
-     same commit, because it was drawn with the same invisible hairline. */
-  border: 1px solid var(--field-edge);
-  border-radius: var(--waka-r-surface);
-  background: var(--waka-raised);
-  overflow: hidden;
+  /* ═══ A RULE, NOT A CAPSULE ═══════════════════════════════════════════
+     Founder, with the composer and the dock stacked at the bottom of a
+     chat: "this double layer is so weird."
+
+     It was. Two rounded bars, one directly above the other, both the width
+     of the column — the dock is a pill because it is an object you press,
+     and the composer had become a pill because a capsule is what a chat
+     input looks like in other products. Side by side they read as a
+     stutter rather than as two different kinds of thing.
+
+     One of them has to stop being a shape, and it is this one: the dock is
+     the product's one permanent object and the field is part of the page
+     it sits on. A single rule under the row is also the treatment the
+     archive's search field already wears, so what used to be two field
+     designs is now one.
+
+     THE CONTRAST ARGUMENT IS UNCHANGED, which is the part a later tidy-up
+     must not undo. `--field-edge` is still the token (3.48:1 against the
+     ground, where `--line` is 1.41:1 — see its note in `chrome.css`), and
+     focus is still the same 3:1 CHANGE in the same pixels. What went is
+     the radius and the fill, neither of which was carrying a ratio: the
+     fill measured 1.07:1 and was doing nothing but rounding a corner. */
+  border: 0;
+  border-bottom: 1px solid var(--field-edge);
+  background: none;
 }
 
 /**
@@ -675,8 +693,11 @@
  * and recompute both.
  */
 .chat-input-row:focus-within {
-  border-color: color-mix(in srgb, var(--ink) 80%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 80%, transparent);
+  /* The rule brightens and thickens — the same 3:1 change in the same
+     pixels the box used to make with its whole edge, now spent on the one
+     edge that is left. */
+  border-bottom-color: color-mix(in srgb, var(--ink) 80%, transparent);
+  box-shadow: 0 1px 0 0 color-mix(in srgb, var(--ink) 80%, transparent);
 }
 
 /* The field's own ring would be the second rectangle; the row above has it. */
