@@ -239,16 +239,43 @@ describe("the four breaks that a browser found and reading did not", () => {
     ).toBe(true);
   });
 
+  /* ═══ THE RULE OUTLIVED THE GRID IT WAS WRITTEN FOR ══════════════════
+     This named `.waka-cards`, the archive's tile grid, which is gone: the
+     founder asked for the Apple Notes list ("copy this for saved
+     inspirations") and the archive is a column of grouped rows now, with no
+     track to be wider than anything.
+
+     SO THE GATE READS THE SHEET INSTEAD OF A NAME. A rule that checks one
+     selector dies with that selector and takes its lesson with it; this asks
+     the question of EVERY grid in the two sheets, which means the next grid
+     somebody writes is held to it without anybody remembering to add a line
+     here. A flat `minmax(260px, 1fr)` is 30px wider than the room's content
+     box at 320, so the surface grows a sideways scrollbar on the narrowest
+     phone; `min()` inside the minimum is what stops it. */
   it("never lets a grid track be wider than the page it is on", () => {
+    const loose: string[] = [];
+    for (const file of ["claims.css", "home.css"]) {
+      const text = source(file).replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " "));
+      for (const match of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const track = /grid-template-columns:([^;]*)/.exec(match[2]!)?.[1];
+        if (!track || !/minmax\(/.test(track)) continue;
+        /* Only an AUTO-FIT/AUTO-FILL track can be forced wider than its
+           container: an explicit track list is already bounded by the count
+           the author wrote. */
+        if (!/auto-fit|auto-fill/.test(track)) continue;
+        if (/minmax\(\s*min\(/.test(track)) continue;
+        loose.push(`${match[1]!.trim()} in ${file}`);
+      }
+    }
     expect(
-      /grid-template-columns:[^;]*minmax\(\s*min\(/.test(block("claims.css", ".waka-cards")),
-      "`.waka-cards` has a bare pixel minimum in its track again. A flat " +
-        "`minmax(260px, 1fr)` is 30px wider than the overlay's content box " +
-        "at 320, so the archive grows a sideways scrollbar on the narrowest " +
+      loose,
+      "a repeating grid track has a bare minimum again. A flat " +
+        "`minmax(260px, 1fr)` is 30px wider than the room's content box at " +
+        "320, so the surface grows a sideways scrollbar on the narrowest " +
         "phone. `.waka-held` has written `minmax(min(22rem, 100%), 1fr)` for " +
-        "exactly this reason since it was built — two grids, one rule, and " +
-        "only one of them had learned it.",
-    ).toBe(true);
+        "exactly this reason since it was built; every repeating track owes " +
+        "the same.",
+    ).toEqual([]);
   });
 
   it("lets the delete question shrink instead of hanging off the edge", () => {

@@ -159,32 +159,26 @@ async function worldWithTheMouthOpen(): Promise<MountedWorld> {
   return layout;
 }
 
-it('includes the visible secondary link when the keyboard save shortcut is used', async()=>{
-  await worldWithTheMouthOpen(); await press(/＋ Link/);
-  await act(async()=>{
-    const input=layout!.container.querySelector<HTMLInputElement>('input[type=url]')!;
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,'https://example.test/not-added');
-    input.dispatchEvent(new Event('input',{bubbles:true}));
-  });
-  await act(async()=>layout!.container.querySelector('[aria-label="Capture inspiration"] textarea')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true})));
-  expect(saveCalls).toHaveLength(1);
-  expect(saveCalls[0]).toMatchObject({text:'a thing worth keeping\nhttps://example.test/not-added'});
-});
+/* ═══ THE LINK BUTTON IS GONE, AND THIS CASE WENT WITH IT ════════════════
+   This drove the composer's "＋ Link" control, typed a url into the field it
+   opened, and proved the keyboard save shortcut carried it. The control is
+   gone — founder, on the row that held Photo, Link and Record: "remove all" —
+   and with it the only way to reach that field from the world.
 
-/** the two words on the row, by the light they wear */
-function destination(): { private: boolean; public: boolean } {
-  const row = layout?.container.querySelector(".jar-composer-visibility");
-  if (!row) throw new Error("the composer did not open");
-  const buttons = Array.from(row.querySelectorAll("button"));
-  const find = (word: RegExp) => buttons.find((b) => word.test(b.textContent ?? ""));
-  const priv = find(/^Only me$/i);
-  const pub = find(/^Share with rooms$/i);
-  if (!priv || !pub) throw new Error(`the row offers ${buttons.map((b) => b.textContent).join("/")}`);
-  return {
-    private: priv.getAttribute("aria-pressed") === "true",
-    public: pub.getAttribute("aria-pressed") === "true",
-  };
-}
+   WHAT IT PROTECTED IS STILL PROTECTED, one layer down:
+   `inspiration-composer.test.tsx` mounts the composer with `linkText` already
+   set (the restored-draft case, which is now the only way the field appears)
+   and asserts the same thing — that Save carries the pending link.
+   `inspiration-input.test.ts` owns the joining itself.
+
+   Recorded here rather than silently deleted, because "the test was removed"
+   and "the behaviour was removed" look identical in a diff. */
+
+/* ═══ `destination()` IS GONE, WITH THE ROW IT READ ══════════════════════
+   It found `.jar-composer-visibility` and reported which of "Only me" and
+   "Share with rooms" was lit. Founder: "I told you we got rid of the concept
+   for room so there shouldn't be only me and share with rooms." There is no
+   row, because there is no second destination for a save to go to. */
 
 async function press(word: RegExp): Promise<void> {
   const row = layout?.container.querySelector(".jar-inspiration-composer");
@@ -251,48 +245,38 @@ describe("the capture remembers where it last went", () => {
     expect(layout.container.querySelector("textarea")?.value ?? "").not.toContain("an unattributed private draft");
     expect(window.localStorage.getItem("waka.draft")).toBe("an unattributed private draft");
   });
-  it("isolates drafts and sharing choices when identity changes in the same mounted app", async () => {
-    window.localStorage.setItem(KEY, "1");
+  /* THE SHARING HALF OF THIS CASE IS GONE; THE DRAFT HALF IS THE POINT.
+     It used to assert that switching identity swapped the remembered audience
+     as well as the words. There is no audience to swap. What remains is the
+     claim that actually protects somebody: one account's unsent words never
+     appear in another account's field, and leaving a profile does not take
+     the draft with you. */
+  it("isolates drafts when identity changes in the same mounted app", async () => {
     await worldWithTheMouthOpen();
-    expect(destination().public).toBe(true);
     const other = { accountId: "account-2", profileId: "profile-2" };
     const otherDraftKey = profileStorageKey(other, "draft")!;
     window.localStorage.setItem(otherDraftKey, "a separate account's draft");
     Object.assign(IDENTITY, other);
     await layout!.rerender();
     expect(layout!.container.querySelector("textarea")?.value).toBe("a separate account's draft");
-    expect(destination()).toEqual({ private: true, public: false });
     expect(window.localStorage.getItem(DRAFT_KEY)).toBe("a thing worth keeping");
-    expect(window.localStorage.getItem(KEY)).toBe("1");
     Object.assign(IDENTITY, SCOPE);
     await layout!.rerender();
     expect(layout!.container.querySelector("textarea")?.value).toBe("a thing worth keeping");
-    expect(destination().public).toBe(true);
     expect(window.localStorage.getItem(otherDraftKey)).toBe("a separate account's draft");
   });
-  it("starts private when nothing has ever been said", async () => {
-    await worldWithTheMouthOpen();
-    expect(destination()).toEqual({ private: true, public: false });
-    expect(window.localStorage.getItem(KEY)).toBe(null);
-  });
 
-  it("opens on public when public is what was chosen last", async () => {
-    window.localStorage.setItem(KEY, "1");
-    await worldWithTheMouthOpen();
-    expect(destination()).toEqual({ private: false, public: true });
-  });
+  /* THREE CASES ABOUT THE REMEMBERED AUDIENCE STOOD HERE — "starts private
+     when nothing has ever been said", "opens on public when public is what
+     was chosen last", "writes the choice down, and takes it back the same
+     way". All three drove a control that no longer exists.
 
-  it("writes the choice down, and takes it back the same way", async () => {
-    await worldWithTheMouthOpen();
-    await press(/^Share with rooms$/i);
-    expect(destination().public).toBe(true);
-    expect(window.localStorage.getItem(KEY)).toBe("1");
-    await press(/^Only me$/i);
-    expect(destination().private).toBe(true);
-    /* removed rather than set to "0": absent IS private, and one spelling of
-       a state is the whole reason this reads a single key */
-    expect(window.localStorage.getItem(KEY)).toBe(null);
-  });
+     THE STORAGE KEY AND ITS STATE HAVE NOT BEEN RIPPED OUT, deliberately:
+     `keepPublic` still rides on every save and the world still reads the key,
+     so if sharing comes back it comes back to a working default rather than
+     to a rewrite. What is gone is the surface that asked. The case below
+     keeps that wiring honest — a remembered `public` still reaches the
+     server — which is the one assertion that does not depend on a control. */
 
   it("still stands on public after the memory is kept", async () => {
     /* THE REGRESSION THIS FILE EXISTS FOR. `setKeepPublic(false)` stood in

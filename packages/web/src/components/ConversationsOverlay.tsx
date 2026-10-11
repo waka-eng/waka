@@ -144,18 +144,24 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
     return out;
   })();
 
+  /* ═══ IT IS A PAGE NOW, NOT A RAIL ═══════════════════════════════════
+     Founder: "conversation still opens the side panel first", in a list of
+     corrections whose through-line is that the four places in the dock should
+     be four pages of the same kind.
+
+     The rail's own argument — a list you SCAN wants to be tall and narrow and
+     off to one side, beside the thing you are about to bring it back into —
+     was good while this list was reached from a corner icon over a world you
+     were still standing in. It is a dock destination now, beside three other
+     dock destinations, and arriving at one of four peers by a different
+     mechanism from the other three is the inconsistency being reported. The
+     grouping by day, which is the part that made the rail work, is kept
+     exactly as it was. */
   return (
-    /* The scrim is still full-screen: the rail is a surface over the world,
-       and a press anywhere off it puts it down. */
-    <div className="waka-rail-scrim" onClick={onClose}>
-      <DialogSurface
-        className="waka-rail"
-        aria-label={title}
-        onClose={onClose}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="waka-rail-head">
-          <h2 className="waka-rail-title">{title}</h2>
+    <div className="waka-room">
+      <DialogSurface className="waka-over" aria-label={title} onClose={onClose}>
+        <header className="waka-over-head">
+          <h2 className="waka-over-title">{title}</h2>
           <button type="button" className="waka-over-close" aria-label={say("worldCardClose")} onClick={onClose}>
             <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
               <path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -165,7 +171,9 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
 
         {/* Starting one is the first row, not a separate control: it is the
             same act as opening an old one, aimed at a conversation that does
-            not exist yet. */}
+            not exist yet. The dock's plus offers the same move from anywhere;
+            this one is here because a person already looking at their past
+            conversations should not have to travel to start another. */}
         <button type="button" className="waka-rail-new" onClick={() => onOpen(null)}>
           {say("worldConversationNew")}
         </button>

@@ -137,13 +137,12 @@ export function ClaimsOverlay({ locale, onClose, onAsk, answered }: ClaimsOverla
   };
 
   return (
-    <div className="waka-over-scrim" onClick={onClose}>
+    <div className="waka-room">
       <DialogSurface
         className="waka-over"
         aria-label={title}
         onClose={onClose}
-        onClick={(event) => event.stopPropagation()}
-      >
+        >
         <header className="waka-over-head">
           <h2 className="waka-over-title">{title}</h2>
           <button

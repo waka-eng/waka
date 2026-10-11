@@ -43,7 +43,7 @@ import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { DialogSurface } from "./DialogSurface";
 import { attachmentPreviewImageUrl, updateInspiration } from "../lib/api";
-import { dateStamp } from "../lib/words";
+import { archiveChapter, dateStamp, dateWords } from "../lib/words";
 /* THE SAME DOOR THE WORLD USES. `loadInspirations` is the archive's own
    reader — it pages, it carries the total the server reports, and it holds
    the invariant that a total is never smaller than what arrived. Reaching
@@ -198,14 +198,37 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
     return map;
   }, [rows]);
 
+  /**
+   * NOW, READ ONCE PER LOAD RATHER THAN PER ROW.
+   *
+   * Every chapter heading and every date is relative to a single moment. Read
+   * fresh inside the loop, a list straddling a midnight or a seven-day
+   * boundary could put the same save in two chapters, or date two neighbours
+   * from two different "today"s. One clock for the whole render.
+   */
+  const now = useMemo(() => Date.now(), [rows]);
+
+  /* BY AGE, IN THE ORDER THE ROWS ALREADY HAVE. `rows` is newest first, so
+     walking it in order produces the chapters in order too — no sort, and no
+     second opinion about which of two saves is more recent. */
+  const chapters = useMemo(() => {
+    const out: Array<{ key: string; words: string; rows: Inspiration[] }> = [];
+    for (const row of shown) {
+      const chapter = archiveChapter(row.capturedMs, now, locale);
+      const last = out[out.length - 1];
+      if (last && last.key === chapter.key) last.rows.push(row);
+      else out.push({ ...chapter, rows: [row] });
+    }
+    return out;
+  }, [shown, now, locale]);
+
   return (
-    <div className="waka-over-scrim" onClick={onClose}>
+    <div className="waka-room">
       <DialogSurface
         className="waka-over"
         aria-label={title}
         onClose={onClose}
-        onClick={(event) => event.stopPropagation()}
-      >
+        >
         <header className="waka-over-head">
           {/* THE NAME, THEN WHAT IS BEHIND IT. Founder: "Just write the
               number 36 next to your inspirations so that the search bar is
@@ -415,57 +438,78 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
         ) : shown.length === 0 ? (
           <p className="waka-over-status">{say("worldInspirationsNoHits")}</p>
         ) : (
-          <ul className="waka-cards">
-            {shown.map((row) => {
-              const picture = pictureOf(row);
-              return (
-                <li key={row.id}>
-                  <button
-                    type="button"
-                    className={`waka-card${picture ? "" : " waka-card--text"}`}
-                    /* OPENS HERE, NOT SOMEWHERE ELSE (founder ruling). Pressing
-                       a tile used to throw you into the world at the memory's
-                       own place, which is a page change, a camera flight and a
-                       lost scroll position to read one thing. It opens over the
-                       grid and closes back onto it. */
-                    onClick={() => setOpen(row)}
-                  >
-                    {picture ? (
-                      <span className="waka-card-picture">
-                        {/* Decorative here: the words below are the label, and a
-                            filename read aloud before them would bury it. */}
-                        <img src={picture} alt="" loading="lazy" />
-                      </span>
-                    ) : null}
-                    {/* WHICH ONE THIS IS, AND IT IS A NAME RATHER THAN A
-                        MEASUREMENT. Founder, on the reference's numbered
-                        list: "it works well with ours too because it's like
-                        your fifth inspiration, your 100th inspiration."
+          /* ═══ THE ARCHIVE READS AS A NOTES LIST ════════════════════════
+             Founder, with the Apple Notes list on screen: "copy this for
+             saved inspirations."
 
-                        That is exactly why it survives "states render,
-                        numerals never". The ruling is against METRICS — a
-                        score, a count, a progress number, anything that
-                        invites a person to perform against it. An ordinal
-                        does not measure the thing it sits beside; it NAMES
-                        it. Your hundredth inspiration is a landmark, and
-                        landmarks are the opposite of scores: you cannot do
-                        better or worse at having one.
+             WHAT THAT LIST ACTUALLY DOES, and all three parts matter:
 
-                        FROM THE WHOLE ARCHIVE, NOT THE VISIBLE LIST. Reading
-                        it off the filtered rows would renumber everything
-                        the moment somebody searched, so the name a save
-                        carries would depend on what else was on screen. */}
-                    <span className="waka-card-index" aria-hidden="true">
-                      {ordinals.get(row.id)}
-                    </span>
-                    <span className="waka-card-body">
-                      <span className="waka-card-text">{row.preview}</span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+               IT BREAKS INTO CHAPTERS BY AGE — Previous 7 Days, Previous 30
+               Days, then a heading per month. A long archive becomes readable
+               without a single row having to be compared against its
+               neighbour, and the break is coarse on purpose: recent things
+               are remembered by how long ago, older ones by which month.
+
+               EACH CHAPTER IS ONE ROUNDED GROUP, with hairlines between its
+               rows rather than around them. The group is the object; the rows
+               are inside it. A list of separately-bordered cards is the
+               wireframe look this product keeps removing.
+
+               A ROW IS A LEAD LINE AND THEN ITS META. The first line of what
+               you wrote is the title you never had to give it, and under it
+               sit the ordinal, the date and the rest of the words — the
+               second line is the one that tells you whether this is the one
+               you are looking for.
+
+             THE PICTURE GOES WITH THE GRID. A tile wall needed a thumbnail to
+             be scannable; a list of lead lines does not, and an image column
+             would make every text-only save look like a row with something
+             missing. An attachment still opens with its keep. */
+          <div className="waka-notes">
+            {chapters.map((chapter) => (
+              <section key={chapter.key} className="waka-chapter">
+                <h3 className="waka-chapter-when">{chapter.words}</h3>
+                <ul className="waka-chapter-rows">
+                  {chapter.rows.map((row) => {
+                    const words = row.preview.trim();
+                    const breakAt = words.indexOf("\n");
+                    const lead = (breakAt > 0 ? words.slice(0, breakAt) : words).trim();
+                    const rest = (breakAt > 0 ? words.slice(breakAt + 1) : "").trim();
+                    return (
+                      <li key={row.id}>
+                        <button type="button" className="waka-note" onClick={() => setOpen(row)}>
+                          <span className="waka-note-lead">{lead}</span>
+                          <span className="waka-note-meta">
+                            {/* WHICH ONE THIS IS, AND IT IS A NAME RATHER THAN
+                                A MEASUREMENT. Founder, on the reference's
+                                numbered list: "it works well with ours too
+                                because it's like your fifth inspiration, your
+                                100th inspiration."
+
+                                That is why it survives "states render,
+                                numerals never". The ruling is against METRICS
+                                — a score, a count, a progress number, anything
+                                that invites a person to perform against it. An
+                                ordinal does not measure the thing it sits
+                                beside; it NAMES it, and you cannot do better
+                                or worse at having a hundredth inspiration.
+
+                                FROM THE WHOLE ARCHIVE, NOT THE VISIBLE LIST,
+                                so a search never renames anything. */}
+                            <span className="waka-note-index" aria-hidden="true">
+                              {ordinals.get(row.id)}
+                            </span>
+                            <span className="waka-note-when">{dateWords(row.capturedMs, now, locale)}</span>
+                            {rest ? <span className="waka-note-rest">{rest}</span> : null}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
         )}
 
         {/* ONE SURFACE, TWO STATES — NOT A SHEET OVER A SHEET.

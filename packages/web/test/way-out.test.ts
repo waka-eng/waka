@@ -73,8 +73,18 @@ const WAY_OUT_WORDS = [
 ] as const;
 
 /* A class named for leaving. The overlays' corner mark, and the footer rows
-   that carry a single dismissing press on the surfaces built before it. */
-const WAY_OUT_CLASSES = /className="[^"]*(?:-close\b|-out\b|waka-over-close|jar-x)\b/;
+   that carry a single dismissing press on the surfaces built before it.
+
+   `-back` JOINED THE LIST 2026-10-11, with the notepad. That page's visible
+   exit is a chevron in its top-left corner — founder, annotating the
+   reference: "go back to list of past inspirations" — and it is wired to
+   `onPast` rather than to `onClose`, because it does not merely dismiss the
+   page, it goes somewhere: the archive this note is about to join. The
+   structural check above cannot see that, and it should not be taught to:
+   "any press that navigates counts as an exit" would pass a surface whose
+   only control went deeper. A control NAMED for going back is a narrower
+   claim, and it is the claim the law is actually about. */
+const WAY_OUT_CLASSES = /className="[^"]*(?:-close\b|-out\b|-back\b|waka-over-close|jar-x)\b/;
 
 /**
  * THE STRUCTURAL SIGNAL, WHICH IS THE ONE THAT SHOULD BE TRUSTED.

@@ -4654,8 +4654,147 @@
    * own reading step and `--jar-faint`, which is the tier reserved for text
    * that is present without being read — exactly what a placeholder is.
    */
+  /* The heading row is gone from the markup; this stays for the moment a
+     restored draft still carries one in a cached bundle. */
   .jar-inspiration-composer .jar-composer-heading {
     display: none;
+  }
+
+  /**
+   * ═══ THE TOP OF THE NOTE — three corners, no bar ═══════════════════════
+   *
+   * The way back, when it is, who may read it. A grid rather than a flex row
+   * so the stamp is centred on the PAGE and not on whatever is left between
+   * two controls of unequal width — a date that shifts when the audience
+   * label changes from "Only me" to "Share with rooms" is the kind of
+   * wrongness a reader feels without being able to name.
+   */
+  .jar-note-top {
+    display: grid;
+    /* THREE TRACKS FOR TWO THINGS, deliberately. The audience pair that used
+       to hold the right track is gone with the concept behind it (founder:
+       "we got rid of the concept for room"), and collapsing to two tracks
+       would hang the stamp off the chevron instead of centring it on the
+       page. An empty track keeps the date where the reference puts it. */
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: var(--sp-12);
+    /* AIR ABOVE THE WORDS. Founder: "not enough margin on top." The page's
+       own padding put the first line 24px from the chrome, which on a screen
+       with nothing else on it reads as the text being pinned to the ceiling.
+       The reference leaves roughly a thumb. */
+    margin-block: var(--sp-16) var(--sp-32);
+  }
+
+  .jar-note-back {
+    justify-self: start;
+    display: grid;
+    place-items: center;
+    width: var(--waka-corner);
+    height: var(--waka-corner);
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: var(--waka-raised);
+    color: var(--jar-ink);
+    cursor: pointer;
+  }
+
+  .jar-note-back:hover,
+  .jar-note-back:focus-visible {
+    color: var(--jar-ink);
+  }
+
+  /* WHEN THIS NOTE IS, and it is the only thing on the page until somebody
+     writes. Muted rather than faint: a placeholder is text you are meant to
+     look past, and this is a fact you are meant to be able to read. */
+  .jar-note-when {
+    justify-self: center;
+    font-family: var(--waka-face);
+    font-size: var(--t-fine);
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+    color: var(--jar-muted);
+  }
+
+  /**
+   * ═══ THE PILL, BOTTOM-LEFT ═════════════════════════════════════════════
+   *
+   * Founder: "maybe just a recording button at bottom left of canvas", then,
+   * on the reference's own toolbar: "2 icons: 1. record 2. image".
+   *
+   * It wears the dock's material — same raised tone, same radius, same height
+   * — because they are the same kind of object: something resting near the
+   * bottom of a world that has no edges. Sitting it beside the dock rather
+   * than inside it keeps the distinction that matters: the dock is places,
+   * this is what you can put in a note.
+   */
+  .jar-note-tools {
+    position: fixed;
+    z-index: 59;
+    left: calc(var(--sp-20) + env(safe-area-inset-left));
+    bottom: calc(var(--sp-20) + env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-6);
+    border-radius: var(--r-pill);
+    background: var(--waka-raised);
+  }
+
+  .jar-inspiration-composer .jar-note-tool {
+    display: grid;
+    place-items: center;
+    width: var(--waka-corner);
+    min-width: var(--waka-corner);
+    height: var(--waka-corner);
+    min-height: var(--waka-corner);
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: none;
+    color: var(--jar-muted);
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+
+  .jar-inspiration-composer .jar-note-tool:hover,
+  .jar-inspiration-composer .jar-note-tool:focus-visible {
+    color: var(--jar-ink);
+  }
+
+  /* A running recording says so in words and seconds. A red dot cannot tell
+     anybody how long they have been talking. */
+  .jar-inspiration-composer .jar-note-tool--wide {
+    width: auto;
+    padding-inline: var(--sp-16);
+    font-size: var(--t-fine);
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--jar-ink);
+  }
+
+  /* KEEPING IT, opposite the pill. */
+  .jar-inspiration-composer .jar-note-save {
+    position: fixed;
+    z-index: 59;
+    right: calc(var(--sp-20) + env(safe-area-inset-right));
+    /* ON THE DOCK'S LINE. The dock and the tool pill are `--waka-corner` tall
+       inside `--sp-6` of padding; a bare 44px button at the same bottom inset
+       hangs six pixels below both, which reads as a third row rather than a
+       third object on one. */
+    bottom: calc(var(--sp-20) + var(--sp-6) + env(safe-area-inset-bottom));
+    min-height: var(--waka-corner);
+    padding-inline: var(--sp-20);
+    border: 0;
+    border-radius: var(--r-pill);
+    background: var(--jar-ink);
+    color: var(--jar-atmos);
+    font-size: var(--t-fine);
+    letter-spacing: normal;
+    text-transform: none;
+    cursor: pointer;
   }
 
   /* `.jar-seek.` prefixed so this outranks `chrome.css`'s own
@@ -4668,10 +4807,23 @@
     margin: 0;
     padding: 0;
     border: 0;
-    font-size: var(--t-reading);
-    line-height: 1.3;
+    /* THE CARET IS AS TALL AS THE TYPE, AND THAT IS WHY IT WAS WRONG.
+       Founder, on the blank page: "cursor size too big."
+
+       A browser draws the caret at the FIELD's font size, so setting the
+       field at `--t-reading` (21–30px) to make the placeholder look like a
+       Notion title gave the empty page a 30px bar blinking beside 11px of
+       grey — the loudest thing on a screen whose whole argument is quiet.
+       The reference's note is body prose and its caret is a hairline.
+
+       So the words are body prose here too, and the invitation below stops
+       pretending to be a title. The page is not a document whose heading you
+       are typing; it is a page you are writing on. */
+    font-size: var(--t-body);
+    line-height: 1.7;
     letter-spacing: normal;
     text-transform: none;
+    text-align: left;
     resize: none;
   }
 
@@ -4682,26 +4834,34 @@
        write a sentence was set in the register meant for a four-word
        signpost. The reference's is a sentence in the page's own face. */
     color: var(--jar-faint);
-    font-size: var(--t-reading);
-    line-height: 1.3;
+    font-size: var(--t-body);
+    line-height: 1.7;
     text-transform: none;
     letter-spacing: normal;
   }
 
-  /* Nothing to attach TO until there are words. Same reasoning as the footer
-     below: these are questions about a thing that does not exist yet. */
-  .jar-inspiration-composer:has(.jar-composer-text:placeholder-shown) .jar-composer-tools {
-    display: none;
-  }
-
-  /* Nothing to decide about until there is something to decide about. */
-  .jar-inspiration-composer:has(.jar-composer-text:placeholder-shown) .jar-composer-footer {
-    display: none;
-  }
+  /* THE TWO `:has(:placeholder-shown)` HIDES ARE GONE WITH WHAT THEY HID.
+     They kept the attach row and the footer off a blank page — the right
+     answer to the wrong question, because the founder's ruling on that block
+     was "remove all", not "remove it until there are words". Both are now
+     corners (`.jar-note-tools`, `.jar-note-save`) and the only thing still
+     conditional is Save, which is conditional in the MARKUP: a button for a
+     thing that does not exist should not be in the document either. */
 
   /* One column down the middle of the page, at the measure the rest of the
-     product reads at. */
-  .jar-inspiration-composer > * {
+     product reads at. The fixed corners are excluded — they are positioned
+     against the viewport and a 34rem box centred in the page would drag them
+     inwards from the edges they are pinned to. */
+  /* THE TOP ROW IS THE PAGE'S, NOT THE COLUMN'S. The chevron belongs on the
+     screen's left margin where a thumb finds it — inside the 34rem reading
+     column it floated into the middle of the page beside the words, which is
+     nowhere a back button has ever been. */
+  .jar-inspiration-composer > .jar-note-top {
+    width: 100%;
+    max-width: none;
+  }
+
+  .jar-inspiration-composer > :not(.jar-note-tools):not(.jar-note-save):not(.jar-note-top) {
     width: 100%;
     max-width: 34rem;
     margin-inline: auto;
