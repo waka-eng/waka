@@ -1,4 +1,5 @@
 import type {DistillPrinciplesInput} from './model-provider.js';
+import {fence} from './prompt-fence.js';
 
 export const PRINCIPLE_INPUT_LIMITS={signals:48,standingContext:24,entries:7,characters:16000} as const;
 export const PRINCIPLE_COMPARISON_LIMITS={items:20,characters:12000,outputTokens:1600} as const;
@@ -8,10 +9,16 @@ export const PRINCIPLE_GROUNDING_LIMITS={items:3,characters:18000,outputTokens:5
  * text rather than an optimistic estimate. Human wording is never truncated. */
 export function renderPrincipleDistillContext(input:DistillPrinciplesInput){
   const sections=[`Locale: ${input.preferredLocale}.`,"Current supported signals (id · statement · stats). Capture dates are not experience dates:"];
-  for(const signal of input.signals)sections.push(['<<<signal>>>',`id: ${signal.id}`,`statement: ${signal.statement}`,
-    `evidence: ${signal.evidenceCount} captures, first ${signal.firstEvidenceAt?.toISOString().slice(0,10)??'unknown'}, last ${signal.lastEvidenceAt?.toISOString().slice(0,10)??'unknown'}, selected into ${signal.tomAppearances} top-of-mind versions`,'<<<end>>>'].join('\n'));
-  if(input.currentPrinciples.length){sections.push('Principles the person already holds (do not restate):');for(const row of input.currentPrinciples)sections.push(['<<<principle>>>',row.statement,'<<<end>>>'].join('\n'));}
-  if(input.currentEntries.length){sections.push('Current top-of-mind entries (shared themes are expected; derive a decision constraint from signals, not another summary):');for(const row of input.currentEntries)sections.push(['<<<entry>>>',row.body,'<<<end>>>'].join('\n'));}
+  /* FENCED, AND EACH SECTION CLOSES ITSELF. These three built their own
+     delimiters with one shared `<<<end>>>`, so any one of them could close
+     any other. It matters most here: `signal.statement` is MODEL OUTPUT that
+     is never verified against a source — unlike a quote, which is checked
+     verbatim — so attacker-controlled page text can shape a statement that
+     carries a delimiter, and this prompt writes the principles. */
+  for(const signal of input.signals)sections.push(fence('signal',[`id: ${signal.id}`,`statement: ${signal.statement}`,
+    `evidence: ${signal.evidenceCount} captures, first ${signal.firstEvidenceAt?.toISOString().slice(0,10)??'unknown'}, last ${signal.lastEvidenceAt?.toISOString().slice(0,10)??'unknown'}, selected into ${signal.tomAppearances} top-of-mind versions`].join('\n')));
+  if(input.currentPrinciples.length){sections.push('Principles the person already holds (do not restate):');for(const row of input.currentPrinciples)sections.push(fence('principle',row.statement));}
+  if(input.currentEntries.length){sections.push('Current top-of-mind entries (shared themes are expected; derive a decision constraint from signals, not another summary):');for(const row of input.currentEntries)sections.push(fence('entry',row.body));}
   return sections.join('\n\n');
 }
 
