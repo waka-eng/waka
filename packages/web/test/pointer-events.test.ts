@@ -137,7 +137,10 @@ const MUST_TAKE_A_PRESS: ReadonlyArray<readonly [string, string, readonly string
          shipped, and the fix that wrote the note this file quotes */
       "jar-board-acts",
       /* the claim's answers and the receipts beside them */ "jar-ask",
-      /* the resting question under the wall (Law 11) */ "jar-poster-invite",
+      /* `.jar-poster-invite` was listed here for one day and this gate is
+         how it left: the class went with the question it dressed, `revives`
+         stopped finding it, and the failure said so. A list that fails when
+         a name goes stale is the only kind worth keeping. */
     ],
   ],
   /* THE SPEECH BUBBLE. `.jar-char-bubble-go` — "the way into a conversation"

@@ -444,7 +444,7 @@ async function press(selector: string, name: RegExp): Promise<void> {
  */
 async function rewriteTo(next: string): Promise<void> {
   const was = posterText();
-  await press(".jar-poster-answers button", /not quite/i);
+  await press(".jar-board-act", /^edit$/i);
   const box = layout.container.querySelector<HTMLTextAreaElement>("textarea.jar-reflect-box");
   if (!box) throw new Error("the edit box never opened — 'Say it in my words' did nothing");
   const nativeValue = Object.getOwnPropertyDescriptor(
@@ -744,17 +744,22 @@ describe("board acts leave receipts", () => {
    * each claim to the API test that enforces it (`receipts.test.ts`), so
    * these two cases close the loop from press to law.
    */
-  it("pinning says it will be held through rewrites", async () => {
-    await press(".jar-poster-answers button", /^yes$/i);
-    const toast = layout.container.querySelector('[role="status"]');
-    expect(
-      toast?.textContent,
-      "the pin left no receipt — the gesture taught silently",
-    ).toBe(RECEIPTS.pinned.text);
-  });
+  /* PINNING HAS NO CONTROL ANY MORE, so there is no press to make and no
+     receipt to assert. Founder, naming the verbs this block should carry:
+     "for now maybe just let user either edit it or remove it and ask it to
+     reread." Keeping on top was not among them, and it was the verb they had
+     already said they could not read: "i dont get what these 4 options mean
+     (held up isnt even clickable)."
+
+     WHAT IS GONE IS THE PRESS, NOT THE CAPABILITY. `holdTopOfMindEntry` is
+     still the client for a live endpoint, `verb-pairs.test.ts` still rules on
+     its missing inverse, and the server still honours a pinned entry — the
+     board reads `pinned` when it chooses which statement leads. If a control
+     comes back, this case comes back with it; a test that presses a button
+     nobody can reach is the shape the file next door spent a night deleting. */
 
   it("dismissing states the law beside its own undo", async () => {
-    await press(".jar-poster-answers button", /not me/i);
+    await press(".jar-board-act", /^remove$/i);
     const row = layout.container.querySelector(".jar-receipt");
     expect(
       row?.textContent,

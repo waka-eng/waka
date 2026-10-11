@@ -2543,21 +2543,24 @@
 /**
  * ONE REGISTER FOR "RESPOND TO A STATEMENT ABOUT YOURSELF".
  *
- * `.jar-poster-answers` joined this rule on 2026-10-11. Until then the home
- * screen carried TWO sentences about the person — the creature's claim and
- * the top of mind above it — and asked for the same thing in two different
- * languages: three pills with a question over them down here, and four
- * plain-text maintenance verbs up there (`Write a new one`, `Keep on top`,
- * `Edit wording`, `Not this`). The founder: "rethink the full interaction
- * here... This is definitely not the right way."
+ * `.jar-poster-answers` joined this rule on 2026-10-11 and left it the same
+ * day, which earns a line because the reasoning survives the retreat.
  *
- * The verbs were the defect, not their wording — every one of them managed
- * the artifact and none of them answered the observation. This register is
- * what answering looks like in this product, and it already existed. See the
- * block in `pages/Home.tsx` for the mapping onto the board's operations.
+ * The home screen carried TWO sentences about the person — the creature's
+ * claim and the top of mind above it — asking for the same thing in two
+ * languages: three pills with a question over them down here, four plain
+ * maintenance verbs up there. Giving the top of mind this register fixed the
+ * language and uncovered the deeper problem: two answer rows on one screen.
+ * Founder: "I feel like this page is trying to do too much at once."
+ *
+ * And a hand-written top of mind cannot be answered at all — "WRITTEN BY
+ * HAND" sat directly above a button asking the author to confirm their own
+ * sentence. Founder: "weird". So that surface wears maintenance verbs again,
+ * deliberately, and this register has one user: the creature's claim, the
+ * only thing on the home screen that asks a question. Law 11 is unchanged
+ * and now records the exception.
  */
-.jar-char-claim-answers,
-.jar-poster-answers {
+.jar-char-claim-answers {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -2565,8 +2568,7 @@
   margin: 0;
 }
 
-.jar-char-claim-answers button,
-.jar-poster-answers button {
+.jar-char-claim-answers button {
   /* 44, not 36: the smallest target a thumb reliably hits, and these three
      are the only thing on the home screen the product asks a person to
      press. They were below the floor on exactly the device that has no
@@ -2620,8 +2622,7 @@
    while there is room and never asks a label to fold. */
 /* WHAT YOU CHOSE, once you have chosen. The press is what earns the light —
    this is the same channel, spent on a fact instead of on a suggestion. */
-.jar-char-claim-answers button[aria-pressed="true"],
-.jar-poster-answers button[aria-pressed="true"] {
+.jar-char-claim-answers button[aria-pressed="true"] {
   border-color: color-mix(in srgb, var(--ink) 40%, transparent);
   color: var(--ink);
 }

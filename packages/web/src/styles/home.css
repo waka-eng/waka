@@ -630,59 +630,15 @@
 
    They rest quiet and brighten under the pointer, like every other word in
    this layout. */
-/**
- * THE RESTING STATE UNDER THE TOP OF MIND IS A QUESTION, NOT A TOOLBAR.
- *
- * The objection this layout has always made to permanent controls still
- * stands and is quoted at `.jar-board-acts` below: four verbs under a quiet
- * sentence is "furniture, which this layout does not have". A question is
- * not furniture. It is the shortest honest statement of what the surface is
- * for, and it is the thing the four verbs failed to say — a person reading a
- * sentence about themselves is already asking it, and the page was answering
- * with a filing cabinet.
- *
- * Set in the same voice as the sentence above it, one step quieter: it is
- * addressed TO the reader rather than being part of what WAKA said.
- */
-.jar-poster-invite {
-  margin: var(--sp-26) 0 0;
-  font-size: var(--t-fine);
-  color: var(--jar-muted);
-  pointer-events: auto;
-}
-
-/* The same line once the answers are open, so pressing the sentence does not
-   make the question jump or vanish — it stays put and the answers arrive
-   under it. */
-.jar-poster-ask {
-  margin: 0;
-  flex-basis: 100%;
-  font-size: var(--t-fine);
-  color: var(--jar-muted);
-}
-
-/* FACTS ABOUT THE SENTENCE, AND THE REMEDIES FOR THEM — never answers, so
-   never in the answers' register. "Write a new one" sits here beside the
-   line reporting that the reading has fallen behind, because a remedy
-   belongs next to the complaint it answers; it was previously a fourth
-   option in a row of replies to a question it is not a reply to. */
-.jar-poster-aside {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: center;
-  gap: var(--sp-12);
-  flex-basis: 100%;
-  margin: var(--sp-6) 0 0;
-}
-
-/* The answers sit centred under the statement, like the claim's do, and the
-   question and the aside each take their own line. */
-.jar-board-acts--answers {
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-10);
-}
+/* `.jar-poster-invite`, `.jar-poster-ask`, `.jar-poster-answers` and
+   `.jar-board-acts--answers` were here and went with the question they
+   dressed — see the block in `pages/Home.tsx`. They also carried a real
+   bug worth naming so it is not repeated: `--answers` was written ABOVE
+   `.jar-board-acts` at equal specificity, so the base rule's
+   `align-items: baseline` won and, in a column flex, laid the whole block
+   out like `flex-start`. The founder saw three pills and two lines ragged
+   left under a centred sentence. A modifier declared before the thing it
+   modifies is not a modifier. */
 
 .jar-board-acts {
   display: flex;
