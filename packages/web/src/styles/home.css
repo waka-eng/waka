@@ -649,6 +649,26 @@
 .jar-hq:focus-within .jar-board-acts {
   opacity: 1;
 }
+/**
+ * THE BOARD'S VERBS LEAVE THE EYEBROW REGISTER.
+ *
+ * Founder, on a screenshot of this row: "this is so ugly."
+ *
+ * They were `jar-board-act jar-label` — four pressables set in the uppercase,
+ * letterspaced register, in a row, directly under a quiet sentence. Four
+ * shouted words under one spoken one, which is the whole of the ugliness: not
+ * the colours and not the spacing, but a voice that did not belong to them.
+ *
+ * `system.css` already states the rule they were breaking, and even carries a
+ * precedent for the exception: the register "belongs to eyebrows, never to
+ * things you press", with `.profile-signout-button` deliberately kept out of
+ * the list for exactly this reason. These are things you press.
+ *
+ * So: sentence case at the fine step, quiet at rest and inked on approach,
+ * which is how every other secondary act in this product now reads. Light is
+ * the only meaning channel, and it does the work here without raising its
+ * voice.
+ */
 .jar-board-act {
   appearance: none;
   -webkit-appearance: none;
@@ -656,7 +676,10 @@
   margin: 0;
   padding: 0;
   background: none;
-  font-family: inherit;
+  font-family: var(--waka-face);
+  font-size: var(--t-fine);
+  letter-spacing: normal;
+  text-transform: none;
   color: var(--jar-muted);
   cursor: pointer;
   text-decoration: none;
