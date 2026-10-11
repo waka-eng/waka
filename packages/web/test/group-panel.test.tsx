@@ -117,16 +117,16 @@ const DEE = { profileId: "00000000-0000-4000-8000-000000000004", name: "Dee Song
 describe("the approval surface", () => {
   it("keeps the current room's proposal action ahead of history and separate from settings", () => {
     const el = renderPanel({});
-    expect(el.textContent).toContain("shape this together");
-    expect(el.textContent).toContain("put something to this room");
-    expect(el.textContent).not.toContain("copy the invite link");
-    expect(el.textContent).not.toContain("leave this room");
+    expect(el.textContent).toContain("Shape this together");
+    expect(el.textContent).toContain("Put something to this room");
+    expect(el.textContent).not.toContain("Copy the invite link");
+    expect(el.textContent).not.toContain("Leave this room");
   });
 
   it("does not offer a new proposal while the room's questions are still loading", () => {
     const el = renderPanel({ proposalState: "loading" });
     expect(el.textContent).toContain("Checking what the room is considering");
-    expect(el.textContent).not.toContain("put something to this room");
+    expect(el.textContent).not.toContain("Put something to this room");
   });
 
   it("shows a failed proposal read with a working retry", () => {
@@ -140,7 +140,7 @@ describe("the approval surface", () => {
 
   it("does not offer an empty room proposal as a live submit action", () => {
     const el = renderPanel({ propose: { text: "", busy: false } });
-    const submit = [...el.querySelectorAll("button")].find((button) => button.textContent === "put it to them");
+    const submit = [...el.querySelectorAll("button")].find((button) => button.textContent === "Put it to them");
     expect(submit?.disabled).toBe(true);
   });
 
@@ -210,8 +210,8 @@ describe("the approval surface", () => {
 
     expect([...el.querySelectorAll(".jar-said, .jar-not-said")]).toHaveLength(2);
     // The viewer has not answered, so the verbs are on screen.
-    expect(el.textContent).toContain("yes, that is us");
-    expect(el.textContent).toContain("not us");
+    expect(el.textContent).toContain("Yes, that is us");
+    expect(el.textContent).toContain("Not us");
   });
 
   it("the counter carries the proposal's words into the draft box", () => {
@@ -238,7 +238,7 @@ describe("the approval surface", () => {
     });
 
     const counter = [...el.querySelectorAll("button")].find(
-      (b) => b.textContent === "say it differently",
+      (b) => b.textContent === "Say it differently",
     );
     expect(counter, "no way to counter").toBeTruthy();
     act(() => counter!.click());
@@ -267,9 +267,9 @@ describe("the approval surface", () => {
       },
     });
 
-    expect(el.textContent).toContain("the room so far");
-    expect(el.textContent).toContain("the room first spoke");
-    expect(el.textContent).toContain("a proposal carried");
+    expect(el.textContent).toContain("The room so far");
+    expect(el.textContent).toContain("The room first spoke");
+    expect(el.textContent).toContain("A proposal carried");
     expect(el.textContent).toContain("Bo was removed");
     expect(el.textContent).toContain("Ari arrived");
     expect(
@@ -314,11 +314,11 @@ describe("the approval surface", () => {
       ]),
     });
 
-    expect(el.textContent).toContain("you agreed");
-    expect(el.textContent).not.toContain("yes, that is us");
+    expect(el.textContent).toContain("You agreed");
+    expect(el.textContent).not.toContain("Yes, that is us");
     // ...but the open question still offers the other answer (the
     // counted-stance ruling: an answer is not a door that locks behind you)
-    expect(el.textContent).toContain("not us after all");
+    expect(el.textContent).toContain("Not us after all");
   });
 
   it("a recorded no says so, and offers the yes back", () => {
@@ -343,8 +343,8 @@ describe("the approval surface", () => {
       ]),
     });
 
-    expect(el.textContent).toContain("you said not us");
-    expect(el.textContent).toContain("yes, that is us after all");
+    expect(el.textContent).toContain("You said not us");
+    expect(el.textContent).toContain("Yes, that is us after all");
     expect(
       /\d/.test(el.textContent ?? ""),
       "a numeral appeared on the approval surface",

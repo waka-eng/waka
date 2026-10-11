@@ -315,7 +315,7 @@ async function openTab(container: HTMLDivElement, label: string): Promise<void> 
 async function openActivityFold(container: HTMLDivElement): Promise<void> {
   const door = Array.from(
     container.querySelectorAll<HTMLButtonElement>(".profile-disclose button"),
-  ).find((button) => button.textContent?.includes("connections"));
+  ).find((button) => button.textContent?.includes("Connections"));
   if (!door) throw new Error("no connections fold to open");
   await act(async () => {
     door.click();
@@ -333,8 +333,8 @@ describe("ProfilePage memories", () => {
     const rows = memoryRows(container);
 
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.querySelector(".profile-memory-badge")?.textContent).toBe("you");
-    expect(rows[1]?.querySelector(".profile-memory-badge")?.textContent).toBe("agent");
+    expect(rows[0]?.querySelector(".profile-memory-badge")?.textContent).toBe("You");
+    expect(rows[1]?.querySelector(".profile-memory-badge")?.textContent).toBe("Agent");
   });
 
   /**
@@ -434,8 +434,8 @@ describe("ProfilePage connections", () => {
 
     expect(rows).toHaveLength(3);
     expect(rows[0]?.textContent).toContain("Chrome on macOS");
-    expect(rows[0]?.textContent).toContain("this device");
-    expect(rows[1]?.textContent).not.toContain("this device");
+    expect(rows[0]?.textContent).toContain("This device");
+    expect(rows[1]?.textContent).not.toContain("This device");
   });
 
   /** A login that never named itself still has to be recognisable in a list. */

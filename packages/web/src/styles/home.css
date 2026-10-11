@@ -55,8 +55,17 @@
      overshoot at either end of the descent */
   background: var(--jar-atmos);
   color: var(--jar-ink);
-  font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
-    "Segoe UI", Roboto, sans-serif;
+  /* THE PRODUCT'S FACE, NOT THE SYSTEM'S.
+     Founder: "can we make the font consistent across all the experience? I
+     don't know what the weird cursive thing is."
+
+     This was `Pretendard, -apple-system, …` — so the world, the biggest
+     surface in the product, defaulted to the system sans while the statement
+     above the creature was set in Jost. Anything here that did not name a
+     face explicitly inherited the wrong one, which is why "consistent" kept
+     being almost true. `--waka-face` keeps Pretendard as its second step, so
+     Korean still resolves to the face that was actually chosen for it. */
+  font-family: var(--waka-face);
   font-weight: 400;
   touch-action: none;
   user-select: none;
@@ -745,10 +754,16 @@
 /* Held is a state, not an action: it does not offer to undo itself. */
 .jar-board-act--held { cursor: default; opacity: 0.5; }
 /* What a rewrite will do, said before it does it. */
+/* NO ITALIC, HERE OR ANYWHERE. Founder: "can we make the font consistent
+   across all the experience? I don't know what the weird cursive thing is."
+   That was this — five separate rules set small text in italic Jost, which at
+   `--t-note` and below does not read as emphasis, it reads as a second
+   typeface. `claims.css` states the rule in its first paragraph: hierarchy
+   comes from SIZE and WEIGHT, never from a change of face. These five were
+   written before that sentence existed and were never swept with it. */
 .jar-board-warn {
   flex-basis: 100%;
   color: var(--jar-muted);
-  font-style: italic;
   font-size: var(--t-note);
 }
 
@@ -786,8 +801,11 @@
 .jar-share-note {
   margin: var(--sp-8) 0 0;
   font-size: var(--t-fine);
-  font-style: italic;
-  color: var(--jar-faint);
+  /* READABLE, NOT DECORATIVE. `--jar-faint` measures 2.3:1 on this ground —
+     not dimmer prose, prose you cannot read. `--jar-muted` is 5.5:1 and still
+     plainly quieter than the ink beside it. Same correction as the disabled
+     controls: the ratio is the test, not "looks secondary". */
+  color: var(--jar-muted);
   max-width: 34ch;
 }
 
@@ -1761,7 +1779,6 @@
 .jar-roomform-err {
   margin: var(--sp-10) 0 0;
   font-size: var(--t-ui);
-  font-style: italic;
   color: var(--jar-muted);
 }
 
@@ -1786,7 +1803,6 @@
 .jar-wall-empty {
   font-size: var(--t-note);
   line-height: 1.5;
-  font-style: italic;
   color: var(--jar-muted);
 }
 
@@ -4321,9 +4337,12 @@
   margin-top: 3px;
   font-size: var(--t-fine);
   line-height: 1.5;
-  color: var(--jar-faint);
-  opacity: 0.72;
-  font-style: italic;
+  /* WAS THE LEAST READABLE TEXT IN THE PRODUCT: `--jar-faint` (2.3:1 on this
+     ground) multiplied by `opacity: 0.72`, so about 1.9:1 — prose set below
+     the threshold at which it is text at all. Three quiet-looking decisions,
+     each defensible alone, stacked into invisibility. The italic went with
+     them: hierarchy is size and weight here, never a change of face. */
+  color: var(--jar-muted);
 }
 
 /* the reason under the failure: quiet, small, and never the headline — it is
@@ -4867,4 +4886,49 @@
   margin: 0;
   font-size: var(--t-ui);
   color: var(--w-muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * A CONVERSATION, HELD UP IN FRONT OF THE WORLD
+ *
+ * Founder: "also dont move talk to waka in a new page. find better
+ * transition."
+ *
+ * `chat.css` was written for a page that owned the screen: `.chat-page` is
+ * `position: fixed` at `height: 100dvh`, which is exactly right when it IS
+ * the screen and catastrophic inside an overlay — it escapes its container
+ * and covers the viewport, including the overlay's own close button. So the
+ * way out of the surface would have been painted over by the surface.
+ *
+ * These are tenancy rules, not design: they say what changes when the
+ * transcript is a guest rather than the host. Everything about how it LOOKS
+ * stays in `chat.css`.
+ *
+ * WHY THEY LIVE IN THIS FILE AND SHOULD NOT STAY. `.waka-over*` belongs to
+ * `claims.css`, and that is where this block belongs too. It is here because
+ * another session holds that file open; moving it is a two-line job once that
+ * lands, and leaving a note is better than losing somebody's work to a
+ * concurrent write.
+ * ------------------------------------------------------------------------- */
+
+/* A fixed height rather than a cap, so the transcript inside has something
+   definite to be `flex: 1` of — `max-height` alone leaves the column free to
+   collapse to its content and the composer floats mid-air. */
+.waka-over--talk {
+  height: 88dvh;
+  /* The composer is the bottom edge of this surface, so the shell stops
+     reserving air under it. */
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+.waka-over--talk .chat-page {
+  position: static;
+  top: auto;
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* The overlay already painted a ground; a second opaque layer inside it
+     would hide the hairline that gives the sheet its edge. */
+  background: transparent;
 }

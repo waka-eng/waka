@@ -23,7 +23,14 @@ a law that has not been taken seriously.
 > *"this also is so useless"* (the "Close menu" row)
 > *"rather than keep, say save inspiration for the button"*
 > *"so many different buttons that I have no idea what its supposed to do"*
-> *"why red"*
+
+*(An earlier draft of this law also cited "why red" as colour used
+decoratively. The full-transcript audit traced that message and it was about a
+red row in Claude Code's own background-agent list — a batch killed by a
+session limit — not about anything in the product. There is no red in
+`claims.css`, `chat.css` or `home.css`. The quote is removed rather than
+reinterpreted: a law argued from evidence has to drop the evidence that turns
+out not to be evidence, or the law is just an assertion with decoration.)*
 
 Five separate reports, one law. "Top of mind" changed the surface **and** the
 owner, so it did more than it said. "Keep" was a verb that didn't name the
@@ -132,6 +139,114 @@ animation answers "what did the user just do?"
 
 **Where else to look:** every `offsetHeight` / `getBoundingClientRect` read
 that is not inside an observer; every mount-time animation.
+
+---
+
+## Law 7 — A ruling is applied to the class, not the instance it was pointed at
+
+> *"all of it should say 'You're' in front. Make sure that like everything has
+> the first character of the word capitalized."* → applied to eight rows; 141
+> lowercase strings still rendered.
+> *"make it a single paragraph, don't split it into separate sentences."* →
+> applied to the switcher; the MCP hover card is still three spans.
+> *"All buttons should be a single line. Never make it into a two line thing."*
+> → fixed on the control being pointed at; never verified anywhere else.
+
+This is **not** Law 3, and the difference is worth holding. Law 3 is one
+*change* that failed to reach other screens. This is a *general rule*, stated
+in general words, applied only where the founder's finger happened to be.
+
+The tell is that the founder says "all", "everything", "never" — and the fix
+touches the one instance in the screenshot. They then have to restate the same
+rule on the next screen, which reads to them like being ignored, because it is.
+
+**The test:** when a ruling is stated as a rule, enumerate everything its own
+words cover — every string, every control of that kind — and fix them in that
+commit. If the set is large, that is a reason to write a gate, not a reason to
+do one.
+
+---
+
+## Law 8 — A control's handler must be reachable, and a test must press it
+
+> The one-press return to the top of mind rendered, read "Your top of mind",
+> was enabled, and did nothing: it found its destination with
+> `items.find(i => i.id.endsWith("top-of-mind"))` and the rows had been
+> renamed to `me` / `agent:<id>`. `find` returned `undefined`.
+
+A dead press is worse than a missing control. A missing control reads as a
+thing not offered; a dead one reads as the product being broken. And nothing
+catches it — it type-checks, it renders, and the suites that covered that bar
+asserted the control's *text*, which is true of a dead button.
+
+This shape has now appeared repeatedly here: `pointer-events` inheritance
+three times, an interactivity check missing `[role="button"]`, a scrim losing
+on source order, and an optional `onOpen?.()` with no default. Every one
+rendered perfectly and did nothing.
+
+> *an exit must not be computed from where you are standing, because the state
+> it rescues you from is a state you are standing in.*
+
+**The test:** a new control gets a test that **presses it and asserts the
+effect** — never that it is on screen. Prefer structure over lookup: a visible
+close on an overlay cannot go stale, because there is no destination to
+resolve.
+
+---
+
+## Law 9 — A feature the founder cannot exercise is not shipped
+
+> Photo moments: `ATTACHMENTS_BUCKET` is unset locally, so uploads 500 on the
+> only machine they use. They asked for it and have never seen it work.
+> Google sign-in: the redirect URI was never added, so the door does not open.
+
+Local-dev configuration is part of the deliverable. "It works in principle" is
+not a state this product recognises anywhere else — it is the same honesty the
+empty states are held to.
+
+**The test:** before calling a feature done, exercise it the way the founder
+would, on their machine. If that is impossible, say so in the same sentence
+that reports it built.
+
+---
+
+## Law 10 — An answer collected is an answer read
+
+An input the product collects and then ignores is worse than one it never
+offered: it spends a person's attention and returns nothing, invisibly, so
+nobody can tell it is happening.
+
+**This law has no confirmed violation in the product, and the story of its
+candidate is the useful part.**
+
+The full-transcript audit reported one: `"partly"`, the middle answer to "is
+this true of you?", was said to be written to the database, fenced into
+prompts, asserted in six test files — *and read by nothing*, because
+`top-of-mind-synthesis` compares `=== "true"`. A third of the answers the
+confirmation loop was built around, changing nothing.
+
+That reading was wrong, and checking it is why it is written up here rather
+than fixed. `recentFeedback()` passes **every** verdict value, `partly`
+included, into the generation payload beside the statement it was given about;
+the prompt then says what to do with it — *"A verdict of partly is an
+invitation to sharpen, not to repeat."* So it is read, by the only reader that
+could act on it. What it does **not** do is move the selection arithmetic, and
+that is deliberate, stated in three separate places: *"a `partly` verdict
+resolves nothing — it is an invitation to sharpen, not an arbitration."*
+
+Two things worth keeping from the near-miss:
+
+- **"Read" includes "read by the prompt."** An audit that greps for an input
+  in scoring and ranking code will call every soft signal dead. The generator
+  is a consumer.
+- **A documented non-effect is not a bug.** `partly` is designed to refuse to
+  arbitrate. The test for this law is "name the code that reads it", and the
+  answer may legitimately be "the prompt, which is instructed to sharpen" —
+  it may not be silence.
+
+**The test:** for every input the product collects, name the code that reads
+it. If there is none, either wire it or stop asking. If there is one and it
+deliberately changes no number, say so where someone auditing will look.
 
 ---
 

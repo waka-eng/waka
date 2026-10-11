@@ -299,7 +299,7 @@ async function windToDay(at: number): Promise<void> {
     throw new Error(
       `the wall did not wind to the date that was pressed: pressed ` +
         `${JSON.stringify(label)}, the word now reads ${JSON.stringify(said)}. ` +
-        'If it still says "now", the press never reached the winder.',
+        'If it still says "Now", the press never reached the winder.',
     );
   }
 }
@@ -307,7 +307,7 @@ async function windToDay(at: number): Promise<void> {
 /** back to the present, by the row that says so */
 async function windToNow(): Promise<void> {
   await openDates();
-  const row = rows().find((r) => (r.textContent ?? "").trim() === "now");
+  const row = rows().find((r) => (r.textContent ?? "").trim() === "Now");
   if (!row) throw new Error("the dates offer no way back to now");
   await act(async () => {
     row.click();
@@ -533,7 +533,7 @@ describe("what the list offers", () => {
     await openDates();
 
     const said = rows().map((r) => (r.textContent ?? "").trim());
-    expect(said[0], "the first row is the way back to the present").toBe("now");
+    expect(said[0], "the first row is the way back to the present").toBe("Now");
 
     expect(said.slice(1), "the dates offered are this wall's own days, newest first").toEqual(
       pastDays().map((ms) => dateWords(ms, railEnd)),
@@ -557,7 +557,7 @@ describe("what the list offers", () => {
     await openDates();
     const said = rows().map((r) => (r.textContent ?? "").trim());
     expect(said.length, "there are rows to press").toBeGreaterThan(1);
-    expect(said.filter((t) => t === "now").length, "the present is offered once").toBe(1);
+    expect(said.filter((t) => t === "Now").length, "the present is offered once").toBe(1);
     expect(new Set(said).size, "and no row is offered twice").toBe(said.length);
 
     /* `now` IS PRESSED LAST, because pressing it is how you leave: the handle
@@ -565,7 +565,7 @@ describe("what the list offers", () => {
        pressed after it would have no list to open. Every row is still
        pressed and still read back — the order is the only thing the ruling
        changed about this case. */
-    for (const label of said.filter((row) => row !== "now")) {
+    for (const label of said.filter((row) => row !== "Now")) {
       const at = pastDays().find((ms) => dateWords(ms, railEnd) === label);
       expect(at, `the list offers ${label}, which is not a day this wall changed`).toBeDefined();
       await windToDay(at as number);
@@ -578,7 +578,7 @@ describe("what the list offers", () => {
     await openDates();
     const dates = rows()
       .map((r) => (r.textContent ?? "").trim())
-      .filter((t) => t !== "now");
+      .filter((t) => t !== "Now");
     expect(dates.length, "there are dates to check").toBeGreaterThan(0);
 
     for (const label of dates) {

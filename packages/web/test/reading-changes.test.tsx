@@ -36,7 +36,7 @@ it('compares the displayed reading with its predecessor even when a newer readin
   expect(document.querySelector('.jar-drift-reading')!.textContent).toContain('The words currently displayed.');
   expect(document.querySelector('[role="dialog"]')!.closest('.jar')).toBe(host);
   expect(document.querySelector('[role="dialog"]')!.textContent).not.toContain('A later reading');
-  await click('close');expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await click('Close');expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 it('can retry a failed read without replacing it with an invented first-reading state',async()=>{
   vi.mocked(fetchTopOfMindVersions).mockRejectedValueOnce(new Error('Unavailable'));await mount();await click('What changed');

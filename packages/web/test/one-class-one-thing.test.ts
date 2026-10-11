@@ -256,29 +256,36 @@ function blocksIn(file: string): Block[] {
 }
 
 /**
- * THE ONE PAIR THIS GATE INHERITED AND DID NOT FIX, and it is a list that
- * only ever shrinks — the same ratchet `type-scale.test.ts` keeps.
+ * THE ONE PAIR THIS GATE INHERITED IS RETIRED, AND THE LIST IS NOW EMPTY.
  *
- * `.nc-stage--top-of-mind-wall` is declared in `global.css` and again in
- * `system.css`, both inside `@layer product`, and the two disagree about
- * three grid properties. Which one wins is decided by the order the BUNDLER
- * concatenates two files — the precise hazard `layers.css` was written to
- * end, still live inside a single layer.
+ * `.nc-stage--top-of-mind-wall` was declared in `global.css` and again in
+ * `system.css`, with three grid properties in disagreement — which of them
+ * won decided by the order the BUNDLER concatenated two files, the precise
+ * hazard `layers.css` was written to end, still live inside a single layer.
  *
- * It is not fixed here because merging two grid definitions blind would
- * restyle the public profile page, which this change has no business
- * touching. (An earlier draft said Phase 6 of `one-product-one-system.md`
- * deletes that page and the entry would go with it — it does not; that phase
- * lists `Surface.tsx`, `surface.css`, the agent and graph screens and the
- * flat routes, and `PublicProfile.tsx` is a live route in `main.tsx`.) The
- * condition that retires this entry is someone harmonising those three grid
- * properties on purpose. Nothing may be added to this list to make a build
- * pass: a new collision is a new bug.
+ * The note here said the condition for retiring it was "someone harmonising
+ * those three grid properties on purpose". That is not what happened, and
+ * what did happen is better: the class had no renderer left. `.nc-*` was the
+ * flat screens' language — the post-it, its stage, its titlecard — and
+ * `PublicProfile.tsx` was its last host anywhere in the tree until that page
+ * was rewritten in the product's own material. So the clash went out with 43
+ * dead rules rather than being resolved, which is the honest outcome for a
+ * collision between two definitions of a thing nobody draws.
+ *
+ * Two things worth keeping:
+ *
+ *   - This entry's own reasoning was WRONG about the escape route. It argued
+ *     the entry could not be fixed because merging the grids "would restyle
+ *     the public profile page, which this change has no business touching" —
+ *     correct at the time, and it quietly assumed the page would keep
+ *     needing those rules. The page is still live; its styling is not.
+ *   - The ceiling is zero now and the list is empty. Nothing may be added to
+ *     either to make a build pass: a new collision is a new bug.
  */
-const INHERITED = new Set([".nc-stage--top-of-mind-wall"]);
+const INHERITED = new Set<string>([]);
 
-/** A ratchet, and it only turns down. Nothing may be added to make a build pass. */
-const INHERITED_CEILING = 1;
+/** A ratchet, and it only turns down. It is at zero; it stays there. */
+const INHERITED_CEILING = 0;
 
 /**
  * THE LIMIT THIS GATE KNOWS IT HAS, written down rather than discovered.

@@ -47,7 +47,7 @@ it("shows all events on the date and the actual wording before and after", async
     version === 1 ? reading(1, "We start with questions.") : reading(2, "We build through questions."));
   await act(async () => root.render(<GroupMoment groupId="room-1" timeline={timeline} stop={stop} locale="en-US" />));
   expect(host.textContent).toContain("Sora arrived");
-  expect(host.textContent).toContain("a proposal carried");
+  expect(host.textContent).toContain("A proposal carried");
   expect(host.textContent).toContain("Before");
   expect(host.textContent).toContain("We start with questions.");
   expect(host.textContent).toContain("After");
