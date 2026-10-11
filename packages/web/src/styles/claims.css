@@ -280,9 +280,20 @@
   transition: color 0.2s ease;
 }
 
-.waka-dock-item:hover,
+.waka-dock-item:hover {
+  color: var(--ink);
+}
+
+/* THE ROW YOU ARE STANDING ON CANNOT ANNOUNCE FOCUS WITH LIGHT, because it
+   is already the lit one — `--here` and `:focus-visible` both resolved to
+   `--ink`, so tabbing onto the current place changed nothing on screen. The
+   bar says WHERE YOU ARE with light; it says WHAT YOU HAVE REACHED with a
+   ring, which is a different channel for a different question and the only
+   way both can be true at once. */
 .waka-dock-item:focus-visible {
   color: var(--ink);
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
 }
 
 .waka-dock-item--here {
@@ -375,11 +386,16 @@
   margin-bottom: 0;
 }
 
+/* ABOVE A DESTINATION'S GROUND, NOT UNDER IT. At z-40 these two controls sat
+   beneath `.waka-page` (z-56) and were painted over by it — which is how the
+   only owner switch in the product came to read "MY AGE" on the one surface
+   whose owner you most want to change. The dock (z-60) still outranks both,
+   because the dock is how you leave. */
 .waka-corners {
   position: fixed;
   inset-inline: 0;
   top: 0;
-  z-index: 40;
+  z-index: 58;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -874,10 +890,17 @@
  * of the world behind them.
  * ------------------------------------------------------------------------- */
 
+/* THE 1040px BAND IS GONE, AND IT WAS LEAVING A SEAM DOWN BOTH SIDES.
+   `max-width: 1040px; margin: 0 auto` is this rule's own leftover from when
+   a destination was a FLOWING page. The rule below makes it `fixed; inset:
+   0`, so what the cap actually produced was a 1040-wide stripe of clean
+   ground with the grainy world showing past it — two grounds on one screen,
+   which is Law 5 reported as "why this screen so different". It was also
+   what cut `MY AGENT` in the corner down to `MY AGE`: the stripe's left edge
+   landed in the middle of the word. The ground is the viewport now; what
+   centres the content is `.waka-over`'s own measure. */
 .waka-page {
   min-height: 100dvh;
-  max-width: 1040px;
-  margin: 0 auto;
   /* THE CORNERS ARE FIXED, SO THE PAGE RESERVES THEIR ROOM.
      `.waka-corners` is a 44px target row pinned to the top of the VIEWPORT —
      it is not in this page's flow, so nothing here knows it is there. It sat
@@ -1074,7 +1097,14 @@
   flex-direction: column;
   align-items: center;
   overflow: hidden;
-  padding: calc(var(--sp-20) + env(safe-area-inset-top)) var(--sp-20)
+  /* THE CORNER ROW IS RESERVED, not hoped for. `ME / MY AGENT` and the cog
+     are fixed to the top of the VIEWPORT and are the same two controls on
+     every screen, so a destination has to start below them rather than
+     underneath them — at 1280 the title cleared the corner only because the
+     measure happened to be centred, and at the measure's own width they sit
+     on the same line. This was the first rule's reasoning and it was lost
+     when the geometry moved down here. */
+  padding: calc(var(--waka-corner) + var(--sp-16) + env(safe-area-inset-top)) var(--sp-20)
     calc(var(--sp-20) + var(--waka-corner) + var(--sp-24) + env(safe-area-inset-bottom));
   /* THE GROUND, NOT A FILM OVER IT. A scrim says "the thing behind is still
      the thing you are in, and this is on top of it" — true of a dialog, and
@@ -1116,7 +1146,22 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-20);
-  width: min(1040px, 100%);
+  /* ═══ ONE MEASURE, AND IT IS THE ONE THE PRODUCT ALREADY MEASURED ═══
+     This was 1040px, chosen when this surface held a wall of picture tiles.
+     It holds a list of sentences now, and at 1040 the longest save in the
+     archive ended two thirds of the way across its own row — so the eye
+     tracked 950px to read 460px of words, the title sat at one end of a line
+     with the close at the other, and nothing held the column together. That
+     is the "ugly design that doesn't match the vibe" the founder reported,
+     measured.
+
+     650 is not a new number. `.waka-over--talk` already derives it from
+     `--chat-measure` — 545px, eighty characters, the reading width this
+     product settled on — plus its gutters. A conversation and an archive are
+     both columns of sentences about you, so they are the same column, and
+     the four dock destinations now differ in what they hold rather than in
+     how wide they are. */
+  width: min(650px, 100%);
   /* The room takes the height its ground leaves it and scrolls inside that,
      rather than claiming a fraction of the window and floating in the rest. */
   flex: 1 1 auto;
@@ -1169,19 +1214,13 @@
   flex: 0 0 auto;
 }
 
-/* The field is alone on its row now, so it simply takes it. */
-/* WHAT THIS SURFACE IS, in one line, where a person is standing when they
-   wonder. It replaces three info icons in a list that could only ever answer
-   the question before you arrived. Quiet — it is read once and then never
-   again, so it must not compete with the thing it describes. */
-.waka-over-what {
-  margin: 0;
-  max-width: 62ch;
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  line-height: 1.5;
-  color: var(--muted);
-}
+/* `.waka-over-what` IS GONE FROM BOTH SURFACES THAT WORE IT.
+   Founder: "only the most absolutely necessary things should be shown."
+   It was two paragraphs — thirty-one words on the archive, thirty-four on
+   the principles — explaining a surface whose contents were directly below
+   them, read once by one person on one visit and then stepped over by the
+   eye forever after. That is `six-laws.md` Law 4 in its purest form, and
+   deleting it is also what buys the title the top of the column back. */
 
 .waka-over-search {
   width: 100%;
@@ -1203,37 +1242,17 @@
  * stays pressable and does nothing, which is what a person expects from a
  * control they aimed at by mistake.
  */
-.waka-over-owners {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-16);
-  min-width: 0;
-}
-
-.waka-over-owner {
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-lead);
-  font-weight: 300;
-  cursor: pointer;
-  /* ONE LINE, ALWAYS (founder: "all buttons single line, never wrapping"). */
-  white-space: nowrap;
-}
-
-.waka-over-owner:hover,
-.waka-over-owner:focus-visible {
-  color: var(--ink);
-  outline: none;
-}
-
-.waka-over-owner--here {
-  color: var(--ink);
-  cursor: default;
-}
+/* `.waka-over-owner*` IS GONE, AND THE CORNER KEPT THE JOB.
+   Founder: "from the inspirations modal, it should always let the user
+   switch between your inspirations and your agent's inspirations as well."
+   Still true, and still one press — but by then this surface had grown its
+   own pair of owner buttons while `ME / MY AGENT` stood in the top-left
+   corner doing the identical thing, in a different register, CLIPPED by this
+   overlay's own left edge so it read "MY AGE". Two controls for one act,
+   one of them cut in half. The corner is the one that survives: it is on
+   every screen, it is the same control everywhere, and switching from it
+   moves the world and this surface together, which is the half of the
+   founder's sentence that was the actual design. */
 
 /* ONE KEPT THING, AT THE SAME DEPTH AS THE GRID IT REPLACED. Founder:
    "modal and a modal is bad... switch this whole page to that inspiration
@@ -1574,82 +1593,55 @@
  * touched; one sliding up from the bottom would not be.
  * ------------------------------------------------------------------------- */
 
-/* THE RAIL'S OWN GEOMETRY IS GONE; THE LIST INSIDE IT IS NOT.
-   `.waka-rail-scrim` and `.waka-rail` positioned a fixed left column over a
-   dimmed world. That surface is a room page now (see `ConversationsOverlay`),
-   so the container rules go and everything below — the day headings, the
-   rows, the delete confirmation — is untouched, because none of it ever
-   depended on being in a rail. */
-
-/* `.waka-rail-head` AND `.waka-rail-title` WENT WITH THE RAIL. The page
-   wears `.waka-over-head` and `.waka-over-title`, which is the same two
-   rules the other three rooms already share — one head, not a fourth. */
-
-.waka-rail-new {
-  align-self: start;
-  min-height: 44px;
-  padding: var(--sp-8) var(--sp-12);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-control);
-  background: transparent;
-  color: var(--ink);
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  text-align: left;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.waka-rail-new:hover,
-.waka-rail-new:focus-visible {
-  border-color: var(--ink);
-  outline: none;
-}
-
-.waka-rail-list ul {
-  margin: 0 0 var(--sp-20);
-  padding: 0;
-  list-style: none;
-}
-
-/* THE DAY IS THE HEADING, so no row carries its own date — which takes a date
-   off every line of a list whose whole job is to be scanned. */
-.waka-rail-day {
-  margin: var(--sp-16) 0 var(--sp-4);
-  color: var(--muted);
-}
+/* ═══ THE CHATS LIST STOPPED BEING ITS OWN DESIGN ════════════════════════
+ *
+ * Founder: "chat and inspirations should have same look and feel and
+ * workflow and experience."
+ *
+ * They did not, and the gap was not a matter of taste — it was measurable.
+ * Two lists with the same job, side by side in the same bar:
+ *
+ *                       inspirations              chats
+ *   group heading   13px/500, ink, sentence   10px/500, 80%, UPPERCASE
+ *   row             13px/500 lead + 12px meta  15px/300, one line
+ *   row height      71px                       44px
+ *   ground          a raised card              none
+ *   focus           2px solid ink              `outline: none`
+ *
+ * The cause is the one `six-laws.md` Law 3 names: this file grew the notes
+ * list for inspirations and left `.waka-rail-*` — written when this was a
+ * left sidebar over a dimmed world — holding the chats. The rail's geometry
+ * was deleted when it became a page; its TYPE was not, so a second register
+ * went on rendering inside a surface that had stopped being a rail.
+ *
+ * So the rail's type goes too. A chat row and a save row are the same
+ * object — one line you recognise, and underneath it the facts that tell you
+ * whether this is the one — and they now share `.waka-list-*` down to the
+ * hairline. WHAT IS LEFT HERE is the only thing a chat row has that a save
+ * row does not: a way to erase one, which stays on the row it removes and
+ * still asks first.
+ *
+ * `.waka-rail-new` WENT WITH THEM. A bordered pill at the top of one of four
+ * peer surfaces, offering a verb the dock's plus already offers from
+ * everywhere — and the only boxed control on any of the four. It was the
+ * answer to "nothing led back" in a product where nothing led back; the dock
+ * answers that now. */
 
 .waka-rail-item {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: var(--sp-8);
 }
 
-.waka-rail-row {
+.waka-rail-item > .waka-list-row {
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 44px;
-  padding: var(--sp-4) 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  font-family: var(--waka-face);
-  font-size: var(--t-body);
-  font-weight: 300;
-  text-align: left;
-  cursor: pointer;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.waka-rail-row:focus-visible {
-  outline: none;
 }
 
 .waka-rail-del,
 .waka-rail-ask button {
   flex: 0 0 auto;
+  align-self: center;
   min-height: 44px;
   padding: 0 var(--sp-4);
   border: 0;
@@ -1687,7 +1679,7 @@
   flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: var(--sp-4);
 }
 
@@ -1941,13 +1933,13 @@
   cursor: pointer;
 }
 
-.waka-notes {
+.waka-list {
   display: flex;
   flex-direction: column;
   gap: var(--sp-32);
 }
 
-.waka-chapter {
+.waka-list-chapter {
   display: flex;
   flex-direction: column;
   gap: var(--sp-12);
@@ -1957,7 +1949,7 @@
    title weight, and it is right: they are the landmarks you scroll to, and
    the uppercase register this product uses for labels would make them read as
    captions on the groups rather than as the structure of the page. */
-.waka-chapter-when {
+.waka-list-when {
   margin: 0;
   font-family: var(--waka-face);
   font-size: var(--t-ui);
@@ -1967,28 +1959,36 @@
   color: var(--ink);
 }
 
-/* ONE GROUP, HAIRLINES INSIDE IT. A list of separately-bordered cards is the
-   wireframe look this product keeps removing; a single raised shape with its
-   rows divided is how the reference separates things, and it is the same
-   value-not-line rule the rest of this file follows. */
-.waka-chapter-rows {
+/* HAIRLINES, AND NO SHAPE AROUND THEM.
+ *
+ * This was one rounded `--waka-raised` group with its rows divided inside —
+ * borrowed from a notes app, and right there, because that app's ground is a
+ * flat white page where a raised shape is the only way to say "these belong
+ * together". This product's ground is grain, vignette and black, and the
+ * sheet it is on already has no edges: the slab was deleted from `.waka-over`
+ * for exactly that reason ("nothing else in this product is a slab"), and
+ * then reintroduced one level in, as the only rectangle on the screen.
+ *
+ * The hairlines were always doing the grouping. They still do. What is gone
+ * is the box around them, the 20px indent that pushed every row off the
+ * column's own left edge, and a rectangle on a screen that has none. */
+.waka-list-rows {
   margin: 0;
-  padding: 0 0 0 var(--sp-20);
+  padding: 0;
   list-style: none;
-  border-radius: var(--waka-r-hand);
-  background: var(--waka-raised);
 }
 
-.waka-chapter-rows > li + li .waka-note {
+.waka-list-rows > li + li {
   border-top: 1px solid var(--jar-panel-edge);
 }
 
-.waka-note {
+.waka-list-row {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
   width: 100%;
-  padding: var(--sp-16) var(--sp-20) var(--sp-16) 0;
+  min-width: 0;
+  padding: var(--sp-16) 0;
   border: 0;
   background: none;
   font-family: var(--waka-face);
@@ -1999,7 +1999,7 @@
 /* THE FIRST LINE IS THE TITLE NOBODY HAD TO WRITE. Heavier than the meta
    under it and clipped to one line, so a chapter of ten reads as ten things
    rather than as ten paragraphs. */
-.waka-note-lead {
+.waka-list-lead {
   display: block;
   overflow: hidden;
   font-size: var(--t-ui);
@@ -2010,7 +2010,7 @@
   white-space: nowrap;
 }
 
-.waka-note-meta {
+.waka-list-meta {
   display: flex;
   align-items: baseline;
   gap: var(--sp-8);
@@ -2024,37 +2024,37 @@
    reference's numbered list: "it's just accent numbers... it works well with
    ours too because it's like your fifth inspiration, your 100th inspiration."
    Italic and tabular so a column of them lines up without being a column. */
-.waka-note-index {
+.waka-list-index {
   flex: 0 0 auto;
   font-style: italic;
   font-variant-numeric: tabular-nums;
   color: var(--jar-muted);
 }
 
-.waka-note-when {
+.waka-list-date {
   flex: 0 0 auto;
 }
 
 /* Whatever did not fit on the lead line, clipped rather than wrapped: this
    line is for deciding whether this is the one, not for reading. */
-.waka-note-rest {
+.waka-list-rest {
   overflow: hidden;
   min-width: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.waka-note:hover .waka-note-lead,
-.waka-note:focus-visible .waka-note-lead {
+.waka-list-row:hover .waka-list-lead,
+.waka-list-row:focus-visible .waka-list-lead {
   color: var(--ink);
 }
 
-.waka-note:hover .waka-note-meta,
-.waka-note:focus-visible .waka-note-meta {
+.waka-list-row:hover .waka-list-meta,
+.waka-list-row:focus-visible .waka-list-meta {
   color: var(--ink);
 }
 
-.waka-note:focus-visible {
+.waka-list-row:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: -2px;
   border-radius: var(--waka-r-hand-sm);
@@ -2927,13 +2927,13 @@
   flex-direction: column;
   gap: var(--sp-12);
   min-width: 0;
-  /* THE SAME COLUMN THE SURFACE'S OWN SENTENCE STANDS ON. Without this the
-     intro wrapped at `.waka-over-what`'s 62ch and the claims ran the full
-     1230px of the sheet — two columns on one surface, which reads as a
-     mistake rather than a choice, and a ~100-character line into the
-     bargain.
+  /* A MEASURE FOR A SENTENCE, INSIDE A SHEET SIZED FOR A LIST. This was
+     matched to `.waka-over-what`, which has since been deleted, and to a
+     1230px sheet, which is now 650 — so it no longer rescues anything and
+     is kept for the one thing it still does: a claim is a sentence somebody
+     reads, and it wraps a little before the column's own edge.
 
-     `62ch` is the overlay's existing measure and is matched rather than
+     `62ch` was the overlay's measure and is matched rather than
      improved on purpose: one material. Worth knowing for whoever does
      improve it — `1ch` is the advance of "0", which in Jost 300 is 0.580em
      against 0.417em for a character of real text, so 62ch renders about 86
@@ -3593,7 +3593,14 @@
   pointer-events: auto;
 }
 
+/* IT HAS TO BE SEEN TO BE FOCUSED. This button is an invisible disc over a
+   creature painted on the canvas — which is right for the mouse, and was
+   wrong for the keyboard: the ring was drawn on an `opacity: 0` element, so
+   the one control the home screen exists for had a focus state nobody could
+   see. Reaching it by keyboard lights it the same way reaching it by hand
+   does, and the ring comes up with it. */
 .jar-char-press:focus-visible {
+  opacity: 1;
   outline: 2px solid var(--jar-muted);
   outline-offset: var(--sp-8);
 }

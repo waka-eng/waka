@@ -76,6 +76,31 @@ import { describe, expect, it } from "vitest";
 const CATALOGUE = resolve(dirname(fileURLToPath(import.meta.url)), "../src/lib/i18n/messages/en-US.json");
 const KOREAN = resolve(dirname(fileURLToPath(import.meta.url)), "../src/lib/i18n/messages/ko-KR.json");
 
+/**
+ * AND THE STYLESHEETS, BECAUSE THE CATALOGUE IS NOT THE LAST WORD ON A STRING.
+ *
+ * This gate read 805 values, asserted every one of them began with a capital,
+ * and passed — while `/login` rendered "sign in", `/profile` rendered "sign
+ * out" and "save profile". Two rules in `chrome.css` said
+ * `text-transform: lowercase`, and a transform applies AFTER the value the
+ * gate inspected. The catalogue said "Sign in". The screen said "sign in".
+ * Both were true, and only one of them was being read.
+ *
+ * That is this document's own Law 3 failure wearing a new coat: the ruling
+ * was mechanised over the layer the finger happened to be pointing at. A
+ * string's casing is decided by the catalogue AND by the cascade, so the gate
+ * has to hold both ends or it holds neither.
+ *
+ * `uppercase` is NOT forbidden here, and the distinction matters: this
+ * product has a deliberate uppercase register — the eyebrow — declared in
+ * `system.css` and worn by labels that are not things you press. The ruling
+ * the founder gave was about the FIRST character being a capital, and
+ * `uppercase` satisfies it. `lowercase` is the only transform that can take a
+ * capitalised value and uncapitalise it, so it is the only one gated.
+ */
+const STYLESHEETS = ["global.css", "system.css", "chrome.css", "home.css", "claims.css", "chat.css", "layers.css"];
+const STYLE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../src/styles");
+
 function catalogue(path: string): Record<string, string> {
   return JSON.parse(readFileSync(path, "utf8")) as Record<string, string>;
 }
@@ -187,6 +212,29 @@ describe("every string a person reads begins with a capital", () => {
         "gone or its value already begins with a capital. An exemption that " +
         "excuses nothing while reading as if it does is worse than no " +
         "exemption, because the next reader trusts it.",
+    ).toEqual([]);
+  });
+
+  it("lets no stylesheet uncapitalise what the catalogue capitalised", () => {
+    const offenders: string[] = [];
+    for (const file of STYLESHEETS) {
+      const css = readFileSync(resolve(STYLE_DIR, file), "utf8");
+      /* Line by line, so the failure can name WHERE — a file name alone sends
+         the next person grepping a five-thousand-line stylesheet for a rule
+         this gate already found. Declarations only: the word appears in prose
+         in the comment above, and a comment is where the reasoning lives. */
+      css.split("\n").forEach((line, at) => {
+        const code = line.split("/*")[0]!;
+        if (/text-transform\s*:\s*lowercase/.test(code)) offenders.push(`${file}:${at + 1} ${line.trim()}`);
+      });
+    }
+    expect(
+      offenders,
+      "a stylesheet is lowercasing text the catalogue capitalised, which is " +
+        "the founder's ruling undone after the gate above has read the " +
+        "string. Delete the declaration — the catalogue already holds the " +
+        "casing. If a surface needs a quieter register than sentence case, " +
+        "that is a weight and a colour, not a transform.\n",
     ).toEqual([]);
   });
 

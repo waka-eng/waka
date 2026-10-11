@@ -126,13 +126,6 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
         >
         <header className="waka-over-head">
           <h2 className="waka-over-title">{title}</h2>
-          {/* THE SURFACE EXPLAINS ITSELF, WHERE THE QUESTION IS ASKED.
-              Founder, originally: "there should be like an info icon next to
-              each of the top of mind, principles, the inspirations so that
-              users can see what these are." Three icons in the switcher
-              answered that in the one place it is least useful — before you
-              arrive, about a thing you have not seen — and they went with the
-              dropdown. One line here costs no press and no icon. */}
           <button type="button" className="waka-over-close" aria-label={say("worldCardClose")} onClick={onClose}>
             <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
               <path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -140,7 +133,15 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
           </button>
         </header>
 
-        <p className="waka-over-what">{say("worldPrinciplesWhatIs")}</p>
+        {/* THE SURFACE NO LONGER EXPLAINS ITSELF, AND NEITHER DOES THE
+            ARCHIVE. Founder, originally: "there should be like an info icon
+            next to each of the top of mind, principles, the inspirations so
+            that users can see what these are" — answered with a sentence
+            rather than an icon, which was the right shape for the question.
+            Founder, since: "only the most absolutely necessary things should
+            be shown." Thirty-four words of definition above a set of cards
+            that are the definition is read once, by one person, and stepped
+            over by every eye afterwards — including theirs. */}
         {phase === "loading" ? (
           <p className="waka-over-status" role="status">
             {say("worldPrinciplesLoading")}

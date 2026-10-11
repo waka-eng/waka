@@ -14332,7 +14332,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               it simply has nothing to show at rest. The ruling that saving is
               never more than one gesture away is intact: pressing the
               creature IS the gesture. */}
-          <div className={'jar-mouth-slot' + (atNow ? '' : ' jar-mouth-slot--away') + (mouthOpen ? '' : ' jar-mouth-slot--closed')} {...(!atNow || inField || inSky ? { inert: '' } : {})}>
+          {/* INERT WHEN IT IS NOT OFFERED, AND "CLOSED" IS NOT OFFERED.
+              `--closed` and `--away` both draw the slot at `opacity: 0` with
+              `pointer-events: none`, which stops the mouse and does nothing
+              at all to the keyboard. So the three controls inside it — the
+              field, the microphone and the send — stayed in the tab order on
+              every screen in the product: on the home screen they were tab
+              stops 2, 3 and 4, and pressing Enter on a box nobody can see is
+              the invisible half of Law 8. `pointer-events: none` is a mouse
+              statement; `inert` is the one that means "not offered". */}
+          <div className={'jar-mouth-slot' + (atNow ? '' : ' jar-mouth-slot--away') + (mouthOpen ? '' : ' jar-mouth-slot--closed')} {...(!atNow || inField || inSky || !mouthOpen ? { inert: '' } : {})}>
           {/* A BOX, NOT A BUTTON (founder ruling). The resting state used to be
               a labelled button that opened a drawer, so keeping a thought cost
               a press before it cost a word, and a file had nowhere to land
@@ -16260,7 +16269,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           has one typeface and no icon set, and inventing one for the dock
           would be a second meaning channel arriving through the back. Four
           short words in the register this product already labels things in. */}
-      {phase==='ready'&&!viewNavigation.view?.conversationId&&!viewNavigation.view?.sharePrinciple ? (
+      {/* THE DOCK STANDS ON AN OPEN CHAT TOO. It was hidden there and shown
+          on every other destination — including an open inspiration, which is
+          the same depth of the same gesture — so reading one conversation was
+          the single state in the product with no bottom bar. Founder, on the
+          surface that made this rule: "this should be its own page, so bottom
+          navigation always visible." A conversation is a page like the rest
+          of them now, so it keeps the bar like the rest of them. */}
+      {phase==='ready'&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
           {([
             /* "HOME" IS NOT A PLACE IN THIS PRODUCT. Founder: "I don't like
@@ -16479,23 +16495,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         title={say(atWall.kind==='agent'?'worldAgentField':'worldMenuField')}
-        /* THE SWITCH MOVES THE WORLD, NOT JUST THE GRID. Founder: "if the
+        /* THE SWITCH IS IN THE CORNER, AND IT ALWAYS WAS. Founder: "if the
            user changes it in the modal, then the page behind it should also
-           change." So this writes the address — the same write the creature's
-           own faces make — and the overlay re-reads the owner from it. The
-           camera does not travel for it, for the same reason the form change
-           does not: one companion, two faces, no journey. */
-        owners={agentWall ? [
-          { id: null, name: say('worldWallMe'), here: atWall.kind !== 'agent' },
-          { id: agentWall.id, name: say('worldWallMyAgent'), here: atWall.kind === 'agent' },
-        ] : undefined}
-        onOwner={id => {
-          /* `publishStanding`, not the local `setStanding` — this file has a
-             useState of that name for a different thing, and the alias at the
-             import is what keeps the two from being confused. */
-          publishStanding(auth?.account?.id, id && agentWall ? { id: agentWall.id, name: agentWall.name } : null);
-          simApiRef.current?.goToWall(id && agentWall ? agentWall.col : 0, true);
-        }}
+           change." Still exactly what happens — `ME / MY AGENT` in the
+           top-left writes the address and every surface re-reads the owner
+           from it. What this overlay no longer carries is a SECOND pair of
+           buttons saying the same two words, which stood here while the
+           corner's pair stood behind this sheet's own left edge, clipped to
+           "MY AGE". The act survives; the duplicate does not. */
         onClose={viewNavigation.closeOpen}/>:null}
       {/* THE QUEUE, where answering eight in a row is a different activity
           from being asked one. The creature keeps asking its single claim on
@@ -16580,8 +16587,34 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         return <div className="waka-page">
           <DialogSurface className="waka-over waka-over--talk" aria-label={say('worldMenuTalk')}
             onClose={viewNavigation.closeConversation}>
+            {/* ═══ THE WAY BACK TO THE LIST, which this surface was the one
+                place in the product not to have ═══════════════════════════
+                Founder: "chat and inspirations should have same look and
+                feel and workflow and experience."
+
+                Measured, an open inspiration had THREE ways out — a chevron
+                reading "All inspirations", a ✕, and a "Close" in its own
+                foot — and an open chat had ONE, which went to the world
+                rather than to the chats it came from. So the only surface in
+                the product you could not step back out of was the one the
+                founder has reported being lost in most. The two are now the
+                same pair: a chevron to the list, and a ✕ to the world.
+
+                AND THE TITLE SAID A FOURTH NAME. The bar says "Chats", the
+                list says "Your chats", and this said "Talk with WAKA" —
+                three names for one place, which is the thing Law 1 is about
+                before it is about verbs. The chevron names the place it
+                returns to, the way the archive's does, and nothing else on
+                the surface claims to name it. */}
             <header className="waka-over-head">
-              <h2 className="waka-over-title">{say('worldMenuTalk')}</h2>
+              <button type="button" className="waka-over-back"
+                onClick={()=>viewNavigation.write({...EMPTY_VIEW,open:'conversations'})}>
+                <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
+                  <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
+                    strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {say('worldBackToChats')}
+              </button>
               <button type="button" className="waka-over-close" aria-label={say('worldCardClose')} onClick={viewNavigation.closeConversation}>
                 <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
                   <path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>

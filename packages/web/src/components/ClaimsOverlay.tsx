@@ -163,9 +163,13 @@ export function ClaimsOverlay({ locale, onClose, onAsk, answered }: ClaimsOverla
           </button>
         </header>
 
-        {/* The surface says what it is, in the place the question gets asked —
-            the same one line the other three overlays carry. */}
-        <p className="waka-over-what">{say("worldClaimsWhatIs")}</p>
+        {/* THE ONE LINE WENT FROM ALL THREE SURFACES THAT CARRIED IT, and
+            this was the longest of them: forty-one words of definition above
+            a queue of claims that are the definition. Founder: "only the
+            most absolutely necessary things should be shown." The whole
+            point of it being "the same one line the other three overlays
+            carry" holds in the other direction too — a sentence removed
+            everywhere is still one material. */}
 
         {phase === "loading" ? (
           <p className="waka-over-status" role="status">

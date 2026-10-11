@@ -149,12 +149,48 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      `generationEnabled` — whether replies are connected at all, which the
      composer's own state depends on and which this endpoint happens to
      carry. The conversations it returns are not rendered here. */
-  const refreshList=async()=>{const next=await run(signal=>listConversations(scope.profileId,signal));if(!lifecycle.current.signal.aborted&&!id)setGenerationEnabled(next.generationEnabled);};
-  const loadHistory=()=>{void refreshList().catch(()=>undefined);};
+  /**
+   * ═══ WHOSE RUN IS THIS? — the guard that was asking the wrong object ═══
+   *
+   * Measured 2026-10-11 against the real API: every request on this surface
+   * returned 200, the transcript rendered, and above it the page said "This
+   * conversation couldn't be opened. Try again." A surface lying about its
+   * own success, on the screen the founder called "the most confusing chat
+   * experience ever".
+   *
+   * The cause is one word repeated eleven times. Every guard read
+   * `lifecycle.current` — the controller for the run happening NOW — to
+   * decide whether the run it is INSIDE was cancelled. Those are the same
+   * object exactly until the effect replaces it, which it does on every
+   * change of `[accountId, profileId, id, initialPrincipleId]`:
+   *
+   *   1. run A starts; `lifecycle.current` is A
+   *   2. the effect tears down and aborts A; A's work rejects at once with
+   *      the deliberate `Conversation request stopped`
+   *   3. run B starts; `lifecycle.current` is now B
+   *   4. A's `catch` asks whether `lifecycle.current` is aborted, is told no
+   *      — because it is asking about B — and prints the failure
+   *   5. B's request comes back, `observe` renders the transcript, and
+   *      nothing clears A's sentence, because `observe` never touched it
+   *
+   * `id` changes from `null` to the new conversation's id on the FIRST SEND
+   * of every new chat, so this is not a dev-only StrictMode artifact; it is
+   * on the most ordinary path through the surface.
+   *
+   * BOTH HALVES ARE THE FIX, and step 5 is the one that makes it visible: a
+   * wrong sentence that is cleared a frame later is a flicker, and a wrong
+   * sentence nothing retracts is what was on screen. So each routine
+   * captures the controller it belongs to and asks that one, AND a read
+   * that works clears the sentence saying it did not.
+   */
+  const mine=(owner:AbortController)=>!owner.signal.aborted;
+  const refreshList=async(owner=lifecycle.current)=>{const next=await run(signal=>listConversations(scope.profileId,signal));if(mine(owner)&&!id)setGenerationEnabled(next.generationEnabled);};
+  const loadHistory=(owner=lifecycle.current)=>{void refreshList(owner).catch(()=>undefined);};
   const refresh=async()=>{
+    const owner=lifecycle.current;
     setLoading(true);setError(null);
     try{
-      if(id)loadHistory();else await refreshList();if(lifecycle.current.signal.aborted)return;
+      if(id)loadHistory(owner);else await refreshList(owner);if(!mine(owner))return;
       const target=id??(draftRef.current?.pending?draftRef.current.conversationId:null);
       if(target){const committed=bootstrap.current;bootstrap.current=null;
         const pending=draftRef.current,from=conversationRef.current?.messageWindowStart??restoredScroll.current?.messageWindowStart;
@@ -163,19 +199,20 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         // only when its expected position is hidden by a confirmed later tail.
         const expected=pending?.pending?Math.max(1,pending.revision+1):null;
         if(expected!==null&&next.revision>=expected&&(next.messageWindowStart??1)>expected&&!next.messages.some(message=>message.id===pending!.id))next=await run(signal=>fetchConversation(scope.profileId,target,signal,expected));
-        if(!lifecycle.current.signal.aborted)observe(next);}
-      if(!id&&initialPrincipleId){const available=await run(signal=>fetchPrinciples({profile:scope.profileId},signal));if(!lifecycle.current.signal.aborted){const focus=available.find(row=>row.id===initialPrincipleId)??null;setFocusPrinciple(focus);setFocusFailed(!focus);}}
-    }catch{if(!lifecycle.current.signal.aborted)setError(say(draftRef.current?.pending?'worldConversationSaveFailed':'worldConversationReadFailed'));}
-    finally{if(!lifecycle.current.signal.aborted)setLoading(false);}
+        if(mine(owner)){observe(next);setError(null);}}
+      if(!id&&initialPrincipleId){const available=await run(signal=>fetchPrinciples({profile:scope.profileId},signal));if(mine(owner)){const focus=available.find(row=>row.id===initialPrincipleId)??null;setFocusPrinciple(focus);setFocusFailed(!focus);}}
+    }catch{if(mine(owner))setError(say(draftRef.current?.pending?'worldConversationSaveFailed':'worldConversationReadFailed'));}
+    finally{if(mine(owner))setLoading(false);}
   };
   const loadEarlier=async()=>{
     if(!id||earlierBusy||busy||loading||!conversation?.messageWindowStart||conversation.messageWindowStart<=1)return;
+    const owner=lifecycle.current;
     setEarlierBusy(true);setEarlierFailed(false);
     try{const from=Math.max(1,conversation.messageWindowStart-30),next=await run(signal=>fetchConversation(scope.profileId,id,signal,from));
-      if(lifecycle.current.signal.aborted)return;
+      if(!mine(owner))return;
       if(next.revision<(conversationRef.current?.revision??0)||(next.messageWindowStart??1)>from)throw new Error('Older history window');
       const node=body.current;if(node)prependScroll.current={height:node.scrollHeight,top:node.scrollTop};observe(next);
-    }catch{if(!lifecycle.current.signal.aborted)setEarlierFailed(true);}finally{if(!lifecycle.current.signal.aborted)setEarlierBusy(false);}
+    }catch{if(mine(owner))setEarlierFailed(true);}finally{if(mine(owner))setEarlierBusy(false);}
   };
   useEffect(()=>{
     lifecycle.current=new AbortController();
@@ -190,14 +227,14 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const save=async()=>{
     if(working.current||loading||generationEnabled===null||awaitingReply||!draftRef.current?.content.trim()||storageFailed||focusFailed||id&&!conversation)return;
     const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID()}:{})};
-    if(!keep(intent))return;working.current=true;setBusy(true);setError(null);nearBottom.current=true;
+    if(!keep(intent))return;const owner=lifecycle.current;working.current=true;setBusy(true);setError(null);nearBottom.current=true;
     try{
       const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(generationEnabled?{requestReply:true}:{})},from=conversationRef.current?.messageWindowStart;
         return from!==undefined?saveConversationMessage(scope.profileId,id,input,signal,from):saveConversationMessage(scope.profileId,id,input,signal);})
         :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:generationEnabled===true}));
-      if(!lifecycle.current.signal.aborted){observe(next);if(id)reply.check();}
-    }catch{if(!lifecycle.current.signal.aborted)setError(say('worldConversationSaveFailed'));}
-    finally{working.current=false;if(!lifecycle.current.signal.aborted)setBusy(false);}
+      if(mine(owner)){observe(next);setError(null);if(id)reply.check();}
+    }catch{if(mine(owner))setError(say('worldConversationSaveFailed'));}
+    finally{working.current=false;if(mine(owner))setBusy(false);}
   };
   const edit=(content:string)=>{const current=draftRef.current,own=current?.writer===writer.current;keep({id:own?current.id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content,revision:conversation?.revision??0,pending:false});};
   const first=conversation?.initialPrinciple??focusPrinciple,canCompose=!id||Boolean(conversation);

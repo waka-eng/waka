@@ -1,5 +1,5 @@
 /**
- * YOUR CONVERSATIONS — a sidebar down the left, grouped by the day.
+ * YOUR CHATS — one of four destinations, wearing what the other three wear.
  *
  * Founder: "where do I see all my past chat history is unclear."
  *
@@ -8,35 +8,28 @@
  * them START one. Nothing led back. Every conversation this product had ever
  * held was one URL away and no door away, which is the same as not existing.
  *
- * SO IT IS A LIST, NOT A SHORTCUT. A control that opened a blank conversation
- * would have been a third way to begin and still no way to return. What a
- * person wants here is almost always "the one about X, from last week" — so
- * the list is the surface and starting a new one is its first row.
+ * IT WAS A LEFT SIDEBAR, AND THE HEADER SAYING SO OUTLIVED IT BY TWO
+ * REWRITES. The argument was good at the time — a list you SCAN wants to be
+ * tall and narrow and off to one side, beside the thing you are about to
+ * bring it back into — and it stopped being true the moment this became one
+ * of four peers in the dock. Founder: "conversation still opens the side
+ * panel first." The rail's geometry went then. Its TYPE did not, which is
+ * why this file is being edited again: the two lists in the bar were still
+ * disagreeing about every measurable property a list row has.
  *
- * WHY A SIDEBAR AND NOT THE CENTRED SHEET THE OTHER TWO USE.
+ * Founder, this time: "chat and inspirations should have same look and feel
+ * and workflow and experience."
  *
- * Founder: "When clicking on the top left chat icon, let's open up a left
- * sidebar to show the past chats. And let's just like follow basically what
- * we have in the cloud like this" — with a reference showing a left rail
- * grouped Oct 8 / Oct 7 / Oct 6 / Older.
+ * So the row is `SavesOverlay`'s row — `.waka-list-*`, lead line and then
+ * its meta — and what is left here is only what a chat genuinely has that a
+ * save does not.
  *
- * Your inspirations and your principles are things you HOLD UP and read, so
- * they open centred over the world: a grid and a set of cards both want the
- * middle of the screen and both are a destination in themselves. A
- * conversation list is not read, it is SCANNED — you arrive already knowing
- * you want "the one about X, from last week" — and a list you scan wants to
- * be tall and narrow and off to one side, beside the thing you are about to
- * bring it back into rather than on top of it.
- *
- * It is also the shape every chat history anyone has used already has, which
- * is the entire argument: a person who has opened one before knows where
- * their own conversation went without being taught.
- *
- * GROUPED BY DAY, BECAUSE THAT IS HOW THE QUESTION IS ASKED. Nobody looks for
- * a conversation by its title; they look for it by WHEN — "that was Tuesday".
- * The rows stop carrying their own date because the heading above them does,
- * which also gets a date off every single line of a list whose job is to be
- * scanned quickly.
+ * GROUPED BY DAY, BECAUSE THAT IS HOW THE QUESTION IS ASKED. Nobody looks
+ * for a conversation by its title; they look for it by WHEN — "that was
+ * Tuesday". This is the one part of the rail that was never about being a
+ * rail, and it is kept exactly as it was: the archive groups by chapter
+ * because a save is remembered by roughly how long ago, a chat by the day
+ * it happened on.
  */
 import { useEffect, useRef, useState } from "react";
 
@@ -45,6 +38,43 @@ import { DialogSurface } from "./DialogSurface";
 import { t, type SupportedLocale } from "../lib/locales";
 
 type Phase = "loading" | "ready" | "failed";
+
+/* THE SAME TWO LINES THE ARCHIVE'S ROW IS MADE OF, read off a conversation
+   rather than off a save. `SavesOverlay` splits a kept thing at its first
+   newline — the first line is the title nobody had to write, the rest is the
+   second line — and a transcript preview answers to exactly that shape once
+   the markdown is off it. One anatomy, two readers. */
+function plain(row: ConversationSummary): string[] {
+  return row.preview
+    /* `\u0060` IS A BACKTICK, written as an escape on purpose.
+       `scripts/check-vocabulary.mjs` hand-scans this file for identifiers and
+       treats a bare backtick as the start of a template literal — which, for
+       one inside a character class, means it blanks everything up to the next
+       backtick anywhere in the file and then reads prose out of a comment as
+       code. The escape is the same character to the regex engine and not a
+       delimiter to the scanner. */
+    .replace(/[*\u0060]/g, "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function lead(row: ConversationSummary): string {
+  return plain(row)[0]?.slice(0, 80) ?? "";
+}
+
+function rest(row: ConversationSummary): string {
+  return plain(row).slice(1).join(" ");
+}
+
+/** The hour, which is the only thing that tells two chats on one day apart —
+    the heading above them has already said which day it was. */
+function clock(row: ConversationSummary, locale: SupportedLocale): string {
+  const when = new Date(row.updatedAt);
+  return Number.isNaN(when.getTime())
+    ? ""
+    : when.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+}
 
 export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen }: {
   locale: SupportedLocale;
@@ -144,19 +174,6 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
     return out;
   })();
 
-  /* ═══ IT IS A PAGE NOW, NOT A RAIL ═══════════════════════════════════
-     Founder: "conversation still opens the side panel first", in a list of
-     corrections whose through-line is that the four places in the dock should
-     be four pages of the same kind.
-
-     The rail's own argument — a list you SCAN wants to be tall and narrow and
-     off to one side, beside the thing you are about to bring it back into —
-     was good while this list was reached from a corner icon over a world you
-     were still standing in. It is a dock destination now, beside three other
-     dock destinations, and arriving at one of four peers by a different
-     mechanism from the other three is the inconsistency being reported. The
-     grouping by day, which is the part that made the rail work, is kept
-     exactly as it was. */
   return (
     <div className="waka-page">
       <DialogSurface className="waka-over" aria-label={title} onClose={onClose}>
@@ -169,15 +186,15 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
           </button>
         </header>
 
-        {/* Starting one is the first row, not a separate control: it is the
-            same act as opening an old one, aimed at a conversation that does
-            not exist yet. The dock's plus offers the same move from anywhere;
-            this one is here because a person already looking at their past
-            conversations should not have to travel to start another. */}
-        <button type="button" className="waka-rail-new" onClick={() => onOpen(null)}>
-          {say("worldConversationNew")}
-        </button>
-
+        {/* "NEW CHAT" WAS A BORDERED PILL AT THE TOP OF THIS ONE SURFACE,
+            and it is gone. Its argument — "nothing led back, so starting one
+            is the first row" — was written when this list was unreachable
+            and a conversation could only ever be begun, never found. The
+            dock's plus offers both things this product makes, from every
+            screen, which is the general answer that argument was asking for.
+            It was also the only boxed control on any of the four
+            destinations: one surface in four wearing a button nobody else
+            wears is the inconsistency the founder reported, in miniature. */}
         {phase === "loading" ? (
           <p className="waka-over-status" role="status">{say("worldChatLoading")}</p>
         ) : phase === "failed" ? (
@@ -187,26 +204,50 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
              a fact and not a failure. */
           <p className="waka-over-status">{say("worldConversationFirst")}</p>
         ) : (
-          <nav className="waka-rail-list" aria-label={title}>
+          /* ═══ THE SAME LIST THE ARCHIVE IS ═══════════════════════════
+              Founder: "chat and inspirations should have same look and feel
+              and workflow and experience."
+
+              This wore `.waka-rail-*` — the register of a left sidebar that
+              was deleted when this became one of four peer destinations —
+              so the two lists disagreed about the size, the weight, the
+              casing and the ground of every part they both have. They share
+              `.waka-list-*` now, and the row has the anatomy the archive's
+              row has: the line you recognise it by, and under it the facts
+              that tell you whether this is the one.
+
+              WHAT IS STILL ITS OWN, because a chat is not a save: the
+              headings are days rather than chapters (nobody looks for a
+              conversation by "Previous 30 Days"), there is no ordinal
+              (a conversation is not a numbered thing you collected), and
+              a row can be erased. */
+          <nav className="waka-list" aria-label={title}>
             {groups.map((group) => (
-              <section key={group.label}>
-                <h3 className="waka-rail-day jar-label">{group.label}</h3>
-                <ul>
+              <section key={group.label} className="waka-list-chapter">
+                <h3 className="waka-list-when">{group.label}</h3>
+                <ul className="waka-list-rows">
                   {group.rows.map((row) => (
                     <li key={row.id} className="waka-rail-item">
-                      <button type="button" className="waka-rail-row" onClick={() => onOpen(row.id)}>
+                      <button type="button" className="waka-list-row" onClick={() => onOpen(row.id)}>
                         {/* THE FIRST LINE THAT HAS WORDS IN IT, with the
                             markdown stripped. A preview is for recognising
                             which conversation this is, and a leading blank
                             line or a stray backtick spends that recognition
                             on punctuation. */}
-                        {row.preview.trim()
-                          ? row.preview
-                              .split(/\r?\n/)
-                              .find((line) => line.trim())!
-                              .replace(/[*`]/g, "")
-                              .slice(0, 80)
-                          : say("worldConversationNew")}
+                        <span className="waka-list-lead">
+                          {lead(row) || say("worldConversationNew")}
+                        </span>
+                        {/* THE SECOND LINE IS THE ONE THAT DECIDES IT, the
+                            same as in the archive: when, and then whatever
+                            did not fit on the first line. The day heading
+                            carries the date, so this carries the time —
+                            which is the thing that distinguishes two chats
+                            on one day, and the only reason this list ever
+                            needed a second line. */}
+                        <span className="waka-list-meta">
+                          <span className="waka-list-date">{clock(row, locale)}</span>
+                          {rest(row) ? <span className="waka-list-rest">{rest(row)}</span> : null}
+                        </span>
                       </button>
                       {/* ERASING ONE, ASKED ON THE ROW. This verb had no home
                           in the product at all for a while: it lived in a
