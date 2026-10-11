@@ -4,7 +4,7 @@ import {useAuth} from '../lib/auth-context';
 import {normalizeSupportedLocale} from '../lib/locales';
 import {ConversationPanel} from '../components/ConversationPanel';
 import {Menu} from '../components/Menu';
-import {WallSwitch} from '../components/WallSwitch';
+import {ChatCorner} from '../components/ChatCorner';
 import {usePageMenu} from '../lib/page-menu';
 import type {ApiConversation} from '../lib/api/conversations';
 import '../styles/chat.css';
@@ -27,7 +27,7 @@ export default function ChatPage(){
   const principleId=!id?new URLSearchParams(location.search).get('principle')??undefined:undefined;
   const owner=`${scope.accountId}:${scope.profileId}`;
   if(committed.current&&(committed.current.owner!==owner||committed.current.row.id!==id))committed.current=null;
-  return <><Menu locale={locale} items={menu.items} current={menu.current} left={<WallSwitch menu={menu} locale={locale} />} label="worldMenuTalk" onSettings={menu.onSettings}/><ConversationPanel key={`${scope.accountId}:${scope.profileId}:${id??'new'}:${principleId??''}`}
+  return <><Menu locale={locale} items={menu.items} current={menu.current} left={<ChatCorner locale={locale} profileId={menu.standing.id ?? scope.profileId} onOpen={id => navigate(`/chat/${id ?? "new"}`)} />} label="worldMenuTalk" onSettings={menu.onSettings}/><ConversationPanel key={`${scope.accountId}:${scope.profileId}:${id??'new'}:${principleId??''}`}
     scope={scope} id={id} initialPrincipleId={principleId} initialConversation={committed.current?.row} locale={locale}
     onCreated={row=>{if(row.profileId===scope.profileId)committed.current={owner,row};}}
     onChoose={next=>{if(next!==id||principleId)navigate(`/chat/${next??'new'}`,{replace:!id&&Boolean(next),state:location.state});}}

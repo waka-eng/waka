@@ -839,8 +839,14 @@ describe("the weather is told on arrival, after the world has drawn", () => {
     window.localStorage.setItem("waka.seen", String(Date.UTC(2026, 7, 10)));
     try {
       layout = await mountWorld(FACTS);
+      /* WHAT THE CREATURE SAYS MOVED ABOVE ITS HEAD. It was a line under the
+         chin, in the same column as the claim, so one had to silence the
+         other; speech and a question are different acts and now have
+         different places. The fact under test — that the away-window's
+         sentence is whispered only after the glide returns — is unchanged,
+         so this reads the bubble instead of the line. */
       const said = () =>
-        layout.container.querySelector(".jar-home-narration")?.textContent ?? "";
+        layout.container.querySelector(".jar-char-bubble")?.textContent ?? "";
 
       /* the world has drawn, the glide has not begun: silence */
       expect(said()).not.toContain("refused a candidate");

@@ -113,7 +113,29 @@ export function usePageMenu(locale: SupportedLocale, accountId?: string | null):
       items: VIEWS.map((view) => ({
         id: view.id,
         label: view.label,
-        onSelect: () => navigate(view.path),
+        /**
+         * THE TOP OF MIND IS A WALL, AND THE WALL YOU ARE IN IS THE ONE YOU
+         * GET.
+         *
+         * Founder: "when I go to my agent and click on top of mind, it moves
+         * me to me. That's not the right interpretation."
+         *
+         * It is not. "/" is YOUR wall specifically, not "the top of mind" in
+         * general — so a row that always navigated there silently answered a
+         * different question than the one asked. Standing as your agent and
+         * asking for the top of mind means the AGENT's, and the agent's top
+         * of mind has an address: its own wall.
+         *
+         * The archive and the principles do not need this. They are one page
+         * each, scoped by the stance they read from `lib/standing`, so they
+         * already serve whoever you are standing as.
+         */
+        onSelect: () =>
+          navigate(
+            view.id === "top-of-mind" && standing.id
+              ? `/w/${encodeURIComponent(standing.id)}`
+              : view.path,
+          ),
         explain: view.explain.map((key) => t(locale, key)),
       })),
       current: here,

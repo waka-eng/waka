@@ -1916,3 +1916,253 @@
   line-height: 1.55;
   color: var(--muted);
 }
+
+
+/* ---------------------------------------------------------------------------
+ * WHAT THE CREATURE SAYS, ABOVE ITS HEAD
+ *
+ * Its line used to sit under the chin, in the same column as the claim, so
+ * one had to silence the other. Speech and a question are different acts:
+ * the creature talks upward and what it is asking you stays beneath it.
+ *
+ * Anchored to the crown rather than to a guess: the loop publishes the
+ * companion's middle and its size every layout pass, so the bubble's bottom
+ * edge sits a fixed gap above the top of its body at every viewport.
+ * ------------------------------------------------------------------------- */
+
+.jar-char-bubble {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(var(--jar-char-mid, 50%) - var(--jar-char, 120px) / 2 - var(--sp-12));
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 clamp(20px, 6vw, 28px);
+  /* The world below stays draggable; the card inside opts back in. */
+  pointer-events: none;
+}
+
+.jar-char-bubble-body {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-8);
+  max-width: min(26rem, 100%);
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
+  background: var(--waka-raised);
+  text-align: center;
+}
+
+.jar-char-bubble-body p {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* The door into a conversation about what it just said — the one thing on
+   screen that came from the product rather than from you. */
+.jar-char-bubble-body button {
+  min-height: var(--sp-32);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-fine);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.jar-char-bubble-body button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------------------
+ * WHICH FORM IT IS WEARING
+ *
+ * Under the creature, naming the face you are looking at. Pressing it is the
+ * transformation — the canvas already dissolves between the two and holds the
+ * aura constant to say it is the same companion throughout.
+ * ------------------------------------------------------------------------- */
+
+.jar-char-form {
+  pointer-events: auto;
+  min-height: var(--sp-32);
+  padding: 0 var(--sp-12);
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.jar-char-form:hover {
+  color: var(--ink);
+}
+
+/* Wearing the agent's face is a STATE, so it renders as one. */
+.jar-char-form[aria-pressed="true"] {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.jar-char-form:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+
+/* ---------------------------------------------------------------------------
+ * EVERYTHING YOU HAVE TALKED ABOUT
+ *
+ * A sheet under the left corner. Starting one is its first row rather than a
+ * separate control: it is the same act as opening an old conversation, aimed
+ * at one that does not exist yet.
+ * ------------------------------------------------------------------------- */
+
+.waka-corner-place {
+  pointer-events: auto;
+  position: relative;
+  display: inline-flex;
+}
+
+.waka-chats,
+.waka-account {
+  position: absolute;
+  top: calc(100% + var(--sp-8));
+  z-index: 60;
+  width: max-content;
+  max-width: min(22rem, calc(100vw - var(--sp-32)));
+  padding: var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
+  background: var(--waka-raised);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  color: var(--ink);
+  text-align: left;
+}
+
+.waka-chats { left: 0; }
+/* The account card hangs from the right corner, so it opens leftward or it
+   would run off the edge of a phone. */
+.waka-account { right: 0; }
+
+.waka-chats header,
+.waka-account header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-12);
+}
+
+.waka-chats h2 {
+  margin: 0;
+  color: var(--muted);
+}
+
+.waka-chats p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-fine);
+}
+
+.waka-chats nav ul {
+  list-style: none;
+  margin: var(--sp-8) 0 0;
+  padding: 0;
+  /* A long history scrolls inside the sheet rather than off the screen. */
+  max-height: 50vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.waka-chats button,
+.waka-account button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.waka-chats nav button {
+  display: block;
+  width: 100%;
+  padding: var(--sp-8);
+  border-radius: var(--waka-r-control);
+  color: var(--ink);
+}
+
+.waka-chats nav button:hover,
+.waka-chats-new:hover,
+.waka-account button:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+
+.waka-chats nav span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.waka-chats nav time {
+  display: block;
+  margin-top: var(--sp-4);
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+
+.waka-chats-new {
+  width: 100%;
+  padding: var(--sp-8);
+  border: 1px solid var(--line) !important;
+  border-radius: var(--waka-r-control);
+  color: var(--ink) !important;
+}
+
+/* ---- who you are, under the cog ---- */
+
+.waka-account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.waka-account-name {
+  color: var(--ink);
+}
+
+.waka-account-email {
+  color: var(--muted);
+  font-size: var(--t-fine);
+}
+
+.waka-account-go,
+.waka-account-out {
+  margin-top: var(--sp-8);
+  padding: var(--sp-6) var(--sp-8);
+  border-radius: var(--waka-r-control);
+}
+
+.waka-account-out {
+  margin-top: 0;
+}

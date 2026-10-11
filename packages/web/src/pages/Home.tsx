@@ -129,6 +129,7 @@ import {
   type BeingSprites,
   type Palette,
 } from "../canvas/palette";
+import { ChatCorner } from "../components/ChatCorner";
 import { useMeasured } from "../canvas/measured";
 import { setStanding as publishStanding } from "../lib/standing";
 import { renderScale } from "../canvas/scale";
@@ -341,6 +342,9 @@ const DIAL_H = 92;
    reserve smaller than the thing it reserves for is the companion sitting on
    its own input. */
 const MOUTH_H = 128;
+
+/** How far below the fold the field begins. See `fieldTop`. */
+const FIELD_CLEARANCE = 24;
 /** The least the topmost orb is ever left clear of the top edge. */
 const FIELD_EDGE = 6;
 /**
@@ -964,7 +968,22 @@ function computeLayout(vw: number, vh: number, dialH: number): Layout {
        `vh` exactly, not `vh - dialH`: the dial's strip is chrome drawn OVER
        the bottom of the viewport, so reserving it still left the topmost orbs
        inside the frame. The ground begins where the screen ends. */
-    fieldTop: vh,
+    /**
+     * THE FIELD STARTS BELOW THE FOLD, AND CLEARS IT.
+     *
+     * `vh` put the field's top edge exactly ON the bottom of the viewport,
+     * which is only clear if nothing ever moves — and every orb carries a
+     * slow sine drift on both axes, so the top row bobbed in and out of the
+     * bottom of the screen. Founder: "the bottom of the page still has the
+     * old floating circles, I can see it float up and down once in a while."
+     *
+     * The peek row places itself at `top + r + ampY`, so the arithmetic
+     * already intends the topmost pixel at full upward drift to land on
+     * `top`. Landing ON the line is the bug: a boundary that is exactly
+     * touched is a boundary that sub-pixel rounding crosses. The clearance
+     * is the margin that makes "below the fold" true rather than marginal.
+     */
+    fieldTop: vh + FIELD_CLEARANCE,
     /* AND THE FIELD ENDS EXACTLY WHERE THE DIAL BEGINS — not forty pixels of
        air above it. The reserve is a real, measured piece of chrome, so it is
        the only thing the field owes the bottom of the screen. */
@@ -2339,6 +2358,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     });
     return out;
   }, [agentRoster, groups]);
+  /* The one agent this account has, if it has one. Only its existence and
+     its column are needed here — the creature's form switch is a toggle
+     between your own wall and that one. */
+  const agentWall = walls.find(w => w.kind === 'agent') ?? null;
   const wallsRef = useRef<Space[]>([]);
   wallsRef.current = walls;
   const agentsRef = useRef<AgentBundle[]>([]);
@@ -13853,6 +13876,33 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               from the creature. They are its speech, so they sit where its
               mouth is: `--jar-mouth-top` is still written from the chin every
               layout pass, and it means the chin again. */}
+          {/* THE CREATURE SPEAKS UPWARD.
+              Founder: "I did like how clicking on the agent would make it
+              speak something. So above the agent, let's have a speech bubble
+              that makes the agent tell you something. And maybe have the
+              agent start a conversation so you can dive deeper."
+              Tapping it has always made it talk; what changed was that its
+              line sat under the chin, in the same column as the claim, so
+              one had to silence the other. A bubble over its head gives
+              speech its own place and lets both be true at once.
+              AND IT IS A WAY IN. What the creature just said is a subject —
+              it is the only thing on screen that came from the product rather
+              than from you — so it carries the door into a conversation
+              about itself. */}
+          {!mouthOpen && charSay && charSay !== say('worldSavedWord') ? (
+            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
+              <div className="jar-char-bubble-body">
+                <p role="status">{charSay}</p>
+                <button
+                  type="button"
+                  disabled={talking}
+                  onClick={() => { void talkAbout({ id: '', text: charSay }); }}
+                >
+                  {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
+                </button>
+              </div>
+            </div>
+          ) : null}
           <div ref={measured.charSay} className="jar-char-say" data-jar-chrome="1" data-jar-interactive="1">
             {/* WHAT IT THINKS ABOUT YOU, ASKED WHERE YOU ALREADY ARE. The
                 claims page is gone: this is the one thing the product needs
@@ -13860,6 +13910,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 that did the reading, on the screen everyone starts on. One at
                 a time — a list of claims under the face would be the dense
                 version of the thing "one line at a time" removed. */}
+            {/* WHICH FORM IT IS WEARING, AND HOW TO CHANGE IT.
+                The switch belongs here and not in a corner: the creature IS
+                the identity, and the canvas already renders the agent as the
+                same companion in a machine form, dissolving between the two
+                with the aura held constant to say so. A corner toggle framed
+                that as travel between two places. This frames it as what it
+                is — one companion, two faces.
+                A WORD, NOT A MYSTERY. Pressing a creature is not a
+                discoverable gesture, so the form is named underneath it and
+                the name is the control. It says where you are and changes it
+                in one press. */}
+            {!mouthOpen && agentWall ? (
+              <button
+                type="button"
+                className="jar-char-form jar-label"
+                aria-pressed={atWall.kind === 'agent'}
+                onClick={() => simApiRef.current?.goToWall(atWall.kind === 'agent' ? 0 : agentWall.col)}
+              >
+                {say(atWall.kind === 'agent' ? 'worldWallMyAgent' : 'worldWallMe')}
+              </button>
+            ) : null}
             {!mouthOpen && claimQueue[0] ? (
               <div className="jar-char-claim">
                 {/* NO "IS THIS TRUE OF YOU?" ABOVE IT. Founder: "where this
@@ -13978,7 +14049,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 that rule holding across the two things that can speak, not
                 just within each. The line comes back the moment the claim is
                 answered. */}
-            {!mouthOpen&&!claimQueue[0]&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}
+            {/* WHAT IT SAYS NOW LIVES ABOVE ITS HEAD — see `.jar-char-bubble`.
+                It was a line under the chin, which put it in the same column
+                as the claim and meant one had to silence the other. Speech
+                and a question are different acts and now have different
+                places: the creature talks upward, and what it is asking you
+                stays beneath it. */}
             {/* WHAT THE RECEIPT OFFERS IS THE CONVERSATION, not a second door to
                 a note. "Reflect" opened a private note on the thing just kept
                 — and the thing just kept already carries that door, on its own
@@ -15100,80 +15176,28 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           get you out of. The switcher and the cog belong everywhere for the
           same reason they belong on the other pages. */}
       {phase==='ready'?<Menu locale={locale} items={menu.items} current={menu.current}
-        /* WHOSE GROUND YOU ARE STANDING ON, in the top-left corner.
-           Founder: "the top left should be a drop-down modal that lets you
-           switch between your things. So like Agent 1, me." The name of the
-           wall you are on, a caret, and the list of the others — your own,
-           each agent's, each room's — plus the way to make another. It used
-           to sit in a bar of its own under the chrome; it is the corner now,
-           beside the view switcher and the cog, which is the whole
-           navigation of the product in one row.
-           ALWAYS, INCLUDING ON YOUR OWN WALL. There was a ruling against
-           exactly that — it read your own name back at you beside a menu
-           button, which was noise, because the corner only answered "where
-           am I", and at home you had not gone anywhere. The corner answers a
-           different question now: WHICH CHARACTER ARE YOU. Founder: "also
-           add back button on top left to change character... to my agent,
-           etc etc (eventually rooms when we bring that concept back)".
-           A switch that disappears whenever you are on the default option is
-           a switch you cannot use to leave the default, so the old ruling
-           does not survive the corner's new job.
-           The list is already the right list: your own wall, each agent's,
-           and each room's when rooms come back — they are all walls, so
-           rooms return to this control for free.
-           Written inline because every name it closes over lives in this
-           render. */
-        left={phase === 'ready'
-      ? (() => {
-              /**
-               * ME, AND MY AGENT — a switch, not a list.
-               *
-               * Founder: "since we're only going to have 'me' and 'my agent',
-               * let's just make the top left a switcher between 'me' and 'my
-               * agent'... rather than a drop down, have that instead."
-               *
-               * And the dropdown was the wrong shape for two options anyway:
-               * a list costs a press to open, a press to choose, and a read
-               * of every row in between — to move between two places you can
-               * already see. Both are on screen, the one you are standing on
-               * is inked, and switching is a single press on the other.
-               *
-               * WHEN THERE IS NO AGENT THERE IS NOTHING TO SWITCH. A toggle
-               * showing one option is a label wearing a control's clothes, so
-               * the corner stays empty until a second wall exists.
-               *
-               * This is deliberately the two-wall shape and not the general
-               * one: walls, rooms and the way to make another all still exist
-               * in the model, and when rooms come back this becomes a list
-               * again. It is shaped to what the product currently holds.
-               */
-              const mine = walls.find(w => w.kind === 'self');
-              const agent = walls.find(w => w.kind === 'agent');
-              if (!mine || !agent) return null;
-              const here = atWall.kind === 'agent' ? agent : mine;
-              return <span className="jar-here-split" role="group" aria-label={say('worldGoToAnotherWall')}>
-                {[mine, agent].map(w => {
-                  const standing = w.kind === here.kind && w.id === here.id;
-                  return (
-                    <button
-                      key={spaceKey(w)}
-                      type="button"
-                      className={`jar-here jar-label${standing ? ' jar-here--standing' : ''}`}
-                      aria-pressed={standing}
-                      onClick={() => { if (!standing) simApiRef.current?.goToWall(w.col); }}
-                    >
-                      {w.kind === 'self' ? say('worldWallMe') : say('worldWallMyAgent')}
-                    </button>
-                  );
-                })}
-              </span>;
-            })()
-          : null}
-          /* THE LIST THAT STOOD HERE IS GONE WITH THE DROPDOWN. Walls,
-             rooms and the way to make another all still exist in the model;
-             when rooms come back this corner becomes a list again. It is
-             shaped to the two places the product currently holds. */
+        /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
+           Founder: "I kind of want to give the feeling of, rather than my
+           agent moving rooms, it kind of switches itself up to its agent
+           form."
+           That is the better model and the canvas already believed it: the
+           change of form is a DISSOLVE, not a cut, and the aura is
+           deliberately never pixelated because "its colour temperature is one
+           of the two invariants that say this is still the same companion."
+           The decision was already made in the drawing and contradicted by
+           the navigation — a corner toggle says these are two PLACES, while
+           the creature changing form says this is one companion with two
+           faces, which is what one account with two profiles actually is.
+           So the switch moved onto the creature, where the identity already
+           lives, and the corner went to chat — which genuinely is a
+           destination, because it has a list of past conversations behind
+           it and nowhere else to be reached from. */
+        left={storageScope ? <ChatCorner locale={locale}
+          profileId={atWall.kind === 'agent' ? atWall.id : storageScope.profileId}
+          onOpen={id => navigate(`/chat/${id ?? 'new'}`)} /> : null}
         onSettings={()=>navigate('/profile')}
+        account={auth?.account ? { name: auth.profile?.name, email: auth.account.email } : null}
+        onSignOut={auth ? () => { void auth.logout(); } : undefined}
         hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}

@@ -20,9 +20,10 @@
  * itself — the grid is for finding the thing, not for reading it.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { Menu } from "../components/Menu";
-import { WallSwitch } from "../components/WallSwitch";
+import { ChatCorner } from "../components/ChatCorner";
 import { attachmentPreviewImageUrl, updateInspiration } from "../lib/api";
 import { dateStamp } from "../lib/words";
 /* THE SAME DOOR THE WORLD USES. `loadInspirations` is the archive's own
@@ -60,6 +61,7 @@ export function Inspirations(): JSX.Element {
   const standing = useStanding(auth?.account?.id);
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
 
+  const navigate = useNavigate();
   const menu = usePageMenu(locale, auth?.account?.id);
   const [rows, setRows] = useState<Inspiration[]>([]);
   /* FIND IS A THING YOU DO TO YOUR INSPIRATIONS, so it lives on the page that
@@ -160,7 +162,8 @@ export function Inspirations(): JSX.Element {
 
   return (
     <main className="waka-page">
-      <Menu locale={locale} items={menu.items} current={menu.current} left={<WallSwitch menu={menu} locale={locale} />} onSettings={menu.onSettings} />
+      <Menu locale={locale} items={menu.items} current={menu.current} left={<ChatCorner locale={locale} profileId={menu.standing.id ?? auth?.profile?.id} onOpen={id => navigate(`/chat/${id ?? "new"}`)} />} onSettings={menu.onSettings}
+        account={auth?.account ? { name: auth?.profile?.name, email: auth?.account.email } : null} />
       <header className="waka-page-head">
         {/* NO BACK BUTTON. The menu is the navigation and the browser
             already has a back — a third way out of a page is not a
