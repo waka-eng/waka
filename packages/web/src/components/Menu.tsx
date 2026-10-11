@@ -206,7 +206,37 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
         {left ?? <span className="waka-corner" aria-hidden="true" />}
 
         {/* WHERE YOU ARE, AND THE WAY TO THE OTHER TWO. */}
-        {here ? (
+        {/* A PAGE THAT IS NOT ONE OF THE THREE GETS A WAY BACK, NOT A LIST.
+            Founder: "I find it so annoying that from talk with WAKA there's
+            no one click to go back to top of mind."
+            There was not. The switcher opened a list and the list held the
+            row — two presses to leave a surface you did not travel to on
+            purpose. On a conversation, the settings or your days, the
+            question is not "which view" but "how do I get back", and a
+            control that answers a different question than the one being
+            asked is the whole reason this felt annoying rather than merely
+            slow. One press, and it says where it goes. */}
+        {label ? (
+          <div className="waka-switch">
+            <button
+              type="button"
+              className="waka-switch-trigger"
+              onClick={() => items.find((item) => item.id.endsWith("top-of-mind"))?.onSelect()}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false">
+                <path
+                  d="M6 2L3 5l3 3"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </svg>
+              <span>{t(locale, "worldMenuTopOfMind")}</span>
+            </button>
+          </div>
+        ) : here ? (
           <div
             className="waka-switch"
           >

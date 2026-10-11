@@ -48,13 +48,13 @@ it('keeps named personal destinations available and records section navigation f
      old `view=field` / `view=sky` query params were standing in for. */
   await chooseFromMenu(world.container,'Your inspirations');await settle();
   expect(location.pathname).toBe('/inspirations');
-  await chooseFromMenu(world.container,'Principles');await settle();
+  await chooseFromMenu(world.container,'Your principles');await settle();
   expect(location.pathname).toBe('/principles');
   await navigate(-1);expect(location.pathname).toBe('/inspirations');
   /* Find left the menu entirely: it is a thing you do TO your inspirations,
      so it is a search field on that page now rather than a destination. The
      menu holds places; it held one verb, and that was the odd one out. */
-  await chooseFromMenu(world.container,'Top of mind');await settle();
+  await chooseFromMenu(world.container,'Your top of mind');await settle();
   expect(location.pathname).toBe('/');
 });
 
@@ -95,7 +95,7 @@ it('starts a review beside the personal reading and restores home through Back',
      printed again in the reading's own heading sixty pixels below it, which
      is the duplication the switcher replaced — so the name is asserted where
      it now lives. */
-  expect(world.container.querySelector('.waka-switch-trigger')?.textContent).toContain('Top of mind');
+  expect(world.container.querySelector('.waka-switch-trigger')?.textContent).toContain('Your top of mind');
   /* Review is not offered any more. It was an activity card beside the
      character, then a menu row, and it is now merged away: Claims is the one
      place that asks a person to rule on their own material, and two surfaces

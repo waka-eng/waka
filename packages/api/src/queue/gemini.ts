@@ -172,11 +172,17 @@ const MAX_INSPIRATION_CHARS = 4_000;
 /** Enrichment is a whole page body; it is context, not the main event. */
 const MAX_ATTACHMENT_CHARS = 2_000;
 const MAX_REFLECTION_CHARS = 800;
-/** At most three candidates per capture — see the extraction instruction. */
-export /** A tab's worth of words. Longer than this is a sentence, not a shelf. */
-const MAX_CATEGORY_CHARS = 32;
+/** A tab's worth of words. Longer than this is a sentence, not a shelf. */
+export const MAX_CATEGORY_CHARS = 32;
 
-const MAX_SIGNAL_CANDIDATES = 3;
+/**
+ * At most three candidates per capture — see the extraction instruction.
+ *
+ * Exported so `generation-doc.test.ts` can hold the doc to it. The doc has
+ * named this number in three places for a long time while the code kept it
+ * private, which is a documented constant the gate could not check.
+ */
+export const MAX_SIGNAL_CANDIDATES = 3;
 /**
  * How many earlier captures one candidate may cite as co-witnesses. A cap on
  * apophenia: the model connecting everything to everything is the failure

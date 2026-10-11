@@ -218,6 +218,29 @@ The extraction call (`extractSignalCandidates` — interface in
   (`resolveRelatedEvidence`). A citation whose quote fails is dropped whole:
   "these two share a theme" is not "this capture witnesses this pattern",
   and the verbatim quote is the difference.
+- **The capture's own subject rides on the same call.** The pass also names
+  what the capture is ABOUT, in one or two plain words, as the archive's
+  shelves. It is a fact about the capture (layer 1), not about any statement
+  drawn from it, so a capture that yields zero statements still has one. It
+  rides here rather than taking a call of its own because this call already
+  reads the whole capture, its reflections and its attachments — and a second
+  round-trip per save would be charged against the one act the product
+  promises costs nothing.
+  - The reading is shown the shelves this archive already uses, busiest
+    first, at most `MAX_EXISTING_CATEGORIES` (24), and told to reuse before
+    it coins. Without that, a model names each capture with a fresh phrase
+    and fifty saves become fifty categories of one — a filter where every
+    option holds one thing, which is worse than no filter.
+  - At most `MAX_CATEGORY_CHARS` (32) characters. Longer than that is a
+    sentence, not a shelf, and it has to fit in a tab.
+  - Free text rather than an enum, deliberately: an enum would be a taxonomy
+    decided once for everybody, and the claim this product makes is that what
+    a person keeps about is particular to them. The vocabulary converges per
+    archive instead of being constrained across all of them.
+  - `null` is a real answer and the default. A capture the reading cannot
+    place stays unplaced; nothing downstream may read null as a category
+    named "null". A pass that returns null also leaves an existing shelf
+    alone — "could not place it this time" is not "it belongs nowhere".
 - Temperature 0, JSON schema-constrained, caps re-enforced in code
   regardless of what the model returns.
 
@@ -1159,6 +1182,8 @@ is not part of this text-generation switch.
 | `MAX_GEMINI_EMBEDDING_VALUES` | 4096 | Sanity ceiling on values accepted back per vector |
 | `MAX_SIGNAL_CANDIDATES` | 3 | Statements one extraction may propose |
 | `MAX_RELATED_INSPIRATION_CITATIONS` | 2 | Earlier captures one statement may cite as co-witnesses |
+| `MAX_CATEGORY_CHARS` | 32 | A capture's own subject, in words — longer is a sentence, not a shelf |
+| `MAX_EXISTING_CATEGORIES` | 24 | Shelves the reading is shown before it names a new one, busiest first |
 | `MAX_TOP_OF_MIND_ENTRIES` | 7 | Entries one artifact may hold |
 
 All generation calls run at temperature 0 with schema-constrained JSON
