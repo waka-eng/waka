@@ -263,16 +263,38 @@
    * against, and the statement and its verbs cluster just above the body
    * rather than floating at the top of a tall void.
    *
-   * `190px` IS `POSTER_SLOT` IN `Home.tsx` AND THE TWO MUST MATCH — three
-   * lines of `--t-reading` at its desktop ceiling plus the provenance band
-   * and the verbs. `overflow-y: auto` rather than a clip, because WCAG 1.4.10
+   * `300px` IS `POSTER_SLOT` IN `Home.tsx` AND THE TWO MUST MATCH. It is the
+   * band's WHOLE height, the top padding included — that padding is what
+   * clears the switcher, and the creature's floor is measured from the foot
+   * of this band, so counting the bar separately would push it down by 56px
+   * of nothing. Inside: three lines of `--t-reading` at its desktop ceiling,
+   * the provenance band, and the verbs.
+   *
+   * MEASURED, not chosen. The founder's own statement — "You want the first
+   * move made for you — in tools, and possibly in more than tools." — needs
+   * 260px at 1512 and 275px at 390, where the type is smaller but the column
+   * is far narrower. 300 clears both with room. A genuinely long reading
+   * still overflows and still SCROLLS, which is reachable now and was not
+   * before: see the auto-margin note above. `overflow-y: auto` rather than a clip, because WCAG 1.4.10
    * sets a 256px height floor for reflow and a hard-capped band with no
    * scroll fails it at 400% zoom.
    */
-  height: 190px;
+  height: 300px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  /* AN AUTO MARGIN, NOT `justify-content: flex-end` — and this product has
+     paid for the difference once already. `justify-content` moves content off
+     the scroll container's ORIGIN rather than extending its scrollable area,
+     so overflow in the block-START direction is unreachable AND the scroller
+     reports no overflow at all. Measured here with a five-line statement
+     before this line was written: `scrollHeight === clientHeight` at every
+     width, with the top of the sentence silently gone. `chat.css` carries the
+     same note and the same fix, from the night a conversation's first
+     paragraph was found to be missing rather than clipped.
+
+     On the first child, because the band holds the statement, its provenance
+     and its verbs — the margin pushes the whole stack to the foot and yields
+     the moment the stack is taller than the band. */
   overflow-y: auto;
   overscroll-behavior: contain;
   /* THE COLUMN IS A CONTAINER, SO THE CLAIM CAN BE SET AGAINST IT. See
@@ -342,6 +364,12 @@
  * pills and two lines ended up ragged left under a centred sentence last
  * night. A modifier declared before the thing it modifies is not a modifier.
  */
+/* The foot-anchor itself. See the note in `.jar-hq-inner` for why this is a
+   margin and not `justify-content`. */
+.jar-hq-inner > :first-child {
+  margin-block-start: auto;
+}
+
 .jar-hq-inner--yielded {
   height: 0;
   padding-block: 0;
@@ -4500,6 +4528,25 @@
    belongs: it is not a form control on a page of forms, it is the one place
    the world listens. Nothing else in here reaches beyond the mouth. */
 @layer chrome {
+  /**
+   * THE FIXED BAND IS A DESKTOP SHAPE, AND COMPACT MODE IS NOT ONE.
+   *
+   * `.jar-hq-inner` is a 190px band so the creature's `Y_MIN` has something
+   * constant to measure against. On a short window that reasoning does not
+   * apply at all: `home-activity-layout.ts` takes the screen over, the
+   * creature is moved three viewports off-stage, and this block becomes a
+   * scroller holding the whole activity list. A 190px cap there would clip
+   * the list to a letterbox.
+   *
+   * In the chrome layer, which beats the product layer where the band is
+   * declared — the same route `.jar-hq-inner--compact` already takes for its
+   * margin and its scrolling.
+   */
+  .jar-hq-inner.jar-hq-inner--compact {
+    height: auto;
+    justify-content: flex-start;
+  }
+
   /* THE SIXTH FACE OF THE SAME COLLISION, found by the founder mid-edit
      (2026-08-27: "dont show this line when editing inspiration"). The card's
      editor is a bare textarea, so `chrome.css` dressed it in the form's
