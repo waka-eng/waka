@@ -1857,10 +1857,46 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [offering, setOffering] = useState(false);
   const offerTimer = useRef<number | null>(null);
   useEffect(() => () => { if (offerTimer.current !== null) window.clearTimeout(offerTimer.current); }, []);
-  const offerToWrite = useCallback(() => {
-    setOffering(true);
+  /** The loop's own fallback line, reachable from a press. Assigned inside
+      the frame effect, where it is written. */
+  const sayLineRef = useRef<(() => string) | null>(null);
+  /** Which thing the next press says. */
+  const creatureTurn = useRef(0);
+  /**
+   * ═══ PRESSING IT KEEPS CHANGING WHAT IT SAYS ═══════════════════════════
+   *
+   * Founder: "clicking on the character should keep changing what it says.
+   * Like, I see, like, feeling inspired, save it, and that's like your
+   * memory was consulted the X times, blah blah blah."
+   *
+   * THE ROTATION ALREADY EXISTED AND WAS UNREACHABLE, which is the part
+   * worth recording. `sayTheWeather` walks the day's clauses one per press
+   * (`weatherTurnRef`), and `sayLine` below picks a fresh field line and
+   * never repeats the last one. Both were wired to the CANVAS hit-test —
+   * and `.jar-char-press`, an invisible disc, sits on top of the canvas and
+   * took every press for itself, showing the save offer and nothing else.
+   * So the product had two things to say, a mechanism for alternating them,
+   * and a button over the top that said one of them forever.
+   *
+   * One target, one rotation. The offer first, because that is the order
+   * the founder listed and because saving is what the screen is for; then
+   * what has been happening, which is the record talking rather than the
+   * product asking.
+   */
+  const creatureSpeaks = useCallback(() => {
+    const turn = creatureTurn.current++;
     if (offerTimer.current !== null) window.clearTimeout(offerTimer.current);
-    offerTimer.current = window.setTimeout(() => setOffering(false), OFFER_MS);
+    if (turn % 2 === 0) {
+      setCharSay('');
+      setOffering(true);
+      offerTimer.current = window.setTimeout(() => setOffering(false), OFFER_MS);
+      return;
+    }
+    /* The weather replaces the offer rather than stacking on it: the bubble
+       holds one thing, and `charSay` is the branch that wins. */
+    setOffering(false);
+    const fallback = sayLineRef.current;
+    if (fallback) sayTheWeatherRef.current(fallback);
   }, []);
 
   /* WHETHER THE DOCK'S PLUS IS OPEN. A press on a place is navigation and
@@ -3669,6 +3705,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, []);
   const sayTheWeatherRef = useRef(sayTheWeather);
   sayTheWeatherRef.current = sayTheWeather;
+  /* The loop is built once and must call the CURRENT rotation, the same
+     reason every other seam in this file reaches through a ref. */
+  const creatureSpeaksRef = useRef(creatureSpeaks);
+  creatureSpeaksRef.current = creatureSpeaks;
 
   /**
    * WHAT ARRIVED WHILE YOU WERE GONE — shown by going there, not by saying so.
@@ -6852,6 +6892,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      * than one wording. Two things it will never do: say the same thing twice
      * in a row, and restate a state the light has already rendered.
      */
+    /* EXPOSED TO THE COMPONENT, because the creature is pressed from the
+       DOM and spoken from the loop. See `creatureSpeaks`. */
+    sayLineRef.current = sayLine;
     function sayLine(): string {
       /* PARKED, NOT SCRUBBING. This read `scrubbingRef` — true only while a
          finger was on the rail — so the line existed for the duration of a
@@ -8442,7 +8485,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          record has nothing to tell */
       if (overChar(cx, cy + cam.y)) {
         companion.flare = 1;
-        sayTheWeatherRef.current(sayLine);
+        /* THE SAME ROTATION THE BUTTON DRIVES. This branch is reachable
+           only while `.jar-char-press` is unmounted — it is not rendered
+           while the creature is already speaking — so two different answers
+           to one press is exactly the drift that put the offer in front of
+           the weather in the first place. */
+        creatureSpeaksRef.current();
         wake();
         return;
       }
@@ -14916,7 +14964,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 aria-label={say('worldSaveInspiration')}
                 data-jar-chrome="1"
                 data-jar-interactive="1"
-                onClick={offerToWrite}
+                onClick={creatureSpeaks}
               />
               )}
               {/* ═══ WHAT THE CREATURE IS HOLDING UP ═══════════════════════
