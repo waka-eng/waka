@@ -13662,7 +13662,41 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         been how you open it since 2026-08-24; now the thing
                         it opens is an answer rather than an inventory.
                         ──────────────────────────────────────────────────── */}
-                    {here && w.kind === "self" && !offline && lead && !editing.open && !posterAsk && board.step === "rest" ? (
+                    {/* ONE ASK ON THE PAGE, AND THE CREATURE HAS FIRST CLAIM
+                        ON IT.
+
+                        Founder: "I feel like this page is trying to do too
+                        much at once. It's trying to show the user the top of
+                        mind, ask them to save the inspiration, and also asking
+                        them to review the claim. Maybe we should make it so
+                        that we're only asking the user to do one thing at a
+                        time."
+
+                        This file already states the rule, and states it one
+                        level too low — see `ONE THING FROM ONE MOUTH` under
+                        the claim: "the creature was reporting the weather and
+                        asking you a question in the same breath... the
+                        codebase's own whisper rule is one clause at a time."
+                        That was enforced BETWEEN THE CREATURE'S OWN two
+                        utterances and never between the page's. So the wall
+                        could ask "Is this you?" while the creature was asking
+                        something else four inches below it, which is the same
+                        defect at the scale of the screen.
+
+                        THE WALL IS NOT AN UTTERANCE. Your top of mind is the
+                        thing you are standing in front of — read, not
+                        answered. The creature is who speaks. When it has a
+                        claim, the claim is the page's one ask and the wall
+                        holds its tongue.
+
+                        AND THE ANSWERS ARE STILL ONE PRESS AWAY. Only this
+                        resting invitation is suppressed, not the block it
+                        opens: "one thing at a time" governs what the page
+                        PUTS IN FRONT OF SOMEBODY, never what they may
+                        deliberately reach for. A person who presses their own
+                        top of mind has asked for it, and refusing them then
+                        would be the dead press this codebase keeps relearning. */}
+                    {here && w.kind === "self" && !offline && lead && !editing.open && !posterAsk && board.step === "rest" && !claimQueue[0] ? (
                       <p className="jar-poster-invite" data-jar-chrome="1">{say("worldIsThisYou")}</p>
                     ) : null}
                     {here &&
