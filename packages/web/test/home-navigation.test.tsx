@@ -67,7 +67,7 @@ it('opens your own material over a world that never leaves, and the world is one
      world is never unmounted and the camera never forgets where it was. If
      this ever reads '/inspirations' again, "I'm lost how to go back" is back
      with it. */
-  await chooseFromMenu(world.container,'Your inspirations');await settle();
+  await chooseFromMenu(world.container,'Inspirations');await settle();
   expect(location.pathname).toBe('/');
   expect(new URLSearchParams(location.search).get('open')).toBe('saves');
 
@@ -76,11 +76,11 @@ it('opens your own material over a world that never leaves, and the world is one
      why pressing it can no longer strand you — "I didn't realise clicking on
      top of mind would leave me there" is now impossible rather than merely
      fixed. */
-  await chooseFromMenu(world.container,'Your top of mind');await settle();
+  await chooseFromMenu(world.container,'Home');await settle();
   expect(location.pathname).toBe('/');
   expect(new URLSearchParams(location.search).get('open')).toBeNull();
 
-  await chooseFromMenu(world.container,'Your principles');await settle();
+  await chooseFromMenu(world.container,'Principles');await settle();
   expect(new URLSearchParams(location.search).get('open')).toBe('principles');
 
   /* THREE — AND THE VISIBLE WAY OUT STILL WORKS. Escape and the scrim do
@@ -96,41 +96,33 @@ it('opens your own material over a world that never leaves, and the world is one
   expect(new URLSearchParams(location.search).get('open')).toBe('conversations');
 });
 
-it('offers the four depths in the centre, in the order of the ladder, and nothing else',async()=>{
-  /* The centre answers WHICH — the same material at four depths. It does not
-     answer WHOSE (the creature's two faces do) and it does not answer what
-     you have talked about (the corner does). Each of those was in here at
-     some point and each one made the control answer a question it was not
-     shaped for.
+it('offers places in the dock, and nothing that is already on the screen',async()=>{
+  /* THE FOUR RUNGS ACROSS THE TOP ARE GONE. Founder: "have a bottom navbar."
+     Two of those four named rooms a person is already standing in — claims
+     are the note the creature holds up, and saves are moving onto the home
+     screen under it — and a door to a room you are in is not navigation.
 
-     CLAIMS JOINED ON 2026-10-11, and the ORDER is the assertion that matters:
-     the data model has always been inspiration -> signal -> top of mind ->
-     principle, and the signals were the one layer with no door — reachable
-     only one at a time, in the creature's mouth, on the home screen. Putting
-     the row anywhere but second would make the switcher a menu of places
-     instead of a ladder, which is the thing that lets a person read the whole
-     product off one control. */
+     WHAT THIS CASE PROTECTS is that the dock holds PLACES. `Your claims` must
+     never come back to it, because the claim lives on home now and a second
+     entrance is the duplication this product has already paid for once.
+     `Your inspirations` is here on borrowed time and says so in `Home.tsx`:
+     it keeps a door only until home holds the list, so that retiring the rung
+     did not leave the archive reachable from nowhere. */
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  /* Laid out, not listed: all four are on screen without a press, which is
-     the whole of the change. A person can see that the others exist — and
-     that they are an axis — without opening anything. */
-  const rows=[...world.container.querySelectorAll('.waka-rungs .waka-rung')].map(node=>node.textContent?.trim());
-  expect(rows).toEqual(['Your inspirations','Your claims','Your top of mind','Your principles']);
+  const rows=[...world.container.querySelectorAll('.waka-dock .waka-dock-item')].map(node=>node.textContent?.trim());
+  expect(rows).toEqual(['Home','Inspirations','Principles','Conversations']);
+  expect(rows,'a claim is answered on home; the dock must not offer a second way in').not.toContain('Claims');
 });
 
-it('opens the claims room from the centre, and names it while it is open',async()=>{
-  /* The rung is a door, not a label — the shape this codebase keeps
-     relearning is a control that renders, is labelled, and does nothing. And
-     the switcher must name the rung being READ while the overlay is up:
-     `page-menu` once passed an `open` value it had no row for, so the control
-     whose whole job is to say where you are said somewhere else. */
-  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  await chooseFromMenu(world.container,'Your claims');await settle();
-  expect(new URLSearchParams(location.search).get('open')).toBe('claims');
-  expect(location.pathname).toBe('/');
-  await closeOverlay(world.container);await settle();
-  expect(new URLSearchParams(location.search).get('open')).toBeNull();
-});
+/* THE CLAIMS ROOM HAS NO DOOR IN THE DOCK, AND THAT IS THE POINT. This case
+   pressed a `Your claims` rung and asserted the address. Founder: "the main
+   screen should be just the character and then the claim should always show
+   there. Because that's like the first thing that the user should answer."
+   So a claim is on the home screen, in the note the creature holds up, and a
+   dock row leading to a second copy of it is the duplication this product
+   already removed once — see `ClaimsOverlay`'s header. The case above now
+   asserts the row's ABSENCE instead, which is the thing worth protecting.
+   The room itself is still reachable at `?open=claims` and still tested. */
 
 it('keeps the selected principle and its route after editing, so Back returns to the prior view',async()=>{
   principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'declared',rank:0,locked:true,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[]}];
@@ -169,8 +161,8 @@ it('starts a review beside the personal reading and restores home through Back',
      printed again in the reading's own heading sixty pixels below it, which
      is the duplication the switcher replaced — so the name is asserted where
      it now lives. */
-  expect([...world.container.querySelectorAll('.waka-rungs .waka-rung--here')].map(n=>n.textContent?.trim()))
-    .toEqual(['Your top of mind']);
+  expect([...world.container.querySelectorAll('.waka-dock .waka-dock-item--here')].map(n=>n.textContent?.trim()))
+    .toEqual(['Home']);
   /* Review is not offered any more. It was an activity card beside the
      character, then a menu row, and it is now merged away: Claims is the one
      place that asks a person to rule on their own material, and two surfaces

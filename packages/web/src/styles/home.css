@@ -222,6 +222,32 @@
   );
 }
 
+/**
+ * WHAT STEPS BACK WHEN AN ARCHIVE IS OPEN, AND WHAT DOES NOT.
+ *
+ * Named one by one rather than swept with `[data-jar-chrome]`, because the
+ * overlays carry that attribute too and a blanket rule would hide the thing
+ * being opened.
+ *
+ * THE CREATURE STAYS. It is not chrome, it is the place — and seeing it
+ * dimmed behind your own words is the entire reason the panel was dissolved.
+ * What goes is the furniture: the box you type into, the creature's voice,
+ * and the line reporting what the server is doing. None of them has anything
+ * to say while somebody is reading what they kept, and all three were being
+ * drawn straight through the sentences.
+ *
+ * Opacity rather than `display`, so nothing reflows underneath and the world
+ * is in exactly the same place when the archive closes.
+ */
+.jar--aside .jar-mouth-slot,
+.jar--aside .jar-char-say,
+.jar--aside .jar-source-status,
+.jar--aside .jar-char-bubble {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
 /* ---------- section A: headquarters, rides the camera at 1x ---------- */
 .jar-hq {
   position: absolute;

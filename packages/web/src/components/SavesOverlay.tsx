@@ -39,7 +39,7 @@
  * an ellipsis mid-word, and the full text is one press away on the item
  * itself — the grid is for finding the thing, not for reading it.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { DialogSurface } from "./DialogSurface";
 import { attachmentPreviewImageUrl, updateInspiration } from "../lib/api";
@@ -189,6 +189,14 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
       (!needle || row.preview.toLowerCase().includes(needle)) &&
       (!active || row.category === active),
   );
+  /* Newest first, so the first row carries the largest number — the archive
+     counts up as it grows, the way a person counts their own. Built from the
+     unfiltered list so a search never renames anything. */
+  const ordinals = useMemo(() => {
+    const map = new Map<string, number>();
+    rows.forEach((row, at) => map.set(row.id, rows.length - at));
+    return map;
+  }, [rows]);
 
   return (
     <div className="waka-over-scrim" onClick={onClose}>
@@ -429,6 +437,27 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
                         <img src={picture} alt="" loading="lazy" />
                       </span>
                     ) : null}
+                    {/* WHICH ONE THIS IS, AND IT IS A NAME RATHER THAN A
+                        MEASUREMENT. Founder, on the reference's numbered
+                        list: "it works well with ours too because it's like
+                        your fifth inspiration, your 100th inspiration."
+
+                        That is exactly why it survives "states render,
+                        numerals never". The ruling is against METRICS — a
+                        score, a count, a progress number, anything that
+                        invites a person to perform against it. An ordinal
+                        does not measure the thing it sits beside; it NAMES
+                        it. Your hundredth inspiration is a landmark, and
+                        landmarks are the opposite of scores: you cannot do
+                        better or worse at having one.
+
+                        FROM THE WHOLE ARCHIVE, NOT THE VISIBLE LIST. Reading
+                        it off the filtered rows would renumber everything
+                        the moment somebody searched, so the name a save
+                        carries would depend on what else was on screen. */}
+                    <span className="waka-card-index" aria-hidden="true">
+                      {ordinals.get(row.id)}
+                    </span>
                     <span className="waka-card-body">
                       <span className="waka-card-text">{row.preview}</span>
                     </span>
