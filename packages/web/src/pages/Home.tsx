@@ -126,7 +126,7 @@ import {
   type BeingSprites,
   type Palette,
 } from "../canvas/palette";
-import { OpenCorner } from "../components/OpenCorner";
+import { ChatCorner } from "../components/ChatCorner";
 import { SavesOverlay } from "../components/SavesOverlay";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { ConversationsOverlay } from "../components/ConversationsOverlay";
@@ -2226,16 +2226,42 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * the wrong material — and the verdict would be recorded against whichever
    * profile the request happened to default to.
    */
-  const claimsFor = atWall.kind === 'agent' ? atWall.id : undefined;
+  /**
+   * AN AGENT CONFIRMS ITSELF, SO IT NEVER ASKS YOU.
+   *
+   * Founder: "my agent should never have claims user should confirm since
+   * agent should self confirm right?"
+   *
+   * Right, and the reason is what a claim IS. The question on a claim is "is
+   * this true of you?" — it is asking the subject to recognise themselves in
+   * a sentence drawn from their own material. You are the only one who can
+   * answer that about you. Handing an agent's claims to you asks you to
+   * certify someone else's self-description, which is not a judgement you are
+   * in a position to make and not one the loop wants: the confidence it would
+   * feed back into belongs to the agent's reading, not yours.
+   *
+   * So standing on an agent's wall there is no queue at all. The agent's own
+   * material still forms claims on the server — nothing about generation
+   * changes — they are simply never put to you. The creature on that wall has
+   * nothing to ask, which is also why its speech is the only thing it offers
+   * there.
+   *
+   * NOT the same as hiding them. `undefined` would have asked for YOUR claims
+   * while standing in the agent's ground — the bug this block was written to
+   * stop, and the reason the queue is keyed to the wall at all.
+   */
+  const standingAsAgent = atWall.kind === 'agent';
+  const claimsFor = standingAsAgent ? atWall.id : undefined;
   answeringAsRef.current = claimsFor;
   const loadClaims = useCallback(() => {
-    void listClaims({ limit: 8, ...(claimsFor ? { profile: claimsFor } : {}) })
+    if (standingAsAgent) { setClaimQueue([]); return; }
+    void listClaims({ limit: 8 })
       .then(({ claims }) => setClaimQueue(claims))
       /* A queue that cannot be fetched is silence, not an error on the home
          screen: nothing here is broken for the person, there is simply
          nothing being asked. */
       .catch(() => setClaimQueue([]));
-  }, [claimsFor]);
+  }, [standingAsAgent]);
   useEffect(() => {
     if (phase !== 'ready' || offline) return;
     /* The wall changed under the queue, so the old wall's question must not
@@ -5468,6 +5494,36 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      * offer one. Above it — headquarters and the sky — travel is unchanged.
      */
     function canTravelHere(): boolean {
+      /**
+       * SIDEWAYS IS FOR ROOMS, AND ROOMS ARE NOT OFFERED YET.
+       *
+       * Founder: "the moving left and right should only be used for changing
+       * rooms, which we're not offering at the moment so keep that code to
+       * move, but disable it."
+       *
+       * The axis was built for three kinds of neighbour — agents one way,
+       * rooms the other — and two of those three are gone from the product:
+       * rooms are set aside by ruling, and changing to your agent became a
+       * turn in place rather than a journey, because the creature is one
+       * companion with two faces rather than two creatures in two places.
+       * That left a whole degree of freedom whose only remaining destination
+       * was a wall you can already reach by pressing a face.
+       *
+       * So every USER-DRIVEN lateral gesture stops here: the drag, the
+       * sideways wheel, the arrow keys, and the edge affordance that offers
+       * them. `goToWall` is untouched and still carries the form change and
+       * any deep link — this gates the gestures, not the mechanism, which is
+       * the difference between disabling a thing and deleting it.
+       *
+       * ONE FLAG RATHER THAN FOUR DELETIONS, deliberately. The travel code is
+       * some of the most carefully tuned in the file — the sqrt duration, the
+       * companion's lead and yaw, the rubber-band, the crossing quantisation
+       * — and rooms will want every bit of it. Deleting it to re-derive it
+       * later is how the room form became unreachable code that nobody could
+       * safely remove. Flip this to `true` on the day rooms come back.
+       */
+      const ROOMS_ARE_OFFERED = false;
+      if (!ROOMS_ARE_OFFERED) return false;
       if (cam.aiming) return false;
       const atHQ = Math.abs(cam.y) < 2;
       const atSky = hasSky(curWall().kind) && Math.abs(cam.y - view.layout.minCam) < 2;
@@ -9186,14 +9242,44 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           cam.xTarget = dest * view.w;
           cam.xBack = false;
           gesture.leadOn = false;
-          /* `instant` takes the path reduced motion already takes, which is
-             the whole reason this is a small change: arriving without a glide
-             is a journey the world has always known how to make, and it was
-             only ever offered to people who asked for less motion. */
+          /**
+           * CHANGING FORM IS A TURN IN PLACE, NOT A CUT AND NOT A JOURNEY.
+           *
+           * Founder: "make transformation between me and my agent more
+           * natural", and before that: "rather than my agent like moving
+           * rooms it kind of like switching itself up to its agent form".
+           *
+           * `instant` began as the reduced-motion path, which was right about
+           * the camera and wrong about the creature. The dissolve was already
+           * built — `FORM_FADE_MS` across `form.at` — but its whole design is
+           * that it HIDES INSIDE THE TURN: the comment on it says "the
+           * companion turns away as yours and comes back as theirs, and there
+           * is no frame at which two different creatures are both in focus."
+           * Take the journey away and the turn goes with it, so the dissolve
+           * ran face-on: 320ms of two creatures double-exposed, which is
+           * exactly the thing that comment exists to forbid. It read as a
+           * glitch because it was one.
+           *
+           * So the camera still does not move — nothing slides left or right,
+           * which was the other half of the ask — and the creature turns
+           * where it stands. `yaw` is set a half turn away and `unwindAt`
+           * released on the same frame, so the existing unwind carries it
+           * back over `UNWIND_MS` on the cubic it already uses, with the
+           * dissolve finishing while the creature is still turned away. One
+           * motion, no new easing, and the aura never changes — which is what
+           * says it is the same companion the whole way through.
+           */
           if (view.reduced || instant) {
             trip.col = dest;
             cam.x = cam.xTarget;
             companion.off = 0;
+            /* ONE LINE, because the unwind arms itself. `arriveColumn()`
+               below clears `unwindAt`, and the unwind branch then reads
+               whatever `yaw` is, normalises it the short way round and eases
+               it to zero over `UNWIND_MS`. Setting the turn is the whole
+               instruction; setting the easing too would be a second copy of
+               it, and the two would drift. */
+            if (instant && !view.reduced) companion.yaw = TAU / 2;
             arriveColumn();
             wake();
             return;
@@ -10094,8 +10180,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      one account can never see another's committed question. */
   const committedTalk = useRef<{owner:string;row:ApiConversation}|null>(null);
 
-  const openOverHome = useCallback((what: ViewOpen) => {
+  const openOverHome = useCallback((what: ViewOpen | null) => {
     const nav = viewNavigationRef.current;
+    /* `null` IS YOUR TOP OF MIND, which is the world itself — so that row
+       puts down whatever is held up rather than navigating anywhere. It is
+       why pressing it cannot strand you, which is the whole of the founder's
+       "I didn't realise clicking on top of mind would leave me there". */
+    if (what === null) {
+      if (nav.view?.open) nav.closeOpen();
+      return;
+    }
     nav.write({ ...(nav.view ?? EMPTY_VIEW), open: what });
   }, []);
   const menu = usePageMenu(locale, auth?.account?.id, agentWall ? { id: agentWall.id, name: agentWall.name } : null, openOverHome);
@@ -14076,32 +14170,35 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     thing, and saying so out loud made the creature sound like
                     it was reading a form. */}
                 <p className="jar-char-claim-statement">{claimQueue[0].statement}</p>
-                {/* WHAT IT READ THIS FROM, in your own words.
-                    A sentence about you with nothing under it can only be
-                    agreed or disagreed with on feel. The same sentence beside
-                    the things you actually kept can be CHECKED — which is the
-                    whole difference between a reading and a horoscope, and
-                    the reason the queue has carried these ids all along.
-                    It also changes what "not true" means. With the saves on
-                    screen, rejecting a claim is correcting a misreading of
-                    evidence; without them it is being told who you are and
-                    having to argue back. The second one is the version people
-                    defend against rather than think about.
-                    Pressing one opens that save. */}
-                {claimQueue[0].from?.length ? (
-                  <ul className="jar-char-claim-from">
-                    {claimQueue[0].from.map(source => (
-                      <li key={source.id}>
-                        <button
-                          type="button"
-                          onClick={() => viewNavigation.write({ ...EMPTY_VIEW, inspirationId: source.id })}
-                        >
-                          {source.preview}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
+                {/* WHAT IT READ THIS FROM IS GONE FROM HERE, AND THE REASON
+                    IS SPACE, NOT DOUBT ABOUT IT.
+
+                    Founder, on a screenshot of three evidence lines under a
+                    claim: "we need to remove this or else it's gonna not have
+                    enough space." They are right, and the thing that changed
+                    underneath is that this block now has a RESERVED height —
+                    the claim keeps its slot whether or not there is a claim,
+                    so the creature never moves when you switch faces. A list
+                    that grows by one line per save cannot live inside a slot
+                    whose whole job is not to grow.
+
+                    The argument for having had them stands and is worth
+                    keeping where someone will find it: a sentence about you
+                    with nothing under it can only be agreed with on feel,
+                    while the same sentence beside the things you actually
+                    kept can be CHECKED — which is the difference between a
+                    reading and a horoscope. It also changed what "not true"
+                    meant: with the saves on screen, rejecting a claim is
+                    correcting a misreading of evidence; without them it is
+                    being told who you are and having to argue back.
+
+                    So this is a relocation, not a deletion. The ids are still
+                    on the claim (`from`, with previews, from
+                    `routes/claims.ts`) and nothing about generation changed.
+                    They belong on a surface that can afford to grow — the
+                    claim's own reading, where the evidence already lives —
+                    and the correction field below is what answers the
+                    "argue back" half here. */}
                 {/* CORRECT A CLAIM — what "not true" opens, and the only
                     typing in the confirm loop.
                     Five components used to stand where this field stands:
@@ -15397,7 +15494,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            lives, and the corner went to chat — which genuinely is a
            destination, because it has a list of past conversations behind
            it and nowhere else to be reached from. */
-        left={storageScope ? <OpenCorner locale={locale} items={menu.openRows} /> : null}
+        /* CHAT HISTORY, BACK IN THE CORNER. Founder: "top left button should
+           be chat history since moving between inspirations, top of mind,
+           principles is done with the middle center dropdown." Conversations
+           are a history rather than a depth of your own material, which is
+           why they never sat among the three and why this corner is where
+           they belong. */
+        left={storageScope ? <ChatCorner locale={locale} onOpen={() => openOverHome('conversations')} /> : null}
         onSettings={()=>navigate('/profile')}
         account={auth?.account ? { name: auth.profile?.name, email: auth.account.email } : null}
         onSignOut={auth ? () => { void auth.logout(); } : undefined}
@@ -15437,6 +15540,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         title={say(atWall.kind==='agent'?'worldAgentField':'worldMenuField')}
+        /* THE SWITCH MOVES THE WORLD, NOT JUST THE GRID. Founder: "if the
+           user changes it in the modal, then the page behind it should also
+           change." So this writes the address — the same write the creature's
+           own faces make — and the overlay re-reads the owner from it. The
+           camera does not travel for it, for the same reason the form change
+           does not: one companion, two faces, no journey. */
+        owners={agentWall ? [
+          { id: null, name: say('worldWallMe'), here: atWall.kind !== 'agent' },
+          { id: agentWall.id, name: say('worldWallMyAgent'), here: atWall.kind === 'agent' },
+        ] : undefined}
+        onOwner={id => {
+          /* `publishStanding`, not the local `setStanding` — this file has a
+             useState of that name for a different thing, and the alias at the
+             import is what keeps the two from being confused. */
+          publishStanding(auth?.account?.id, id && agentWall ? { id: agentWall.id, name: agentWall.name } : null);
+          simApiRef.current?.goToWall(id && agentWall ? agentWall.col : 0, true);
+        }}
         onClose={viewNavigation.closeOpen}/>:null}
       {storageScope&&viewNavigation.view?.open==='principles'?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}

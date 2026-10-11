@@ -787,6 +787,54 @@
   gap: var(--sp-16);
 }
 
+/**
+ * WHOSE ARCHIVE, AS THE TITLE ITSELF.
+ *
+ * Founder: "From the inspirations modal, it should always let the user switch
+ * between your inspirations and your agent's inspirations as well."
+ *
+ * It replaces the heading rather than sitting beside it. A heading that names
+ * the archive next to a control that changes it is the same words twice, and
+ * the top-centre switcher was rebuilt once already to stop doing exactly
+ * that: a label became a control, and a door disappeared.
+ *
+ * Light is the only channel, so the one you are reading is inked and the
+ * other is muted — no pill, no underline, no second colour. The pressed one
+ * stays pressable and does nothing, which is what a person expects from a
+ * control they aimed at by mistake.
+ */
+.waka-over-owners {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-16);
+  min-width: 0;
+}
+
+.waka-over-owner {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-lead);
+  font-weight: 300;
+  cursor: pointer;
+  /* ONE LINE, ALWAYS (founder: "all buttons single line, never wrapping"). */
+  white-space: nowrap;
+}
+
+.waka-over-owner:hover,
+.waka-over-owner:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+.waka-over-owner--here {
+  color: var(--ink);
+  cursor: default;
+}
+
 .waka-over-title {
   margin: 0;
   font-family: var(--waka-face);
@@ -1955,6 +2003,23 @@
   align-items: center;
   gap: var(--sp-8);
   padding: 0 clamp(20px, 6vw, 28px);
+  /**
+   * AND THE CLAIM KEEPS ITS SPACE TOO, for the same reason and the opposite
+   * cause.
+   *
+   * `hi` in `Home.tsx` is measured off this block's height, so the companion
+   * rises when there is nothing under its chin. That is now a state the
+   * product deliberately produces: an agent confirms itself and is never
+   * asked, so its wall has no claim at all — press "my agent" and the
+   * creature would jump up by the height of a question.
+   *
+   * The reserve is a statement line plus the row of answers, in the same
+   * type steps those use, so it is the claim's own shape rather than a
+   * number someone liked. A receipt is shorter and a long claim is taller;
+   * both sit inside a slot that does not move.
+   */
+  min-height: calc(var(--t-lead) * 1.35 * 2 + var(--waka-corner) + var(--sp-8));
+  justify-content: flex-start;
   text-align: center;
   /* The world below stays draggable; the controls inside opt back in. */
   pointer-events: none;
@@ -2703,7 +2768,22 @@
    * not — see the note on `--jar-grain`. This surface is light, so it can.)
    */
   mix-blend-mode: overlay;
-  opacity: 0.14;
+  /* 0.14 WAS THE CREATURE'S NUMBER, AND THIS IS NOT THE CREATURE.
+     Founder, after the blend was fixed: "maybe make opacity lower?"
+
+     Copying `character/raster.ts` was right about the BLEND — overlay moves
+     both ways around the midpoint, which is what makes a surface read as
+     paper instead of as damage — and too literal about the strength. The
+     creature carries its grain on a body that is itself a soft gradient with
+     an aura bleeding over it, so 0.14 lands as texture. The bubble is a flat
+     near-white plane with a sentence on it and nothing else competing, so the
+     same number is the loudest thing in the frame and the words have to be
+     read through it.
+
+     Half of it. Still visibly the same emulsion as the companion speaking —
+     which is the entire reason the bubble has grain at all — without being
+     the first thing the eye lands on. */
+  opacity: 0.07;
   pointer-events: none;
 }
 

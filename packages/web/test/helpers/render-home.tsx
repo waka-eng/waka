@@ -588,36 +588,24 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
 }
 
 /**
- * THE LEFT CORNER — what to open over the world.
+ * THE LEFT CORNER — chat history, one press.
  *
- * Founder: "for your inspirations, after I click on it, I feel like I'm lost
- * how to go back to the previous screen." Your inspirations, your principles
- * and your conversations stopped being rows in the top-centre switcher when
- * they stopped being pages: the switcher answers WHOSE material you are
- * reading, and these three are things you hold up in front of the world and
- * put back down. Two controls, two questions — see `lib/page-menu`.
- *
- * So a suite that used to reach them through `chooseFromMenu` reaches them
- * here instead. What those suites were testing is unchanged; only the route
- * to the control moved, which is exactly why this is a helper and not a
- * rewritten assertion.
+ * Founder: "top left button should be chat history since moving between
+ * inspirations, top of mind, principles is done with the middle center
+ * dropdown." So the corner is a single act again, not a menu: pressing it
+ * holds the conversations list up over the world. The three views went back
+ * to `chooseFromMenu`, where they started.
  */
-export async function chooseFromCorner(container: HTMLElement, label: string): Promise<void> {
-  const opener = [...container.querySelectorAll<HTMLButtonElement>(".waka-corners button")]
-    .find((node) => node.getAttribute("aria-label") === "Open");
-  if (!opener) throw new Error("the open corner is not on this screen: " +
-    [...container.querySelectorAll<HTMLButtonElement>(".waka-corners button")].map(n=>n.getAttribute("aria-label")).join(" | "));
-  await act(async () => opener.click());
-  const row = [...container.querySelectorAll<HTMLButtonElement>(".waka-opens .waka-menu-item")].find(
-    (node) => node.textContent?.trim().startsWith(label),
-  );
-  if (!row) {
-    const had = [...container.querySelectorAll(".waka-opens .waka-menu-item")]
-      .map((node) => node.textContent?.trim())
-      .join(", ");
-    throw new Error(`no row named ${label} in the corner. It offers: ${had}`);
+export async function pressChatCorner(container: HTMLElement): Promise<void> {
+  const corner = [...container.querySelectorAll<HTMLButtonElement>(".waka-corners button")]
+    .find((node) => node.getAttribute("aria-label") === "Your conversations");
+  if (!corner) {
+    const had = [...container.querySelectorAll<HTMLButtonElement>(".waka-corners button")]
+      .map((node) => node.getAttribute("aria-label"))
+      .join(" | ");
+    throw new Error(`no chat corner on this screen. The corners offer: ${had}`);
   }
-  await act(async () => row.click());
+  await act(async () => corner.click());
 }
 
 /** Dismissing an overlay the way a person does: the visible close. Escape and
