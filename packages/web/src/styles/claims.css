@@ -2426,6 +2426,95 @@
 }
 
 /**
+ * THE CLAIMS ROOM — a queue you sit down to, not a question you are met with.
+ *
+ * See `components/ClaimsOverlay.tsx` for why this rung finally has a door.
+ * The shape here is doing one job: make a claim CHECKABLE. The statement
+ * reads first and largest, the saves it was read from sit under it in the
+ * person's own words, and the three answers close the block.
+ */
+.waka-claims {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-32);
+  margin: 0;
+  padding: 0;
+}
+
+.waka-claim {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  min-width: 0;
+  /* THE SAME COLUMN THE SURFACE'S OWN SENTENCE STANDS ON. Without this the
+     intro wrapped at `.waka-over-what`'s 62ch and the claims ran the full
+     1230px of the sheet — two columns on one surface, which reads as a
+     mistake rather than a choice, and a ~100-character line into the
+     bargain.
+
+     `62ch` is the overlay's existing measure and is matched rather than
+     improved on purpose: one material. Worth knowing for whoever does
+     improve it — `1ch` is the advance of "0", which in Jost 300 is 0.580em
+     against 0.417em for a character of real text, so 62ch renders about 86
+     characters rather than 62. That lands inside Butterick's 45–90 band by
+     luck rather than by intent. */
+  max-width: 62ch;
+}
+
+.waka-claim-statement {
+  margin: 0;
+  font-size: var(--t-lead);
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+/* THE RECEIPTS. Set below the claim and quieter than it, because they are
+   what the claim is ABOUT rather than part of what it says — and quiet is
+   the only way to show four of them without the page reading as a list of
+   saves with a heading. `--jar-muted` is the 5.5:1 tier, not `--jar-faint`:
+   a person is being asked to CHECK these, and text you cannot read is not
+   evidence. */
+.waka-claim-from {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  margin: 0;
+  padding: 0 0 0 var(--sp-12);
+  border-inline-start: 1px solid var(--line);
+  font-size: var(--t-fine);
+  line-height: 1.5;
+  color: var(--jar-muted);
+}
+
+.waka-claim-from li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The answer, worn. See the overlay's note on why an answered claim stays. */
+.waka-claim-said {
+  margin: 0;
+  font-size: var(--t-fine);
+  color: var(--jar-muted);
+}
+
+/* The answers sit at the start of the line here rather than centred: this is
+   a list being worked down, so every row's first answer should land under the
+   last one. The creature's claim is a single centred utterance and keeps its
+   own alignment. */
+.waka-claim .jar-char-claim-answers {
+  justify-content: flex-start;
+}
+
+.waka-claim .jar-char-claim-answers button {
+  flex: 0 0 auto;
+}
+
+/**
  * ONE REGISTER FOR "RESPOND TO A STATEMENT ABOUT YOURSELF".
  *
  * `.jar-poster-answers` joined this rule on 2026-10-11. Until then the home

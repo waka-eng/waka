@@ -129,6 +129,7 @@ import {
 import { ChatCorner } from "../components/ChatCorner";
 import { SavesOverlay } from "../components/SavesOverlay";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
+import { ClaimsOverlay } from "../components/ClaimsOverlay";
 import { ConversationsOverlay } from "../components/ConversationsOverlay";
 import { ConversationPanel } from "../components/ConversationPanel";
 import type { ApiConversation } from "../lib/api/conversations";
@@ -15803,6 +15804,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           simApiRef.current?.goToWall(id && agentWall ? agentWall.col : 0, true);
         }}
         onClose={viewNavigation.closeOpen}/>:null}
+      {/* THE QUEUE, where answering eight in a row is a different activity
+          from being asked one. The creature keeps asking its single claim on
+          the home screen — that is the product's character and it stays — and
+          this is where a person goes to sit down and work through them. See
+          `ClaimsOverlay` for why this rung needed a door.
+
+          `sayVerdict` is passed down rather than reimplemented: a verdict is
+          filed by whoever is standing here, and a second writer could
+          disagree with the world about who that is. */}
+      {storageScope&&viewNavigation.view?.open==='claims'?<ClaimsOverlay
+        key={`${storageScope.accountId}:${storageScope.profileId}:claims`}
+        locale={locale}
+        onClose={viewNavigation.closeOpen}
+        answered={verdicts}
+        onAnswer={(id,value,revision)=>{
+          sayVerdict(id,value,undefined,undefined,revision);
+          /* The home screen's queue holds the same claims. Dropping the one
+             just answered keeps the creature from asking a question that has
+             been settled in the room next door. */
+          setClaimQueue(queue=>queue.filter(claim=>claim.id!==id));
+        }}/>:null}
       {storageScope&&viewNavigation.view?.open==='principles'?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
