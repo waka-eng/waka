@@ -739,6 +739,32 @@
  * ------------------------------------------------------------------------- */
 
 .waka-rungs {
+  /**
+   * EXPLICIT, BECAUSE `pointer-events` INHERITS AND `.waka-corners` IS `none`.
+   *
+   * Founder, on a screenshot of this strip: "not clickable."
+   *
+   * The whole top-centre switcher — the only way to reach three of the four
+   * rungs — rendered perfectly, lit the rung you were on, had its handlers
+   * wired, and could not be pressed. `.waka-corners` is `pointer-events:
+   * none` so the world behind stays draggable through the bar, and every
+   * child that needs a press turns it back on. `.jar-here-split`,
+   * `.waka-corner-place`, `.waka-corner` and `.waka-switch` all do. This did
+   * not, so it inherited `none`.
+   *
+   * THIS IS THE THIRD TIME. `.jar-edge` (finding 14) and `.jar-board-acts`
+   * both shipped it, and the note on the second one calls it exactly: "with
+   * nothing declared, these inherit the parent's `none` and stay unclickable
+   * while looking perfectly fine. That is the same failure wearing a new
+   * hat." Third hat.
+   *
+   * AND NO TEST COULD SEE IT, which is why `pointer-events.test.ts` now
+   * exists. The suite presses this control and passes — jsdom has no hit
+   * testing, so `.click()` reaches a handler that a real pointer never could.
+   * A gate that presses a dead control and reports success is worse than no
+   * gate, because it is cited as evidence the control works.
+   */
+  pointer-events: auto;
   display: flex;
   align-items: baseline;
   gap: clamp(14px, 3vw, 26px);
