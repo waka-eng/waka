@@ -95,7 +95,24 @@ export interface MenuProps {
    */
   label?: MenuItem["label"];
   /** Everything about this account and its agents. */
+  /**
+   * THE FULL SETTINGS PAGE — reached FROM the card, not instead of it.
+   *
+   * Founder: "when I click on the settings button on the top right, can you
+   * make it so that it's more of a hover card that shows so that it's not
+   * moving the page to a new page?"
+   *
+   * Right, and for a reason worth naming: most of what a person wants from
+   * that corner is to CHECK something — who am I signed in as, how do I get
+   * out — and a whole page navigation to answer a check costs you the screen
+   * you were reading. The card answers the checks in place; the page is one
+   * press further for the things that genuinely need a page.
+   */
   onSettings: () => void;
+  /** Who you are signed in as, for the card to say so. */
+  account?: { name?: string | null; email?: string | null } | null;
+  /** Leaving. Absent on a surface that cannot sign out. */
+  onSignOut?: () => void;
   /**
    * WHOSE GROUND YOU ARE STANDING ON — the top-left corner's whole job.
    *
@@ -115,11 +132,13 @@ export interface MenuProps {
   hidden?: boolean;
 }
 
-export function Menu({ locale, items, current, label, left, onSettings, hidden }: MenuProps): JSX.Element | null {
+export function Menu({ locale, items, current, label, left, onSettings, account, onSignOut, hidden }: MenuProps): JSX.Element | null {
   const [open, setOpen] = useState(false);
   /** Which row has its lines open, if any. One at a time: a list where every
       row can be expanded at once is a page of prose wearing a list's shape. */
   const [explained, setExplained] = useState<string | null>(null);
+  /** Whether the account card is showing under the cog. */
+  const [account_open, setAccountOpen] = useState(false);
   const panelId = useId();
   /* Focus lands on the first destination, not on a way out — see below. */
   const first = useRef<HTMLButtonElement | null>(null);
@@ -150,6 +169,26 @@ export function Menu({ locale, items, current, label, left, onSettings, hidden }
   useEffect(() => {
     if (!open) setExplained(null);
   }, [open]);
+
+  /* The two things this bar can open are mutually exclusive: one sheet at a
+     time, so neither is read through the other. */
+  useEffect(() => {
+    if (open) setAccountOpen(false);
+  }, [open]);
+  useEffect(() => {
+    if (hidden) setAccountOpen(false);
+  }, [hidden]);
+
+  /* Escape closes the card, and a press anywhere else does too — the same
+     two ways out the list has. */
+  useEffect(() => {
+    if (!account_open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [account_open]);
 
   if (hidden) return null;
 
@@ -210,11 +249,13 @@ export function Menu({ locale, items, current, label, left, onSettings, hidden }
           </div>
         ) : null}
 
+        <span className="waka-corner-place">
         <button
           type="button"
           className="waka-corner"
           aria-label={t(locale, "worldSettingsOpen")}
-          onClick={onSettings}
+          aria-expanded={account_open}
+          onClick={() => setAccountOpen((value) => !value)}
         >
           <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
             <path
@@ -227,6 +268,41 @@ export function Menu({ locale, items, current, label, left, onSettings, hidden }
             <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.3" fill="none" />
           </svg>
         </button>
+
+        {/* WHO YOU ARE, AND THE WAY OUT — answered where you asked.
+            A check does not deserve a page: "which account is this" and "how
+            do I leave" are the two things this corner is reached for, and a
+            navigation to answer either costs the screen you were reading.
+            Everything that genuinely needs a page is one press further. */}
+        {account_open ? (
+          <span className="waka-account" role="note">
+            {account?.name ? <span className="waka-account-name">{account.name}</span> : null}
+            {account?.email ? <span className="waka-account-email">{account.email}</span> : null}
+            <button
+              type="button"
+              className="waka-account-go"
+              onClick={() => {
+                setAccountOpen(false);
+                onSettings();
+              }}
+            >
+              {t(locale, "worldAllSettings")}
+            </button>
+            {onSignOut ? (
+              <button
+                type="button"
+                className="waka-account-out"
+                onClick={() => {
+                  setAccountOpen(false);
+                  onSignOut();
+                }}
+              >
+                {t(locale, "worldSignOutLower")}
+              </button>
+            ) : null}
+          </span>
+        ) : null}
+        </span>
       </div>
 
       {open ? (

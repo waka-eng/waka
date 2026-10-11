@@ -27,7 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Menu } from "../components/Menu";
-import { WallSwitch } from "../components/WallSwitch";
+import { ChatCorner } from "../components/ChatCorner";
 import { listKeptDays, type ApiKeptDay } from "../lib/api";
 import { useOptionalAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
@@ -115,7 +115,8 @@ export function Days(): JSX.Element {
 
   return (
     <main className="waka-page">
-      <Menu locale={locale} items={menu.items} current={menu.current} left={<WallSwitch menu={menu} locale={locale} />} label="worldDaysTitle" onSettings={menu.onSettings} />
+      <Menu locale={locale} items={menu.items} current={menu.current} left={<ChatCorner locale={locale} profileId={menu.standing.id ?? auth?.profile?.id} onOpen={id => navigate(`/chat/${id ?? "new"}`)} />} label="worldDaysTitle" onSettings={menu.onSettings}
+        account={auth?.account ? { name: auth?.profile?.name, email: auth?.account.email } : null} />
       <header className="waka-page-head">
         {/* NO BACK BUTTON. The menu is the navigation and the browser
             already has a back — a third way out of a page is not a
