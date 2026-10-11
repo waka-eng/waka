@@ -2294,22 +2294,15 @@
   align-items: center;
   gap: var(--sp-8);
   padding: 0 clamp(20px, 6vw, 28px);
-  /**
-   * AND THE CLAIM KEEPS ITS SPACE TOO, for the same reason and the opposite
-   * cause.
-   *
-   * `hi` in `Home.tsx` is measured off this block's height, so the companion
-   * rises when there is nothing under its chin. That is now a state the
-   * product deliberately produces: an agent confirms itself and is never
-   * asked, so its wall has no claim at all — press "my agent" and the
-   * creature would jump up by the height of a question.
-   *
-   * The reserve is a statement line plus the row of answers, in the same
-   * type steps those use, so it is the claim's own shape rather than a
-   * number someone liked. A receipt is shorter and a long claim is taller;
-   * both sit inside a slot that does not move.
-   */
-  min-height: calc(var(--t-lead) * 1.35 * 2 + var(--waka-corner) + var(--sp-8));
+  /* THE RESERVE IS GONE, AND SO IS THE REASON FOR IT. This held two lines of
+     lead type plus a 44px answer row open whether or not there was a claim,
+     because `hi` in the layout pass was measured from this block's LIVE
+     height — so an unasked wall raised the creature, and a claim that wrapped
+     to three lines or a "Not true" that opened the correction field lowered
+     it, both past what this reserve could absorb. `companion.y` is a function
+     of the window now and reads nothing here, so the block is honest-sized:
+     when there is no question the screen simply gets tighter, and the
+     creature does not move either way. */
   justify-content: flex-start;
   text-align: center;
   /* The world below stays draggable; the controls inside opt back in. */

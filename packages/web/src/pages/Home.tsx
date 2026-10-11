@@ -389,6 +389,24 @@ const SELF_WALL_NAME = "Me";
  * out of room. Nothing shrinks now, so there is no floor to name.
  */
 const CHAR_SIZE = 120;
+/**
+ * THE TWO CONSTANTS THAT REPLACED TWO MEASUREMENTS.
+ *
+ * `companion.y` used to read the live heights of the poster and the claim,
+ * which is why the creature drifted with content and why two blank reserves
+ * had to be installed to stop it. These are the fixed bands those blocks live
+ * in instead. A constant can be wrong by a few pixels; a measurement is wrong
+ * by whatever the person happened to write.
+ *
+ * `POSTER_SLOT` is three lines of `--t-reading` at its desktop ceiling (30px
+ * x 1.25 x 3 = 113) plus the provenance band and the row of verbs under it.
+ * The statement is anchored to the BOTTOM of that band in `home.css`, so a
+ * longer one grows upward into its own air rather than downward into the
+ * creature, and a shorter one leaves the gap above itself where it reads as
+ * margin. `TOP_BAR_H` is the fixed chrome above it.
+ */
+const TOP_BAR_H = 56;
+const POSTER_SLOT = 190;
 /** An orb eases down into its home over this long. */
 const ARRIVE_MS = 520;
 /** How many of the newest orbs share the peek row in section A. */
@@ -6044,38 +6062,80 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * is measured: the voice block is a claim or a receipt or nothing at
        * all, and a constant would be wrong two of those three times.
        */
-      const voiceH = measured.charSay.current?.offsetHeight ?? 0;
-      const lo = hqH + companion.size * 0.5 + gap;
-      /* The chin sits at `size * 0.62`, so the voice block's own height is
-         what remains between the chin and the box. */
-      const hi = seam - companion.size * 0.62 - voiceH - gap;
-      /*
-       * THE COMPANION SITS IN THE MIDDLE OF THE SCREEN, not in the middle of
-       * what is left over.
+      /**
+       * ═══ THE COMPANION'S HEIGHT IS A FUNCTION OF THE WINDOW, AND OF
+       *     NOTHING ELSE ════════════════════════════════════════════════
        *
-       * It used to centre on `(hqH + seam) / 2` — the midpoint of the slot
-       * between headquarters and the mouth. That reads as centred only when
-       * the poster happens to be short. A tall one pushes the body down, so
-       * the character drifts with content it has nothing to do with, and on a
-       * wall with an empty headquarters it sat noticeably low.
+       * Founder ruling, twice: "make sure character is always at same
+       * position so changing between me and my agent doesn't change position
+       * of the agent", and "Even if the agent hasn't formed anything, the
+       * height where the top of mind goes should always be the same so that
+       * the character doesn't move vertically."
        *
-       * `view.h / 2` is the viewport's middle in layout coordinates at
-       * headquarters rest, which is where the companion is looked at. The
-       * clamp is unchanged and still decides: `lo` keeps the body off the
-       * poster, `hi` keeps it out of the mouth and the dial, so centring is a
-       * PREFERENCE the slot can still overrule rather than a position that can
-       * overlap. When the slot is roomy — which is most of the time — the
-       * preference wins and the body is where the eye expects it.
+       * THAT RULING WAS BEING VIOLATED BY THIS LINE. `companion.y` was
+       * `(lo + hi) / 2`, where `lo` was measured from the live poster and
+       * `hi` from the live claim. Replicating the layout pass numerically
+       * against the real constants, the creature drifted:
+       *
+       *   top of mind grows to 5 lines           +38px down
+       *   top of mind grows to 7 lines           +75px down
+       *   claim wraps to 3 lines                 -12px up
+       *   the person presses "Not true"          -19px up
+       *
+       * 75px is 62% of the creature's own body, and the last row is the
+       * worst of them: a normal press in the main loop moved the character.
+       *
+       * AND THE TWO BLANK RESERVES WERE A PATCH OVER THIS, not a design.
+       * `.jar-char-say`'s `min-height` existed only because `voiceH` was in
+       * this equation; `.jar-hq-inner`'s only because `hqH` was. Both have
+       * been deleted, because nothing reads the heights any more — which is
+       * what removes the "hole in the lower third" the comment below this
+       * block used to describe, on exactly the screens where it was worst.
+       *
+       * AND THE VOID WAS UNBOUNDED BY CONSTRUCTION. "The middle of what is
+       * left" splits every extra pixel of window height evenly into two
+       * gaps, with no cap:
+       *
+       *   iPhone 15 Pro   (760)   128px above, 78px below — 27% of the screen
+       *   MacBook Pro 14" (890)   173 / 123              — 33%
+       *   iPad Pro 11"   (1100)   298 / 248              — 50%
+       *   27" 1440p      (1330)   392 / 342              — 55%
+       *
+       * `home.css` caps the column at `max-width: 680px`. There was no
+       * vertical equivalent anywhere, and that is the whole of it: the
+       * horizontal axis stops growing and the vertical one never did.
+       *
+       * WHY 0.34 AND NOT 0.5. NN/g's scrolling-and-attention work puts more
+       * than 65% of above-fold viewing time in the TOP HALF of the viewport,
+       * so the vertical middle of a tall window is not the attention centre
+       * — parking the creature at 50% is a demotion, not neutrality. Google's
+       * own homepage declines to vertically centre for the same reason, and
+       * solves the surplus the way this now does: clamp the band, and let the
+       * extra height fall into ONE declared place rather than two accidental
+       * ones.
+       *
+       * THE OCT 8 INSTRUCTION SURVIVES, ITS IMPLEMENTATION DOES NOT. "place
+       * this text input box at the bottom of the space. so i want equal space
+       * between the top of mind, character, and input box" is right on a
+       * phone, where there is no surplus to distribute. As a RATIO it turns
+       * every pixel of desktop height into void — and equal spacing is
+       * anti-hierarchy by definition: Gestalt proximity says elements
+       * separated by whitespace read as less related, so two equal 400px gaps
+       * dissolve the statement, the creature and the box into three unrelated
+       * things. That is the founder's "information hierarchy" complaint,
+       * arrived at by arithmetic.
        */
-      /* THE MIDDLE OF WHAT IS LEFT, NOT THE MIDDLE OF THE SCREEN.
-         With the box pinned to the bottom, the three things on this page are
-         the reading, the companion and the box — and the founder asked for
-         equal space between them. `lo` already sits one gap below the
-         reading and `hi` one gap above the box, so the midpoint of that band
-         divides the remaining height in two equal parts by construction.
-         Centring on the viewport instead would only be even when the reading
-         and the box happened to be the same height. */
-      companion.y = compactHome ? -view.h * 3 : hi >= lo ? (lo + hi) / 2 : (lo + hi) / 2;
+      const Y_MIN = TOP_BAR_H + POSTER_SLOT + gap + CHAR_SIZE * 0.5;
+      const Y_MAX = 420;
+      /* THE ONE CONTENT-DEPENDENT CLAMP LEFT, and it only ever engages on a
+         window too short to hold the composition at all. Without it the body
+         would sit ON the box rather than above it, and an overlap is a worse
+         failure than a short window moving the creature once. On every window
+         tall enough for `Y_MAX` to be reachable it never binds. */
+      const floor = seam - CHAR_SIZE * 0.62 - gap;
+      companion.y = compactHome
+        ? -view.h * 3
+        : Math.min(Math.max(Math.min(Math.max(Y_MIN, view.h * 0.34), Y_MAX), 0), Math.max(floor, CHAR_SIZE));
       /* WHAT SITS UNDER THE COMPANION, AND IN WHAT ORDER (founder, 2026-08-25:
          "keep something should be shown right below the character").
          The mouth first, directly beneath the body, because keeping something
