@@ -94,8 +94,8 @@ it('offers a new-chat exit when a conversation is unavailable, without showing o
   vi.mocked(fetchConversation).mockRejectedValueOnce(new Error('Unavailable'));await mount();
   /* No box to type in, so the exit has to be visible without opening
      anything — it sits next to the sentence that reports the failure. */
-  expect(host.querySelector('textarea')).toBeNull();expect(host.querySelector('.chat-notice')?.textContent).toContain('New conversation');
-  await click('New conversation');expect(choose).toHaveBeenCalledWith(null);expect(createConversation).not.toHaveBeenCalled();
+  expect(host.querySelector('textarea')).toBeNull();expect(host.querySelector('.chat-notice')?.textContent).toContain('New chat');
+  await click('New chat');expect(choose).toHaveBeenCalledWith(null);expect(createConversation).not.toHaveBeenCalled();
 });
 it('reconciles a lost save response with a read, without resending',async()=>{
   const save=vi.mocked(saveConversationMessage).getMockImplementation()!;

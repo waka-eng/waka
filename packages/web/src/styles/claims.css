@@ -11,6 +11,10 @@
  * face.
  */
 :root {
+  /* THE ONE FACE, AND THE ONLY PLACE ITS STACK IS SPELLED. `global.css`
+     points `--font-sans` and `--font-serif` here too, so the flat screens and
+     the world finally read in the same voice — see the note there for why
+     they did not, and what the web build was actually rendering instead. */
   --waka-face: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
 
   /* The fixed corner buttons' target size. Named because two things depend on
@@ -267,7 +271,7 @@
      four letterspaced capitals is the loudest thing on a quiet screen — the
      reference's bar is four small icons you barely notice until you need
      them. Sentence case at the fine step does the same job here. */
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   letter-spacing: normal;
   font-weight: 400;
   text-transform: none;
@@ -470,7 +474,7 @@
   background: transparent;
   color: var(--muted);
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -599,7 +603,7 @@
   padding: 0 var(--sp-12) 0;
   color: var(--muted);
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   font-weight: 300;
   letter-spacing: normal;
   text-transform: none;
@@ -698,7 +702,7 @@
   text-decoration: none;
   text-align: left;
   font-family: var(--waka-face);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   cursor: pointer;
 }
 
@@ -1510,7 +1514,7 @@
   background: transparent;
   color: var(--muted);
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   cursor: pointer;
   /* ONE LINE, ALWAYS. Founder: "all buttons single line, never wrapping." */
   white-space: nowrap;
@@ -1654,7 +1658,7 @@
      people scan reads as the row's purpose. */
   color: transparent;
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -1842,7 +1846,7 @@
 .waka-reading-when {
   margin: 0;
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   letter-spacing: normal;
   text-transform: none;
   color: var(--muted);
@@ -1911,7 +1915,7 @@
   background: var(--ink);
   color: var(--bg);
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   letter-spacing: normal;
   text-transform: none;
   cursor: pointer;
@@ -2011,7 +2015,7 @@
   align-items: baseline;
   gap: var(--sp-8);
   min-width: 0;
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   line-height: 1.4;
   color: var(--muted);
 }
@@ -2147,7 +2151,7 @@
   background: transparent;
   color: var(--muted);
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   cursor: pointer;
 }
 
@@ -2210,7 +2214,7 @@
   border-radius: 999px;
   background: var(--bg);
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--ink);
 }
 
@@ -2231,7 +2235,7 @@
   border-radius: 50%;
   background: transparent;
   color: var(--muted);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1;
   cursor: pointer;
 }
@@ -2366,7 +2370,7 @@
 .waka-composer-recording,
 .waka-composer-recording-why {
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--muted);
   /* ONE LINE, ALWAYS — it sits in a row of controls the founder asked never
      to wrap. A long failure sentence ellipsises rather than reflowing the
@@ -2560,7 +2564,7 @@
 .waka-composer-status {
   margin: 0;
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--error);
 }
 
@@ -2659,7 +2663,7 @@
   background: var(--bg);
   color: var(--ink);
   font-family: var(--waka-face);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   font-weight: 300;
   line-height: 1.45;
   resize: none;
@@ -2804,7 +2808,6 @@
  * from the ground by value, which is the whole of how the reference does it.
  */
 .jar-char-claim {
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2822,39 +2825,14 @@
   /* Warmer than the general raised tone: this is the creature's note, not a
      panel, and it should read as lit by the same lamp the creature is. */
   background: color-mix(in srgb, var(--waka-raised) 88%, var(--moon-warm) 12%);
-  isolation: isolate;
 }
 
-/**
- * THE SAME EMULSION THE CREATURE AND ITS BUBBLE WEAR.
- *
- * Founder: "the design a bit more grainy and aligned with the character's
- * design."
- *
- * The loop publishes its own grain tile as `--jar-grain`, which is why the
- * bubble wears it rather than a second film that would look identical until a
- * DPR change moved one of them. This is that same tile, on the one other
- * surface the companion is holding up.
- *
- * SCREEN, NOT MULTIPLY. The bubble is a LIGHT surface and darkens to show its
- * grain; this note is dark, so the same film has to lighten — the mirror of
- * the choice already recorded one rule below, and the reason a single blend
- * mode could not have served both.
- */
-.jar-char-claim::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background-image: var(--jar-grain, none);
-  background-size: var(--jar-grain-size, 128px);
-  background-repeat: repeat;
-  mix-blend-mode: screen;
-  opacity: 0.1;
-  pointer-events: none;
-}
-
+/* A GRAIN WAS PUT ON THIS CARD AND TAKEN STRAIGHT BACK OFF. "A bit more
+   grainy and aligned with the character's design" got a film of the
+   creature's own emulsion here; founder, on the result: "dont grain it". Same
+   answer as the page grounds an hour earlier — on a dark surface this film
+   reads as dirt rather than as paper. What survives of that ruling is the
+   warmth and the hand-drawn corner above, which is the half that worked. */
 
 /* The one sentence with weight. Same face and the same light weight as the
    reading above it — it is the same kind of thing, said earlier. */
@@ -3017,7 +2995,7 @@
   margin: 0;
   padding: 0 0 0 var(--sp-12);
   border-inline-start: 1px solid var(--line);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   line-height: 1.5;
   color: var(--jar-muted);
 }
@@ -3030,7 +3008,7 @@
 /* The answer, worn. See the overlay's note on why an answered claim stays. */
 .waka-claim-said {
   margin: 0;
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--jar-muted);
 }
 
@@ -3389,7 +3367,7 @@
 .waka-public-aside {
   margin: 0;
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   line-height: 1.55;
   color: var(--muted);
 }
@@ -3528,7 +3506,7 @@
 .profile-formation-note {
   margin: var(--sp-16) 0 0;
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   line-height: 1.55;
   color: var(--muted);
 }
@@ -3579,11 +3557,23 @@
 /* THE READING IN THE BUBBLE. Wider than the pencil's bubble because it holds
    a sentence, set at the reading step on the creature's own warm ground — the
    same material the note below it wears, so the two read as one voice. */
+/* THE SAME TYPE THE OFFER IS SET IN. Founder, with the two bubbles side by
+   side: "text too big" of the reading, and "use this font for top of mind as
+   well" of the offer below it.
+
+   They were two sizes because they arrived a week apart — the reading at
+   `--t-lead` from when it was the only thing the bubble held, the offer at
+   the interface step. One bubble saying two things in two sizes reads as two
+   different kinds of object, which is the opposite of what a speech bubble
+   is: everything in it is the same creature talking. */
 .jar-char-bubble-reading {
   display: block;
   max-width: 24rem;
-  font-size: var(--t-lead);
+  font-family: inherit;
+  font-size: var(--t-ui);
+  font-weight: inherit;
   line-height: 1.45;
+  letter-spacing: normal;
   text-align: center;
   text-wrap: pretty;
 }
@@ -3896,7 +3886,7 @@
   background: none;
   color: color-mix(in srgb, var(--waka-on-light) 62%, transparent);
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
@@ -4067,7 +4057,7 @@
 
 .waka-account-email {
   color: var(--muted);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
 }
 
 .waka-account-go,

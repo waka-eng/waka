@@ -96,8 +96,9 @@ const CEILING = 2;
    10px on one screen, 11px on another and 12px on a third; a quiet control
    was 12px here and 13px there.
    Every one of those is a named step now, chosen by role rather than by
-   eye — eyebrow `--t-meta`, quiet meta `--t-fine`, quiet control `--t-ui`,
-   list text `--t-note`, prose `--t-body`, fields `--t-input`, a sentence of
+   eye — quiet meta `--t-meta`, interface text `--t-ui` (which absorbed the
+   eyebrow, the quiet control and the list row when six steps became three on
+   2026-10-11), prose `--t-body`, fields `--t-input`, a sentence of
    yours `--t-lead`, the one with weight `--t-reading`. A whole dead claims
    stylesheet went out in the same pass, taking a third set of sizes with it.
    What is left is the two display one-offs on the landing page. */
@@ -359,9 +360,14 @@ describe("the type scale is one scale", () => {
       "--t-lead",
       "--t-body",
       "--t-input",
-      "--t-note",
+      /* `--t-note` (14) AND `--t-fine` (12) LEFT THE SCALE on 2026-10-11,
+         and the list is the right place to notice: five steps inside four
+         pixels is not a hierarchy, and the founder called it — "keep
+         consistent throughout without too many variations. This size is
+         perfect." `--t-note` folded into `--t-ui`, `--t-fine` and the old
+         11px `--t-meta` into one 12px `--t-meta`. The reasoning is in
+         system.css where the steps are declared. */
       "--t-ui",
-      "--t-fine",
       "--t-meta",
       "--t-label",
       "--t-micro",
@@ -402,7 +408,9 @@ describe("the type scale is one scale", () => {
         "A new literal means a size was chosen at a call site instead of taken " +
         "from the scale. Either it is one of the named steps — use the token — " +
         "or it is a step the scale is missing, in which case name it in " +
-        "system.css and say why, the way `--t-note` and `--t-fine` were named.",
+        "system.css and say why — but read the note on the reading cluster " +
+        "first: `--t-note` and `--t-fine` were named that way and then " +
+        "removed for being indistinguishable from their neighbours.",
     ).toBeLessThanOrEqual(CEILING);
   });
 

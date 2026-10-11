@@ -138,17 +138,51 @@
   /* Editing needs a readable minimum on desktop and avoids focus zoom on
      phones, without enlarging the surrounding reading/body scale. */
   --t-input: max(16px, var(--t-body));
-  /* TWO STEPS NAMED BECAUSE THE PRODUCT REALLY USES THEM (2026-08-25).
-     `14px` appears at twenty sites and `12px` at thirteen, across three
-     stylesheets, and neither had a name. Folding them into `--t-ui` or
-     `--t-body` would move thirty-three pieces of type on screen — a visual
-     redesign, and one for the founder's eye rather than a refactor's. So the
-     scale describes what this product IS, and collapsing six reading steps to
-     four stays an open decision rather than a silent one. */
-  --t-note: 14px;
+  /**
+   * ═══ SIX STEPS BECAME THREE, AND THE DECISION WAS THE FOUNDER'S ═══════
+   *
+   * What stood here named `--t-note` (14px) and `--t-fine` (12px) and said:
+   * "folding them into `--t-ui` or `--t-body` would move thirty-three pieces
+   * of type on screen — a visual redesign, and one for the founder's eye
+   * rather than a refactor's. So collapsing six reading steps to four stays
+   * an open decision rather than a silent one."
+   *
+   * The founder has now made it, looking at the inspirations list: "audit
+   * font size and type used across the entire experience. Keep consistent
+   * throughout without too many variations. This size is perfect (of course
+   * certain titles and header sections should be bigger, but)."
+   *
+   * WHAT WAS ACTUALLY WRONG, which is not that any one size was wrong: five
+   * steps lived inside four pixels — 15, 14, 13, 12, 11. Nobody can see a
+   * one-pixel difference, so the steps could not do the job a scale exists
+   * for, and every new rule picked whichever of the five its author happened
+   * to type. A scale that cannot be perceived is not a hierarchy, it is a
+   * lottery with five tickets.
+   *
+   * THREE STEPS, BY ROLE, AND THEY ARE TELLABLE APART:
+   *
+   *   --t-body  15  PROSE YOU READ. The notepad, a conversation, the words
+   *                 on a kept thing. The only step set for reading a
+   *                 paragraph in.
+   *   --t-ui    13  THE INTERFACE. List rows, controls, the dock, every
+   *                 sentence-case label. This is the size the founder pointed
+   *                 at: "this size is perfect."
+   *   --t-meta  12  THE QUIET SECOND LINE. Dates, counts, the line under a
+   *                 row that tells you whether this is the one.
+   *
+   * `--t-note` (14) folded into `--t-ui`: 58 call sites, all of them list
+   * text and quiet controls, down one pixel. `--t-fine` (12) and the old
+   * `--t-meta` (11) were the same role at two sizes and are now one at 12 —
+   * 45 sites unchanged in size, 14 up one pixel. Nothing else moved.
+   *
+   * BIGGER IS STILL AVAILABLE AND STILL MEANS SOMETHING, which is the
+   * founder's parenthesis: `--t-lead` for a section's head, `--t-reading`
+   * for a page's title and for the one sentence with weight, `--t-display`
+   * for a room's name. Those are steps you can SEE from across the room,
+   * which is what a step is for.
+   */
   --t-ui: 13px;
-  --t-fine: 12px;
-  --t-meta: 11px;
+  --t-meta: 12px;
   /* THE LABEL REGISTER, WHICH HAD NO NAME UNTIL NOW (2026-08-25). Ten pixels,
      tracked and uppercased, is what every signpost, eyebrow and quiet verb row
      in this product is set in — the four edges of the world, the card's date,
