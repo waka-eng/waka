@@ -235,7 +235,6 @@ import {
   dismissTopOfMindEntry,
   restoreTopOfMindEntry,
   releaseTopOfMindEntry,
-  holdTopOfMindEntry,
   updateInspiration,
   fetchProfiles,
   type ApiGroupProposal,
@@ -1913,27 +1912,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     void readingRefresh.start();
   }, [readingRefresh.start]);
 
-  /**
-   * HOLD THIS ONE UP — and there is no un-holding, by the canon's design.
-   * You either keep a statement or you say it is not you; a toggle back
-   * through "held" would be a third state that means nothing. So the button
-   * disappears once it has been used, rather than offering to undo itself.
-   */
-  const holdLead = useCallback((entry: Entry) => {
-    setNotes((prev) =>
-      prev ? prev.map((n) => (n.id === entry.id ? { ...n, pinned: true } : n)) : prev,
-    );
-    /* the receipt for the pin — the board's own quiet channel */
-    setBoardToast(say(RECEIPTS.pinned.messageKey));
-    window.setTimeout(() => setBoardToast(null), 6000);
-    if (offlineRef.current) return;
-    const finish = beginReadingMutation();
-    holdTopOfMindEntry(entry.id).catch(() => {
-      setNotes((prev) =>
-        prev ? prev.map((n) => (n.id === entry.id ? { ...n, pinned: false } : n)) : prev,
-      );
-    }).finally(finish);
-  }, []);
+  /* HOLDING WAS A PRESS AND IS NOT ONE NOW. `holdLead` lived here and set
+     `pinned`, behind a verb the founder twice said they could not read — "i
+     dont get what these 4 options mean (held up isnt even clickable)" — and
+     then named the three that should be here without it: "let user either
+     edit it or remove it and ask it to reread". The client
+     (`holdTopOfMindEntry`), its endpoint and the board's reading of `pinned`
+     are all untouched; what went is the control, because a callback with no
+     caller is the unreachable shape this file keeps deleting elsewhere. */
 
   /**
    * NOT THIS ONE. Dismissing is not deleting: the canon keeps the entry and
@@ -13663,43 +13649,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         been how you open it since 2026-08-24; now the thing
                         it opens is an answer rather than an inventory.
                         ──────────────────────────────────────────────────── */}
-                    {/* ONE ASK ON THE PAGE, AND THE CREATURE HAS FIRST CLAIM
-                        ON IT.
-
-                        Founder: "I feel like this page is trying to do too
-                        much at once. It's trying to show the user the top of
-                        mind, ask them to save the inspiration, and also asking
-                        them to review the claim. Maybe we should make it so
-                        that we're only asking the user to do one thing at a
-                        time."
-
-                        This file already states the rule, and states it one
-                        level too low — see `ONE THING FROM ONE MOUTH` under
-                        the claim: "the creature was reporting the weather and
-                        asking you a question in the same breath... the
-                        codebase's own whisper rule is one clause at a time."
-                        That was enforced BETWEEN THE CREATURE'S OWN two
-                        utterances and never between the page's. So the wall
-                        could ask "Is this you?" while the creature was asking
-                        something else four inches below it, which is the same
-                        defect at the scale of the screen.
-
-                        THE WALL IS NOT AN UTTERANCE. Your top of mind is the
-                        thing you are standing in front of — read, not
-                        answered. The creature is who speaks. When it has a
-                        claim, the claim is the page's one ask and the wall
-                        holds its tongue.
-
-                        AND THE ANSWERS ARE STILL ONE PRESS AWAY. Only this
-                        resting invitation is suppressed, not the block it
-                        opens: "one thing at a time" governs what the page
-                        PUTS IN FRONT OF SOMEBODY, never what they may
-                        deliberately reach for. A person who presses their own
-                        top of mind has asked for it, and refusing them then
-                        would be the dead press this codebase keeps relearning. */}
-                    {here && w.kind === "self" && !offline && lead && !editing.open && !posterAsk && board.step === "rest" && !claimQueue[0] ? (
-                      <p className="jar-poster-invite" data-jar-chrome="1">{say("worldIsThisYou")}</p>
-                    ) : null}
                     {here &&
                     w.kind === "self" &&
                     !offline &&
@@ -13709,7 +13658,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                        flight must not be hidden out from under the person who
                        started it. */
                     (posterAsk || board.step !== "rest") ? (
-                      <div className="jar-board-acts jar-board-acts--answers" data-jar-chrome="1">
+                      <div className="jar-board-acts" data-jar-chrome="1">
                         {readingRefresh.busy ? (
                           <span className="jar-board-act" role="status">{say(readingMessage ?? "worldReadingNow")}</span>
                         ) : board.step === "asking" ? (
@@ -13741,42 +13690,57 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           </>
                         ) : (
                           <>
-                            <p className="jar-poster-ask">{say("worldIsThisYou")}</p>
-                            {/* THREE PEERS, AND NO PRIMARY — the claim's own
-                                rule, for the claim's own reason: a filled or
-                                lit "yes" is the brightest thing on the screen
-                                and puts a thumb on the scale of every
-                                principle written downstream. */}
-                            <p className="jar-poster-answers">
-                              <button
-                                type="button"
-                                aria-pressed={lead.pinned ? true : undefined}
-                                /* ALREADY SAID IS NOT A REASON TO HIDE IT.
-                                   `holdTopOfMindEntry` has no inverse by
-                                   design, and the old row answered that by
-                                   REMOVING the control once used — so a row
-                                   of three became a row of two with no
-                                   explanation, and the answer you gave left
-                                   no trace. It renders as answered instead,
-                                   in the register the claim already uses for
-                                   exactly this. */
-                                onClick={() => { if (!lead.pinned) holdLead(lead); }}
-                              >
-                                {say("worldYes")}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => editing.begin("entry", lead.id, lead.body)}
-                              >
-                                {say("worldNotQuite")}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => dropLead(lead)}
-                              >
-                                {say("worldNotMe")}
-                              </button>
-                            </p>
+                            {/* ── THREE VERBS, AND THEY ARE MAINTENANCE ON PURPOSE ──
+                                Founder, on the "Is this you? / Yes / Not
+                                quite / Not me" this replaces: "weird... for
+                                now maybe just let user either edit it or
+                                remove it and ask it to reread."
+
+                                WHY IT WAS WEIRD, which is worth recording
+                                because the general rule it bends is a good
+                                one. Law 11 says the controls under a sentence
+                                about a person must let them ANSWER it. That
+                                is right when WAKA wrote the sentence. This
+                                sentence says WRITTEN BY HAND directly above
+                                these buttons — the person wrote it
+                                themselves — and asking somebody to confirm
+                                their own words is not a question, it is a
+                                tic. The law holds; the surface it was applied
+                                to turned out to be two surfaces wearing one
+                                set of verbs.
+
+                                AND THE PAGE GETS ITS ONE ASK BACK. The
+                                creature's claim is four inches below this and
+                                asks a real question. Two answer rows on one
+                                screen is what "this page is trying to do too
+                                much at once" looked like, and suppressing
+                                only the RESTING invitation left both of them
+                                up the moment anybody pressed the statement.
+                                Maintenance verbs do not compete with a
+                                question, so now only one thing on the page
+                                asks anything.
+
+                                THE RICHER ANSWER, NOT BUILT because "for
+                                now" was the instruction: ask "Is this you?"
+                                only when the reading is WAKA's own, and offer
+                                these three when it is yours. The data is
+                                already here — `lead.locked` and the hand/
+                                chain provenance band above both know which it
+                                is. */}
+                            <button
+                              type="button"
+                              className="jar-board-act"
+                              onClick={() => editing.begin("entry", lead.id, lead.body)}
+                            >
+                              {say("worldEditWording")}
+                            </button>
+                            <button
+                              type="button"
+                              className="jar-board-act"
+                              onClick={() => dropLead(lead)}
+                            >
+                              {say("worldRemoveLower")}
+                            </button>
                             {/* THE QUIET LINE: facts about this sentence, and
                                 the remedies for them. Never answers. */}
                             {/* ALWAYS MOUNTED, not only when the reading has
@@ -13790,7 +13754,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                 push on it. The STALENESS LINE is conditional,
                                 because it reports something; the remedy is
                                 not, because it is a thing you may want. */}
-                            <p className="jar-poster-aside">
+                            <>
                                 {readingMessage || boardToast ? (
                                   <span className="jar-board-warn" role="status">
                                     {readingMessage ? say(readingMessage) : boardToast}
@@ -13854,7 +13818,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                     </button>
                                   )
                                 ) : null}
-                              </p>
+                            </>
                           </>
                         )}
                       </div>

@@ -289,9 +289,34 @@ must be visible at rest, even when the answers are not.
 
 | surface | had | now |
 |---|---|---|
-| top of mind (home) | `Write a new one` · `Keep on top` · `Edit wording` · `Not this` — four administrations, no answer | `Is this you?` → **Yes · Not quite · Not me**; the administrations moved to a quiet aside beside the staleness line they remedy |
+| top of mind (home) | `Write a new one` · `Keep on top` · `Edit wording` · `Not this` — four administrations, no answer | **Edit · Remove · Write a new one** — see the exception below |
 | principles | `Move up` / `Move down` — the ranking act, labelled as list mechanics. The i18n keys were `worldMattersMore` / `worldMattersLess`, so the code knew what it meant and the person was told where the row would go | **Matters more to me** / **Matters less to me** — the key's own meaning, said out loud |
 | the creature's claim | — | nothing. It was already right, and it is where the answer came from |
+
+**THE ONE EXCEPTION FOUND SO FAR, and it sharpens the law rather than
+weakening it.** The top of mind was given `Is this you? / Yes · Not quite ·
+Not me` under this law, and the founder's answer was "weird... for now maybe
+just let user either edit it or remove it and ask it to reread."
+
+Two reasons, both of which the law should have anticipated:
+
+**A sentence you wrote yourself cannot be answered.** The provenance band
+directly above those buttons says WRITTEN BY HAND. Asking the author to
+confirm their own words is not a question, it is a tic. The law assumes the
+sentence is a CLAIM ABOUT the person made by something else; a top of mind
+can be either, and it was wearing one set of verbs for both cases.
+
+**A page gets one ask.** The creature's claim sits four inches below the top
+of mind and asks a real question. Answering is the strongest thing a control
+can do, which is exactly why two answer rows on one screen is worse than one
+answer row and one toolbar — the person cannot tell which question is the one
+that matters. Maintenance verbs do not compete with a question.
+
+So the test gains a precondition: **apply it when the sentence was written
+about the person by something else, and when the page is not already asking
+them something.** The richer version — ask when the reading is WAKA's own,
+offer maintenance when it is theirs — is not built; `lead.locked` and the
+provenance band already know which it is, so it is available when wanted.
 
 **The model is in the product, not in this document.** `jar-char-claim-answers`
 is the register: a question, three peer answers, no primary, and one of them
