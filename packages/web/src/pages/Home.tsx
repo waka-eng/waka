@@ -14586,7 +14586,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                              answers do — would pull the sentence out from
                              under the field they are typing into. */
                           setCorrecting(null);
-                          setClaimQueue(queue => queue.filter(row => row.id !== claim.id));
+                          /* THE SAME TERMINAL BEAT AS YES AND PARTLY — see
+                             the note on those. A correction is still an
+                             answer, and a sitting that ended silently after
+                             the one answer the person took most care over
+                             would be the worst place to drop it. */
+                          setClaimQueue(queue => {
+                            const left = queue.filter(row => row.id !== claim.id);
+                            if (!left.length) setCharSay(say('worldSittingDone'));
+                            return left;
+                          });
                         });
                       }}>
                         {say(correcting.saving ? 'worldSaving' : 'worldSave')}
@@ -14618,7 +14627,36 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           return;
                         }
                         sayVerdict(claim.id, value, undefined, claim.contested, claim.statementRevision);
-                        setClaimQueue(queue => queue.slice(1));
+                        /* ═══ THE SITTING ENDS ON SOMETHING ════════════════
+                           Every product that asks for a run of small
+                           judgements terminates the run deliberately, and
+                           terminates it on a GIFT rather than a receipt:
+                           Readwise's last card is a bonus highlight, Finch's
+                           pet comes back from its adventure with a story.
+                           Nobody ends on "you're done", because that makes
+                           the queue the point, and the queue is not the
+                           point.
+
+                           WAKA has a better terminal beat available than any
+                           of them, and it costs nothing to show: the statement
+                           band un-yields the moment this queue empties, so the
+                           last act of the sitting is your own top of mind
+                           coming back. The person watches the thing they were
+                           answering FOR return to the screen.
+
+                           The line is what keeps that honest. The reading
+                           re-forms on the server from the signals as they now
+                           stand, which is not instant — so the creature says
+                           what is happening rather than claiming the sentence
+                           on screen has already changed. Overclaiming here
+                           would be the one lie that costs this product its
+                           licence, since the whole proposition is that its
+                           account of you is checkable. */
+                        setClaimQueue(queue => {
+                          const left = queue.slice(1);
+                          if (!left.length) setCharSay(say('worldSittingDone'));
+                          return left;
+                        });
                       }}
                     >
                       {say(value === 'true' ? 'worldYes' : value === 'partly' ? 'worldPartly' : 'worldNotTrue')}
