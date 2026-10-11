@@ -2261,7 +2261,26 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const loadClaims = useCallback(() => {
     if (standingAsAgent) { setClaimQueue([]); return; }
     void listClaims({ limit: 8 })
-      .then(({ claims }) => setClaimQueue(claims))
+      /* ═══ THREE IS A SITTING ═══════════════════════════════════════════
+         Not eight, which is what this used to hold. A claim is expensive to
+         answer — it asks a person to consult themselves — and the research
+         on products that ask for repeated judgements is unanimous that the
+         quality of the answers degrades fast. Anki's entire philosophy is
+         capping intake, and its manual says why: "More than one Anki user has
+         excitedly studied hundreds of new cards over their first few days of
+         using the program, and then has become overwhelmed by the reviews
+         required."
+
+         That matters more here than it does for a flashcard, because bad
+         answers do not just waste a review — they are what the top of mind
+         and the principles get written FROM. The outputs are only ever as
+         good as the attention paid to the three questions above them.
+
+         And being stopped by the product reads as the product respecting the
+         cost; running dry reads as a chore completed. The rest of the queue
+         is still visible in its own room, which is now a doorway back to
+         here. */
+      .then(({ claims }) => setClaimQueue(claims.slice(0, 3)))
       /* A queue that cannot be fetched is silence, not an error on the home
          screen: nothing here is broken for the person, there is simply
          nothing being asked. */
@@ -13167,7 +13186,34 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 ) : null}
                 {ready && c ? (
                   <div
-                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}`}
+                    /* ═══ ONE STATEMENT ON THE SCREEN, AND THE CREATURE HAS
+                           FIRST CLAIM ON IT ════════════════════════════════
+                       Founder: "I feel like this page is trying to do too much
+                       at once. It's trying to show the user the top of mind,
+                       ask them to save the inspiration, and also asking them
+                       to review the claim."
+
+                       Six products were torn down end to end — Oura, Readwise,
+                       Day One, Spotify Wrapped, Finch, Whoop — and every one
+                       of them puts EXACTLY ONE derived object on its home
+                       screen. Not one stacks even two. This screen stacked
+                       four.
+
+                       So the statement band yields while the creature is
+                       asking. Your top of mind and WAKA's question are both
+                       sentences about you, in the same register, and showing
+                       them together is what made the screen read as two
+                       products arguing. The band comes back the moment the
+                       sitting is answered — which is the whole point, because
+                       what comes back has been rewritten by the answers.
+
+                       THIS IS ONLY POSSIBLE NOW. Yielding used to be
+                       unthinkable: `companion.y` was measured from this
+                       block's live height, so hiding it would have thrown the
+                       creature up the screen. The position is a function of
+                       the window alone now, so the band can collapse to
+                       nothing and the creature does not move a pixel. */
+                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}${here&&w.kind==='self'&&!mouthOpen&&claimQueue[0]?' jar-hq-inner--yielded':''}`}
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
                     {/* R01 makes the personal reading explicit while keeping
@@ -15842,12 +15888,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         locale={locale}
         onClose={viewNavigation.closeOpen}
         answered={verdicts}
-        onAnswer={(id,value,revision)=>{
-          sayVerdict(id,value,undefined,undefined,revision);
-          /* The home screen's queue holds the same claims. Dropping the one
-             just answered keeps the creature from asking a question that has
-             been settled in the room next door. */
-          setClaimQueue(queue=>queue.filter(claim=>claim.id!==id));
+        /* THE ROOM HANDS A CLAIM TO THE CREATURE; IT NEVER ANSWERS ONE.
+           Founder: "your claims are duplicated so that's like even bad." The
+           rule every shipping product follows is that a queue has exactly one
+           surface where an item is answerable, and other surfaces may only
+           advertise that it exists — GitHub's badge carries no item content,
+           Anki never renders a card on the deck screen. So pressing a row
+           here moves that claim to the front of the creature's queue and
+           closes the room, which makes the duplication impossible rather than
+           merely discouraged. */
+        onAsk={id=>{
+          setClaimQueue(queue=>{
+            const picked=queue.find(claim=>claim.id===id);
+            return picked?[picked,...queue.filter(claim=>claim.id!==id)]:queue;
+          });
+          viewNavigation.closeOpen();
         }}/>:null}
       {storageScope&&viewNavigation.view?.open==='principles'?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}

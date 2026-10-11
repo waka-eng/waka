@@ -2452,7 +2452,37 @@
   max-width: 62ch;
 }
 
+/* THE DOORWAY. The statement is the control — see the note on the row in
+   `ClaimsOverlay.tsx` — so it wears a button's reset and the statement's own
+   type, and says it is pressable the way everything else in this world does:
+   quiet at rest, the page's ink under the pointer. No underline; the one
+   underline in this product marks where you are. */
+.waka-claim-open {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.waka-claim-open .waka-claim-statement {
+  transition: color 0.2s ease;
+}
+
+.waka-claim-open:hover .waka-claim-statement,
+.waka-claim-open:focus-visible .waka-claim-statement {
+  color: var(--jar-ink);
+}
+
 .waka-claim-statement {
+  display: block;
   margin: 0;
   font-size: var(--t-lead);
   line-height: 1.45;

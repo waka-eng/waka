@@ -317,6 +317,36 @@
    */
   text-align: center;
 }
+
+/**
+ * THE BAND YIELDS WHILE THE CREATURE IS ASKING.
+ *
+ * See the note in `pages/Home.tsx` where this class is applied: six products
+ * torn down end to end, and every one puts exactly ONE derived object on its
+ * home screen. Your top of mind and WAKA's question are both sentences about
+ * you, in the same register — so they take turns instead of stacking.
+ *
+ * COLLAPSED, NOT HIDDEN. `visibility: hidden` or an opacity would leave a
+ * 190px hole where the statement was, which is the exact failure this pass
+ * exists to remove: a reserved blank slot has the cost of reserved space and
+ * the cost of adaptive layout and the benefit of neither. Carbon's rule is
+ * that an empty state REPLACES the element that would ordinarily show — and
+ * here the replacement is nothing, because the creature below is already
+ * saying the one thing this screen has to say.
+ *
+ * NOTHING MOVES WHEN IT COLLAPSES. `companion.y` stopped reading this block's
+ * height in the same commit; that is the only reason this rule can exist.
+ *
+ * DECLARED AFTER THE BASE RULE, not before it. A modifier written above the
+ * thing it modifies loses to it at equal specificity — which is how three
+ * pills and two lines ended up ragged left under a centred sentence last
+ * night. A modifier declared before the thing it modifies is not a modifier.
+ */
+.jar-hq-inner--yielded {
+  height: 0;
+  padding-block: 0;
+  overflow: hidden;
+}
 /* ═══ THE LAYER TAKES NO POINTER; ITS CONTROLS TAKE IT BACK, ALL OF THEM ═══
    `.jar-hq` is `pointer-events: none` so the world underneath stays draggable
    through it. `pointer-events` INHERITS, so every control inside headquarters
