@@ -2011,21 +2011,54 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--sp-8);
-  max-width: min(24rem, 100%);
-  padding: var(--sp-16) var(--sp-20);
+  gap: var(--sp-6);
+  max-width: min(22rem, 100%);
+  padding: var(--sp-12) var(--sp-16) var(--sp-10);
   border: 0;
-  /* The pill shape of something said, not the rounded rectangle of a panel. */
-  border-radius: 22px;
+  /* Not a uniform radius: a said thing is softer on one side than the other,
+     and a perfectly even pill reads as a component. */
+  border-radius: 20px 20px 20px 20px / 18px 18px 20px 20px;
   background: var(--jar-live);
   color: var(--waka-on-light);
   text-align: center;
-  /* The same falloff the companion's own glow has: a tight bright ring, then
-     three doublings out into nothing. A single shadow reads as a sticker. */
+  /* The creature's own falloff: a tight ring, then two doublings out into
+     nothing. One shadow reads as a sticker. */
   box-shadow:
-    0 0 14px color-mix(in srgb, var(--jar-live) 42%, transparent),
-    0 0 36px color-mix(in srgb, var(--jar-live) 22%, transparent),
-    0 0 80px color-mix(in srgb, var(--jar-live) 11%, transparent);
+    0 0 12px color-mix(in srgb, var(--jar-live) 40%, transparent),
+    0 0 34px color-mix(in srgb, var(--jar-live) 20%, transparent),
+    0 0 76px color-mix(in srgb, var(--jar-live) 10%, transparent);
+  /* The film sits inside it (see ::before), which has to clip to the shape. */
+  isolation: isolate;
+}
+
+/**
+ * THE SAME EMULSION THE CREATURE WEARS.
+ *
+ * The world's grain is a single layer painted over the canvas, so anything
+ * drawn ABOVE it came out clean — the bubble was the one smooth surface on a
+ * screen where everything else has texture, which is exactly why it read as
+ * a pasted-on box. Founder: "it should also be the same grainy texture."
+ *
+ * The loop publishes its tile as `--jar-grain`, so this is the same film
+ * baked once rather than a second one that would look identical until a DPR
+ * change moved one of them.
+ *
+ * MULTIPLY, not normal: on a LIGHT surface the grain has to darken to be
+ * seen at all, which is the mirror of the dither over the dark ground — and
+ * the reason the ground's film cannot simply be reused as-is.
+ */
+.jar-char-bubble-body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background-image: var(--jar-grain, none);
+  background-size: var(--jar-grain-size, 128px);
+  background-repeat: repeat;
+  mix-blend-mode: multiply;
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 /* THE TAIL, pointing at the thing that said it. A rotated square rather than
@@ -2036,47 +2069,62 @@
   position: absolute;
   bottom: -5px;
   left: 50%;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   transform: translateX(-50%) rotate(45deg);
-  border-radius: 3px;
-  background: inherit;
+  border-radius: 0 0 4px 0;
+  background: var(--jar-live);
 }
 
 .jar-char-bubble-body p {
   margin: 0;
   font-family: var(--waka-face);
   font-size: var(--t-ui);
+  /* Dark on light, so the weight steps up: 300 on a bright ground is thin
+     where 300 on a dark one is delicate. */
   font-weight: 400;
-  line-height: 1.5;
-  /* Dark on light now, so the weight steps up: 300 on a bright ground is
-     thin where 300 on a dark one is delicate. */
+  line-height: 1.45;
   color: inherit;
+  text-wrap: pretty;
 }
 
-/* The door into a conversation about what it just said — the one thing on
-   screen that came from the product rather than from you. */
-.jar-char-bubble-body button {
-  min-height: var(--sp-32);
-  padding: 0 var(--sp-16);
-  border: 1px solid color-mix(in srgb, var(--waka-on-light) 22%, transparent);
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: color-mix(in srgb, var(--waka-on-light) 72%, transparent);
+/**
+ * THE OFFER IS PART OF THE SPEECH.
+ *
+ * It was a bordered pill, which made the bubble a dialog box with an OK in
+ * it — something that wants an answer rather than something said. Founder:
+ * "talk about this rather than put it in a button."
+ *
+ * A line of the same voice, underlined, the way an offer is made inside a
+ * sentence. It keeps a full target height so it is still reachable by a
+ * thumb; what it loses is the costume.
+ */
+.jar-char-bubble-go {
+  min-height: var(--sp-24);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: color-mix(in srgb, var(--waka-on-light) 62%, transparent);
   font-family: var(--waka-face);
   font-size: var(--t-fine);
-  white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
   cursor: pointer;
 }
 
-.jar-char-bubble-body button:hover:not(:disabled) {
-  border-color: var(--waka-on-light);
+.jar-char-bubble-go:hover:not(:disabled) {
   color: var(--waka-on-light);
 }
 
-.jar-char-bubble-body button:focus-visible {
+.jar-char-bubble-go:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.jar-char-bubble-go:focus-visible {
   outline: 2px solid var(--waka-on-light);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
 /* ---------------------------------------------------------------------------

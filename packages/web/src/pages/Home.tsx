@@ -3630,6 +3630,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (grainEl && pal.grainUrl) {
       grainEl.style.backgroundImage = `url(${pal.grainUrl})`;
       grainEl.style.backgroundSize = `${GRAIN_PX * GRAIN_TILE}px ${GRAIN_PX * GRAIN_TILE}px`;
+      /* AND THE SAME FILM IS AVAILABLE TO THE DOM.
+         The world's grain is one layer painted over the canvas, so anything
+         drawn ABOVE that layer — the creature's speech, for one — came out
+         clean while everything under it carried the emulsion. Founder: "the
+         speech bubble doesn't match the grainy texture of the character and
+         the product."
+         The tile is published as a variable rather than copied, so there is
+         one film and it is baked once: a second tile would be a second
+         texture that looks like the first until a DPR change moves one of
+         them. */
+      root!.style.setProperty("--jar-grain", `url(${pal.grainUrl})`);
+      root!.style.setProperty("--jar-grain-size", `${GRAIN_PX * GRAIN_TILE}px`);
     }
     const bag = ballsRef.current;
     if (bag) for (const b of bag.list) colorBall(b, TRef.current);
@@ -13893,8 +13905,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
               <div className="jar-char-bubble-body">
                 <p role="status">{charSay}</p>
+                {/* NOT A BUTTON. Founder: "talk about this rather than put
+                    it in a button." A pill inside a speech bubble is a dialog
+                    box with an OK in it — the bubble stops reading as
+                    something said and starts reading as something that wants
+                    an answer. It is a line of the same speech, underlined,
+                    the way an offer is made in a sentence rather than
+                    presented as a control. */}
                 <button
                   type="button"
+                  className="jar-char-bubble-go"
                   disabled={talking}
                   onClick={() => { void talkAbout({ id: '', text: charSay }); }}
                 >
