@@ -401,8 +401,16 @@ async function askThePoster(): Promise<void> {
   });
 }
 
+/* THE ANSWERS AND THE ASIDE BOTH LIVE BEHIND THE POSTER'S PRESS, exactly as
+   the old verb row did — see `askThePoster`. What changed on 2026-10-11 is
+   what the press opens: three answers to "Is this you?" in the claim's own
+   register (`.jar-poster-answers`), with the maintenance verbs moved to a
+   quiet aside (`.jar-board-act`, still) because they were never answers.
+   Founder: "rethink the full interaction here... This is definitely not the
+   right way." The operations underneath are the same four, which is why these
+   cases needed new names and not new assertions. */
 async function press(selector: string, name: RegExp): Promise<void> {
-  if (selector === ".jar-board-act") await askThePoster();
+  if (selector === ".jar-board-act" || selector === ".jar-poster-answers button") await askThePoster();
   const el = [...layout.container.querySelectorAll(selector)].find((n) =>
     name.test((n.textContent ?? "").trim()),
   );
@@ -436,7 +444,7 @@ async function press(selector: string, name: RegExp): Promise<void> {
  */
 async function rewriteTo(next: string): Promise<void> {
   const was = posterText();
-  await press(".jar-board-act", /edit wording/i);
+  await press(".jar-poster-answers button", /not quite/i);
   const box = layout.container.querySelector<HTMLTextAreaElement>("textarea.jar-reflect-box");
   if (!box) throw new Error("the edit box never opened — 'Say it in my words' did nothing");
   const nativeValue = Object.getOwnPropertyDescriptor(
@@ -737,7 +745,7 @@ describe("board acts leave receipts", () => {
    * these two cases close the loop from press to law.
    */
   it("pinning says it will be held through rewrites", async () => {
-    await press(".jar-board-act", /keep on top/i);
+    await press(".jar-poster-answers button", /^yes$/i);
     const toast = layout.container.querySelector('[role="status"]');
     expect(
       toast?.textContent,
@@ -746,7 +754,7 @@ describe("board acts leave receipts", () => {
   });
 
   it("dismissing states the law beside its own undo", async () => {
-    await press(".jar-board-act", /not this/i);
+    await press(".jar-poster-answers button", /not me/i);
     const row = layout.container.querySelector(".jar-receipt");
     expect(
       row?.textContent,
