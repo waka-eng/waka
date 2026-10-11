@@ -179,11 +179,6 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
       <DialogSurface className="waka-over" aria-label={title} onClose={onClose}>
         <header className="waka-over-head">
           <h2 className="waka-over-title">{title}</h2>
-          <button type="button" className="waka-over-close" aria-label={say("worldCardClose")} onClick={onClose}>
-            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-              <path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-          </button>
         </header>
 
         {/* "NEW CHAT" WAS A BORDERED PILL AT THE TOP OF THIS ONE SURFACE,

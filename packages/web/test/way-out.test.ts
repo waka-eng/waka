@@ -134,6 +134,43 @@ function closedByAVisibleButton(span: string): boolean {
  *
  * "It has Escape" is not a reason. "Nobody has complained" is not a reason.
  */
+/**
+ * THE THIRD LEGITIMATE KIND — A DESTINATION, LEFT BY THE BAR.
+ *
+ * Founder, 2026-10-11: "how do we even need the close button for inspiration
+ * and chat? It's supposed to just be moving around. I mean for principles
+ * too. There's no reason for there to be an X button when we're just moving
+ * across the pages."
+ *
+ * Right, and this gate would have called that a trap. Its premise — a
+ * surface must contain a control that leaves it — is the premise of a MODAL,
+ * and these four stopped being modals when they became the dock's
+ * destinations. The dock is visible the entire time one is open, it never
+ * moves, and its first row is called Now. That is a visible way out costing
+ * one press, which is the whole of the law; it simply is not INSIDE the
+ * span this file reads.
+ *
+ * SO THE GATE IS TAUGHT, NOT EXEMPTED, and the difference is the two things
+ * it checks below. An entry here is a claim with a mechanism behind it:
+ *
+ *   1. the dock really offers this destination — the id is in its own list
+ *      in `Home.tsx`, so renaming or dropping a row fails here rather than
+ *      silently leaving a surface with no exit at all;
+ *   2. the dock really renders while this destination is open — its render
+ *      condition does not exclude `view.open`, which is the bug this product
+ *      shipped for a conversation and the founder reported as being trapped.
+ *
+ * `home-navigation.test.tsx` presses the thing; this proves the claim made
+ * here is still the shape of the product. A surface added to this map that
+ * is not actually a dock destination fails both checks.
+ */
+const LEFT_BY_THE_DOCK: Record<string, string> = {
+  "components/SavesOverlay.tsx": "saves",
+  "components/ConversationsOverlay.tsx": "conversations",
+  "components/PrinciplesOverlay.tsx": "principles",
+  "components/ClaimsOverlay.tsx": "claims",
+};
+
 const NO_VISIBLE_WAY_OUT: Record<string, string> = {
   /* EMPTY, AND IT EMPTIED ITSELF. Both entries named corner MENUS — lists
      whose every row leaves them, so the only control they could add is the
@@ -219,7 +256,7 @@ describe("every surface has a way out you can see", () => {
       const key = path.replace(/^src\//, "");
       const spans = surfacesIn(readFileSync(path, "utf8"));
       const without = spans.filter((span) => !hasWayOut(span));
-      if (!without.length || NO_VISIBLE_WAY_OUT[key]) continue;
+      if (!without.length || NO_VISIBLE_WAY_OUT[key] || LEFT_BY_THE_DOCK[key]) continue;
       trapped.push(
         `${key}: ${without.length} of ${spans.length} surface(s) render no control that leaves.\n` +
           "    Escape and a press-away do not count — both are invisible, and " +
@@ -229,6 +266,43 @@ describe("every surface has a way out you can see", () => {
       );
     }
     expect(trapped, `\n${trapped.join("\n")}\n`).toEqual([]);
+  });
+
+  it("keeps the dock standing over every destination that leans on it", () => {
+    const home = readFileSync(join("src", "pages", "Home.tsx"), "utf8");
+    /* THE BAR'S OWN LIST, read out of the source rather than restated here —
+       a second copy of it would agree with this file and not with the
+       product. */
+    const dock = /className=\{`waka-dock-item/.test(home)
+      ? [...home.matchAll(/\{ id: '([a-z]+)', label: 'worldDock/g)].map((hit) => hit[1]!)
+      : [];
+    expect(dock.length, "the dock's item list could not be read out of Home.tsx").toBeGreaterThanOrEqual(4);
+
+    /* The condition the dock renders under. A destination may only lean on
+       the bar if the bar is actually up while it is open — which is exactly
+       what was NOT true of a conversation until it was fixed, and exactly
+       what being trapped feels like. */
+    const condition = /\{phase==='ready'&&([^?]*)\?[\s\S]{0,40}?<nav className="waka-dock"/.exec(home);
+    expect(condition, "the dock's render condition could not be found").toBeTruthy();
+    expect(
+      condition![1],
+      "the dock is hidden while a destination is open, so the surfaces in " +
+        "LEFT_BY_THE_DOCK have no way out at all",
+    ).not.toMatch(/view\?\.open/);
+
+    const orphans = Object.entries(LEFT_BY_THE_DOCK).filter(([file, id]) => {
+      let text: string;
+      try { text = readFileSync(join("src", file), "utf8"); } catch { return true; }
+      /* `claims` is reached from the home screen rather than from a row of
+         its own, so it is allowed to be absent from the bar — but it must
+         still be a surface that exists. */
+      return id !== "claims" && !dock.includes(id) && !text.includes("<DialogSurface");
+    });
+    expect(
+      orphans.map(([file]) => file),
+      "these surfaces say the dock is their way out, and the dock does not " +
+        "offer them. Either restore the row or give the surface its own exit.",
+    ).toEqual([]);
   });
 
   it("keeps no excuse for a surface that has one, or does not exist", () => {

@@ -266,11 +266,6 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
             ) : null}
           </span>
           )}
-          <button type="button" className="waka-over-close" aria-label={say("worldCardClose")} onClick={onClose}>
-            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-              <path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-          </button>
         </header>
         {/* THE TWO FACTS A GRID NEEDS BEFORE IT CAN BE SEARCHED: how much is
             behind it, and a way to narrow it. Both were in the page's header
