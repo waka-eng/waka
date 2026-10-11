@@ -4778,9 +4778,14 @@
     display: flex;
     align-items: center;
     gap: var(--sp-4);
-    padding: var(--sp-6);
-    border-radius: var(--r-pill);
-    background: var(--waka-raised);
+    /* NOT A PILL EITHER — same ruling as the chat's composer. Founder:
+       "this double layer is so weird." Two glyphs sitting on the page beside
+       the dock are two glyphs; two glyphs in their own capsule beside the
+       dock's capsule are a second bar, and the notepad is the one surface
+       whose whole specification is "the middle of the screen is yours,
+       nothing is in it". The dock stays the only drawn object down there. */
+    padding: 0;
+    background: none;
   }
 
   .jar-inspiration-composer .jar-note-tool {
