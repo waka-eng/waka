@@ -1837,6 +1837,7 @@
    `chrome.css` for why an input's boundary earns 3:1 and a card's does not,
    and why the conversation's box next door wears the same token. */
 .waka-composer-body {
+  position: relative;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--field-edge);
@@ -1847,6 +1848,71 @@
 
 .waka-composer-body:focus-within {
   border-color: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+/**
+ * ═══ CAPTURE IS A GESTURE, NOT A PROMPT ═══════════════════════════════════
+ *
+ * Founder: "I feel like this page is trying to do too much at once. It's
+ * trying to show the user the top of mind, ask them to save the inspiration,
+ * and also asking them to review the claim. Maybe we should make it so that
+ * we're only asking the user to do one thing at a time." And, choosing the
+ * shape for this one: a quiet line that opens when you engage with it.
+ *
+ * A RESTING BOX WITH TWO LABELLED BUTTONS IN IT IS A PROMPT. It reads as a
+ * third thing demanding an answer, beside the wall and the creature, and it
+ * demands it on every screen of the product, forever, whether or not anybody
+ * has anything to say. Measured at rest it was ~110px: a 44px field, then a
+ * row holding a microphone and two words nobody has yet given anything to do.
+ *
+ * At rest it is now the field and the microphone — one line, about 46px. The
+ * two destinations come back the instant there are words to send somewhere,
+ * which is the instant they first mean anything.
+ *
+ * THE MICROPHONE NEVER LEAVES, and that is the whole reason this is done with
+ * position rather than by hiding the row. It is the one control here that is
+ * not a destination for words — it is how the words get in — so a person who
+ * wants to speak rather than type must be able to see that they can before
+ * they have typed anything. Hiding it until first keystroke would be the
+ * "control that appears on keystroke cannot be found before the keystroke"
+ * failure this product has already fixed twice. It moves to the end of the
+ * line instead of stacking under it.
+ *
+ * `:placeholder-shown` IS THE "NOTHING TYPED YET" TEST, and it is paired with
+ * `:not(:focus-within)` deliberately: focus alone would collapse the box the
+ * moment somebody clicked away mid-sentence, with their own half-written
+ * words still sitting in it and the way to send them gone.
+ */
+.waka-composer-body:not(:focus-within):has(.jar-keep-box:placeholder-shown) {
+  /* The field sets the height; the microphone rides on top of it. */
+  display: block;
+}
+
+.waka-composer-body:not(:focus-within):has(.jar-keep-box:placeholder-shown)
+  .waka-composer-foot {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--sp-4);
+  align-items: center;
+  padding: 0;
+}
+
+/* Where words GO is meaningless before there are words. The microphone, which
+   is how words arrive, stays. */
+.waka-composer-body:not(:focus-within):has(.jar-keep-box:placeholder-shown)
+  .waka-composer-ask,
+.waka-composer-body:not(:focus-within):has(.jar-keep-box:placeholder-shown)
+  .waka-composer-send,
+.waka-composer-body:not(:focus-within):has(.jar-keep-box:placeholder-shown)
+  .waka-composer-where {
+  display: none;
+}
+
+/* Room for the microphone at the end of the line, so a long placeholder never
+   runs under it. */
+.waka-composer-body:not(:focus-within):has(.jar-keep-box:placeholder-shown)
+  .jar-keep-box {
+  padding-inline-end: calc(var(--waka-corner) + var(--sp-8));
 }
 
 /* The input loses its own frame: the BODY is the frame now, which is what
