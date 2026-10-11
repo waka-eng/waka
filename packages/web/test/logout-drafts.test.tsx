@@ -20,10 +20,15 @@
  * must not need a server here. `localStorage` is jsdom's real implementation,
  * not a stub: the eviction works by enumerating keys and matching prefixes, so
  * a hand-written store with three methods on it would be asserting the sweep
- * against a store that cannot be swept. The provider, the eviction, and the
- * key-scoping rules are all the real modules — the bug was in the seam between
- * them, which is the one thing a faked provider could not have.
+ * against a store that cannot be swept. `indexedDB` is `fake-indexeddb`, a
+ * real IndexedDB engine in Node, for the same reason — the save box's photos
+ * and recordings are emptied by a cursor over an index inside a transaction,
+ * and a stub with a `clear()` on it would prove none of that ran. The
+ * provider, the eviction, and the key-scoping rules are all the real modules —
+ * the bug was in the seam between them, which is the one thing a faked
+ * provider could not have.
  */
+import { IDBFactory } from "fake-indexeddb";
 import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,6 +37,12 @@ import { fetchCurrentViewer, logout as apiLogout } from "../src/lib/api";
 import type { ApiViewer } from "../src/lib/api";
 import { AuthProvider, useAuth, type AuthContextValue } from "../src/lib/auth-context";
 import { storeConversationDraft } from "../src/lib/conversation-drafts";
+import {
+  loadInspirationDraft,
+  newInspirationDraft,
+  settleInspirationMediaDraft,
+  writeInspirationDraft,
+} from "../src/lib/inspiration-draft-store";
 import { profileStorageKey, writeProfileText } from "../src/lib/profile-storage";
 
 vi.mock("../src/lib/api", async (importOriginal) => {
@@ -94,6 +105,30 @@ async function signedIn(): Promise<void> {
   });
 }
 
+/**
+ * Rows counted straight out of the object store.
+ *
+ * Two reasons, and the second is the stronger one. A row carrying a voice
+ * recording cannot be read back through `loadInspirationDraft` in jsdom — the
+ * Blob that survives this environment's structured clone is not an instance of
+ * this realm's `Blob`, and the module's verifier rightly refuses it. And
+ * counting proves the row is GONE rather than merely filtered out of a read,
+ * which is the whole claim being made about logout.
+ */
+function storedDraftCount(scope: { accountId: string; profileId: string }): Promise<number> {
+  const owner = profileStorageKey(scope, "inspirationDraft")!;
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open("waka-inspiration-drafts", 1);
+    open.onsuccess = () => {
+      const db = open.result;
+      const request = db.transaction("drafts", "readonly").objectStore("drafts").index("owner").count(owner);
+      request.onsuccess = () => { db.close(); resolve(request.result); };
+      request.onerror = () => { db.close(); reject(request.error ?? new Error("count failed")); };
+    };
+    open.onerror = () => reject(open.error ?? new Error("open failed"));
+  });
+}
+
 const draft = (conversationId: string, content: string) =>
   storeConversationDraft(SCOPE, conversationId, {
     id: crypto.randomUUID(),
@@ -106,6 +141,7 @@ const draft = (conversationId: string, content: string) =>
 
 beforeEach(() => {
   localStorage.clear();
+  vi.stubGlobal("indexedDB", new IDBFactory());
   auth = null;
   vi.mocked(apiLogout).mockClear();
 });
@@ -116,6 +152,7 @@ afterEach(() => {
   container?.remove();
   container = null;
   localStorage.clear();
+  vi.unstubAllGlobals();
 });
 
 describe("logging out", () => {
@@ -182,6 +219,129 @@ describe("logging out", () => {
       "someone else's half-written keep",
     );
     expect(localStorage.getItem(theirs.key)).not.toBeNull();
+  });
+
+  it("takes the per-id drafts too: a reflection, a review, a selection, a share card", async () => {
+    /* These four are written under keys that carry an id — of an inspiration,
+       a review, a principle — so logout cannot name them and has to sweep the
+       prefix. They are the four the first pass at this fix did not reach.
+       Three of the writers are gone now (the reflection and review surfaces
+       were removed on 2026-10-10) and the cases stay anyway: a browser that
+       used those surfaces still holds the keys, which is the only thing
+       eviction is about. */
+    const reflection = profileStorageKey(SCOPE, "reflectionDraft:inspiration-7")!;
+    const review = profileStorageKey(SCOPE, "reviewDialogue:review-3:draft-1")!;
+    const selection = profileStorageKey(SCOPE, "reviewSelection:selection-9")!;
+    const share = profileStorageKey(SCOPE, "principleArtifact:principle-2:draft-4")!;
+    localStorage.setItem(reflection, JSON.stringify({ afterId: null, answer: "because she never said it out loud" }));
+    localStorage.setItem(review, JSON.stringify({ answer: "I am not sure this is true of me any more" }));
+    localStorage.setItem(selection, JSON.stringify({ ids: ["a"], query: "the ones about my father" }));
+    localStorage.setItem(share, JSON.stringify({ entries: [{ text: "half a sentence I have not finished" }] }));
+    await signedIn();
+
+    await act(async () => {
+      await auth?.logout();
+    });
+
+    for (const key of [reflection, review, selection, share]) expect(localStorage.getItem(key)).toBeNull();
+  });
+
+  it("leaves the recovery copies that sit one character away from those prefixes", async () => {
+    /* `reviewSelectionRecovery:` begins with `reviewSelection`, and only the
+       colon separates them. Each of these holds bytes a store could not verify
+       and moved aside rather than destroy, which is submitted-work territory:
+       a sweep that matched them would be data loss dressed as a privacy fix.
+       `principleArtifactRecovery:` is still written today; the other two are
+       from retired surfaces and are no less worth not destroying. */
+    const reviewBackup = profileStorageKey(SCOPE, "reviewDialogueRecovery:review-3:backup-1")!;
+    const selectionBackup = profileStorageKey(SCOPE, "reviewSelectionRecovery:backup-2")!;
+    const shareBackup = profileStorageKey(SCOPE, "principleArtifactRecovery:backup-3")!;
+    for (const key of [reviewBackup, selectionBackup, shareBackup]) localStorage.setItem(key, "{\"unreadable\":true}");
+    await signedIn();
+
+    await act(async () => {
+      await auth?.logout();
+    });
+
+    for (const key of [reviewBackup, selectionBackup, shareBackup]) expect(localStorage.getItem(key)).not.toBeNull();
+  });
+
+  it("empties the save box's IndexedDB copy — the photo and the recording, not just the words", async () => {
+    /* The one store in the product that holds a person's own media before they
+       have decided to keep it. Emptying it is a transaction, which is why
+       logout awaits this rather than firing it off. */
+    const draft = {
+      ...newInspirationDraft("the bench in the window at my mother's house"),
+      revision: 1,
+      linkText: "https://example.test/the-photo-i-was-about-to-paste",
+      media: [{ id: "photo-1", type: "image" as const, name: "Kitchen.png", blob: new Blob(["png bytes"], { type: "image/png" }) }],
+      recordingCandidate: { id: "voice-1", type: "audio" as const, name: "Recording.webm", blob: new Blob(["voice bytes"], { type: "audio/webm" }) },
+    };
+    await writeInspirationDraft(SCOPE, draft, 0);
+    expect(await storedDraftCount(SCOPE)).toBe(1);
+    await signedIn();
+
+    await act(async () => {
+      await auth?.logout();
+    });
+
+    expect(await storedDraftCount(SCOPE)).toBe(0);
+    expect(await loadInspirationDraft(SCOPE, draft.id)).toBeNull();
+  });
+
+  it("keeps the settled receipt in IndexedDB, so an old tab still cannot resubmit it", async () => {
+    /* A settled row holds no words — settlement empties them — and what it
+       does hold is the fact that this draft was already saved. Deleting it
+       buys no privacy and costs the guarantee it exists for. */
+    const draft = { ...newInspirationDraft("already on its way"), revision: 1 };
+    await writeInspirationDraft(SCOPE, draft, 0);
+    expect(await settleInspirationMediaDraft(SCOPE, draft.id, 1, "inspiration-1")).toBe(true);
+    await signedIn();
+
+    await act(async () => {
+      await auth?.logout();
+    });
+
+    expect(await storedDraftCount(SCOPE)).toBe(1);
+    await expect(writeInspirationDraft(SCOPE, { ...draft, revision: 1, text: "resubmitted by a stale tab" }, 0))
+      .rejects.toThrow();
+  });
+
+  it("another profile's IndexedDB draft survives this profile leaving", async () => {
+    const mine = { ...newInspirationDraft("mine"), revision: 1 };
+    const theirs = { ...newInspirationDraft("someone else's half-written keep"), revision: 1 };
+    await writeInspirationDraft(SCOPE, mine, 0);
+    await writeInspirationDraft(OTHER, theirs, 0);
+    await signedIn();
+
+    await act(async () => {
+      await auth?.logout();
+    });
+
+    expect(await loadInspirationDraft(SCOPE)).toBeNull();
+    expect((await loadInspirationDraft(OTHER))?.text).toBe("someone else's half-written keep");
+  });
+
+  it("completes even when IndexedDB never answers, and the words are gone regardless", async () => {
+    /* A control that never finishes is worse than one that reports a failure.
+       `indexedDB.open` here returns a request whose handlers are never called
+       — the documented way this hangs is another tab holding an older version
+       open — so the only thing that can resolve the logout is the eviction's
+       own deadline. The synchronous sweep must already have happened. */
+    vi.stubGlobal("indexedDB", { open: () => ({}) });
+    writeProfileText(SCOPE, "draft", "the sentence I had not finished");
+    const reflection = profileStorageKey(SCOPE, "reflectionDraft:inspiration-7")!;
+    localStorage.setItem(reflection, JSON.stringify({ afterId: null, answer: "unsent" }));
+    await signedIn();
+
+    await act(async () => {
+      await auth?.logout();
+    });
+
+    expect(localStorage.getItem(profileStorageKey(SCOPE, "draft")!)).toBeNull();
+    expect(localStorage.getItem(reflection)).toBeNull();
+    expect(auth?.isAuthenticated).toBe(false);
+    expect(apiLogout).toHaveBeenCalled();
   });
 
   it("does not evict a draft when the network merely went away", async () => {

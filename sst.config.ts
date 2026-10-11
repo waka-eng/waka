@@ -143,17 +143,53 @@ export default $config({
      * S3 CORS rules — without them every preflight OPTIONS fails and the
      * upload never leaves the browser.
      *
-     * We allow `*` for origins because:
-     *   - The bucket has no public read; the only writable surface is a
-     *     short-lived (5 min), narrowly-scoped SigV4 PUT URL whose signature
-     *     pins Content-Type, Content-Length, key, and method.
-     *   - A relaxed CORS policy on a private, signature-gated bucket cannot
-     *     be abused: a different origin can only succeed at PUTting if it
-     *     was already handed a valid presigned URL by our Lambda, which
-     *     requires a valid session.
-     *   - Pinning to a specific origin would mean re-deploying SST every
-     *     time the dev StaticSite URL changes (and every `sst dev` run can
-     *     mint a fresh one).
+     * WHY `allowOrigins: ["*"]` IS NOT A HOLE — STATED SO AN AUDIT CAN CHECK IT
+     * -------------------------------------------------------------------------
+     * Re-examined on 2026-10-10 (every-ask audit #174) and deliberately left
+     * as it is. The note this replaces said the same thing and was flagged
+     * anyway, which was fair: it argued from intent ("deliberate", "cannot be
+     * abused") rather than from the mechanism, and an auditor cannot check an
+     * intention. The mechanism is checkable.
+     *
+     * CORS IS NOT AN AUTHORIZATION MECHANISM IN S3. A CORS rule decides one
+     * thing: whether a browser will let script on page X read the response to
+     * a request it was already permitted to make. It grants no access of its
+     * own, and S3 attaches no ambient credential — no cookie, no session — to
+     * a cross-origin request, so there is nothing for a permissive rule to
+     * unlock. Authorization for every byte in this bucket comes from SigV4: a
+     * signature over the method, the key, the content type and the byte count,
+     * minted by the API Lambda, valid for five minutes, for an object under
+     * the caller's own profile prefix, and only after a session check.
+     *
+     * So "what can be read cross-origin given the bucket's auth model?" has a
+     * precise answer: exactly the objects the reader already holds a valid
+     * presigned URL for, and nothing else. And whoever holds such a URL has no
+     * need of a browser — `curl` honours no CORS rule, and neither does any
+     * server-side fetch. Narrowing `allowOrigins` would therefore change
+     * nothing about WHO can read an object. It would change only whether a
+     * browser lets JavaScript see the bytes of a request that succeeds either
+     * way.
+     *
+     * THE INVARIANT THIS RESTS ON, AND THE GATE THAT HOLDS IT. Every sentence
+     * above is true only while the bucket itself is private — while there is
+     * no unauthenticated request for CORS to be the last thing standing in
+     * front of. Public read would end that: `access: "public"`, a bucket
+     * policy with a `*` principal, or a CloudFront origin serving these keys
+     * unsigned. So that, and not the origin list, is what is actually guarded:
+     * `packages/api/test/sst-config-env.test.ts` asserts this bucket declares
+     * no public access and no policy transform, and fails pointing back at
+     * this comment if one is ever added. Widen the bucket and the gate makes
+     * you come back here and pin the origins in the same change.
+     *
+     * WHAT PINNING THE ORIGINS WOULD COST, for completeness, because "harmless
+     * and free" and "harmless but expensive" are different verdicts. Every
+     * `sst dev` run can mint a fresh StaticSite URL, so the list would need a
+     * deploy to follow dev around — and a stale list does not fail loudly, it
+     * fails as "photo upload is broken for one developer". The native app
+     * uploads from a WebView whose `Origin` is `capacitor://localhost` (see
+     * `packages/api/src/lib/mobile-cors.ts`), or `null` on some iOS versions:
+     * neither is an origin an S3 `AllowedOrigin` list matches reliably. The
+     * trade is real breakage against no gain in access control.
      *
      * `exposeHeaders: ["ETag"]` lets the SPA read the upload's ETag back
      * from the PUT response, which is useful if we ever want to fingerprint

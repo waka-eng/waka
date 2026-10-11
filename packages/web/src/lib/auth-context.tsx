@@ -393,6 +393,13 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
    * so it clears only once `apiLogout()` has resolved — a person still signed
    * in because the keychain write failed must not already have lost what they
    * were typing.
+   *
+   * IT IS AWAITED, because the save box also keeps photographs and voice
+   * recordings in IndexedDB and emptying those is a transaction rather than a
+   * synchronous write. `clearUnsentDrafts` does all of its `localStorage` work
+   * before it returns a promise at all and bounds the asynchronous half with
+   * its own deadline, so awaiting here can delay a logout but can never hold
+   * one open — see that module's header for the reasoning on both halves.
    */
   const logout = useCallback(async (): Promise<void> => {
     const leaving = viewer
@@ -405,12 +412,16 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       // Native invalidation is emitted after durable retirement, before the
       // server round trip. A failed secure write must not claim successful logout.
       await apiLogout();
-      clearUnsentDrafts(leaving);
+      await clearUnsentDrafts(leaving);
       return;
     }
     applyViewer(null);
-    clearUnsentDrafts(leaving);
+    /* Started before the server round trip and awaited after it, so the
+       asynchronous half of the eviction overlaps the request instead of
+       delaying the cookie clear behind it. */
+    const evicted = clearUnsentDrafts(leaving);
     await apiLogout();
+    await evicted;
   }, [applyViewer, viewer]);
 
   const refresh = useCallback(async (): Promise<ApiViewer | null> => {

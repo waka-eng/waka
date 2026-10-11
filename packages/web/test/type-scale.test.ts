@@ -144,14 +144,25 @@ function onTheScale(value: string): boolean {
  * counted here. The point is not shorter CSS — `var(--sp-14)` is longer than
  * `14px`. It is that "off the grid" becomes something a machine can see.
  */
-const SPACE_CEILING = 32;
+const SPACE_CEILING = 29;
 /* 38 -> 33 on 2026-08-26, for the same reason as `CEILING` above: the
    literals left with the dead rules that carried them.
    33 -> 32 on 2026-09-08: the mouth's coarse-pointer air was a raw 13px on
    each side of the resting phrase. Fixing the founder's jump meant saying the
    same number to the field, which would have been two more literals — so it
    moved to `--sp-14` instead, which is on the grid, lands the act on 47
-   rather than 45, and clears 44 either way. Two literals gone, none added. */
+   rather than 45, and clears 44 either way. Two literals gone, none added.
+
+   32 -> 29 on 2026-10-10, and for the third time this number has fallen
+   because DEAD RULES WENT OUT, not because anybody drained a call site.
+   Founder, three times: "remove all unused and deadcode across the
+   codebase." 142 dead selector parts across 127 rules went, and the three
+   raw values they were carrying went with them — the room form's `3px` row
+   gap under a name nothing renders, the capture shortcut's `47px` offset for
+   a modifier the markup never builds, and the forming line's margin.
+   This is exactly the slack the companion test below exists to catch: the
+   count fell three and the ceiling would have gone on permitting three new
+   literals, which is how a ratchet quietly stops being one. */
 
 /** Spacing values, per governed file, as written. */
 function spacingIn(file: string): string[] {
@@ -221,7 +232,7 @@ describe("the spacing grid is one grid", () => {
  * forced. Colour is the most design-sensitive of the three scales, and a blind
  * mapping of 97 values is a redesign nobody asked for.
  */
-const COLOUR_CEILING = 90;
+const COLOUR_CEILING = 89;
 /* 125 -> 104 on 2026-08-26. Nobody drained twenty-one colours: the dead rules
    that held them were deleted by `e2e:dead-css`, and this ceiling had no way
    to notice, which is the whole point of the test added below.
@@ -248,7 +259,14 @@ const COLOUR_CEILING = 90;
    Three scrims written three ways (55%, 62%, and a flat black at .55
    opacity) became one `--waka-scrim` in the same pass, and a `var(--jar-live,
    #fff2dc)` fallback that duplicated its own token went out — so the count
-   admitted is already lower than what was found. From here it only falls. */
+   admitted is already lower than what was found. From here it only falls.
+
+   90 -> 89 on 2026-10-10. One literal, and it is logged for the same reason
+   the nineteen before it were: it left inside a dead rule rather than being
+   drained. `.jar-here-list` was the sheet the wall rows used to hang in, and
+   its `0 18px 44px -26px rgba(0, 0, 0, 0.8)` lift was the last raw colour in
+   that corner of `home.css`. The rows outlived their container — they are in
+   the menu's own surface now — so the shadow went and they stayed. */
 
 /** Colour literals, per governed file. */
 function coloursIn(file: string): string[] {

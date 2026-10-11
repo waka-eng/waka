@@ -1,8 +1,13 @@
 // @vitest-environment jsdom
-/** WHAT THIS MOCKS, AND WHY (gate G6): `window.location.reload` only, because
- * jsdom will not navigate and the whole point is to observe whether it was
- * called. The real `SurfaceBoundary` class renders, catches for real, and
- * reads real `sessionStorage`. No router, no auth, no server. */
+/** WHAT THIS MOCKS, AND WHY (gate G6): nothing. No module is replaced — the
+ * real `SurfaceBoundary` class renders, throws for real, catches for real,
+ * and reads the real `sessionStorage`. There is no router, no auth context
+ * and no server here because the boundary takes none of them.
+ *
+ * `window.location` IS swapped for an object carrying a spy `reload`, which
+ * is an environment stub rather than a seam: jsdom refuses to navigate, and
+ * whether `reload` was called is the entire thing under test. It is swapped
+ * whole because jsdom makes `location.reload` non-configurable on its own. */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";

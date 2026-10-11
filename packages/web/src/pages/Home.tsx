@@ -63,7 +63,6 @@ import {
 } from "react";
 import { PrincipleRead } from "../components/PrincipleRead";
 import { publicWebOrigin } from '../lib/public-origins';
-import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlow";
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { createConversation } from "../lib/api/conversations";
 import { DialogSurface } from "../components/DialogSurface";
@@ -84,8 +83,6 @@ import { useAuthoredSave } from '../lib/use-authored-save';
 import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
-import { ReviewPanel } from '../components/ReviewPanel';
-import { useReviewEntry } from '../lib/use-review-entry';
 import { paintField } from '../space/inspiration/field-paint';
 import { Menu } from '../components/Menu';
 import { usePageMenu } from '../lib/page-menu';
@@ -217,8 +214,6 @@ import {
   fetchGroupTimeline,
   type ApiGroupTimeline,
   type ApiGroupTopOfMind,
-  type ApiReflection,
-  type ApiInspiration,
   leaveGroup,
   removeGroupMember,
   renameGroup,
@@ -2190,6 +2185,37 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const answeringAsRef = useRef<string | undefined>(undefined);
   const [claimQueue, setClaimQueue] = useState<ApiClaim[]>([]);
   /**
+   * CORRECTING A CLAIM — THE ONLY PLACE IN THE PRODUCT THAT TAKES TYPING
+   * BESIDES THE ONE BOX.
+   *
+   * This state is what is left of five components (2026-10-10). Founder's
+   * workflow design, on the writing-based reflection flow that used to live
+   * here: *"Review isn't a smaller version of confirm — it's a different
+   * mental model. Its placeholder is 'What comes to mind?'. It generates open
+   * questions, collects written answers, and carries draft storage, draft
+   * copying, draft discarding, and 'this device couldn't keep your draft'
+   * recovery. Confirming a claim needs none of that. Typing happens in one
+   * place only: when you correct."*
+   *
+   * So: one field, one claim, no draft lifecycle. `text` lives in memory for
+   * as long as the field is open and goes to the server with the verdict it
+   * belongs to. There is deliberately NO localStorage behind it — a draft
+   * store is the thing that was just deleted, and re-growing one here for a
+   * sentence that is two taps from being saved would be the fold undoing
+   * itself. What protects the words instead is that the field does not close
+   * on failure: `failed` keeps them on screen with the reason beside them.
+   *
+   * WHY IT HANGS OFF "NOT TRUE" AND NOT "PARTLY". Also the founder's
+   * instruction — *"one text field, reached only after 'not quite'"*. Partly
+   * used to open a rewrite of the claim's own wording here, and that act is
+   * not lost: it still lives on the reading's ground rows, where the sentence
+   * sits in its own context and rewording it is the point. In the queue,
+   * partly is now exactly as cheap as yes — one press, no round trip — and
+   * the generator already reads it ("a verdict of partly is an invitation to
+   * sharpen, not an arbitration"; `docs/six-laws.md`, Law 10).
+   */
+  const [correcting, setCorrecting] = useState<{ id: string; text: string; saving: boolean; failed: boolean } | null>(null);
+  /**
    * AND THE QUEUE BELONGS TO THE WALL YOU ARE STANDING ON.
    *
    * Founder: "the claims should also be different per my agent and me no?"
@@ -2213,8 +2239,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   useEffect(() => {
     if (phase !== 'ready' || offline) return;
     /* The wall changed under the queue, so the old wall's question must not
-       stay on screen while the new one is in flight. */
+       stay on screen while the new one is in flight — and neither may a
+       half-typed correction, which belongs to one claim on one wall. */
     setClaimQueue([]);
+    setCorrecting(null);
     loadClaims();
   }, [phase, offline, loadClaims]);
   const composerOpenRef = useRef(mouthOpen); composerOpenRef.current = mouthOpen;
@@ -2336,7 +2364,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      minted before a language change still speaks the language of the moment
      it fires. */
   const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
-  const reviewEntry = useReviewEntry(storageScope, viewNavigation.view?.reviewId, locale);
 
   const localeRef = useRef(locale);
   localeRef.current = locale;
@@ -3446,7 +3473,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const requested = requestedViewRef.current;
     // An explicit route or an already-started interaction belongs to the
     // person. A returning-visitor greeting is never navigation authority.
-    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.reviewId || requested?.principleId || requested?.conversationId) {
+    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.principleId || requested?.conversationId) {
       stamp(); return undefined;
     }
     const interactionAtGreeting = navigationInteraction.current;
@@ -10364,7 +10391,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     // restoration or the world's debounced observer can close the new editor.
     const nav=viewNavigationRef.current;
     nav.write({...EMPTY_VIEW,...nav.view,section:'top',at:null,compose:true,find:false,
-      inspirationId:null,reflectionId:null,reviewId:null,reviewAnswerId:null,principleId:null,sharePrinciple:false,conversationId:null});
+      inspirationId:null,reflectionId:null,principleId:null,sharePrinciple:false,conversationId:null});
   }, []);
 
   /** The shortcut returns to the present wall before putting the pen in hand. */
@@ -10450,16 +10477,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         attachmentRequestsRef.current.add(linkKey);
         void finalizeAttachment({ type: 'link', inspirationId: made.id, url }).catch(() => { attachmentRequestsRef.current.delete(linkKey); });
       }
+      /* `shouldReflect` IS GONE (2026-10-10), and it had never once been
+         true. It read `intent.reflect`, which came from `keepIt(andReflect)`,
+         which came from `InspirationComposer`'s `onSubmit` — and the composer
+         has only ever called `onSubmit(false)`. So the branch it guarded
+         (opening a question sheet on the thing just saved) was unreachable
+         code behind a flag nothing could set. It went with the fold rather
+         than because of it; see the tombstone on the sheet itself. */
       return () => { if (!remaining && !preserveNewer && !composerDraft.current.current.media.length) {
-        const shouldReflect = initiated && intent.reflect && composerOpenRef.current;
         setMouthOpen(false);
         if (initiated) simApiRef.current?.acknowledge('kept');
         setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : say('worldSavedToYourWall'));
-        if (shouldReflect) setReflectOn({ id: made.id, text: displayText, attachments: detail.attachments });
-        else {
-          if(initiated&&storageScope)setRecentInspiration({owner:`${storageScope.accountId}:${storageScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
-          viewNavigationRef.current.closeComposer();
-        }
+        if(initiated&&storageScope)setRecentInspiration({owner:`${storageScope.accountId}:${storageScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
+        viewNavigationRef.current.closeComposer();
       } };
     },
     onRemoved: async (intent) => {
@@ -10499,7 +10529,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     catch { if (composerEpoch.current === epoch) setMouthNote('Couldn’t upload this file yet. Your draft is still here.'); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   };
-  const keepIt = useCallback(async (andReflect = false) => {
+  const keepIt = useCallback(async () => {
     let text = draftRef.current.trim();
     const initialMedia = composerDraft.current.current.media;
     const pendingLink=composerDraft.current.current.linkText??'';
@@ -10544,7 +10574,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       inspirationSave.start({ operation: 'inspiration', input: { text, kind, source: 'app',
         ...(attachments.length ? { attachments } : {}), ...(reflections ? { reflections } : {}),
         ...(keepPublic ? { visibility: 'public' as const } : {}) },
-        reflect: andReflect, ...(reference ? { draft: reference } : {}) });
+        ...(reference ? { draft: reference } : {}) });
       setMomentWhy('');
       setCharSay('');
     } catch (reason) { if (composerEpoch.current === epoch) setMouthNote(reason instanceof ApiError ? say('worldComposerUploadFailed') : reason instanceof Error ? reason.message : 'Could not save this inspiration. Your draft is here.'); }
@@ -10922,7 +10952,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * its visibility on screen around a textarea (founder, 2026-08-25: "have
    * reflect workflow in modal"). Null unless the mouth asked.
    */
-  const [reflectOn, setReflectOn] = useState<{ id: string; text: string; attachments: InspirationDetail['attachments'] } | null>(null);
   const [recentInspiration,setRecentInspiration]=useState<{owner:string;id:string;text:string;attachments:InspirationDetail['attachments']}|null>(null);
   /**
    * FROM KEEPING A THING TO TALKING ABOUT IT.
@@ -11007,6 +11036,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * Agreement is recorded too, not only dissent: a pattern that only ever
    * hears from the people it got wrong is a pattern the server learns nothing
    * from.
+   *
+   * AND SINCE 2026-10-10 IT CARRIES THE ONE PLACE A PERSON TYPES.
+   * Founder's workflow design: *"Typing happens in one place only: when you
+   * correct."* So `correctionText` rides the same POST as the verdict it
+   * belongs to rather than becoming a second act with a second store —
+   * `feedback.correction_text` has been on the row since the route was
+   * written, and `top-of-mind-synthesis.ts` already reads it back into the
+   * generation payload beside the statement it corrects. Nothing new was
+   * invented to hold these words; what was missing was a way to say them.
+   *
+   * IT RETURNS WHAT HAPPENED, which the three cheap answers never needed.
+   * A verdict that does not land rolls its own light back and that is enough
+   * — the row is still there to press again. A CORRECTION cannot be handled
+   * that way: the words are the person's, they are not on screen anywhere
+   * else, and losing them silently is the one failure this product refuses.
+   * `null` means nothing was sent (offline); the promise resolves false when
+   * the server refused it, and the caller keeps the words and says so.
    */
   const sayVerdict = useCallback(
     (
@@ -11015,7 +11061,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       targetId?: string,
       contested?: boolean,
       targetRevision?: string,
-    ) => {
+      correctionText?: string,
+    ): Promise<boolean> | null => {
       setVerdicts((prev) => new Map(prev).set(id, value));
       /* the receipt: what this answer taught the loop, said where the act
          happened, worded only as strongly as its enforcing test allows —
@@ -11025,16 +11072,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         : value === "not_true"
           ? say(RECEIPTS.verdictNo.messageKey)
           : say(RECEIPTS.verdictKept.messageKey);
-      if (offlineRef.current) return;
+      if (offlineRef.current) return null;
       /* Filed by whoever is standing here. A claim read from an agent's wall
          is about the agent, and a verdict on it under your own profile is a
          verdict about a signal you do not own — which the server refuses, as
          it should. */
-      createFeedback({ targetType: "signal", targetId: targetId ?? id, value,
+      return createFeedback({ targetType: "signal", targetId: targetId ?? id, value,
+        ...(correctionText ? { correctionText } : {}),
         ...(targetRevision ? { targetRevision } : {}),
         ...(answeringAsRef.current ? { profile: answeringAsRef.current } : {}) })
         .then(() => {
-          if (!readingMountedRef.current) return;
+          if (!readingMountedRef.current) return true;
           setVerdictReceipt({ id, text: receipt });
           window.setTimeout(() => setVerdictReceipt((r) => (r?.id === id ? null : r)), 7000);
           /* AN ARBITRATION JUST HAPPENED. A verdict on a contested ground
@@ -11042,10 +11090,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              the pair has TWO sides — only the server knows the other one,
              so the settled light is fetched, not guessed. `partly` resolves
              nothing and the refetch honestly brings the waver back. */
-          if (!contested) return;
+          if (!contested) return true;
           loadPersonalReading()
             .then((tom) => absorbBoard(tom))
             .catch(() => undefined);
+          return true;
         })
         .catch((error) => {
         /* it did not land, and the row should not claim it did */
@@ -11055,6 +11104,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           return next;
         });
         if ((error as { code?: string })?.code === 'feedback_target_changed') verifyReadingRef.current(false);
+        return false;
       });
     },
     [],
@@ -12296,70 +12346,26 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       });
   }, [panelId, panelBall, forget.step, inspirationRemovedFromView]);
 
-  const askToReflect = useCallback(() => {
+  /** Open the answers already on this save. A read, with nothing to write. */
+  const openReflections = useCallback(() => {
     if (!panelId || !panelBall) return;
-    /* another member's save is theirs to reflect on, not the viewer's */
+    /* another member's save is theirs, and so are its answers */
     if (panelBall.col !== undefined && !panelBall.own) return;
     setReflectOpen(true);
     viewNavigationRef.current.write({ ...observedRef.current, inspirationId: panelBall.sigId ?? panelId, reflectionId: 'open' }, { observed: true });
   }, [panelId, panelBall]);
 
-  const synchronizeReflections = useCallback((owner: string, row: ApiInspiration | null) => {
-    const revision = ++sourceListMutationRef.current;
-    const apply = (detail: InspirationDetail) => {
-      const before = inspirationsRef.current?.find((item) => item.id === owner)?.reflectionCount ?? detailsRef.current.get(owner)?.reflectionCount ?? 0;
-      detailsRef.current.set(owner, detail);
-      inspirationsRef.current = inspirationsRef.current?.map((item) => item.id === owner ? { ...item, reflectionCount: detail.reflectionCount } : item) ?? null;
-      setPanel((cur) => cur?.detail?.id === owner || cur?.id === owner ? { ...cur!, detail } : cur);
-      setInspirations((cur) => cur?.map((item) => item.id === owner ? { ...item, reflectionCount: detail.reflectionCount } : item) ?? null);
-      simApiRef.current?.reflectionChanged(owner, detail.reflectionCount - before);
-    };
-    if (row) apply(toInspirationDetail(row));
-    else {
-      detailsRef.current.delete(owner);
-      setPanel((cur) => cur?.detail?.id === owner ? { ...cur, detail: null } : cur);
-      void loadInspiration(owner, storageScope?.profileId).then((detail) => {
-        if (readingMountedRef.current && sourceListMutationRef.current === revision) apply(detail);
-      }).catch(() => undefined);
-    }
-  }, []);
-  const reflectionSaved = useCallback((made: ApiReflection) => {
-    if (made.processing) sourceProcessing.track(made.inspirationId, made.processing);
-    simApiRef.current?.acknowledge("answered");
-  }, []);
-
-  const reflectionRemoved = useCallback((id: string, owner: string) => {
-    sourceListMutationRef.current += 1;
-    if (!offlineRef.current) sourceProcessing.track(owner);
-    skyReadSequence.current += 1;
-    const withoutDeletedCopy = (row: Evidence): Evidence => row.inspirationId !== owner ? row : {
-      ...row, reason: null,
-      ...(row.quoteReflectionId === id || !row.quoteReflectionId
-        ? { quote: null, quoteSource: null, quoteReflectionId: null } : {}),
-    };
-    for (const [signalId, rows] of evidenceBySignalRef.current) evidenceBySignalRef.current.set(signalId, rows.map(withoutDeletedCopy));
-    setCitations((rows) => new Map([...rows].map(([key, evidence]) => [key, evidence.map(withoutDeletedCopy)])));
-    setProv((current) => current ? { ...current, rows: current.rows.map(withoutDeletedCopy) } : null);
-    setProvFull((current) => current?.id === owner ? null : current);
-    setProvenance((current) => {
-      if (!current.has(owner)) return current;
-      const next = new Map(current); next.set(owner, null); return next;
-    });
-    for (const item of ballsRef.current?.list ?? []) {
-      if ((item.sigId ?? item.id) === owner) item.quote = null;
-    }
-    const cached = detailsRef.current.get(owner);
-    if (cached) detailsRef.current.set(owner, {
-      ...cached,
-      reflectionCount: Math.max(0, cached.reflectionCount - 1),
-      reflections: cached.reflections.filter((item) => item.id !== id),
-    });
-    setPanel((cur) => cur?.detail?.id === owner ? { ...cur, detail: detailsRef.current.get(owner) ?? cur.detail } : cur);
-    setInspirations((cur) => cur?.map((item) => item.id === owner
-      ? { ...item, reflectionCount: Math.max(0, item.reflectionCount - 1) } : item) ?? null);
-    simApiRef.current?.reflectionChanged(owner, -1);
-    void readSkyRef.current().catch(() => undefined);
-  }, []);
+  /* `reflectionRemoved`, `reflectionSaved` and `synchronizeReflections` are
+     GONE (2026-10-10), and so is the writing flow whose four call sites were
+     their only callers: `ReflectionFlow` inside the save's panel, the
+     standalone reflect sheet, and `ReviewPanel`'s two. They kept the field,
+     the archive counts, the evidence quotes and the simulation in step with
+     an answer being written or deleted; nothing writes or deletes an answer
+     from this client any more, so keeping them would have been three handlers
+     waiting for an event the product cannot raise. Look for them under those
+     names in git history alongside `components/ReflectionFlow.tsx`.
+     The answers THEMSELVES are untouched: they arrive on the save
+     (`detail.reflections`) and are rendered read-only in the panel. */
 
   /* The passages worth marking inside the text: the words a PATTERN carried
      out of this memory, and only those. The second tier used to be the
@@ -12428,13 +12434,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const after = next?.entries.find((entry) => entry.pinned) ?? next?.entries[0];
     if (!absorbBoard(next)) throw new Error('Reading changed while opening');
     setSourcePrevious(before && after && before.body !== after.body ? { body: before.body, reading: next! } : null);
-    setReflectOn(null); setReflectOpen(false); setSelectedId(null);
+    setReflectOpen(false); setSelectedId(null);
     simApiRef.current?.goToWall(0); simApiRef.current?.toTop(); setPosterAsk(true);
   });
   const sourceNotice = !offline && !readingRefresh.busy && inspirationSave.phase === 'idle' ? <InspirationProcessingNotice
     processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null;
   const showHomeProcessing = Boolean(sourceProcessing.active && sourceProcessing.phase !== 'idle' && !offline && !readingRefresh.busy &&
-    inspirationSave.phase === 'idle' && atNow && !inField && !inSky && !reflectOn && !reflectOpen && !editing.open);
+    inspirationSave.phase === 'idle' && atNow && !inField && !inSky && !reflectOpen && !editing.open);
 
   const appliedViewKey = useRef<string | null>(null), viewRequest = useRef(0);
   const canonicalizeViewRef = useRef(false);
@@ -12455,7 +12461,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const current = () => !canceled && !controller.signal.aborted && viewRequest.current === serial && latestViewKey.current === key;
     setNavigationProblem(null);
     linkedReflectionRef.current = null;
-    setReflectOn(null); setReflectOpen(false); setSelectedId(null); setDetachedInspiration(null); setGroupPanel(null);
+    setReflectOpen(false); setSelectedId(null); setDetachedInspiration(null); setGroupPanel(null);
     setSeek(desired.find ? viewNavigation.query : null);
     setPick(desired.principleId);
     setMouthOpen(desired.compose);
@@ -12522,9 +12528,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const observedView: ViewLocation = { ...EMPTY_VIEW, wallId: atWall.kind === 'self' ? null : atWall.id,
     label: atWall.kind === 'self' ? undefined : (walls.find((wall) => wall.id === atWall.id)?.name ?? atWall.name),
     section: inSky ? 'sky' : inField ? 'field' : 'top', at: parkedAt, memberId: atWall.kind === 'group' ? standing : null,
-    inspirationId: reflectOn?.id ?? (selectedViewBall?.sigId ?? selectedId),
-    reflectionId: reflectOn || reflectOpen ? (requestedViewRef.current?.inspirationId === (reflectOn?.id ?? selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
-    find: seek !== null, compose: mouthOpen,reviewId:viewNavigation.view?.reviewId??null,reviewAnswerId:viewNavigation.view?.reviewAnswerId??null,
+    inspirationId: selectedViewBall?.sigId ?? selectedId,
+    reflectionId: reflectOpen ? (requestedViewRef.current?.inspirationId === (selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
+    find: seek !== null, compose: mouthOpen,
     principleId:atWall.kind==='self'&&inSky?pick:null,
     sharePrinciple:atWall.kind==='self'&&inSky&&(viewNavigation.view?.sharePrinciple??false),conversationId:viewNavigation.view?.conversationId??null,
     /* WHAT IS HELD UP IS NOT SOMETHING THE WORLD OBSERVES, so it is carried
@@ -13437,7 +13443,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         progress keeps them mounted regardless: a control that
                         vanished mid-work would take its own progress report
                         with it. */}
-                    {here && w.kind === 'self' && !showHomeProcessing && !reflectOn && !reflectOpen && !editing.open ? sourceNotice : null}
+                    {here && w.kind === 'self' && !showHomeProcessing && !reflectOpen && !editing.open ? sourceNotice : null}
                     {here && w.kind === "self" && !offline && !lead && readingMessage ? (
                       <p className="jar-board-acts jar-reading-status" role="status" data-jar-chrome="1">
                         {readingMessage === "worldReadingSupportChanged" ? null : say(readingMessage)}
@@ -14096,44 +14102,83 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     ))}
                   </ul>
                 ) : null}
-                {/* SAYING IT IN YOUR OWN WORDS — what "partly" opens.
-                    The three answers are cheap on purpose, and a cheap middle
-                    option is the one a person reaches for when they would
-                    rather not think: it collects whoever is satisficing and
-                    teaches the loop nothing, because "sort of" is not a fact
-                    about anybody. So partly costs ONE SENTENCE and buys
-                    ownership of it — what you type becomes the claim's
-                    wording, locked, and the generator will not rewrite it on
-                    the next pass.
-                    That is the difference between a verdict and scaffolding.
-                    Agreeing is receiving a sentence about yourself; rewriting
-                    it is writing one, and the line that reaches your
-                    principles is then a line you wrote. */}
-                {editing.open?.kind === 'signal' && editing.open.id === claimQueue[0].id ? (
+                {/* CORRECT A CLAIM — what "not true" opens, and the only
+                    typing in the confirm loop.
+                    Five components used to stand where this field stands:
+                    `ReviewPanel`, `ReviewDialogue`, `ReviewResult`,
+                    `ReflectionFlow`, and the review's own evidence block —
+                    84 strings, generated open questions, and a draft
+                    lifecycle with storage, copying, discarding and a
+                    "this device couldn't keep your draft" recovery path.
+                    Founder's verdict on all of it: *"Confirming a claim needs
+                    none of that. Typing happens in one place only: when you
+                    correct."* The components are deleted; their shape is in
+                    git history under those names, and the words a person
+                    already wrote in them are still read — `ReviewEvidence`
+                    still quotes them under a principle, which is what they
+                    were being collected for.
+                    WHY SAYING WHAT IS TRUE INSTEAD IS WORTH A FIELD AT ALL.
+                    "Not true" on its own tells the loop a sentence is wrong
+                    and nothing about what is right, so the next pass has no
+                    more to go on than the last one did. One sentence here is
+                    the difference between refusing a reading and replacing
+                    it. It is optional on purpose — the answer is already
+                    complete without it, and making the negative answer the
+                    expensive one is how a person learns to pick a different
+                    one. */}
+                {correcting?.id === claimQueue[0].id ? (
                   <div className="jar-char-claim-mine">
+                    {/* THE QUESTION REGISTER, NOT THE LABEL REGISTER.
+                        `.jar-label` is uppercase and tracked (`system.css`),
+                        which is a voice for eyebrows — "PRIVATE", "SAVED" —
+                        and a question set in capitals reads as a form field
+                        rather than as something being asked. `.jar-reflect-q`
+                        is this product's existing register for exactly this
+                        shape: one sentence above a box you answer in. It is
+                        a real `<label>` rather than a paragraph so the words
+                        and the box are one control to a screen reader, and
+                        pressing the words focuses the field. */}
+                    <label className="jar-reflect-q" htmlFor="claim-correction">{say('worldClaimCorrect')}</label>
                     <textarea
+                      id="claim-correction"
                       className="jar-char-claim-edit"
-                      aria-label={say('worldPatternInYourWords')}
-                      value={editing.open.text}
+                      value={correcting.text}
                       rows={2}
                       autoFocus
-                      onChange={e => editing.retype(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); editing.leave(); } }}
+                      readOnly={correcting.saving}
+                      onChange={e => setCorrecting(current => current && { ...current, text: e.target.value, failed: false })}
+                      /* Escape leaves the field without answering. It does
+                         NOT record the verdict: nothing was sent when the
+                         button was pressed, so the claim is simply still
+                         being asked, which is the truth. */
+                      onKeyDown={e => { if (e.key === 'Escape' && !correcting.saving) { e.preventDefault(); setCorrecting(null); } }}
                     />
+                    {correcting.failed ? <p className="jar-settings-warn" role="alert">{say('worldClaimCorrectFailed')}</p> : null}
                     <p className="jar-char-claim-answers">
-                      <button type="button" disabled={editing.open.saving} onClick={() => {
+                      {/* ONE PRESS, ONE POST, whether or not words were
+                          typed. The verdict and the correction are the same
+                          act and travel together — recording "not true"
+                          first and the words second would file two rows for
+                          one answer, and the second one could fail alone. */}
+                      <button type="button" disabled={correcting.saving} onClick={() => {
                         const claim = claimQueue[0]!;
-                        void Promise.resolve(editing.keep()).then(() => {
-                          /* The claim only leaves once the person's words are
-                             on the record. Advancing first — which the other
-                             two answers do — would pull the sentence out from
-                             under the editor they are typing into. */
+                        const words = correcting.text.trim();
+                        setCorrecting(current => current && { ...current, saving: true, failed: false });
+                        const sent = sayVerdict(claim.id, 'not_true', undefined, claim.contested, claim.statementRevision, words || undefined);
+                        if (!sent) { setCorrecting(current => current && { ...current, saving: false, failed: true }); return; }
+                        void sent.then(landed => {
+                          if (!landed) { setCorrecting(current => current && { ...current, saving: false, failed: true }); return; }
+                          /* The claim only leaves once the answer is on the
+                             record. Advancing first — which the other two
+                             answers do — would pull the sentence out from
+                             under the field they are typing into. */
+                          setCorrecting(null);
                           setClaimQueue(queue => queue.filter(row => row.id !== claim.id));
                         });
                       }}>
-                        {say(editing.open.saving ? 'worldSaving' : 'worldSave')}
+                        {say(correcting.saving ? 'worldSaving' : 'worldSave')}
                       </button>
-                      <button type="button" onClick={editing.leave}>{say('worldLeaveIt')}</button>
+                      <button type="button" disabled={correcting.saving} onClick={() => setCorrecting(null)}>{say('worldLeaveIt')}</button>
                     </p>
                   </div>
                 ) : (
@@ -14148,17 +14193,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          the scale of every principle written downstream. */
                       onClick={() => {
                         const claim = claimQueue[0]!;
-                        sayVerdict(claim.id, value, undefined, claim.contested, claim.statementRevision);
-                        /* PARTLY STAYS, because partly is the one answer that
-                           is not finished. The verdict is already on the
-                           record; what opens now is the wording, so the person
-                           can say it the way it is actually true. The other
-                           two advance at once — a judgement about yourself
-                           should not wait on a round trip. */
-                        if (value === 'partly') {
-                          editing.begin('signal', claim.id, claim.statement);
+                        /* NOT TRUE IS THE ONE ANSWER THAT IS NOT FINISHED, so
+                           it alone sends nothing yet: the field below it may
+                           still change what goes on the record, and a verdict
+                           filed before the words would be a second row for the
+                           same answer. Yes and partly advance at once — a
+                           judgement about yourself should not wait on a round
+                           trip. */
+                        if (value === 'not_true') {
+                          setCorrecting({ id: claim.id, text: '', saving: false, failed: false });
                           return;
                         }
+                        sayVerdict(claim.id, value, undefined, claim.contested, claim.statementRevision);
                         setClaimQueue(queue => queue.slice(1));
                       }}
                     >
@@ -14208,7 +14254,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           onRetryFile={id => { void retryDraftFile(id); }}
           onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
-          onVisibility={setKeepPublic} onClose={saveAsDraft} onSubmit={reflect => { void keepIt(reflect); }}
+          onVisibility={setKeepPublic} onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void composerDraft.fork().catch(reason => setMouthNote(String(reason))); }} /> : null}
       </> : null}
 
@@ -14407,23 +14453,44 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
           {panelCanReflect&&!panelIsGroup&&panel.detail?.conversationOrigin?<p className="jar-review-context">{say(panel.detail.conversationOrigin.authorship==='adopted'?'worldChatAdoptedOrigin':'worldChatUserOrigin')}</p>:null}
           {reflectOpen && panelCanReflect && !panel.detail ? <p role="status">{say('worldOpeningAttachment')}</p> : null}
-          {reflectOpen && panelCanReflect && panel.detail && (panelBall?.sigId ?? panelId) ? (
-            <ReflectionFlow
-              key={panelBall?.sigId ?? panelId}
-              inspirationId={(panelBall?.sigId ?? panelId) as string}
-              scope={storageScope}
-              processing={!reflectOn && sourceProcessing.active?.inspirationId === (panelBall?.sigId ?? panelId) ? sourceNotice : null}
-              initialTurns={(panel.detail?.reflections ?? [])
+          {/* WHAT YOU ALREADY WROTE ABOUT THIS SAVE, READ BACK.
+              `ReflectionFlow` stood here — 297 lines that generated a
+              follow-up question, took an answer, kept a draft on the device,
+              recovered that draft when the device could not keep it, and
+              offered go deeper, retry, delete and copy-link around it. The
+              founder folded the whole flow: *"Typing happens in one place
+              only: when you correct."*
+              What could NOT be folded is the words. Answers written through
+              that flow are evidence the readings are drawn from; a save that
+              says "· Reflected" and then cannot show you what you reflected
+              would be the product hiding the person's own writing. So this is
+              the same material, read-only: the question it was asked under,
+              the answer underneath. No textarea, no draft, no verbs.
+              It wears `.jar-reflection-turn` and `.jar-reflect-q`, which are
+              `ReflectionFlow`'s own classes for exactly these two lines —
+              borrowed rather than invented so the type ladder stays one
+              ladder. Skipped questions never counted as reflected and still
+              do not appear. */}
+          {reflectOpen && panelCanReflect && panel.detail ? (
+            <div className="jar-reflection-flow">
+              {(panel.detail.reflections ?? [])
                 .filter((item) => !item.skipped && item.answer)
-                .map((item): ReflectionTurn => ({ id: item.id, question: item.question, answer: item.answer as string }))}
-              locale={locale}
-              focusReflectionId={viewNavigation.view?.reflectionId}
-              onCopyLink={(id) => void copyInspirationLink(id)}
-              onSaved={reflectionSaved}
-              onSynchronized={(row) => synchronizeReflections((panelBall?.sigId ?? panelId) as string, row)}
-              onRemoved={(id) => reflectionRemoved(id, (panelBall?.sigId ?? panelId) as string)}
-              onDone={() => { setReflectOpen(false); viewNavigation.write({ ...observedRef.current, reflectionId: null }, { observed: true, replace: true }); }}
-            />
+                .map((item) => (
+                  <div key={item.id} className="jar-reflection-turn" data-reflection-id={item.id}>
+                    <p className="jar-reflect-q">{item.question}</p>
+                    <p>{item.answer}</p>
+                  </div>
+                ))}
+              {/* ONE PRESS BACK TO THE MEMORY (Law 2). The old flow carried
+                  its own finish; a read with no finish is a surface you enter
+                  and cannot leave, which is the founder's most-repeated
+                  complaint. */}
+              <p className="jar-ask jar-ask--row">
+                <button type="button" onClick={() => { setReflectOpen(false); viewNavigation.write({ ...observedRef.current, reflectionId: null }, { observed: true, replace: true }); }}>
+                  {say('worldClose')}
+                </button>
+              </p>
+            </div>
           ) : null}
 
           {/* FORGET IT — and the law it does not break.
@@ -14581,10 +14648,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           !(forget.step === "asking" && forget.id === panelId) &&
           !unpublishAsk ? (
             <p className={`jar-ask jar-ask--after jar-panel-foot${panelHasReflection ? " jar-panel-foot--reflected" : ""}`}>
+              {/* THE VERB IS `READ`, AND ONLY WHEN THERE IS SOMETHING TO
+                  READ (2026-10-10). This cell used to offer `Reflect` on a
+                  save with no answers yet, which opened a generated question
+                  and a textarea — the writing flow the founder folded: *"Typing
+                  happens in one place only: when you correct."* So the
+                  write half is gone and the read half stays, because words a
+                  person already wrote do not stop being theirs when the door
+                  they wrote them through closes. On a save with no answers
+                  the cell is now empty, which is the honest state: there is
+                  nothing here to open. */}
               <span className="jar-panel-foot-l">
-              <button type="button" className={panelHasReflection ? "jar-panel-reflection-link" : undefined} onClick={askToReflect}>
-                {panelHasReflection ? say("worldReadReflection") : say("worldReflect")}
-              </button>
+              {panelHasReflection ? (
+                <button type="button" className="jar-panel-reflection-link" onClick={openReflections}>
+                  {say("worldReadReflection")}
+                </button>
+              ) : null}
               </span>
               <span className="jar-panel-foot-c">{panelStepCarets}</span>
               <span className="jar-panel-foot-r">
@@ -15245,65 +15324,41 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           moment that owns the screen — the same one the seek line and the
           delete ask wear. It says what was kept, asks, takes the answer, and
           goes. */}
-      {reflectOn ? (
-        <DialogSurface
-          className="jar-seek jar-reflect-room"
-          onClose={() => setReflectOn(null)}
-          data-jar-chrome="1"
-          role="dialog"
-          aria-label={say("worldReflectOnKept")}
-        >
-          <p className="jar-prov-lead jar-label">{say("worldSavedLead")}</p>
-          {/* what it was, in one line: enough to know which memory this is
-              about, never the whole thing back */}
-          <p className="jar-reflect-on">{reflectOn.text}</p>
-          <ReflectionFlow
-            key={reflectOn.id}
-            inspirationId={reflectOn.id}
-            scope={storageScope}
-            source={reflectOn.attachments.length ? <InspirationAttachments items={reflectOn.attachments} locale={locale} /> : undefined}
-            processing={sourceProcessing.active?.inspirationId === reflectOn.id ? sourceNotice : null}
-            initialTurns={[]}
-            locale={locale}
-            onSaved={reflectionSaved}
-            onSynchronized={(row) => synchronizeReflections(reflectOn.id, row)}
-            onRemoved={(id) => reflectionRemoved(id, reflectOn.id)}
-            onDone={() => setReflectOn(null)}
-          />
-          {/* A WAY OUT FOR SOMEBODY WHO DOES NOT WANT TO ANSWER.
-              This surface had none. `ReflectionFlow` carries a finish for
-              whoever reflects, and Escape and a press-away close it — but
-              both of those are invisible, so a person who opened this and
-              simply did not feel like answering had nothing to press. That
-              is the exact shape of the founder's most-repeated complaint
-              ("I feel like I'm lost how to go back"), on a surface that
-              ASKS YOU A QUESTION, which is the worst place to trap someone:
-              declining has to be as easy as answering or the question is not
-              really being asked.
-
-              "not now" rather than "close", because that is what the press
-              means here and it is already this product's word for declining
-              a prompt — the seek line, the room form and a room's settings
-              all offer it. A fourth way of saying the same thing would be
-              the drift the consistency pass exists to stop. */}
-          <p className="jar-ask jar-ask--row jar-reflect-room-out">
-            <button type="button" onClick={() => setReflectOn(null)}>
-              {say("worldNotNow")}
-            </button>
-          </p>
-        </DialogSurface>
-      ) : null}
-
-      {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.accountId}:${storageScope.profileId}:review`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
-        onSaved={reflectionSaved} onSynchronized={synchronizeReflections} onReflectionRemoved={reflectionRemoved} onInspirationRemoved={inspirationRemovedFromView}
-        onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}
-        onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}
-        onOpenPrinciple={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id})}
-        onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'field',inspirationId:id})}/>:null}
+      {/* THE STANDALONE REFLECT SHEET IS GONE, AND IT WAS ALREADY
+          UNREACHABLE BEFORE IT WAS DELETED (2026-10-10).
+          It opened when a save was made with `reflect: true`, and the only
+          thing that could ask for that was `InspirationComposer`, which calls
+          `props.onSubmit(false)` and has done for as long as the control has
+          existed — so `shouldReflect` was never true, `setReflectOn` was never
+          called, and a `DialogSurface` with a generated question, a textarea
+          and a "not now" way out sat in the tree being rendered by nothing.
+          That is the exact shape of Law 8 in `docs/six-laws.md`: it
+          type-checked, it read like live code, and it did nothing. It would
+          have gone with the fold either way — the fold removes writing flows
+          — but it is worth recording that the fold is not what killed it.
+          `worldReflectOnKept` and `jar-reflect-room` went with it. */}
+      {/* `ReviewPanel` STOOD HERE, AND SO DID THE WHOLE FOURTH PRODUCT
+          (2026-10-10). Founder's workflow design counted the surface: 84 of
+          the app's 847 user-facing strings belonged to Review — the largest
+          single concept in the product, against three strings for the
+          interaction meant to be at its centre — and ruled *"Collapse all
+          five into 'correct a claim' — one text field, reached only after
+          'not quite'."* The field is up beside the claim, in
+          `.jar-char-claim-mine`.
+          What went with this one call: `ReviewPanel`, `ReviewDialogue`,
+          `ReviewResult`, `ReflectionFlow`, `useReviewSession`,
+          `useReviewDialogue`, `useReviewEntry`, the review draft and
+          selection stores, the `/review/:id` route and its `?thought=`
+          deep link, and the three `lib/api` resources behind them. Answers
+          already written are still read: `ReviewEvidence` quotes them under
+          the principles they are evidence for, which is where the collecting
+          was pointed all along. */}
       <div className={`jar-personal-shortcuts${atWall.kind==='self'?' jar-personal-shortcuts--self':''}${!inField&&!inSky&&wallCount>0&&(!atNow||(charSay!==''&&!mouthOpen))?' jar-personal-shortcuts--above-count':''}`}
-        hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple||viewNavigation.view?.open)}>
-      {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'&&(inField||inSky)&&!viewNavigation.view?.reviewId?<button type="button" className="jar-review-shortcut" data-jar-chrome="1"
-        onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
+        hidden={Boolean(panelOpen||mouthOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple||viewNavigation.view?.open)}>
+      {/* THE REVIEW SHORTCUT IS GONE FROM THIS CORNER. It was the one door
+          into the folded flow, and `useReviewEntry` existed only to decide
+          whether it should read "Review" or "Resume review" — a fetch on
+          every arrival to label a button. Capture keeps the corner. */}
       {phase==='ready'&&(inField||inSky||!atNow)?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
         <HomeActionIcon kind="capture"/> {say('worldCaptureInspiration')}</button>:null}
       {/* AND SO IS FIND. Founder ruling, long since applied everywhere
@@ -15346,7 +15401,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         onSettings={()=>navigate('/profile')}
         account={auth?.account ? { name: auth.profile?.name, email: auth.account.email } : null}
         onSignOut={auth ? () => { void auth.logout(); } : undefined}
-        hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
+        hidden={Boolean(panelOpen||mouthOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
           query={seek} locale={locale} label={atWall.kind === 'group' ? say('worldFindYourInspirations') : undefined}

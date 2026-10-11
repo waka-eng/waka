@@ -169,21 +169,30 @@ function expectGroundIsWhole(where: string) {
 }
 
 describe("native input inside the world", () => {
-  it("lets a reflection answer type a slash without opening search", async () => {
+  /* `jar-inspiration-composer`, WHERE THIS NAMED `jar-reflect-room`
+     (2026-10-10). The surface was the standalone reflect sheet, which went
+     with the folded writing flow — and a suite that builds a node with a class
+     nothing renders is describing a surface the product does not have, which
+     is the same shape as a message nothing renders. The composer is a live
+     `.jar-seek` with a real textarea in it, so the property is now asserted
+     about a surface a person can actually be standing in. The property itself
+     is unchanged: a native writer inside world chrome owns its own keystroke
+     and the camera's shortcuts must not steal it. */
+  it("lets a writer inside world chrome type a slash without opening search", async () => {
     const sheet = document.createElement("div");
-    sheet.className = "jar-seek jar-reflect-room";
+    sheet.className = "jar-seek jar-inspiration-composer";
     sheet.setAttribute("role", "dialog");
     const answer = document.createElement("textarea");
     sheet.append(answer);
     layout.container.querySelector(".jar")!.append(sheet);
     const key = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true });
     await act(async () => answer.dispatchEvent(key));
-    expect(key.defaultPrevented, "the answer owns its slash").toBe(false);
+    expect(key.defaultPrevented, "the writer owns its slash").toBe(false);
     expect(layout.container.querySelectorAll(".jar-seek")).toHaveLength(1);
     sheet.remove();
   });
 
-  it.each(["jar-roomform", "jar-seek jar-reflect-room", "jar-settings", "jar-dial"])(
+  it.each(["jar-roomform", "jar-seek jar-inspiration-composer", "jar-settings", "jar-dial"])(
     "leaves wheel scrolling to %s instead of cancelling it for the camera",
     async (className) => {
       const sheet = document.createElement("div");

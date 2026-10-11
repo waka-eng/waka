@@ -3,7 +3,34 @@
  * settlement helpers prove newer words survive; one case injects a failed
  * browser storage read to verify that cleanup stops rather than deleting data. */
 import { beforeEach, expect, it, vi } from 'vitest';
-import { restoreInspirationDraft, restoreReflectionDraft, settleInspirationDraft, settleReflectionDraft } from '../src/lib/authored-save-drafts';
+import { restoreInspirationDraft, settleInspirationDraft } from '../src/lib/authored-save-drafts';
+
+/*
+ * THREE REFLECTION CASES WERE DELETED FROM HERE (2026-10-10), and one of them
+ * is worth reporting rather than just removing.
+ *
+ * `settleReflectionDraft`, `restoreReflectionDraft` and `ReflectionDraft` went
+ * with `components/ReflectionFlow.tsx` when the founder folded the writing
+ * flow into the claim queue's one correction field. Two of the three cases
+ * failed loudly when the functions disappeared, which is what should happen.
+ *
+ * THE THIRD KEPT PASSING, AND WAS A LIE. It read:
+ *
+ *     expect(() => settleReflectionDraft('draft', draft, draft)).toThrow();
+ *
+ * with `getItem` stubbed to throw — so once the function was gone, the
+ * `TypeError: settleReflectionDraft is not a function` satisfied `toThrow()`
+ * and the suite reported a property of a function that no longer existed. A
+ * bare `toThrow()` cannot tell "refused for the right reason" from "was never
+ * called at all", which is the same failure shape as `docs/six-laws.md` Law 8
+ * one level up: green, and about nothing.
+ *
+ * The property it was holding — a storage read that FAILS must stop the
+ * cleanup rather than delete the person's words — belongs to both halves of
+ * this module equally, and the surviving half is the one box. It is asserted
+ * below, on `settleInspirationDraft`, and asserted by its message rather than
+ * by the mere fact of a throw.
+ */
 
 beforeEach(() => localStorage.clear());
 it('clears only the submitted capture, retaining newer memory or stored drafts', () => {
@@ -21,28 +48,24 @@ it('persists newly typed words before clearing the old submitted draft', () => {
   expect(settleInspirationDraft('draft', 'Original', 'Newer')).toBe('Newer');
   expect(localStorage.getItem('draft')).toBe('Newer');
 });
-it('retains a later reflection even when its words happen to match an earlier answer', () => {
-  const submitted = { afterId: null, question: 'Why?', answer: 'An answer' };
-  const newer = { ...submitted, afterId: 'a-later-turn' };
-  localStorage.setItem('draft', JSON.stringify(newer));
-  expect(settleReflectionDraft('draft', submitted, submitted)).toEqual(newer);
-  expect(JSON.parse(localStorage.getItem('draft')!)).toEqual(newer);
-});
-it('does not clear a reflection draft if ownership of its stored state cannot be read', () => {
-  const draft = { afterId: null, question: 'Why?', answer: 'A thought' };
-  localStorage.setItem('draft', JSON.stringify(draft));
+it('does not clear a draft if ownership of its stored state cannot be read', () => {
+  localStorage.setItem('draft', 'A thought');
   const read = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Unavailable'); });
-  try { expect(() => settleReflectionDraft('draft', draft, draft)).toThrow(); }
+  try { expect(() => settleInspirationDraft('draft', 'A thought', 'A thought')).toThrow('Unavailable'); }
   finally { read.mockRestore(); }
-  expect(JSON.parse(localStorage.getItem('draft')!)).toEqual(draft);
+  expect(localStorage.getItem('draft')).toBe('A thought');
+});
+it('refuses to settle without owned storage rather than silently keeping nothing', () => {
+  /* The `null` key is a profile scope that could not be built — a signed-out
+     or half-restored viewer. Throwing is the point: a save whose pending
+     identity is cleared while its words are not is a save that can duplicate
+     itself on the next reload. */
+  expect(() => settleInspirationDraft(null, 'A thought', 'A thought')).toThrow('No owned draft storage');
+  expect(() => restoreInspirationDraft(null, 'Rejected', '')).toThrow('No owned draft storage');
 });
 it('restores rejected input without replacing a newer draft', () => {
   expect(restoreInspirationDraft('draft', 'Rejected', '')).toBe('Rejected');
   localStorage.setItem('draft', 'Newer');
   expect(restoreInspirationDraft('draft', 'Rejected', '')).toBe('Newer');
-  const original = { afterId: null, question: 'Why?', answer: 'Rejected' };
-  expect(restoreReflectionDraft('reflection', original, { ...original, answer: '' })).toEqual(original);
-  const newer = { afterId: 'later', question: 'What next?', answer: 'A newer answer' };
-  localStorage.setItem('reflection', JSON.stringify(newer));
-  expect(restoreReflectionDraft('reflection', original, { ...original, answer: '' })).toEqual(newer);
+  expect(restoreInspirationDraft('draft', 'Rejected', 'My newer in-memory words')).toBe('My newer in-memory words');
 });

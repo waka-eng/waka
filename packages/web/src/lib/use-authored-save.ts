@@ -1,11 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, createInspiration, createReflection, fetchInspiration, fetchInspirationSaveRequest,
-  type ApiInspiration, type ApiInspirationProcessingReceipt, type ApiReflection, type CreateInspirationRequest, type CreateReflectionRequest } from './api';
+import { ApiError, createInspiration, fetchInspiration, fetchInspirationSaveRequest,
+  type ApiInspiration, type ApiInspirationProcessingReceipt, type ApiReflection, type CreateInspirationRequest } from './api';
 import { hashStr } from './num';
 import { profileStorageKey, type ProfileStorageScope } from './profile-storage';
 
-export type AuthoredSaveInput = { operation: 'inspiration'; input: CreateInspirationRequest; reflect: boolean; draft?: { id: string; revision: number } }
-  | { operation: 'reflection'; inspirationId: string; input: CreateReflectionRequest; afterId: string | null; continueReflecting: boolean };
+/**
+ * ONE OPERATION, WHERE THERE WERE TWO (2026-10-10).
+ *
+ * This was a union: an inspiration, or a REFLECTION — a written answer to a
+ * generated question, journalled with an `afterId` so the next question knew
+ * which answer it followed, and a `continueReflecting` flag so saving could
+ * ask for another one. Its only caller was `components/ReflectionFlow.tsx`,
+ * which the founder folded: *"Typing happens in one place only: when you
+ * correct."*
+ *
+ * `reflect: boolean` went too, and it is worth saying why separately: it told
+ * this hook to open a question sheet after the save landed, and
+ * `InspirationComposer` has only ever passed `false`. A field that nothing
+ * could set, read by a branch nothing could reach.
+ *
+ * REFLECTIONS STILL EXIST, and are still written — a photo moment's "why"
+ * rides the capture itself as `input.reflections`, which is one POST and
+ * needs no journal of its own. What is gone is the second, separately
+ * journalled act.
+ */
+export type AuthoredSaveInput = { operation: 'inspiration'; input: CreateInspirationRequest; draft?: { id: string; revision: number } };
 type SavedReference = { inspirationId: string; reflectionId: string | null; processing?: ApiInspirationProcessingReceipt };
 export type AuthoredSaveIntent = AuthoredSaveInput & { version: 1; accountId: string; profileId: string; requestId: string; createdAt: number; checksum: number; acknowledged?: SavedReference; rejected?: boolean; validationMessage?: string };
 export interface AuthoredSaveResult { inspiration: ApiInspiration; reflection: ApiReflection | null; processing?: ApiInspirationProcessingReceipt; recovered: boolean }
@@ -14,11 +33,9 @@ type Phase = 'idle' | 'checking' | 'saving' | 'uncertain' | 'storage_error' | 'u
 // A corruption checksum, NOT an authorization signature. The server owns
 // authorization and input-hash conflict checks; UUIDs are never reused here.
 function checksum(value: AuthoredSaveInput): number {
-  return hashStr(JSON.stringify(value.operation === 'inspiration'
-    ? { operation: value.operation, input: value.input, reflect: value.reflect, ...(value.draft ? { draft: value.draft } : {}) }
-    : { operation: value.operation, input: value.input, inspirationId: value.inspirationId, afterId: value.afterId, continueReflecting: value.continueReflecting }));
+  return hashStr(JSON.stringify({ operation: value.operation, input: value.input, ...(value.draft ? { draft: value.draft } : {}) }));
 }
-function readIntents(prefix: string, scope: ProfileStorageScope, operation: AuthoredSaveInput['operation'], inspirationId?: string) {
+function readIntents(prefix: string, scope: ProfileStorageScope, operation: AuthoredSaveInput['operation']) {
   const intents: AuthoredSaveIntent[] = [];
   const invalidKeys: string[] = [];
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -29,12 +46,11 @@ function readIntents(prefix: string, scope: ProfileStorageScope, operation: Auth
       if (value.version !== 1 || value.accountId !== scope.accountId || value.profileId !== scope.profileId || value.operation !== operation ||
         typeof value.requestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.requestId) ||
         key !== prefix + value.requestId || !Number.isFinite(value.createdAt) || !value.input ||
-        (value.operation === 'inspiration' ? typeof value.input.text !== 'string' : value.inspirationId !== inspirationId || typeof value.input.question !== 'string') ||
+        typeof value.input.text !== 'string' ||
         value.checksum !== checksum(value)) throw new Error('Unverifiable pending save');
       if ((value.rejected !== undefined && typeof value.rejected !== 'boolean') ||
-        (value.acknowledged && (typeof value.acknowledged.inspirationId !== 'string' || !value.acknowledged.inspirationId || value.rejected ||
-          (value.operation === 'reflection' && (value.acknowledged.inspirationId !== inspirationId || typeof value.acknowledged.reflectionId !== 'string'))))) throw new Error('Invalid saved reference');
-      if (value.operation === 'inspiration' && value.draft && (typeof value.draft.id !== 'string' || !Number.isSafeInteger(value.draft.revision) || value.draft.revision < 1)) throw new Error('Invalid draft reference');
+        (value.acknowledged && (typeof value.acknowledged.inspirationId !== 'string' || !value.acknowledged.inspirationId || value.rejected))) throw new Error('Invalid saved reference');
+      if (value.draft && (typeof value.draft.id !== 'string' || !Number.isSafeInteger(value.draft.revision) || value.draft.revision < 1)) throw new Error('Invalid draft reference');
       intents.push(value);
     } catch { invalidKeys.push(key); }
   }
@@ -89,7 +105,7 @@ export function useAuthoredSave(options: {
       let created: ApiInspiration | null = null;
       try {
         const found = await fetchInspirationSaveRequest(intent.requestId, scoped, controller.signal); current();
-        if (found.operation !== intent.operation || (intent.operation === 'reflection' && found.inspirationId !== intent.inspirationId)) throw new Error('Unexpected save identity');
+        if (found.operation !== intent.operation) throw new Error('Unexpected save identity');
         saved = { inspirationId: found.inspirationId, reflectionId: found.reflectionId, processing: found.processing };
       } catch (error) {
         current();
@@ -101,15 +117,9 @@ export function useAuthoredSave(options: {
         current(); setPhase('saving');
         attempted = true;
         const saveOptions = { ...scoped, requestId: intent.requestId, signal: controller.signal };
-        if (intent.operation === 'inspiration') {
-          created = await createInspiration(intent.input, saveOptions); current();
-          if (!created?.id || created.profileId !== intent.profileId) throw new Error('Unexpected saved inspiration');
-          saved = { inspirationId: created.id, reflectionId: null, processing: created.processing };
-        } else {
-          const answer = await createReflection(intent.inspirationId, intent.input, saveOptions); current();
-          if (!answer?.id || answer.inspirationId !== intent.inspirationId) throw new Error('Unexpected saved answer');
-          saved = { inspirationId: intent.inspirationId, reflectionId: answer.id, processing: answer.processing };
-        }
+        created = await createInspiration(intent.input, saveOptions); current();
+        if (!created?.id || created.profileId !== intent.profileId) throw new Error('Unexpected saved inspiration');
+        saved = { inspirationId: created.id, reflectionId: null, processing: created.processing };
         const acknowledged = { ...intent, acknowledged: saved };
         // The original durable key is already safe to reconcile if quota fills
         // after the POST. Retain the acknowledgment in memory in that case.
@@ -119,9 +129,12 @@ export function useAuthoredSave(options: {
       current();
       const inspiration = created ?? await fetchInspiration(saved.inspirationId, scoped, controller.signal); current();
       if (inspiration.id !== saved.inspirationId || inspiration.profileId !== intent.profileId) throw new Error('Unexpected saved owner');
-      const reflection = intent.operation === 'reflection' ? inspiration.reflections.find((row) => row.id === saved!.reflectionId) ?? null : null;
-      if (intent.operation === 'reflection' && !reflection) throw new ApiError({ status: 410, code: 'saved_item_removed', message: 'That saved answer was removed' });
-      return { inspiration, reflection, processing: saved.processing, recovered: !created || created.saveRequest?.replayed === true };
+      /* The 410 that a MISSING ANSWER used to raise here is gone with the
+         reflection operation. The server still raises its own 410 from
+         `GET /inspirations/save-requests/:id` when the thing a journalled
+         save points at has been deleted, and `onRemoved` still answers it —
+         that is the path this client can still walk. */
+      return { inspiration, reflection: null, processing: saved.processing, recovered: !created || created.saveRequest?.replayed === true };
     };
     try {
       const result = await Promise.race([work(), cancelled, new Promise<never>((_, reject) => {
@@ -161,7 +174,7 @@ export function useAuthoredSave(options: {
     if (!mounted.current || working.current || !at.prefix || !at.scope || at.enabled === false || document.hidden) return;
     if (intentRef.current) { void run(intentRef.current, false); return; }
     try {
-      const found = readIntents(at.prefix, at.scope, at.operation, at.inspirationId);
+      const found = readIntents(at.prefix, at.scope, at.operation);
       if (found.intents[0]) { intentRef.current = found.intents[0]; setPending(found.intents[0]); void run(found.intents[0], false); }
       else if (found.invalid) setPhase('invalid');
     } catch { setPhase('storage_error'); }
@@ -185,9 +198,9 @@ export function useAuthoredSave(options: {
     if (!mounted.current || working.current || intentRef.current || at.enabled === false) return false;
     if (!at.scope || !at.prefix) { setPhase('unsupported'); return false; }
     try {
-      const found = readIntents(at.prefix, at.scope, at.operation, at.inspirationId);
+      const found = readIntents(at.prefix, at.scope, at.operation);
       if (found.invalid || found.intents.length) { scan(); return false; }
-      if (input.operation !== at.operation || (input.operation === 'reflection' && input.inspirationId !== at.inspirationId)) throw new Error('Unexpected save target');
+      if (input.operation !== at.operation) throw new Error('Unexpected save target');
       const copy = JSON.parse(JSON.stringify(input)) as AuthoredSaveInput;
       const intent: AuthoredSaveIntent = { ...copy, ...at.scope, version: 1, requestId: crypto.randomUUID(), createdAt: Date.now(), checksum: checksum(copy) };
       persist(at.prefix, intent); // no request may precede durable ownership/words
@@ -209,7 +222,7 @@ export function useAuthoredSave(options: {
     const at = live.current;
     if (working.current || intentRef.current || !at.scope || !at.prefix) return;
     try {
-      const found = readIntents(at.prefix, at.scope, at.operation, at.inspirationId);
+      const found = readIntents(at.prefix, at.scope, at.operation);
       for (const key of found.invalidKeys) {
         // Explicit user reset only. Preserve uninterpreted bytes for recovery,
         // outside the pending namespace; never adopt or submit them as a draft.

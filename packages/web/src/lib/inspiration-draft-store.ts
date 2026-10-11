@@ -102,6 +102,45 @@ export async function writeInspirationDraft(scope: ProfileStorageScope, draft: I
     };
   });
 }
+/**
+ * EVERYTHING THIS OWNER LEFT UNSENT, FOR LOGOUT.
+ *
+ * The save box keeps its words here and ALSO its pasted links, its photos and
+ * its voice recordings — the only store in the product that holds a person's
+ * actual media before they have decided to keep it. Signing out on a shared
+ * machine left all of it for the next person; `lib/draft-eviction.ts` is the
+ * one caller and its header carries the full reasoning.
+ *
+ * A SETTLED ROW IS A RECEIPT, NOT A DRAFT, so it stays. `settleInspirationMediaDraft`
+ * empties a row's text and media when it stamps `savedInspirationId` on it, so
+ * a row carrying that id holds no words — what it holds is the fact that this
+ * draft was already submitted, which is how an old tab is stopped from
+ * submitting it a second time. Deleting it would buy no privacy and cost that
+ * guarantee, which is the same trade `pendingSave:` is kept for.
+ *
+ * Anything unreadable goes. A row this module's own verifier rejects is still
+ * a row someone typed into, and there is no recovery backup here to move it to.
+ *
+ * Deleting a row that a save is in flight for costs nothing either: the
+ * submitted payload lives in the `pendingSave:` intent, which survives logout,
+ * and `settleInspirationMediaDraft` treats an absent row as already settled.
+ */
+export async function clearInspirationDrafts(scope: ProfileStorageScope): Promise<void> {
+  const owner = ownerKey(scope);
+  return transaction('readwrite', (store, done) => {
+    /* A bare key, not an `IDBKeyRange`: the range object is a separate global
+       and not every environment this module is exercised in exposes one. */
+    const request = store.index('owner').openCursor(owner);
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) { done(undefined); return; }
+      const row = cursor.value as Partial<StoredDraft> | undefined;
+      if (typeof row?.savedInspirationId !== 'string' || !row.savedInspirationId) cursor.delete();
+      cursor.continue();
+    };
+  });
+}
+
 /** Remove the submitted bytes only if the exact draft revision was saved.
  * Keep a small tombstone so an old tab cannot submit that cleared draft again. */
 export async function settleInspirationMediaDraft(scope: ProfileStorageScope, id: string, revision: number, inspirationId: string): Promise<boolean> {

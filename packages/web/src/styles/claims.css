@@ -214,13 +214,6 @@
   color: var(--ink);
 }
 
-.waka-corners > .jar-here-split > .jar-here--standing {
-  border-color: var(--line);
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
-  color: var(--ink);
-  cursor: default;
-}
-
 .waka-corners > .jar-here-split > .jar-here:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
@@ -509,24 +502,7 @@
   color: var(--muted);
 }
 
-.waka-menu-close {
-  min-height: 44px;
-  width: 100%;
-  margin-top: var(--sp-8);
-  padding: var(--sp-12) var(--sp-16);
-  border: 0;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-fine);
-  text-align: left;
-  cursor: pointer;
-}
-
-.waka-menu-item:focus-visible,
-.waka-menu-close:focus-visible {
+.waka-menu-item:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: -2px;
 }
@@ -578,12 +554,6 @@
   outline-offset: 1px;
 }
 
-/* The one line about agents, under the box and inside its measure. */
-.jar-keep-foot .jar-keep-via {
-  color: var(--muted);
-  text-decoration: none;
-}
-
 .jar-keep-via:hover,
 .jar-keep-via:focus-visible {
   color: var(--ink);
@@ -624,15 +594,24 @@
 }
 
 /**
- * THE READING'S OWN CARD OPENS DOWNWARD, AND FROM THE LEFT.
+ * THE ONE CARD LEFT IN THE PRODUCT OPENS DOWNWARD, AND FROM THE LEFT.
  *
  * The default card sits above its trigger and hangs off its right edge,
- * which is right for the composer's footer at the bottom of the screen and
- * wrong for the one place a hover card now lives at the TOP of it: above
- * would be off-screen, and right-aligned would run the card out past a title
- * that starts at the left margin.
+ * which is what the composer's footer at the bottom of the screen wants and
+ * is wrong everywhere else: above is off-screen when the trigger is near the
+ * top, and right-aligned runs the card out past a line that starts at the
+ * left margin.
+ *
+ * THIS RULE WAS WRITTEN FOR `.jar-reading-what` AND SURVIVED IT. That host
+ * is gone — `HoverCard` has exactly one call site in the tree now
+ * (`Profile.tsx`, the MCP line under the agent keys), and it wears
+ * `.jar-keep-via`. Deleting the rule with the selector would have been the
+ * easy half of a dead-CSS sweep and the wrong half: the REASONING outlived
+ * the name, and it applies to the new host word for word — the line starts at
+ * the section's left margin, and the heading it would open over sits directly
+ * above it. So the selector moves and the rule stays.
  */
-.jar-reading-what .waka-hovercard-card {
+.jar-keep-via .waka-hovercard-card {
   top: calc(100% + var(--sp-8));
   bottom: auto;
   right: auto;
@@ -692,45 +671,25 @@
   background: var(--bg);
 }
 
-/**
- * THE PAGE HEADER WRAPS BEFORE IT COLLIDES.
- *
- * Back, the title, the count and the search share one row while there is room
- * and take two when there is not — `flex-wrap` plus a search that is allowed
- * to grow and allowed to shrink. The alternative, a media query at one width,
- * is a guess about a window; this answers to the content it actually has.
- */
-.waka-page-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-12) var(--sp-16);
-  margin-bottom: var(--sp-40);
-}
+/* THE WHOLE PAGE HEADER IS GONE, NOT JUST ITS TITLE, and the second half of
+   that took a dead-CSS sweep to notice.
 
-.waka-page-back {
-  min-height: 44px;
-  padding: 0 var(--sp-8) 0 0;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-fine);
-  cursor: pointer;
-  flex: 0 0 auto;
-}
+   `.waka-page-title` went first. One control names the view — the switcher at
+   the top of the screen — and printing the same words again as a page heading
+   made the name appear twice on two of the three pages and once on the third.
+   Founder, holding the three side by side: "these 3 things should be same
+   text size font color etc." They are the same thing now, because they are
+   the same element.
 
-.waka-page-back:hover,
-.waka-page-back:focus-visible {
-  color: var(--ink);
-}
-
-/* `.waka-page-title` IS GONE, AND SO IS EVERY PAGE THAT WORE IT.
-   One control names the view — the switcher at the top of the screen — and
-   printing the same words again as a page heading made the name appear twice
-   on two of the three pages and once on the third. Founder, holding the three
-   side by side: "these 3 things should be same text size font color etc."
-   They are the same thing now, because they are the same element. */
+   `.waka-page-head`, `-back`, `-count` and `-search` outlived it by a month.
+   The archive stopped being a page the moment it became an overlay — founder:
+   "this should just be a model that you can escape to go back to your top of
+   mind" — and the overlay brought its own head (`.waka-over-head`, `-title`,
+   `-close`, `-count`, `-search`, below). So FOUR header rules sat here
+   describing a row no element has worn since, including a `flex-wrap`
+   argument about collision that nothing could collide in. `.waka-page`,
+   `-status` and `-retry` stay: `Days.tsx` is still a page and still wears
+   all three. */
 
 .waka-page-status {
   /* Same air the grid takes, for the same reason — see `.waka-days`. */
@@ -1430,50 +1389,18 @@
   line-height: 1.4;
 }
 
-/* ---------------------------------------------------------------------------
- * Statements: one line each, nothing beside it
- * ------------------------------------------------------------------------- */
-
-.waka-statements {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  max-width: 34rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.waka-statement {
-  display: block;
-  width: 100%;
-  padding: var(--sp-16) 0;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink);
-  font-family: var(--waka-face);
-  font-size: var(--t-reading);
-  line-height: 1.3;
-  text-align: left;
-  text-wrap: pretty;
-  cursor: pointer;
-}
-
-.waka-statement:hover,
-.waka-statement:focus-visible {
-  color: var(--ink);
-  border-bottom-color: var(--ink);
-}
-
 /* The one face is a LIGHT geometric; at display sizes anything heavier loses
    the even stroke the poster is set for. Weight carries hierarchy instead of
-   a change of family. */
-.waka-card-text,
-.waka-statement,
-.waka-claim-statement,
-.waka-sheet-text,
-.waka-claims-done {
+   a change of family.
+
+   FOUR OF THE FIVE NAMES THAT USED TO BE IN THIS LIST ARE GONE, and the rule
+   is not: a selector list is five claims, and one of them is still true.
+   `.waka-statement` and `.waka-statements` were the claims page's row and its
+   list, `.waka-claim-statement` the sentence on the ask, `.waka-claims-done`
+   its empty state, `.waka-sheet-text` the opened card's words — every one of
+   those surfaces now draws `.jar-panel-text` from `home.css` instead
+   (`SavesOverlay.tsx`), which is why only `.waka-card-text` is left. */
+.waka-card-text {
   font-weight: 300;
   letter-spacing: 0.005em;
 }
@@ -1515,35 +1442,6 @@
   max-height: 46dvh;
   object-fit: contain;
   border-radius: var(--waka-r-control);
-}
-
-.waka-sheet-text {
-  margin: 0;
-  font-family: var(--waka-face);
-  font-size: var(--t-lead);
-  font-weight: 300;
-  line-height: 1.45;
-  color: var(--ink);
-  white-space: pre-wrap;
-}
-
-.waka-sheet-close {
-  align-self: flex-start;
-  min-height: 44px;
-  padding: var(--sp-8) var(--sp-16);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-control);
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  cursor: pointer;
-}
-
-.waka-sheet-close:hover,
-.waka-sheet-close:focus-visible {
-  color: var(--ink);
-  border-color: var(--ink);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1848,12 +1746,12 @@
   opacity: 0.55;
 }
 
-.waka-composer-ask:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-}
-
-
+/* THE ASK'S FOCUS RING IS DECLARED ONCE, beside the mic's, and it used to be
+   declared twice — the same two lines, verbatim, fifty lines apart in this
+   file. Nothing looked wrong: the values agreed, so the cascade produced the
+   right ring either way, and the duplicate could only be found by counting.
+   The one it kept is the one that says the ring belongs to the whole footer
+   row rather than to this button, which is the true statement. */
 
 .waka-composer-body .jar-keep-box:focus-visible {
   outline: none;
@@ -2036,45 +1934,6 @@
   font-family: var(--waka-face);
   font-size: var(--t-meta);
   color: var(--muted);
-}
-
-/* Find, on the page it acts on. Sits in the header beside the title, because
-   it narrows what is below it rather than navigating anywhere. */
-.waka-page-search {
-  /* Takes the rest of the row when there is one, and the whole of the next
-     row when there is not. `min-width` is what lets it shrink instead of
-     pushing the row wider than the page. */
-  flex: 1 1 14rem;
-  min-width: 0;
-  max-width: 24rem;
-  margin-left: auto;
-  min-height: 36px;
-  padding: 0 var(--sp-12);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-control);
-  background: var(--waka-raised);
-  color: var(--ink);
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  font-weight: 300;
-}
-
-.waka-page-search::placeholder {
-  color: var(--muted);
-}
-
-.waka-page-search:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 1px;
-}
-
-/* How much is behind the door, on the page the door leads to. */
-.waka-page-count {
-  margin: 0;
-  font-family: var(--waka-face);
-  font-size: var(--t-fine);
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
 }
 
 /* ---------------------------------------------------------------------------
@@ -2654,7 +2513,7 @@
   border-top: 1px solid var(--line);
 }
 
-.profile-page .login-eyebrow {
+.profile-page .profile-eyebrow {
   font-family: var(--waka-face);
   font-size: var(--t-meta);
   font-weight: 500;
@@ -2662,7 +2521,7 @@
   color: var(--muted);
 }
 
-.profile-page .login-subtitle {
+.profile-page .profile-subtitle {
   font-family: var(--waka-face);
   font-size: var(--t-ui);
   color: var(--muted);
@@ -2672,18 +2531,24 @@
 /* ---------------------------------------------------------------------------
  * HOW ONE LAYER BECOMES THE NEXT
  *
+ * `.profile-formation`, and it was `.profile-forms` until the settings page
+ * stopped borrowing the door's words. "Forms" here is the VERB — what the
+ * three layers do to each other — and the settings page's own `<form>` had
+ * just become `.profile-form`, one letter apart in the same stylesheet. A
+ * name a reader has to disambiguate by counting characters is not a name.
+ *
  * A definition list, because that is what it is: three names and what each
  * one is made of. The names wear the label register so they read as the same
  * three things the switcher offers, and the prose sits quiet beneath each.
  * ------------------------------------------------------------------------- */
 
-.profile-forms {
+.profile-formation {
   display: grid;
   gap: var(--sp-4);
   margin: 0;
 }
 
-.profile-forms dt {
+.profile-formation dt {
   margin-top: var(--sp-12);
   font-family: var(--waka-face);
   font-size: var(--t-meta);
@@ -2693,11 +2558,11 @@
   color: var(--muted);
 }
 
-.profile-forms dt:first-of-type {
+.profile-formation dt:first-of-type {
   margin-top: 0;
 }
 
-.profile-forms dd {
+.profile-formation dd {
   margin: 0;
   font-family: var(--waka-face);
   font-size: var(--t-ui);
@@ -2707,7 +2572,7 @@
 }
 
 /* What it cannot promise, at the foot of what it does. */
-.profile-forms-note {
+.profile-formation-note {
   margin: var(--sp-16) 0 0;
   font-family: var(--waka-face);
   font-size: var(--t-fine);
@@ -2964,11 +2829,20 @@
 
 
 /* ---------------------------------------------------------------------------
- * EVERYTHING YOU HAVE TALKED ABOUT
+ * A SHEET UNDER A CORNER
  *
- * A sheet under the left corner. Starting one is its first row rather than a
- * separate control: it is the same act as opening an old conversation, aimed
- * at one that does not exist yet.
+ * ELEVEN RULES OF `.waka-chats` WENT OUT OF THIS SECTION ON 2026-10-10, which
+ * is most of what was in it. It was the conversation list hanging under the
+ * LEFT corner — a sheet, a header, a scrolling nav of past conversations, and
+ * a first row that started a new one. The list is an overlay now
+ * (`.waka-over-*`, above), and nothing has worn `.waka-chats` since; founder,
+ * on why: "this should just be a model that you can escape to go back to your
+ * top of mind."
+ *
+ * `.waka-account` stays, and it is why the shared rules below read as a pair
+ * of names with one name in them: the account card under the cog is built
+ * from the same anatomy and was written as this sheet's twin. Pruning the
+ * dead half of each selector list keeps the rule the live half still needs.
  * ------------------------------------------------------------------------- */
 
 .waka-corner-place {
@@ -2977,7 +2851,6 @@
   display: inline-flex;
 }
 
-.waka-chats,
 .waka-account {
   position: absolute;
   top: calc(100% + var(--sp-8));
@@ -2994,12 +2867,10 @@
   text-align: left;
 }
 
-.waka-chats { left: 0; }
 /* The account card hangs from the right corner, so it opens leftward or it
    would run off the edge of a phone. */
 .waka-account { right: 0; }
 
-.waka-chats header,
 .waka-account header {
   display: flex;
   align-items: baseline;
@@ -3008,28 +2879,6 @@
   margin-bottom: var(--sp-12);
 }
 
-.waka-chats h2 {
-  margin: 0;
-  color: var(--muted);
-}
-
-.waka-chats p {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--t-fine);
-}
-
-.waka-chats nav ul {
-  list-style: none;
-  margin: var(--sp-8) 0 0;
-  padding: 0;
-  /* A long history scrolls inside the sheet rather than off the screen. */
-  max-height: 50vh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.waka-chats button,
 .waka-account button {
   border: 0;
   background: transparent;
@@ -3040,42 +2889,9 @@
   cursor: pointer;
 }
 
-.waka-chats nav button {
-  display: block;
-  width: 100%;
-  padding: var(--sp-8);
-  border-radius: var(--waka-r-control);
-  color: var(--ink);
-}
-
-.waka-chats nav button:hover,
-.waka-chats-new:hover,
 .waka-account button:hover {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
-}
-
-.waka-chats nav span {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-
-.waka-chats nav time {
-  display: block;
-  margin-top: var(--sp-4);
-  font-size: var(--t-meta);
-  color: var(--muted);
-}
-
-.waka-chats-new {
-  width: 100%;
-  padding: var(--sp-8);
-  border: 1px solid var(--line) !important;
-  border-radius: var(--waka-r-control);
-  color: var(--ink) !important;
 }
 
 /* ---- who you are, under the cog ---- */

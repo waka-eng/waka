@@ -228,7 +228,15 @@ it('restores an older card, its earlier reflection and date across Back/Forward 
   await navigate(`/?view=field&at=${date}&inspiration=older&reflection=answer-1`);
   expect(world.container.textContent).toContain(detail.text);
   expect(world.container.querySelector('.jar-reading-heading')?.textContent).toContain('Earlier reading');
-  expect(world.container.querySelector<HTMLDetailsElement>('.jar-reflection-turns')?.open).toBe(true);
+  /* `[data-reflection-id]`, WHERE THIS READ `.jar-reflection-turns` + `.open`
+     (2026-10-10). `ReflectionFlow` kept earlier answers inside a collapsed
+     `<details>` and opened it when the address named one; the flow is folded
+     and the save's panel now renders its answers plainly, so there is no
+     `<details>` left to be open. The invariant is the one that mattered and
+     is now asserted directly: a cold or restored `?reflection=<id>` link puts
+     THAT answer on screen, identified by its own id rather than by a
+     disclosure's state. */
+  expect(world.container.querySelector('[data-reflection-id="answer-1"]')?.textContent).toContain('My earlier words');
   expect(loadInspiration).toHaveBeenCalledWith('older', VIEWER_ID, expect.any(AbortSignal));
   await navigate('/w/group-id/old-name?view=sky');
   /* THE CORNER NO LONGER NAMES A ROOM. It is a two-state switch — me, my
@@ -247,7 +255,7 @@ it('restores an older card, its earlier reflection and date across Back/Forward 
 it('cold opens an older inspiration link without needing its orb in the initial field', async () => {
   world = await mountWorld(FACTS, { initialEntries: ['/inspirations/older?reflection=answer-1'], routerTools: <RouterTools /> });
   await settle(); expect(world.container.textContent).toContain(detail.text);
-  expect(world.container.querySelector<HTMLDetailsElement>('.jar-reflection-turns')?.open).toBe(true);
+  expect(world.container.querySelector('[data-reflection-id="answer-1"]')?.textContent).toContain('My earlier words');
   expect(world.audit().present).toBe(1); expect(location.search).toContain('reflection=answer-1');
 });
 it('restores reflection on the same inspiration across Back/Forward, without changing the card identity', async () => {
@@ -255,7 +263,7 @@ it('restores reflection on the same inspiration across Back/Forward, without cha
   await navigate('/inspirations/older?reflection=answer-1');
   expect(world.container.textContent).toContain('My earlier words');
   await navigate(-1); expect(world.container.querySelector('.jar-reflection-flow')).toBeNull();
-  await navigate(1); expect(world.container.querySelector<HTMLDetailsElement>('.jar-reflection-turns')?.open).toBe(true);
+  await navigate(1); expect(world.container.querySelector('[data-reflection-id="answer-1"]')?.textContent).toContain('My earlier words');
   expect(location.search).toContain('reflection=answer-1');
 });
 it('records actual world travel as a new history entry instead of replacing the previous ground', async () => {

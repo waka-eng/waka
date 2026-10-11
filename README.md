@@ -143,7 +143,8 @@ The variables that matter:
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | `/api/auth/google` | Redirect URI must match the running API. |
 | `GEMINI_API_KEY` | embeddings, vision, fallback generation | Never reaches the browser. |
 | `OPENROUTER_API_KEY` | generation (DeepSeek V4 Flash) | Never reaches the browser. |
-| `ATTACHMENTS_BUCKET`, `ATTACHMENTS_REGION` | uploads | Only needed for S3-backed attachments. |
+| `ATTACHMENTS_BUCKET`, `ATTACHMENTS_ENDPOINT` | photo / file / voice uploads | **Leave both unset for local work.** `pnpm dev:local` starts a local object store and sets them, so uploads work with no AWS account; see `.env.example`. Set `ATTACHMENTS_BUCKET` and `WAKA_NO_LOCAL_S3=1` to use real S3 instead. |
+| `ATTACHMENTS_REGION` | uploads | Must equal the bucket's real region on real S3 — SigV4 signs it in. Falls back to `AWS_REGION`, then `us-west-2`. |
 | `WAKA_ENRICHMENT_ALLOWED_HOSTS` | enrichment | Empty by default. See "Enrichment and private addresses". |
 
 > At Lambda runtime, secrets come from SST rather than from a file. Mirror each

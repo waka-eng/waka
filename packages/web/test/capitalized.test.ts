@@ -136,7 +136,14 @@ describe("every string a person reads begins with a capital", () => {
        surface-count case. */
     const messages = catalogue(CATALOGUE);
     const values = Object.values(messages);
-    expect(values.length, "the en-US catalogue came back empty — has it moved?").toBeGreaterThanOrEqual(700);
+    /* A FLOOR AGAINST THE CATALOGUE VANISHING, NOT A HEADCOUNT.
+       This was 700, calibrated the day it was written against ~805 keys, and
+       it went red the moment a legitimate deletion landed — the review fold
+       removed about a hundred strings exactly as its design doc asked. A
+       tripwire that fails on honest subtraction teaches people to edit the
+       tripwire, which is how a gate stops meaning anything. 400 is far below
+       any plausible catalogue and far above the zero this exists to catch. */
+    expect(values.length, "the en-US catalogue came back empty — has it moved?").toBeGreaterThanOrEqual(400);
     expect(
       values.every((value) => typeof value === "string"),
       "a catalogue value is not a string, so this gate is reading the wrong shape",
@@ -192,7 +199,7 @@ describe("every string a person reads begins with a capital", () => {
        mangle the Korean. So both halves are pinned: the predicate is silent on
        Hangul, and the Korean catalogue passes it as it stands. */
     const korean = catalogue(KOREAN);
-    expect(Object.keys(korean).length).toBeGreaterThanOrEqual(700);
+    expect(Object.keys(korean).length).toBeGreaterThanOrEqual(400);
     expect(startsLower("모든 대화"), "the predicate must not read Hangul as lower case").toBe(false);
     const flagged = Object.entries(korean)
       .filter(([, value]) => startsLower(value))

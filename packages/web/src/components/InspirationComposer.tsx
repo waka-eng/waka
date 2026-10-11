@@ -38,7 +38,7 @@ export function InspirationComposer(props: {
   onText: (text: string, caret: number) => void; onFiles: (files: File[]) => void;
   onRetryFile: (id: string) => void;
   onRemove: (id: string) => void; onVisibility: (value: boolean) => void;
-  onClose: () => void; onSubmit: (reflect: boolean) => void;
+  onClose: () => void; onSubmit: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null), linkInput = useRef<HTMLInputElement>(null);
@@ -50,7 +50,7 @@ export function InspirationComposer(props: {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const submit = () => {
     try {
-      inspirationWithPendingLink(props.text,link);props.onSubmit(false);
+      inspirationWithPendingLink(props.text,link);props.onSubmit();
     } catch {linkInput.current?.setCustomValidity(say('worldComposerInvalidLink'));linkInput.current?.reportValidity();}
   };
   useEffect(()=>{if(addingLink)linkInput.current?.focus();},[addingLink]);

@@ -49,8 +49,17 @@ import { describe, expect, it } from "vitest";
  * `verb-pairs.test.ts`, which asks every verb for a way back or a reason it
  * has none.
  */
+/* `worldReflectionDone` IS OFF THIS REGISTER (2026-10-10), in the same change
+   that removed the only surface wearing it. It held "Done for now", the
+   visible close in the review sheet's header — and the note below still cites
+   it, deliberately, because the lesson is about this gate rather than about
+   that surface: a curated word list called that perfectly good exit a trap on
+   its first run, which is why the structural check beneath it is the one to
+   trust. The five review components are folded into the claim queue's
+   correction field; a way-out word kept alive by nothing is the same leftover
+   `verb-pairs.test.ts` refuses one file over, so it goes in this commit rather
+   than the next one. */
 const WAY_OUT_WORDS = [
-  "worldReflectionDone",
   "worldClose",
   "worldCardClose",
   "worldNotNow",

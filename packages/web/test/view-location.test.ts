@@ -26,20 +26,25 @@ it('accepts direct inspiration links, ignores malformed metadata and refuses inv
   expect(readViewLocation('/w/%ZZ')).toBeNull();
   expect(readViewLocation('/unrelated')).toBeNull();
 });
-it('routes review identity without source content or unrelated world metadata',()=>{
-  const view={...EMPTY_VIEW,reviewId:'session-id'};
-  expect(viewHref(view)).toBe('/review/session-id');
-  expect(readViewLocation('/review/session-id','?compose=1&inspiration=other')).toEqual(view);
-  expect(viewHref({...EMPTY_VIEW,reviewId:'new'})).toBe('/review/new');
+/* THE TWO REVIEW SUITES THAT STOOD HERE ARE REPLACED, NOT DROPPED
+   (2026-10-10). They asserted that `/review/:id` round-tripped and that
+   `?thought=` carried one exact answer id. Both are deleted with the review
+   flow, and the invariant they were really holding — an address this product
+   emits is an address it can read back, and one it cannot read resolves to
+   nothing rather than to an empty world — is what the suite below now asserts
+   about the same two paths from the other side. That matters more than the
+   round trip did: a `/review/...` link in somebody's history or in an old
+   notification must land on "this link is unavailable", which is what a null
+   from here produces. `test/native-navigation.test.ts` presses the same
+   question at the native layer. */
+it('refuses the folded review addresses rather than resolving them to an empty world',()=>{
+  expect(readViewLocation('/review/session-id')).toBeNull();
+  expect(readViewLocation('/review/session-id','?thought=answer-id')).toBeNull();
+  expect(readViewLocation('/review/new')).toBeNull();
   expect(readViewLocation('/review')).toBeNull(); // remains available to a public profile handle
-});
-it('round-trips an exact saved thought and excludes it from unrelated or new-review routes',()=>{
-  const view={...EMPTY_VIEW,reviewId:'session-id',reviewAnswerId:'answer-id'};
-  expect(viewHref(view)).toBe('/review/session-id?thought=answer-id');
-  expect(readViewLocation('/review/session-id','?thought=answer-id')).toEqual(view);
-  expect(readViewLocation('/review/new','?thought=answer-id')?.reviewAnswerId).toBeNull();
-  expect(readViewLocation('/','?thought=answer-id')?.reviewAnswerId).toBeNull();
-  expect(readViewLocation('/review/session-id','?thought=%3Cscript%3E')?.reviewAnswerId).toBeNull();
+  /* and `?thought=` on the world's own address is not quietly adopted as some
+     other field: it is simply not a parameter this view model has. */
+  expect(readViewLocation('/','?thought=answer-id')).toEqual(EMPTY_VIEW);
 });
 it('round-trips principle detail and sharing without putting the chosen wording in the URL',()=>{
   const view={...EMPTY_VIEW,section:'sky' as const,principleId:'principle-id',sharePrinciple:true};

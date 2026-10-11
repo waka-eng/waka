@@ -230,7 +230,6 @@ ReactDOM.createRoot(root).render(
             <Route path="/chat/:conversationId" element={<></>} />
             <Route path="/w/:wall/:label?" element={<></>} />
             <Route path="/inspirations/:inspirationId" element={<></>} />
-            <Route path="/review/:reviewId" element={<></>} />
             <Route path="/principles/:principleId" element={<></>} />
             <Route path="/principles/:principleId/share" element={<></>} />
           </Route>
