@@ -1905,6 +1905,9 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      something" a page you could link to and come back to. */
   /** The picker the dock's making-slot opens while a note is being written. */
   const dockFileInput = useRef<HTMLInputElement>(null);
+  /** Which saves the archive is showing, when it was opened by asking a
+      claim where it came from. Cleared by its own control and by leaving. */
+  const [savesFocus, setSavesFocus] = useState<{ label: string; ids: readonly string[] } | null>(null);
   const [makingNew, setMakingNew] = useState(false);
   /* The box's own measured height, kept across frames so the layout pass can
      place the box before it has re-measured it this frame. `MOUTH_H` is the
@@ -3783,7 +3786,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       .catch(() => undefined);
     const timers: number[] = [];
     const tell = () => {
-      if (toldRef.current) setCharSay(toldRef.current);
+      /* THE THIRD PLACE A SERVER CLAUSE IS SPOKEN ALONE, and it was missed
+         when the other two were fixed — caught by a probe that printed what
+         the creature was actually saying: "you kept a memory." The
+         away-window sentence comes off the same API as the day's clauses,
+         lower case for the same reason, and lands straight in the bubble.
+         `capitalized.test.ts` lists all three by name now. */
+      if (toldRef.current) setCharSay(asSentence(toldRef.current, localeRef.current));
     };
     const fresh = inspirations.filter((c) => c.capturedMs > since);
     if (fresh.length === 0) {
@@ -15208,6 +15217,41 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     thing, and saying so out loud made the creature sound like
                     it was reading a form. */}
                 <p className="jar-char-claim-statement">{claimQueue[0].statement}</p>
+                {/* ═══ WHERE IT CAME FROM, IN ONE LINE ════════════════════
+                    Founder: "how do we help the user deep dive into what
+                    inspirations led to this top of mind... without
+                    overwhelming the space we have?"
+
+                    THE LIST WAS TRIED HERE AND YOU REJECTED IT. Three
+                    evidence lines used to sit under this statement, and the
+                    verdict was "makes the page messy" and "we need to remove
+                    this or else it's gonna not have enough space". The ids
+                    stayed on the claim; it was the RENDERING that failed.
+
+                    So it is one line, in the register the principles surface
+                    already uses for exactly this — "held since August, drawn
+                    from 14 things you kept", which the craft notes call the
+                    whole difference between that card and a fortune cookie.
+                    One line cannot crowd anything, and pressing it opens the
+                    archive showing precisely those saves: a real list you
+                    can scan and open, rather than a paragraph about them.
+
+                    Absent when the claim arrived without its sources — an
+                    older server omits `from`, and a line claiming nothing is
+                    worse than no line. */}
+                {claimQueue[0].from?.length ? (
+                  <button type="button" className="jar-char-claim-from"
+                    onClick={() => {
+                      const claim = claimQueue[0]!;
+                      setSavesFocus({
+                        label: formatMessage(locale, "worldClaimFromCount", { count: claim.from!.length }),
+                        ids: claim.from!.map((row) => row.id),
+                      });
+                      openOverHome('saves');
+                    }}>
+                    {formatMessage(locale, "worldClaimFromCount", { count: claimQueue[0].from.length })}
+                  </button>
+                ) : null}
                 {/* WHAT IT READ THIS FROM IS GONE FROM HERE, AND THE REASON
                     IS SPACE, NOT DOUBT ABOUT IT.
 
@@ -16931,6 +16975,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         title={say(atWall.kind==='agent'?'worldAgentField':'worldMenuField')}
+        focus={savesFocus} onClearFocus={() => setSavesFocus(null)}
         /* THE SWITCH IS IN THE CORNER, AND IT ALWAYS WAS. Founder: "if the
            user changes it in the modal, then the page behind it should also
            change." Still exactly what happens — `ME / MY AGENT` in the

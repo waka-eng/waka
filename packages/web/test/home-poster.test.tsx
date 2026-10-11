@@ -883,7 +883,13 @@ describe("the weather is told on arrival, after the world has drawn", () => {
       });
       await layout.step(5);
       expect(said()).toContain(
-        "refused a candidate — too close to what you dismissed.",
+        /* CAPITALISED WHERE IT IS SPOKEN. The API writes this clause lower
+           case on purpose — the full record joins several into one line —
+           and the creature says one of them alone, which makes it a
+           sentence. `asSentence` capitalises at that point; see the note on
+           it in `lib/words`. What this case is about is unchanged: the
+           sentence arrives only AFTER the glide returns. */
+        "Refused a candidate — too close to what you dismissed.",
       );
       /* A count in the telling is now exact, not spelled (founder ruling,
          2026-08-24) — the fixture's sentence carries none either way, and
