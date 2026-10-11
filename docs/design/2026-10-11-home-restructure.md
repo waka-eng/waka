@@ -402,3 +402,89 @@ two rules.
   ceiling, not eliminated. The full fix is one capped band holding all three
   elements, which means the creature's canvas coordinates and the composer's
   CSS position deriving from the same number.
+
+---
+
+## 10. The sixth track, which landed last and agreed
+
+The derived-insight IA track returned after the build. Its three
+highest-priority recommendations were, in its own order:
+
+1. *"Remove the three verdict buttons from `ClaimsOverlay.tsx`."* — done
+2. *"Give the creature's ask an ending."* — done
+3. *"Collapse the expanding chat board into the capture box."* — done
+
+Independent convergence on all three, from a track that had not seen the
+work. Two further findings worth keeping.
+
+**The duplication was three duplications, not one.** `view-location.ts`
+defines two independent axes over the same four layers: `ViewSection`
+(`top` / `field` / `sky` — the 3D world's camera, where sky IS signals and
+field IS inspirations) and `ViewOpen` (four list overlays over that world). So
+every derived layer was rendered twice and claims three times — and the two
+claim surfaces differed on ZERO axes: same object, same key, same clearing
+condition, same durability, same voice, and the same CSS class on the
+buttons. One was a strict superset of the other. That is one feature where
+one copy is worse, which is what the founder read correctly as "even bad".
+
+**The precedent for what the room became.** Anki's Browse can search, edit,
+tag, reposition and suspend — and cannot rate a card; seeing one there is
+called a *preview*. The track names this as the fix and as the sanctioned
+fallback if a claims destination is kept at all: strip the verb, and the
+destination stops being a copy. That is exactly the shape the room now has.
+
+### What it recommends that was NOT done, and why
+
+**Three rungs, not four — drop claims from the switcher entirely**, leaving
+them in the creature's mouth and as nested provenance under the top of mind
+(the Limitless model: the derived material is the collapsed state of the raw
+material, in one tree). The argument is that the switcher describes its own
+axis as "the same material at three depths" and claims were the rung that
+broke the sentence.
+
+Not done, deliberately: the founder asked for a separate claims experience
+earlier the same night, and the track itself sanctions the kept-destination
+fallback provided the verb is removed — which it now is. Reversing an
+explicit request unreviewed, at the end of a long autonomous pass, is not a
+call to make alone.
+
+### The one instance of the rule still outstanding
+
+Two surfaces can still file a verdict on a signal:
+
+- the creature's claim (`Home.tsx` ~14583, ~14630)
+- the provenance chips under the top of mind (~13453–13473), which add a
+  fourth verb, "Say it in my words"
+
+These can hold the same unanswered signal, so the one-answerable-surface rule
+is not yet universal. Two ways to close it, and they are genuinely different
+products:
+
+- **Hand off.** The chips stop offering verdicts and route to the creature,
+  exactly as the claims room now does. Makes the rule absolute. Costs the
+  "say it in my words" path for a ground, which survives via the creature's
+  own "Not true".
+- **Keep them.** Argue that a chip under the reading is answering the
+  READING's evidence rather than the queue, and accept the overlap.
+
+Left for a decision rather than taken.
+
+### Two ideas from this track not yet built
+
+**The top of mind is an ephemeral persistent object and is missing both of
+that pattern's mechanics.** Spotify's daylist puts a next-update time on the
+object itself and warns that an un-saved one is "gone with the wind"; the
+save gesture is what converts a passing reading into a kept one. WAKA's
+reading is re-derived and silently replaces itself, and `lead.locked` already
+exists in the data — so the keep gesture is a surfacing job, not a feature
+build. It is the most emotionally loaded single gesture available here.
+
+**"Here is a new thing I believe about you — is that right?" is unclaimed in
+the entire category.** Across twelve AI self-model products, every belief
+list is a destination, and the only in-conversation memory notice outside
+ChatGPT is Claude's — which is negative, a notice when it DECLINES to save.
+Pi's own docs: "Thumbs down does not mean that Pi will forget that specific
+memory." ChatGPT's "Don't mention this again" "does not delete the original
+source." Confirm gestures that do nothing are the category norm, and WAKA's
+correction channel is the only one that asks what IS true. It belongs on the
+home screen, which is where it now is.
