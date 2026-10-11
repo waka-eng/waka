@@ -40,21 +40,40 @@
  * misread. Without it, you are being told who you are and have to argue back
  * from nothing.
  *
- * ── THE ANSWERS ARE THE PRODUCT'S ONE ANSWER REGISTER ─────────────────────
+ * ── THE ROOM ADVERTISES THE QUEUE. IT NEVER ANSWERS ONE ──────────────────
  *
- * `.jar-char-claim-answers`, shared with the creature's claim and the top of
- * mind's wall — see Law 11 in `docs/six-laws.md`. Three peers, no primary,
- * because lighting "yes" puts a thumb on the scale of every principle written
- * downstream. A person answering eight claims in a row is exactly who that
- * ruling protects.
+ * Founder, on the first version of this surface: "your claims are duplicated
+ * so that's like even bad."
  *
- * ── AN ANSWERED CLAIM DOES NOT VANISH ─────────────────────────────────────
+ * Correct, and it was structural rather than cosmetic. This room rendered the
+ * same unanswered claim, with the same three answers, that the creature was
+ * asking on the home screen — so the product had two places to do one thing
+ * and no rule saying which was real.
  *
- * It stays on screen wearing its answer. A row that disappears on press takes
- * its own receipt with it: you cannot tell a successful answer from a lost
- * one, and you cannot change your mind about the thing you just did. The list
- * is re-read on the next open, so the queue is still a queue — it simply does
- * not move under the hand that is working it.
+ * THE RULE EVERY SHIPPING PRODUCT FOLLOWS, found by looking at six of them:
+ * a queue has exactly ONE surface where an item is answerable; other surfaces
+ * may advertise that the queue exists and how heavy it is, and must never
+ * render an answerable item. GitHub's notification badge carries zero item
+ * content and the inbox is the only place anything can be acted on. Anki
+ * shows the day's load on the deck screen and NEVER renders a card there —
+ * doorway, then work. Linear's Priority and Other are a partition of one
+ * inbox, not two copies of it.
+ *
+ * So the creature is where a claim is answered, always and only. This room is
+ * the deck screen: it shows what WAKA is noticing and the saves each reading
+ * leans on, and pressing one does not answer it — it HANDS IT TO THE CREATURE
+ * and gets out of the way. The duplication is now impossible rather than
+ * discouraged, and the room keeps the job the home screen cannot do: the
+ * evidence does not fit in a creature's mouth, and here there is room for it.
+ *
+ * ── WHY NOT A BACKLOG OF ANSWERED ONES ───────────────────────────────────
+ *
+ * That is the better destination and it is blocked, not declined: `ApiSignal`
+ * carries no verdict, so "the claim, and what you said about it" cannot be
+ * rendered without a server change. When it can, this room should become
+ * exactly that — the correction channel's archive and the evidence trail for
+ * how the top of mind got written, which is a reason to visit that is not
+ * guilt.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -63,39 +82,29 @@ import { listClaims, type ApiClaim } from "../lib/api/claims";
 import { t, type SupportedLocale } from "../lib/locales";
 
 type Phase = "loading" | "ready" | "failed";
-type Verdict = "true" | "partly" | "not_true";
 
 export interface ClaimsOverlayProps {
   locale: SupportedLocale;
   onClose: () => void;
-  /** Files the verdict. Owned by the world, so this surface goes through the
-      same writer as the creature's claim rather than a second one that could
-      disagree with it about who is standing here. */
-  onAnswer: (id: string, value: Verdict, revision?: string) => void;
+  /** Hands this claim to the creature and closes. The verdict is filed on the
+      home screen, by the one surface allowed to take it. */
+  onAsk: (id: string) => void;
   /**
-   * Answers already filed this session, so a reopened overlay does not ask
-   * again about something that was just settled.
+   * Answers already filed this session, so a claim settled with the creature
+   * a moment ago is not still advertised here as waiting.
    *
-   * WIDER THAN `Verdict`, ON PURPOSE. The world's map carries a fourth state,
-   * `gone`, for a signal that is no longer there to be ruled on. Narrowing
-   * the world's type to this surface's three would make the caller cast, and
-   * a cast is how a fifth state arrives here unannounced one day. The read
-   * below ignores anything that is not one of the three answers, so a `gone`
-   * claim simply shows its buttons — which is the honest behaviour, since the
-   * list it came from only contains claims the server still considers open.
+   * WIDER THAN THE THREE ANSWERS, ON PURPOSE: the world's map carries `gone`
+   * for a signal that is no longer there to be ruled on. Narrowing it here
+   * would make the caller cast, and a cast is how a fifth state arrives
+   * unannounced.
    */
-  answered?: ReadonlyMap<string, Verdict | "gone">;
+  answered?: ReadonlyMap<string, "true" | "partly" | "not_true" | "gone">;
 }
 
-export function ClaimsOverlay({ locale, onClose, onAnswer, answered }: ClaimsOverlayProps) {
+export function ClaimsOverlay({ locale, onClose, onAsk, answered }: ClaimsOverlayProps) {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   const [phase, setPhase] = useState<Phase>("loading");
   const [rows, setRows] = useState<ApiClaim[]>([]);
-  /* Answers filed from THIS surface, merged over the ones the world already
-     knew. Local, because the overlay must show the answer in the same beat it
-     was pressed — a judgement about yourself should not wait on a round trip,
-     which is the ruling the creature's claim already follows. */
-  const [mine, setMine] = useState<Map<string, Verdict>>(new Map());
   const alive = useRef(true);
 
   const load = useCallback(() => {
@@ -120,9 +129,11 @@ export function ClaimsOverlay({ locale, onClose, onAnswer, answered }: ClaimsOve
   }, [load]);
 
   const title = say("worldMenuClaims");
-  const verdictOf = (id: string): Verdict | undefined => {
-    const said = mine.get(id) ?? answered?.get(id);
-    return said === "true" || said === "partly" || said === "not_true" ? said : undefined;
+  /* Settled with the creature during this session, so it stops being
+     advertised here as waiting. */
+  const settled = (id: string): boolean => {
+    const said = answered?.get(id);
+    return said === "true" || said === "partly" || said === "not_true";
   };
 
   return (
@@ -178,19 +189,33 @@ export function ClaimsOverlay({ locale, onClose, onAnswer, answered }: ClaimsOve
           <p className="waka-over-status">{say("worldClaimsEmpty")}</p>
         ) : (
           <ul className="waka-claims">
-            {rows.map((row) => {
-              const verdict = verdictOf(row.id);
+            {rows.filter((row) => !settled(row.id)).map((row) => {
               const from = row.from ?? [];
               return (
                 <li key={row.id} className="waka-claim">
-                  <p className="waka-claim-statement">{row.statement}</p>
+                  {/* THE WHOLE ROW IS A DOORWAY, NOT A JUDGEMENT. Pressing it
+                      hands this claim to the creature and closes this surface,
+                      so the one place a verdict can be filed stays the one
+                      place a verdict can be filed. The verb rides on the
+                      statement rather than in a button beside it, because the
+                      statement IS the thing you want to go and think about and
+                      a separate button would be a second target for one
+                      intention. */}
+                  <button
+                    type="button"
+                    className="waka-claim-open"
+                    onClick={() => onAsk(row.id)}
+                  >
+                    <span className="waka-claim-statement">{row.statement}</span>
+                  </button>
 
-                  {/* THE RECEIPTS, ALWAYS, NOT BEHIND A PRESS. See this file's
-                      header: the saves are the difference between a reading
-                      and a horoscope. Absent on an older server and empty when
-                      every save behind it has since been deleted — in both
-                      cases the claim renders without them rather than
-                      pretending to a proof it does not have. */}
+                  {/* THE RECEIPTS, ALWAYS, NOT BEHIND A PRESS — and this is
+                      the room's entire reason to exist. `api/claims.ts` has
+                      the sentence: "A claim with no material under it can only
+                      be agreed or disagreed with on vibes; with the saves
+                      visible it can be CHECKED, which is the whole difference
+                      between a reading and a horoscope." The evidence does not
+                      fit in a creature's mouth; here there is space for it. */}
                   {from.length > 0 ? (
                     <ul className="waka-claim-from">
                       {from.map((source) => (
@@ -198,41 +223,6 @@ export function ClaimsOverlay({ locale, onClose, onAnswer, answered }: ClaimsOve
                       ))}
                     </ul>
                   ) : null}
-
-                  {verdict ? (
-                    /* IT WEARS ITS ANSWER RATHER THAN DISAPPEARING. A row that
-                       vanishes on press takes its own receipt with it. */
-                    <p className="waka-claim-said" role="status">
-                      {say(
-                        verdict === "true"
-                          ? "worldYouAnsweredYes"
-                          : verdict === "partly"
-                            ? "worldYouAnsweredPartly"
-                            : "worldYouAnsweredNotTrue",
-                      )}
-                    </p>
-                  ) : (
-                    <p className="jar-char-claim-answers">
-                      {(["true", "partly", "not_true"] as const).map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => {
-                            setMine((prev) => new Map(prev).set(row.id, value));
-                            onAnswer(row.id, value, row.statementRevision);
-                          }}
-                        >
-                          {say(
-                            value === "true"
-                              ? "worldYes"
-                              : value === "partly"
-                                ? "worldPartly"
-                                : "worldNotTrue",
-                          )}
-                        </button>
-                      ))}
-                    </p>
-                  )}
                 </li>
               );
             })}
