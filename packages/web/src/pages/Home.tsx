@@ -16356,9 +16356,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           <button type="button" className="waka-new-away" aria-label={say('worldClose')}
             onClick={() => setMakingNew(false)} />
           <div className="waka-new" role="menu" aria-label={say('worldDockNew')} data-jar-chrome="1" data-jar-interactive="1">
+            {/* "NEW X", BOTH OF THEM. Founder: "new inspiration, new chat."
+                The two rows said "Save inspiration" and "New conversation" —
+                a verb beside a noun, for two moves that are the same move
+                aimed at two things. Under a plus, every row is "a new one of
+                these"; saying it twice the same way is what makes the pair
+                read as a pair. */}
             <button type="button" role="menuitem" className="waka-new-one"
               onClick={() => { setMakingNew(false); startNewInspiration(); }}>
-              {say('worldSaveInspiration')}
+              {say('worldNewInspiration')}
             </button>
             <button type="button" role="menuitem" className="waka-new-one"
               onClick={() => { setMakingNew(false); viewNavigation.write({ ...EMPTY_VIEW, conversationId: 'new' }); }}>

@@ -119,7 +119,11 @@ it('offers places in the dock, and nothing that is already on the screen',async(
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
   const dock=[...world.container.querySelectorAll('.waka-dock .waka-dock-item')];
   const rows=dock.map(node=>(node.textContent?.trim()||node.getAttribute('aria-label')?.trim())??'');
-  expect(rows).toEqual(['Now','Inspirations','Make something','Conversations','Principles']);
+  /* "CHATS", NOT "CONVERSATIONS" — founder: "change conversation to chat in
+     bottom navigation as well". A dock row is read in a glance and in a
+     thumb's width; the longer word was the longest thing on the bar and the
+     one nobody calls it out loud. */
+  expect(rows).toEqual(['Now','Inspirations','Make something','Chats','Principles']);
   expect(dock[2]!.textContent?.trim(),'the plus is drawn, not written').toBe('');
   expect(dock[2]!.getAttribute('aria-current'),'a verb is never a place you are at').toBeNull();
   expect(rows,'a claim is answered on home; the dock must not offer a second way in').not.toContain('Claims');

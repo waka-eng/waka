@@ -314,12 +314,12 @@ select:focus {
 .profile-tabs button,
 .login-tab,
 .profile-memory-action {
-  --t-label-size: var(--t-fine);
+  --t-label-size: var(--t-meta);
 }
 .btn-destructive {
-  --t-label-size: var(--t-note);
+  --t-label-size: var(--t-ui);
 }
-.btn-google { --t-label-size: var(--t-fine); }
+.btn-google { --t-label-size: var(--t-meta); }
 .btn-primary,
 .btn-destructive,
 button[type="submit"] {
@@ -331,7 +331,7 @@ button[type="submit"] {
   background: none;
   color: var(--w-ink);
   font-family: inherit;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 5px;
@@ -797,7 +797,7 @@ a:focus-visible {
   display: block;
   margin: var(--sp-8) 0;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   line-height: 1.5;
   color: var(--ink);
   word-break: break-all;
@@ -818,7 +818,7 @@ a:focus-visible {
   gap: var(--sp-12);
   margin: 0 0 var(--sp-14);
   color: var(--w-ink);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
   cursor: pointer;
 }
@@ -907,7 +907,7 @@ a:focus-visible {
 .profile-email,
 .login-subtitle,
 .profile-subtitle {
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.6;
   letter-spacing: 0;
 }
@@ -921,7 +921,7 @@ a:focus-visible {
 .profile-public-panel > .profile-subtitle,
 .profile-danger-panel > .profile-subtitle {
   max-width: 52ch;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
 }
 
 /* the header sits apart from the form rather than on top of it */
@@ -1205,7 +1205,7 @@ body .field:last-of-type {
    arriving rather than the page rearranging around you. */
 body .profile-disclose {
   margin: var(--sp-26) 0 0;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
 }
 body .profile-disclose button {
   appearance: none;
@@ -1269,7 +1269,7 @@ body .profile-form .btn-primary,
 body .profile-card .btn-primary {
   margin-top: var(--sp-26);
   color: var(--w-ink);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   letter-spacing: 0;
   text-transform: lowercase;
 }
@@ -1468,7 +1468,7 @@ body .profile-disclose-inline {
   min-height: 32px;
   color: var(--w-faint);
   font: inherit;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 5px;
@@ -1481,7 +1481,7 @@ body .profile-disclose-inline:focus-visible {
 }
 /* sign out leaves the header and joins the foot, where leaving belongs */
 body .profile-signout-button {
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   text-transform: lowercase;
   letter-spacing: 0;
 }
@@ -1489,17 +1489,17 @@ body .profile-signout-button {
 .jar-inspiration-search { width: min(560px, calc(100vw - var(--sp-44))); color: var(--w-ink); font-size: var(--t-body); }
 .jar-search-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
 .jar-search-heading p { margin: 0; }
-.jar-inspiration-search button, .jar-copy-link, .jar-navigation-notice button { min-width: var(--sp-44); min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 0; background: none; color: var(--w-ink); font: inherit; font-size: var(--t-note); cursor: pointer; }
+.jar-inspiration-search button, .jar-copy-link, .jar-navigation-notice button { min-width: var(--sp-44); min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 0; background: none; color: var(--w-ink); font: inherit; font-size: var(--t-ui); cursor: pointer; }
 .jar-inspiration-search button[aria-disabled="true"] { cursor: progress; }
 .jar-search-results { list-style: none; padding: 0; margin: var(--sp-12) 0; }
 .jar-search-results li { border-bottom: 1px solid var(--w-edge); }
 .jar-search-results button { display: block; width: 100%; text-align: left; border-radius: var(--sp-8); }
 .jar-search-results button:hover { background: var(--w-raised); }
 .jar-search-results span { display: block; line-height: 1.5; overflow-wrap: anywhere; }
-.jar-search-results small { display: block; margin-top: var(--sp-4); color: var(--w-muted); font-size: var(--t-note); }
+.jar-search-results small { display: block; margin-top: var(--sp-4); color: var(--w-muted); font-size: var(--t-ui); }
 .jar-panel-head { grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--sp-8); }
 .jar-panel-when { min-width:0; overflow-wrap:anywhere; }
-.jar-audience-note { color:var(--w-muted); font-size:var(--t-note); line-height:1.5; margin:var(--sp-8) 0; }
+.jar-audience-note { color:var(--w-muted); font-size:var(--t-ui); line-height:1.5; margin:var(--sp-8) 0; }
 .jar-composer-footer > .jar-audience-note { flex-basis:100%; margin-bottom:0; }
 @media (max-width:600px) {
   .jar-panel-head { grid-template-columns:minmax(0,1fr) auto; }
@@ -1511,7 +1511,7 @@ body .profile-signout-button {
 .jar-inspiration-search button:focus-visible, .jar-copy-link:focus-visible, .jar-navigation-notice button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
 .jar-navigation-notice { position: absolute; z-index: 60; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(400px, calc(100vw - var(--sp-44))); padding: var(--sp-22); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: var(--jar-panel); color: var(--w-ink); font-size: var(--t-body); }
 
-.jar-room-patterns { margin: var(--sp-12) 0 var(--sp-22); color: var(--w-ink); font-size: var(--t-note); line-height: 1.5; }
+.jar-room-patterns { margin: var(--sp-12) 0 var(--sp-22); color: var(--w-ink); font-size: var(--t-ui); line-height: 1.5; }
 .jar-room-patterns ul { list-style: none; padding: 0; margin: 0; }
 .jar-room-patterns li { padding: var(--sp-12) 0; border-bottom: 1px solid var(--w-edge); }
 .jar-room-patterns li > p { margin: 0 0 var(--sp-4); }
@@ -1536,14 +1536,14 @@ body .profile-signout-button {
 }
 .jar-composer-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
 .jar-composer-heading h2 { margin: 0; font-size: var(--t-body); font-weight: 500; }
-.jar-inspiration-composer button { min-height: var(--sp-44); min-width: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: none; color: var(--w-ink); font: inherit; font-size: var(--t-note); cursor: pointer; }
+.jar-inspiration-composer button { min-height: var(--sp-44); min-width: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: none; color: var(--w-ink); font: inherit; font-size: var(--t-ui); cursor: pointer; }
 .jar-inspiration-composer button:disabled { opacity: .5; cursor: default; }
 .jar-inspiration-composer button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
 .jar-inspiration-composer .jar-composer-text { position: static; display: block; width: 100%; max-width: none; min-height: calc(var(--sp-44) * 3); max-height: calc(var(--sp-44) * 6); margin: var(--sp-12) 0; padding: var(--sp-8) 0; background: none; border: 0; border-bottom: 1px solid var(--w-muted); border-radius: 0; color: var(--w-ink); font-size: var(--t-input); line-height: 1.6; letter-spacing: normal; text-transform: none; text-align: left; resize: vertical; }
 .jar-composer-tools, .jar-composer-actions, .jar-composer-visibility { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
 .jar-composer-tools { margin-bottom: var(--sp-12); }
 .jar-inspiration-composer .jar-composer-save { background:var(--w-ink); color:var(--w-ground); border-color:var(--w-ink); }
-.jar-composer-storage-note { color: var(--w-muted); font-size: var(--t-note); line-height: 1.5; }
+.jar-composer-storage-note { color: var(--w-muted); font-size: var(--t-ui); line-height: 1.5; }
 .jar-composer-link { display: flex; gap: var(--sp-8); margin: var(--sp-12) 0; }
 .jar-composer-link input { min-width: 0; flex: 1; min-height: var(--sp-44); padding: var(--sp-8); border: 1px solid var(--w-edge); border-radius: var(--sp-8); background: transparent; color: var(--w-ink); }
 @media (max-width: 480px) { .jar-composer-link { flex-wrap: wrap; } .jar-composer-link input { flex-basis: 100%; } }
@@ -1553,16 +1553,16 @@ body .profile-signout-button {
 .jar-composer-media audio { width: 100%; }
 .jar-recording-choice { padding-block: var(--sp-12); border-bottom: 1px solid var(--w-edge); }
 .jar-recording-choice audio { width: 100%; margin-bottom: var(--sp-12); }
-.jar-composer-media-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--t-note); }
+.jar-composer-media-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--t-ui); }
 .jar-composer-media-name a { color: inherit; }
-.jar-composer-media-name small { display: block; color: var(--w-muted); font-size: var(--t-note); }
+.jar-composer-media-name small { display: block; color: var(--w-muted); font-size: var(--t-ui); }
 .jar-composer-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--sp-12); margin-top: var(--sp-22); }
 .jar-composer-visibility button { border-color: transparent; }
 .jar-composer-visibility button[aria-pressed="true"] { background: var(--w-raised); border-color: var(--w-muted); }
-.jar-saved-attachment { margin: var(--sp-12) 0; font-size: var(--t-note); }
+.jar-saved-attachment { margin: var(--sp-12) 0; font-size: var(--t-ui); }
 .jar-saved-attachment img { display: block; max-width: 100%; max-height: 320px; object-fit: contain; border-radius: var(--sp-8); }
 .jar-saved-attachment audio { width: 100%; }
-.jar-attachment-preview { margin-block: var(--sp-12); font-size: var(--t-note); line-height: 1.6; }
+.jar-attachment-preview { margin-block: var(--sp-12); font-size: var(--t-ui); line-height: 1.6; }
 .jar-attachment-preview h3 { font-size: var(--t-lead); font-weight: 500; margin: 0; overflow-wrap: anywhere; }
 .jar-attachment-preview h3 a { display: block; min-height: var(--sp-44); }
 .jar-attachment-preview .jar-link-thumbnail { width: 100%; max-height: 200px; object-fit: cover; margin-bottom: var(--sp-12); }
@@ -1579,7 +1579,7 @@ body .profile-signout-button {
 .jar-review header,.jar-review footer { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-12); flex-wrap:wrap; flex-shrink:0; }
 .jar-review h2 { margin:0; font-size:var(--t-lead); font-weight:500; }
 .jar-review h3 { font-size:var(--t-lead); font-weight:500; }
-.jar-review button { min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8) var(--sp-12); margin:var(--sp-4); border:1px solid var(--w-edge); border-radius:var(--sp-12); background:none; color:var(--w-ink); font:inherit; font-size:var(--t-note); cursor:pointer; }
+.jar-review button { min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8) var(--sp-12); margin:var(--sp-4); border:1px solid var(--w-edge); border-radius:var(--sp-12); background:none; color:var(--w-ink); font:inherit; font-size:var(--t-ui); cursor:pointer; }
 /* The label stays a label; see the doorway's note above for the bug this is
    the same shape as. A sheet's verbs sit on no fill, so nothing needs dimming
    but the ink, and `progress` is the honest cursor for a button that is busy
@@ -1588,10 +1588,10 @@ body .profile-signout-button {
 .jar-review button:hover:not(:disabled) { background:var(--w-raised); }
 .jar-review-card { outline:none; touch-action:pan-y pinch-zoom; }
 .jar-review-card:focus-visible { outline:1px solid var(--w-edge); outline-offset:var(--sp-4); }
-.jar-review-context { color:var(--w-muted); font-size:var(--t-note); line-height:1.5; }
+.jar-review-context { color:var(--w-muted); font-size:var(--t-ui); line-height:1.5; }
 .jar-review-item-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-8); margin-top:var(--sp-22); padding-top:var(--sp-16); border-top:1px solid var(--w-edge); }
 .jar-review-item-actions button { margin:0; font-size:var(--t-body); }
-.jar-item-actions { position:relative; margin-left:auto; font-size:var(--t-note); }
+.jar-item-actions { position:relative; margin-left:auto; font-size:var(--t-ui); }
 .jar-item-actions > summary { display:flex; align-items:center; min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8); list-style:none; color:var(--w-muted); cursor:pointer; }
 .jar-item-actions > summary::-webkit-details-marker { display:none; }
 .jar-item-actions > summary:hover,.jar-item-actions > summary:focus-visible { color:var(--w-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
@@ -1633,7 +1633,7 @@ body .profile-signout-button {
 .jar-share-preview img { display:block; width:100%; height:auto; border:1px solid var(--w-edge); }
 .jar-principle-share footer { border-top:1px solid var(--w-edge); padding-top:var(--sp-12); }
 @media (max-width:680px) { .jar-share-columns { grid-template-columns:minmax(0,1fr); } .jar-share-preview { grid-row:1; } .jar-share-controls { grid-column:1; grid-row:2; } }.jar-review select { box-sizing:border-box; width:100%; min-height:var(--sp-44); font:inherit; font-size:var(--t-lead); color:var(--w-ink); background:var(--w-raised); border:1px solid var(--w-edge); border-radius:var(--sp-12); padding:var(--sp-12); }.jar-reflection-flow .jar-reflection-turn button { min-height: var(--sp-44); }
-.jar-attachment-transcript { margin-top: var(--sp-16); font-size: var(--t-note); line-height: 1.6; }
+.jar-attachment-transcript { margin-top: var(--sp-16); font-size: var(--t-ui); line-height: 1.6; }
 .jar-attachment-transcript header { display: flex; align-items: baseline; gap: var(--sp-12); }
 .jar-attachment-transcript h3 { font-size: var(--t-body); font-weight: 500; margin: 0; }
 .jar-attachment-transcript small { color: var(--w-muted); }
@@ -1650,7 +1650,7 @@ body .profile-signout-button {
 .jar-mouth-rest:not(.jar-mouth-rest--said), .jar .jar-capture-shortcut {
   min-height:var(--sp-44); box-sizing:border-box; padding:var(--sp-8) var(--sp-12);
   border:1px solid var(--w-muted); border-radius:var(--sp-22); background:var(--w-raised);
-  color:var(--w-ink); --t-label-size:var(--t-note);
+  color:var(--w-ink); --t-label-size:var(--t-ui);
 }
 .jar-mouth .jar-mouth-rest:not(.jar-mouth-rest--said) { text-decoration:none; }
 .jar-mouth .jar-mouth-rest:not(.jar-mouth-rest--said), .jar .jar-capture-shortcut {
@@ -1709,7 +1709,7 @@ body .profile-signout-button {
 .jar-hq-inner--compact:focus-visible { outline:1px solid var(--w-muted); outline-offset:-2px; }
 .jar-activity-title { font-size:var(--t-body); line-height:1.5; font-weight:400; overflow-wrap:anywhere; }
 @media (max-width:560px) { .jar-hq-inner.jar-hq-inner--compact { margin-top:calc(118px + env(safe-area-inset-top)); } .jar-home-activities { grid-template-columns:minmax(0,1fr); gap:var(--sp-4); margin-top:var(--sp-24); } }
-.jar-source-details { font-size:var(--t-note); }
+.jar-source-details { font-size:var(--t-ui); }
 .jar-source-details summary { min-height:var(--sp-44); display:flex; align-items:center; cursor:pointer; color:var(--w-muted); }
 .jar-panel .jar-panel-vis button,.jar-panel .jar-panel-foot button,.jar-panel .jar-panel-askrow button,.jar-reflection-flow button { min-height:var(--sp-44); }
 .jar-personal-shortcuts { position:absolute; z-index:6; inset:auto var(--sp-12) calc(var(--sp-12) + env(safe-area-inset-bottom)); display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:end; gap:var(--sp-12); pointer-events:none; }

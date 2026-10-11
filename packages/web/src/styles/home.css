@@ -188,7 +188,7 @@
 .jar-account,
 .jar-here-row,
 .jar-dial-stop {
-  --t-label-size: var(--t-fine);
+  --t-label-size: var(--t-meta);
 }
 .jar-mouth-where,
 .jar-panel-vis,
@@ -198,7 +198,7 @@
 }
 .jar-mouth-rest,
 .jar-mouth-field {
-  --t-label-size: var(--t-note);
+  --t-label-size: var(--t-ui);
 }
 
 /* ---------- the volume: a quiet gradient the camera descends through ---------- */
@@ -460,18 +460,18 @@
   cursor: pointer;
   transition: text-shadow 0.2s ease;
 }
-.jar-reading-heading { display:flex; align-items:baseline; flex-wrap:wrap; justify-content:center; gap:var(--sp-12); margin:0 0 var(--sp-8); color:var(--w-muted); font-size:var(--t-note); line-height:1.5; }
+.jar-reading-heading { display:flex; align-items:baseline; flex-wrap:wrap; justify-content:center; gap:var(--sp-12); margin:0 0 var(--sp-8); color:var(--w-muted); font-size:var(--t-ui); line-height:1.5; }
 .jar-reading-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:var(--sp-4) var(--sp-12); margin-top:var(--sp-8); pointer-events:auto; }
 .jar-reading-actions button { min-height:var(--sp-44); padding:var(--sp-8) 0; border:0; background:none; color:var(--w-muted); font:inherit; font-size:var(--t-body); text-align:left; cursor:pointer; }
 .jar-forming.jar-forming--personal { font-size:var(--t-body); font-style:normal; color:var(--w-muted); line-height:1.6; }
-.jar-first-capture-hint { margin:var(--sp-8) 0; color:var(--w-muted); font-size:var(--t-note); line-height:1.6; }
+.jar-first-capture-hint { margin:var(--sp-8) 0; color:var(--w-muted); font-size:var(--t-ui); line-height:1.6; }
 .jar-personal-navigation { position:absolute; z-index:6; bottom:calc(var(--sp-12) + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:grid; grid-template-columns:repeat(4,auto); gap:var(--sp-4); width:min(520px,calc(100vw - var(--sp-16))); padding:var(--sp-4); border-radius:var(--sp-16); background:color-mix(in srgb,var(--jar-atmos) 90%,transparent); pointer-events:auto; }
 .jar-personal-navigation[hidden] { display:none; }
-.jar-personal-navigation button { min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8) var(--sp-4); border:0; border-radius:var(--sp-8); background:none; color:var(--w-muted); font:inherit; font-size:var(--t-note); white-space:nowrap; cursor:pointer; }
+.jar-personal-navigation button { min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8) var(--sp-4); border:0; border-radius:var(--sp-8); background:none; color:var(--w-muted); font:inherit; font-size:var(--t-ui); white-space:nowrap; cursor:pointer; }
 .jar-personal-navigation button[aria-current="page"],.jar-personal-navigation button:hover,.jar-personal-navigation button:focus-visible { color:var(--w-ink); background:color-mix(in srgb,var(--w-ink) 8%,transparent); }
 .jar-personal-navigation button:focus-visible { text-decoration:underline; text-underline-offset:var(--sp-4); }
 .jar-personal-navigation button:disabled { opacity:.5; cursor:progress; }
-.jar-capture-receipt { pointer-events:auto; display:flex; align-items:center; justify-content:center; gap:var(--sp-12); margin-top:var(--sp-8); color:var(--w-muted); font-size:var(--t-note); }
+.jar-capture-receipt { pointer-events:auto; display:flex; align-items:center; justify-content:center; gap:var(--sp-12); margin-top:var(--sp-8); color:var(--w-muted); font-size:var(--t-ui); }
 .jar-capture-receipt button { min-height:var(--sp-44); padding:var(--sp-8); border:0; background:none; color:var(--w-ink); font:inherit; cursor:pointer; }
 .jar-capture-receipt button:hover,.jar-capture-receipt button:focus-visible { text-decoration:underline; text-underline-offset:var(--sp-4); }
 .jar-reading-actions button:hover,.jar-reading-actions button:focus-visible { color:var(--jar-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
@@ -482,7 +482,7 @@
 
 .jar-poster {
   margin: 0;
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   /* 300, never heavier: in a geometric the elegance is in the thin even stroke
      and the air around it, and weight is what killed the last attempt. */
   font-weight: 300;
@@ -589,7 +589,7 @@
 .jar-forming {
   margin: 0;
   font-family: var(--waka-face);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   font-weight: 300;
   font-style: normal;
   color: var(--jar-muted);
@@ -612,7 +612,7 @@
   border: 0;
   background: none;
   font: inherit;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   color: var(--jar-ink);
   text-decoration: underline;
   text-underline-offset: 4px;
@@ -789,7 +789,7 @@
   padding: 0;
   background: none;
   font-family: var(--waka-face);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   letter-spacing: normal;
   text-transform: none;
   color: var(--jar-muted);
@@ -811,7 +811,7 @@
   gap: var(--sp-12);
 }
 .jar-reading-status .jar-board-act {
-  --t-label-size: var(--t-note);
+  --t-label-size: var(--t-ui);
   min-height: 44px;
   padding: var(--sp-8) 0;
   color: var(--jar-ink);
@@ -823,7 +823,7 @@
   gap: var(--sp-12);
   margin-top: var(--sp-16);
   color: var(--jar-ink);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
   pointer-events: auto;
 }
@@ -865,7 +865,7 @@
    reading". What it explained is a hover card on the settings page now
    (#36), which is the difference between an explanation you can open and a
    specification printed under the thing you came to read. */
-.jar-source-hint { font-size: var(--t-note); line-height: 1.5; }
+.jar-source-hint { font-size: var(--t-ui); line-height: 1.5; }
 /* The mark sits with the words rather than in a column of its own. */
 .jar-source-status--quiet .jar-source-copy {
   flex: 0 1 auto;
@@ -883,7 +883,7 @@
 }
 .jar-source-previous {
   margin: var(--sp-16) 0;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
   color: var(--jar-ink);
 }
@@ -899,14 +899,14 @@
 /* NO ITALIC, HERE OR ANYWHERE. Founder: "can we make the font consistent
    across all the experience? I don't know what the weird cursive thing is."
    That was this — five separate rules set small text in italic Jost, which at
-   `--t-note` and below does not read as emphasis, it reads as a second
+   `--t-ui` and below does not read as emphasis, it reads as a second
    typeface. `claims.css` states the rule in its first paragraph: hierarchy
    comes from SIZE and WEIGHT, never from a change of face. These five were
    written before that sentence existed and were never swept with it. */
 .jar-board-warn {
   flex-basis: 100%;
   color: var(--jar-muted);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
 }
 
 
@@ -923,7 +923,7 @@
 .jar-share-hint { font-size: var(--t-meta); opacity: 0.55; }
 .jar-share-note {
   margin: var(--sp-8) 0 0;
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   /* READABLE, NOT DECORATIVE. `--jar-faint` measures 2.3:1 on this ground —
      not dimmer prose, prose you cannot read. `--jar-muted` is 5.5:1 and still
      plainly quieter than the ink beside it. Same correction as the disabled
@@ -1090,7 +1090,7 @@
 }
 .jar-values-lead {
   margin: 0;
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: clamp(19px, 2vw, 25px);
   line-height: 1.34;
@@ -1186,9 +1186,9 @@
   flex-wrap: wrap;
   gap: var(--sp-8) var(--sp-20);
 }
-.jar-principle-actions > button { min-height: 44px; font-size:var(--t-note); color:var(--jar-ink); }
-.jar-values .jar-values-words { font-size:var(--t-note); font-weight:400; letter-spacing:normal; text-transform:none; }
-.jar-board-acts button.jar-board-act { font-size:var(--t-note); letter-spacing:normal; text-transform:none; }
+.jar-principle-actions > button { min-height: 44px; font-size:var(--t-ui); color:var(--jar-ink); }
+.jar-values .jar-values-words { font-size:var(--t-ui); font-weight:400; letter-spacing:normal; text-transform:none; }
+.jar-board-acts button.jar-board-act { font-size:var(--t-ui); letter-spacing:normal; text-transform:none; }
 .jar-principle-secondary {
   display: flex;
   align-items: center;
@@ -1279,7 +1279,7 @@
 .jar-review-evidence { margin:var(--sp-12) 0; padding-left:var(--sp-12); border-left:1px solid var(--jar-faint); color:var(--jar-ink); overflow-wrap:anywhere; }
 .jar-review-evidence p,.jar-principle-reference .jar-review-evidence p { margin:0; font-size:var(--t-body); line-height:1.6; white-space:pre-wrap; }
 .jar-review-evidence footer { margin-top:var(--sp-6); color:var(--jar-muted); font-size:var(--t-label); }
-.jar-review-evidence a { display:inline-flex; align-items:center; min-height:var(--sp-44); color:var(--jar-ink); font-size:var(--t-note); text-underline-offset:var(--sp-4); }.jar-review-evidence a:focus-visible { outline:2px solid var(--jar-ink); outline-offset:var(--sp-4); }
+.jar-review-evidence a { display:inline-flex; align-items:center; min-height:var(--sp-44); color:var(--jar-ink); font-size:var(--t-ui); text-underline-offset:var(--sp-4); }.jar-review-evidence a:focus-visible { outline:2px solid var(--jar-ink); outline-offset:var(--sp-4); }
 .jar-principles-list details[open] p {
   padding: var(--sp-8) 0 var(--sp-8) var(--sp-12);
   border-left: 1px solid var(--jar-faint);
@@ -1305,7 +1305,7 @@
 .jar-principles-empty { max-width: 430px; margin: 0 auto; text-align: center; }
 .jar-principles-empty-lead {
   margin: 0 0 var(--sp-24);
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   font-size: clamp(20px, 2.1vw, 28px);
   font-weight: 300;
   line-height: 1.3;
@@ -1385,7 +1385,7 @@
   background: none;
   cursor: pointer;
   text-align: center;
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: clamp(19px, 2vw, 25px);
   line-height: 1.34;
@@ -1399,7 +1399,7 @@
 }
 .jar-values-sub {
   margin: var(--sp-14) 0 0;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.66;
   text-wrap: pretty;
   color: var(--jar-muted);
@@ -1472,7 +1472,7 @@
 /* which memory this is about, in one line and never the whole thing */
 .jar-reflect-on {
   margin: 0 0 var(--sp-14);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
   color: var(--jar-muted);
   display: -webkit-box;
@@ -1708,7 +1708,7 @@
 }
 .jar-proposal-body {
   margin: 0;
-  font-family: Jost, Pretendard, sans-serif;
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: var(--t-lead);
   line-height: 1.4;
@@ -1769,14 +1769,14 @@
 }
 .jar-roomform .jar-room-primary {
   color: var(--jar-ink);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 .jar-roomform--group .jar-ask button {
   min-height: 32px;
   padding: 6px var(--sp-4);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
 }
 .jar-roomform .jar-room-primary:disabled {
   color: var(--jar-faint);
@@ -1866,7 +1866,7 @@
 }
 /* Same register as `.jar-forming`, which is the line it stands in for. */
 .jar-wall-empty {
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
   color: var(--jar-muted);
 }
@@ -2589,7 +2589,7 @@
   background: none;
   padding: 0;
   font: inherit;
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--jar-faint);
   cursor: pointer;
 }
@@ -2633,7 +2633,7 @@
   display: block;
   width: 100%;
   margin: 0 0 var(--sp-4);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   line-height: 1.5;
   color: var(--jar-muted);
 }
@@ -2643,7 +2643,7 @@
   background: none;
   padding: 0;
   font: inherit;
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--jar-faint);
   cursor: pointer;
   text-decoration: none;
@@ -2699,7 +2699,7 @@
   display: block;
   margin: var(--sp-8) 0;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   line-height: 1.5;
   color: var(--jar-ink);
   word-break: break-all;
@@ -2736,7 +2736,7 @@
   display: flex;
   align-items: baseline;
   gap: var(--sp-10);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   color: var(--jar-ink);
 }
 .jar-settings-member > span:first-child {
@@ -2891,7 +2891,7 @@
 .jar-panel-foot--reflected .jar-panel-foot-r { opacity: 1; }
 .jar-panel-foot button.jar-panel-reflection-link {
   color: var(--jar-ink);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
 }
 .jar-panel-foot-l {
   justify-self: start;
@@ -3211,7 +3211,7 @@
 }
 .jar-panel-reflected {
   color: var(--jar-ink);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   white-space: nowrap;
 }
 .jar-reflection-key {
@@ -3223,7 +3223,7 @@
   align-items: center;
   gap: var(--sp-8);
   color: var(--jar-muted);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   pointer-events: none;
 }
 .jar-reflection-key-dot {
@@ -3337,7 +3337,7 @@
 }
 .jar-reflect-q {
   margin: 0 0 var(--sp-10);
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: var(--t-input);
   line-height: 1.45;
@@ -3369,7 +3369,7 @@
   background: none;
   color: var(--jar-muted);
   font: inherit;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   cursor: pointer;
   min-height: 32px;
   padding: var(--sp-6) 0;
@@ -3377,7 +3377,7 @@
 .jar-reflection-turns {
   margin-bottom: var(--sp-16);
   color: var(--jar-muted);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
 }
 .jar-reflection-turns summary {
   cursor: pointer;
@@ -3389,7 +3389,7 @@
 }
 .jar-reflection-turn p:not(.jar-reflect-q) {
   margin: 0;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
   color: var(--jar-ink);
 }
@@ -3417,7 +3417,7 @@
    quiet weight the forming line speaks in. */
 .jar-skel-line {
   font-weight: 400;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   letter-spacing: 0;
   text-transform: none;
   color: var(--jar-muted);
@@ -3660,7 +3660,7 @@
    whole room is accounting for, so it leads and nothing shares its line */
 .jar-prov-room-lead {
   margin: 0 0 var(--sp-18);
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: clamp(17px, 1.5vw, 21px);
   line-height: 1.38;
@@ -3722,7 +3722,7 @@
    label register, and never a spinner */
 .jar-prov-room-idle {
   margin: 0;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.6;
   color: var(--jar-faint);
 }.jar-prov-room-close {
@@ -4266,7 +4266,7 @@
 .jar-prov-why {
   display: block;
   margin-top: 3px;
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   line-height: 1.5;
   /* WAS THE LEAST READABLE TEXT IN THE PRODUCT: `--jar-faint` (2.3:1 on this
      ground) multiplied by `opacity: 0.72`, so about 1.9:1 — prose set below
@@ -4281,7 +4281,7 @@
 .jar-skel-why {
   display: block;
   margin-top: var(--sp-10);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--jar-faint);
   opacity: 0.75;
 }
@@ -4523,7 +4523,7 @@
      as a smudge beside a name set at label size — it is the control that opens
      every other wall, and it was the smallest mark on the bar. */
   padding: var(--sp-6) var(--sp-18) var(--sp-6) var(--sp-16);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   box-shadow: inset 1px 0 0 0 var(--jar-panel-edge);
 }
 /* `.jar-here-list` WAS THE SHEET THESE ROWS HUNG IN, and nothing renders it:
@@ -4711,7 +4711,7 @@
   .jar-note-when {
     justify-self: center;
     font-family: var(--waka-face);
-    font-size: var(--t-fine);
+    font-size: var(--t-meta);
     letter-spacing: normal;
     text-transform: none;
     white-space: nowrap;
@@ -4769,7 +4769,7 @@
   .jar-inspiration-composer .jar-note-tool--wide {
     width: auto;
     padding-inline: var(--sp-16);
-    font-size: var(--t-fine);
+    font-size: var(--t-meta);
     letter-spacing: normal;
     text-transform: none;
     color: var(--jar-ink);
@@ -4791,7 +4791,7 @@
     border-radius: var(--r-pill);
     background: var(--jar-ink);
     color: var(--jar-atmos);
-    font-size: var(--t-fine);
+    font-size: var(--t-meta);
     letter-spacing: normal;
     text-transform: none;
     cursor: pointer;
@@ -5062,7 +5062,7 @@
 
 .jar-drift-reading {
   margin: var(--sp-8) 0 0;
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: var(--t-lead);
   line-height: 1.5;

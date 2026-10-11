@@ -421,7 +421,7 @@
   padding: 2px var(--sp-4);
   border-radius: var(--radius-sm);
   background: var(--waka-raised);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
 }
 
 /* The light half of it. See the note above for why this is `--jar-muted`
@@ -441,7 +441,7 @@
 .chat-topic {
   margin-bottom: var(--sp-32);
   color: var(--muted);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   letter-spacing: 0.06em;
 }
 
@@ -479,7 +479,7 @@
 
 .chat-muted {
   margin: var(--sp-8) 0 0;
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--muted);
 }
 
@@ -518,7 +518,7 @@
    it needs it now inherits from the composer it sits in. */
 .chat-notice {
   margin: 0;
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--muted);
 }
 
@@ -534,7 +534,7 @@
   align-items: center;
   gap: var(--sp-12);
   margin-block: var(--sp-32);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   letter-spacing: 0.06em;
   color: var(--muted);
 }
@@ -761,7 +761,7 @@
    stopped or is rate-limited. */
 .chat-reply-status {
   margin: 0;
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--muted);
 }
 

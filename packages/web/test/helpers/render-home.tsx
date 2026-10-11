@@ -610,12 +610,15 @@ export async function pressChatCorner(container: HTMLElement): Promise<void> {
      reaches for the conversations door keeps reading the same; only where
      that door is has changed. */
   const row = [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")]
-    .find((node) => node.textContent?.trim() === "Conversations");
+    /* "Chats" SINCE 2026-10-11 — founder: "change conversation to chat in
+       bottom navigation as well." The helper's NAME still says chat, which it
+       always did, so every suite reaching for this door is unchanged. */
+    .find((node) => node.textContent?.trim() === "Chats");
   if (!row) {
     const had = [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")]
       .map((node) => node.textContent?.trim())
       .join(" | ");
-    throw new Error(`no conversations row in the dock. The dock offers: ${had}`);
+    throw new Error(`no Chats row in the dock. The dock offers: ${had}`);
   }
   await act(async () => row.click());
 }

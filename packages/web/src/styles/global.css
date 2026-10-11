@@ -51,21 +51,44 @@
   --accent: #0f0f0e;
   --error: #b3261e;
 
-  /* ---------------------------------------------------------------------
-   * Typography tokens
+  /**
+   * ═══ ONE FACE, AND NOW IT REALLY IS ONE ════════════════════════════════
    *
-   * The prototype pairs three faces:
-   *   • Instrument Serif → headlines and inspiration text (warm, editorial)
-   *   • Inter Tight     → UI body copy (neutral, modern)
-   *   • JetBrains Mono  → meta labels, eyebrows, button captions (technical)
+   * Founder: "audit font size and type used across the entire experience.
+   * Keep consistent throughout without too many variations." And, a month
+   * earlier, on the same thing: "can we make the font consistent across all
+   * the experience? I don't know what the weird cursive thing is."
    *
-   * Fallbacks mirror the originals so the pre-webfont paint still feels
-   * close to the final design. Defined as variables so a component
-   * referencing `font-family: var(--font-serif)` survives a future face
-   * swap without code churn.
-   * -------------------------------------------------------------------*/
-  --font-sans: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-serif: "Instrument Serif", "Times New Roman", serif;
+   * WHAT STOOD HERE, and it is worth the paragraph because nothing about it
+   * looked wrong in the stylesheet. These tokens paired three faces for the
+   * flat screens — Instrument Serif for headlines, Inter Tight for body,
+   * JetBrains Mono for labels — while the WORLD was rebuilt around one
+   * (`--waka-face`: Jost over Pretendard). So the product had two typographic
+   * systems, and which one you were reading depended on which screen you
+   * happened to be standing on.
+   *
+   * AND ON THE WEB IT WAS WORSE THAN THAT. `index.html` loads exactly two
+   * families — Pretendard and Jost — and says so in a comment ending "no
+   * third face in the world". Neither Instrument Serif nor Inter Tight is
+   * among them. So every flat screen fell through to its FALLBACK: the
+   * login's headline rendered in Times New Roman, which is almost certainly
+   * the "weird cursive thing". The mobile build imports the real faces
+   * (`mobile-fonts.css`), so the same screen had one look on a phone and
+   * another in a browser.
+   *
+   * Both now name the face that is actually loaded, which is the one the
+   * product is designed in. The TOKENS SURVIVE rather than being replaced at
+   * every call site, because `--voice-room` / `--voice-you` in system.css
+   * describe a real distinction — a sentence the machine claims about you
+   * versus one you wrote — and that distinction is still worth being able to
+   * express in weight and size even when the family is shared.
+   *
+   * MONO IS UNTOUCHED and stays a real monospace: invite codes, ids and raw
+   * values are the one place a second face carries information rather than
+   * decoration, and `ui-monospace` resolves to a loaded system face.
+   * ─────────────────────────────────────────────────────────────────────── */
+  --font-sans: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  --font-serif: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
 
   /* ---------------------------------------------------------------------
@@ -566,7 +589,7 @@ body {
 .profile-subtitle {
   margin: 0 0 var(--sp-28) 0;
   color: var(--muted);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
 }
 
@@ -725,7 +748,7 @@ body {
   gap: var(--sp-10);
   color: var(--ink);
   cursor: pointer;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.35;
 }
 
@@ -764,7 +787,7 @@ body {
 
 .profile-public-link {
   color: var(--muted);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   overflow-wrap: anywhere;
 }
 
@@ -795,7 +818,7 @@ body {
 
 .profile-footer {
   margin-top: var(--sp-24);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--muted);
   text-align: center;
 }
@@ -1449,7 +1472,7 @@ textarea {
 }
 
 .profile-row-meta {
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--ink-3);
 }
 
