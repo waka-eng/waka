@@ -14525,9 +14525,38 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 data-jar-interactive="1"
                 onClick={() => viewNavigation.write({ ...EMPTY_VIEW, compose: true })}
               />
-              <div className="jar-char-bubble" aria-hidden="true" data-jar-chrome="1">
-                <span className="jar-char-bubble-body jar-char-bubble-body--offer">
-                  <span className="jar-char-offer">✏️</span>
+              {/* ═══ WHAT THE CREATURE IS HOLDING UP ═══════════════════════
+                  Founder: "top of mind should shown in the speech bubble
+                  where the pencil is rn. but once in a while show the pencil
+                  icon? idk help me."
+
+                  NOT ON A TIMER, AND THAT IS THE ANSWER TO THE QUESTION. A
+                  bubble that swaps its contents while somebody is looking at
+                  it changes the screen without them touching it, which is
+                  the one thing this world does not do. The STATE decides
+                  instead, and it happens to produce exactly the rotation
+                  that was wanted:
+
+                    a reading exists  → the bubble holds it. It is the
+                                        product's output; it should be the
+                                        thing the creature is holding up.
+                    no reading yet    → the pencil. Day one, nothing to show,
+                                        so the offer is to give it something.
+
+                  The pencil then is not decoration that the eye stops
+                  seeing — it is an honest "I have nothing yet". And capture
+                  does not depend on it either way: pressing the body opens
+                  the notepad in both states, and the inspirations room
+                  carries its own way in. */}
+              <div
+                className="jar-char-bubble"
+                aria-hidden={lead ? undefined : true}
+                data-jar-chrome="1"
+              >
+                <span className={`jar-char-bubble-body${lead ? '' : ' jar-char-bubble-body--offer'}`}>
+                  {lead
+                    ? <span className="jar-char-bubble-reading">{lead.body}</span>
+                    : <span className="jar-char-offer">✏️</span>}
                 </span>
               </div>
             </>
@@ -14802,7 +14831,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                  visible for free: answer the last claim and the seat fills
                  with the statement those answers are written from. */
               <div className="jar-char-claim jar-char-claim--reading">
-                <p className="jar-char-claim-statement">{lead.body}</p>
+                {/* THE SENTENCE MOVED UP INTO THE BUBBLE; what stays here is
+                    what you can do about it. Printing it in both places would
+                    be the same words twice on one screen. */}
                 {/* ITS VERBS COME WITH IT. They used to live in the band above
                     the creature; that band now yields on this wall always, so
                     leaving them there would have made three controls nobody
@@ -16021,13 +16052,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
           {([
             { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open && !viewNavigation.view?.compose, go: () => viewNavigation.closeOpen() },
-            /* SAVE IS A PLACE. Founder: "it should be its dedicated full page.
-               save should be a bottom bar navigation. so clicking on it just
-               leads to that note pad." `?compose=1` was already an address —
-               it just had no door. Pressing the creature writes the same one,
-               so the two entrances are one destination rather than two
-               features. */
-            { id: 'save', label: 'worldDockSave' as const, here: Boolean(viewNavigation.view?.compose), go: () => viewNavigation.write({ ...EMPTY_VIEW, compose: true }) },
+            /* SAVE IS NOT A TAB. Founder: "home, inspirations -> let see list
+               of past inspirations with main CTA to save new, chat -> see
+               list of past chats with main CTA to start new chat,
+               principles." Saving is what you DO in the inspirations room,
+               not a room of its own — and it has two other doors already:
+               pressing the creature, and `?compose=1`. A fifth row leading
+               to a thing two other gestures already reach is vocabulary
+               without a place behind it. */
             /* INSPIRATIONS KEEPS A DOOR UNTIL HOME HOLDS THE LIST. The plan
                is that your saves live on the home screen under the note, at
                which point this row goes the way the claims row already has —
