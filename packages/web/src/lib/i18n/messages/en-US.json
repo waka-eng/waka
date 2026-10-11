@@ -599,6 +599,7 @@
   "worldShareOriginal": "Use original wording",
   "worldSharePortrait": "Portrait · 1080 × 1350",
   "worldSharePrinciple": "Make a share card",
+  "worldShareProof": "{count} {count, plural, one {thing I kept} other {things I kept}} over {months} {months, plural, one {month} other {months}}. These are what stayed.",
   "worldShareRecordedWords": "These words and dates come from saved records.",
   "worldShareRemove": "Remove from card",
   "worldShareRenderFailed": "The image couldn’t be made.",
