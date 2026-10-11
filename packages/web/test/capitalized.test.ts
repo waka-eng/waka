@@ -238,6 +238,52 @@ describe("every string a person reads begins with a capital", () => {
     ).toEqual([]);
   });
 
+  it("capitalises the server's clauses wherever one is spoken alone", () => {
+    /**
+     * ═══ THE CATALOGUE IS NOT THE ONLY PLACE A SENTENCE COMES FROM ══════
+     *
+     * This gate reads `en-US.json` and has caught real decay doing it. It
+     * has also been blind twice in one day, both times to a sentence the
+     * catalogue never held:
+     *
+     *   a stylesheet lowercased three button labels AFTER this gate had
+     *   read them — fixed, and gated above;
+     *
+     *   and the weather's clauses, which are assembled on the SERVER out
+     *   of row counts. "you kept a memory", "your memory was consulted 170
+     *   times" — written lower case on purpose, because the full record
+     *   joins them into one line, and spoken ALONE by the creature, where a
+     *   clause becomes a sentence and the ruling applies.
+     *
+     * THE API IS NOT ASKED TO CAPITALISE, and that is the design rather
+     * than a dodge: a clause that is going to be joined must stay lower
+     * case or the joined line grows capitals in its middle. What the rule
+     * actually requires is that the WEB capitalise at the point a clause
+     * stops being one, which is `asSentence` in `lib/words`.
+     *
+     * So this checks the two places that speak a clause on its own, by
+     * name. A third render site that forgets is the failure mode, and the
+     * only honest defence is that the list is short and stated here.
+     */
+    const SPEAKS_A_CLAUSE_ALONE = [
+      ["pages/Home.tsx", "the creature, when it is asked what has been happening"],
+      ["components/ReadingPanel.tsx", "the record, one clause per line"],
+    ] as const;
+    const bare: string[] = [];
+    for (const [file, why] of SPEAKS_A_CLAUSE_ALONE) {
+      const text = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../src", file), "utf8");
+      if (!/\basSentence\s*\(/.test(text)) bare.push(`${file} — ${why}`);
+    }
+    expect(
+      bare,
+      "this surface speaks one of the weather's clauses on its own and does " +
+        "not pass it through `asSentence`, so it prints a sentence starting " +
+        "in lower case. The API writes clauses deliberately — they are joined " +
+        "elsewhere — and capitalising belongs at the point one stops being a " +
+        "clause.\n",
+    ).toEqual([]);
+  });
+
   it("asks nothing of Korean, which has no letter case", () => {
     /* NOT A FORMALITY. The first instinct on reading this gate is to run it
        over both catalogues "for symmetry", and the second is to make the

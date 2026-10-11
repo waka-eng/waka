@@ -16,6 +16,7 @@ import type { ApiReading } from "../lib/api";
 import { DialogSurface } from "./DialogSurface";
 import { useOptionalAuth } from "../lib/auth-context";
 import { normalizeSupportedLocale, t } from "../lib/locales";
+import { asSentence } from "../lib/words";
 
 export interface ReadingPanelProps {
   /** null until the fetch lands; the panel says it is still being fetched */
@@ -33,9 +34,16 @@ export function ReadingPanel({ reading, onClose }: ReadingPanelProps): JSX.Eleme
       </div>
       {reading ? (
         <>
+          {/* ONE PER LINE IS ONE SENTENCE EACH, so each takes a capital.
+              The API writes these as clauses, lower case, because they are
+              designed to be joined; printed on their own lines they are
+              sentences, and the founder's ruling covers every sentence a
+              person reads. `capitalized.test.ts` cannot see them — they are
+              assembled on the server, not drawn from the catalogue it
+              reads. */}
           {reading.sentences.map((sentence) => (
             <p key={sentence} className="jar-reading-line">
-              {sentence}
+              {asSentence(sentence, locale)}
             </p>
           ))}
           {reading.coda ? (
