@@ -9284,7 +9284,35 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                it to zero over `UNWIND_MS`. Setting the turn is the whole
                instruction; setting the easing too would be a second copy of
                it, and the two would drift. */
-            if (instant && !view.reduced) companion.yaw = TAU / 2;
+            if (instant && !view.reduced) {
+              /**
+               * A TURN, AND ONLY A TURN.
+               *
+               * Founder, on a recording of the form change: "its not spinning
+               * in the same place."
+               *
+               * The yaw is a planet turn — the features traverse a sphere
+               * while the body holds still — so the spin itself cannot move
+               * anything. What moves it is `lean`, which the draw composes
+               * from three terms: the travel offset, the camera's pitch, and
+               * `attendHold`, the lean toward something you just tapped. The
+               * form switch IS a tap, on a control right beside the creature,
+               * so it was leaning at the button it had just been pressed on
+               * for the whole length of the turn — a tilt plus a rotation
+               * reads as a wobble, not as a creature turning where it stands.
+               *
+               * All three are cleared here rather than suppressed in the draw
+               * because they are each correct in their own context: leaning
+               * into a drag, into camera motion, and toward a thing you
+               * pointed at are all behaviours worth keeping. They simply have
+               * no business in a change of form, which is not a direction.
+               */
+              companion.yaw = TAU / 2;
+              companion.off = 0;
+              companion.pitch = 0;
+              companion.attendHold = 0;
+              companion.attendUntil = 0;
+            }
             arriveColumn();
             wake();
             return;

@@ -785,6 +785,26 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--sp-16);
+  flex-wrap: wrap;
+}
+
+/* The name and what is behind it read as one thing, so they share a baseline
+   and sit together rather than at opposite ends of the row. */
+.waka-over-name {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-12);
+  min-width: 0;
+}
+
+.waka-over-count {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+/* The field is alone on its row now, so it simply takes it. */
+.waka-over-search {
+  width: 100%;
 }
 
 /**
@@ -867,14 +887,6 @@
   color: var(--ink);
 }
 
-/* The count and the search share a line: the count tells you whether
-   searching is worth it, and the field is what you search with. */
-.waka-over-sub {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-12) var(--sp-16);
-}
 
 .waka-over-count {
   margin: 0;
@@ -2855,6 +2867,17 @@
   height: 13px;
   transform: translateX(-50%) rotate(45deg);
   border-radius: 0 0 4px 0;
+  /* BEHIND THE BODY, SO ONLY THE TIP IS A SHAPE. Founder: "The speech bubble
+     diamond part is white on its own so it's weird." Two things made it read
+     as a separate object rather than as the bubble pointing: it painted ABOVE
+     the body, so the join between them was a visible edge rather than a
+     continuation, and it sits in the densest part of the halo, where a small
+     bright shape surrounded by light reads as a highlight. Dropped behind, the
+     body's own fill covers the join and what remains is a corner of the same
+     surface. The grain on `::before` still does not reach it — `inset: 0`
+     cannot — but at 0.07 that difference is below the threshold where a
+     13-pixel shape could carry it. */
+  z-index: -1;
   /* THE SAME FILL AS THE BODY, SAID THE SAME WAY. The tail is one piece of
      the bubble, not a decoration beside it — left at flat `--jar-live` while
      the body dimmed, it would have been a bright notch exactly where the two

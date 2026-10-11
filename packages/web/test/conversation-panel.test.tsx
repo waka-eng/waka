@@ -64,8 +64,14 @@ function completeReply(){stored={...stored,revision:stored.revision+1,messages:[
    lost: `restores a scoped non-bottom transcript position after reopening`
    and `does not jump away from older messages when a new reply arrives` below
    hold the transcript's scrolling to account. */
+/* THE WORDING MOVED, THE PROMISE DID NOT. Founder, on this line: "what does
+   this mean". "Replies aren't connected yet. Your messages are saved
+   privately." is true and says nothing a person can act on — it names a
+   state of the installation in the passive voice and leaves them to guess
+   whether they did something wrong. What this case protects is unchanged:
+   the surface must not imply a reply is coming when none can. */
 it('clearly saves messages without promising an assistant reply',async()=>{
-  await mount();expect(host.textContent).toContain('Replies aren’t connected yet.');await type('I want quiet mornings.');await click('Send');
+  await mount();expect(host.textContent).toContain('WAKA can’t reply here yet');await type('I want quiet mornings.');await click('Send');
   expect(host.textContent).toContain('I want quiet mornings.');expect(host.querySelector('textarea')!.value).toBe('');expect(stored.messages).toHaveLength(1);expect(readConversationDrafts(scope,id)).toEqual([]);
 });
 it('offers a new-chat exit when a conversation is unavailable, without showing old words',async()=>{
