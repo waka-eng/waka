@@ -26,8 +26,12 @@ export type ViewSection = 'top' | 'field' | 'sky';
    click on it to go to a new page where the user can engage with it." It is
    an `open` rather than a route for the same reason the other four are: the
    world stays mounted behind it, so leaving is a return rather than a trip. */
-export type ViewOpen = 'saves' | 'claims' | 'principles' | 'conversations' | 'reading';
-const OPEN: readonly ViewOpen[] = ['saves', 'claims', 'principles', 'conversations', 'reading'];
+export type ViewOpen = 'saves' | 'claims' | 'principles' | 'conversations';
+/* `'reading'` LEFT THIS LIST WITH THE PAGE IT NAMED. An address that reads
+   cleanly and resolves to nothing is the worst of the two ways a link can
+   die — this file already says so about `/review/:id` — so it is not parsed
+   rather than parsed into a surface that no longer exists. */
+const OPEN: readonly ViewOpen[] = ['saves', 'claims', 'principles', 'conversations'];
 export interface ViewLocation {
   wallId: string | null;
   label?: string;

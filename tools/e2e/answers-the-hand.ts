@@ -39,7 +39,7 @@
 import { type Browser, type Page } from "playwright";
 import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
-import { saveAnInspiration } from "./keep";
+import { openTheNotepad, saveAnInspiration } from "./keep";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
 const PASSWORD = "answers-the-hand-1";
@@ -343,7 +343,7 @@ async function run(base: string): Promise<number> {
 
     await page.keyboard.press("Escape");
     await page.waitForTimeout(400);
-    await page.locator(".jar-mouth-rest").first().click();
+    await openTheNotepad(page);
     await page.waitForTimeout(900);
     asked += await askSurface(page, "the mouth open", dead);
     tabbed += await askByKeyboard(page, "the mouth open", unlit);

@@ -119,8 +119,8 @@
      off the root, so the world's ground and the pages' ground are one
      value and cannot drift — which is the whole reason they are declared
      here rather than in each surface. */
-  --jar-deep: #070b14;
-  --jar-atmos: #0d131f;
+  --jar-deep: #05080f;
+  --jar-atmos: #0a0e18;
   /* the sky: the same ground, a few percent thinner */
   --jar-sky: #060910;
   --jar-ink: #e8edf4;
@@ -4712,23 +4712,37 @@
     margin-block: var(--sp-16) var(--sp-32);
   }
 
+  /* THE SAME WAY BACK AS EVERYWHERE ELSE. Founder, with a screenshot of
+     just this control: "why is this still here?"
+
+     It was a filled rounded square holding a chevron — the only boxed back
+     button in the product, on the one surface that most wants to look like
+     a blank page. Every other surface's return is a plain chevron with the
+     name of the place it returns to beside it ("All inspirations", "All
+     chats"), and this one goes somewhere with a name too: the archive the
+     note is about to join. So it says so, in the register its three peers
+     already use, with no box around it. */
   .jar-note-back {
     justify-self: start;
-    display: grid;
-    place-items: center;
-    width: var(--waka-corner);
-    height: var(--waka-corner);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-8);
+    min-height: var(--waka-corner);
     padding: 0;
     border: 0;
-    border-radius: var(--r-pill);
-    background: var(--waka-raised);
-    color: var(--jar-ink);
+    background: none;
+    color: var(--muted);
+    font-family: var(--waka-face);
+    font-size: var(--t-body);
+    font-weight: 300;
+    white-space: nowrap;
     cursor: pointer;
+    transition: color 0.2s ease;
   }
 
   .jar-note-back:hover,
   .jar-note-back:focus-visible {
-    color: var(--jar-ink);
+    color: var(--ink);
   }
 
   /* WHEN THIS NOTE IS, and it is the only thing on the page until somebody

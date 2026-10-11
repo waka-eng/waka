@@ -42,7 +42,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { DialogSurface } from "./DialogSurface";
-import { attachmentPreviewImageUrl, updateInspiration } from "../lib/api";
+import { attachmentPreviewImageUrl, deleteInspiration, updateInspiration } from "../lib/api";
 import { archiveChapter, dateStamp, dateWords } from "../lib/words";
 /* THE SAME DOOR THE WORLD USES. `loadInspirations` is the archive's own
    reader — it pages, it carries the total the server reports, and it holds
@@ -122,12 +122,15 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
      archive holds, which is not the same as how many arrived — an older
      server omits it, and then the length of what came is the best there is. */
   const [total, setTotal] = useState<number | null>(null);
-  /* Editing is a state of the OPEN card, not of the page: closing is how you
-     leave it, and a page-level edit flag would survive a card it no longer
-     belongs to. */
-  const [editing, setEditing] = useState(false);
+  /* THE WORDS BEING WRITTEN, which is every word on the open note — there is
+     no "editing" flag any more because there is no mode to be in. `draft` is
+     seeded when a note opens and written back when it closes. */
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  /* Erasing asks first, the same way the chats list does. Page-level rather
+     than per-row because exactly one note is open at a time. */
+  const [asking, setAsking] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [open, setOpen] = useState<Inspiration | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
@@ -163,6 +166,50 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * LEAVING THE NOTE IS WHAT SAVES IT.
+   *
+   * Founder: "just let the user edit it directly and then just going back
+   * saves it automatically like Apple Notes does."
+   *
+   * NOT ON A TIMER, and that is the whole of why this is honest. A
+   * keystroke-debounced write puts a round trip behind every pause in
+   * somebody's thinking, and then it has to SAY so — a spinner, a "saved"
+   * receipt — which is more chrome than the Save button it replaced. The
+   * chevron is a moment a person chose; committing there needs no
+   * announcement because the act already has one.
+   *
+   * A FAILED WRITE DOES NOT LET GO. The note stays open with the words
+   * still in it and says what happened, because the alternative is closing
+   * a surface and silently discarding what somebody just wrote — which is
+   * the one thing this product is for.
+   *
+   * Unchanged words close immediately: there is nothing to send, and a
+   * round trip to write what is already there would make reading a note
+   * cost the same as editing one.
+   */
+  const leaveNote = useCallback(async () => {
+    const note = open;
+    const words = draft.trim();
+    if (!note || saving) return;
+    if (!words || words === note.preview) { setOpen(null); setAsking(false); return; }
+    setSaving(true);
+    setSaveFailed(false);
+    try {
+      await updateInspiration(note.id, { text: words });
+      if (!mounted.current) return;
+      /* The list holds what the page loaded, so it has to agree without a
+         refetch — otherwise going back reveals the old first line. */
+      setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: words } : row)));
+      setOpen(null);
+      setAsking(false);
+    } catch {
+      if (mounted.current) setSaveFailed(true);
+    } finally {
+      if (mounted.current) setSaving(false);
+    }
+  }, [draft, open, saving]);
 
   /* Case-folded substring over the preview, which is what a person reading the
      grid can actually see. Matching text they cannot read would return cards
@@ -247,7 +294,7 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
               are not in — and two controls that both lead out is the stack
               this change exists to remove. */}
           {open ? (
-            <button type="button" className="waka-over-back" onClick={() => { setOpen(null); setEditing(false); }}>
+            <button type="button" className="waka-over-back" disabled={saving} onClick={() => void leaveNote()}>
               <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
                 <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
                   strokeLinecap="round" strokeLinejoin="round" />
@@ -335,83 +382,91 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
         ) : null}
 
         {open ? (
-          <article className="waka-over-one jar-panel-card">
-            <div className="jar-panel-head">
-                <span className="jar-panel-when jar-label">
-                  {dateStamp(open.capturedMs, locale)}
-                </span>
-              </div>
+          /* ═══ IT IS A NOTE, NOT A RECORD WITH AN EDIT MODE ═══════════════
+             Founder: "when looking at an inspiration, don't have a separate
+             button that says edit, just let the user edit it directly and
+             then just going back saves it automatically like Apple Notes
+             does, but there should be an option to delete an inspiration."
 
-              {pictureOf(open) ? (
-                <img className="waka-sheet-picture" src={pictureOf(open)!} alt="" />
-              ) : null}
+             WHAT WENT. An `Edit wording` button, a `Save`, a `Cancel`, and a
+             mode the surface could be in. Four controls and a state machine
+             for the act of changing your own sentence — on a product whose
+             composer is a blank page with no Save on it until there is
+             something to keep. The archive and the notepad disagreed about
+             what writing is, and the notepad was right.
 
-              {editing ? (
-                <textarea
-                  className="jar-panel-text jar-panel-edit"
-                  value={draft}
-                  aria-label={say("worldEditWording")}
-                  onChange={(event) => setDraft(event.target.value)}
-                />
+             WHY "SAVING" CAN STOP BEING A CONTROL. The write is idempotent
+             and already scoped to one row, the words are on screen the whole
+             time, and leaving is the only exit — so the moment to commit is
+             unambiguous and there is nothing for a button to disambiguate.
+             A Save here was asking a person to confirm a decision they had
+             already finished making.
+
+             AND IT IS AN HONEST AUTOSAVE, which is the part that is easy to
+             get wrong. It fires on the way OUT rather than on a timer: a
+             keystroke-debounced write would put a round trip behind every
+             pause in somebody's thinking and would have to say so, and a
+             product whose whole claim is that its account of you is
+             checkable cannot have a save that happens at a moment nobody can
+             name. If the write fails the surface says so and keeps you on
+             the note with your words — see `saveFailed`.
+
+             DELETE IS HERE AND ASKS FIRST, in the same two-press shape the
+             chats list uses for the same act, because erasing one of your
+             own things is the one move in this product that cannot be
+             undone. `deleteInspiration` has existed in the client for
+             months with no caller; this is the first door onto it. */
+          <article className="waka-over-one">
+            <span className="jar-panel-when jar-label">
+              {dateStamp(open.capturedMs, locale)}
+            </span>
+
+            {pictureOf(open) ? (
+              <img className="waka-sheet-picture" src={pictureOf(open)!} alt="" />
+            ) : null}
+
+            {/* THE WORDS ARE THE PAGE. No border, no fill, no label — the
+                same blank-page treatment the notepad gives a new one, so a
+                thing you wrote reads the same whether it is ten seconds or
+                ten months old. */}
+            <textarea
+              className="jar-panel-text waka-note-page"
+              value={draft}
+              readOnly={saving}
+              aria-label={say("worldCaptureInspiration")}
+              onChange={(event) => { setDraft(event.target.value); setSaveFailed(false); }}
+            />
+
+            {saveFailed ? (
+              <p className="jar-settings-warn" role="alert">{say("worldClaimCorrectFailed")}</p>
+            ) : null}
+
+            <p className="waka-note-foot">
+              {asking ? (
+                <>
+                  <button type="button" className="waka-note-erase" disabled={saving}
+                    onClick={() => {
+                      setSaving(true);
+                      void deleteInspiration(open.id)
+                        .then(() => {
+                          setRows((all) => all.filter((row) => row.id !== open.id));
+                          setAsking(false);
+                          setOpen(null);
+                        })
+                        .catch(() => setSaveFailed(true))
+                        .finally(() => setSaving(false));
+                    }}>
+                    {say(saving ? "worldDeleting" : "worldDeleteItAnyway")}
+                  </button>
+                  <button type="button" onClick={() => setAsking(false)}>{say("worldNotNow")}</button>
+                </>
               ) : (
-                <p className="jar-panel-text">{open.preview}</p>
+                <button type="button" className="waka-note-erase" onClick={() => setAsking(true)}>
+                  {say("worldDelete")}
+                </button>
               )}
-
-              <p className="jar-ask jar-ask--after jar-panel-foot">
-                <span className="jar-panel-foot-l">
-                  {editing ? (
-                    <button
-                      type="button"
-                      className="jar-panel-save"
-                      disabled={saving || !draft.trim() || draft === open.preview}
-                      onClick={() => {
-                        const words = draft.trim();
-                        setSaving(true);
-                        void updateInspiration(open.id, { text: words })
-                          .then(() => {
-                            /* The grid holds what the page loaded, so the card
-                               and the tile behind it have to agree without a
-                               refetch — otherwise closing reveals the old words. */
-                            setRows((all) =>
-                              all.map((row) => (row.id === open.id ? { ...row, preview: words } : row)),
-                            );
-                            setOpen((card) => (card ? { ...card, preview: words } : card));
-                            setEditing(false);
-                          })
-                          .catch(() => undefined)
-                          .finally(() => setSaving(false));
-                      }}
-                    >
-                      {say("worldSave")}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => { setDraft(open.preview); setEditing(true); }}
-                    >
-                      {say("worldEditWording")}
-                    </button>
-                  )}
-                </span>
-                {/* ONE WAY OUT, NOT THREE. At rest this said "Close", under
-                    a header already carrying "‹ All inspirations" on the left
-                    and a ✕ on the right — three controls, all leaving, on a
-                    surface holding one sentence. Founder: "only the most
-                    absolutely necessary things should be shown."
-
-                    The one it keeps is the one that is NOT a duplicate:
-                    Cancel, which abandons an edit rather than the surface,
-                    and which is the only move here the chevron and the ✕
-                    cannot make. */}
-                {editing ? (
-                  <span className="jar-panel-foot-r">
-                    <button type="button" onClick={() => setEditing(false)}>
-                      {say("worldCancelEdit")}
-                    </button>
-                  </span>
-                ) : null}
-              </p>
-            </article>
+            </p>
+          </article>
         ) : phase === "loading" ? (
           <p className="waka-over-status" role="status">
             {say("worldInspirationsLoad")}
@@ -469,7 +524,8 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
                     const rest = (breakAt > 0 ? words.slice(breakAt + 1) : "").trim();
                     return (
                       <li key={row.id}>
-                        <button type="button" className="waka-list-row" onClick={() => setOpen(row)}>
+                        <button type="button" className="waka-list-row"
+                          onClick={() => { setOpen(row); setDraft(row.preview); setAsking(false); setSaveFailed(false); }}>
                           <span className="waka-list-lead">{lead}</span>
                           <span className="waka-list-meta">
                             {/* WHICH ONE THIS IS, AND IT IS A NAME RATHER THAN

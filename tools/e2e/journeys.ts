@@ -47,7 +47,7 @@
 import { type Browser, type BrowserContext, type Page, type Route } from "playwright";
 import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
-import { saveAnInspiration } from "./keep";
+import { openTheNotepad, saveAnInspiration } from "./keep";
 interface Args {
   baseUrl: string;
   negative: boolean;
@@ -429,7 +429,7 @@ const JOURNEYS: Journey[] = [
          companion's line whenever the creature has just spoken, so a
          text-matched selector misses on a run where the greeting happens to
          be showing. `.jar-mouth-rest` is what the control IS. */
-      await page.locator(".jar-mouth-rest").first().click();
+      await openTheNotepad(page);
       await page.waitForTimeout(900);
       await page.fill(
         /* The mouth's own label, which matches its visible placeholder — an
@@ -519,7 +519,7 @@ const JOURNEYS: Journey[] = [
       }
 
       const phrase = `kept while standing somewhere else ${uniq()}`;
-      await page.locator(".jar-mouth-rest").first().click();
+      await openTheNotepad(page);
       await page.waitForTimeout(700);
       await page.fill('textarea[aria-label="Capture inspiration"]', phrase);
       /* Enter rather than the `save` button `keepInWorld` presses: the same
@@ -1424,7 +1424,7 @@ const JOURNEYS: Journey[] = [
           family: "mouth",
           open: async () => {
             await goHome();
-            await page.locator(".jar-mouth-rest").first().click();
+            await openTheNotepad(page);
             await page.waitForTimeout(900);
           },
         },
