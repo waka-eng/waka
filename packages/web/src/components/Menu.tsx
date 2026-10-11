@@ -27,10 +27,9 @@
  *
  * A long switcher list is not the failure mode. A long home page is.
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { t, type MessageKey, type SupportedLocale } from "../lib/locales";
-import { MenuRows } from "./MenuRows";
 
 export interface MenuItem {
   /** Stable key; also what a test names a row by. */
@@ -134,41 +133,13 @@ export interface MenuProps {
 }
 
 export function Menu({ locale, items, current, label, left, onSettings, account, onSignOut, hidden }: MenuProps): JSX.Element | null {
-  const [open, setOpen] = useState(false);
-  /** Which row has its lines open, if any. One at a time: a list where every
-      row can be expanded at once is a page of prose wearing a list's shape. */
+  /* THE SWITCHER'S OWN OPEN STATE IS GONE WITH THE SHEET IT OPENED. The
+     three rungs are laid out rather than listed (see `.waka-rungs`), so there
+     is nothing to expand, nothing to focus into, nothing to close on Escape
+     and nothing to close when the bar hides. Four pieces of state and
+     lifecycle went with one piece of chrome. */
   /** Whether the account card is showing under the cog. */
   const [account_open, setAccountOpen] = useState(false);
-  const panelId = useId();
-  /* Focus lands on the first destination, not on a way out — see below. */
-  const first = useRef<HTMLButtonElement | null>(null);
-
-  /* Escape closes, and focus moves into the sheet when it opens — a sheet you
-     cannot leave by keyboard is a sheet that traps a person on this screen.
-     Focus goes to the FIRST DESTINATION rather than to a close control:
-     opening a menu is a reach for somewhere to go, so the first thing under
-     the keyboard should be somewhere to go. */
-  useEffect(() => {
-    if (!open) return;
-    first.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  /* A hidden menu closes rather than lingering behind whatever took the
-     screen: reopening to a sheet you left ten minutes ago is a small haunt. */
-  useEffect(() => {
-    if (hidden) setOpen(false);
-  }, [hidden]);
-
-  /* The two things this bar can open are mutually exclusive: one sheet at a
-     time, so neither is read through the other. */
-  useEffect(() => {
-    if (open) setAccountOpen(false);
-  }, [open]);
   useEffect(() => {
     if (hidden) setAccountOpen(false);
   }, [hidden]);
@@ -212,8 +183,6 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
      them (settings, a conversation) says the first rung rather than a blank
      control, because the switcher's job there is still to offer a way back
      into the three. */
-  const here = items.find((item) => item.id === current) ?? items[0];
-  const name = label ?? here?.label;
 
   return (
     <>
@@ -270,83 +239,54 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
               <span>{t(locale, "worldMenuTopOfMind")}</span>
             </button>
           </div>
-        ) : here ? (
-          <div
-            className="waka-switch"
-          >
-            <button
-              type="button"
-              className="waka-switch-trigger"
-              aria-expanded={open}
-              aria-controls={panelId}
-              onClick={() => setOpen((value) => !value)}
-            >
-              <span>{name ? t(locale, name) : ""}</span>
-              {/* The caret turns over when the list is down: the one piece of
-                  motion here, and it explains rather than decorates. */}
-              <svg
-                className="waka-switch-caret"
-                width="10"
-                height="10"
-                viewBox="0 0 10 10"
-                aria-hidden="true"
-                focusable="false"
+        ) : items.length ? (
+          /**
+           * THE THREE WORDS THEMSELVES, NOT A DOOR TO THEM.
+           *
+           * Founder: "brainstorm better way to help users see their
+           * inspirations and principles. i dont like current dropdown way to
+           * do it."
+           *
+           * A dropdown is the wrong instrument for this particular three, and
+           * the reason is what they ARE. They are not unrelated destinations
+           * that happen to need a list — they are the same material at three
+           * depths: what you kept, what it adds up to now, and what has
+           * endured. That is one axis, and an axis wants to be SEEN. Behind a
+           * caret, a person cannot discover that the other two exist without
+           * opening something, and the relationship between them — the whole
+           * idea of the product — is invisible until they do.
+           *
+           * Laid out, the three words teach the model with no explanation at
+           * all: left to right is upstream to downstream, and a person moving
+           * rightward is moving forward through their own thinking. It also
+           * costs a press. The caret is gone, the sheet is gone, and the one
+           * you are on is simply the one that is lit — light is this
+           * product's only meaning channel and it does the work here without
+           * a highlight, a pill or a rule under anything.
+           *
+           * AND THE INFO ICONS GO WITH IT, which is a gain rather than a
+           * loss. Founder, earlier: "there should be like an info icon next
+           * to each of the top of mind, principles, the inspirations so that
+           * users can see what these are." Three icons in a list answered
+           * that question in the one place it is least useful — before you
+           * arrive, about a thing you have not seen. Each surface carries its
+           * own line now, where the question is actually asked.
+           */
+          <nav className="waka-rungs" aria-label={t(locale, "worldMenuLabel")}>
+            {items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`waka-rung${item.id === current ? " waka-rung--here" : ""}`}
+                aria-current={item.id === current ? "page" : undefined}
+                disabled={item.disabled}
+                onClick={item.onSelect}
               >
-                <path
-                  d="M2 4l3 3 3-3"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
-              </svg>
-            </button>
-            {/* NOTHING ON HOVER. This carried the explanation of whichever
-                view you were on, and the per-row icons in the list replaced
-                it — founder: "since u added info icon next to dropdown items,
-                remove text that shows when hovering on dropdown button".
-                Two places saying the same thing is one too many, and this was
-                the weaker of them: it could only ever describe the view you
-                had already arrived at, and it could only be reached by a
-                pointer. */}
-            {open ? (
-              <>
-                {/* THE WAY OUT IS THE WORLD, AND THE LIST IS UNDER THE
-                    CONTROL. The sheet used to be centred on the VIEWPORT,
-                    which is only under the trigger when the two corners
-                    happen to be the same width — founder: "I want the
-                    dropdown to be centered, not skewed towards the left."
-                    It hangs from the switch now, so it is centred on the
-                    thing that opened it by construction rather than by
-                    coincidence. The scrim stays full-screen behind it: a way
-                    out you have to aim at is not one. */}
-                <button
-                  type="button"
-                  className="waka-menu-scrim"
-                  aria-hidden="true"
-                  tabIndex={-1}
-                  onClick={() => setOpen(false)}
-                />
-                <nav
-            id={panelId}
-            className="waka-menu waka-menu--under"
-            aria-label={t(locale, "worldMenuLabel")}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <MenuRows locale={locale} items={items} current={current} first={first}
-              onChose={() => setOpen(false)} />
-            {/* NO "CLOSE MENU" ROW. Founder, pointing at it: "this also is so
-                useless." It was, and three ways out already exist and always
-                did: the scrim behind it, Escape, and choosing any destination.
-                A row that only undoes the press that opened the sheet is a row
-                you read every time you look for a place to go — and it sat at
-                the bottom of a four-item list, where it was a quarter of what
-                the menu appeared to offer. */}
+                {t(locale, item.label)}
+                {item.note ? <span className="sr-only jar-saved-count">{item.note}</span> : null}
+              </button>
+            ))}
           </nav>
-              </>
-            ) : null}
-          </div>
         ) : null}
 
         <span className="waka-corner-place">

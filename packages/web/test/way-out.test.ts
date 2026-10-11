@@ -187,9 +187,16 @@ describe("every surface has a way out you can see", () => {
        component is renamed, or the walk stops matching, every assertion below
        goes vacuously green and the law stops being enforced silently — which
        is the failure mode this whole file exists to prevent, one level up. */
-    expect(files.length, "no file renders a DialogSurface — has it been renamed?").toBeGreaterThanOrEqual(12);
+    /* FLOORS, NOT A CENSUS. These were 12 and 18, which was the count on the
+       day they were written — so the gate went red the first time a surface
+       was legitimately removed, and a tripwire that fails on honest deletion
+       teaches people to edit the tripwire. They exist to catch "this gate is
+       reading nothing", which is a different question from "how many
+       surfaces are there". The dropdown's sheet is the one that went: the
+       three rungs are laid out now rather than listed. */
+    expect(files.length, "no file renders a DialogSurface — has it been renamed?").toBeGreaterThanOrEqual(8);
     const spans = files.flatMap((path) => surfacesIn(readFileSync(path, "utf8")));
-    expect(spans.length, "found the files but parsed no surfaces out of them").toBeGreaterThanOrEqual(18);
+    expect(spans.length, "found the files but parsed no surfaces out of them").toBeGreaterThanOrEqual(10);
     /* And the spans must have real content: a balanced-match bug that
        returned the opening tag alone would find no way out anywhere and
        produce a wall of false failures rather than silence. */

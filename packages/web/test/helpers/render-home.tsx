@@ -570,19 +570,16 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
  * carries that one difference and the assertions stay where they were.
  */
 export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
-  const opener = container.querySelector<HTMLButtonElement>(".waka-corners button[aria-controls]");
-  if (!opener) throw new Error("the menu button is not on this screen");
-  await act(async () => opener.click());
-  /* A row may carry an sr-only note after its label — the archive's size rides
-     the Inspirations row — so match the label, not the whole string. */
-  const row = [...container.querySelectorAll<HTMLButtonElement>(".waka-menu .waka-menu-item")].find(
-    (node) => node.textContent?.trim().startsWith(label),
-  );
+  /* THE THREE ARE LAID OUT NOW, NOT LISTED. Founder: "i dont like current
+     dropdown way to do it." So there is no trigger to press first — the rung
+     IS the control. What every suite using this helper was testing is
+     unchanged; only the number of presses it takes to get there is. */
+  const rows = [...container.querySelectorAll<HTMLButtonElement>(".waka-rungs .waka-rung")];
+  const row = rows.find((node) => node.textContent?.trim().startsWith(label));
   if (!row) {
-    const had = [...container.querySelectorAll(".waka-menu .waka-menu-item")]
-      .map((node) => node.textContent?.trim())
-      .join(", ");
-    throw new Error(`no menu row named ${label}. The menu offers: ${had}`);
+    throw new Error(
+      `no rung named ${label}. The bar offers: ${rows.map((n) => n.textContent?.trim()).join(", ")}`,
+    );
   }
   await act(async () => row.click());
 }
