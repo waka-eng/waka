@@ -199,10 +199,29 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
         onClick={(event) => event.stopPropagation()}
       >
         <header className="waka-over-head">
+          {/* THE NAME, THEN WHAT IS BEHIND IT. Founder: "Just write the
+              number 36 next to your inspirations so that the search bar is
+              taking up the full space." The count was sharing a row with the
+              search, which left the field a stub on a surface whose only
+              other control is that field. It is a fact ABOUT the archive, so
+              it belongs with the archive's name.
+
+              The owner switch sits beside the title rather than replacing
+              it, which is a correction: replacing it read as "Me / My agent"
+              with nothing saying what of theirs you were looking at. The
+              overlay has to name itself — there is no switcher above it and
+              the world behind is showing somebody's top of mind. */}
+          <span className="waka-over-name">
+            <h2 className="waka-over-title">{title}</h2>
+            {total !== null ? (
+              <span className="waka-over-count jar-saved-count">
+                {total > rows.length
+                  ? formatMessage(locale, "worldInspirationCountCapped", { shown: rows.length, total })
+                  : formatMessage(locale, "worldInspirationCount", { count: total })}
+              </span>
+            ) : null}
+          </span>
           {owners && owners.length > 1 && onOwner ? (
-            /* THE TITLE IS THE SWITCH. Two rows of the same words — a heading
-               that names the archive and a control that changes it — would be
-               the duplication the view switcher was rebuilt to remove. */
             <span className="waka-over-owners" role="group" aria-label={title}>
               {owners.map((owner) => (
                 <button
@@ -216,13 +235,7 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
                 </button>
               ))}
             </span>
-          ) : (
-            <h2 className="waka-over-title">{title}</h2>
-          )}
-          {/* THE WAY OUT IS VISIBLE, not only known. Escape and the scrim
-              both work and neither announces itself, and this surface exists
-              because a person could not find the way back from its
-              predecessor — so the one that can be seen is not optional. */}
+          ) : null}
           <button type="button" className="waka-over-close" aria-label={say("worldCardClose")} onClick={onClose}>
             <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
               <path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -240,25 +253,22 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
             entry there that did not go anywhere. Filtering happens over what
             is already loaded, so typing narrows in place with no round trip
             and no empty frame between keys. */}
-        <div className="waka-over-sub">
-          {total !== null ? (
-            <p className="waka-over-count jar-saved-count">
-              {total > rows.length
-                ? formatMessage(locale, "worldInspirationCountCapped", { shown: rows.length, total })
-                : formatMessage(locale, "worldInspirationCount", { count: total })}
-            </p>
-          ) : null}
-          {rows.length ? (
-            <input
-              type="search"
-              className="waka-over-search"
-              value={query}
-              placeholder={say("worldInspirationsSearch")}
-              aria-label={say("worldInspirationsSearch")}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          ) : null}
-        </div>
+        {/* THE FIELD TAKES THE ROW, because it is the only thing on it and
+            because finding is a thing you do TO your inspirations — it lives
+            on the surface that holds them rather than as a destination of its
+            own. Filtering happens over what is already loaded, so typing
+            narrows in place with no round trip and no empty frame between
+            keys. */}
+        {rows.length ? (
+          <input
+            type="search"
+            className="waka-over-search"
+            value={query}
+            placeholder={say("worldInspirationsSearch")}
+            aria-label={say("worldInspirationsSearch")}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        ) : null}
 
         {/* The row divides nothing until there are two things to divide into. */}
         {phase === "ready" && categories.length > 1 ? (

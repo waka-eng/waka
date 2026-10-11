@@ -250,7 +250,7 @@
   "worldConversationCheck": "저장된 메시지 확인",
   "worldConversationDraftFailed": "이 기기에 초안을 보관하지 못했어요. 나가기 전에 글을 복사해 주세요.",
   "worldConversationFirst": "무엇을 생각해 보고 싶나요?",
-  "worldConversationFoundation": "아직 답변 기능은 연결되지 않았어요. 메시지는 비공개로 저장돼요.",
+  "worldConversationFoundation": "아직 여기서 답을 받을 수 없어요 — 이 설치에 연결된 모델이 없어서예요. 쓴 내용은 그대로 보관되고, 연결되면 답이 채워져요.",
   "worldConversationFull": "이 대화는 가득 찼어요. 새 대화에서 이어가 주세요.",
   "worldConversationMessage": "내 메시지",
   "worldConversationMessages": "저장된 메시지",

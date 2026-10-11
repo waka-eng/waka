@@ -250,7 +250,7 @@
   "worldConversationCheck": "Check saved messages",
   "worldConversationDraftFailed": "This device couldn’t keep the draft. Copy your words before leaving.",
   "worldConversationFirst": "What would you like to explore?",
-  "worldConversationFoundation": "Replies aren’t connected yet. Your messages are saved privately.",
+  "worldConversationFoundation": "WAKA can’t reply here yet — no model is connected to this install. What you write is kept, and the replies will fill in once one is.",
   "worldConversationFull": "This conversation is full. Start another to continue.",
   "worldConversationMessage": "Your message",
   "worldConversationMessages": "Saved messages",
