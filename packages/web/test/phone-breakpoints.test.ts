@@ -99,8 +99,33 @@ describe("the phone is a width somebody measured", () => {
     /* THE FINDING, AS A TEST. Zero width media queries in 80 KB holding the
        entire new UI. Not "too few" — none, so there was no width at which
        anything had been decided. `prefers-reduced-motion` does not count: it
-       answers a preference, not a screen. */
-    for (const file of SHEETS) {
+       answers a preference, not a screen.
+
+       ── WHY `chat.css` IS NOT IN THIS ONE, AND WHAT REPLACED IT ───────────
+
+       This assertion originally covered both sheets, written while the pass
+       that found the four breaks was still running. It ran out before
+       reaching `chat.css`, which left a gate demanding work nobody had
+       measured — the exact thing this file exists to forbid, one level up.
+
+       So `chat.css` was measured, on 2026-10-10, with a real touch device
+       emulated (Playwright, `hasTouch`, DPR 3) at 320x568, 360x640, 390x844,
+       414x896 and 768x1024, on a transcript long enough to overflow and
+       inside the overlay it actually renders in. It has NO width-driven
+       break: nothing overflows horizontally at any width, the scroller
+       reaches both ends of a 3,363px transcript at 320, and the composer
+       stays on screen. Its one real phone problem was a 23px touch target on
+       `Load earlier messages` — the only way to reach the beginning of a long
+       conversation — and a touch target is a POINTER question, so the fix
+       lives in that sheet's `pointer: coarse` block where it is measurable.
+
+       Adding a width query to satisfy a gate would have been a number
+       somebody picked, dressed as a number somebody observed. The file's own
+       escape clause said to delete the assertion and say what replaced it;
+       this is the saying. The writing rule below still covers both sheets,
+       so the day `chat.css` earns a breakpoint, it has to carry its
+       measurement like every other one. */
+    for (const file of ["claims.css"]) {
       const sized = [...rules(file).matchAll(/@media\s*\([^)]*(?:max|min)-(?:width|height)[^)]*\)/g)];
       expect(
         sized.length,
@@ -124,7 +149,19 @@ describe("the phone is a width somebody measured", () => {
     const offenders: string[] = [];
     for (const file of SHEETS) {
       const text = source(file);
-      for (const hit of text.matchAll(/@media\s*\([^)]*(?:max|min)-(?:width|height|pointer)[^{]*\{/g)) {
+      /* FOUND IN THE RULES, READ IN THE SOURCE.
+         This matched against the raw source and promptly failed on a query
+         that does not exist: the header above `claims.css`'s breakpoints
+         quotes "`@media (max-width: 480px)` with no number behind it" as the
+         example of what this codebase does not write, and the matcher read
+         its own documentation as a violation — the precise failure the note
+         on `rules()` warns about, committed by the file that wrote the note.
+         `rules()` blanks comments CHARACTER FOR CHARACTER, newlines kept, so
+         offsets are identical in both strings: the query is located in the
+         blanked text, where prose cannot pretend to be code, and the comment
+         above it is then read out of the real source, where it still exists. */
+      const code = rules(file);
+      for (const hit of code.matchAll(/@media\s*\([^)]*(?:max|min)-(?:width|height|pointer)[^{]*\{/g)) {
         /* The nearest comment ending above this query. Any distance: these
            headers run forty lines, and the rule is about the comment being
            THERE and being about this query, not about how long it is. */

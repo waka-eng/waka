@@ -2812,8 +2812,33 @@
   background-image: var(--jar-grain, none);
   background-size: var(--jar-grain-size, 128px);
   background-repeat: repeat;
-  mix-blend-mode: multiply;
-  opacity: 0.4;
+  /**
+   * THE SAME EMULSION AS THE CREATURE, AT THE SAME STRENGTH.
+   *
+   * Founder, on a screenshot of this bubble: "cant read anything." And of the
+   * next one: "weird."
+   *
+   * It was `multiply` at `0.4`, and both halves of that were wrong for a
+   * surface this colour. The grain tile is FULL-RANGE noise — `GRAIN_AMP` is
+   * 1, so each cell swings the whole ±127 — and it is deliberately chunky at
+   * `GRAIN_PX` 2, because on the near-black ground it is composited at 0.035
+   * and what you want there is present-but-invisible. On a near-WHITE bubble,
+   * `multiply` can only darken, so every dark cell punched through at full
+   * strength and 0.4 made it television static with a sentence behind it.
+   *
+   * The creature does not have this problem and never did, because it was
+   * written correctly: `overlay` at `0.14` (`character/raster.ts`). Overlay
+   * moves in BOTH directions around the midpoint, which is what makes a
+   * surface look like paper rather than like damage — and the founder's whole
+   * ask for this bubble was that it match the character.
+   *
+   * So the numbers are not tuned here, they are COPIED. One emulsion, one
+   * strength, stated in the one place that already got it right. (Overlay is
+   * near-inert on near-black, which is why the ground cannot use it and does
+   * not — see the note on `--jar-grain`. This surface is light, so it can.)
+   */
+  mix-blend-mode: overlay;
+  opacity: 0.14;
   pointer-events: none;
 }
 

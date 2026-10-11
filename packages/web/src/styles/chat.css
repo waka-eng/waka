@@ -513,8 +513,28 @@
  * thing that was wrong was never the width — it was the input device, and a
  * `max-width` breakpoint would have left a 768-wide tablet short.
  */
+/* MEASURED 2026-10-10 with a real touch device emulated (Playwright,
+   `hasTouch`, DPR 3) at 320x568, 360x640, 390x844, 414x896 and 768x1024, on a
+   transcript long enough to overflow. Two findings, and only one of them was
+   a bug:
+
+     - `.chat-send` came back 63x44 at every width. The rule below was
+       already doing its job, and an earlier pass that measured WITHOUT touch
+       emulation saw 63x32 and nearly "fixed" a control that was correct.
+       A coarse-pointer rule can only be measured with a coarse pointer.
+
+     - `Load earlier messages` came back 23px tall at every width — barely
+       half the minimum, and it is the control at the TOP edge of a scrolling
+       transcript, which is the worst place on a phone to ask for a precise
+       tap. It is also the only way to reach the beginning of a long
+       conversation, so missing it means the conversation simply appears to
+       start in the middle.
+
+   Both now take the corner's own target size, which is the one number this
+   product uses for "a thumb goes here". */
 @media (pointer: coarse) {
-  .chat-page .chat-send {
+  .chat-page .chat-send,
+  .chat-page .chat-earlier button {
     min-height: var(--waka-corner);
   }
 }
