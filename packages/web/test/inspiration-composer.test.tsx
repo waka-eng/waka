@@ -137,3 +137,36 @@ it('refuses unsafe link schemes without submitting or discarding the draft',asyn
   expect(props.onSubmit).not.toHaveBeenCalled();expect(props.onLinkText).not.toHaveBeenCalled();
   expect(host.querySelector<HTMLInputElement>('input[type=url]')!.validationMessage).toContain('HTTP or HTTPS');
 });
+
+/**
+ * ═══ ONE OF EACH CORNER, AND ONLY ONE ══════════════════════════════════
+ *
+ * Founder, with a screenshot of the notepad showing the record-and-photo
+ * pair at the TOP left and again at the bottom left: "where did mic and
+ * image attachment buttons go?" — reading the top pair as the real one and
+ * the bottom pair as a replacement.
+ *
+ * IT COULD NOT BE REPRODUCED. The pair was measured at 1280x860, 720x980,
+ * 720x1959, 390x844, 360x980 and in a full-page capture: one pair every
+ * time, bottom-left, exactly where the notepad's specification puts it. The
+ * likeliest explanation is the screenshot itself — a stitched long capture
+ * duplicates `position: fixed` elements, and 1959 is almost exactly twice
+ * that window's 980.
+ *
+ * "Likeliest" is not "proven", which is why this exists rather than a
+ * shrug. The specification is one pair in one corner; a second would be a
+ * real defect and nothing in the tree asserted there was only one. Now
+ * something does, and if it ever genuinely doubles this fails instead of
+ * being reported by screenshot.
+ */
+it('renders exactly one of each corner, never two', async () => {
+  props.text = ''; props.media = []; await mount();
+  const count = (selector: string) => host.querySelectorAll(selector).length;
+  expect(count('.jar-note-tools'), 'the attach corner is doubled').toBe(1);
+  expect(count('.jar-note-back'), 'the way back is doubled').toBe(1);
+  expect(count('.jar-note-when'), 'the moment is doubled').toBe(1);
+  expect(
+    count('.jar-note-tools button'),
+    'the attach corner should hold exactly two glyphs — record and photo',
+  ).toBe(2);
+});

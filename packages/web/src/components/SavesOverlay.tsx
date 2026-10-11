@@ -42,7 +42,16 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { DialogSurface } from "./DialogSurface";
-import { attachmentPreviewImageUrl, deleteInspiration, updateInspiration } from "../lib/api";
+import {
+  attachmentPreviewImageUrl,
+  deleteInspiration,
+  finalizeAttachment,
+  presignAttachment,
+  updateInspiration,
+  uploadToPresignedUrl,
+} from "../lib/api";
+import { supportedRecordingType, useAudioRecording } from "../lib/use-audio-recording";
+import { HomeActionIcon } from "./HomeActionIcon";
 import { archiveChapter, dateStamp, dateWords } from "../lib/words";
 /* THE SAME DOOR THE WORLD USES. `loadInspirations` is the archive's own
    reader — it pages, it carries the total the server reports, and it holds
@@ -157,10 +166,17 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
          page cannot be made to lie by a reader that stops holding it. */
       setTotal(Math.max(field.total, field.inspirations.length));
       setPhase("ready");
+      /* RETURNED, SO A CALLER CAN RE-POINT AT A ROW IT WAS HOLDING. `open`
+         is a snapshot of one row taken when it was pressed; a reload
+         replaces `rows` and leaves that snapshot stale, which is how the
+         first attachment uploaded correctly and then did not appear — the
+         note on screen was the row as it had been a second earlier. */
+      return field.inspirations;
     } catch {
-      if (!mounted.current) return;
+      if (!mounted.current) return [];
       setPhase("failed");
     }
+    return [];
   }, [profileId]);
 
   useEffect(() => {
@@ -210,6 +226,69 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
       if (mounted.current) setSaving(false);
     }
   }, [draft, open, saving]);
+
+  /**
+   * ═══ A SAVED THOUGHT CAN STILL TAKE A RECORDING OR A PICTURE ═══════════
+   *
+   * Founder, looking at an opened note: "where did mic and image attachment
+   * buttons go?"
+   *
+   * They had never been here. The notepad — the page you write a NEW thought
+   * on — keeps record and photo in its bottom-left corner, and this page,
+   * which is the same page for a thought you wrote earlier, had nothing
+   * there. For a while it had DELETE there instead, which is how the
+   * question got asked: the same corner meaning "add something" on one note
+   * page and "destroy this" on the other.
+   *
+   * NONE OF THIS IS NEW MACHINERY, which is worth saying because it looked
+   * like backend work and is not. `presign → upload → finalize` with an
+   * `inspirationId` has existed and been in use all along — the world's own
+   * memory panel attaches to an already-saved capture with exactly these
+   * three calls. What was missing was a door.
+   *
+   * THE WRITE IS INDEPENDENT OF THE NOTE'S WORDS. An attachment lands on the
+   * row immediately rather than waiting for the autosave on the way out: it
+   * is a file that has already been uploaded, there is nothing to batch it
+   * with, and holding it until somebody presses back would mean a photo
+   * could be lost by closing a tab. The text keeps its own rule.
+   */
+  const [attaching, setAttaching] = useState(false);
+  const [attachFailed, setAttachFailed] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const attach = useCallback(async (file: File) => {
+    const note = open;
+    if (!note) return;
+    setAttaching(true);
+    setAttachFailed(false);
+    try {
+      const pre = await presignAttachment(
+        { filename: file.name, contentType: file.type || "application/octet-stream", size: file.size },
+        undefined,
+        ...(profileId ? [{ profile: profileId }] as const : []),
+      );
+      await uploadToPresignedUrl(pre.uploadUrl, file, pre.headers);
+      await finalizeAttachment({
+        type: file.type.startsWith("image/") ? "image" : "file",
+        inspirationId: note.id,
+        key: pre.key,
+        name: file.name,
+        ...(file.type ? { contentType: file.type } : {}),
+      });
+      if (!mounted.current) return;
+      /* The open note is a snapshot, so it is re-pointed at the row that
+         now carries the attachment — otherwise the upload lands, the list
+         knows, and the page somebody is looking at does not. */
+      const fresh = (await load()) ?? [];
+      if (!mounted.current) return;
+      setOpen((card) => (card ? fresh.find((row) => row.id === card.id) ?? card : card));
+    } catch {
+      if (mounted.current) setAttachFailed(true);
+    } finally {
+      if (mounted.current) setAttaching(false);
+    }
+  }, [load, open, profileId]);
+  /* The same recorder the notepad uses, handed a different destination. */
+  const recording = useAudioRecording(attach);
 
   /* Case-folded substring over the preview, which is what a person reading the
      grid can actually see. Matching text they cannot read would return cards
@@ -490,6 +569,43 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
             {saveFailed ? (
               <p className="jar-settings-warn" role="alert">{say("worldClaimCorrectFailed")}</p>
             ) : null}
+            {attachFailed ? (
+              <p className="jar-settings-warn" role="alert">{say("worldComposerUploadFailed")}</p>
+            ) : null}
+
+            {/* ═══ THE SAME CORNER THE NOTEPAD HAS ═════════════════════════
+                Founder: "where did mic and image attachment buttons go?"
+                Two glyphs, bottom-left, no words and no box — the notepad's
+                own specification, because this is the same page for a
+                thought written earlier. Absent where the browser cannot
+                record: a control that can never work is not a control. */}
+            <div className="jar-note-tools">
+              {supportedRecordingType() ? (
+                recording.phase === 'idle' ? (
+                  <button type="button" className="jar-note-tool" disabled={attaching || saving}
+                    aria-label={say('worldComposerRecord')}
+                    onClick={() => void recording.start()}><HomeActionIcon kind="record"/></button>
+                ) : (
+                  <button type="button" className="jar-note-tool jar-note-tool--wide"
+                    disabled={recording.phase === 'finishing'}
+                    onClick={() => void recording.stop()}>
+                    {say('worldComposerStop')} {Math.floor(recording.seconds / 60)}:{String(recording.seconds % 60).padStart(2, '0')}
+                  </button>
+                )
+              ) : null}
+              <button type="button" className="jar-note-tool" disabled={attaching || saving || recording.phase !== 'idle'}
+                aria-label={say('worldComposerPhoto')}
+                onClick={() => fileInput.current?.click()}><HomeActionIcon kind="photo"/></button>
+              <input ref={fileInput} type="file" hidden
+                accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif"
+                onChange={(event) => {
+                  const picked = event.target.files?.[0];
+                  event.target.value = "";
+                  if (picked) void attach(picked);
+                }} />
+              {attaching ? <span className="jar-label" role="status">{say('worldComposerUploading')}</span> : null}
+              {recording.error ? <span className="jar-settings-warn" role="alert">{recording.error}</span> : null}
+            </div>
 
           </article>
         ) : phase === "loading" ? (
