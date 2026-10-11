@@ -21,8 +21,13 @@ export type ViewSection = 'top' | 'field' | 'sky';
  * because two of these open at once is not a state anyone meant and a
  * boolean trio makes it representable.
  */
-export type ViewOpen = 'saves' | 'claims' | 'principles' | 'conversations';
-const OPEN: readonly ViewOpen[] = ['saves', 'claims', 'principles', 'conversations'];
+/* `reading` ARRIVED 2026-10-11 — the top of mind's own page. Founder: "the
+   speech bubble should show its top of mind at the moment, and the user can
+   click on it to go to a new page where the user can engage with it." It is
+   an `open` rather than a route for the same reason the other four are: the
+   world stays mounted behind it, so leaving is a return rather than a trip. */
+export type ViewOpen = 'saves' | 'claims' | 'principles' | 'conversations' | 'reading';
+const OPEN: readonly ViewOpen[] = ['saves', 'claims', 'principles', 'conversations', 'reading'];
 export interface ViewLocation {
   wallId: string | null;
   label?: string;

@@ -126,6 +126,7 @@ import {
   type BeingSprites,
   type Palette,
 } from "../canvas/palette";
+import { ReadingPage } from "../components/ReadingPage";
 import { SavesOverlay } from "../components/SavesOverlay";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { ClaimsOverlay } from "../components/ClaimsOverlay";
@@ -13465,6 +13466,24 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           the page is for the sentence. */}
                       {atNow&&topOfMind?.id&&storageScope&&!offline&&(inField||inSky)?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale} compact/>:null}
                     </div>:null}
+                    {/* THE BAND THIS SITS IN IS ALREADY HEIGHT-ZERO ON THE
+                        WALL YOU ARE STANDING ON — see `jar-hq-inner--yielded`
+                        on the line that builds this block's class. So the
+                        companion's bubble carrying the reading (founder: "the
+                        speech bubble should show its top of mind at the
+                        moment") does NOT duplicate this heading: there is
+                        nothing on screen to duplicate. A suppression was
+                        written here for a duplication that does not exist,
+                        and seventeen tests said so — the drift readout, the
+                        board acts and the grounds all live under this
+                        heading, reached by the dial rather than by the home
+                        screen, and all of them went dark at once.
+
+                        Noted rather than left silent, because the next person
+                        to see the reading in two places will reach for the
+                        same fix. The thing to change is which SURFACE the
+                        expansion belongs to, not whether this renders. */
+                    }
                     {c.text ? (
                       /* A STABLE KEY, AND A CARRIED/NEW SPLIT INSIDE IT.
                          The whole h1 used to be keyed by its words, so every
@@ -14715,7 +14734,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 <div
                   className="jar-char-bubble"
                   data-jar-chrome="1"
-                  data-jar-interactive={offering ? '1' : undefined}
+                  data-jar-interactive={offering || lead ? '1' : undefined}
                 >
                   <span className="jar-char-bubble-body">
                     {offering ? (
@@ -14723,9 +14742,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         {say('worldCreatureOffer')}
                       </button>
                     ) : (
-                      <span className="jar-char-bubble-reading">
-                        {lead ? lead.body : restingWord}
-                      </span>
+                      /* THE READING IS A DOOR; THE EMPTY LINE IS NOT.
+                         Founder: "the speech bubble should show its top of
+                         mind at the moment. And the user can click on it to
+                         go to a new page where the user can engage with it."
+                         "I haven't formed anything yet" leads nowhere,
+                         because there is nothing on the other side of it —
+                         a control that opens an empty page is worse than no
+                         control. */
+                      lead ? (
+                        <button type="button" className="jar-char-bubble-reading jar-char-bubble-open"
+                          onClick={() => openOverHome('reading')}>
+                          {lead.body}
+                        </button>
+                      ) : (
+                        <span className="jar-char-bubble-reading">{restingWord}</span>
+                      )
                     )}
                   </span>
                 </div>
@@ -16418,6 +16450,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           an unrelated statement would be a second anonymous surface. The
           title follows the wall rather than the stored stance, so it cannot
           disagree with the world it is covering. */}
+      {/* ═══ THE READING'S OWN PAGE ═══════════════════════════════════════
+          Founder: "the speech bubble should show its top of mind at the
+          moment. And the user can click on it to go to a new page where the
+          user can engage with it."
+
+          Only where there is one to engage with: the bubble renders the
+          reading as a door only when `lead` exists, and this guards the same
+          fact rather than trusting it — a cold link to `?open=reading` on an
+          account with no reading has to land somewhere honest. It closes to
+          the world, which is where that link's reader already is. */}
+      {viewNavigation.view?.open==='reading' ? (lead ? <ReadingPage locale={locale}
+        statement={lead.body} whenMs={lead.createdMs ?? null}
+        grounds={posterGrounds}
+        builtFrom={posterChain.length > 0 || posterReviewSignalIds.length > 0}
+        onGround={(id, value, contested, revision) => sayVerdict(id, value, undefined, contested, revision)}
+        onBuiltFrom={() => { setProvPick(null); setProv({ lead: lead.body, rows: posterChain, reviewSignalIds: posterReviewSignalIds }); }}
+        talking={talking}
+        onTalk={() => { void talkAbout({ id: '', text: lead.body }); }}
+        onClose={viewNavigation.closeOpen} /> : null) : null}
       {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
@@ -16520,7 +16571,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         const talkId=viewNavigation.view.conversationId==='new'?null:viewNavigation.view.conversationId;
         const owner=`${storageScope.accountId}:${storageScope.profileId}`;
         if(committedTalk.current&&(committedTalk.current.owner!==owner||committedTalk.current.row.id!==talkId))committedTalk.current=null;
-        return <div className="waka-room">
+        return <div className="waka-page">
           <DialogSurface className="waka-over waka-over--talk" aria-label={say('worldMenuTalk')}
             onClose={viewNavigation.closeConversation}>
             <header className="waka-over-head">

@@ -158,7 +158,7 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
      grouping by day, which is the part that made the rail work, is kept
      exactly as it was. */
   return (
-    <div className="waka-room">
+    <div className="waka-page">
       <DialogSurface className="waka-over" aria-label={title} onClose={onClose}>
         <header className="waka-over-head">
           <h2 className="waka-over-title">{title}</h2>

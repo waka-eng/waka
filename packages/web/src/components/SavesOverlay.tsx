@@ -223,7 +223,7 @@ export function SavesOverlay({ locale, profileId, title, owners, onOwner, onClos
   }, [shown, now, locale]);
 
   return (
-    <div className="waka-room">
+    <div className="waka-page">
       <DialogSurface
         className="waka-over"
         aria-label={title}
