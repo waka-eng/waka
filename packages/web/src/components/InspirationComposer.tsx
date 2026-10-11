@@ -32,7 +32,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import { DialogSurface } from './DialogSurface';
 import { AuthoredSaveNotice } from './AuthoredSaveNotice';
-import { HomeActionIcon } from './HomeActionIcon';
 import {inspirationWithPendingLink} from '../lib/inspiration-input';
 import { t, type SupportedLocale } from '../lib/locales';
 import { momentStamp } from '../lib/words';
@@ -163,22 +162,22 @@ export function InspirationComposer(props: {
     {props.error.includes('another tab') ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
     {!props.ready ? <p role="status">{say('worldComposerOpening')}</p> : null}
     </div>
-    {/* THE PILL, BOTTOM-LEFT. Two glyphs and no words: founder, pointing at
-        the reference's toolbar, "2 icons: 1. record 2. image". While a
-        recording runs the pill says so in words and seconds, because a red
-        dot alone cannot tell you how long you have been talking. */}
-    <div className="jar-note-tools">
-      {props.recording.phase === 'idle' ? <button type="button" className="jar-note-tool"
-          aria-label={props.media.some(item => item.type === 'audio') ? say('worldComposerRecordAgain') : say('worldComposerRecord')}
-          disabled={blocked || !props.fileDraftsAvailable || Boolean(props.recordingCandidate)}
-          onClick={() => void props.recording.start()}><HomeActionIcon kind="record"/></button>
-        : <button type="button" className="jar-note-tool jar-note-tool--wide" onClick={() => void props.recording.stop()} disabled={props.recording.phase === 'finishing'}>
-            {say('worldComposerStop')} {Math.floor(props.recording.seconds / 60)}:{String(props.recording.seconds % 60).padStart(2, '0')}</button>}
-      {props.recording.phase === 'recording' || props.recording.phase === 'requesting'
-        ? <button type="button" className="jar-note-tool jar-note-tool--wide" onClick={() => void props.recording.cancel()}>{say('worldComposerCancelRecording')}</button>
-        : <button type="button" className="jar-note-tool" aria-label={say('worldComposerPhoto')}
-            disabled={blocked || !props.fileDraftsAvailable} onClick={() => fileInput.current?.click()}><HomeActionIcon kind="photo"/></button>}
-    </div>
+    {/* THE PILL IN THE BOTTOM-LEFT CORNER IS GONE, AND SO IS THE CORNER.
+        Founder, twice, about that corner — "I don't like this thing on the
+        left" — and about the shape of the bottom of the screen: "this
+        double layer is so weird."
+
+        Record and photo moved into the DOCK, into the slot the plus
+        occupies when you are not already making something. The argument
+        for them being here was the reference's own floating toolbar, and
+        it was right while the dock did not exist; with a bar on screen,
+        two glyphs floating beside it are a second bar with two buttons in
+        it. The bar is the only object at the bottom of any screen again,
+        and the middle of this page is emptier than it has ever been, which
+        is this surface's whole specification.
+
+        See the note at `waka-dock-making` in `Home.tsx` for why only this
+        one slot transforms and the four places never move. */}
     {/* KEEPING IT, BOTTOM-RIGHT, and only once there is something to keep.
         An always-present Save on a blank page is a button for a thing that
         does not exist. */}
