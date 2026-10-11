@@ -256,6 +256,7 @@
   "worldConversationFull": "이 대화는 가득 찼어요. 새 대화에서 이어가 주세요.",
   "worldConversationMessage": "내 메시지",
   "worldConversationMessages": "저장된 메시지",
+  "worldConversationNeedsWords": "먼저 무언가를 적어 주세요.",
   "worldConversationNew": "새 대화",
   "worldConversationOpening": "지금 마음에 있는 것을 적어 보세요. WAKA는 당신이 모아둔 것에서 답합니다.",
   "worldConversationReadFailed": "대화를 열지 못했어요.",
