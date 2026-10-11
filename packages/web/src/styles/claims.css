@@ -1196,7 +1196,31 @@
      `--jar-atmos` for the same reason; three rooms and a page that disagree
      about whether they are over the world or in it is the stack the founder
      has now reported twice. */
-  background: var(--jar-atmos);
+  /* ═══ IT DOES NOT PAINT A GROUND, BECAUSE THERE IS ALREADY ONE ══════
+     Founder: "I like the now page's navy blue and the other navy blue
+     backgrounds are too light. Can I use the exact same background as
+     what's under now, with the floating dots and stuff? Why does it have
+     to be different?"
+
+     It did not have to be. This painted `--moon-ground` edge to edge —
+     the SAME TOKEN the world's ground uses, which is why the answer was
+     never a colour. What the world has on top of that token is a vignette,
+     a dust field and the stars, all drawn on the canvas; a page that
+     covers the canvas gets the number without any of them, and a ground
+     with its vignette removed is exactly what "too light" looks like.
+
+     So it stops painting. The world is still mounted underneath — it
+     always was, that is what made these overlays rather than pages in the
+     first place — and what shows through is not a copy of its background,
+     it IS its background. They cannot drift because there is one of them.
+
+     THE COMPANION STEPS ASIDE FOR IT. `.jar--aside` already faded the
+     bubble, the mouth and the creature's line; the body is on the canvas
+     where a stylesheet cannot reach, so the frame loop now skips it while
+     a destination is up (see `asideRef` in `Home.tsx`). Its ground, its
+     vignette and its dust keep drawing — they are what the page stands
+     on. */
+  background: transparent;
 }
 
 /**

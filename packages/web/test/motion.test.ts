@@ -53,3 +53,48 @@ describe("the star's turn", () => {
     expect(reduced![1]!).toContain("animation: none");
   });
 });
+
+/**
+ * ═══ A DESTINATION DOES NOT FADE IN OVER THE WORLD ═════════════════════
+ *
+ * Founder, with a screen recording: "stop blinking to show the now page
+ * every time I move tabs."
+ *
+ * A fade-in was added to `.waka-page` on the reasoning that a destination
+ * should arrive rather than appear. Measured on the move from Inspirations
+ * to Chats, the incoming page sat at opacity 0, 0.21, 0.48, 0.73, reaching
+ * 1 at 225ms — and a page at opacity 0 is a window onto whatever is behind
+ * it, which for every destination is the WORLD. So the fade was not
+ * softening an arrival, it was showing the Now screen for a fifth of a
+ * second on every move between tabs.
+ *
+ * THERE IS NO SAFE VERSION OF IT, which is why this is a gate and not a
+ * tuned duration: the only thing a destination can fade in from is the
+ * world, so any entry animation that starts transparent reintroduces the
+ * blink. The surfaces are listed by name because the next one added will
+ * inherit the same ground and the same temptation.
+ */
+const CHROME = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), "../src/styles/chrome.css"),
+  "utf8",
+);
+
+describe("moving between places", () => {
+  it("never shows the world through an arriving page", () => {
+    /* Every rule that names a page ground, with its declarations. */
+    const grounds = [...CHROME.matchAll(/\.(waka-page|login-shell|waka-public)\b[^{]*\{([^}]*)\}/g)];
+    expect(grounds.length, "no page-ground rules found — has a class been renamed?")
+      .toBeGreaterThanOrEqual(2);
+    const fading = grounds
+      .filter(([, , body]) => /animation(-name)?\s*:/.test(body!) && !/animation\s*:\s*none/.test(body!))
+      .map(([, name]) => `.${name}`);
+    expect(
+      fading,
+      "a page ground has an entry animation again. Whatever it fades in " +
+        "from is the world, so it will show the Now screen on every move " +
+        "between tabs — which is what the founder recorded. If a surface " +
+        "genuinely needs to animate, animate something INSIDE it that is " +
+        "not the thing covering the world.",
+    ).toEqual([]);
+  });
+});

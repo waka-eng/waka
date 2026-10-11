@@ -2441,6 +2441,35 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     loadClaims();
   }, [phase, offline, loadClaims]);
   const composerOpenRef = useRef(mouthOpen); composerOpenRef.current = mouthOpen;
+  /* ═══ THE WORLD STEPS ASIDE FOR A DESTINATION, CANVAS INCLUDED ═════════
+     Founder: "I like the now page's navy blue and the other navy blue
+     backgrounds are too light. Can I use the exact same background as
+     what's under now, with the floating dots and stuff? Why does it have to
+     be different?"
+
+     It did not have to be. A destination painted an opaque ground over the
+     world — the same token, so the colour matched, but flat: no vignette,
+     no dust, no stars. Those come from the canvas, so a page that covers
+     the canvas cannot have them, and "too light" is what a ground with its
+     vignette removed looks like.
+
+     So the page stops painting and the real world shows through it. The
+     DOM chrome already knew how to do this — `.jar--aside` fades the
+     bubble, the mouth and the companion's line — and the one thing left
+     drawing over the list was the COMPANION itself, on the canvas, where a
+     stylesheet cannot reach it. This ref is how the loop hears the same
+     fact the class is stating. */
+  const asideRef = useRef(false);
+  /* EVERY SURFACE THAT MOUNTS A PAGE, not just the ones that set `open`.
+     The first version of this asked `view.open` alone and the chat broke
+     immediately: a conversation sets `conversationId`, so the world went on
+     drawing its companion and its bubble straight through the page's own
+     creature and its opening line — two companions and two sentences on one
+     screen. `.waka-page` is the thing that matters here, and these three
+     parameters are what mount one. */
+  asideRef.current = Boolean(
+    viewNavigation.view?.open || viewNavigation.view?.conversationId || viewNavigation.view?.sharePrinciple,
+  );
   useEffect(() => { if (!mouthOpen && recording.phase !== 'idle') void recording.stop(); }, [mouthOpen, recording.phase, recording.stop]);
   const [newInspirationRequested, setNewInspirationRequested] = useState(false);
   /** The one honest line: it did not keep. Never a modal, never a silence. */
@@ -7094,7 +7123,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const showPrev = formMix < 0.5 && form.prevBody !== null;
       const formBe = showPrev ? form.prevBe : wear.be;
       const formMachine = showPrev ? form.prevMachine : wear.machine;
-      if (companion.y - cam.y > -companion.size * 2 && companion.y - cam.y < view.h + companion.size * 2) {
+      /* AND IT IS NOT DRAWN AT ALL WHILE A DESTINATION IS UP. Not moved —
+         moved would mean it travels back when you leave, which is the world
+         moving without anybody moving it. It simply is not painted, the way
+         `.jar--aside` simply does not paint the bubble. Its ground, its
+         vignette and its dust keep drawing, which is the whole point: they
+         are what the page is standing on now. */
+      if (!asideRef.current && companion.y - cam.y > -companion.size * 2 && companion.y - cam.y < view.h + companion.size * 2) {
         /* the bob rides its own integrated phase: while the companion leads
            it quickens toward a walk, and at rest it is the hover it was */
         /* THE FLOAT BECOMES A TICK. A sine is how something alive hovers; a
@@ -13099,7 +13134,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          through it too, and a composer drawn across a sentence somebody
          wrote is not depth, it is a collision.
          So the world's CHROME steps back and the world itself does not. */
-      className={`jar${viewNavigation.view?.open ? " jar--aside" : ""}`}
+      /* THE SAME THREE, so the DOM chrome and the canvas step aside
+         together. They were two different conditions and the chat sat in
+         the gap between them. */
+      className={`jar${viewNavigation.view?.open || viewNavigation.view?.conversationId || viewNavigation.view?.sharePrinciple ? " jar--aside" : ""}`}
       aria-label="Waka"
     >
       {/* the world's early face, until the first real frame: the same ground,
@@ -14888,7 +14926,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 <div
                   className="jar-char-bubble"
                   data-jar-chrome="1"
-                  data-jar-interactive={offering || lead ? '1' : undefined}
+                  /* Every state of this bubble is pressable now — the
+                     offer, a reading, and the empty line — so the flag is
+                     unconditional rather than a list of which two. */
+                  data-jar-interactive="1"
                 >
                   <span className="jar-char-bubble-body">
                     {offering ? (
@@ -14943,7 +14984,34 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           {lead.body}
                         </button>
                       ) : (
-                        <span className="jar-char-bubble-reading">{restingWord}</span>
+                        /* ═══ AND THE EMPTY LINE IS A DOOR AFTER ALL ═════
+                           Founder: "this should say no top of mind formed
+                           yet, add more inspirations. And then clicking on
+                           that speech bubble should lead to new
+                           inspiration. Don't say no reading."
+
+                           It was the one state of this bubble that led
+                           nowhere, on the argument that "a control that
+                           opens an empty page is worse than no control" —
+                           which was right about the page it used to open
+                           (the reading, which did not exist yet) and wrong
+                           about what the sentence is for. The line names a
+                           thing the person can DO something about, and the
+                           thing is saving another inspiration. A sentence
+                           that asks for something and cannot be acted on is
+                           the worse control.
+
+                           SO THE BUBBLE'S RULE HAS EXACTLY ONE SHAPE NOW:
+                           what the companion says is a door, and the door
+                           is a chat about what it said — EXCEPT when what
+                           it said names the act of saving, in which case it
+                           is the notepad. The offer ("Feeling inspired?
+                           Save it.") and this line are the two that name
+                           it, and they go to the same place. */
+                        <button type="button" className="jar-char-bubble-reading jar-char-bubble-open"
+                          onClick={startNewInspiration}>
+                          {restingWord}
+                        </button>
                       )
                     )}
                   </span>

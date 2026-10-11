@@ -58,7 +58,14 @@ it('keeps Home usable while a delayed reading loads, without claiming it is empt
 });
 it('shows the real empty state only after the owned response confirms no reading',async()=>{
   world=await mountWorld(facts);expectLoading();await act(async()=>reads.requests[0]!.resolve(null));
-  expect(settled()?.textContent).toContain('No reading yet');
+  /* THE WORDS CHANGED AND THE CLAIM DID NOT. Founder: "this should say no
+     top of mind formed yet, add more inspirations. Don't say no reading."
+     "Reading" is the machinery's word for the thing; "top of mind" is the
+     product's, and it is the one on every other surface. What this case is
+     about is unchanged — the real empty state appears only once an OWNED
+     response has confirmed there is nothing, never while a read is still in
+     flight. */
+  expect(settled()?.textContent).toContain('No top of mind formed yet');
   /* AND THE POSTER NO LONGER SAYS IT TOO. The same sentence in two registers
      sixty pixels apart, with the bubble overlapping the words, is exactly
      what the founder reported. */

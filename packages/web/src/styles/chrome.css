@@ -1105,40 +1105,27 @@ a:focus-visible {
  * grain below stays: a texture is not a light source and was never the
  * complaint. */
 
-/* ═══ A PAGE ARRIVES, IT DOES NOT APPEAR ════════════════════════════════
+/* ═══ A PAGE DOES NOT FADE IN, AND HERE IS WHAT THAT COST ══════════════
  *
- * Same sentence, the other half of it: 몽글몽글 is as much about how a thing
- * shows up as about what colour it is. A destination cutting into existence
- * at full strength is a slide change; the same destination rising a few
- * pixels into place over a fifth of a second is something being set down in
- * front of you.
+ * Founder, with a screen recording: "stop blinking to show the now page
+ * every time I move tabs."
  *
- * THIS IS NOT THE MOTION THE LAW FORBIDS. "Nothing moves unless the user
- * moved it" — they pressed a row in the dock, and this is that press
- * answered. It happens once, on arrival, and never again; nothing on the
- * page moves afterwards unless touched. `prefers-reduced-motion` turns it
- * off entirely, because for some people softness and nausea are the same
- * gradient. */
-@keyframes waka-settle {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-}
-
-.waka-page,
-.login-shell,
-.waka-public {
-  animation: waka-settle 220ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .waka-page,
-  .login-shell,
-  .waka-public {
-    animation: none;
-  }
-}
+ * `waka-settle` was added here on the reasoning that a destination should
+ * arrive rather than appear — 220ms, six pixels, answering the press that
+ * opened it. MEASURED on the move from Inspirations to Chats: the incoming
+ * page sits at opacity 0, 0.21, 0.48, 0.73 … reaching 1 at 225ms.
+ *
+ * A page at opacity 0 is a window onto whatever is behind it, and what is
+ * behind every destination is the WORLD. So the fade was not softening an
+ * arrival; it was showing the Now screen for a fifth of a second on every
+ * single move between tabs, which is a screen the person did not ask for,
+ * arriving twice per move. That is the founder's own law — nothing moves
+ * unless the user moved it — being broken by the thing that quoted it.
+ *
+ * There is no version of a fade-in here that does not do this, because the
+ * only thing to fade in FROM is the world. A destination is now simply
+ * there when you press its row, which is what a bottom bar has always
+ * promised. */
 
 .login-shell::after,
 .waka-page::after,
