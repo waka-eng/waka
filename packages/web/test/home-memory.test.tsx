@@ -762,10 +762,22 @@ describe("stepping between memories", () => {
       "the memory opened next has its footer — an edit left behind on the last " +
         "card must not strip this one of everything it offers",
     ).not.toBeNull();
+    /* `Delete`, WHERE THIS ASSERTED `Reflect` (2026-10-10). The marker had to
+       change because the verb did: the footer's left cell offered `Reflect` on
+       a save with no answers, which opened the writing flow the founder
+       folded — it now offers `Read reflection` only when there is an answer to
+       read, and this memory has none, so that cell is empty by design.
+       `Delete` is the better marker anyway and was the one to reach for first:
+       it exists ONLY on the reading footer (the editing footer offers Add a
+       picture / Save / Leave it), so it still distinguishes the two footers,
+       and unlike `Reflect` it does not depend on what the memory happens to
+       carry. The property under test is unchanged — an edit left behind on a
+       card you can no longer see must not strip the next card of everything
+       it offers. */
     expect(
       [...(foot?.querySelectorAll("button") ?? [])].map((b) => (b.textContent ?? "").trim()),
       "and it is the reading footer, not the one that belongs to an open edit",
-    ).toContain("Reflect");
+    ).toContain("Delete");
     expect(
       (
         layout.container.querySelector(".jar-panel--in .jar-panel-text")?.textContent ?? ""

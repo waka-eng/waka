@@ -28,6 +28,11 @@ archive/
 # Local file-first vault used by pnpm dev:local
 .waka-vault-local/
 
+# Objects uploaded to the local attachments store that pnpm dev:local starts
+# (tools/e2e/s3-stub.ts). Real photos and voice recordings from whoever has
+# been using the stack — a person's own material, never the repo's.
+.waka-attachments-local/
+
 # Throwaway browser probes, which have to sit in the repo root.
 #
 # A one-off question about the running world ("is anything covering this

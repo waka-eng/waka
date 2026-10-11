@@ -49,9 +49,14 @@ export * from "./profiles";
 export * from "./sessions";
 export * from "./inspirations";
 export * from "./inspiration-processing";
-export * from './review-sessions';
-export * from './review-dialogue';
-export * from './review-processing';
+/* `review-sessions`, `review-dialogue` and `review-processing` are GONE
+   (2026-10-10). Three resources — a review session with its own advance and
+   finish verbs, a question/answer dialogue with revisions and drafts, and the
+   processing job that turned those answers into a reading — behind five
+   components the founder folded into one correction field. Each one's only
+   caller was a hook under `lib/`, and each of those hooks had exactly one
+   component. Nothing else in the client spoke to them. The server routes
+   still stand; this barrel simply no longer offers a client for them. */
 export * from "./inspiration-save-requests";
 export * from "./attachments";
 export * from "./signals";

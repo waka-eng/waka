@@ -4,22 +4,22 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { ApiError, createInspiration, createReflection, fetchInspiration, fetchInspirationSaveRequest, type ApiInspiration } from '../src/lib/api';
+import { ApiError, createInspiration, fetchInspiration, fetchInspirationSaveRequest, type ApiInspiration } from '../src/lib/api';
 import { useAuthoredSave, type AuthoredSaveInput } from '../src/lib/use-authored-save';
 
 vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(),
-  createInspiration: vi.fn(), createReflection: vi.fn(), fetchInspiration: vi.fn(), fetchInspirationSaveRequest: vi.fn(),
+  createInspiration: vi.fn(), fetchInspiration: vi.fn(), fetchInspirationSaveRequest: vi.fn(),
 }));
 const scope = { accountId: 'account-A', profileId: 'profile-A' };
 const source: ApiInspiration = { id: 'source-A', profileId: scope.profileId, text: 'One thought', kind: 'note', source: 'app',
   createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z', attachments: [], reflections: [] };
-const input: AuthoredSaveInput = { operation: 'inspiration', input: { text: source.text, visibility: 'private' }, reflect: false };
+const input: AuthoredSaveInput = { operation: 'inspiration', input: { text: source.text, visibility: 'private' } };
 const resolved = vi.fn(), removed = vi.fn();
 let host: HTMLDivElement, root: Root, latest: ReturnType<typeof useAuthoredSave>;
 const records = () => Object.keys(localStorage).filter((key) => key.includes(':pendingSave:'));
 const missing = () => new ApiError({ status: 404, code: 'save_not_found', message: 'No committed save found' });
-function Probe({ owner = scope, operation = 'inspiration' as 'inspiration' | 'reflection' }) {
-  latest = useAuthoredSave({ scope: owner, operation, inspirationId: operation === 'reflection' ? source.id : undefined,
+function Probe({ owner = scope, operation = 'inspiration' as const }) {
+  latest = useAuthoredSave({ scope: owner, operation,
     onResolved: resolved, onRemoved: removed });
   return <span>{latest.phase}</span>;
 }
@@ -130,15 +130,18 @@ it('removes a deleted intent without recreating its words', async () => {
   expect(records()).toHaveLength(0); expect(latest.phase).toBe('removed');
 });
 
-it('preserves a reflection question and loads current answers before continuation', async () => {
-  const reflection = { id: 'answer-1', inspirationId: source.id, question: 'The original question?', answer: 'An answer', skipped: false, createdAt: source.createdAt };
-  vi.mocked(createReflection).mockResolvedValue(reflection);
-  vi.mocked(fetchInspiration).mockResolvedValue({ ...source, reflections: [reflection, { ...reflection, id: 'answer-2', answer: 'A later answer from another device' }] });
-  await act(async () => root.render(<Probe operation="reflection" />));
-  await act(async () => { latest.start({ operation: 'reflection', inspirationId: source.id, input: { question: reflection.question, answer: reflection.answer }, afterId: null, continueReflecting: true }); });
-  expect(resolved.mock.calls[0]?.[1].inspiration.reflections).toHaveLength(2);
-  expect(vi.mocked(createReflection).mock.calls[0]?.[1]).toEqual({ question: reflection.question, answer: reflection.answer });
-});
+/* THE REFLECTION SUITE IS GONE, WITH THE OPERATION IT EXERCISED
+   (2026-10-10). It asserted that a journalled answer POSTed exactly the words
+   given and that the resolution carried the CURRENT answers — including one
+   written on another device while this save was in flight. `useAuthoredSave`
+   has one operation now; `components/ReflectionFlow.tsx`, its only caller,
+   is folded into the claim queue's correction field.
+   WHAT PROTECTED THE SAME INVARIANT IS STILL HERE, on the inspiration path:
+   the suites above assert that the POST carries the immutable intent's own
+   words, that a lost response is observed with a GET rather than re-POSTed,
+   and that resolution reads the server's current row rather than the one this
+   device remembers. Those were always the properties under test; the
+   reflection operation was a second shape of the same protocol. */
 
 it('allows editing only after a confirmed validation rejection, never after an ambiguous response', async () => {
   vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 400, message: 'Invalid inspiration', fieldErrors: { text: ['Inspiration text is too long'] } }));

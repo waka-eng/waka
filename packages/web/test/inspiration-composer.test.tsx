@@ -24,7 +24,12 @@ const mount = () => act(async () => root.render(<InspirationComposer {...props} 
 it('saves once without asking the user to choose reflection, and blocks an unresolved save',async()=>{
   props.text='A thought to come back to.';props.media=[];await mount();
   const actions=host.querySelectorAll<HTMLButtonElement>('.jar-composer-actions button');expect(actions).toHaveLength(1);
-  await act(async()=>actions[0].click());expect(props.onSubmit).toHaveBeenCalledExactlyOnceWith(false);
+  /* NO ARGUMENT, WHERE THERE USED TO BE `false` (2026-10-10). `onSubmit`
+     took a `reflect` boolean and this control only ever passed `false` — so
+     the parameter went with the question sheet it was meant to open, which
+     nothing could reach. Asserting the EXACT argument list rather than just
+     the call count is what keeps that from silently coming back. */
+  await act(async()=>actions[0].click());expect(props.onSubmit).toHaveBeenCalledExactlyOnceWith();
   props.save.pending={} as NonNullable<typeof props.save.pending>;await mount();
   expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(true);
 });
@@ -89,7 +94,7 @@ it('restores the separate link draft and includes it through the single Save act
   expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(false);
   expect(host.textContent).toContain('This link will be included when you save.');
   await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.click());
-  expect(props.onSubmit).toHaveBeenCalledExactlyOnceWith(false);
+  expect(props.onSubmit).toHaveBeenCalledExactlyOnceWith();
   expect(props.onLinkText).not.toHaveBeenCalled();expect(props.onText).not.toHaveBeenCalled();
 });
 it('refuses unsafe link schemes without submitting or discarding the draft',async()=>{

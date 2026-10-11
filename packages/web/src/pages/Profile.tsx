@@ -619,6 +619,23 @@ export default function ProfilePage(): JSX.Element {
      * nobody had reported: the cog brought you here and there was no way back
      * except the browser's own button. The switcher names the page, so the
      * card's eyebrow and title are gone rather than repeated.
+     *
+     * AND THE NAMES SAY SO NOW, which that pass did not finish. Looking the
+     * same was the visible half; the markup still said `login-` thirty-nine
+     * times — `login-eyebrow` twelve, `login-subtitle` twenty-four,
+     * `login-form`, `login-footer`, `login-link` — so every rule dressing
+     * this page had to be written as "the sign-in page's eyebrow, except on
+     * the profile page", and four of them literally were
+     * (`.profile-public-heading > .login-eyebrow` and its siblings). A name
+     * borrowed from another screen does not stay a harmless alias: it makes
+     * every later rule about THIS screen an exception to that one, and the
+     * exceptions are where the two screens drift apart.
+     *
+     * So the five are `profile-eyebrow`, `-subtitle`, `-form`, `-footer`,
+     * `-link`. The door keeps its own names and its own rules; where a rule
+     * genuinely dresses both, both names are on it, which is the honest way
+     * to say "these two screens agree here" instead of one wearing the
+     * other's clothes.
      */
     <main className="waka-page profile-page">
       {/* THE WAY OUT, WHICH HAD NEVER WORKED HERE. The cog on every screen
@@ -706,7 +723,7 @@ export default function ProfilePage(): JSX.Element {
           ))}
         </div>
         <form
-          className="login-form profile-panel"
+          className="profile-form profile-panel"
           onSubmit={handleSubmit}
           noValidate
           role="tabpanel"
@@ -782,10 +799,10 @@ export default function ProfilePage(): JSX.Element {
             hidden={open !== "public"}
           >
             <div className="profile-public-heading">
-              <p className="login-eyebrow" id="profile-public-title">
+              <p className="profile-eyebrow" id="profile-public-title">
                 {t(locale, "profilePublicTitle")}
               </p>
-              <p className="login-subtitle">{t(locale, "profilePublicHint")}</p>
+              <p className="profile-subtitle">{t(locale, "profilePublicHint")}</p>
             </div>
             <label className="field">
               <span className="field-label">{t(locale, "profilePublicHandle")}</span>
@@ -830,7 +847,7 @@ export default function ProfilePage(): JSX.Element {
                 The association is what was worth keeping, not the copy, so
                 both boxes now describe themselves with the VISIBLE paragraph
                 and the clones are gone. */}
-            <p className="login-subtitle" id="profile-public-privacy">
+            <p className="profile-subtitle" id="profile-public-privacy">
               {t(locale, "profilePublicPrivacyHint")}
             </p>
             <label className="profile-toggle-row">
@@ -900,10 +917,10 @@ export default function ProfilePage(): JSX.Element {
           hidden={tab !== "you"}
         >
           <div className="profile-memories-heading">
-            <p className="login-eyebrow" id="profile-machinery-title">
+            <p className="profile-eyebrow" id="profile-machinery-title">
               {t(locale, "profileMachineryTitle")}
             </p>
-            <p className="login-subtitle">{t(locale, "profileMachineryHint")}</p>
+            <p className="profile-subtitle">{t(locale, "profileMachineryHint")}</p>
           </div>
 
           {/* HOW ONE LAYER BECOMES THE NEXT — re-homed, not restored.
@@ -919,7 +936,7 @@ export default function ProfilePage(): JSX.Element {
               what I give it, and in what order. That is read once, carefully,
               by somebody who wants to know how the machine works — which is
               the question every other thing in this section answers too. */}
-          <dl className="profile-forms">
+          <dl className="profile-formation">
             <dt>{t(locale, "worldMenuField")}</dt>
             <dd>{t(locale, "worldFormationInspirations")}</dd>
             <dt>{t(locale, "worldMenuTopOfMind")}</dt>
@@ -931,7 +948,7 @@ export default function ProfilePage(): JSX.Element {
               of the disclosure and it belongs at the foot of this: a person
               reading how the machine works is owed the part where it says
               what it cannot do. */}
-          <p className="profile-forms-note">{t(locale, "worldFormationKeep")}</p>
+          <p className="profile-formation-note">{t(locale, "worldFormationKeep")}</p>
           <p className="profile-machinery-row">
             <button
               type="button"
@@ -1018,10 +1035,10 @@ export default function ProfilePage(): JSX.Element {
         >
         <section className="profile-memories-panel" aria-labelledby="profile-memories-title">
           <div className="profile-memories-heading">
-            <p className="login-eyebrow" id="profile-memories-title">
+            <p className="profile-eyebrow" id="profile-memories-title">
               {t(locale, "profileMemoriesTitle")}
             </p>
-            <p className="login-subtitle">{t(locale, "profileMemoriesHint")}</p>
+            <p className="profile-subtitle">{t(locale, "profileMemoriesHint")}</p>
           </div>
 
           <ul className="profile-list">
@@ -1124,13 +1141,13 @@ export default function ProfilePage(): JSX.Element {
           </ul>
           {mintedAgentKey ? (
             <div className="profile-minted">
-              <p className="login-eyebrow">{t(locale, "profileKeyCopyNow")}</p>
-              <p className="login-subtitle">
+              <p className="profile-eyebrow">{t(locale, "profileKeyCopyNow")}</p>
+              <p className="profile-subtitle">
                 {t(locale, "profileMemoryKeyFor")} {memoryName(mintedAgentKey.profileId)}.
               </p>
               <code className="profile-secret">{mintedAgentKey.secret}</code>
-              <p className="login-subtitle">{t(locale, "profileKeyShownOnce")}</p>
-              <p className="login-subtitle">{t(locale, "profileKeyConfigHint")}</p>
+              <p className="profile-subtitle">{t(locale, "profileKeyShownOnce")}</p>
+              <p className="profile-subtitle">{t(locale, "profileKeyConfigHint")}</p>
               <code className="profile-secret">
                 {`WAKA_API_KEY=${mintedAgentKey.secret}\nWAKA_API_URL=${publicApiOrigin()}`}
               </code>
@@ -1146,10 +1163,10 @@ export default function ProfilePage(): JSX.Element {
         </section>
         <section className="profile-memories-panel" aria-labelledby="profile-keys-title">
           <div className="profile-memories-heading">
-            <p className="login-eyebrow" id="profile-keys-title">
+            <p className="profile-eyebrow" id="profile-keys-title">
               {t(locale, "profileKeysTitle")}
             </p>
-            <p className="login-subtitle">{t(locale, "profileKeysHint")}</p>
+            <p className="profile-subtitle">{t(locale, "profileKeysHint")}</p>
           </div>
 
           <ul className="profile-list">
@@ -1188,7 +1205,7 @@ export default function ProfilePage(): JSX.Element {
               })}
           </ul>
           {keeperKeys !== null && keeperKeys.every((key) => key.revokedAt !== null) ? (
-            <p className="login-subtitle">{t(locale, "profileKeysEmpty")}</p>
+            <p className="profile-subtitle">{t(locale, "profileKeysEmpty")}</p>
           ) : null}
 
           {mintedKey ? (
@@ -1196,10 +1213,10 @@ export default function ProfilePage(): JSX.Element {
                until the person says they have it — two uncopied secrets on
                one screen is one too many. */
             <div className="profile-minted">
-              <p className="login-eyebrow">{t(locale, "profileKeyCopyNow")}</p>
+              <p className="profile-eyebrow">{t(locale, "profileKeyCopyNow")}</p>
               <code className="profile-secret">{mintedKey.secret}</code>
-              <p className="login-subtitle">{t(locale, "profileKeyShownOnce")}</p>
-              <p className="login-subtitle">{t(locale, "profileKeyConfigHint")}</p>
+              <p className="profile-subtitle">{t(locale, "profileKeyShownOnce")}</p>
+              <p className="profile-subtitle">{t(locale, "profileKeyConfigHint")}</p>
               <code className="profile-secret">
                 {`WAKA_API_KEY=${mintedKey.secret}\nWAKA_API_URL=${publicApiOrigin()}`}
               </code>
@@ -1246,10 +1263,10 @@ export default function ProfilePage(): JSX.Element {
           <>
         <section className="profile-memories-panel" aria-labelledby="profile-agent-keys-title">
           <div className="profile-memories-heading">
-            <p className="login-eyebrow" id="profile-agent-keys-title">
+            <p className="profile-eyebrow" id="profile-agent-keys-title">
               {t(locale, "profileAgentKeysTitle")}
             </p>
-            <p className="login-subtitle">{t(locale, "profileAgentKeysHint")}</p>
+            <p className="profile-subtitle">{t(locale, "profileAgentKeysHint")}</p>
             {/* HOW AN AGENT ACTUALLY SAVES, BESIDE THE KEYS IT NEEDS TO.
                 This line stood under the box on the home screen, where it was
                 a setup instruction printed beneath the thing you use every
@@ -1257,10 +1274,30 @@ export default function ProfilePage(): JSX.Element {
                 it are in this section, so it reads here and takes up no room
                 on the screen the product opens on. */}
             <p className="profile-machinery-row">
+              {/* ONE PARAGRAPH, NOT THREE SENTENCES IN THREE SPANS. Founder:
+                  "for the text that shows up when I click the info icon, make
+                  it a single paragraph. Don't split it into separate
+                  sentences."
+
+                  That was ruled on the switcher's three cards and applied
+                  only there — `page-menu.ts` carries the same note — while
+                  this card, the last `HoverCard` left anywhere in the tree,
+                  went on stacking `worldKeepMcpWhat`, `-Tools` and `-Where`
+                  as siblings. Three stacked clauses read as a specification
+                  to retain when the question was only "what is this", and
+                  the `gap` between the spans made them look like three
+                  settings rather than one explanation.
+
+                  It is ONE KEY, not three joined at the call site: joining
+                  them here would still be three sentences, just without the
+                  line breaks, and the Korean cannot be assembled from
+                  English-ordered fragments at all. `worldFieldWhatIs` and
+                  `worldPrinciplesWhatIs` are each a single flowing sentence
+                  for exactly this reason, and this now matches them.
+                  The link below stays its own element — it is a destination,
+                  not a clause. */}
               <HoverCard label={t(locale, "worldKeepViaAgent")} className="jar-keep-via">
-                <span>{t(locale, "worldKeepMcpWhat")}</span>
-                <span>{t(locale, "worldKeepMcpTools")}</span>
-                <span>{t(locale, "worldKeepMcpWhere")}</span>
+                <span>{t(locale, "worldKeepMcpWhatIs")}</span>
                 <a href="https://github.com/waka-eng/waka-mcp" target="_blank" rel="noreferrer noopener">
                   {t(locale, "worldKeepMcpOpen")}
                 </a>
@@ -1300,18 +1337,18 @@ export default function ProfilePage(): JSX.Element {
               })}
           </ul>
           {agentKeys !== null && agentKeys.every((key) => key.revokedAt !== null) ? (
-            <p className="login-subtitle">{t(locale, "profileAgentKeysEmpty")}</p>
+            <p className="profile-subtitle">{t(locale, "profileAgentKeysEmpty")}</p>
           ) : null}
 
           {reissuedKey ? (
             <div className="profile-minted">
-              <p className="login-eyebrow">{t(locale, "profileKeyCopyNow")}</p>
-              <p className="login-subtitle">
+              <p className="profile-eyebrow">{t(locale, "profileKeyCopyNow")}</p>
+              <p className="profile-subtitle">
                 {t(locale, "profileMemoryKeyFor")} {memoryName(reissuedKey.profileId)}.
               </p>
               <code className="profile-secret">{reissuedKey.secret}</code>
-              <p className="login-subtitle">{t(locale, "profileKeyShownOnce")}</p>
-              <p className="login-subtitle">{t(locale, "profileKeyConfigHint")}</p>
+              <p className="profile-subtitle">{t(locale, "profileKeyShownOnce")}</p>
+              <p className="profile-subtitle">{t(locale, "profileKeyConfigHint")}</p>
               <code className="profile-secret">
                 {`WAKA_API_KEY=${reissuedKey.secret}\nWAKA_API_URL=${publicApiOrigin()}`}
               </code>
@@ -1360,10 +1397,10 @@ export default function ProfilePage(): JSX.Element {
         </section>
         <section className="profile-memories-panel" aria-labelledby="profile-grants-title">
           <div className="profile-memories-heading">
-            <p className="login-eyebrow" id="profile-grants-title">
+            <p className="profile-eyebrow" id="profile-grants-title">
               {t(locale, "profileGrantsTitle")}
             </p>
-            <p className="login-subtitle">{t(locale, "profileGrantsHint")}</p>
+            <p className="profile-subtitle">{t(locale, "profileGrantsHint")}</p>
           </div>
 
           <ul className="profile-list">
@@ -1401,11 +1438,11 @@ export default function ProfilePage(): JSX.Element {
           {grants !== null &&
           grants.every((grant) => grant.revokedAt !== null) &&
           agentMemories.length >= 2 ? (
-            <p className="login-subtitle">{t(locale, "profileGrantsEmpty")}</p>
+            <p className="profile-subtitle">{t(locale, "profileGrantsEmpty")}</p>
           ) : null}
 
           {agentMemories.length < 2 ? (
-            <p className="login-subtitle">{t(locale, "profileGrantsNeedTwo")}</p>
+            <p className="profile-subtitle">{t(locale, "profileGrantsNeedTwo")}</p>
           ) : (
             <ul className="profile-list">
               <li className="profile-list-row profile-memory-new">
@@ -1469,10 +1506,10 @@ export default function ProfilePage(): JSX.Element {
           <>
         <section className="profile-memories-panel" aria-labelledby="profile-connections-title">
           <div className="profile-memories-heading">
-            <p className="login-eyebrow" id="profile-connections-title">
+            <p className="profile-eyebrow" id="profile-connections-title">
               {t(locale, "profileConnectionsTitle")}
             </p>
-            <p className="login-subtitle">{t(locale, "profileConnectionsHint")}</p>
+            <p className="profile-subtitle">{t(locale, "profileConnectionsHint")}</p>
           </div>
 
           <ul className="profile-list">
@@ -1511,15 +1548,15 @@ export default function ProfilePage(): JSX.Element {
             })}
           </ul>
           {connections !== null && connections.length === 0 ? (
-            <p className="login-subtitle">{t(locale, "profileConnectionsEmpty")}</p>
+            <p className="profile-subtitle">{t(locale, "profileConnectionsEmpty")}</p>
           ) : null}
         </section>
         <section className="profile-memories-panel" aria-labelledby="profile-read-record-title">
           <div className="profile-memories-heading">
-            <p className="login-eyebrow" id="profile-read-record-title">
+            <p className="profile-eyebrow" id="profile-read-record-title">
               {t(locale, "profileReadRecordTitle")}
             </p>
-            <p className="login-subtitle">{t(locale, "profileReadRecordHint")}</p>
+            <p className="profile-subtitle">{t(locale, "profileReadRecordHint")}</p>
           </div>
 
           <ul className="profile-list">
@@ -1537,7 +1574,7 @@ export default function ProfilePage(): JSX.Element {
             ))}
           </ul>
           {readRecord !== null && readRecord.length === 0 ? (
-            <p className="login-subtitle">{t(locale, "profileReadRecordEmpty")}</p>
+            <p className="profile-subtitle">{t(locale, "profileReadRecordEmpty")}</p>
           ) : null}
         </section>
           </>
@@ -1552,13 +1589,13 @@ export default function ProfilePage(): JSX.Element {
           hidden={tab !== "you" || open !== "danger"}
         >
           <div className="profile-danger-heading">
-            <p className="login-eyebrow" id="profile-danger-title">
+            <p className="profile-eyebrow" id="profile-danger-title">
               {t(locale, "profileDangerZone")}
             </p>
             {/* The consequence, said where it is visible, and referenced by
                 both controls below rather than cloned into an `sr-only` span
                 that said it a second time. */}
-            <p className="login-subtitle" id="profile-delete-description">
+            <p className="profile-subtitle" id="profile-delete-description">
               {t(locale, "profileDeleteHint")}
             </p>
           </div>
@@ -1592,8 +1629,8 @@ export default function ProfilePage(): JSX.Element {
             form it saves, because that is the one action that belongs to the
             fields rather than to the account. */}
         <div className="profile-foot">
-        <p className="login-footer">
-          <Link className="login-link" to="/">{t(locale, "profileBackHome")}</Link>
+        <p className="profile-footer">
+          <Link className="profile-link" to="/">{t(locale, "profileBackHome")}</Link>
         </p>
           {tab === "you" && open !== "danger" ? (
             /* NAMED FOR WHAT IT REVEALS, NOT FOR WHAT IT WOULD DO. This read

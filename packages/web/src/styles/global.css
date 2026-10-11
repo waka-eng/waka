@@ -547,7 +547,9 @@ body {
   padding: var(--sp-40) 36px;
 }
 
-.login-eyebrow {
+.login-eyebrow,
+
+.profile-eyebrow {
   color: var(--muted);
   margin: 0 0 var(--sp-14) 0;
 }
@@ -559,14 +561,18 @@ body {
   font-weight: 400;
 }
 
-.login-subtitle {
+.login-subtitle,
+
+.profile-subtitle {
   margin: 0 0 var(--sp-28) 0;
   color: var(--muted);
   font-size: var(--t-note);
   line-height: 1.5;
 }
 
-.login-form {
+.login-form,
+
+.profile-form {
   display: flex;
   flex-direction: column;
   gap: var(--sp-16);
@@ -663,11 +669,11 @@ body {
   gap: var(--sp-8);
 }
 
-.profile-public-heading .login-eyebrow,
-.profile-memories-heading .login-eyebrow,
-.profile-danger-heading .login-eyebrow,
-.profile-public-heading .login-subtitle,
-.profile-danger-heading .login-subtitle {
+.profile-public-heading .profile-eyebrow,
+.profile-memories-heading .profile-eyebrow,
+.profile-danger-heading .profile-eyebrow,
+.profile-public-heading .profile-subtitle,
+.profile-danger-heading .profile-subtitle {
   margin: 0;
 }
 
@@ -785,7 +791,9 @@ body {
   cursor: not-allowed;
 }
 
-.login-footer {
+.login-footer,
+
+.profile-footer {
   margin-top: var(--sp-24);
   font-size: var(--t-fine);
   color: var(--muted);
@@ -825,7 +833,10 @@ body {
 }
 
 
-.login-link {
+.login-link,
+
+
+.profile-link {
   background: none;
   border: none;
   padding: 0;
@@ -835,7 +846,9 @@ body {
   cursor: pointer;
 }
 
-.login-link:hover {
+.login-link:hover,
+
+.profile-link:hover {
   text-decoration: none;
 }
 
@@ -1200,7 +1213,9 @@ textarea {
     line-height: 1.2;
   }
 
-  .login-link {
+  .login-link,
+
+  .profile-link {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
@@ -1475,7 +1490,7 @@ textarea {
 
 
 /* Section hints stay readable: one measure, not full-bleed. */
-.profile-memories-heading .login-subtitle {
+.profile-memories-heading .profile-subtitle {
   max-width: 52ch;
 }
 

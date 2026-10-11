@@ -10,7 +10,13 @@ it('keeps browser/model gates manual and includes loader/cache/request regressio
   expect(workflow).toContain("github.event_name == 'workflow_dispatch' && inputs.run_model_evaluations == true");
   expect(workflow).toContain('pnpm --filter @waka/web test');
   const config=read('../vitest.config.ts');expect(config).toContain('test/**/*.test.ts');
-  for(const file of ['home-request-budget.test.tsx','first-page-readiness.test.tsx','inspiration-snapshots.test.ts','review-session.test.tsx'])
+  /* `review-session.test.tsx` was the fourth name here and is deleted with the
+     review flow (2026-10-10). `home-navigation.test.tsx` takes its place rather
+     than the list shrinking to three: what this line guards is that the
+     EXPENSIVE suites — the ones that mount the world or walk a protocol — say
+     what layer they replace, and dropping a name quietly lowers the bar the
+     seam gate is holding. Home's navigation suite is the heaviest one left. */
+  for(const file of ['home-request-budget.test.tsx','first-page-readiness.test.tsx','inspiration-snapshots.test.ts','home-navigation.test.tsx'])
     expect(read('./'+file)).toContain('WHAT THIS MOCKS');
   const manifest=JSON.parse(read('../../../package.json'));expect(manifest.scripts['perf:local']).toContain('tools/performance/run.ts');
   expect(workflow).not.toContain('pnpm perf:local');

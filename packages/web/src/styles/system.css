@@ -246,6 +246,7 @@
    product, and the one that made every screen read as an instrument panel.
    ======================================================================= */
 .login-eyebrow,
+.profile-eyebrow,
 .field-label {
   font-family: var(--voice-you);
   font-size: var(--t-meta);
@@ -310,7 +311,9 @@
   border-radius: var(--r-paper);
 }
 
-.login-subtitle {
+.login-subtitle,
+
+.profile-subtitle {
   font-family: var(--voice-you);
   font-size: var(--t-lead);
   line-height: 1.5;
@@ -319,7 +322,9 @@
 
 .field-hint,
 .login-footer,
+.profile-footer,
 .login-link,
+.profile-link,
 .login-divider__label,
 .login-tabs {
   font-family: var(--voice-you);
@@ -435,23 +440,21 @@ body {
  * WHY HERE. `home.css` is only loaded by the world, so a register that lives
  * there cannot dress the door. This sheet is loaded by every page, and it is
  * written LAST in it on purpose: the two voice rules above also name
- * `.login-eyebrow` and `.field-label`, and a register that lost to them
- * would be a twenty-sixth attempt rather than the end of them.
+ * `.login-eyebrow`, `.profile-eyebrow` and `.field-label`, and a register
+ * that lost to them would be a twenty-sixth attempt rather than the end of
+ * them.
  *
  * DECLARED ONCE MEANS LAYERS STOP MATTERING. There is no longer any rule in
  * any layer to out-rank; `type-scale.test.ts` holds it at one. */
 .jar-label,
 .jar-saved,
 .jar-mouth-field::placeholder,
-.jar-mouth-step,
 .jar-mouth-where,
 .jar-panel-vis,
 .jar-grounds,
 .login-eyebrow,
+.profile-eyebrow,
 .field-label,
-.profile-public-heading > .login-eyebrow,
-.profile-danger-heading > .login-eyebrow,
-.profile-memories-heading > .login-eyebrow,
 .login-divider,
 .login-divider__label,
 .login-tab,

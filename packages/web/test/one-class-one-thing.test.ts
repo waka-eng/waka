@@ -85,8 +85,63 @@ const STYLES = resolve(HERE, "../src/styles");
  * (An earlier draft of this note exempted `surface.css`, copied from
  * `type-scale.test.ts`. That file was deleted on 2026-08-26 — the exemption
  * described a file that is not there, in a list it was not in.)
+ *
+ * `claims.css` AND `chat.css` JOINED ON 2026-10-10, two days after they
+ * joined `type-scale.test.ts`'s list for the same reason. The omission was
+ * identical and so was its cost: the two sheets that carry the switcher, the
+ * corners, all three overlays, the card grid, the composer and the chat
+ * console were the only live sheets in `src/styles` no structural gate read.
+ * A gate with a hand-written list of what it watches only watches the past.
+ *
+ * ── WHAT ADDING THEM SURFACED: NOTHING, AND THAT IS A FINDING ──────────────
+ *
+ * Zero new collisions. That is not the two sheets being clean — it is this
+ * gate being unable to see the shape they actually had. The 2026-10-10 audit
+ * named two duplications in `claims.css`,
+ * `.waka-composer-send:disabled` and `.waka-composer-ask:focus-visible`, and
+ * `BARE_CLASS` below excludes BOTH: a selector carrying `:disabled` or
+ * `:focus-visible` is not a bare class, so neither was ever a candidate.
+ *
+ * Checked by hand instead, and they are two different things:
+ *
+ *   - `.waka-composer-ask:focus-visible` really was declared twice, fifty
+ *     lines apart, with the same two declarations verbatim. REMOVED. Nothing
+ *     about it looked wrong, because the values agreed — the cascade produced
+ *     the correct ring from either block, which is exactly why it survived.
+ *   - `.waka-composer-send:disabled` is declared twice and is NOT a defect.
+ *     One block sets `cursor`, the other sets `border-color` / `background` /
+ *     `color`; the property sets are DISJOINT and the pairing carries a
+ *     comment explaining it ("both go quiet together, and neither
+ *     disappears"). An audit that counts declarations calls this a
+ *     duplication. It is one component answering one state in two places,
+ *     which is untidy and true.
+ *
+ * ── WHY THE GATE WAS NOT WIDENED TO CATCH THEM ─────────────────────────────
+ *
+ * Measured before deciding, because that is what the narrowings above were.
+ * Asking "does any selector set the same property in two unconditional
+ * blocks in one layer" reports FIFTY-ONE pairs across the governed sheets,
+ * and almost every one is the documented idiom: `chrome.css` redressing
+ * `global.css`, and `system.css` holding the register that `global.css`
+ * states loosely. Narrowing all the way to "same FILE, same selector, same
+ * property, same VALUE" — the only form that can never be a redress, a theme
+ * or a state — still reports ELEVEN.
+ *
+ * Eleven means an allowlist of eleven, and this file's own doctrine is that
+ * an allowlist that size "is not a gate — it is a list of things the gate has
+ * agreed not to look at". So the sheets are in the list and the rule is
+ * unchanged. The eleven are real and worth draining by hand; the day they are
+ * down to zero is the day this check is worth writing, and not before.
  */
-const GOVERNED = ["home.css", "chrome.css", "global.css", "system.css", "layers.css"] as const;
+const GOVERNED = [
+  "home.css",
+  "chrome.css",
+  "global.css",
+  "system.css",
+  "layers.css",
+  "claims.css",
+  "chat.css",
+] as const;
 
 /**
  * Properties that decide where a box is and how big it is.

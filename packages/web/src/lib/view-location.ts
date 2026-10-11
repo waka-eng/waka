@@ -33,14 +33,12 @@ export interface ViewLocation {
   at: number | null;
   find: boolean;
   compose: boolean;
-  reviewId: string|null;
-  reviewAnswerId: string|null;
   principleId:string|null;
   sharePrinciple:boolean;
   conversationId:string|null;
   open: ViewOpen | null;
 }
-export const EMPTY_VIEW: ViewLocation = { wallId: null, section: 'top', inspirationId: null, reflectionId: null, memberId: null, at: null, find: false, compose: false,reviewId:null,reviewAnswerId:null,principleId:null,sharePrinciple:false,conversationId:null,open:null };
+export const EMPTY_VIEW: ViewLocation = { wallId: null, section: 'top', inspirationId: null, reflectionId: null, memberId: null, at: null, find: false, compose: false,principleId:null,sharePrinciple:false,conversationId:null,open:null };
 const id = (value: string | null) => value && /^[a-zA-Z0-9_-]{1,120}$/.test(value) ? value : null;
 
 export function readViewLocation(pathname: string, search = ''): ViewLocation | null {
@@ -56,10 +54,12 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
       view.inspirationId = segments[1]!;
     } else if(segments[0]==='chat'&&segments.length===2&&id(segments[1]!)){
       view.conversationId=segments[1];view.principleId=view.conversationId==='new'?id(params.get('principle')):null;return view;
-    } else if(segments[0]==='review' && segments.length===2 && id(segments[1]!)) {
-      view.reviewId=segments[1]!;
-      view.reviewAnswerId=view.reviewId==='new'?null:id(params.get('thought'));
-      return view;
+    /* `/review/:id` AND ITS `?thought=` DEEP LINK ARE GONE (2026-10-10),
+       with the five components the founder folded into one correction field.
+       An address that reads cleanly and resolves to nothing is the worst of
+       the two ways a link can die, so it is not parsed: an old `/review/...`
+       bookmark now returns null here and the app says the link is
+       unavailable, in words, rather than opening an empty world. */
     } else if(segments[0]==='principles'&&id(segments[1]??null)&&(segments.length===2||segments.length===3&&segments[2]==='share')){
       view.principleId=segments[1];view.sharePrinciple=segments.length===3;view.section='sky';return view;
     } else return null;
@@ -81,7 +81,6 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
 
 export function viewHref(view: ViewLocation): string {
   if(view.conversationId)return `/chat/${encodeURIComponent(view.conversationId)}${view.conversationId==='new'&&view.principleId?`?principle=${encodeURIComponent(view.principleId)}`:''}`;
-  if(view.reviewId)return `/review/${encodeURIComponent(view.reviewId)}${view.reviewAnswerId&&view.reviewId!=='new'?`?thought=${encodeURIComponent(view.reviewAnswerId)}`:''}`;
   if(view.principleId)return `/principles/${encodeURIComponent(view.principleId)}${view.sharePrinciple?'/share':''}`;
   const path = view.wallId ? `/w/${encodeURIComponent(view.wallId)}${view.label ? `/${encodeURIComponent(view.label.trim().toLowerCase().replace(/\s+/g, '-'))}` : ''}` : '/';
   const params = new URLSearchParams();
