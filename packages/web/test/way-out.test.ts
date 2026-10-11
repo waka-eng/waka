@@ -73,7 +73,7 @@ const WAY_OUT_CLASSES = /className="[^"]*(?:-close\b|-out\b|waka-over-close|jar-
  * A curated list of words is a gate that fails the day someone writes a
  * perfectly good exit with a word nobody thought of — which is exactly what
  * happened on its first run: the review surface's header has carried a
- * visible "done for now" wired to its own close since it was written, and
+ * visible "Done for now" wired to its own close since it was written, and
  * this file called it a trap. A gate that cries wolf gets an exemption added
  * to shut it up, and then it is guarding nothing.
  *

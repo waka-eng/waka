@@ -133,6 +133,8 @@ import { OpenCorner } from "../components/OpenCorner";
 import { SavesOverlay } from "../components/SavesOverlay";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { ConversationsOverlay } from "../components/ConversationsOverlay";
+import { ConversationPanel } from "../components/ConversationPanel";
+import type { ApiConversation } from "../lib/api/conversations";
 import { useMeasured } from "../canvas/measured";
 import { setStanding as publishStanding } from "../lib/standing";
 import { renderScale } from "../canvas/scale";
@@ -207,7 +209,6 @@ import type { MessageKey } from "../lib/locales";
 import {
   affirmGroupProposal,
   declineGroupProposal,
-  createGroup,
   fetchPrinciples,
   createProfile,
   fetchGroupProposals,
@@ -282,6 +283,12 @@ import { RECEIPTS } from "../lib/receipts";
 import { useOptionalAuth } from "../lib/auth-context";
 
 import "../styles/home.css";
+/* THE CONVERSATION'S OWN SHEET, loaded here because the conversation is part
+   of the world now. It used to be imported by `pages/Chat`, and deleting that
+   page took the entire stylesheet out of the bundle with it — the transcript
+   rendered with no styling at all for one commit. A surface that moves has to
+   bring its sheet. */
+import "../styles/chat.css";
 
 /**
  * MOONLIGHT — the surface, chosen.
@@ -10020,6 +10027,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * a return rather than a trip somewhere else. See `ViewOpen` in
    * `lib/view-location` and `closeOpen` in `lib/use-view-navigation`.
    */
+  /* ONE IMMEDIATELY COMMITTED RESPONSE, not persistent or cross-owner memory.
+     It moved here with the conversation: `createConversation` returns the row
+     holding the first question, and re-reading it over the network would show
+     an empty transcript for a beat after a person has just watched their own
+     words land. Cleared the moment the owner or the conversation changes, so
+     one account can never see another's committed question. */
+  const committedTalk = useRef<{owner:string;row:ApiConversation}|null>(null);
+
   const openOverHome = useCallback((what: ViewOpen) => {
     const nav = viewNavigationRef.current;
     nav.write({ ...(nav.view ?? EMPTY_VIEW), open: what });
@@ -10407,7 +10422,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         const shouldReflect = initiated && intent.reflect && composerOpenRef.current;
         setMouthOpen(false);
         if (initiated) simApiRef.current?.acknowledge('kept');
-        setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : 'saved to your own wall');
+        setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : say('worldSavedToYourWall'));
         if (shouldReflect) setReflectOn({ id: made.id, text: displayText, attachments: detail.attachments });
         else {
           if(initiated&&storageScope)setRecentInspiration({owner:`${storageScope.accountId}:${storageScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
@@ -10771,8 +10786,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {panelNeighbours.prev ? (
         <button
           type="button"
-          aria-label="the inspiration before this one"
-          title="the inspiration before this one"
+          aria-label={say('worldStepBack')}
+          title={say('worldStepBack')}
           className={caretLit === -1 ? "jar-caret-lit" : undefined}
           onClick={() => stepToMemory(panelNeighbours.prev)}
         >
@@ -10782,8 +10797,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {panelNeighbours.next ? (
         <button
           type="button"
-          aria-label="the inspiration after this one"
-          title="the inspiration after this one"
+          aria-label={say('worldStepForward')}
+          title={say('worldStepForward')}
           className={caretLit === 1 ? "jar-caret-lit" : undefined}
           onClick={() => stepToMemory(panelNeighbours.next)}
         >
@@ -11131,48 +11146,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, []);
 
   /** Making a room, joining one, and the state of asking about either. */
-  const [groupForm, setGroupForm] = useState<{
-    mode: "make" | "join";
-    text: string;
-    busy: boolean;
-    error: string | null;
-  } | null>(null);
-
-  const submitGroup = useCallback(() => {
-    if (!groupForm || groupForm.busy) return;
-    const text = groupForm.text.trim();
-    if (text === "") return;
-    setGroupForm({ ...groupForm, busy: true, error: null });
-    const landed = (g: ApiGroupSummary) => {
-      /* newest room first, which is where the axis puts it: a new column
-         appears to the right and the traveller can walk to it immediately */
-      setGroups((prev) => [g, ...prev.filter((x) => x.id !== g.id)]);
-      setGroupForm(null);
-    };
-    const failed = (m: string) =>
-      setGroupForm((f) => (f ? { ...f, busy: false, error: m } : f));
-    if (groupForm.mode === "make") {
-      createGroup(text)
-        .then(landed)
-        /* THROUGH `whyFailed`, AND THE 401 IS WHY.
-           This said "That room could not be made. Try another name." to every
-           failure alike, so `e2e:when-it-fails --kind 401` showed a signed-out
-           person being sent to think up a different name — advice that cannot
-           work, about a problem they do not have. The name IS the likely
-           cause of a 409, and the fallback still says so; what was missing is
-           that the server gets to disagree. */
-        .catch((err: unknown) =>
-          failed(whyFailed(err, say("worldRoomNotMade"))),
-        );
-    } else {
-      /* a pasted invite link works as well as a bare code — the link is the
-         thing people will actually send each other */
-      const code = text.includes("/") ? text.split("/").filter(Boolean).pop() ?? text : text;
-      joinGroup(code)
-        .then((r) => landed(r.group))
-        .catch((err: unknown) => failed(whyFailed(err, say("worldNoRoomAnswered"))));
-    }
-  }, [groupForm, whyFailed]);
+  /* `groupForm` AND `submitGroup` ARE GONE WITH THE SHEET THEY DROVE.
+     Nothing opened that sheet — see the note where it used to render — so
+     this state could only ever be set from inside itself. `createGroup` went
+     with it, and so did the `createGroup: "deleteGroup"` entry in
+     `test/verb-pairs.test.ts` that only passed because this unreachable
+     handler referenced the verb. `joinGroup` survives on the `?join=<code>`
+     path, which never came through here. */
 
   /**
    * WHO IS IN HERE — and it is the same act as inviting.
@@ -14948,7 +14928,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               tidiness. A list that does not exist cannot be in front of
               anything, so there is no rest state left in which this can take
               a press that was meant for the world. */}
-          <div className="jar-dial-list" role="group" aria-label="wind this wall back to a date">
+          <div className="jar-dial-list" role="group" aria-label={say('worldDialLabel')}>
             {/* THE WAY BACK IS THE FIRST ROW. The rail had none: returning to
                 the present meant landing a drag within half a day of the top
                 of a line you could not see. */}
@@ -15386,82 +15366,80 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         title={say(atWall.kind==='agent'?'worldAgentConversations':'worldOpenConversations')}
         onClose={viewNavigation.closeOpen}
-        onOpen={id=>navigate(`/chat/${id ?? 'new'}`)}/>:null}
+        onOpen={id=>viewNavigation.write({...EMPTY_VIEW,conversationId:id??'new'})}/>:null}
 
-      {/* MAKING OR JOINING A ROOM. A form, and it is honest about being one:
-          typed text, a submit and an error line all need to reflow and be
-          reachable by keyboard, and none of that survives being painted into
-          the layout. So it is DOM, it sits over the layout rather than inside
-          it, and the layout holds perfectly still behind it. */}
-      {groupForm ? (
-        <DialogSurface className="jar-roomform" data-jar-chrome="1"
-          aria-label={say("worldARoom")} onClose={() => setGroupForm(null)}>
-          <div className="jar-roomform-tabs jar-label">
-            <button
-              type="button"
-              className={groupForm.mode === "make" ? "is-on" : undefined}
-              onClick={() => setGroupForm({ ...groupForm, mode: "make", error: null })}
-            >
-              {/* "ROOM", NOT "GROUP". This repo's rule is that identifiers
-                  speak canon and copy speaks human — `group` in the code,
-                  `room` on the screen — and this button was the one place the
-                  canon word reached a person. The comment eight lines above it
-                  says "MAKING OR JOINING A ROOM", the dialog that opens it
-                  offers "a room", and then the tab said Make a group.
+      {/* THE CONVERSATION ITSELF, ALSO OVER THE WORLD.
+          Founder: "also dont move talk to waka in a new page. find better
+          transition." And, of the page it used to be: "the most confusing
+          chat experience ever with so many different buttons that I have no
+          idea what its supposed to do."
 
-                  Found while fixing an e2e walk that could not reach this
-                  form, which is the second copy defect in two days turned up
-                  by reading a surface closely for an unrelated reason. */}
-              {say("worldMakeARoom")}
-            </button>
-            <button
-              type="button"
-              className={groupForm.mode === "join" ? "is-on" : undefined}
-              onClick={() => setGroupForm({ ...groupForm, mode: "join", error: null })}
-            >
-              {say("worldJoinWithLink")}
-            </button>
-          </div>
-          <input
-            className="jar-roomform-box"
-            autoFocus
-            value={groupForm.text}
-            placeholder={groupForm.mode === "make" ? say("worldWhatIsItAbout") : say("worldPasteTheLink")}
-            onChange={(e) => setGroupForm({ ...groupForm, text: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submitGroup();
-              if (e.key === "Escape") setGroupForm(null);
-            }}
-          />
-          {groupForm.error ? <p className="jar-roomform-err">{groupForm.error}</p> : null}
-          <p className="jar-ask">
-            <button type="button" onClick={submitGroup} disabled={groupForm.busy}>
-              {groupForm.busy ? "…" : groupForm.mode === "make" ? say("worldMakeIt") : say("worldGoIn")}
-            </button>
-            <span aria-hidden="true"> · </span>
-            <button type="button" onClick={() => setGroupForm(null)}>
-              {say("worldNotNow")}
-            </button>
-          </p>
-          {groups.length > 0 ? (
-            <div className="jar-share">
-              {groups.map((g) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  className="jar-share-row"
-                  onClick={() => copyInvite(g)}
-                >
-                  {g.name}
-                  <span className="jar-share-hint">
-                    {copied === g.id ? say("worldLinkCopied") : say("worldCopyInvite")}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </DialogSurface>
-      ) : null}
+          Both sentences were about the same screen and only one of them was
+          about buttons. The controls were cut back to a transcript and a box;
+          this is the other half. A conversation was the last surface in the
+          product that still replaced the world, and it replaced it hardest —
+          its own page, its own chrome, its own corners, its own idea of where
+          you were standing. Every complaint about not being able to get back
+          was loudest there for that reason.
+
+          AND IT IS WHY THE ONE-PRESS RETURN CAN STOP BEING A CONTROL. That
+          control existed to undo a navigation, it was built three times, and
+          this morning it was a button that rendered, read "Your top of mind",
+          and did nothing — because it found its destination by matching a
+          string that had been renamed under it. An overlay cannot have that
+          bug: leaving is dismissal, the world is still behind, and there is
+          no destination to look up. The visible close below is the whole
+          mechanism. */}
+      {storageScope&&viewNavigation.view?.conversationId?(()=>{
+        const talkId=viewNavigation.view.conversationId==='new'?null:viewNavigation.view.conversationId;
+        const owner=`${storageScope.accountId}:${storageScope.profileId}`;
+        if(committedTalk.current&&(committedTalk.current.owner!==owner||committedTalk.current.row.id!==talkId))committedTalk.current=null;
+        return <div className="waka-over-scrim" onClick={viewNavigation.closeOpen}>
+          <DialogSurface className="waka-over waka-over--talk" aria-label={say('worldMenuTalk')}
+            onClose={viewNavigation.closeOpen} onClick={event=>event.stopPropagation()}>
+            <header className="waka-over-head">
+              <h2 className="waka-over-title">{say('worldMenuTalk')}</h2>
+              <button type="button" className="waka-over-close" aria-label={say('worldCardClose')} onClick={viewNavigation.closeOpen}>
+                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+                  <path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </header>
+            <ConversationPanel key={`${owner}:${talkId??'new'}:${viewNavigation.view.principleId??''}`}
+              scope={storageScope} id={talkId}
+              initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
+              initialConversation={committedTalk.current?.row} locale={locale}
+              onCreated={row=>{if(row.profileId===storageScope.profileId)committedTalk.current={owner,row};}}
+              /* `replace` on the new-to-id hop so dismissing does not land
+                 back on the blank conversation you just started. */
+              onChoose={next=>{if(next!==talkId)viewNavigation.write({...EMPTY_VIEW,conversationId:next??'new'},{replace:!talkId&&Boolean(next)});}}/>
+          </DialogSurface>
+        </div>;
+      })():null}
+
+      {/* MAKING OR JOINING A ROOM BY TYPING IS GONE — IT WAS UNREACHABLE.
+          Founder: "get rid of the rooms and agent related stuff for now",
+          and later: "remove all unused and deadcode across the codebase."
+
+          A sheet with two tabs — make a room, join one by code — and NOTHING
+          EVER OPENED IT. Every `setGroupForm` call was inside the sheet or
+          its own submit handler, so the only way to reach it was to already
+          be in it. It had survived three cleanliness passes because it looks
+          alive from the inside: real state, a real submit, honest error
+          handling, a 401 branch someone had carefully fixed.
+
+          It was also holding a gate hostage. `test/verb-pairs.test.ts`
+          required `createGroup` to have a way back, and the pair was
+          satisfied only because this dead handler called it — a register
+          describing a verb the product does not offer, passing because
+          unreachable code referenced it. Both go in this commit; that is why
+          they are one change and not two.
+
+          JOINING BY LINK IS UNTOUCHED, which is the whole reason this is a
+          deletion and not a capability loss. A `?join=<code>` address still
+          sets `pendingJoin` and still opens the join sheet below — that path
+          never went through here. What is gone is typing a code into a form
+          nobody could open. */}
 
       {/* THE ROOM, OPENED. Who is in it, how to bring somebody, what you can
           put to them, and the way out — one surface, because they are all the

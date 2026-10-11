@@ -221,10 +221,20 @@ describe("the spacing grid is one grid", () => {
  * forced. Colour is the most design-sensitive of the three scales, and a blind
  * mapping of 97 values is a redesign nobody asked for.
  */
-const COLOUR_CEILING = 109;
+const COLOUR_CEILING = 90;
 /* 125 -> 104 on 2026-08-26. Nobody drained twenty-one colours: the dead rules
    that held them were deleted by `e2e:dead-css`, and this ceiling had no way
    to notice, which is the whole point of the test added below.
+
+   109 -> 90 on 2026-10-10. Nobody drained nineteen colours by hand: the 37
+   dead `.nc-*` rules in `global.css` went out and the literals went with
+   them. `.nc-note` and its stage were the flat screens' post-it — paper
+   colour, ink colour, five pastel tints, two wall keyframes — and the last
+   `.tsx` touching any of it was rewritten away. This is the second time this
+   number has fallen for exactly that reason, which is the argument for the
+   companion test below rather than for this one: a ratchet only ratchets if
+   it follows the count DOWN, and slack is room for the thing it was built to
+   stop.
 
    104 -> 109 on 2026-10-08, and this is the ONE direction this number is not
    supposed to move. It moved because the GOVERNED list grew: `claims.css` and

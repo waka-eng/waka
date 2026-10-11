@@ -70,7 +70,7 @@ describe("the reading panel", () => {
 
   it("says it is still fetching rather than rendering an empty page", () => {
     const el = renderPanel(null);
-    expect(el.textContent).toContain("still fetching the reading");
+    expect(el.textContent).toContain("Still fetching the reading");
     expect(/\d/.test(el.textContent ?? "")).toBe(false);
   });
 });

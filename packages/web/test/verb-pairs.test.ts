@@ -151,7 +151,24 @@ const REGISTER: Record<string, string> = {
   reorderPrinciples: "RULED: an ordering is its own inverse — move it back",
 
   // rooms
-  createGroup: "deleteGroup",
+  /* `createGroup` IS GONE, AND SO IS THE SHEET THAT WAS ITS ONLY CALLER.
+     Founder: "get rid of the rooms and agent related stuff for now."
+
+     This entry is the reason that deletion had to be one commit rather than
+     two. The pair read as satisfied — create a room, delete a room — but the
+     create half was reachable only from a form NOTHING OPENED, so the
+     register was describing a verb the product does not offer and passing
+     because unreachable code referenced it. That is the exact shape this
+     gate exists to catch, and it was hiding inside the gate.
+
+     `deleteGroup` survives and is reachable from a room's own settings. Its
+     way back is not a verb: a room is joined, never made, and the link that
+     joins it still works. */
+  deleteGroup:
+    "RULED: a room is joined, never made — the way back into one you left is " +
+    "the invite link that put you in it, which `?join=<code>` still honours. " +
+    "There is no `createGroup` to pair with: it went with the sheet nobody " +
+    "could open.",
   // TALKING, AFTER THE SURFACE WAS CUT BACK (2026-10-10). Founder: "So the
   // talk with Waka experience is the most confusing chat experience ever with
   // so many different buttons that I have no idea what its supposed to do."
@@ -176,7 +193,6 @@ const REGISTER: Record<string, string> = {
     "requested once, by sending the message. Asking again is saying something " +
     "again, which is the composer, not a verb of its own.",
   saveConversationMessage: "RULED: authored conversation messages are immutable; confirm deletion of the conversation to erase them, never automatically create a belief",
-  deleteGroup: "createGroup",
   joinGroup: "leaveGroup",
   leaveGroup: "joinGroup",
   removeGroupMember: "joinGroup",

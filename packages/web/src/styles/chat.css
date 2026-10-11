@@ -150,16 +150,42 @@
  * and the field. Founder: "so ugly."
  *
  * Messages grow upward from the box, the way they do in every conversation
- * anyone has ever had on a screen. `justify-content: flex-end` on a scrolling
- * flex column does exactly that and still scrolls normally once the content
- * is taller than the frame.
+ * anyone has ever had on a screen.
+ *
+ * AND IT IS AN AUTO MARGIN, NOT `justify-content: flex-end`.
+ *
+ * This said `justify-content: flex-end`, with a comment claiming it "still
+ * scrolls normally once the content is taller than the frame". MEASURED
+ * 2026-10-10 in headless Chromium — with the transcript nested inside
+ * `.waka-over--talk`, which is how `Home.tsx` actually renders it — because
+ * that is how a claim like that should have been settled in the first place:
+ *
+ *   320×568   442px of the conversation above the frame, and the scroller
+ *             reported scrollHeight == clientHeight: NOT SCROLLABLE TO
+ *   360×640   316px above the frame, same
+ *   390×844   89px above the frame, same
+ *   414×896   fits, nothing lost
+ *   768×1024  fits
+ *
+ * So on three of the five widths tested, the beginning of every conversation
+ * long enough to matter was simply gone — not clipped and reachable, gone —
+ * and gone worst on the narrowest phone, where the overlay holding it is only
+ * 221px tall after its own header and the composer. The reason is a flexbox
+ * rule that has bitten every chat UI ever written: overflow in the
+ * block-START direction of a scroll container is unreachable, because
+ * `justify-content` moves the content off the scrollable origin rather than
+ * extending the scrollable area. The scroller reports no overflow at all,
+ * which is why no amount of reading this rule would have found it.
+ *
+ * `margin-block-start: auto` on the single child does the same thing when
+ * there is room and nothing at all when there is not — so a short
+ * conversation still sits on the box, and a long one scrolls both ways.
  */
 .chat-scroll {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0 clamp(20px, 6vw, 28px);
@@ -172,6 +198,9 @@
   width: 100%;
   max-width: 680px;
   margin-inline: auto;
+  /* ON THE BOX WHEN IT CAN BE, SCROLLABLE WHEN IT CANNOT. See `.chat-scroll`:
+     an auto margin yields to overflow; `justify-content` does not. */
+  margin-block-start: auto;
   padding-bottom: var(--sp-24);
 }
 
@@ -463,4 +492,30 @@
  * `.chat-sidebar` any more, which is exactly how CSS rots unnoticed. The
  * memory drawer went on 2026-10-10 with the control that opened it.
  * ------------------------------------------------------------------------- */
+
+/**
+ * THE ONE ACT ON THIS SURFACE GETS A THUMB'S TARGET.
+ *
+ * MEASURED 2026-10-10 at 320, 360, 390, 414 and 768: `.chat-send` came out
+ * 61×32 at every one of them. It is the only thing a person presses here —
+ * everything else on the surface is text — and 32px is under the 44 the
+ * founder set and under what Apple asks for a primary action.
+ *
+ * Coarse pointers only, which is the line `home.css` drew for this product
+ * in August and wrote down: the ACTS get 44 where there is no pointer to
+ * fall back on, everything else clears 24, and nothing moves a pixel on a
+ * desktop. The matching block for the newer surfaces is at the foot of
+ * `claims.css`; this is the same ruling reaching the one control that lives
+ * here. The selector carries `.chat-page` because the rule it is raising
+ * does, and a rule that loses a specificity race is a comment.
+ *
+ * NO WIDTH QUERY. Every number above is identical at 320 and at 768, so the
+ * thing that was wrong was never the width — it was the input device, and a
+ * `max-width` breakpoint would have left a 768-wide tablet short.
+ */
+@media (pointer: coarse) {
+  .chat-page .chat-send {
+    min-height: var(--waka-corner);
+  }
+}
 }

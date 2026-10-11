@@ -267,8 +267,9 @@
 /* ==========================================================================
    2. THE ROOM'S NAME -- the display cluster, and the only thing in it
    ======================================================================= */
-.login-title,
-.nc-title {
+/* `.nc-title` is gone with the flat screens; the door's own title keeps
+   the display cluster. */
+.login-title {
   font-family: var(--voice-room);
   font-size: var(--t-display);
   font-weight: 400;
@@ -281,55 +282,6 @@
 /* Auth and onboarding are one screen with one word on them, so they get the
    same treatment -- capped lower, because they sit inside a card. */
 .login-title { font-size: clamp(46px, 8vw, 104px); }
-
-/*
-   `align-content: center` is what made a wall of two look broken -- two
-   readings floating mid-screen with equal emptiness above and below reads as
-   "still loading", not as "this is what held". Starting at the top makes two
-   readings a short page, which is what a finished wall of two should be.
-*/
-.nc-stage--top-of-mind-wall {
-  align-content: start;
-  justify-content: start;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
-  gap: clamp(30px, 5vh, 60px) clamp(24px, 4vw, 52px);
-  min-height: 0;
-  margin-top: clamp(20px, 4vh, 44px);
-  padding-inline: 0;
-}
-
-/* ==========================================================================
-   4. THE POST-IT
-
-   Keeps its paper, tilt and shadow. What changes is that the words on it are
-   finally sized like the most important thing on the screen.
-   ======================================================================= */
-
-.nc-note { border-radius: var(--r-paper); }
-
-/* ==========================================================================
-   5. CAPTURE
-
-   Three complaints, one cause: it is a box, a box is a form, and a form is
-   filing. Saving something that quickened your pulse is not data entry.
-   ======================================================================= */
-
-/* Your words, in your voice -- sans against the wall's serif, so yours and
-   the room's are distinguishable without anything having to say so. */
-
-/* ==========================================================================
-   6. A SAVE
-
-   The material itself, set as running text at a real reading size. It was
-   13-15px -- the same as the buttons around it.
-   ======================================================================= */
-
-/* Anything the machine claims about a person takes the room's face. */
-.nc-loading {
-  font-family: var(--voice-you);
-  font-size: var(--t-ui);
-  color: var(--ink-3);
-}
 
 /* ==========================================================================
    8. CONTROLS
@@ -388,7 +340,8 @@
    Everything that moves resolves to `--ease`. Timing only -- this cannot
    affect layout, so it is safe to apply broadly.
    ======================================================================= */
-.nc-note,
+/* `.nc-note` led this list and is gone — the post-it was the flat
+   screens' object and nothing renders one. The four below are live. */
 .btn-primary,
 .btn-destructive,
 .btn-google,
@@ -397,10 +350,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-.nc-note {
-    transition-duration: 1ms;
-    animation-duration: 1ms;
-  }
 }
 
 /* ==========================================================================
@@ -435,49 +384,8 @@ body {
   background: var(--bg);
 }
 
-/* ==========================================================================
-   15. ONE SURFACE
-
-   The prototype's central idea: opening a save does not navigate. The wall
-   recedes in place and what you opened comes forward, in the same box.
-
-   Today that is five stacked overlays -- a 460px history panel, a draggable
-   memory window layer, the capture modal, the room panel and the drop
-   overlay -- across 26 `position: fixed` rules reaching z-index 1000. Each
-   was reasonable alone; together they are why the product feels like parts
-   rather than one place.
-
-   These rules take the first step: the drawer stops being a floating sheet
-   and becomes the same ground, and the wall behind it recedes rather than
-   being covered over.
-   ======================================================================= */
-
-/*
-   A save in the list is a piece of text, not a bordered tile.
-
-   Rows had a hairline border, a radius, a tinted fill and a hover fill --
-   four devices to say "this is a row", on a surface where the only thing that
-   matters is the words. The rule between them is enough.
-*/
-
-/* The floating draggable memory-window layer was a third way to look at a
-   save, stacked on top of two others. Deleted. */
-
-/*
-   The wall recedes while something is open in front of it.
-
-   and the readings are still there behind what you are reading. This is what
-   makes opening a save feel like moving within one place instead of being
-   taken somewhere else.
-*/
-.nc-stage--top-of-mind-wall {
-  transition: transform var(--dur-slow) var(--ease), opacity var(--dur) var(--ease);
-  transform-origin: center top;
-}
-
 
 @media (prefers-reduced-motion: reduce) {
-  .nc-stage--top-of-mind-wall { transition: none; }
 }
 
 
@@ -566,8 +474,7 @@ body {
    join the sign-out verb in lower case is a design question, and it is not
    this rule's to answer. */
 .btn-destructive,
-.btn-google,
-.nc-profile-link {
+.btn-google {
   /* The register's voice stays shared; an interactive label can opt into a
      larger named type step without losing its uppercase/tracking. Metadata
      keeps the original ten-pixel default. */

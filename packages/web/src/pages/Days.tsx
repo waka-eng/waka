@@ -27,7 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Menu } from "../components/Menu";
-import { ChatCorner } from "../components/ChatCorner";
+import { OpenCorner } from "../components/OpenCorner";
 import { listKeptDays, type ApiKeptDay } from "../lib/api";
 import { useOptionalAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
@@ -136,7 +136,7 @@ export function Days(): JSX.Element {
           So the header is gone, because an element whose only contents are
           two comments is 40px of margin pretending to be a heading, and the
           exit is where every other page keeps it. */}
-      <Menu locale={locale} items={menu.items} current={menu.current} left={<ChatCorner locale={locale} profileId={menu.standing.id ?? auth?.profile?.id} onOpen={id => navigate(`/chat/${id ?? "new"}`)} />} label="worldDaysTitle" onSettings={menu.onSettings}
+      <Menu locale={locale} items={menu.items} current={menu.current} left={<OpenCorner locale={locale} items={menu.openRows} />} label="worldDaysTitle" onSettings={menu.onSettings}
         account={auth?.account ? { name: auth?.profile?.name, email: auth?.account.email } : null} />
 
       {phase === "loading" ? (

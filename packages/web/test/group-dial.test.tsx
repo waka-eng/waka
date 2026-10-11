@@ -328,7 +328,7 @@ async function windToDay(at: number): Promise<void> {
 /** back to the present, by the row that says so */
 async function windToNow(): Promise<void> {
   await openDates();
-  const row = rows().find((r) => rowDate(r) === "now");
+  const row = rows().find((r) => rowDate(r) === "Now");
   if (!row) throw new Error("the room offers no way back to now");
   await act(async () => {
     row.click();
@@ -352,10 +352,10 @@ describe("the dial in a room", () => {
   });
   it("opens the shared-direction action from the room's current reading", async () => {
     const shape = one(".jar-room-shape");
-    expect(shape.textContent).toContain("shape this together");
+    expect(shape.textContent).toContain("Shape this together");
     await act(async () => shape.click());
     await act(async () => { await Promise.resolve(); });
-    expect(one(".jar-roomform--group").textContent).toContain("put something to this room");
+    expect(one(".jar-roomform--group").textContent).toContain("Put something to this room");
   });
 
   it("is there at all — a room's board is one chain, and one chain can be wound", async () => {
@@ -383,7 +383,7 @@ describe("the dial in a room", () => {
      */
     await openDates();
     const said = rows().map(rowDate);
-    expect(said[0], "the first row is the way back to the present").toBe("now");
+    expect(said[0], "the first row is the way back to the present").toBe("Now");
 
     const want = Array.from(new Set([...DOOR_DAYS, V1_DAYS, V2_DAYS].map((d) => dayOf(ago(d)))))
       .sort((a, b) => b - a)
@@ -436,14 +436,14 @@ describe("the dial in a room", () => {
   it("opens the selected date's full account and wording change from the date caption", async () => {
     await windToDay(dayOf(ago(V2_DAYS)));
     const detail = one(".jar-when-story button");
-    expect(detail.textContent).toContain("see what changed");
+    expect(detail.textContent).toContain("See what changed");
     await act(async () => detail.click());
     await act(async () => { await Promise.resolve(); });
     const moment = one(".jar-group-moment");
-    expect(moment.textContent).toContain("a proposal carried");
+    expect(moment.textContent).toContain("A proposal carried");
     expect(moment.textContent).toContain(THEN_TEXT);
     expect(moment.textContent).toContain(NOW_TEXT);
-    expect(one(".jar-roomform--group").textContent).not.toContain("put something to this room");
+    expect(one(".jar-roomform--group").textContent).not.toContain("Put something to this room");
   });
 
   it("says the room had nothing up before it had anything up", async () => {

@@ -239,7 +239,7 @@ describe("reflection conversation", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(host.querySelector('textarea'));
     expect(createReflection).toHaveBeenCalledTimes(1);
-    expect(button("close")).toBeTruthy();
+    expect(button("Close")).toBeTruthy();
   });
 
   it("treats the wait as part of the conversation while keeping the answer in view", async () => {
@@ -253,7 +253,7 @@ describe("reflection conversation", () => {
     expect(host.querySelector('[role="status"]')?.textContent).toContain("Let’s follow that thought…");
     expect(host.textContent).toContain(saved.answer);
     expect(host.querySelectorAll(".jar-reflection-typing span")).toHaveLength(3);
-    expect(button("done for now")).toBeTruthy();
+    expect(button("Done for now")).toBeTruthy();
   });
 
   it("keeps a saved answer visible when question generation fails, and permits a retry", async () => {
@@ -267,7 +267,7 @@ describe("reflection conversation", () => {
     await act(async () => button("Explore another question").click());
     expect(host.textContent).toContain(saved.answer);
     expect(host.querySelector('[role="alert"]')?.textContent).toContain("thought is kept");
-    await act(async () => button("try again").click());
+    await act(async () => button("Try again").click());
     expect(requestReflectionQuestion).toHaveBeenLastCalledWith("inspiration-1", saved.id, true, {profile:SCOPE.profileId,signal:expect.any(AbortSignal)});
     expect(host.textContent).toContain("What would you leave unfinished next time?");
   });
@@ -293,7 +293,7 @@ describe("reflection conversation", () => {
     expect(requestReflectionQuestion).not.toHaveBeenCalled();
     expect(onDone).not.toHaveBeenCalled();
     expect(host.textContent).toContain("Your thought is saved.");
-    await act(async () => button("done for now").click());
+    await act(async () => button("Done for now").click());
     expect(onDone).toHaveBeenCalledOnce();
   });
 

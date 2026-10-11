@@ -178,15 +178,12 @@ export async function fetchGroups(): Promise<ApiGroupSummary[]> {
   return Array.isArray(body.groups) ? body.groups : [];
 }
 
-/** POST /groups — create one; the caller becomes its owner. */
-export async function createGroup(name: string): Promise<ApiGroupSummary> {
-  const body = await postJson<{ group: ApiGroupSummary }>(
-    apiPath("/groups"),
-    { name },
-    "Failed to create room",
-  );
-  return body.group;
-}
+/* `createGroup` IS GONE. Its one caller was a make-or-join sheet in the world
+   that nothing ever opened, so the verb was unreachable from the product
+   while still satisfying `test/verb-pairs.test.ts`'s pairing for
+   `deleteGroup`. Founder: "get rid of the rooms and agent related stuff for
+   now." The server route is untouched; a room is joined by link, and
+   `joinGroup` below is how. */
 
 /** POST /groups/join — join by the shareable code. */
 export async function joinGroup(

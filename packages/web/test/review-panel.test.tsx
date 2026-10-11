@@ -61,7 +61,7 @@ const button=(label:string)=>{const row=[...host.querySelectorAll('button')].fin
 const click=(label:string)=>act(async()=>button(label).click());
 const answer=(value:string)=>act(async()=>{const textarea=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(textarea,value);textarea.dispatchEvent(new Event('input',{bubbles:true}));});
 it('opens directly to one original with Reflect and Next, with deletion under item actions',async()=>{
-  await mount();expect(host.textContent).toContain(source.text);expect(button('reflect')).toBeDefined();expect(button('Next inspiration →')).toBeDefined();expect(button('Remove')).toBeDefined();expect(host.querySelector<HTMLDetailsElement>('.jar-item-actions')!.open).toBe(false);
+  await mount();expect(host.textContent).toContain(source.text);expect(button('Reflect')).toBeDefined();expect(button('Next inspiration →')).toBeDefined();expect(button('Remove')).toBeDefined();expect(host.querySelector<HTMLDetailsElement>('.jar-item-actions')!.open).toBe(false);
   expect(host.querySelector('.jar-review-steps')).toBeNull();expect(host.textContent).not.toMatch(/Choose inspirations|Start review|Stays with me|Selected inspirations/);
   expect(requestReviewQuestion).not.toHaveBeenCalled();expect(requestReflectionQuestion).not.toHaveBeenCalled();expect(saveReviewAnswer).not.toHaveBeenCalled();
 });
@@ -100,7 +100,7 @@ it('keeps advancing across three real panel URL transitions without remounting o
   function CyclingReview(){const[id,setId]=useState('new');return <ReviewPanel scope={scope} id={id} locale="en-US" onId={next=>{onId(next);setId(next);}} onClose={onClose} onNewInspiration={onNewInspiration} onOpen={onOpen}/>;}
   await act(async()=>root.render(<CyclingReview/>));
   for(let n=0;n<3;n++){
-    expect(current?.currentInspirationId).toBe(ids[n]);expect(button('reflect').disabled).toBe(false);
+    expect(current?.currentInspirationId).toBe(ids[n]);expect(button('Reflect').disabled).toBe(false);
     expect(startReviewSession).toHaveBeenCalledTimes(n+1);
     if(n<2)await click('Next inspiration →');
   }
@@ -108,25 +108,25 @@ it('keeps advancing across three real panel URL transitions without remounting o
   expect(deleteInspiration).not.toHaveBeenCalled();expect(requestReviewQuestion).not.toHaveBeenCalled();
 });
 it('allows closing without advancing or deleting the current inspiration',async()=>{
-  await mount();await click('done for now');expect(onClose).toHaveBeenCalledOnce();expect(chooseReviewInspiration).not.toHaveBeenCalled();expect(deleteInspiration).not.toHaveBeenCalled();
+  await mount();await click('Done for now');expect(onClose).toHaveBeenCalledOnce();expect(chooseReviewInspiration).not.toHaveBeenCalled();expect(deleteInspiration).not.toHaveBeenCalled();
 });
 it('reflects on this inspiration only and saves into its normal reflection history',async()=>{
   vi.mocked(createReflection).mockImplementation(async(id,input)=>{
     const row={id:'answer-1',inspirationId:id,question:input.question,answer:input.answer!,skipped:false,createdAt:source.createdAt};
     source={...source,reflections:[row]};current={...current!,items:current!.items.map(item=>({...item,currentRevision:'2',sourceChanged:true}))};return row;
   });
-  await mount();await click('reflect');expect(host.textContent).toContain('What made you want to keep this?');expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('What made you want to keep this?');expect(host.querySelector('.jar-review-item-actions')).toBeNull();
+  await mount();await click('Reflect');expect(host.textContent).toContain('What made you want to keep this?');expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('What made you want to keep this?');expect(host.querySelector('.jar-review-item-actions')).toBeNull();
   await answer('I need room to change my mind.');await click('Save thought');expect(requestReflectionQuestion).not.toHaveBeenCalled();await click('Back to inspiration');
   expect(createReflection).toHaveBeenCalledOnce();expect(vi.mocked(createReflection).mock.calls[0]).toMatchObject([SOURCE,{answer:'I need room to change my mind.'},{profile:scope.profileId}]);
   expect(onSaved).toHaveBeenCalledOnce();expect(onSynchronized).toHaveBeenCalledWith(SOURCE,expect.objectContaining({reflections:[expect.objectContaining({answer:'I need room to change my mind.'})]}));
-  expect(host.textContent).toContain('earlier thoughts (1)');expect(host.querySelector('textarea')).toBeNull();
+  expect(host.textContent).toContain('Earlier thoughts (1)');expect(host.querySelector('textarea')).toBeNull();
   expect(requestReflectionQuestion).not.toHaveBeenCalled();expect(saveReviewAnswer).not.toHaveBeenCalled();
   await click('Next inspiration →');expect(vi.mocked(chooseReviewInspiration).mock.calls[0]![1]).toMatchObject({sourceRevision:'2',choice:'keep'});
 });
 it('requests a follow-up only for the current inspiration when Continue is chosen',async()=>{
   vi.mocked(createReflection).mockImplementation(async(id,input)=>{const row={id:'answer-1',inspirationId:id,question:input.question,answer:input.answer!,skipped:false,createdAt:source.createdAt};source={...source,reflections:[row]};return row;});
   vi.mocked(requestReflectionQuestion).mockResolvedValue({phase:'ready',question:'What would make that possible?'});
-  await mount();await click('reflect');await answer('I want more space.');await click('Save thought');expect(requestReflectionQuestion).not.toHaveBeenCalled();await click('Explore another question');
+  await mount();await click('Reflect');await answer('I want more space.');await click('Save thought');expect(requestReflectionQuestion).not.toHaveBeenCalled();await click('Explore another question');
   expect(requestReflectionQuestion).toHaveBeenCalledWith(SOURCE,'answer-1',false,{profile:scope.profileId,signal:expect.any(AbortSignal)});
   expect(host.textContent).toContain('What would make that possible?');expect(requestReviewQuestion).not.toHaveBeenCalled();expect(chooseReviewInspiration).not.toHaveBeenCalled();
 });

@@ -74,7 +74,6 @@ import "./styles/claims.css";
   down, and the next person reads it as the current shape of the product.
 */
 const HomePage = lazy(() => import("./pages/Home"));
-const ChatPage = lazy(() => import('./pages/Chat'));
 const MobileChecks = import.meta.env.VITE_BUILD_TARGET === 'mobile' && import.meta.env.VITE_MOBILE_DIAGNOSTICS === '1' ? lazy(() => import('./pages/MobileChecks')) : null;
 
 /**
@@ -205,9 +204,30 @@ ReactDOM.createRoot(root).render(
               - authenticated    → render the underlying page.
           */}
           {/* Home is the layout. */}
-          <Route path="/chat/:conversationId" element={<RequireAuth><SurfaceBoundary surface="chat"><Suspense fallback={null}><ChatPage/></Suspense></SurfaceBoundary></RequireAuth>}/>
+          {/* TALKING IS NOT A PLACE YOU TRAVEL TO EITHER.
+              Founder: "also dont move talk to waka in a new page. find
+              better transition."
+
+              This was the last surface still doing the thing every other one
+              stopped doing. The archive and the principles became overlays
+              because reaching them UNMOUNTED THE WORLD — and a conversation
+              unmounted it hardest, since the chat page mounted its own
+              chrome, its own corners and its own idea of where you were. The
+              founder's judgement of that page, "the most confusing chat
+              experience ever", had two causes: the controls inside it (now
+              cut back to a transcript and a box) and the fact that opening it
+              threw the world away. The second one is this line.
+
+              So it joins the layout. `readViewLocation` already parsed
+              `/chat/:id` into `view.conversationId` and `viewHref` already
+              emitted it — the view model has always known a conversation is
+              a thing you can be looking at, and only the router disagreed.
+              The address is unchanged, so every link ever sent still opens
+              the same conversation; what changed is that the world is behind
+              it when it does. */}
           <Route element={<ProtectedHome />}>
             <Route path="/" element={<></>} />
+            <Route path="/chat/:conversationId" element={<></>} />
             <Route path="/w/:wall/:label?" element={<></>} />
             <Route path="/inspirations/:inspirationId" element={<></>} />
             <Route path="/review/:reviewId" element={<></>} />

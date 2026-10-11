@@ -3,7 +3,7 @@
  * THE ANTECHAMBER, PINNED.
  *
  * goal: the-legible-loop, Phase 5. The dim place must render every refusal
- * with its anchor REACHABLE: while the anchor still refuses, "put it back"
+ * with its anchor REACHABLE: while the anchor still refuses, "Put it back"
  * stands beside it — the restore verb, permanently housed; an anchor that
  * was since put back says so; an anchor truly deleted leaves its words as a
  * departed mark and offers nothing. The candidates render through the dim
@@ -73,11 +73,11 @@ describe("the antechamber", () => {
 
     const candidate = el.querySelector(".jar-ante-candidate");
     expect(candidate?.textContent).toBe("Mornings are your best hours.");
-    expect(el.textContent).toContain("too close to: You are a morning person.");
+    expect(el.textContent).toContain("Too close to: You are a morning person.");
 
     /* the anchor is reachable: the restore verb stands beside it */
     const restore = [...el.querySelectorAll("button")].find(
-      (b) => (b.textContent ?? "").trim() === "put it back",
+      (b) => (b.textContent ?? "").trim() === "Put it back",
     );
     expect(restore, "a still-refusing anchor must carry its way back").toBeTruthy();
     act(() => restore!.click());
@@ -96,7 +96,7 @@ describe("the antechamber", () => {
     expect(el.textContent).toContain("stands again");
     expect(el.textContent).toContain("since removed");
     const restores = [...el.querySelectorAll("button")].filter(
-      (b) => (b.textContent ?? "").trim() === "put it back",
+      (b) => (b.textContent ?? "").trim() === "Put it back",
     );
     expect(restores, "neither a restored nor a departed anchor offers restore").toHaveLength(0);
   });
@@ -108,17 +108,17 @@ describe("the antechamber", () => {
     expect(el.textContent).toContain("stands again");
     expect(
       [...el.querySelectorAll("button")].some(
-        (b) => (b.textContent ?? "").trim() === "put it back",
+        (b) => (b.textContent ?? "").trim() === "Put it back",
       ),
     ).toBe(false);
   });
 
   it("says the empty state and the pending state in words", () => {
     expect(renderPanel([]).textContent).toContain(
-      "nothing stands here — the ground has refused nothing",
+      "Nothing stands here — the ground has refused nothing",
     );
     act(() => root?.unmount());
     host?.remove();
-    expect(renderPanel(null).textContent).toContain("still fetching the refusals…");
+    expect(renderPanel(null).textContent).toContain("Still fetching the refusals…");
   });
 });

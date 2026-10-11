@@ -1184,7 +1184,18 @@
 /* The ask replaces the verb in place: a sheet over a list would make you
    lose your place in the list to answer a question about one line of it. */
 .waka-talks-ask {
-  flex: 0 0 auto;
+  /* IT MAY SHRINK, and it could not. `flex: 0 0 auto` pinned this group at
+     its widest — the warning sentence plus two verbs, 334px — inside a row
+     that is 230px wide on a 320px phone, so it hung 83px off the right of
+     the overlay (measured 2026-10-10: +83 at 320, +43 at 360, +13 at 390,
+     and still 34px past the overlay's content box at 414). Worse, the open
+     button beside it is `flex: 1 1 auto`, so ALL of the shrinking landed
+     there and it measured ZERO pixels wide: answering "are you sure" cost
+     you the ability to see which conversation you were answering about.
+     Shrinking lets the wrap this group already declares actually engage; the
+     phone breakpoint at the foot of this file gives it its own line. */
+  flex: 0 1 auto;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -1240,6 +1251,29 @@
 
 .waka-tabs {
   display: flex;
+  /**
+   * AND IT DOES NOT GIVE ITS HEIGHT BACK, which is what it was doing.
+   *
+   * MEASURED 2026-10-10, first time anyone put a browser at phone size on
+   * this surface: the shelves were FOUR PIXELS TALL at 320, 360, 390 and 414,
+   * and 26px at 768 — against 36px of content. Not a near miss; the row of
+   * words was a sliver with the pills clipped out of it, and a person on a
+   * phone could not see that the archive had shelves at all.
+   *
+   * The cause is the one flexbox rule nobody remembers. `.waka-over` is a
+   * column flex box with `max-height: 88dvh`, and a grid of forty-six cards
+   * is always taller than that — so every child is asked to shrink. Content
+   * normally refuses: a flex item's automatic minimum size is its content.
+   * BUT `overflow-x: auto` sets that minimum to ZERO, and this row needs
+   * `overflow-x` to slide sideways. So the one child that scrolls was the one
+   * child that could be crushed, and it was crushed on every screen the
+   * overlay filled — which is every phone, and 768 too.
+   *
+   * `flex: none` says what was always meant: this row is one line of pills
+   * and its height is a fact about the pills, not slack for the grid below it
+   * to borrow. The grid is what scrolls; `.waka-over` already owns that.
+   */
+  flex: none;
   gap: var(--sp-8);
   margin-bottom: var(--sp-24);
   padding-bottom: var(--sp-4);
@@ -1293,7 +1327,26 @@
 
 .waka-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  /**
+   * THE TRACK CANNOT BE WIDER THAN THE PAGE IT IS ON.
+   *
+   * MEASURED 2026-10-10 at 320px: the overlay's content box is 230px wide and
+   * this track was a flat 260px minimum, so the grid was 30px wider than the
+   * surface holding it and `.waka-over` grew a sideways scrollbar. The
+   * archive — the one page in this product a person opens to browse — slid
+   * left and right under the thumb on the narrowest phone.
+   *
+   * `min(260px, 100%)` is the guard, and it is not a new idea here:
+   * `.waka-held` eight hundred lines up already writes
+   * `minmax(min(22rem, 100%), 1fr)` for exactly this reason. Two grids, one
+   * rule, and only one of them had learned it — which is Law 3 in four
+   * characters of CSS.
+   *
+   * It is intrinsic rather than a breakpoint on purpose: the number that
+   * matters is the width of the CONTAINER, not of the window, and this grid
+   * also sits inside a 680px column on a wide screen.
+   */
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
   gap: var(--sp-20);
   margin: 0;
   padding: 0;
@@ -1588,6 +1641,21 @@
   display: flex;
   align-items: center;
   gap: var(--sp-8);
+  /**
+   * A FILENAME CANNOT MAKE THE PILL WIDER THAN THE PHONE.
+   *
+   * MEASURED 2026-10-10 at 320px with a real camera filename
+   * (`IMG_20261008_193455_the_whole_wall.heic`): the pill wanted 286px inside
+   * a 254px drawer and simply stuck out of it, 32px past the composer's own
+   * edge — on the one surface where the thing that overflows is a file the
+   * person just attached and may want to remove.
+   *
+   * The row already wraps, so the pill had somewhere to go; what it did not
+   * have was permission to be narrower than its text. A flex item's content
+   * is its own floor until something says otherwise, and nothing did.
+   */
+  max-width: 100%;
+  min-width: 0;
   padding: var(--sp-4) var(--sp-8) var(--sp-4) var(--sp-12);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -1595,6 +1663,16 @@
   font-family: var(--waka-face);
   font-size: var(--t-fine);
   color: var(--ink);
+}
+
+/* The name gives way, the × never does: a truncated filename is still
+   recognisable and a missing remove button is a file you cannot take back
+   out. This is the same deal `.waka-talks-words` strikes with its date. */
+.waka-drawer-items li > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .waka-drawer-items button {
@@ -3001,4 +3079,240 @@
 
 .waka-account-out {
   margin-top: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * WHAT BREAKS ON A PHONE — MEASURED, NOT REASONED
+ *
+ * Founder, four separate times: "I want the experience to be more mobile
+ * friendly", "treat it as a mobile first app", "must be responsive and good
+ * front end practices", and then — because the first three had produced
+ * nothing anyone could see — "audit some mobile experiences to ensure ours is
+ * highly usable and clear and intuitive and aesthetically high craft and
+ * update my design as well (directly change code)".
+ *
+ * Until 2026-10-10 this file was 80 KB holding the switcher, both corners,
+ * all three overlays, the card grid, the composer, the claim ask and the
+ * speech bubble, and it contained ZERO width media queries. Only
+ * `prefers-reduced-motion`. `home.css` next door has fourteen. The previous
+ * two audits of this were done by READING the code, because Playwright could
+ * not get past the auth wall — and `docs/six-laws.md` is explicit that a
+ * layout measured once is a layout hard-coded (Law 6), which makes a layout
+ * never measured at all the worse case of the same thing.
+ *
+ * ── HOW THESE NUMBERS WERE GOT ─────────────────────────────────────────────
+ *
+ * A standalone page linking this stylesheet and reproducing the real class
+ * structure of `SavesOverlay`, `PrinciplesOverlay`, `ConversationsOverlay`,
+ * `OpenCorner`, `MenuRows`, `Menu` and the composer / claim / bubble block in
+ * `Home.tsx`, driven by headless Chromium at 320×568, 360×640, 390×844,
+ * 414×896 and 768×1024, in English AND in Korean — because the archive is
+ * majority Korean and every label in it is a different number of pixels.
+ * Everything below carries the width it was measured breaking at. A bare
+ * `@media (max-width: 480px)` with no number behind it is the thing this
+ * codebase does not do.
+ *
+ * ── WHAT WAS FINE, which is most of it ─────────────────────────────────────
+ *
+ * `document.scrollWidth` never exceeded the window at any width in either
+ * language: nothing in this file puts a sideways scrollbar on the page. The
+ * intrinsic sizing is doing real work — `width: min(1040px, 100%)`,
+ * `min(17rem, calc(100vw - var(--sp-32)))`, `max-height: 88dvh` with
+ * `overflow: auto`, `flex-wrap` on the composer footer and on `.waka-over-sub`
+ * — and no overlay was ever taller than its viewport without a scroller. The
+ * three claim answers were the only control in the file already holding the
+ * 44px floor, and they held it in both languages. What was missing was not
+ * fluidity. It was the handful of places where a single number — a grid
+ * track, a flex-shrink, a justify-content — was chosen on a desktop and
+ * nobody had ever stood on a phone to check it.
+ *
+ * ── WHY THIS IS NOT INVERTED ───────────────────────────────────────────────
+ *
+ * Mobile-first means the base rules are the phone and `min-width` adds the
+ * desktop. This file is written desktop-first, and inverting 80 KB of it is a
+ * rewrite of every rule on the five surfaces the founder looks at most, in
+ * one commit, with no test that can tell a correct inversion from a subtly
+ * wrong one — the gates here count literals and names, not geometry. The
+ * trade is clear: inverting is a large change with a large chance of breaking
+ * what works, against a small chance of fixing something the measurements
+ * above did not already find. So the base stays, and what the phone needs is
+ * added with `max-width` — stated per rule, with the measurement that
+ * justifies it. If this file is ever rewritten rather than edited, it should
+ * come back mobile-first; that is a goal, not a side effect of this pass.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * THE CONFIRM ROW GETS ITS OWN LINE ON A PHONE.
+ *
+ * MEASURED on `.waka-talks-ask` — the "that didn't go through / delete it
+ * anyway / not now" group that replaces the delete verb in place:
+ *
+ *   320  the group wants 334px in a 230px row  →  83px off the right edge
+ *   360  the group wants 334px in a 270px row  →  43px off the right edge
+ *   390  the group wants 334px in a 300px row  →  13px off the right edge
+ *   414  34px past the overlay's content box, absorbed by its padding
+ *   768  311px of preview still beside it      →  fits
+ *
+ * Letting it shrink (see the rule itself) stops the overflow, but shrinking
+ * alone squeezes the conversation's own preview toward nothing — and the
+ * preview is the only thing that tells you WHICH conversation you are about
+ * to erase. Three controls and a sentence cannot share one line with a
+ * readable preview under about 566px (334 + a 16px gap + 8rem of preview +
+ * the overlay's 48px of padding + the scrim's 40px), so under 560 the row
+ * wraps and the question stands on its own line beneath the thing it is
+ * about.
+ *
+ * 560 and not 480: it is the step `home.css` already breaks the top row at,
+ * and the arithmetic lands four pixels under it. One breakpoint in the
+ * product beats two that nearly agree.
+ */
+@media (max-width: 560px) {
+  .waka-talks-row {
+    flex-wrap: wrap;
+  }
+
+  /* Its own line, at the end of it — the verbs stay under the delete they
+     replaced rather than jumping to the opposite side of the row. */
+  .waka-talks-ask {
+    flex: 1 0 100%;
+    justify-content: flex-end;
+  }
+}
+
+/**
+ * AN OVERLAY'S CLOSE BUTTON MUST NOT BE DRAWN ON THE SETTINGS COG.
+ *
+ * MEASURED: at 320×568 and 360×640 the archive's and the principles' own
+ * close button lands in a 24×24 square of the fixed corner gear behind it —
+ * two glyphs in one place, one of them showing through a 58% scrim. The
+ * overlay wins the press (z-65 over z-40), so this is not a dead control; it
+ * is the kind of wrongness a person feels without being able to name it, and
+ * it is on the two surfaces the left corner opens most.
+ *
+ * AND THE AXIS IS HEIGHT, NOT WIDTH, which is why this is the one query here
+ * that does not read `max-width`. The scrim centres the sheet, so the sheet's
+ * top edge is `max(20px, (100vh − 88vh) / 2)` = `max(20, 0.06vh)` whenever
+ * the content fills it — which for an archive of forty-six things is always.
+ * That clears the 56px-tall chrome row exactly when `0.06vh ≥ 44`, i.e. from
+ * 733px of viewport height up. 732 is the last pixel at which it is still
+ * true, and the measurements agree to the decimal: the sheet's top edge came
+ * out at 34px on a 568-tall window, 38px at 640, and 50.6px at 844 — the
+ * first of the three that clears. A width query would have fixed a 390-wide
+ * phone in landscape and missed a 320-wide one in portrait.
+ *
+ * The cost is 32px of the shortest screen, and it is paid in SCROLL rather
+ * than in lost content: the sheet already scrolls inside itself.
+ */
+@media (max-height: 732px) {
+  .waka-over-scrim {
+    padding-top: calc(var(--waka-corner) + var(--sp-8) + env(safe-area-inset-top));
+  }
+
+  /* AND THE SHEET TAKES THE ROOM THAT IS LEFT, NOT 88% OF THE WINDOW.
+     Reserving the corner row without saying this leaves 88dvh of sheet in
+     496px of padding box at 320×568, and a centred flex item that does not
+     fit overflows BOTH ways — it would have crept 2px back under the cog the
+     reserve was made for. `88dvh` stays as the ceiling on a tall screen; on a
+     short one the sheet is exactly the space the scrim leaves it. */
+  .waka-over {
+    max-height: min(
+      88dvh,
+      calc(100dvh - var(--waka-corner) - var(--sp-8) - var(--sp-20))
+    );
+  }
+}
+
+/**
+ * THE ACTS GET 44 WHERE THERE IS NO POINTER TO FALL BACK ON.
+ *
+ * Founder ruling: 44px minimum touch targets. `home.css` has held this since
+ * 2026-08-25 and states the line it draws: WCAG 2.2 AA asks 24×24, Apple
+ * asks 44 and Material 48, and "those are recommendations rather than the
+ * conformance bar" — so THE ACTS get 44, everything else clears 24, and
+ * nothing moves a pixel on a desktop. This file never learned that rule,
+ * which is Law 3 exactly: the ruling landed on the stylesheet being looked at
+ * and not on the one holding the newer half of the product.
+ *
+ * MEASURED, every tappable thing in this file, at 320–768 and in both
+ * languages. What was under the floor:
+ *
+ *   .waka-composer-send   120×32   where what you typed goes — THE act
+ *   .waka-composer-ask    108×32   the other destination, its peer
+ *   .waka-composer-mic     32×32   how words get in
+ *   .waka-tab              ..×32   choosing a shelf, inside a sideways slider
+ *   .waka-talks-open       ..×22   opening a conversation
+ *   .waka-account-go      135×31   the way to the settings page
+ *   .waka-account-out     135×31   signing out
+ *   .jar-char-bubble-go    69×24   the way into a conversation
+ *
+ * All eight are acts — a mis-hit costs you the thing you were keeping, the
+ * conversation you were opening, or your session. They get 44.
+ *
+ * WHAT WAS MEASURED SHORT AND DELIBERATELY LEFT, because 44 everywhere would
+ * remake the composition on the strength of a guideline this product is not
+ * held to — the same trade `home.css` wrote down:
+ *
+ *   .waka-menu-why         32×32   asking what a row IS, not going there, and
+ *                                  it already sits inside a 44px row
+ *   .waka-drawer-toggle   254×32   32 tall but the full width of the drawer
+ *   .jar-char-face         ..×32   me / my agent: growing it pushes the claim
+ *                                  down on a 568-tall screen, where
+ *                                  `.jar-char-say` is already scrolling
+ *   .jar-char-claim-from   ..×29   a cited save; four of them under a claim
+ *   .waka-talks-del        39×44   destructive, and a bigger destructive
+ *                                  target is a worse one
+ *
+ * The attachment drawer's × was 20×20 — under even the WCAG floor — so it is
+ * brought to 24 rather than to 44: it lives inside a 28px-tall pill beside a
+ * filename, and 44 would make the drawer taller than the box you type in.
+ */
+@media (pointer: coarse) {
+  .waka-composer-send,
+  .waka-composer-ask,
+  .waka-composer-mic {
+    min-height: var(--waka-corner);
+  }
+
+  /* A circle stays a circle: the mic is the one control here whose width is
+     its height, so both move together or it comes out an oval. */
+  .waka-composer-mic {
+    width: var(--waka-corner);
+    height: var(--waka-corner);
+  }
+
+  .waka-tab {
+    min-height: var(--waka-corner);
+  }
+
+  /* Centred rather than on its baseline, because the row that holds it aligns
+     on baselines and a 44px box with its words pinned to the top edge reads
+     as a mistake. The preview and the date are both one line, so centring
+     them together keeps the row looking exactly as it was drawn. */
+  .waka-talks-open {
+    min-height: var(--waka-corner);
+    align-items: center;
+  }
+
+  .waka-account-go,
+  .waka-account-out {
+    min-height: var(--waka-corner);
+    display: flex;
+    align-items: center;
+  }
+
+  /* It keeps the costume it was given — a line of the same speech, underlined
+     (founder: "talk about this rather than put it in a button") — and gains
+     only the air around it. The underline does not move because the text is
+     centred in the taller box. */
+  .jar-char-bubble-go {
+    min-height: var(--waka-corner);
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* To the floor, not to 44. See the note above. */
+  .waka-drawer-items button {
+    min-width: var(--sp-24);
+    min-height: var(--sp-24);
+  }
 }

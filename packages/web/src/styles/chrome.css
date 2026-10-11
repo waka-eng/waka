@@ -229,8 +229,7 @@ select:focus {
 .profile-tab,
 .profile-tabs button,
 .login-tab,
-.profile-memory-action,
-.nc-profile-link {
+.profile-memory-action {
   --t-label-size: var(--t-fine);
 }
 .btn-destructive {
@@ -905,9 +904,7 @@ a:focus-visible {
 .login-title,
 .profile-header h1,
 .login-shell h1,
-.login-shell h2,
-.nc-canvas h1,
-.nc-canvas h2 {
+.login-shell h2 {
   /* The token, not its value. `--waka-face` IS this stack; writing it out
      means the next person changes the token, watches the product follow, and
      has no way to see the two headings that did not. */

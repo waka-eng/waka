@@ -116,9 +116,9 @@ it('keeps the selected principle and its route after editing, so Back returns to
   vi.mocked(updatePrinciple).mockImplementation(async(_id,text)=>{principleState.rows=[{...principleState.rows[0],statement:text}];return principleState.rows[0];});
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();await navigate('/principles/principle-one');
   await act(async()=>world.container.querySelector<HTMLButtonElement>('[aria-label="Edit wording"]')!.click());
-  const editor=world.container.querySelector<HTMLTextAreaElement>('[aria-label="this principle in your own words"]')!;
+  const editor=world.container.querySelector<HTMLTextAreaElement>('[aria-label="This principle in your own words"]')!;
   await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(editor,'Leave unhurried time for thought.');editor.dispatchEvent(new Event('input',{bubbles:true}));});
-  await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principles-list--personal button')].find(button=>button.textContent==='save')!.click());await settle();
+  await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principles-list--personal button')].find(button=>button.textContent==='Save')!.click());await settle();
   expect(location.pathname).toBe('/principles/principle-one');expect(world.container.textContent).toContain('Make a share card');
   expect(updatePrinciple).toHaveBeenCalledWith('principle-one','Leave unhurried time for thought.');
   await navigate(-1);expect(location.pathname+location.search).toBe('/');
@@ -165,18 +165,18 @@ it('requires a visible audience confirmation before publishing and leaves cancel
   expect(world.container.querySelector<HTMLElement>('.jar-personal-shortcuts')?.hidden).toBe(true);
   const button=(label:string)=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-panel button')].find(item=>item.textContent?.trim()===label)!;
   expect(world.container.querySelector('.jar-panel .jar-audience-note')).toBeNull();
-  expect(button('private').getAttribute('title')).toBeNull();
-  expect(button('public').getAttribute('title')).toBeNull();
-  await act(async()=>button('public').click());
+  expect(button('Private').getAttribute('title')).toBeNull();
+  expect(button('Public').getAttribute('title')).toBeNull();
+  await act(async()=>button('Public').click());
   expect(world.container.textContent).toContain('People in your rooms can read it and its attachments');
   expect(updateInspiration).not.toHaveBeenCalled();
   await act(async()=>button('Keep private').click());expect(updateInspiration).not.toHaveBeenCalled();
-  expect(button('private').getAttribute('aria-pressed')).toBe('true');
-  await act(async()=>button('public').click());
+  expect(button('Private').getAttribute('aria-pressed')).toBe('true');
+  await act(async()=>button('Public').click());
   vi.mocked(updateInspiration).mockResolvedValue({} as Awaited<ReturnType<typeof updateInspiration>>);
   await act(async()=>button('Make public').click());
   expect(updateInspiration).toHaveBeenCalledExactlyOnceWith('older',{visibility:'public'});
-  expect(button('public').getAttribute('aria-pressed')).toBe('true');
+  expect(button('Public').getAttribute('aria-pressed')).toBe('true');
   expect(world.container.querySelector('.jar-panel .jar-audience-note')).toBeNull();
 });
 
@@ -206,7 +206,7 @@ it('does not let the returning-visitor greeting replace an explicitly linked ref
 });
 it('records explicit reflection opening immediately, before the world observer debounce', async()=>{
   world=await mountWorld(FACTS,{initialEntries:['/inspirations/older'],routerTools:<RouterTools/>}); await settle();
-  const open=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='read reflection')!;
+  const open=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Read reflection')!;
   expect(open).toBeDefined(); await act(async()=>open.click());
   expect(location.search).toContain('reflection=open');
 });
@@ -215,10 +215,10 @@ it('a greeting cannot close its own selected card after the person starts intera
   vi.mocked(loadInspiration).mockResolvedValue({...detail,id:'loaded'});
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>}); await settle();
   await act(async()=>{await vi.advanceTimersByTimeAsync(1500);}); await settle();
-  const panel=world.container.querySelector('[aria-label="a saved inspiration"]'); expect(panel).not.toBeNull();
+  const panel=world.container.querySelector('[aria-label="A saved inspiration"]'); expect(panel).not.toBeNull();
   await act(async()=>panel!.dispatchEvent(new Event('pointerdown',{bubbles:true})));
   await act(async()=>{await vi.advanceTimersByTimeAsync(4000);}); await settle();
-  expect(world.container.querySelector('[aria-label="a saved inspiration"]')).not.toBeNull();
+  expect(world.container.querySelector('[aria-label="A saved inspiration"]')).not.toBeNull();
   expect(location.search).toContain('inspiration=loaded');
 });
 

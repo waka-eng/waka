@@ -48,7 +48,7 @@
  *   measuring the fixture's rewrite of the fixture's own words.
  *
  *   `lib/api` — for the group reads, which have no loader, and for one write:
- *   `updateTopOfMindEntry`, the call behind "keep these words". Its reason is
+ *   `updateTopOfMindEntry`, the call behind "Keep these words". Its reason is
  *   given at the mock itself, and it is not decoration — left unmocked it
  *   reaches the network, fails, and the page recovers by reloading the board,
  *   which puts the OLD sentence back and turns every rewrite case here into a
@@ -280,7 +280,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     fetchTopOfMindRefresh: async () => ({ status: refreshState.status, runAfter: null,
       requestVersion: "1", completedVersion: refreshState.status === "succeeded" ? "1" : "0",
       result: refreshState.status === "succeeded" ? { kind: "top_of_mind", topOfMindId: "tom-self", version: 3, outcome: refreshState.empty ? "empty" : "changed" } : null }),
-    /* The write behind "keep these words". Its RESULT is discarded by the
+    /* The write behind "Keep these words". Its RESULT is discarded by the
        page — the new sentence is already in hand — so this only has to
        resolve. What matters is that it is mocked at all: unmocked it would
        reach the network, fail, and the page would answer by reloading the
@@ -622,7 +622,7 @@ describe("what the poster is standing on", () => {
    *
    * Two hops: the statement cites signals, the signals cite memories, and the
    * row is the far end of that chain. Keyed by the wrong id at either hop the
-   * chain resolves to nothing and the page says "written by hand" — which is a
+   * chain resolves to nothing and the page says "Written by hand" — which is a
    * sentence it is supposed to say only about a sentence somebody typed, and
    * which is exactly what every group poster said while the bug was live. So
    * the absence of that phrase is asserted too, not just the presence of rows.
@@ -752,7 +752,7 @@ describe("board acts leave receipts", () => {
     expect(
       row?.parentElement?.textContent,
       "the receipt and the way back must share one breath",
-    ).toContain("put it back");
+    ).toContain("Put it back");
   });
 });
 
@@ -800,7 +800,7 @@ describe("ratified light: the poster's grounds are lit by who holds them", () =>
     /* the dim ground opens its own ask row — correction one gesture from
        the explanation, the same verbs the sky uses */
     await press(".jar-ground", /the code is read as the truth/);
-    await press(".jar-ask button", /^yes$/);
+    await press(".jar-ask button", /^Yes$/);
 
     const lit = [...layout.container.querySelectorAll<HTMLElement>(".jar-ground")].find((g) =>
       (g.textContent ?? "").includes("the code is read as the truth"),

@@ -161,13 +161,38 @@ export function usePageMenu(
 
     return {
       items,
+      /**
+       * THE ROWS WORK EVERYWHERE, INCLUDING WHERE NOBODY WIRED THEM.
+       *
+       * `onOpen` is supplied by the world, which holds these up over itself
+       * without changing the address. Every other surface has no world to
+       * hold anything over — so without a default, `onOpen?.()` would render
+       * three perfectly good rows whose press did NOTHING.
+       *
+       * That is not a hypothetical: the one-press return from a conversation
+       * was exactly this bug hours ago. It rendered, it was labelled, it was
+       * enabled, and its handler resolved to `undefined`. A dead press is
+       * worse than a missing control — it reads as the product being broken
+       * rather than as a thing not offered — and no type check can see it,
+       * because an optional callback not being called is legal.
+       *
+       * So the fallback travels to the world with the thing already open,
+       * which is also the honest answer to "what should this do from here":
+       * these three live over the world, so asking for one from somewhere
+       * else means going back to the world and opening it.
+       */
       openRows: OPENS.map((row) => ({
         id: row.what,
         /* Named for the owner whose world is on screen. The switcher above
            says the same thing; this says it again where a person is about to
            act on it, which is the one place repetition earns its place. */
         label: owner ? row.agentLabel : row.label,
-        onSelect: () => onOpen?.(row.what),
+        onSelect: () =>
+          onOpen
+            ? onOpen(row.what)
+            : navigate(
+                `${owner ? `/w/${encodeURIComponent(owner)}` : "/"}?open=${row.what}`,
+              ),
         ...(row.explain ? { explain: t(locale, row.explain) } : {}),
       })),
       current: owner ? `agent:${owner}` : "me",
