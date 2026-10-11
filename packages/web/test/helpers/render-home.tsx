@@ -623,12 +623,24 @@ export async function pressChatCorner(container: HTMLElement): Promise<void> {
   await act(async () => row.click());
 }
 
-/** Dismissing an overlay the way a person does: the visible close. Escape and
-    the scrim also work, and the point of Law 2 is that the SEEN one exists. */
+/**
+ * Leaving a destination the way a person does, which stopped being an X.
+ *
+ * Founder, 2026-10-11: "how do we even need the close button for inspiration
+ * and chat? It's supposed to just be moving around. I mean for principles
+ * too. There's no reason for there to be an X button when we're just moving
+ * across the pages." The dock is visible the whole time a destination is
+ * open and its first row is called Now, so the X was a second control doing
+ * what a permanent one already did.
+ *
+ * The point of Law 2 is unchanged and so is this helper's: the way out it
+ * presses is one a person can SEE. It is simply the bar now, which is the
+ * same control on every surface instead of one per sheet.
+ */
 export async function closeOverlay(container: HTMLElement): Promise<void> {
-  const close = container.querySelector<HTMLButtonElement>(".waka-over .waka-over-close");
-  if (!close) throw new Error("no visible way out of this overlay");
-  await act(async () => close.click());
+  const now = container.querySelector<HTMLButtonElement>(".waka-dock .waka-dock-item");
+  if (!now) throw new Error("no visible way out: the dock is not on screen");
+  await act(async () => now.click());
 }
 
 /** The capture entry is a field now, not a button that opens one. */

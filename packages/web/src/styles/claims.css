@@ -1349,24 +1349,25 @@
    could not find the way back from its predecessor, so the one that can be
    seen is not optional. Quiet at rest, inked on approach: light is the only
    meaning channel. */
-.waka-over-close {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  margin: calc(-1 * var(--sp-12)) calc(-1 * var(--sp-8)) 0 0;
-  border: 0;
-  border-radius: var(--waka-r-control);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
+/* `.waka-over-close` IS GONE FROM EVERY SURFACE THAT WORE IT.
+   Founder: "how do we even need the close button for inspiration and chat?
+   I mean, it's supposed to just be moving around. I mean for principles too.
+   There's no reason for there to be an X button when we're just moving
+   across the pages... these are details where I'm saying, why are there
+   things that are unnecessary that keep showing up?"
 
-.waka-over-close:hover,
-.waka-over-close:focus-visible {
-  color: var(--ink);
-}
+   The mark made sense while these were sheets ON the world. They are
+   destinations in a bar now, the bar is on screen the whole time they are
+   open, and its first row is called Now — so the X was a second control
+   doing what a visible, permanent, one-press control already does. Law 2
+   asks for a visible way out costing one press; it does not ask for two,
+   and this product's own history is a list of second controls being cut.
+
+   WHAT A DETAIL KEEPS is its chevron — "All inspirations", "All chats" —
+   because stepping back to the list is a DIFFERENT act from leaving for the
+   world, and the dock cannot do it. See `way-out.test.ts`, which was taught
+   the distinction rather than handed an exemption. */
+
 
 
 .waka-over-count {
@@ -2862,9 +2863,29 @@
      this reason ("a said thing is softer on one side than the other"), and
      the note the creature holds up is the same kind of object. */
   border-radius: var(--waka-r-hand);
-  /* Warmer than the general raised tone: this is the creature's note, not a
-     panel, and it should read as lit by the same lamp the creature is. */
-  background: color-mix(in srgb, var(--waka-raised) 88%, var(--moon-warm) 12%);
+  /* ═══ AN OUTLINE, NOT A FILL ══════════════════════════════════════════
+     Founder, pointing at this block: "that gray box is so ugly. How do we
+     make it a little bit prettier? Maybe it should just be this outlined
+     box as we have before for the chat" — and attached the composer, which
+     is a transparent field inside a soft hairline.
+
+     The fill was argued from the reference, where a card on a WHITE page is
+     separated by value. On a near-black ground the same move produces a
+     grey rectangle: `--waka-raised` is 1.07:1 against the ground, so what
+     it actually draws is not a lit object but a slightly less black one,
+     and a slightly less black rectangle is the definition of a slab.
+
+     An outline does the separating with a single warm line, which is the
+     one thing on a dark ground that CAN be seen, and leaves the inside of
+     the card made of the same night as everything around it. That is also
+     the 몽글몽글 answer: the question is held by a soft edge rather than
+     stamped onto a plate.
+
+     THE EDGE IS WARM, not white. `--moon-edge` is a neutral white alpha and
+     would put the one cold line on the screen around the one warm object on
+     it. */
+  border: 1px solid color-mix(in srgb, var(--moon-warm) 22%, transparent);
+  background: transparent;
 }
 
 /* A GRAIN WAS PUT ON THIS CARD AND TAKEN STRAIGHT BACK OFF. "A bit more

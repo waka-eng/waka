@@ -103,8 +103,8 @@
   /* the sky: the same ground, a few percent thinner */
   --jar-sky: #060910;
   --jar-ink: #e8edf4;
-  --jar-muted: rgba(232, 237, 244, 0.55);
-  --jar-faint: rgba(232, 237, 244, 0.3);
+  --jar-muted: rgba(242, 236, 225, 0.55);
+  --jar-faint: rgba(242, 236, 225, 0.3);
   /* the soft pills: the back link and "return to now" */
   --jar-card: rgba(255, 255, 255, 0.06);
   --jar-card-hover: rgba(255, 255, 255, 0.12);
@@ -117,8 +117,11 @@
      the poster's huge letters to ghost through a card someone is trying to
      read. A surface for reading is paper, not glass. */
   --jar-panel: rgb(11, 14, 20);
-  --jar-panel-edge: rgba(255, 255, 255, 0.08);
-  --jar-scroll: rgba(232, 237, 244, 0.16);
+  /* Warm, for the reason `--moon-edge` is: a hairline is the thinnest thing
+     on the screen and therefore the easiest place for a second light
+     temperature to hide. */
+  --jar-panel-edge: color-mix(in srgb, var(--jar-live) 8%, transparent);
+  --jar-scroll: rgba(242, 236, 225, 0.16);
   --jar-row: rgba(255, 255, 255, 0.045);
   --jar-row-hover: rgba(255, 255, 255, 0.1);
 
@@ -477,7 +480,7 @@
 .jar-reading-actions button:hover,.jar-reading-actions button:focus-visible { color:var(--jar-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
 .jar-poster[role="button"]:hover,
 .jar-poster[role="button"]:focus-visible {
-  text-shadow: 0 0 22px rgba(232, 237, 244, 0.32);
+  text-shadow: 0 0 22px rgba(242, 236, 225, 0.32);
 }
 
 .jar-poster {
@@ -4201,7 +4204,7 @@
    never render alike. The hover line says whose it is. */
 .jar-prov-lit--page {
   color: var(--jar-faint);
-  text-shadow: 0 0 8px rgba(232, 237, 244, 0.1);
+  text-shadow: 0 0 8px rgba(242, 236, 225, 0.1);
   text-decoration: underline dotted;
   text-underline-offset: 3px;
 }

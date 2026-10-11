@@ -401,10 +401,17 @@ it('closes a conversation from its own X, which the overlay handler could not', 
   await openANewChat(world.container);
   expect(location.pathname.startsWith('/chat/'), 'the conversation never opened').toBe(true);
 
-  const close = world.container.querySelector<HTMLButtonElement>('.waka-over--talk .waka-over-close');
-  expect(close, 'a conversation offers no visible way out').toBeTruthy();
-  await act(async () => close!.click()); await settle();
-  expect(location.pathname, 'the X still does nothing').not.toContain('/chat/');
+  /* THE X IS GONE FROM EVERY DESTINATION. Founder: "how do we even need the
+     close button for inspiration and chat? There's no reason for there to be
+     an X button when we're just moving across the pages." So what this
+     presses is the control that replaced it — the dock's own first row,
+     which is visible the whole time a conversation is open and is the way
+     out the law is actually satisfied by. The assertion is unchanged: an
+     address, not a rendered button. */
+  const now = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock-item')][0];
+  expect(now, 'the bar a conversation leans on for its way out is not there').toBeTruthy();
+  await act(async () => now!.click()); await settle();
+  expect(location.pathname, 'the dock still does nothing from a conversation').not.toContain('/chat/');
 });
 
 /**

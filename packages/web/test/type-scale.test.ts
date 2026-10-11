@@ -233,7 +233,17 @@ describe("the spacing grid is one grid", () => {
  * forced. Colour is the most design-sensitive of the three scales, and a blind
  * mapping of 97 values is a redesign nobody asked for.
  */
-const COLOUR_CEILING = 90;
+/* 90 -> 84 on 2026-10-11, and the six went out as a SIDE EFFECT rather than
+   as a tidy-up, which is the best way for a ratchet to move. Founder:
+   "몽글몽글 소중소중 dreamy dreamy." The primitives that carry this
+   product's edges and raised tones were neutral white alphas —
+   `rgba(255, 255, 255, 0.14)` and friends — sitting inside a warm palette,
+   so every hairline in the product was the one cold thing on its screen.
+   Each became `color-mix(in srgb, var(--moon-warm) N%, transparent)`, which
+   is a token reference and therefore not a literal. Warming the material
+   drained six of these by writing the colour the way it should have been
+   written anyway. */
+const COLOUR_CEILING = 84;
 /* 125 -> 104 on 2026-08-26. Nobody drained twenty-one colours: the dead rules
    that held them were deleted by `e2e:dead-css`, and this ceiling had no way
    to notice, which is the whole point of the test added below.

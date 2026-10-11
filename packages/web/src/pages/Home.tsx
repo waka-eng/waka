@@ -6297,18 +6297,29 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * arrived at by arithmetic.
        */
       const Y_MIN = POSTER_SLOT + gap + CHAR_SIZE * 0.5;
-      /* 0.42 AND 620, AND BOTH CAME FROM LOOKING AT IT.
-         0.34 with a 420 ceiling put the whole cluster in the top third of a
-         1330px window with 734px of black under it — which is not calm, it is
-         NN/g's "false floor": a page with little at the top leaves people
-         unsure anything else exists, and they read the empty band as the end.
-         The attention data that argued for keeping content high is still
-         right, and it argues for the cluster being ABOVE centre, not pinned
-         to the ceiling of the screen. 0.42 puts the box's foot near 60% of
-         the window at every size anybody uses, which leaves the statement in
-         the top third where the eye lands and the surplus in one pool below
-         rather than two around. */
-      const Y_MAX = 620;
+      /* ═══ THE CENTRE, BECAUSE THAT IS WHERE A COMPANION STANDS ════════
+         Founder: "I wanted the character to be at the very very center,
+         center vertically and center horizontally, but it looks a little
+         more skewed towards the top, which I don't like."
+
+         WHAT WAS HERE AND WHY IT IS NOT A LOSS. 0.42 with a 620 ceiling was
+         argued from NN/g's "false floor" — a page with little at the top
+         leaves people unsure anything else exists — and from attention data
+         that wants content high. Both were reasoning about a PAGE. This
+         screen stopped being a page: the statement moved into the bubble,
+         the claim moved down onto the dock, and the composer left the
+         middle entirely. What is left in the centre band is one creature,
+         and the thing those rules protect against — a reader thinking the
+         screen ends — cannot happen on a screen whose bottom edge is a
+         navigation bar that is always visible.
+
+         So the creature is centred, and the composition is symmetrical
+         about it: the bubble above, the dock and the claim below, the same
+         air each side. `Y_MIN` still binds on a window too short to hold
+         the poster and the body at once, which is the one case where
+         centring would overlap them. The ceiling is gone — it existed only
+         to keep the cluster above centre, which is the thing being
+         undone. */
       /* THE ONE CONTENT-DEPENDENT CLAMP LEFT, and it only ever engages on a
          window too short to hold the composition at all. Without it the body
          would sit ON the box rather than above it, and an overlap is a worse
@@ -6317,7 +6328,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const floor = seam - CHAR_SIZE * 0.62 - gap;
       companion.y = compactHome
         ? -view.h * 3
-        : Math.min(Math.max(Math.min(Math.max(Y_MIN, view.h * 0.42), Y_MAX), 0), Math.max(floor, CHAR_SIZE));
+        : Math.min(Math.max(Math.max(Y_MIN, view.h * 0.5), 0), Math.max(floor, CHAR_SIZE));
       /* WHAT SITS UNDER THE COMPANION, AND IN WHAT ORDER (founder, 2026-08-25:
          "keep something should be shown right below the character").
          The mouth first, directly beneath the body, because keeping something
@@ -13627,6 +13638,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                        — those are facts about the fetch, not about the
                        companion, and the bubble says neither — and on every
                        wall the bubble is not over. */
+                    /* ═══ AN AGENT'S WALL NEVER PRINTS THIS LINE ═════════
+                       Founder, for at least the third time: "I told you so
+                       many times that the agent should never say 'feeling
+                       inspired save it', nor why is 'I haven't formed
+                       anything yet' shown as a big text behind it."
+
+                       It kept coming back because it was SUPPRESSED rather
+                       than absent: the condition was "hide this while the
+                       bubble is holding it", and `bubbleHoldsTheLine` is
+                       false whenever the bubble is holding anything ELSE —
+                       the creature speaking (`charSay`), the offer, a form
+                       change. So every one of those states lifted the
+                       suppression and the sentence came back up behind the
+                       bubble, which is the screenshot, twice.
+
+                       A condition with five ways to be false is not a rule.
+                       An agent's wall has one place for its own words and it
+                       is the bubble, unconditionally, so the paragraph is
+                       not rendered there at all — there is no state left for
+                       it to reappear in. */
+                    : w.kind === 'agent' ? null
                     : here && bubbleHoldsTheLine && !topOfMind?.supportChanged ? null : (
                       /* NO GENERATED PLACEHOLDER, EVER. An invented ambition
                          for a wall that has not worked yet would teach the
@@ -16786,11 +16818,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 {say('worldBackToChats')}
-              </button>
-              <button type="button" className="waka-over-close" aria-label={say('worldCardClose')} onClick={viewNavigation.closeConversation}>
-                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-                  <path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-                </svg>
               </button>
             </header>
             <ConversationPanel key={`${owner}:${talkId??'new'}:${viewNavigation.view.principleId??''}`}
