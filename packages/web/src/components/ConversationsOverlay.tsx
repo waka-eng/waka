@@ -1,5 +1,5 @@
 /**
- * YOUR CONVERSATIONS — everything you have talked about, over the world.
+ * YOUR CONVERSATIONS — a sidebar down the left, grouped by the day.
  *
  * Founder: "where do I see all my past chat history is unclear."
  *
@@ -13,14 +13,30 @@
  * person wants here is almost always "the one about X, from last week" — so
  * the list is the surface and starting a new one is its first row.
  *
- * WHY IT IS AN OVERLAY NOW AND NOT A CORNER SHEET. It spent a while as a
- * dropdown hanging off the top-left corner, which was right about where to
- * reach it from and wrong about what it is. The corner now asks one question
- * — what do you want to open — and your conversations are one of three
- * answers to it, beside your inspirations and your principles. Three things
- * of the same kind have to open the same way, or the corner is a list of
- * three rows where one of them behaves differently for no reason a person
- * could discover. See `components/OpenCorner`.
+ * WHY A SIDEBAR AND NOT THE CENTRED SHEET THE OTHER TWO USE.
+ *
+ * Founder: "When clicking on the top left chat icon, let's open up a left
+ * sidebar to show the past chats. And let's just like follow basically what
+ * we have in the cloud like this" — with a reference showing a left rail
+ * grouped Oct 8 / Oct 7 / Oct 6 / Older.
+ *
+ * Your inspirations and your principles are things you HOLD UP and read, so
+ * they open centred over the world: a grid and a set of cards both want the
+ * middle of the screen and both are a destination in themselves. A
+ * conversation list is not read, it is SCANNED — you arrive already knowing
+ * you want "the one about X, from last week" — and a list you scan wants to
+ * be tall and narrow and off to one side, beside the thing you are about to
+ * bring it back into rather than on top of it.
+ *
+ * It is also the shape every chat history anyone has used already has, which
+ * is the entire argument: a person who has opened one before knows where
+ * their own conversation went without being taught.
+ *
+ * GROUPED BY DAY, BECAUSE THAT IS HOW THE QUESTION IS ASKED. Nobody looks for
+ * a conversation by its title; they look for it by WHEN — "that was Tuesday".
+ * The rows stop carrying their own date because the heading above them does,
+ * which also gets a date off every single line of a list whose job is to be
+ * scanned quickly.
  */
 import { useEffect, useRef, useState } from "react";
 
@@ -91,16 +107,55 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
 
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
 
+  /**
+   * TODAY, YESTERDAY, THE DAY ITSELF, THEN OLDER.
+   *
+   * Named days for the week a person can still place from memory, the date
+   * for the rest of the recent past, and one bucket beyond it — because past
+   * a week "the 14th" stops being a memory and starts being a lookup, and a
+   * heading nobody can use is a line of noise between two rows they can.
+   *
+   * Built once per render from the rows themselves, so a day with nothing in
+   * it never appears — the headings describe what is there rather than a
+   * calendar the list is being fitted into.
+   */
+  const groups = (() => {
+    const startOfDay = (value: Date): number =>
+      new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+    const today = startOfDay(new Date());
+    const out: Array<{ label: string; rows: ConversationSummary[] }> = [];
+    for (const row of rows) {
+      const when = new Date(row.updatedAt);
+      const daysAgo = Number.isNaN(when.getTime())
+        ? Number.POSITIVE_INFINITY
+        : Math.round((today - startOfDay(when)) / 86_400_000);
+      const label =
+        daysAgo <= 0
+          ? say("worldChatsToday")
+          : daysAgo === 1
+            ? say("worldChatsYesterday")
+            : daysAgo <= 7
+              ? when.toLocaleDateString(locale, { month: "short", day: "numeric" })
+              : say("worldChatsOlder");
+      const last = out[out.length - 1];
+      if (last && last.label === label) last.rows.push(row);
+      else out.push({ label, rows: [row] });
+    }
+    return out;
+  })();
+
   return (
-    <div className="waka-over-scrim" onClick={onClose}>
+    /* The scrim is still full-screen: the rail is a surface over the world,
+       and a press anywhere off it puts it down. */
+    <div className="waka-rail-scrim" onClick={onClose}>
       <DialogSurface
-        className="waka-over"
+        className="waka-rail"
         aria-label={title}
         onClose={onClose}
         onClick={(event) => event.stopPropagation()}
       >
-        <header className="waka-over-head">
-          <h2 className="waka-over-title">{title}</h2>
+        <header className="waka-rail-head">
+          <h2 className="waka-rail-title">{title}</h2>
           <button type="button" className="waka-over-close" aria-label={say("worldCardClose")} onClick={onClose}>
             <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
               <path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -111,11 +166,7 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
         {/* Starting one is the first row, not a separate control: it is the
             same act as opening an old one, aimed at a conversation that does
             not exist yet. */}
-        <button
-          type="button"
-          className="waka-over-new"
-          onClick={() => onOpen(null)}
-        >
+        <button type="button" className="waka-rail-new" onClick={() => onOpen(null)}>
           {say("worldConversationNew")}
         </button>
 
@@ -128,69 +179,78 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
              a fact and not a failure. */
           <p className="waka-over-status">{say("worldConversationFirst")}</p>
         ) : (
-          <ul className="waka-talks">
-            {rows.map((row) => (
-              <li key={row.id} className="waka-talks-row">
-                  <button type="button" className="waka-talks-open" onClick={() => onOpen(row.id)}>
-                    <span className="waka-talks-words">
-                      {/* THE FIRST LINE THAT HAS WORDS IN IT, with the markdown
-                          stripped. A preview is for recognising which
-                          conversation this is, and a leading blank line or a
-                          stray backtick spends that recognition on punctuation. */}
-                      {row.preview.trim()
-                        ? row.preview
-                            .split(/\r?\n/)
-                            .find((line) => line.trim())!
-                            .replace(/[*`]/g, "")
-                            .slice(0, 80)
-                        : say("worldConversationNew")}
-                    </span>
-                    <time className="waka-talks-when jar-label" dateTime={row.updatedAt}>
-                      {new Date(row.updatedAt).toLocaleDateString(locale, { month: "short", day: "numeric" })}
-                    </time>
-                  </button>
-                  {asking === row.id ? (
-                    <span className="waka-talks-ask">
-                      {failed === row.id ? (
-                        /* PROSE, AND IT SAYS WHAT IS TRUE: the conversation is
-                           still here. Beside the verb rather than in a sheet,
-                           because nothing happened and nothing needs deciding
-                           — pressing again is the whole recovery. */
-                        <span className="waka-talks-warn">{say("worldDeleteFailed")}</span>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="waka-talks-go"
-                        disabled={going === row.id}
-                        onClick={() => {
-                          setGoing(row.id);
-                          setFailed(null);
-                          void deleteConversation(profileId!, row.id)
-                            .then(() => {
-                              /* The list holds what was loaded, so it has to
-                                 agree without a refetch — otherwise the row
-                                 you just removed is still sitting there. */
-                              setRows((all) => all.filter((item) => item.id !== row.id));
-                              setAsking(null);
-                            })
-                            .catch(() => setFailed(row.id))
-                            .finally(() => setGoing(null));
-                        }}
-                      >
-                        {say(going === row.id ? "worldDeleting" : "worldDeleteItAnyway")}
+          <nav className="waka-rail-list" aria-label={title}>
+            {groups.map((group) => (
+              <section key={group.label}>
+                <h3 className="waka-rail-day jar-label">{group.label}</h3>
+                <ul>
+                  {group.rows.map((row) => (
+                    <li key={row.id} className="waka-rail-item">
+                      <button type="button" className="waka-rail-row" onClick={() => onOpen(row.id)}>
+                        {/* THE FIRST LINE THAT HAS WORDS IN IT, with the
+                            markdown stripped. A preview is for recognising
+                            which conversation this is, and a leading blank
+                            line or a stray backtick spends that recognition
+                            on punctuation. */}
+                        {row.preview.trim()
+                          ? row.preview
+                              .split(/\r?\n/)
+                              .find((line) => line.trim())!
+                              .replace(/[*`]/g, "")
+                              .slice(0, 80)
+                          : say("worldConversationNew")}
                       </button>
-                      <button type="button" onClick={() => { setAsking(null); setFailed(null); }}>
-                        {say("worldNotNow")}
-                      </button>
-                    </span>
-                  ) : (
-                    <button type="button" className="waka-talks-del" onClick={() => setAsking(row.id)}>
-                      {say("worldDelete")}
-                    </button>
-                  )}
-                </li>
+                      {/* ERASING ONE, ASKED ON THE ROW. This verb had no home
+                          in the product at all for a while: it lived in a
+                          `···` menu inside the conversation you were reading,
+                          where "delete" sits one slip from "send", and the
+                          sweep that cut that menu left the capability
+                          homeless. It belongs beside the row it removes, and
+                          it asks first — inline, because a sheet over a list
+                          makes you lose your place in the list to answer a
+                          question about one line of it. */}
+                      {asking === row.id ? (
+                        <span className="waka-rail-ask">
+                          {failed === row.id ? (
+                            <span className="waka-rail-warn">{say("worldDeleteFailed")}</span>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="waka-rail-go"
+                            disabled={going === row.id}
+                            onClick={() => {
+                              setGoing(row.id);
+                              setFailed(null);
+                              void deleteConversation(profileId!, row.id)
+                                .then(() => {
+                                  /* The list holds what was loaded, so it has
+                                     to agree without a refetch — otherwise the
+                                     row you just removed is still sitting
+                                     there. */
+                                  setRows((all) => all.filter((item) => item.id !== row.id));
+                                  setAsking(null);
+                                })
+                                .catch(() => setFailed(row.id))
+                                .finally(() => setGoing(null));
+                            }}
+                          >
+                            {say(going === row.id ? "worldDeleting" : "worldDeleteItAnyway")}
+                          </button>
+                          <button type="button" onClick={() => { setAsking(null); setFailed(null); }}>
+                            {say("worldNotNow")}
+                          </button>
+                        </span>
+                      ) : (
+                        <button type="button" className="waka-rail-del" onClick={() => setAsking(row.id)}>
+                          {say("worldDelete")}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </nav>
         )}
       </DialogSurface>
     </div>
