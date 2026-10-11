@@ -16,14 +16,20 @@ beforeEach(() => {
     locale: 'en-US', public: false, ready: true, fileDraftsAvailable: true, busy: false, error: '', uploadingId: null, inputRef: null,
     save: { phase: 'idle', pending: null, busy: false, start: vi.fn(), retry: vi.fn(), check: vi.fn(), dismiss: vi.fn(), resetInvalid: vi.fn(), editRejected: vi.fn() },
     recording: { phase: 'idle', seconds: 0, error: '', notice: '', start: vi.fn(), stop: vi.fn(), cancel: vi.fn() },
-    onText: vi.fn(), onFiles: vi.fn(), onRetryFile: vi.fn(), onChooseRecording: vi.fn(), onRemove: vi.fn(), onVisibility: vi.fn(), onClose: vi.fn(), onSubmit: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(),
+    onText: vi.fn(), onFiles: vi.fn(), onRetryFile: vi.fn(), onChooseRecording: vi.fn(), onRemove: vi.fn(), onVisibility: vi.fn(), onPast: vi.fn(), onClose: vi.fn(), onSubmit: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(),
   };
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 const mount = () => act(async () => root.render(<InspirationComposer {...props} />));
 it('saves once without asking the user to choose reflection, and blocks an unresolved save',async()=>{
   props.text='A thought to come back to.';props.media=[];await mount();
-  const actions=host.querySelectorAll<HTMLButtonElement>('.jar-composer-actions button');expect(actions).toHaveLength(1);
+  /* SAVE IS A CORNER NOW, NOT A FOOTER ROW. `.jar-composer-actions` held it
+     beside an audience pair and an explanatory line; the founder's ruling on
+     that block was "remove all", so what is left is one control in the
+     bottom-right. The assertion that matters is unchanged and is the reason
+     this line counts rather than selecting: there is exactly ONE thing on
+     this page that commits a save. */
+  const actions=host.querySelectorAll<HTMLButtonElement>('.jar-note-save');expect(actions).toHaveLength(1);
   /* NO ARGUMENT, WHERE THERE USED TO BE `false` (2026-10-10). `onSubmit`
      took a `reflect` boolean and this control only ever passed `false` — so
      the parameter went with the question sheet it was meant to open, which
@@ -33,28 +39,49 @@ it('saves once without asking the user to choose reflection, and blocks an unres
   props.save.pending={} as NonNullable<typeof props.save.pending>;await mount();
   expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(true);
 });
-it('opens with a decorative spark without changing focus, the action name or save semantics',async()=>{
+/* ═══ THE HEADING ROW IS GONE, AND SO IS ITS SPARK ═══════════════════════
+   Founder, with Notion's new page on screen: "notion style - just blank
+   page", and then Apple Notes: "copy this apple note experience."
+
+   What this used to protect — a title, a decorative spark icon, a Close — was
+   a dialog announcing itself in a bar, which is the one thing a note page
+   does not do. The half of the old assertion that still matters is the half
+   about a person rather than about chrome: the field names itself to a screen
+   reader, and opening the page puts the caret in it. */
+it('opens straight into the words, under the moment and the way back',async()=>{
   await mount();
-  const heading=host.querySelector('h2')!;
-  expect(heading.textContent).toBe('Capture inspiration');
-  expect(heading.querySelector('[data-home-action-icon="capture"]')).not.toBeNull();
-  expect(heading.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
-  expect(heading.querySelector('svg')?.getAttribute('focusable')).toBe('false');
+  expect(host.querySelector('h2')).toBeNull();
+  const back=host.querySelector<HTMLButtonElement>('.jar-note-back')!;
+  expect(back.getAttribute('aria-label')).toBe('Past inspirations');
+  await act(async()=>back.click());
+  expect(props.onPast).toHaveBeenCalledOnce();
+  /* The one fact a blank page can state. Not asserted to an exact string —
+     it is the clock — but it must be a real stamp rather than an empty node,
+     which is what a missing `momentStamp` would leave behind. */
+  expect(host.querySelector('.jar-note-when')?.textContent).toMatch(/\d{4}/);
   expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('Capture inspiration');
   expect(document.activeElement).toBe(host.querySelector('textarea'));
   expect(props.onSubmit).not.toHaveBeenCalled();
 });
-it('describes the selected audience visibly and accessibly without publishing on selection', async () => {
-  await mount();
-  const group=host.querySelector('[aria-label="Who can read this"]')!;
-  expect([...group.querySelectorAll('button')].map(row=>row.textContent)).toEqual(['Only me','Share with rooms']);
-  expect(group.querySelector('button')?.getAttribute('aria-pressed')).toBe('true');
-  expect(group.getAttribute('aria-describedby')).toBe('capture-audience');
-  expect(host.querySelector('#capture-audience')?.textContent).toContain('Only you');
-  props.public=true;await mount();
-  expect(host.querySelector('#capture-audience')?.textContent).toContain('People in your rooms');
-  expect(host.querySelector('#capture-audience')?.textContent).toContain('Reflections stay private');
-  expect(props.onSubmit).not.toHaveBeenCalled();
+/* ═══ AND THE AUDIENCE WENT WITH THE CONCEPT BEHIND IT ═══════════════════
+   Founder: "I told you we got rid of the concept for room so there shouldn't
+   be only me and share with rooms."
+
+   This test asserted the pair existed, its pressed state and its explanatory
+   line. Inverted rather than deleted, because a control offering two
+   destinations when the product has one is worse than clutter — it teaches a
+   model that is no longer true — and a deleted test would let it drift back
+   in unnoticed. `onVisibility` stays on the props: the world still decides
+   what a save is, and this page is simply no longer where it is asked. */
+it('offers no audience choice, because there is nowhere else for a save to go', async () => {
+  props.text='A thought to come back to.';await mount();
+  expect(host.querySelector('[aria-label="Who can read this"]')).toBeNull();
+  expect(host.querySelector('#capture-audience')).toBeNull();
+  expect(host.textContent).not.toContain('Only me');
+  expect(host.textContent).not.toContain('Share with rooms');
+  await act(async()=>host.querySelector<HTMLButtonElement>('.jar-note-save')!.click());
+  expect(props.onVisibility).not.toHaveBeenCalled();
+  expect(props.onSubmit).toHaveBeenCalledOnce();
 });
 it('keeps an unsupported browser preview saveable and gives the failed file its own retry', async () => {
   await mount();

@@ -25,6 +25,22 @@ afterEach(()=>{world?.unmount();world=undefined;vi.useRealTimers();});
 const board=(body='Leave room for a small experiment.',profileId=reads.owner):TopOfMind=>({id:'reading-'+profileId,profileId,version:1,reason:'regenerated',createdMs:Date.now(),
   entries:[{id:'entry-one',type:'hypothesis',body,belief:null,prompt:null,locked:false,pinned:false,dismissed:false,sortOrder:0,citedSignals:[],createdMs:Date.now()}]});
 const forming=()=>world!.container.querySelector('.jar-hq-inner--activities .jar-forming');
+/**
+ * THE SETTLED EMPTY LINE MOVED INTO THE COMPANION'S MOUTH.
+ *
+ * Founder, on that sentence printed across the middle of the screen with the
+ * speech bubble floating through the word "formed": "I haven't formed
+ * anything yet should be shown instead of the top of mind if it's not
+ * existing yet."
+ *
+ * So it is said once, by the thing that would know, and `.jar-forming` keeps
+ * only the two states the companion cannot speak to — LOADING and FAILED,
+ * which are facts about a fetch rather than about what it has read. That
+ * split is the whole of what these cases protect and it is now the harder
+ * half: a companion that says "nothing yet" while the read is still in flight
+ * is not slow, it is wrong, and it is wrong in the first person.
+ */
+const settled=()=>world!.container.querySelector('.jar-char-bubble-reading');
 const poster=()=>world!.container.querySelector('h1.jar-poster[data-jar-chrome="1"]');
 const retry=()=>[...world!.container.querySelectorAll<HTMLButtonElement>('.jar-hq-inner--activities .jar-forming button')].find(row=>row.textContent==='Try again')!;
 const expectLoading=()=>{
@@ -42,14 +58,18 @@ it('keeps Home usable while a delayed reading loads, without claiming it is empt
 });
 it('shows the real empty state only after the owned response confirms no reading',async()=>{
   world=await mountWorld(facts);expectLoading();await act(async()=>reads.requests[0]!.resolve(null));
-  expect(forming()?.textContent).toContain('No reading yet');
+  expect(settled()?.textContent).toContain('No reading yet');
+  /* AND THE POSTER NO LONGER SAYS IT TOO. The same sentence in two registers
+     sixty pixels apart, with the bubble overlapping the words, is exactly
+     what the founder reported. */
+  expect(forming()).toBeNull();
   expect(world.container.textContent).not.toContain('Loading your top of mind');expect(refreshTopOfMind).not.toHaveBeenCalled();
 });
 it('does not tell someone to capture their first inspiration until both reads confirm the empty state',async()=>{
   facts.inspirations=[];world=await mountWorld(facts);expectLoading();
   await act(async()=>reads.requests[0]!.resolve(null));
-  expect(forming()?.textContent).toContain('Keep something you want to come back to.');
-  expect(forming()?.textContent).not.toContain('Loading your top of mind');
+  expect(settled()?.textContent).toContain('Keep something you want to come back to.');
+  expect(world.container.textContent).not.toContain('Loading your top of mind');
 });
 it('shows a read failure, preserves a Capture draft, and coalesces explicit read-only retries',async()=>{
   world=await mountWorld(facts);

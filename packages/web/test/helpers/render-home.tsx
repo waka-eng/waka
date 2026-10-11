@@ -577,10 +577,17 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
      What every suite using this helper tests is unchanged; only where the
      control lives is. */
   const rows = [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")];
-  const row = rows.find((node) => node.textContent?.trim().startsWith(label));
+  /* BY LABEL, NOT BY TEXT ALONE. The dock's plus is drawn rather than
+     written — it is the one verb in a row of nouns — so its `textContent` is
+     empty and only its `aria-label` names it. Reading the accessible name is
+     also the better question to ask of any control: it is what a person
+     navigating by voice or by screen reader would say out loud. */
+  const name = (node: HTMLButtonElement) =>
+    (node.textContent?.trim() || node.getAttribute("aria-label")?.trim()) ?? "";
+  const row = rows.find((node) => name(node).startsWith(label));
   if (!row) {
     throw new Error(
-      `no dock row named ${label}. The dock offers: ${rows.map((n) => n.textContent?.trim()).join(", ")}`,
+      `no dock row named ${label}. The dock offers: ${rows.map(name).join(", ")}`,
     );
   }
   await act(async () => row.click());

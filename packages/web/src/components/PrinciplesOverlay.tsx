@@ -118,13 +118,12 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
   }, [load]);
 
   return (
-    <div className="waka-over-scrim" onClick={onClose}>
+    <div className="waka-room">
       <DialogSurface
         className="waka-over"
         aria-label={title}
         onClose={onClose}
-        onClick={(event) => event.stopPropagation()}
-      >
+        >
         <header className="waka-over-head">
           <h2 className="waka-over-title">{title}</h2>
           {/* THE SURFACE EXPLAINS ITSELF, WHERE THE QUESTION IS ASKED.

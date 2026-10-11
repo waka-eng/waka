@@ -604,6 +604,34 @@ const MOOD_GLANCE = 0.45;
  */
 const FORM_FADE_MS = 320;
 /**
+ * HOW LONG THE CREATURE HOLDS ITS OFFER UP BEFORE GOING BACK TO THE READING.
+ *
+ * Long enough to read a short sentence and decide (about four seconds of
+ * reading at the pace this type is set), plus a beat to reach for it. Shorter
+ * and the offer is gone before a slow reader has finished it; longer and a
+ * person who has decided against it is left looking at a pitch.
+ */
+const OFFER_MS = 6000;
+/**
+ * HOW LONG THE BUBBLE STAYS DOWN WHILE THE CREATURE CHANGES FORM.
+ *
+ * Founder: "when the character is spinning from me to my agent, the speech
+ * bubble should be gone and it should reappear."
+ *
+ * Right, and the canvas already agreed with them: the form change hides
+ * inside a half turn, and the comment on it forbids any frame where two
+ * creatures are both in focus. The bubble was the one part of the companion
+ * that did not turn — it hung in the air, unchanged, over a body dissolving
+ * into somebody else's, and announced that the words and the creature were
+ * two unrelated objects.
+ *
+ * It covers the turn (`UNWIND_MS`) rather than the dissolve (`FORM_FADE_MS`),
+ * because what the eye follows is the turn: the dissolve finishes while the
+ * creature is still facing away, and bringing the bubble back then would put
+ * words over the back of its head.
+ */
+const FORM_HUSH_MS = UNWIND_MS;
+/**
  * ARRIVING IN A ROOM, WHOSE GROUNDS ARE HERE IS LIT THIS LONG.
  *
  * A room pours ONE member's memories — yours, until you move to somebody
@@ -1795,6 +1823,41 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** What the companion is saying: its own line when tapped, and the told
       weather when an arrival has something on the record to tell. */
   const [charSay, setCharSay] = useState("");
+  /**
+   * ═══ THE CREATURE WAS JUST PRESSED, AND IS OFFERING ════════════════════
+   *
+   * Founder: "clicking on the character should just make it shine and bright,
+   * and maybe we can change the speech bubble from the top of mind content to
+   * 'feeling inspired? save inspiration', and then a few seconds later it can
+   * come back to top of mind."
+   *
+   * This replaces a press that went straight into the notepad. The press is
+   * an ANSWER now rather than a door: you poke it, it lights up and offers,
+   * and the offer is the thing you press to write. One extra press buys the
+   * gesture its whole character — a creature that reacts is a creature, and
+   * one that teleports you to a form is a button with a face on it.
+   *
+   * THE RETURN IS NOT THE WORLD MOVING ON ITS OWN. The law is that nothing
+   * changes unless the person moved it, and they did: this whole sequence is
+   * one press and its settling. What would break the law is a bubble that
+   * cycled unprompted, which is why the rotation the founder asked about
+   * earlier — "once in a while show the pencil icon?" — was answered with
+   * state rather than a timer.
+   */
+  const [offering, setOffering] = useState(false);
+  const offerTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (offerTimer.current !== null) window.clearTimeout(offerTimer.current); }, []);
+  const offerToWrite = useCallback(() => {
+    setOffering(true);
+    if (offerTimer.current !== null) window.clearTimeout(offerTimer.current);
+    offerTimer.current = window.setTimeout(() => setOffering(false), OFFER_MS);
+  }, []);
+
+  /* WHETHER THE DOCK'S PLUS IS OPEN. A press on a place is navigation and
+     lives in the address; a press on the plus is not going anywhere yet, so
+     it stays here — putting it in the URL would make "I was about to make
+     something" a page you could link to and come back to. */
+  const [makingNew, setMakingNew] = useState(false);
   /* The box's own measured height, kept across frames so the layout pass can
      place the box before it has re-measured it this frame. `MOUTH_H` is the
      first-paint fallback and nothing more. */
@@ -2262,7 +2325,60 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * stop, and the reason the queue is keyed to the wall at all.
    */
   const standingAsAgent = atWall.kind === 'agent';
+  /**
+   * THE BUBBLE GOES DOWN WHILE THE CREATURE TURNS, AND COMES BACK AFTER.
+   *
+   * Founder: "when the character is spinning from me to my agent, the speech
+   * bubble should be gone and it should reappear."
+   *
+   * WHICH WALL YOU ARE ON is the only honest trigger available here. The
+   * dissolve itself lives in the canvas loop — `form.prevBody`, `form.at` —
+   * which is a ref the render never reads and must not start reading, because
+   * the loop writes it at sixty hertz and a state mirror of it would re-render
+   * the whole world every frame. The wall changes on the same beat the turn
+   * is armed (see `arriveColumn`), so watching the wall watches the turn.
+   *
+   * CLEARED ON UNMOUNT AND ON THE NEXT CHANGE, so a fast switch back and
+   * forth leaves the bubble hushed until the LAST turn finishes rather than
+   * popping it back up mid-spin on the first timer.
+   */
+  const [turning, setTurning] = useState(false);
+  const turnedFrom = useRef<string | null>(null);
+  const wallSeat = `${atWall.kind}:${atWall.kind === 'agent' ? atWall.id : ''}`;
+  useEffect(() => {
+    if (turnedFrom.current === null) { turnedFrom.current = wallSeat; return; }
+    if (turnedFrom.current === wallSeat) return;
+    turnedFrom.current = wallSeat;
+    setTurning(true);
+    const timer = window.setTimeout(() => setTurning(false), FORM_HUSH_MS);
+    return () => window.clearTimeout(timer);
+  }, [wallSeat]);
   const claimsFor = standingAsAgent ? atWall.id : undefined;
+  /**
+   * WHETHER THE CREATURE'S BUBBLE IS UP AND SPEAKING FOR THE WALL.
+   *
+   * The poster's empty line consults this so the same sentence is not printed
+   * twice on one screen — see the branch in the wall's heading.
+   *
+   * "NOTHING YET" AND "NOT LOADED YET" ARE DIFFERENT FACTS, and this is where
+   * confusing them would do the most damage: a companion that says "I haven't
+   * formed anything yet" while the read is still in flight is not slow, it is
+   * WRONG, and it says so in the first person. So on your own wall the bubble
+   * waits for the read to settle; the poster keeps the loading and failed
+   * lines, which are facts about a fetch and not about the companion. An
+   * agent's line comes from its own chrome and has nothing to wait for.
+   */
+  const bubbleHoldsTheLine =
+    /* ONLY FOR WALLS THE COMPANION SPEAKS FOR. A room's poster says what the
+       ROOM is waiting for, in the room's own voice, and the companion is a
+       visitor there — so silencing it in favour of a bubble would replace a
+       sentence about the room with a sentence about you. Caught by
+       `group-dial`, which lost "Some earlier wording is hidden" off a
+       historical version the moment this suppression stopped asking whose
+       wall it was on. */
+    (atWall.kind === "self" || atWall.kind === "agent") &&
+    !mouthOpen && !charSay && !turning && (standingAsAgent || readingLoadPhase === "ready");
+
   answeringAsRef.current = claimsFor;
   const loadClaims = useCallback(() => {
     if (standingAsAgent) { setClaimQueue([]); return; }
@@ -2424,6 +2540,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const say = useCallback((key: MessageKey) => t(localeRef.current, key), []);
+  /* AND IT IS THE WALL'S OWN SENTENCE, not one sentence for both. Your wall
+     says what it is waiting for — something kept, or a pattern to recur in
+     what you have kept — and an agent says it has formed nothing. The poster
+     chose between exactly these; the bubble is the poster's new seat, so it
+     makes the same choice from the same facts rather than a simpler one. */
+  const restingWord = standingAsAgent
+    ? chrome.formingAlt ?? say("worldFormingNothingAdopted")
+    : say(inspirations?.length || fieldBeyond ? "worldPersonalReadingNotReady" : "worldPersonalReadingEmpty");
 
   /* The self wall's NAME is canon ("Me" — it also mints the /w/me address);
      what a person reads is the catalog's word for it. User-given names —
@@ -10369,7 +10493,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (nav.view?.open) nav.closeOpen();
       return;
     }
-    nav.write({ ...(nav.view ?? EMPTY_VIEW), open: what });
+    /* AND THE NOTEPAD IS PUT DOWN. Same rule in the other direction: a room
+       and the note you were writing cannot both be the place you are. The
+       draft is untouched — `closeComposer` keeps the words, and the archive's
+       own new-note button opens straight back onto them. */
+    nav.write({ ...(nav.view ?? EMPTY_VIEW), open: what, compose: false });
   }, []);
   const menu = usePageMenu(locale, auth?.account?.id, agentWall ? { id: agentWall.id, name: agentWall.name } : null, openOverHome);
 
@@ -10663,7 +10791,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     // Capture is an explicit navigation intent. Record it before boot/roster
     // restoration or the world's debounced observer can close the new editor.
     const nav=viewNavigationRef.current;
-    nav.write({...EMPTY_VIEW,...nav.view,section:'top',at:null,compose:true,find:false,
+    /* AND NO ROOM OVER IT. `open` was the one field this list did not clear,
+       so pressing a dock row while a room was up left the archive standing on
+       the notepad — the two surfaces the founder caught in one screenshot,
+       with the dock greyed out between them. The notepad is a place, and
+       arriving at a place means leaving the last one. */
+    nav.write({...EMPTY_VIEW,...nav.view,section:'top',at:null,compose:true,find:false,open:null,
       inspirationId:null,reflectionId:null,principleId:null,sharePrinciple:false,conversationId:null});
   }, []);
 
@@ -13373,7 +13506,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           <span className="jar-poster-away"> {c.awayFrom}</span>
                         ) : null}
                       </h1>
-                    ) : here && w.kind === 'self' && showHomeProcessing && readingLoadPhase === 'ready' && !topOfMind?.supportChanged ? null : (
+                    ) : here && w.kind === 'self' && showHomeProcessing && readingLoadPhase === 'ready' && !topOfMind?.supportChanged ? null
+                    /* THE EMPTY LINE IS SAID ONCE, BY THE CREATURE.
+                       Founder, on this paragraph printed across the middle of
+                       the screen with the speech bubble floating through the
+                       word "formed": "I haven't formed anything yet should be
+                       shown instead of the top of mind if it's not existing
+                       yet."
+                       The bubble carries it now (see `jar-char-bubble`), so on
+                       the wall you are standing on this paragraph would be the
+                       same sentence twice, in two registers, overlapping. It
+                       still renders while the reading is LOADING or has FAILED
+                       — those are facts about the fetch, not about the
+                       companion, and the bubble says neither — and on every
+                       wall the bubble is not over. */
+                    : here && bubbleHoldsTheLine && !topOfMind?.supportChanged ? null : (
                       /* NO GENERATED PLACEHOLDER, EVER. An invented ambition
                          for a wall that has not worked yet would teach the
                          reader that the poster is generated copy and destroy
@@ -14515,50 +14662,74 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               illustration register — the same place the body and its aura
               live — not a UI icon set, which this product still does not have
               and is not getting. */}
-          {!mouthOpen && !charSay ? (
+          {!mouthOpen && !charSay && !turning ? (
             <>
               <button
                 type="button"
-                className="jar-char-press"
+                className={`jar-char-press${offering ? ' jar-char-press--lit' : ''}`}
                 aria-label={say('worldSaveInspiration')}
                 data-jar-chrome="1"
                 data-jar-interactive="1"
-                onClick={() => viewNavigation.write({ ...EMPTY_VIEW, compose: true })}
+                onClick={offerToWrite}
               />
               {/* ═══ WHAT THE CREATURE IS HOLDING UP ═══════════════════════
-                  Founder: "top of mind should shown in the speech bubble
-                  where the pencil is rn. but once in a while show the pencil
-                  icon? idk help me."
+                  Three things, in this order, and the order is the whole
+                  design:
 
-                  NOT ON A TIMER, AND THAT IS THE ANSWER TO THE QUESTION. A
-                  bubble that swaps its contents while somebody is looking at
-                  it changes the screen without them touching it, which is
-                  the one thing this world does not do. The STATE decides
-                  instead, and it happens to produce exactly the rotation
-                  that was wanted:
+                    you just pressed it  → the offer to write. Founder:
+                                           "clicking on the character should
+                                           just make it shine and bright, and
+                                           change the speech bubble to
+                                           'feeling inspired? save
+                                           inspiration', and then a few
+                                           seconds later come back to top of
+                                           mind."
+                    a reading exists     → the reading. It is the product's
+                                           output; it should be the thing the
+                                           creature is holding up.
+                    nothing read yet     → "I haven't formed anything yet",
+                                           said by the creature rather than
+                                           printed across the middle of the
+                                           screen. Founder, on the big centred
+                                           version of that line with the
+                                           bubble floating through it: "I
+                                           haven't formed anything yet should
+                                           be shown instead of the top of mind
+                                           if it's not existing yet." It is a
+                                           sentence about what the companion
+                                           knows, so it belongs in the
+                                           companion's mouth — and putting it
+                                           there removes the collision at the
+                                           same time.
 
-                    a reading exists  → the bubble holds it. It is the
-                                        product's output; it should be the
-                                        thing the creature is holding up.
-                    no reading yet    → the pencil. Day one, nothing to show,
-                                        so the offer is to give it something.
-
-                  The pencil then is not decoration that the eye stops
-                  seeing — it is an honest "I have nothing yet". And capture
-                  does not depend on it either way: pressing the body opens
-                  the notepad in both states, and the inspirations room
-                  carries its own way in. */}
-              <div
-                className="jar-char-bubble"
-                aria-hidden={lead ? undefined : true}
-                data-jar-chrome="1"
-              >
-                <span className={`jar-char-bubble-body${lead ? '' : ' jar-char-bubble-body--offer'}`}>
-                  {lead
-                    ? <span className="jar-char-bubble-reading">{lead.body}</span>
-                    : <span className="jar-char-offer">✏️</span>}
-                </span>
-              </div>
+                  THE PENCIL IS GONE. It was standing in for the empty state
+                  ("I have nothing yet") and for the offer at once, which is
+                  two jobs for a glyph that can only say one thing. Both now
+                  have words. */}
+              {/* NO BUBBLE AT ALL WHILE THERE IS NOTHING TRUE TO PUT IN IT.
+                  An empty bubble over the creature's head would be a shape
+                  saying "something belongs here", which is worse than air;
+                  the press target above stays, so the offer is always one
+                  press away whether or not anything is being held up. */}
+              {offering || lead || bubbleHoldsTheLine ? (
+                <div
+                  className="jar-char-bubble"
+                  data-jar-chrome="1"
+                  data-jar-interactive={offering ? '1' : undefined}
+                >
+                  <span className="jar-char-bubble-body">
+                    {offering ? (
+                      <button type="button" className="jar-char-offer" onClick={startNewInspiration}>
+                        {say('worldCreatureOffer')}
+                      </button>
+                    ) : (
+                      <span className="jar-char-bubble-reading">
+                        {lead ? lead.body : restingWord}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ) : null}
             </>
           ) : null}
           {!mouthOpen && charSay && charSay !== say('worldSavedWord') ? (
@@ -14901,6 +15072,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           onRetryFile={id => { void retryDraftFile(id); }}
           onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
+          draftUpdatedMs={composerDraft.draft.updatedAt}
+          /* THE CHEVRON GOES TO THE ARCHIVE — in ONE write, not two.
+             `saveAsDraft` leaves through history (`closeComposer`) and
+             `openOverHome` writes the address, so calling them in sequence
+             raced: the pop landed last and the chevron put you on the world
+             with no archive in sight. The draft is kept by the store, not by
+             the navigation, so stopping any recording and writing the single
+             destination is the whole move. */
+          onPast={() => { void recording.stop(); setMouthNote(''); openOverHome('saves'); }}
           onVisibility={setKeepPublic} onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void composerDraft.fork().catch(reason => setMouthNote(String(reason))); }} /> : null}
       </> : null}
@@ -16051,7 +16231,31 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {phase==='ready'&&!viewNavigation.view?.conversationId&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
           {([
-            { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open && !viewNavigation.view?.compose, go: () => viewNavigation.closeOpen() },
+            /* "HOME" IS NOT A PLACE IN THIS PRODUCT. Founder: "I don't like
+               the word 'home', so maybe just the home should be a light bulb
+               icon? I don't know."
+
+               Not a lightbulb: a bulb means IDEA, and it would be sitting one
+               press away from a row called Inspirations — a glyph saying the
+               name of its neighbour. It would also be the only picture in a
+               row of words, which is a second meaning channel arriving for
+               one entry.
+
+               "Now" instead, which is what that screen actually is. The world
+               already calls it that everywhere underneath — `atNow`, the
+               present wall, the dial's end — and the row then reads as four
+               nouns rather than three nouns and a piece of app furniture. It
+               is where your companion is standing at this moment, holding up
+               what you are thinking about at this moment.
+
+               HOME PUTS DOWN WHATEVER IS HELD UP — a room OR the notepad.
+               It was wired to `closeOpen` alone, which returns on its first
+               line when there is no `open`, so from a half-written note the
+               row rendered, lit correctly, and did nothing. That is the fifth
+               time a control's handler has not matched the state it was for
+               (see `closeConversation`); `saveAsDraft` is the notepad's own
+               way out and it keeps the words. */
+            { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open && !viewNavigation.view?.compose, go: () => { if (viewNavigation.view?.compose) saveAsDraft(); else viewNavigation.closeOpen(); } },
             /* SAVE IS NOT A TAB. Founder: "home, inspirations -> let see list
                of past inspirations with main CTA to save new, chat -> see
                list of past chats with main CTA to start new chat,
@@ -16060,32 +16264,76 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                pressing the creature, and `?compose=1`. A fifth row leading
                to a thing two other gestures already reach is vocabulary
                without a place behind it. */
-            /* INSPIRATIONS KEEPS A DOOR UNTIL HOME HOLDS THE LIST. The plan
-               is that your saves live on the home screen under the note, at
-               which point this row goes the way the claims row already has —
-               a door to a room you are standing in is not navigation. Until
-               that is built, retiring the rung without this would have left
-               the archive reachable from nowhere.
+            /* THE TWO ROOMS LEAD TO THE PAST; THE PLUS MAKES THE NEW ONE.
+               Founder, after a morning of trying it the other way round:
+               "from inspirations and conversations, it's not clear that I can
+               click the back button to see all inspirations... maybe
+               inspirations and conversations should lead to the past ones and
+               in the bottom navigation there should be a plus button that
+               opens up either save inspiration or start chat — would that be
+               better?"
 
-               NO `SAVE` ROW. Capture is about to become the creature's own
-               offer — a pencil in its speech bubble, beside the claim it
-               holds up — and two front doors to one room is the duplication
-               this product has already paid for once. */
+               Yes, and the reason the first arrangement failed is worth
+               keeping: a page reached by a NOUN has to be the noun. Pressing
+               "Inspirations" and landing on a blank note made the archive a
+               thing you had to know was behind a chevron, and a chevron is
+               not a label — nothing about it says what is on the other side.
+
+               One verb for making things, in the one place every phone puts
+               it, and the nouns mean what they say. */
             { id: 'saves', label: 'worldDockSaves' as const, here: viewNavigation.view?.open === 'saves', go: () => openOverHome('saves') },
-            { id: 'principles', label: 'worldDockPrinciples' as const, here: viewNavigation.view?.open === 'principles', go: () => openOverHome('principles') },
+            /* THE PLUS. Not a place, so it does not light and does not take
+               `aria-current`: it is the only verb in a row of nouns, and the
+               sheet it raises is where the verb is chosen. */
+            { id: 'new', label: 'worldDockNew' as const, here: false, go: () => setMakingNew(value => !value) },
+            /* CONVERSATIONS BEFORE PRINCIPLES, by the founder's own order:
+               "home, inspirations, conversations, and principles". It is also
+               the ladder's order — what you kept, what you said about it,
+               what has endured — so the row reads left to right the way the
+               material actually moves. */
             { id: 'talk', label: 'worldDockTalk' as const, here: viewNavigation.view?.open === 'conversations', go: () => openOverHome('conversations') },
+            { id: 'principles', label: 'worldDockPrinciples' as const, here: viewNavigation.view?.open === 'principles', go: () => openOverHome('principles') },
           ]).map(item => (
             <button
               key={item.id}
               type="button"
-              className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}`}
+              className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}${item.id === 'new' ? ' waka-dock-item--new' : ''}`}
               aria-current={item.here ? 'page' : undefined}
+              aria-expanded={item.id === 'new' ? makingNew : undefined}
+              aria-label={item.id === 'new' ? say('worldDockNew') : undefined}
               onClick={item.go}
             >
-              {say(item.label)}
+              {item.id === 'new'
+                ? <svg width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false">
+                    <path d="M8.5 2.6v11.8M2.6 8.5h11.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                : say(item.label)}
             </button>
           ))}
         </nav>
+      ) : null}
+      {/* ═══ WHAT THE PLUS RAISES ════════════════════════════════════════
+          Two verbs, because the product makes exactly two things. It stands
+          directly over the dock rather than in the middle of the screen: a
+          sheet that answers a press belongs where the press happened.
+          The ground under it is a dismiss target with nothing drawn on it —
+          no scrim, because dimming the world to ask a two-word question is
+          the modal weight this product keeps removing. */}
+      {phase==='ready'&&makingNew ? (
+        <>
+          <button type="button" className="waka-new-away" aria-label={say('worldClose')}
+            onClick={() => setMakingNew(false)} />
+          <div className="waka-new" role="menu" aria-label={say('worldDockNew')} data-jar-chrome="1" data-jar-interactive="1">
+            <button type="button" role="menuitem" className="waka-new-one"
+              onClick={() => { setMakingNew(false); startNewInspiration(); }}>
+              {say('worldSaveInspiration')}
+            </button>
+            <button type="button" role="menuitem" className="waka-new-one"
+              onClick={() => { setMakingNew(false); viewNavigation.write({ ...EMPTY_VIEW, conversationId: 'new' }); }}>
+              {say('worldConversationNew')}
+            </button>
+          </div>
+        </>
       ) : null}
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
@@ -16272,9 +16520,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         const talkId=viewNavigation.view.conversationId==='new'?null:viewNavigation.view.conversationId;
         const owner=`${storageScope.accountId}:${storageScope.profileId}`;
         if(committedTalk.current&&(committedTalk.current.owner!==owner||committedTalk.current.row.id!==talkId))committedTalk.current=null;
-        return <div className="waka-over-scrim" onClick={viewNavigation.closeConversation}>
+        return <div className="waka-room">
           <DialogSurface className="waka-over waka-over--talk" aria-label={say('worldMenuTalk')}
-            onClose={viewNavigation.closeConversation} onClick={event=>event.stopPropagation()}>
+            onClose={viewNavigation.closeConversation}>
             <header className="waka-over-head">
               <h2 className="waka-over-title">{say('worldMenuTalk')}</h2>
               <button type="button" className="waka-over-close" aria-label={say('worldCardClose')} onClick={viewNavigation.closeConversation}>

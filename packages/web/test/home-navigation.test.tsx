@@ -76,7 +76,7 @@ it('opens your own material over a world that never leaves, and the world is one
      why pressing it can no longer strand you — "I didn't realise clicking on
      top of mind would leave me there" is now impossible rather than merely
      fixed. */
-  await chooseFromMenu(world.container,'Home');await settle();
+  await chooseFromMenu(world.container,'Now');await settle();
   expect(location.pathname).toBe('/');
   expect(new URLSearchParams(location.search).get('open')).toBeNull();
 
@@ -105,12 +105,23 @@ it('offers places in the dock, and nothing that is already on the screen',async(
      WHAT THIS CASE PROTECTS is that the dock holds PLACES. `Your claims` must
      never come back to it, because the claim lives on home now and a second
      entrance is the duplication this product has already paid for once.
-     `Your inspirations` is here on borrowed time and says so in `Home.tsx`:
-     it keeps a door only until home holds the list, so that retiring the rung
-     did not leave the archive reachable from nowhere. */
+     "HOME" IS NOT A PLACE IN THIS PRODUCT (founder: "I don't like the word
+     'home'"). It is `Now` — which is what that screen is, and what the world
+     already calls it everywhere underneath: `atNow`, the present wall, the
+     dial's end. Four nouns rather than three nouns and a piece of app
+     furniture.
+
+     AND A FIFTH CONTROL THAT IS NOT A PLACE. The plus is the one verb on the
+     bar; it is drawn rather than written and carries its name only in
+     `aria-label`, which is why this reads the accessible name. It must stay
+     unnamed-by-text and unlit: a verb that lights like a destination would
+     say you were standing somewhere. */
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  const rows=[...world.container.querySelectorAll('.waka-dock .waka-dock-item')].map(node=>node.textContent?.trim());
-  expect(rows).toEqual(['Home','Inspirations','Principles','Conversations']);
+  const dock=[...world.container.querySelectorAll('.waka-dock .waka-dock-item')];
+  const rows=dock.map(node=>(node.textContent?.trim()||node.getAttribute('aria-label')?.trim())??'');
+  expect(rows).toEqual(['Now','Inspirations','Make something','Conversations','Principles']);
+  expect(dock[2]!.textContent?.trim(),'the plus is drawn, not written').toBe('');
+  expect(dock[2]!.getAttribute('aria-current'),'a verb is never a place you are at').toBeNull();
   expect(rows,'a claim is answered on home; the dock must not offer a second way in').not.toContain('Claims');
 });
 
@@ -162,7 +173,7 @@ it('starts a review beside the personal reading and restores home through Back',
      is the duplication the switcher replaced — so the name is asserted where
      it now lives. */
   expect([...world.container.querySelectorAll('.waka-dock .waka-dock-item--here')].map(n=>n.textContent?.trim()))
-    .toEqual(['Home']);
+    .toEqual(['Now']);
   /* Review is not offered any more. It was an activity card beside the
      character, then a menu row, and it is now merged away: Claims is the one
      place that asks a person to rule on their own material, and two surfaces
