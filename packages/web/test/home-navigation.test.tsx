@@ -110,7 +110,7 @@ it('offers places in the dock, and nothing that is already on the screen',async(
      did not leave the archive reachable from nowhere. */
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
   const rows=[...world.container.querySelectorAll('.waka-dock .waka-dock-item')].map(node=>node.textContent?.trim());
-  expect(rows).toEqual(['Home','Save','Inspirations','Principles','Conversations']);
+  expect(rows).toEqual(['Home','Inspirations','Principles','Conversations']);
   expect(rows,'a claim is answered on home; the dock must not offer a second way in').not.toContain('Claims');
 });
 

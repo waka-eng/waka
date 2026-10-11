@@ -206,7 +206,11 @@
  */
 .waka-dock {
   position: fixed;
-  z-index: 55;
+  /* ABOVE THE NOTEPAD, because the dock is how you leave it. The composer is
+     a full page at z-58 and was covering its own way out — the Law 2 failure
+     this product has a gate for: every surface you can enter has a visible
+     way out, and it costs one press. */
+  z-index: 60;
   left: 50%;
   bottom: calc(var(--sp-20) + env(safe-area-inset-bottom));
   transform: translateX(-50%);
@@ -3309,6 +3313,18 @@
   flex: 0 1 auto;
   min-width: 0;
   position: static;
+}
+
+/* THE READING IN THE BUBBLE. Wider than the pencil's bubble because it holds
+   a sentence, set at the reading step on the creature's own warm ground — the
+   same material the note below it wears, so the two read as one voice. */
+.jar-char-bubble-reading {
+  display: block;
+  max-width: 24rem;
+  font-size: var(--t-lead);
+  line-height: 1.45;
+  text-align: center;
+  text-wrap: pretty;
 }
 
 .jar-char-press {

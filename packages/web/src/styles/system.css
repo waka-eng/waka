@@ -448,7 +448,20 @@ body {
  * any layer to out-rank; `type-scale.test.ts` holds it at one. */
 .jar-label,
 .jar-saved,
-.jar-mouth-field::placeholder,
+/* `.jar-mouth-field::placeholder` LEFT THIS REGISTER on 2026-10-11. It was
+   right while that field was a one-line box on the home screen: a short
+   signpost, in the voice signposts use. The field is now the whole notepad
+   page — founder, with a screenshot of Notion's new page: "notion style -
+   just blank page" — and its placeholder is the only thing on that page, a
+   sentence inviting somebody to write. Prose does not go in the eyebrow
+   register, which this file already rules "belongs to eyebrows, never to
+   things you press".
+
+   WORTH KNOWING WHY IT TOOK THREE TRIES TO OVERRIDE: `@layer register` is
+   declared LAST in `layers.css`, so it beats `chrome` and `product` outright
+   no matter how specific the challenger is. Raising specificity in a lower
+   layer can never win. The entry had to leave the register, not be
+   out-ranked. */
 .jar-mouth-where,
 .jar-panel-vis,
 .jar-grounds,

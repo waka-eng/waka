@@ -4627,6 +4627,78 @@
     transform: none;
   }
 
+  /**
+   * ═══ A BLANK PAGE, THE WAY NOTION OPENS ONE ═════════════════════════
+   *
+   * Founder, with a screenshot of Notion's new page: "notion style - just
+   * blank page."
+   *
+   * That screen is one faint enormous placeholder and nothing else — no
+   * title bar, no close button, no field with an edge around it. The page IS
+   * the field, and the only thing on it is the invitation to write. Every
+   * piece of furniture this composer inherited from being a dialog is the
+   * opposite of that, so it goes:
+   *
+   *   the heading row and its Close — the dock is how you leave, and a page
+   *   that announces itself in a bar at the top is a dialog wearing a page's
+   *   clothes
+   *
+   *   the field's underline — an edge on something that fills the screen is
+   *   a line drawn for no reason; there is nothing for it to separate
+   *
+   *   the footer, until there are words — where this goes and what happens
+   *   to it are questions about a thing that does not exist yet
+   *
+   * THE PLACEHOLDER BECOMES THE PAGE'S TITLE, at reading size and barely
+   * lit. Notion's is about 40px at roughly 10% ink; this uses the product's
+   * own reading step and `--jar-faint`, which is the tier reserved for text
+   * that is present without being read — exactly what a placeholder is.
+   */
+  .jar-inspiration-composer .jar-composer-heading {
+    display: none;
+  }
+
+  /* `.jar-seek.` prefixed so this outranks `chrome.css`'s own
+     `.jar-inspiration-composer .jar-composer-text`, which sets the size and
+     the register this page is overriding. Equal specificity in the same
+     layer was leaving the winner to source order across two chunks — not
+     something to rely on. */
+  .jar-seek.jar-inspiration-composer .jar-composer-text {
+    min-height: 40vh;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: var(--t-reading);
+    line-height: 1.3;
+    letter-spacing: normal;
+    text-transform: none;
+    resize: none;
+  }
+
+  .jar-seek.jar-inspiration-composer .jar-composer-text::placeholder {
+    /* OUT OF THE LABEL REGISTER. `.jar-mouth-field` is the class this field
+       inherited from the days when capture was a labelled BUTTON, and the
+       uppercase, letterspaced voice came with it — so the invitation to
+       write a sentence was set in the register meant for a four-word
+       signpost. The reference's is a sentence in the page's own face. */
+    color: var(--jar-faint);
+    font-size: var(--t-reading);
+    line-height: 1.3;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  /* Nothing to attach TO until there are words. Same reasoning as the footer
+     below: these are questions about a thing that does not exist yet. */
+  .jar-inspiration-composer:has(.jar-composer-text:placeholder-shown) .jar-composer-tools {
+    display: none;
+  }
+
+  /* Nothing to decide about until there is something to decide about. */
+  .jar-inspiration-composer:has(.jar-composer-text:placeholder-shown) .jar-composer-footer {
+    display: none;
+  }
+
   /* One column down the middle of the page, at the measure the rest of the
      product reads at. */
   .jar-inspiration-composer > * {
