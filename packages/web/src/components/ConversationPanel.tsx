@@ -1,15 +1,13 @@
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
-import {createConversation,deleteConversation,fetchConversation,fetchConversationCitation,fetchConversationContext,listConversations,saveConversationMessage,type ApiConversation,type ConversationCitation,type ConversationContext,type ConversationSummary,type ConversationSourceKind} from '../lib/api/conversations';
+import {createConversation,deleteConversation,fetchConversation,fetchConversationCitation,fetchConversationContext,listConversations,saveConversationMessage,type ApiConversation,type ConversationCitation,type ConversationContext,type ConversationSourceKind} from '../lib/api/conversations';
 import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage';
 import {useConversationReply} from '../lib/use-conversation-reply';
 import {ConversationThought} from './ConversationThought';
 import {ConversationPrincipleEdit} from './ConversationPrincipleEdit';
-import {ConversationHistory} from './ConversationHistory';
 import {ConversationMemory} from './ConversationMemory';
 import {ConversationText} from './ConversationText';
 import {ConversationReadingChoices} from './ConversationReadingChoices';
 import {ConversationSourceDate} from './ConversationSourceDate';
-import {conversationPreview} from '../../../api/src/lib/conversation-preview';
 import {fetchPrinciples,type ApiInspiration,type ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
 import {readConversationDrafts,storeConversationDraft,clearConversationDraft,clearConversationDrafts,type ConversationDraft as Draft,type StoredConversationDraft} from '../lib/conversation-drafts';
@@ -18,11 +16,10 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const journal=id??`new:${initialPrincipleId??'general'}`;
   const initial=initialConversation?.id===id&&initialConversation.profileId===scope.profileId?initialConversation:null;
   const bootstrap=useRef(initial);
-  const [rows,setRows]=useState<ConversationSummary[]>([]),[conversation,setConversation]=useState<ApiConversation|null>(initial),[draft,setDraft]=useState<Draft|null>(null);
+  const [conversation,setConversation]=useState<ApiConversation|null>(initial),[draft,setDraft]=useState<Draft|null>(null);
   const [busy,setBusy]=useState(false),[loading,setLoading]=useState(!initial),[error,setError]=useState<string|null>(null),[storageFailed,setStorageFailed]=useState(false);
   const [context,setContext]=useState<ConversationContext|null>(null),[memoryOpen,setMemoryOpen]=useState(false),[memoryBusy,setMemoryBusy]=useState(false),[memoryFailed,setMemoryFailed]=useState(false);
-  const [historyOpen,setHistoryOpen]=useState(false),[mobile,setMobile]=useState(()=>window.matchMedia?.('(max-width:760px)').matches??false);
-  const [historyFailed,setHistoryFailed]=useState(false);
+  const [mobile,setMobile]=useState(()=>window.matchMedia?.('(max-width:760px)').matches??false);
   const [earlierBusy,setEarlierBusy]=useState(false),[earlierFailed,setEarlierFailed]=useState(false);
   const prependScroll=useRef<{height:number;top:number}|null>(null);
   const [focusPrinciple,setFocusPrinciple]=useState<ApiPrinciple|null>(null),[focusFailed,setFocusFailed]=useState(false);
@@ -49,9 +46,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const observe=(next:ApiConversation)=>{
     if(conversationRef.current?.id===next.id&&conversationRef.current.profileId===next.profileId&&conversationRef.current.revision>next.revision)next=conversationRef.current;
     conversationRef.current=next;setConversation(next);setGenerationEnabled(next.generationEnabled??false);setContext(null);setCitation(null);citationSerial.current++;memorySerial.current++;setMemoryBusy(false);
-    const preview=next.preview??conversationPreview(next.messages);
-    setRows(previous=>[{id:next.id,profileId:next.profileId,revision:next.revision,updatedAt:next.updatedAt,preview},...previous.filter(row=>row.id!==next.id)].slice(0,100));
-    const pending=draftRef.current;
+        const pending=draftRef.current;
     if(pending?.pending&&next.messages.some(message=>message.id===pending.id&&message.content===pending.content&&(message.correctsMessageId??undefined)===pending.correctsMessageId)){
       try{if(receipt.current)clearConversationDraft(receipt.current);}catch{setStorageFailed(true);}
       receipt.current=undefined;draftRef.current=null;setDraft(null);setError(null);
@@ -75,8 +70,12 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     if(saved){nearBottom.current=saved.nearBottom;node.scrollTop=saved.nearBottom?node.scrollHeight:saved.top;restoredScroll.current=null;}
     else if(nearBottom.current){node.scrollTop=node.scrollHeight;setNewMessages(false);}else setNewMessages(true);
   },[conversation?.messages.length]);
-  const refreshList=async()=>{setHistoryFailed(false);const next=await run(signal=>listConversations(scope.profileId,signal));if(!lifecycle.current.signal.aborted){setRows(next.conversations);if(!id)setGenerationEnabled(next.generationEnabled);}};
-  const loadHistory=()=>{void refreshList().catch(()=>{if(!lifecycle.current.signal.aborted)setHistoryFailed(true);});};
+  /* THE LIST ITSELF MOVED TO THE CORNER. What this still reads it for is
+     `generationEnabled` — whether replies are connected at all, which the
+     composer's own state depends on and which this endpoint happens to
+     carry. The conversations it returns are no longer rendered here. */
+  const refreshList=async()=>{const next=await run(signal=>listConversations(scope.profileId,signal));if(!lifecycle.current.signal.aborted&&!id)setGenerationEnabled(next.generationEnabled);};
+  const loadHistory=()=>{void refreshList().catch(()=>undefined);};
   const refresh=async()=>{
     setLoading(true);setError(null);
     try{
@@ -127,7 +126,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     catch{if(!lifecycle.current.signal.aborted)setError(say('worldConversationDeleteFailed'));}finally{if(!lifecycle.current.signal.aborted)setBusy(false);}
   };
   const memory=async()=>{
-    setHistoryOpen(false);setMemoryOpen(true);if(!id||memoryBusy)return;const serial=++memorySerial.current;setMemoryBusy(true);setMemoryFailed(false);setContext(null);
+    setMemoryOpen(true);if(!id||memoryBusy)return;const serial=++memorySerial.current;setMemoryBusy(true);setMemoryFailed(false);setContext(null);
     try{const next=await run(signal=>fetchConversationContext(scope.profileId,id,signal));if(!lifecycle.current.signal.aborted&&serial===memorySerial.current)setContext(next);}
     catch{if(!lifecycle.current.signal.aborted&&serial===memorySerial.current)setMemoryFailed(true);}finally{if(!lifecycle.current.signal.aborted&&serial===memorySerial.current)setMemoryBusy(false);}
   };
@@ -164,10 +163,12 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     <div className="chat-top">
       {/* The switcher at the top of the screen names this page too, so the
           name is not printed again here. See Menu's `label`. */}
-      {/* Past conversations, and what the reply was allowed to read. Both
-          open as sheets; neither is a column standing open beside a
-          conversation it is not part of. */}
-      <button type="button" aria-expanded={historyOpen} onClick={()=>{closeMemory();setHistoryOpen(value=>!value);}}>{say('worldConversationHistory')}</button>
+      {/* ALL CONVERSATIONS IS NOT HERE ANY MORE. It is the top-left corner
+          now, on every screen including this one, so a second door to the
+          same list sitting in this page's own row was the duplication the
+          corner was built to remove.
+          What is left is the one thing that belongs to THIS conversation:
+          what the reply was allowed to read. */}
       <button type="button" aria-expanded={memoryOpen} onClick={()=>memoryOpen?closeMemory():void memory()}>{say('worldChatMemory')}</button>
       {id||otherDrafts.length?<details className="chat-options"><summary aria-label={say('worldConversationOptions')}>···</summary><div className="chat-options-menu">
         {otherDrafts.length?<label>{say('worldShareDrafts')}<select value="" disabled={busy||Boolean(draft?.pending)||storageFailed} onChange={event=>{const selected=drafts.find(row=>row.value.id===event.target.value);if(selected){receipt.current=selected;draftRef.current=selected.value;setDraft(selected.value);}}}>
@@ -176,8 +177,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         {id?<button type="button" disabled={busy} onClick={()=>void remove()}>{say('worldConversationDelete')}</button>:null}
       </div></details>:null}
     </div>
-    {historyOpen||memoryOpen?<button type="button" className="chat-drawer-backdrop" aria-hidden="true" tabIndex={-1} onClick={()=>{setHistoryOpen(false);closeMemory();}}/>:null}
-    <ConversationHistory rows={rows} id={id} locale={locale} open={historyOpen} failed={historyFailed} onRetry={loadHistory} onClose={()=>setHistoryOpen(false)} onChoose={next=>{if(next===null&&!id&&!initialPrincipleId)editor.current?.focus();else onChoose(next);}}/>
+    {memoryOpen?<button type="button" className="chat-drawer-backdrop" aria-hidden="true" tabIndex={-1} onClick={closeMemory}/>:null}
     <section className="chat-main" aria-label={say('worldConversationTitle')}>
       {generationEnabled===false?<p className="chat-notice">{say('worldConversationFoundation')}</p>:null}
       {error?<div className="chat-notice" role="alert">{error} {!draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldRoomHistoryRetry')}</button>:null}

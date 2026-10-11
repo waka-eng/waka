@@ -102,9 +102,17 @@
  * viewport and are not in this flow.
  * ------------------------------------------------------------------------- */
 
+/**
+ * NOT A SECOND HEADER.
+ *
+ * This row sat under the centred title with its controls pushed to the right
+ * edge, which drew a second bar across the top of a screen that already has
+ * one. It holds a single quiet control now — what the reply was allowed to
+ * read — on the transcript's own column, so it reads as part of the
+ * conversation rather than as chrome above it.
+ */
 .chat-top {
   display: flex;
-  /* The row is controls only now; the name is on the switcher. */
   justify-content: flex-end;
   flex-wrap: wrap;
   align-items: baseline;
@@ -113,8 +121,8 @@
   max-width: 680px;
   box-sizing: border-box;
   margin: 0 auto;
-  padding: calc(var(--waka-corner) + var(--sp-12) + env(safe-area-inset-top))
-    clamp(20px, 6vw, 28px) var(--sp-12);
+  padding: calc(var(--waka-corner) + var(--sp-8) + env(safe-area-inset-top))
+    clamp(20px, 6vw, 28px) var(--sp-8);
 }
 
 
@@ -173,9 +181,27 @@
   flex-direction: column;
 }
 
+/**
+ * THE TRANSCRIPT SITS ON THE BOTTOM, ON THE COMPOSER'S OWN COLUMN.
+ *
+ * Two things were wrong and they compounded. The scroller carried its own
+ * gutters while the composer carried different ones, so the words and the box
+ * you type them into stood on two columns a few pixels apart — close enough
+ * to look like a mistake rather than a choice. And a short conversation was
+ * pinned to the TOP, leaving a thousand pixels of void between one sentence
+ * and the field. Founder: "so ugly."
+ *
+ * Messages grow upward from the box, the way they do in every conversation
+ * anyone has ever had on a screen. `justify-content: flex-end` on a scrolling
+ * flex column does exactly that and still scrolls normally once the content
+ * is taller than the frame.
+ */
 .chat-scroll {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0 clamp(20px, 6vw, 28px);
@@ -183,6 +209,9 @@
 }
 
 .chat-transcript {
+  /* The composer's column, to the pixel — they were a few apart, which reads
+     as a mistake rather than a choice. */
+  width: 100%;
   max-width: 680px;
   margin-inline: auto;
   padding-bottom: var(--sp-24);

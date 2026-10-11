@@ -32,8 +32,11 @@ it('retains the confirmed first question through the real new-to-id route withou
   expect(createConversation).toHaveBeenCalledOnce();expect(fetchConversation).not.toHaveBeenCalled();
   expect(host.querySelector('.chat-messages > li[data-role="user"]')?.textContent).toContain('What has changed in how I think?');
   expect(host.textContent).toContain('Waiting to start…');expect(host.textContent).not.toContain('This conversation couldn’t be opened.');
-  /* Starting over is in the conversations sheet now, not a standing column. */
-  await act(async()=>button('All conversations').click());await act(async()=>button('New conversation').click());expect(host.querySelectorAll('.chat-messages > li')).toHaveLength(0);
+  /* STARTING OVER MOVED TO THE CORNER, which this harness does not mount —
+     it renders the panel alone, so there is no "New conversation" button
+     here to press. What the test was really protecting is above and
+     unchanged: the committed first question survives the new-to-id route
+     without a second GET. */
 });
 it('clears the bootstrap on a profile switch instead of showing another owner’s committed question',async()=>{
   await render();await act(async()=>button('What has changed in how I think?').click());

@@ -145,11 +145,12 @@ it('sends on desktop Enter but preserves composition and Shift Enter',async()=>{
 });
 it('loads the current conversation even if its history list is unavailable',async()=>{
   vi.mocked(listConversations).mockRejectedValueOnce(new Error('List unavailable'));await mount();
-  /* The failure is reported inside the sheet the list lives in, not as a
-     page-level alarm about a secondary list — but the conversation you are
-     actually in opens regardless, which is what this is really testing. */
+  /* THE LIST IS NOT ON THIS PAGE ANY MORE — it is the top-left corner, on
+     every screen. What this has always really been testing survives and is
+     all that is asserted now: a conversation list that cannot be fetched
+     does not stop the conversation you are actually in from opening and
+     working. */
   expect(host.querySelector('textarea')).not.toBeNull();
-  await click('All conversations');expect(host.textContent).toContain('Couldn’t load your conversation list.');await click('close');
   await type('My conversation still works');await click('Save message');expect(saveConversationMessage).toHaveBeenCalledOnce();
 });
 it('restores a scoped non-bottom transcript position after reopening',async()=>{
@@ -159,12 +160,15 @@ it('restores a scoped non-bottom transcript position after reopening',async()=>{
   await act(async()=>root.unmount());root=createRoot(host);await mount();expect(host.querySelector<HTMLElement>('.jar-conversation-body')!.scrollTop).toBe(120);
   expect(fetchConversation).toHaveBeenLastCalledWith(scope.profileId,id,expect.any(AbortSignal),1);
 });
-it('keeps the two sheets mutually exclusive and preserves the composer behind their backdrop',async()=>{
+it('keeps the composer behind the memory sheet and its backdrop',async()=>{
+  /* There is one sheet on this page now: what the reply was allowed to read.
+     The conversation list moved to the corner, so "mutually exclusive" has
+     nothing left to be exclusive with — what still has to hold is that
+     opening the sheet does not cost a draft. */
   vi.mocked(fetchConversationContext).mockResolvedValue({profileId:scope.profileId,generationEnabled:false,principles:[],reading:[],inspirations:[]});
   await mount();await type('A draft behind the drawer');
-  await click('All conversations');
+  await click('Your memory');
   expect(host.querySelector('.chat-drawer-backdrop')).not.toBeNull();expect(host.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-  await click('Your memory');expect(host.querySelectorAll('[role="dialog"]')).toHaveLength(1);expect(host.querySelector('.chat-sidebar')).toBeNull();
   await act(async()=>host.querySelector<HTMLButtonElement>('.chat-drawer-backdrop')!.click());
   expect(host.querySelector('[role="dialog"]')).toBeNull();expect(host.querySelector('textarea')!.value).toBe('A draft behind the drawer');
 });
@@ -220,7 +224,6 @@ it('loads earlier words while preserving the visible scroll anchor and original 
   vi.mocked(fetchConversation).mockResolvedValueOnce({...stored,messageWindowStart:1,messages});
   await click('Load earlier messages');expect(fetchConversation).toHaveBeenLastCalledWith(scope.profileId,id,expect.any(AbortSignal),1);
   expect(host.querySelectorAll('.chat-messages > li')).toHaveLength(60);expect(scroll.scrollTop).toBe(3010);
-  await click('All conversations');expect(host.querySelector('.chat-sidebar nav')?.textContent).toContain('The original human topic');await click('close');
   expect(host.textContent).not.toContain('Load earlier messages');expect(saveConversationMessage).not.toHaveBeenCalled();
 });
 it('an earlier-read failure preserves current messages and the unfinished draft',async()=>{
@@ -282,10 +285,11 @@ it.each(['principle','inspiration'] as const)('continues from a verified %s prev
   await type('');await click('Discuss this');expect(saveConversationMessage).toHaveBeenCalledOnce();
   expect(vi.mocked(saveConversationMessage).mock.calls[0][2]).toMatchObject({content:'“Verified words for this topic.”\n\nLet’s explore this idea further.',requestReply:true});
 });
-it('keeps the local sidebar title aligned with the actual human topic',async()=>{
-  stored.messages=[{id:'first',role:'user',profileId:scope.profileId,conversationId:id,position:1,content:'Help me think through a choice.',createdAt:stored.createdAt},{id:'second',role:'user',profileId:scope.profileId,conversationId:id,position:2,content:'Should I take the evening course?',createdAt:stored.createdAt}];
-  await mount();await click('All conversations');expect(host.querySelector('.chat-sidebar nav')?.textContent).toContain('Should I take the evening course?');
-});
+/* THE LOCAL SIDEBAR TITLE TEST WENT WITH THE SIDEBAR. It asserted that the
+   in-page list named a conversation by its first HUMAN line rather than by
+   whatever happened to be first — a real rule, and it now belongs to the
+   corner that owns that list. `conversationPreview` still holds it and is
+   still covered by its own suite. */
 it('sends a starter in one click instead of requiring another Send',async()=>{
   stored.generationEnabled=true;await mount();await click('What has changed in how I think?');
   expect(saveConversationMessage).toHaveBeenCalledExactlyOnceWith(scope.profileId,id,expect.objectContaining({content:'What has changed in how I think?',requestReply:true}),expect.any(AbortSignal));
