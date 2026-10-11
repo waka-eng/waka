@@ -13604,28 +13604,77 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         ) : null}
                       </p>
                     ) : null}
+                    {/* ────────────────────────────────────────────────────
+                        WHAT A PERSON WANTS TO DO WITH A SENTENCE ABOUT
+                        THEMSELVES IS ANSWER IT.
+
+                        Founder, on a screenshot of this block: "Just changing
+                        the text and removing duplicate is not enough. Just
+                        rethink the full interaction here. When the user looks
+                        at this top of mind, what would they want to do? How
+                        would they want to do that interaction? This is
+                        definitely not the right way."
+
+                        WHAT WAS HERE: `Write a new one` · `Keep on top` ·
+                        `Edit wording` · `Not this` — and every one of them is
+                        a way to MAINTAIN THE ARTIFACT. Regenerate it, pin it,
+                        retype it, discard it. Not one of them is a way to
+                        RESPOND TO THE OBSERVATION, which is the only thing
+                        that actually happens in a person's head when they
+                        read a sentence claiming to describe them. The
+                        reaction is involuntary and immediate — "...is that
+                        me?" — and the surface handed it a filing cabinet.
+
+                        THE RIGHT INTERACTION WAS ALREADY IN THE PRODUCT, two
+                        hundred pixels below this one. The creature's claim
+                        asks a statement and offers three peer answers, one of
+                        which opens a field to say what is closer
+                        (`jar-char-claim-answers`, and `setCorrecting` under
+                        "not true"). Two sentences about you were on one
+                        screen asking for the same thing in two different
+                        languages, and the one nobody complained about is the
+                        one that asks a question.
+
+                        So this is that model transposed, not a new invention:
+
+                          Yes       it holds — `holdLead`, settles at once
+                          Not quite opens the field — `editing.begin`, the
+                                    same shape as the claim's "not true"
+                          Not me    `dropLead`, settles at once and stays
+                                    undoable through `undrop` below
+
+                        AND THE MAINTENANCE VERBS DO NOT DISAPPEAR, THEY STOP
+                        PRETENDING TO BE ANSWERS. "Write a new one" is now
+                        beside the line that reports the reading has fallen
+                        behind — a remedy belongs next to the complaint it
+                        answers, not in a row of replies to a question it is
+                        not an answer to. "Hand it back to WAKA" only exists
+                        once you have written the sentence yourself, which
+                        makes it a fact about this sentence rather than a
+                        response to it, so it goes to the same quiet line.
+
+                        AT REST THE BLOCK IS ONE LINE: the question. Four
+                        permanent verbs made "a sentence with a toolbar under
+                        it — furniture, which this layout does not have", and
+                        that objection still stands; a question is not
+                        furniture, it is the shortest possible statement of
+                        what the surface is for. Pressing the sentence has
+                        been how you open it since 2026-08-24; now the thing
+                        it opens is an answer rather than an inventory.
+                        ──────────────────────────────────────────────────── */}
+                    {here && w.kind === "self" && !offline && lead && !editing.open && !posterAsk && board.step === "rest" ? (
+                      <p className="jar-poster-invite" data-jar-chrome="1">{say("worldIsThisYou")}</p>
+                    ) : null}
                     {here &&
                     w.kind === "self" &&
                     !offline &&
                     lead &&
                     !editing.open &&
-                    /* ONLY WHEN ASKED FOR. These four — refresh, hold up, edit
-                       wording, not this — are how you MANAGE the reading, and
-                       the home screen holds the reading, the character and the
-                       box. The row used to force itself open whenever
-                       `readingMessage` was set, which is any time the reading
-                       has fallen behind its own support, so a four-verb toolbar
-                       appeared under the sentence without anyone asking for one.
-
-                       Pressing the sentence is already how you ask it what it
-                       rests on (founder, 2026-08-24). Its verbs belong in that
-                       same gesture rather than printed beside it.
-
-                       `board.step !== "rest"` stays: a confirmation already in
+                    /* `board.step !== "rest"` stays: a confirmation already in
                        flight must not be hidden out from under the person who
                        started it. */
                     (posterAsk || board.step !== "rest") ? (
-                      <div className={`jar-board-acts${readingMessage !== null ? " jar-reading-status" : ""}`} data-jar-chrome="1">
+                      <div className="jar-board-acts jar-board-acts--answers" data-jar-chrome="1">
                         {readingRefresh.busy ? (
                           <span className="jar-board-act" role="status">{say(readingMessage ?? "worldReadingNow")}</span>
                         ) : board.step === "asking" ? (
@@ -13657,120 +13706,120 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           </>
                         ) : (
                           <>
-                            {readingMessage || boardToast ? (
-                              <span className="jar-board-warn" role="status">
-                                {readingMessage ? say(readingMessage) : boardToast}
-                              </span>
-                            ) : null}
-                            {/* "REFRESH READING" -> "WRITE A NEW ONE", because
-                                the name was the defect and not the verb.
-                                Founder: "i dont get what these 4 options
-                                mean."
-
-                                "Refresh" is what you do to a web page. It
-                                describes a mechanism — re-run the generator —
-                                rather than the thing that happens, which is
-                                that WAKA writes you a new sentence from what
-                                you have saved since. Said that way it is the
-                                one verb here nobody has to be taught.
-
-                                An earlier attempt at this REMOVED the verb,
-                                on the argument that a reading re-forms when
-                                its material changes so a manual refresh says
-                                the promise is not trusted. That argument is
-                                decent and the change was wrong: it orphaned
-                                the confirm step below it, leaving a branch
-                                with nothing able to open it — the exact
-                                unreachable-code shape this file has spent the
-                                night deleting elsewhere. A control nobody
-                                understands is fixed by naming it. */}
-                            <button
-                              type="button"
-                              className="jar-board-act"
-                              disabled={readingChecking}
-                              onClick={() => readingCheckFailed ? verifyReadingRef.current(true)
-                                : readingRefresh.canResume ? void readingRefresh.start() : setBoard({ step: "asking" })}
-                            >
-                              {say(readingCheckFailed || readingChecking ? "worldReadingCheckAgain" : readingRefresh.canResume ? "worldReadCheck" : "worldWriteANewOne")}
-                            </button>
-                            {/* HOLDING IS A STATE, AND IT STOPS SITTING IN THE
-                                ROW OF VERBS. Founder: "i dont get what these
-                                4 options mean (held up isnt even clickable)."
-
-                                Exactly — it never was. `holdTopOfMindEntry`
-                                has no inverse BY DESIGN, stated where it is
-                                implemented: "you either keep a statement or
-                                you say it is not you; a toggle back through
-                                'held' would be a third state that means
-                                nothing." That reasoning is right and it is
-                                not what was wrong. What was wrong is that a
-                                state was drawn in the same uppercase label
-                                register, at the same size, in the same row,
-                                as three things you press — so the only way to
-                                discover it was not a control was to press it
-                                and get nothing. A dead press is the shape
-                                this codebase keeps relearning.
-
-                                Holding is the person overruling the ordering:
-                                the server keeps feeding the entry but never
-                                moves it off the poster again. Said once, in
-                                the statement's own provenance band, where the
-                                other facts about this sentence already live. */}
-                            {lead.pinned ? null : (
+                            <p className="jar-poster-ask">{say("worldIsThisYou")}</p>
+                            {/* THREE PEERS, AND NO PRIMARY — the claim's own
+                                rule, for the claim's own reason: a filled or
+                                lit "yes" is the brightest thing on the screen
+                                and puts a thumb on the scale of every
+                                principle written downstream. */}
+                            <p className="jar-poster-answers">
                               <button
                                 type="button"
-                                className="jar-board-act"
-                                onClick={() => holdLead(lead)}
+                                aria-pressed={lead.pinned ? true : undefined}
+                                /* ALREADY SAID IS NOT A REASON TO HIDE IT.
+                                   `holdTopOfMindEntry` has no inverse by
+                                   design, and the old row answered that by
+                                   REMOVING the control once used — so a row
+                                   of three became a row of two with no
+                                   explanation, and the answer you gave left
+                                   no trace. It renders as answered instead,
+                                   in the register the claim already uses for
+                                   exactly this. */
+                                onClick={() => { if (!lead.pinned) holdLead(lead); }}
                               >
-                                {say("worldKeepThisOneUp")}
+                                {say("worldYes")}
                               </button>
-                            )}
-                            <button
-                              type="button"
-                              className="jar-board-act"
-                              onClick={() => editing.begin("entry", lead.id, lead.body)}
-                            >
-                              {say("worldSayItInMyWordsCap")}
-                            </button>
-                            {lead.locked ? (
-                              entrusting === lead.id ? (
-                                <>
-                                  <span className="jar-board-warn">
-                                    {say(RECEIPTS.releaseOffer.messageKey)}
+                              <button
+                                type="button"
+                                onClick={() => editing.begin("entry", lead.id, lead.body)}
+                              >
+                                {say("worldNotQuite")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => dropLead(lead)}
+                              >
+                                {say("worldNotMe")}
+                              </button>
+                            </p>
+                            {/* THE QUIET LINE: facts about this sentence, and
+                                the remedies for them. Never answers. */}
+                            {/* ALWAYS MOUNTED, not only when the reading has
+                                fallen behind. A first pass gated this whole
+                                line on `readingMessage || boardToast ||
+                                lead.locked`, which reads fine and means that
+                                asking for a new sentence is only possible
+                                once WAKA has decided one is needed — the
+                                person loses the verb precisely when they are
+                                content enough with the reading to want to
+                                push on it. The STALENESS LINE is conditional,
+                                because it reports something; the remedy is
+                                not, because it is a thing you may want. */}
+                            <p className="jar-poster-aside">
+                                {readingMessage || boardToast ? (
+                                  <span className="jar-board-warn" role="status">
+                                    {readingMessage ? say(readingMessage) : boardToast}
                                   </span>
-                                  <button
-                                    type="button"
-                                    className="jar-board-act"
-                                    onClick={() => entrustLead(lead.id)}
-                                  >
-                                    {say("worldHandItBackCap")}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="jar-board-act"
-                                    onClick={() => setEntrusting(null)}
-                                  >
-                                    {say("worldLeaveItAsItIsCap")}
-                                  </button>
-                                </>
-                              ) : (
+                                ) : null}
+                                {/* "REFRESH READING" -> "WRITE A NEW ONE", because
+                                    the name was the defect and not the verb.
+                                    Founder: "i dont get what these 4 options
+                                    mean." "Refresh" is what you do to a web
+                                    page — it describes a mechanism rather than
+                                    the thing that happens, which is that WAKA
+                                    writes you a new sentence from what you have
+                                    saved since.
+
+                                    It stays mounted whether or not the reading
+                                    has fallen behind: an earlier attempt at
+                                    tidying this REMOVED the verb and orphaned
+                                    the confirm step above, leaving a branch
+                                    nothing could open. */}
                                 <button
                                   type="button"
-                                  className="jar-board-act jar-star-act"
-                                  title={say(RECEIPTS.starHeld.messageKey)}
-                                  onClick={() => setEntrusting(lead.id)}
+                                  className="jar-board-act"
+                                  disabled={readingChecking}
+                                  onClick={() => readingCheckFailed ? verifyReadingRef.current(true)
+                                    : readingRefresh.canResume ? void readingRefresh.start() : setBoard({ step: "asking" })}
                                 >
-                                  {say("worldHandItBackToWaka")}
+                                  {say(readingCheckFailed || readingChecking ? "worldReadingCheckAgain" : readingRefresh.canResume ? "worldReadCheck" : "worldWriteANewOne")}
                                 </button>
-                              )
-                            ) : null}
-                            <button
-                              type="button"
-                              className="jar-board-act jar-board-act--quiet"
-                              onClick={() => dropLead(lead)}
-                            >
-                              {say("worldNotThis")}
-                            </button>
+                                {/* Only exists once the sentence is yours, so
+                                    it is a fact about the sentence and not a
+                                    reply to the question above. */}
+                                {lead.locked ? (
+                                  entrusting === lead.id ? (
+                                    <>
+                                      <span className="jar-board-warn">
+                                        {say(RECEIPTS.releaseOffer.messageKey)}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="jar-board-act"
+                                        onClick={() => entrustLead(lead.id)}
+                                      >
+                                        {say("worldHandItBackCap")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="jar-board-act"
+                                        onClick={() => setEntrusting(null)}
+                                      >
+                                        {say("worldLeaveItAsItIsCap")}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="jar-board-act jar-star-act"
+                                      title={say(RECEIPTS.starHeld.messageKey)}
+                                      onClick={() => setEntrusting(lead.id)}
+                                    >
+                                      {say("worldHandItBackToWaka")}
+                                    </button>
+                                  )
+                                ) : null}
+                              </p>
                           </>
                         )}
                       </div>

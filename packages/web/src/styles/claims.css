@@ -2359,7 +2359,24 @@
   outline-offset: 2px;
 }
 
-.jar-char-claim-answers {
+/**
+ * ONE REGISTER FOR "RESPOND TO A STATEMENT ABOUT YOURSELF".
+ *
+ * `.jar-poster-answers` joined this rule on 2026-10-11. Until then the home
+ * screen carried TWO sentences about the person — the creature's claim and
+ * the top of mind above it — and asked for the same thing in two different
+ * languages: three pills with a question over them down here, and four
+ * plain-text maintenance verbs up there (`Write a new one`, `Keep on top`,
+ * `Edit wording`, `Not this`). The founder: "rethink the full interaction
+ * here... This is definitely not the right way."
+ *
+ * The verbs were the defect, not their wording — every one of them managed
+ * the artifact and none of them answered the observation. This register is
+ * what answering looks like in this product, and it already existed. See the
+ * block in `pages/Home.tsx` for the mapping onto the board's operations.
+ */
+.jar-char-claim-answers,
+.jar-poster-answers {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -2367,7 +2384,8 @@
   margin: 0;
 }
 
-.jar-char-claim-answers button {
+.jar-char-claim-answers button,
+.jar-poster-answers button {
   /* 44, not 36: the smallest target a thumb reliably hits, and these three
      are the only thing on the home screen the product asks a person to
      press. They were below the floor on exactly the device that has no
@@ -2421,7 +2439,8 @@
    while there is room and never asks a label to fold. */
 /* WHAT YOU CHOSE, once you have chosen. The press is what earns the light —
    this is the same channel, spent on a fact instead of on a suggestion. */
-.jar-char-claim-answers button[aria-pressed="true"] {
+.jar-char-claim-answers button[aria-pressed="true"],
+.jar-poster-answers button[aria-pressed="true"] {
   border-color: color-mix(in srgb, var(--ink) 40%, transparent);
   color: var(--ink);
 }
