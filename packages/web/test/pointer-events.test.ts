@@ -150,9 +150,13 @@ const MUST_TAKE_A_PRESS: ReadonlyArray<readonly [string, string, readonly string
   /* THE SAVE BOX'S GROUND. It is `none` so the world stays draggable around
      the field; the field, its slots and the armed destination opt back in. */
   ["home.css", ".jar-mouth", ["jar-mouth-rest", "jar-mouth-field", "jar-mouth-slot--note"]],
-  /* The destination label becomes pressable only once it is armed, which is
-     the one case where `none` -> `auto` is a STATE rather than an omission. */
-  ["home.css", ".jar-mouth-where", ["jar-mouth-where--armed"]],
+  /* `.jar-mouth-where` LEFT THIS LIST WITH THE CONTROL IT GUARDED.
+     The destination label — "only me" / "share with rooms" — went when the
+     room concept did, and its rules outlived it in `home.css` by weeks
+     because this case kept them honest-looking: a gate asserting that a
+     dead rule still behaves correctly reads exactly like a gate doing its
+     job. Eleven e2e gates were also still driving the same selector; see
+     `tools/e2e/keep.ts`. Deleted in the sweep that deleted the rules. */
   /* A room's board: live rooms take presses, the rest are a backdrop. */
   ["home.css", ".jar-values-room", ["jar-values-room--live"]],
 ];

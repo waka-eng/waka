@@ -214,7 +214,6 @@
 .jar-dial-stop {
   --t-label-size: var(--t-meta);
 }
-.jar-mouth-where,
 .jar-panel-vis,
 .jar-grounds,
 .jar-capture-shortcut {
@@ -489,12 +488,12 @@
 .jar-reading-actions button { min-height:var(--sp-44); padding:var(--sp-8) 0; border:0; background:none; color:var(--w-muted); font:inherit; font-size:var(--t-body); text-align:left; cursor:pointer; }
 .jar-forming.jar-forming--personal { font-size:var(--t-body); font-style:normal; color:var(--w-muted); line-height:1.6; }
 .jar-first-capture-hint { margin:var(--sp-8) 0; color:var(--w-muted); font-size:var(--t-ui); line-height:1.6; }
-.jar-personal-navigation { position:absolute; z-index:6; bottom:calc(var(--sp-12) + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:grid; grid-template-columns:repeat(4,auto); gap:var(--sp-4); width:min(520px,calc(100vw - var(--sp-16))); padding:var(--sp-4); border-radius:var(--sp-16); background:color-mix(in srgb,var(--jar-atmos) 90%,transparent); pointer-events:auto; }
-.jar-personal-navigation[hidden] { display:none; }
-.jar-personal-navigation button { min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8) var(--sp-4); border:0; border-radius:var(--sp-8); background:none; color:var(--w-muted); font:inherit; font-size:var(--t-ui); white-space:nowrap; cursor:pointer; }
-.jar-personal-navigation button[aria-current="page"],.jar-personal-navigation button:hover,.jar-personal-navigation button:focus-visible { color:var(--w-ink); background:color-mix(in srgb,var(--w-ink) 8%,transparent); }
-.jar-personal-navigation button:focus-visible { text-decoration:underline; text-underline-offset:var(--sp-4); }
-.jar-personal-navigation button:disabled { opacity:.5; cursor:progress; }
+
+
+
+
+
+
 .jar-capture-receipt { pointer-events:auto; display:flex; align-items:center; justify-content:center; gap:var(--sp-12); margin-top:var(--sp-8); color:var(--w-muted); font-size:var(--t-ui); }
 .jar-capture-receipt button { min-height:var(--sp-44); padding:var(--sp-8); border:0; background:none; color:var(--w-ink); font:inherit; cursor:pointer; }
 .jar-capture-receipt button:hover,.jar-capture-receipt button:focus-visible { text-decoration:underline; text-underline-offset:var(--sp-4); }
@@ -917,10 +916,10 @@
 /* Throwing out the sentence you are standing on is one step quieter than
    keeping it, and it never wears a colour — this world spends temperature on
    aliveness alone. */
-.jar-board-act--quiet { opacity: 0.45; }
-.jar-board-act--quiet:hover { opacity: 0.85; }
+
+
 /* Held is a state, not an action: it does not offer to undo itself. */
-.jar-board-act--held { cursor: default; opacity: 0.5; }
+
 /* What a rewrite will do, said before it does it. */
 /* NO ITALIC, HERE OR ANYWHERE. Founder: "can we make the font consistent
    across all the experience? I don't know what the weird cursive thing is."
@@ -1089,7 +1088,6 @@
    wearing it inside a signpost silently overrode the sign's ink — which is
    exactly how the four drifted to three different tiers. The label register's
    TYPE is what these want from it; the colour comes from the sign. */
-.jar-values-words,
 .jar-saved-count {
   display: block;
   color: inherit;
@@ -1213,7 +1211,7 @@
   gap: var(--sp-8) var(--sp-20);
 }
 .jar-principle-actions > button { min-height: 44px; font-size:var(--t-ui); color:var(--jar-ink); }
-.jar-values .jar-values-words { font-size:var(--t-ui); font-weight:400; letter-spacing:normal; text-transform:none; }
+
 .jar-board-acts button.jar-board-act { font-size:var(--t-ui); letter-spacing:normal; text-transform:none; }
 .jar-principle-secondary {
   display: flex;
@@ -1496,16 +1494,7 @@
   text-align: left;
 }
 /* which memory this is about, in one line and never the whole thing */
-.jar-reflect-on {
-  margin: 0 0 var(--sp-14);
-  font-size: var(--t-ui);
-  line-height: 1.5;
-  color: var(--jar-muted);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
+
 .jar-reflect-room .jar-reflect-box {
   width: 100%;
 }
@@ -1516,28 +1505,9 @@
    they also grew a second question INTO the one row that answers "where am I".
    Here each has a name and a sentence, which is what a person actually needs
    to choose between them. */
-.jar-seek.jar-newplace {
-  width: min(440px, calc(100vw - 48px));
-}
-.jar-newplace-row {
-  display: block;
-  width: 100%;
-  margin: var(--sp-12) 0 0;
-  padding: 0 0 0 var(--sp-12);
-  border: 0;
-  border-left: 1px solid var(--jar-edge, var(--jar-panel-edge));
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.2s ease;
-}
-.jar-newplace-row:hover,
-.jar-newplace-row:focus-visible {
-  border-left-color: var(--jar-ink);
-  outline: none;
-}
+
+
+
 /* the way to make one, at the foot of the list of the ones you have */
 /* ---------- how much is down there, and the way to it ----------
    The ground is a whole section below headquarters and nothing on the resting
@@ -1973,9 +1943,7 @@
   transition: opacity 0.3s ease, color 0.2s ease;
 }
 /* placed by its wall's column, so the inline `left` is its RIGHT edge */
-.jar-way--r {
-  transform: translateX(-100%);
-}
+
 @media (max-width: 600px) {
   .jar-way { max-width: 28vw; }
 }
@@ -2345,27 +2313,10 @@
    there are words. Reserving the height is what keeps the typing line from
    jumping when the choice appears; inert while invisible, so the empty mouth
    still offers no control. */
-.jar-mouth-where {
-  /* The same uppercase label voice as the card's privacy choice, now at the
-     readable control step: these are decisions, not metadata. */
-  gap: 5px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.18s ease;
-}
-.jar-mouth-where button {
-  font-size: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  font-weight: 500;
-  min-height: 30px;
-  padding: 5px var(--sp-4);
-}
-.jar-mouth-where .jar-where-off { color: var(--jar-muted); }
-.jar-mouth-where--armed {
-  opacity: 1;
-  pointer-events: auto;
-}
+
+
+
+
 .jar-mouth-field::-webkit-scrollbar {
   width: 6px;
 }
@@ -3831,7 +3782,6 @@
   /* the verbs under it: 11px -> 44px. The row grows, and on a phone that is
      the right trade — these decide who may read a memory and whether it is
      kept at all. */
-  .jar-mouth-where button,
   .jar-panel-vis button {
     /* 17, not 16: the words are 11px tall, so 16 each side lands on 43 and the
        gate reports it one pixel short — which is the gate doing its job */
@@ -4420,10 +4370,7 @@
 /* the capture's destination line: under the words, in the same quiet register
    as every other row of choices, and present only once there is something to
    send anywhere */
-.jar-mouth-where {
-  margin-top: var(--sp-8);
-  justify-content: center;
-}
+
 
 /* WHO HAS SAID YES, WHO HAS SAID NO, AND WHO HAS NOT — the room read as
    people rather than as a score. Agreed is full ink; not yet is the same

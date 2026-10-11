@@ -243,15 +243,6 @@ const FIXTURE = `<!doctype html>
   </div>
 
   <div class="jar-mouth-slot">
-    <p class="jar-ask jar-ask--row jar-mouth-where jar-mouth-where--armed">
-      <button type="button" class="jar-where-on">private</button>
-      <span aria-hidden="true">/</span>
-      <button type="button" class="jar-where-off">public</button>
-      <span aria-hidden="true" class="jar-mouth-dot"> &middot; </span>
-      <button type="button" class="jar-where-on">save</button>
-      <span aria-hidden="true" class="jar-mouth-dot"> &middot; </span>
-      <button type="button" class="jar-where-off">reflect</button>
-    </p>
   </div>
 
   <div class="jar-settings" data-jar-chrome="1" role="dialog">
@@ -345,7 +336,7 @@ const BOXES = `(() => {
     inkCaretUp: ink(".jar-caret--up"), inkCaretLeft: ink(".jar-caret--left"),
     inkCaretRight: ink(".jar-caret--right"),
     /* the two rows of quiet verbs: the card's head and the mouth's foot */
-    typeVis: ink(".jar-panel-vis button"), typeMouth: ink(".jar-mouth-where button"),
+    typeVis: ink(".jar-panel-vis button"),
     typeWhen: ink(".jar-panel-when"),
   };
 })()`;
@@ -631,8 +622,8 @@ const CASES: Case[] = [
   {
     id: "verb-rows-one-register",
     name: "every row of quiet verbs is set in the label register",
-    needs: ["jar-panel-vis", "jar-mouth-where"],
-    sabotage: ".jar-mouth-where button { font-size: 13px; text-transform: none; }",
+    needs: ["jar-panel-vis"],
+    sabotage: ".jar-panel-vis button { font-size: 13px; text-transform: none; }",
     run: async (page) => {
       /* THE MISS THIS CASE EXISTS FOR. `private/public` was brought to the
          label register on the CARD and left at `.jar-ask`'s 13px prose in the
