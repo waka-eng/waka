@@ -72,25 +72,38 @@ const VIEWS: ReadonlyArray<{
   id: string;
   label: MenuItem["label"];
   path: string;
-  explain: ReadonlyArray<MenuItem["label"]>;
+  /**
+   * ONE PARAGRAPH, NOT A LIST OF FACTS.
+   *
+   * Founder: "make it a single paragraph. Don't split it into separate
+   * sentences. Just have one to two sentences in the same paragraph that
+   * explains it intuitively."
+   *
+   * The list form was wrong for what this is. Three stacked clauses read as
+   * a specification — things you are expected to retain — when the question
+   * is only "what is this". A paragraph is read once and understood; a list
+   * is scanned and remembered, and nobody wants to remember what a tab
+   * means.
+   */
+  explain: MenuItem["label"];
 }> = [
   {
     id: "inspirations",
     label: "worldMenuField",
     path: "/inspirations",
-    explain: ["worldFieldWhatMade", "worldFieldWhatShelves"],
+    explain: "worldFieldWhatIs",
   },
   {
     id: "top-of-mind",
     label: "worldMenuTopOfMind",
     path: "/",
-    explain: ["worldReadingWhatMade", "worldReadingWhatCounts", "worldReadingWhatChanges"],
+    explain: "worldReadingWhatIs",
   },
   {
     id: "principles",
     label: "worldPrinciplesShortcut",
     path: "/principles",
-    explain: ["worldPrinciplesWhatMade", "worldPrinciplesWhatChanges"],
+    explain: "worldPrinciplesWhatIs",
   },
 ];
 
@@ -136,7 +149,7 @@ export function usePageMenu(locale: SupportedLocale, accountId?: string | null):
               ? `/w/${encodeURIComponent(standing.id)}`
               : view.path,
           ),
-        explain: view.explain.map((key) => t(locale, key)),
+        explain: t(locale, view.explain),
       })),
       current: here,
       standing,
