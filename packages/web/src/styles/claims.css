@@ -1104,141 +1104,184 @@
 }
 
 /* ---------------------------------------------------------------------------
- * YOUR CONVERSATIONS
+ * YOUR CONVERSATIONS — A RAIL DOWN THE LEFT
  *
- * A list, because what a person wants here is almost always "the one about X,
- * from last week". The preview is the first line that has words in it and the
- * date sits at the end of the row, which is the only two things you recognise
- * a past conversation by.
+ * Founder: "When clicking on the top left chat icon, let's open up a left
+ * sidebar to show the past chats. And let's just like follow basically what
+ * we have in the cloud like this."
+ *
+ * The other two overlays open centred, and that is right for them: a grid of
+ * saves and a set of principle cards are both READ, and reading wants the
+ * middle of the screen. A conversation list is SCANNED — you arrive already
+ * knowing you want the one about X from last week — and scanning wants tall
+ * and narrow, beside the thing you are bringing it back into rather than on
+ * top of it. It is also the shape every chat history already has, which is
+ * the whole argument: a person who has used one knows where their own
+ * conversation went without being told.
+ *
+ * It is anchored to the corner it opens from. A rail arriving from the left
+ * while the press happened at the top-left is a surface coming from where you
+ * touched; one sliding up from the bottom would not be.
  * ------------------------------------------------------------------------- */
 
-.waka-talks {
+.waka-rail-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  background: var(--waka-scrim);
+}
+
+.waka-rail {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(21rem, 86vw);
   display: flex;
   flex-direction: column;
+  gap: var(--sp-16);
+  padding: calc(var(--sp-16) + env(safe-area-inset-top)) var(--sp-20)
+    calc(var(--sp-20) + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* A hairline, not a shadow: the rail meets the world along a straight edge
+     rather than floating over it, which is what makes it read as chrome
+     rather than as a third sheet. */
+  border-right: 1px solid var(--line);
+  background: var(--waka-raised);
+}
+
+.waka-rail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-12);
+}
+
+.waka-rail-title {
   margin: 0;
+  font-family: var(--waka-face);
+  font-size: var(--t-lead);
+  font-weight: 300;
+  color: var(--ink);
+}
+
+.waka-rail-new {
+  align-self: stretch;
+  min-height: 44px;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.waka-rail-new:hover,
+.waka-rail-new:focus-visible {
+  border-color: var(--ink);
+  outline: none;
+}
+
+.waka-rail-list ul {
+  margin: 0 0 var(--sp-20);
   padding: 0;
   list-style: none;
 }
 
-/* THE ROW IS A CONTAINER NOW, because it carries two acts: open it, and
-   erase it. The hairline and the hover still belong to the whole row, so
-   they stay here rather than moving onto the control that fills it. */
-.waka-talks-row {
+/* THE DAY IS THE HEADING, so no row carries its own date — which takes a date
+   off every line of a list whose whole job is to be scanned. */
+.waka-rail-day {
+  margin: var(--sp-16) 0 var(--sp-4);
+  color: var(--muted);
+}
+
+.waka-rail-item {
   display: flex;
   align-items: baseline;
-  gap: var(--sp-16);
-  width: 100%;
-  min-height: 44px;
-  padding: var(--sp-12) var(--sp-8);
-  /* A hairline between rows rather than a box around each: these are one
-     list, and twelve bordered cards would read as twelve surfaces. */
-  border-bottom: 1px solid var(--line);
+  gap: var(--sp-8);
 }
 
-.waka-talks li:last-child .waka-talks-row {
-  border-bottom: 0;
-}
-
-.waka-talks-row:hover,
-.waka-talks-row:focus-within {
-  background: var(--cell);
-}
-
-/* Opening is the row's whole width minus whatever the delete takes, so the
-   press target stays the size of the thing you are aiming at. */
-.waka-talks-open {
+.waka-rail-row {
   flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-16);
-  padding: 0;
+  min-height: 44px;
+  padding: var(--sp-4) 0;
   border: 0;
   background: transparent;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-body);
+  font-weight: 300;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.waka-talks-open:focus-visible {
+.waka-rail-row:focus-visible {
   outline: none;
 }
 
-/* THE DESTRUCTIVE VERB IS THE QUIETEST THING ON THE ROW, and only inks when
-   reached for. It is beside a list people scan, so anything louder would be
-   read as the row's purpose. */
-.waka-talks-del,
-.waka-talks-ask button {
+.waka-rail-del,
+.waka-rail-ask button {
   flex: 0 0 auto;
   min-height: 44px;
   padding: 0 var(--sp-4);
   border: 0;
   background: transparent;
-  color: var(--muted);
+  /* Transparent until reached for: a destructive verb on every row of a list
+     people scan reads as the row's purpose. */
+  color: transparent;
   font-family: var(--waka-face);
   font-size: var(--t-fine);
   cursor: pointer;
   white-space: nowrap;
 }
 
-.waka-talks-del:hover,
-.waka-talks-del:focus-visible,
-.waka-talks-ask button:hover,
-.waka-talks-ask button:focus-visible {
+.waka-rail-item:hover .waka-rail-del,
+.waka-rail-item:focus-within .waka-rail-del,
+.waka-rail-ask button {
+  color: var(--muted);
+}
+
+.waka-rail-del:hover,
+.waka-rail-del:focus-visible,
+.waka-rail-ask button:hover,
+.waka-rail-ask button:focus-visible {
   color: var(--ink);
 }
 
-/* The ask replaces the verb in place: a sheet over a list would make you
-   lose your place in the list to answer a question about one line of it. */
-.waka-talks-ask {
-  /* IT MAY SHRINK, and it could not. `flex: 0 0 auto` pinned this group at
-     its widest — the warning sentence plus two verbs, 334px — inside a row
-     that is 230px wide on a 320px phone, so it hung 83px off the right of
-     the overlay (measured 2026-10-10: +83 at 320, +43 at 360, +13 at 390,
-     and still 34px past the overlay's content box at 414). Worse, the open
-     button beside it is `flex: 1 1 auto`, so ALL of the shrinking landed
-     there and it measured ZERO pixels wide: answering "are you sure" cost
-     you the ability to see which conversation you were answering about.
-     Shrinking lets the wrap this group already declares actually engage; the
-     phone breakpoint at the foot of this file gives it its own line. */
-  flex: 0 1 auto;
-  min-width: 0;
+/* Where there is no hover to reveal it, it is simply always there. */
+@media (hover: none) {
+  .waka-rail-del {
+    color: var(--muted);
+  }
+}
+
+.waka-rail-ask {
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--sp-4) var(--sp-8);
+  gap: var(--sp-4);
 }
 
-/* DISABLED DIMS THE FILL, NEVER THE LABEL. This product has shipped the
-   blank-rectangle bug before — a darkened label on a light fill on a dark
-   theme reads as an empty box. There is no fill here, so the label simply
-   stays legible and the cursor says it is busy. */
-.waka-talks-go:disabled {
+/* No fill to dim, so the label stays legible and the cursor carries it. */
+.waka-rail-go:disabled {
   color: var(--muted);
   cursor: progress;
 }
 
-.waka-talks-warn {
+.waka-rail-warn {
   flex: 1 1 100%;
   font-family: var(--waka-face);
   font-size: var(--t-meta);
-  color: var(--muted);
-}
-
-.waka-talks-words {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-family: var(--waka-face);
-  font-size: var(--t-body);
-  font-weight: 300;
-  color: var(--ink);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.waka-talks-when {
-  flex: 0 0 auto;
   color: var(--muted);
 }
 
@@ -2079,6 +2122,14 @@
 
 /* The one sentence with weight. Same face and the same light weight as the
    reading above it — it is the same kind of thing, said earlier. */
+/* `.jar-char-claim-from` IS GONE WITH THE LIST IT DRESSED. Founder, on a
+   screenshot of three evidence lines under a claim: "makes the page messy",
+   and before that "we need to remove this or else it's gonna not have enough
+   space." The claim's slot has a reserved height now so the creature cannot
+   move when you change faces, and a list that grows by one line per save is
+   the one thing that slot cannot hold. The ids are still on the claim and the
+   reasoning for showing them is kept in `Home.tsx` where it happened. */
+
 .jar-char-claim-statement {
   margin: 0;
   font-family: var(--waka-face);
@@ -2087,61 +2138,6 @@
   line-height: 1.35;
   color: var(--ink);
   text-wrap: pretty;
-}
-
-/**
- * WHAT THE CLAIM WAS READ FROM.
- *
- * Quiet and small on purpose: these are the grounds, not the question. The
- * sentence above stays the largest thing in the block, and these sit under it
- * the way a citation sits under a line — close enough to belong to it, light
- * enough that the eye reads the claim first.
- *
- * Each one is pressable and opens that save. A receipt you cannot follow is
- * an assertion with a footnote; a receipt you can follow is evidence.
- */
-.jar-char-claim-from {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  text-align: left;
-}
-
-.jar-char-claim-from button {
-  display: block;
-  width: 100%;
-  padding: var(--sp-6) var(--sp-8);
-  border: 0;
-  border-left: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-fine);
-  font-weight: 300;
-  line-height: 1.45;
-  text-align: left;
-  cursor: pointer;
-  /* One line each. Four saves under a claim is context; four paragraphs is a
-     reading list, and the thing being asked stops being the thing on screen. */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.jar-char-claim-from button:hover,
-.jar-char-claim-from button:focus-visible {
-  border-left-color: var(--ink);
-  color: var(--ink);
-}
-
-.jar-char-claim-from button:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
 }
 
 /* The sentence, handed back for you to say properly. Same width as the
