@@ -137,7 +137,7 @@ export function ClaimsOverlay({ locale, onClose, onAsk, answered }: ClaimsOverla
   };
 
   return (
-    <div className="waka-room">
+    <div className="waka-page">
       <DialogSurface
         className="waka-over"
         aria-label={title}

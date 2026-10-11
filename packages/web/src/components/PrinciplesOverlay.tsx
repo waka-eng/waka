@@ -118,7 +118,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
   }, [load]);
 
   return (
-    <div className="waka-room">
+    <div className="waka-page">
       <DialogSurface
         className="waka-over"
         aria-label={title}
