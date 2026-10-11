@@ -13980,7 +13980,32 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                    third of it describes a gesture that does not exist. The
                    pointer query is the honest test — it asks whether this
                    input can drag, not how wide the window happens to be. */
-                placeholder={say(touchOnly ? 'worldKeepPlaceholderTouch' : 'worldKeepPlaceholder')}
+                /**
+                 * THE BOX SAYS WHAT IT IS FOR, AND THAT DEPENDS ON WHO YOU
+                 * ARE BEING.
+                 *
+                 * Founder, on the agent's wall: "When I have my agent
+                 * selected, I shouldn't be able to save inspiration. Instead,
+                 * the text should say 'Ask my agent anything'." And on their
+                 * own: "make this text say 'save an inspiration' or 'ask
+                 * anything about my past inspirations' or something like
+                 * that. Help me better write the sentence."
+                 *
+                 * "Type, paste, or drop — save it, or ask about it" named the
+                 * input methods first and the point second. The two things a
+                 * person can actually do lead now, and the methods are
+                 * discovered by doing them, which is how they were always
+                 * going to be discovered.
+                 *
+                 * On an agent's wall there is only one of the two. Saving
+                 * into someone else's archive is not a thing this product
+                 * does — your material is yours and its material is its own —
+                 * so the box asks the only question available there, and the
+                 * save beside it goes rather than sitting disabled. A control
+                 * that can never work is not a control.
+                 */
+                placeholder={say(standingAsAgent ? 'worldKeepPlaceholderAgent'
+                  : touchOnly ? 'worldKeepPlaceholderTouch' : 'worldKeepPlaceholderMine')}
                 aria-label={say('worldCaptureInspiration')}
                 aria-describedby="jar-keep-hint"
                 onChange={event => { draftRef.current = event.target.value; setDraft(event.target.value); setCharSay(''); setMouthNote(''); }}
@@ -14124,22 +14149,38 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       as a kept inspiration, so detection would misfire on
                       this product's own material. */}
                   <span className="waka-composer-where">
+                    {/* ONE ACT ON AN AGENT'S WALL, AND IT IS A SEND.
+                        Founder: "the one call to action should be... let's
+                        just make it a send icon." Two worded buttons are a
+                        choice between destinations; there is only one
+                        destination here, so the control stops arguing for
+                        itself and becomes the arrow every message box in the
+                        world already uses. It keeps its name for anyone
+                        listening rather than looking. */}
                     <button
                       type="button"
-                      className="waka-composer-ask"
+                      className={standingAsAgent ? 'waka-composer-send waka-composer-send--icon' : 'waka-composer-ask'}
                       disabled={talking || !draft.trim()}
+                      aria-label={standingAsAgent ? say('worldComposerSendAria') : undefined}
                       onClick={() => { void talkAbout({ id: '', text: draft.trim() }); }}
                     >
-                      {say(talking ? 'worldTalkOpening' : 'worldComposerAsk')}
+                      {standingAsAgent ? (
+                        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                          <path d="M2.2 8h11M8.6 3.2 13.4 8l-4.8 4.8" fill="none" stroke="currentColor"
+                            strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      ) : say(talking ? 'worldTalkOpening' : 'worldComposerAsk')}
                     </button>
-                    <button
-                      type="button"
-                      className="waka-composer-send"
-                      disabled={!draft.trim() && inputMedia.length === 0}
-                      onClick={() => { void keepIt(); }}
-                    >
-                      {say('worldKeepSend')}
-                    </button>
+                    {standingAsAgent ? null : (
+                      <button
+                        type="button"
+                        className="waka-composer-send"
+                        disabled={!draft.trim() && inputMedia.length === 0}
+                        onClick={() => { void keepIt(); }}
+                      >
+                        {say('worldKeepSend')}
+                      </button>
+                    )}
                   </span>
                 </div>
               ) : null}
@@ -15701,12 +15742,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         const talkId=viewNavigation.view.conversationId==='new'?null:viewNavigation.view.conversationId;
         const owner=`${storageScope.accountId}:${storageScope.profileId}`;
         if(committedTalk.current&&(committedTalk.current.owner!==owner||committedTalk.current.row.id!==talkId))committedTalk.current=null;
-        return <div className="waka-over-scrim" onClick={viewNavigation.closeOpen}>
+        return <div className="waka-over-scrim" onClick={viewNavigation.closeConversation}>
           <DialogSurface className="waka-over waka-over--talk" aria-label={say('worldMenuTalk')}
-            onClose={viewNavigation.closeOpen} onClick={event=>event.stopPropagation()}>
+            onClose={viewNavigation.closeConversation} onClick={event=>event.stopPropagation()}>
             <header className="waka-over-head">
               <h2 className="waka-over-title">{say('worldMenuTalk')}</h2>
-              <button type="button" className="waka-over-close" aria-label={say('worldCardClose')} onClick={viewNavigation.closeOpen}>
+              <button type="button" className="waka-over-close" aria-label={say('worldCardClose')} onClick={viewNavigation.closeConversation}>
                 <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
                   <path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
                 </svg>

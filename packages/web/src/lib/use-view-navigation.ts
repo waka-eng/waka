@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { readViewLocation, viewHref, type ViewLocation } from './view-location';
+import { EMPTY_VIEW, readViewLocation, viewHref, type ViewLocation } from './view-location';
 
 interface StoredView { scope: string; query: string; composerFrom?: string;shareFrom?:string;conversationFrom?:string;openFrom?:string }
 /** Router owns browser history; the world owns rendering and restoration. */
@@ -76,5 +76,31 @@ export function useViewNavigation(scope: string | null) {
     if(stored?.scope===current.scope&&stored.openFrom) current.navigate(-1);
     else current.navigate(viewHref({...before,open:null}),{replace:true});
   },[]);
-  return { view, href, key: location.key, query, write, closeComposer,closeShare,closeOpen, own };
+  /**
+   * PUTTING DOWN A CONVERSATION, WHICH IS NOT PUTTING DOWN AN OVERLAY — and
+   * assuming it was is how its close button died.
+   *
+   * Founder: "x button doesnt work to close modal."
+   *
+   * The conversation reuses the overlay's SHELL but not its address: the
+   * other three set `open`, a conversation sets `conversationId`. Its X was
+   * wired to `closeOpen`, whose first line is `if(!before?.open) return` — so
+   * the press ran, found no `open`, and returned. Rendered, labelled,
+   * enabled, silent. That is the fourth time this shape has surfaced here
+   * tonight, and every one was a control whose handler did not match the
+   * state it was for.
+   *
+   * `conversationFrom` has been recorded by `write` all along for exactly
+   * this, so dismissing walks back through history like every other close and
+   * falls back to the world's own address on a cold link.
+   */
+  const closeConversation=useCallback(()=>{
+    const current=latest.current,before=readViewLocation(current.location.pathname,current.location.search);
+    if(!before?.conversationId)return;
+    const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
+    own.current=null;
+    if(stored?.scope===current.scope&&stored.conversationFrom) current.navigate(-1);
+    else current.navigate(viewHref({...EMPTY_VIEW}),{replace:true});
+  },[]);
+  return { view, href, key: location.key, query, write, closeComposer,closeShare,closeOpen,closeConversation, own };
 }

@@ -1889,6 +1889,18 @@
    note where they were rendered. */
 /* The primary action sits at the end of the footer, where the pattern puts
    it, and is the only filled control on the screen. */
+/* THE SEND, AS AN ARROW. Founder, on the agent's wall: "the one call to
+   action should be... let's just make it a send icon." A square target rather
+   than a worded pill, because an icon in a pill shaped for words reads as a
+   button that lost its label. */
+.waka-composer-send--icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+}
+
 .waka-composer-send {
   margin-left: auto;
   min-height: 32px;
@@ -2725,15 +2737,38 @@
   /* Not a uniform radius: a said thing is softer on one side than the other,
      and a perfectly even pill reads as a component. */
   border-radius: 20px 20px 20px 20px / 18px 18px 20px 20px;
-  background: var(--jar-live);
+  /**
+   * IT IS THE CREATURE'S LIGHT, SO IT IS THE CREATURE'S BRIGHTNESS.
+   *
+   * Founder: "speech bubble too white it hurts my eye due to contrast with
+   * rest of the product."
+   *
+   * Measured rather than dimmed by feel, because there is a right answer
+   * here. Against `--jar-deep` the creature's own body sits at about 12.3:1.
+   * The bubble was `--jar-live` flat — 18.5:1 — so the thing being SAID was
+   * brighter than the thing saying it, on a ground this dark. That is the
+   * whole of the glare: not a colour anyone disliked, but a speech bubble
+   * out-shining its own speaker.
+   *
+   * Sixteen percent toward the ground puts it at 12.9:1, which is the
+   * creature's luminance to within a rounding error, and the dark ink on it
+   * still reads at 11.7:1 — far above any threshold, so nothing is traded for
+   * the comfort. Expressed as a mix of the two palette tokens rather than a
+   * hex, so it tracks the ramp if the ground or the light is ever retuned.
+   */
+  background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep));
   color: var(--waka-on-light);
   text-align: center;
   /* The creature's own falloff: a tight ring, then two doublings out into
-     nothing. One shadow reads as a sticker. */
+     nothing. One shadow reads as a sticker.
+
+     HALVED WITH THE FILL. The halo was a proportion of a surface that is now
+     dimmer, and a bright corona around a quieter panel would have put the
+     glare back at its edge — which is where the eye lands first. */
   box-shadow:
-    0 0 12px color-mix(in srgb, var(--jar-live) 40%, transparent),
-    0 0 34px color-mix(in srgb, var(--jar-live) 20%, transparent),
-    0 0 76px color-mix(in srgb, var(--jar-live) 10%, transparent);
+    0 0 12px color-mix(in srgb, var(--jar-live) 20%, transparent),
+    0 0 34px color-mix(in srgb, var(--jar-live) 10%, transparent),
+    0 0 76px color-mix(in srgb, var(--jar-live) 5%, transparent);
   /* The film sits inside it (see ::before), which has to clip to the shape. */
   isolation: isolate;
 }
@@ -2820,7 +2855,12 @@
   height: 13px;
   transform: translateX(-50%) rotate(45deg);
   border-radius: 0 0 4px 0;
-  background: var(--jar-live);
+  /* THE SAME FILL AS THE BODY, SAID THE SAME WAY. The tail is one piece of
+     the bubble, not a decoration beside it — left at flat `--jar-live` while
+     the body dimmed, it would have been a bright notch exactly where the two
+     meet, which is the one join a person's eye follows down to the
+     creature. */
+  background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep));
 }
 
 .jar-char-bubble-body p {

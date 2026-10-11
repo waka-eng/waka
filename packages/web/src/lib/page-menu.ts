@@ -160,9 +160,22 @@ export function usePageMenu(
 
     return {
       items,
-      /* WHICH RUNG IS BEING READ. The world is your top of mind when nothing
-         is held up over it; the overlay's own parameter says otherwise. */
-      current: open ?? "top-of-mind",
+      /**
+       * WHICH RUNG IS BEING READ — AND ONLY THE THREE COUNT.
+       *
+       * The world is your top of mind when nothing is held up over it, and
+       * the overlay's own parameter says otherwise. But `open` has a fourth
+       * value, `conversations`, which is not a rung at all — it is the
+       * corner's. Passing it through made `Menu` look for a row with that id,
+       * find none, and fall back to the first one, so the switcher read "Your
+       * inspirations" while the screen showed the top of mind. A control
+       * whose whole job is to name where you are, naming somewhere else.
+       *
+       * Conversations are held up over your top of mind without being a depth
+       * of your material, so the honest answer while one is open is the rung
+       * underneath it — which is what this now says.
+       */
+      current: open === "saves" || open === "principles" ? open : "top-of-mind",
       standing,
       stand: (next: Standing | null) => setStanding(accountId, next),
       onSettings: () => navigate("/profile"),

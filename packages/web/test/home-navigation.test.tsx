@@ -333,3 +333,33 @@ it('changes form in place instead of travelling to the agent', async () => {
   await world.step(0);
   expect(world.audit().wallKind).toBe('self');
 });
+
+/**
+ * THE CONVERSATION'S X ACTUALLY CLOSES IT.
+ *
+ * Founder: "x button doesnt work to close modal."
+ *
+ * It did not. The conversation reuses the overlay shell but not its address —
+ * the other three surfaces set `open`, a conversation sets `conversationId` —
+ * and its close was wired to `closeOpen`, which begins `if(!before?.open)
+ * return`. The press ran and returned. Rendered, labelled, enabled, silent.
+ *
+ * So this presses the X and asserts the ADDRESS, not the markup. A test that
+ * checked the button was on screen would have passed throughout.
+ */
+it('closes a conversation from its own X, which the overlay handler could not', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await pressChatCorner(world.container); await settle();
+  expect(new URLSearchParams(location.search).get('open')).toBe('conversations');
+
+  /* Open one, so the surface under test is the conversation rather than the
+     list that offered it. */
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-rail-new')!.click());
+  await settle();
+  expect(location.pathname.startsWith('/chat/'), 'the conversation never opened').toBe(true);
+
+  const close = world.container.querySelector<HTMLButtonElement>('.waka-over--talk .waka-over-close');
+  expect(close, 'a conversation offers no visible way out').toBeTruthy();
+  await act(async () => close!.click()); await settle();
+  expect(location.pathname, 'the X still does nothing').not.toContain('/chat/');
+});
