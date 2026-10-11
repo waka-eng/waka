@@ -65,6 +65,7 @@ import type { Page } from "playwright";
 
 import { launchChromium } from "./browser";
 import { settleAfterArrival } from "./arrival";
+import { saveAnInspiration } from "./keep";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
 
@@ -151,10 +152,7 @@ const run = async (base: string): Promise<number> => {
       "a memory about a long walk",
       "a memory about arriving early",
     ]) {
-      await page.locator(".jar-mouth-rest").first().click();
-      await page.waitForTimeout(450);
-      await page.fill('textarea[aria-label="Capture inspiration"]', t);
-      await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
+      await saveAnInspiration(page, t);
       await page.waitForTimeout(3_000);
     }
     await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });

@@ -607,12 +607,19 @@ const FORM_FADE_MS = 320;
 /**
  * HOW LONG THE CREATURE HOLDS ITS OFFER UP BEFORE GOING BACK TO THE READING.
  *
- * Long enough to read a short sentence and decide (about four seconds of
- * reading at the pace this type is set), plus a beat to reach for it. Shorter
- * and the offer is gone before a slow reader has finished it; longer and a
- * person who has decided against it is left looking at a pitch.
+ * Founder: "the time to go back to the top of mind should be so much shorter,
+ * like half what it is right now."
+ *
+ * Six seconds was argued from reading speed — four to read the sentence, a
+ * beat to reach for it — and that reasoning is about the wrong thing. The
+ * sentence is five words and the person pressed the creature a moment ago,
+ * so they are not reading it cold; they are deciding, and a decision not
+ * made in three seconds is a no. What the extra three seconds actually did
+ * was hold the ONE THING THIS SCREEN IS FOR off the screen — the top of mind
+ * is the product's output and the offer is an interruption of it, however
+ * welcome. An interruption should be the shorter of the two.
  */
-const OFFER_MS = 6000;
+const OFFER_MS = 3000;
 /**
  * HOW LONG THE BUBBLE STAYS DOWN WHILE THE CREATURE CHANGES FORM.
  *
@@ -2378,7 +2385,21 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
        historical version the moment this suppression stopped asking whose
        wall it was on. */
     (atWall.kind === "self" || atWall.kind === "agent") &&
-    !mouthOpen && !charSay && !turning && (standingAsAgent || readingLoadPhase === "ready");
+    !mouthOpen && !charSay && !turning &&
+    /* AND THE WAIT IS ABOUT THE WALL, NOT ABOUT WHO YOU ARE BEING.
+       The paragraph above already says it — "an agent's line comes from its
+       own chrome and has nothing to wait for" — and the code then asked
+       `standingAsAgent`, which is whether you have SWITCHED FORM, not whose
+       wall you are looking at. Travel to your agent's column without
+       switching, and this went false while your own reading was still in
+       flight, so the suppression below lifted and "I haven't formed anything
+       yet" printed across the middle of the screen with the bubble floating
+       through the word "formed" — the exact collision the founder reported
+       on the self wall, reappearing one column over.
+
+       Founder, with the screenshot: "why are you saying I haven't formed
+       anything behind? It should only be a text that it says." */
+    (atWall.kind === "agent" || standingAsAgent || readingLoadPhase === "ready");
 
   answeringAsRef.current = claimsFor;
   const loadClaims = useCallback(() => {
@@ -10484,21 +10505,88 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      one account can never see another's committed question. */
   const committedTalk = useRef<{owner:string;row:ApiConversation}|null>(null);
 
+  /**
+   * ═══ THE FOUR PLACES ARE PLACES, SO YOU MOVE — YOU DO NOT STACK ═════════
+   *
+   * Founder: "If I click on inspiration, then chat, then inspiration, then
+   * chat, then I have to close it four times before seeing the now. Like,
+   * are you not moving the pages and opening modals instead? You should move
+   * the pages."
+   *
+   * Exactly what was happening, and the arithmetic is simple. Every press
+   * here PUSHED a history entry, and `closeOpen` walks back ONE — so four
+   * presses built four entries and the close undid them one at a time.
+   * `openFrom` had carried the world's address forward correctly all along;
+   * the depth was the problem, not the memory.
+   *
+   * A DESTINATION REPLACES A DESTINATION. The four are peers in a bar at the
+   * bottom of the screen, which is the one arrangement every person already
+   * has a model for: moving between tabs does not deepen anything, and
+   * leaving gets you out from wherever you happen to be standing. So the
+   * depth from the world is always exactly one, `navigate(-1)` is both a
+   * true return AND a single press, and the browser's own Back keeps
+   * agreeing with Escape and with the close — which is the property the
+   * history-based dismissal was chosen for in the first place.
+   *
+   * AND A CONVERSATION IS ONE OF THE THINGS IT REPLACES. The dock stands on
+   * an open chat now, which it did not before, so these rows became
+   * reachable from a state they had never been pressed in: `open` would have
+   * been set with `conversationId` still beside it — two surfaces on screen
+   * at once — and the `null` row returned on its first line, so "Now" was a
+   * lit, labelled, dead control. That is the sixth time a handler here has
+   * not matched a state it could be pressed in; this one was born in the
+   * same change that made it reachable.
+   */
+  /** Whether you are standing somewhere other than the world, which is the
+      whole of the question "does this press move me, or deepen me". */
+  const standingAway = (view: ViewLocation | null | undefined) =>
+    Boolean(view?.open || view?.conversationId);
+
   const openOverHome = useCallback((what: ViewOpen | null) => {
     const nav = viewNavigationRef.current;
     /* `null` IS YOUR TOP OF MIND, which is the world itself — so that row
        puts down whatever is held up rather than navigating anywhere. It is
        why pressing it cannot strand you, which is the whole of the founder's
-       "I didn't realise clicking on top of mind would leave me there". */
+       "I didn't realise clicking on top of mind would leave me there".
+       WHATEVER is held up: a destination, or a conversation, which have
+       separate closes because they have separate addresses. */
     if (what === null) {
-      if (nav.view?.open) nav.closeOpen();
+      if (nav.view?.conversationId) nav.closeConversation();
+      else if (nav.view?.open) nav.closeOpen();
       return;
     }
-    /* AND THE NOTEPAD IS PUT DOWN. Same rule in the other direction: a room
+    /* AND THE NOTEPAD IS PUT DOWN. Same rule in the other direction: a place
        and the note you were writing cannot both be the place you are. The
        draft is untouched — `closeComposer` keeps the words, and the archive's
        own new-note button opens straight back onto them. */
-    nav.write({ ...(nav.view ?? EMPTY_VIEW), open: what, compose: false });
+    nav.write(
+      { ...(nav.view ?? EMPTY_VIEW), open: what, compose: false, conversationId: null },
+      standingAway(nav.view) ? { replace: true } : {},
+    );
+  }, []);
+
+  /**
+   * AND A CONVERSATION IS A PLACE, ON THE SAME TERMS.
+   *
+   * It wants its own function only because it writes a different parameter;
+   * the rule is `openOverHome`'s and must not be restated. Reached from the
+   * chats list, it REPLACES that list rather than sitting on top of it —
+   * which is what makes "Now" one press from inside a chat instead of two,
+   * and the chat's own close one press instead of landing you back on the
+   * list you were trying to leave.
+   *
+   * WHAT PAYS FOR IT: the browser's Back from a conversation reaches the
+   * world rather than the chats. The step back to the list is a visible
+   * chevron on the surface itself, which is what Law 2 asks for and what
+   * browser Back explicitly is not — "a list is not an exit. Browser Back is
+   * not an exit."
+   */
+  const openTalk = useCallback((id: string | null) => {
+    const nav = viewNavigationRef.current;
+    nav.write(
+      { ...EMPTY_VIEW, conversationId: id ?? 'new' },
+      standingAway(nav.view) ? { replace: true } : {},
+    );
   }, []);
   const menu = usePageMenu(locale, auth?.account?.id, agentWall ? { id: agentWall.id, name: agentWall.name } : null, openOverHome);
 
@@ -14692,6 +14780,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               and is not getting. */}
           {!mouthOpen && !charSay && !turning ? (
             <>
+              {/* NOT ON AN AGENT'S WALL. Founder, pressing the creature over
+                  there and being offered "Feeling inspired? Save one.":
+                  "when clicking on an agent you shouldn't prompt me to save
+                  an inspiration — I shouldn't be saving it for my agent."
+
+                  Right, and the product already knew: the keep box on an
+                  agent's wall drops its save and asks the only question
+                  available there, under the ruling "saving into someone
+                  else's archive is not a thing this product does — your
+                  material is yours and its material is its own", and the
+                  note beside it, "a control that can never work is not a
+                  control". That ruling was applied to the box and not to the
+                  creature, which is the same wall offering two different
+                  answers about whose archive you are standing in.
+
+                  So the press is ABSENT here rather than inert. Its
+                  accessible name is "Save inspiration" — a name for an act
+                  that does not exist on this wall — and a disabled control
+                  with a lying label is worse than no control. The bubble
+                  still speaks; it simply has nothing to offer. */}
+              {atWall.kind === 'agent' ? null : (
               <button
                 type="button"
                 className={`jar-char-press${offering ? ' jar-char-press--lit' : ''}`}
@@ -14700,6 +14809,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 data-jar-interactive="1"
                 onClick={offerToWrite}
               />
+              )}
               {/* ═══ WHAT THE CREATURE IS HOLDING UP ═══════════════════════
                   Three things, in this order, and the order is the whole
                   design:
@@ -16303,7 +16413,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                time a control's handler has not matched the state it was for
                (see `closeConversation`); `saveAsDraft` is the notepad's own
                way out and it keeps the words. */
-            { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open && !viewNavigation.view?.compose, go: () => { if (viewNavigation.view?.compose) saveAsDraft(); else viewNavigation.closeOpen(); } },
+            /* "HERE" HAS TO KNOW ABOUT A CONVERSATION TOO, now that the bar
+               stands on one. Without it the bar said you were at Now while
+               you were reading a chat, and its own row for the chats was
+               dark — the two rows that could tell you where you are, both
+               wrong, on the one surface that already had the worst record
+               for leaving people lost. */
+            { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open && !viewNavigation.view?.compose && !viewNavigation.view?.conversationId, go: () => { if (viewNavigation.view?.compose) saveAsDraft(); else openOverHome(null); } },
             /* SAVE IS NOT A TAB. Founder: "home, inspirations -> let see list
                of past inspirations with main CTA to save new, chat -> see
                list of past chats with main CTA to start new chat,
@@ -16339,11 +16455,38 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                the ladder's order — what you kept, what you said about it,
                what has endured — so the row reads left to right the way the
                material actually moves. */
-            { id: 'talk', label: 'worldDockTalk' as const, here: viewNavigation.view?.open === 'conversations', go: () => openOverHome('conversations') },
+            { id: 'talk', label: 'worldDockTalk' as const, here: viewNavigation.view?.open === 'conversations' || Boolean(viewNavigation.view?.conversationId), go: () => openOverHome('conversations') },
             { id: 'principles', label: 'worldDockPrinciples' as const, here: viewNavigation.view?.open === 'principles', go: () => openOverHome('principles') },
           ]).map(item => (
+            /* THE SHEET HANGS OFF THE PLUS, not off the middle of the screen.
+               Founder, with a screenshot: "this not being aligned with the +
+               button — these little details are all missing rn."
+
+               Measured: the plus sits at 642 and the sheet at 640, because
+               the sheet was `position: fixed; left: 50%` — centred on the
+               VIEWPORT while the plus is centred in a row of four words of
+               unequal length. Two pixels at this window width, and the gap is
+               whatever the labels happen to weigh: a longer word on either
+               side moves the plus and the sheet does not follow. The founder
+               saw two pixels; what is wrong is that the two were never
+               related.
+
+               NOT A MEASUREMENT — A PARENT. The fix that suggests itself is
+               to observe the plus and write its centre to a custom property,
+               and this product has a law about exactly that road ("every
+               measurement feeding layout is observed, not sampled"). The
+               cheaper answer obeys it by not measuring at all: the sheet
+               becomes a child of the plus's own slot and is centred on it by
+               the box model, which cannot drift and has nothing to resample.
+
+               IT ALSO PUTS THE SHEET WHERE THE KEYBOARD EXPECTS IT. Rendered
+               after the whole nav, its two rows were the LAST things in the
+               tab order — so opening the menu and pressing Tab went to
+               "Chats", then "Principles", then a full-screen invisible
+               dismiss target, and only then to "New inspiration". Beside the
+               plus in source order, Tab goes straight into it. */
+            <span key={item.id} className={item.id === 'new' ? 'waka-dock-slot' : undefined}>
             <button
-              key={item.id}
               type="button"
               className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}${item.id === 'new' ? ' waka-dock-item--new' : ''}`}
               aria-current={item.here ? 'page' : undefined}
@@ -16357,37 +16500,45 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   </svg>
                 : say(item.label)}
             </button>
+            {item.id === 'new' && makingNew ? (
+              <div className="waka-new" role="menu" aria-label={say('worldDockNew')} data-jar-chrome="1" data-jar-interactive="1"
+                onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setMakingNew(false); } }}>
+                {/* "NEW X", BOTH OF THEM. Founder: "new inspiration, new chat."
+                    The two rows said "Save inspiration" and "New conversation" —
+                    a verb beside a noun, for two moves that are the same move
+                    aimed at two things. Under a plus, every row is "a new one of
+                    these"; saying it twice the same way is what makes the pair
+                    read as a pair. */}
+                <button type="button" role="menuitem" className="waka-new-one"
+                  onClick={() => { setMakingNew(false); startNewInspiration(); }}>
+                  {say('worldNewInspiration')}
+                </button>
+                <button type="button" role="menuitem" className="waka-new-one"
+                  onClick={() => { setMakingNew(false); openTalk(null); }}>
+                  {say('worldConversationNew')}
+                </button>
+              </div>
+            ) : null}
+            </span>
           ))}
         </nav>
       ) : null}
-      {/* ═══ WHAT THE PLUS RAISES ════════════════════════════════════════
-          Two verbs, because the product makes exactly two things. It stands
-          directly over the dock rather than in the middle of the screen: a
-          sheet that answers a press belongs where the press happened.
-          The ground under it is a dismiss target with nothing drawn on it —
-          no scrim, because dimming the world to ask a two-word question is
-          the modal weight this product keeps removing. */}
+      {/* ═══ THE GROUND THAT TAKES THE DISMISSING PRESS ═════════════════
+          The sheet itself now hangs off the plus inside the dock — see the
+          note there. What stays out here is the full-screen target that
+          closes it, because that is the one part of this which genuinely
+          belongs to the whole window rather than to the button.
+
+          Nothing is drawn on it: dimming the world to ask a two-word
+          question is the modal weight this product spends its time
+          removing. It is `tabIndex={-1}` because it is a window-sized
+          invisible button, and it sat in the tab order between the bar and
+          the two rows the plus had just raised. The mouse is the only hand
+          it was ever for; Escape on the sheet and the plus itself are the
+          keyboard's way out. */}
       {phase==='ready'&&makingNew ? (
-        <>
-          <button type="button" className="waka-new-away" aria-label={say('worldClose')}
-            onClick={() => setMakingNew(false)} />
-          <div className="waka-new" role="menu" aria-label={say('worldDockNew')} data-jar-chrome="1" data-jar-interactive="1">
-            {/* "NEW X", BOTH OF THEM. Founder: "new inspiration, new chat."
-                The two rows said "Save inspiration" and "New conversation" —
-                a verb beside a noun, for two moves that are the same move
-                aimed at two things. Under a plus, every row is "a new one of
-                these"; saying it twice the same way is what makes the pair
-                read as a pair. */}
-            <button type="button" role="menuitem" className="waka-new-one"
-              onClick={() => { setMakingNew(false); startNewInspiration(); }}>
-              {say('worldNewInspiration')}
-            </button>
-            <button type="button" role="menuitem" className="waka-new-one"
-              onClick={() => { setMakingNew(false); viewNavigation.write({ ...EMPTY_VIEW, conversationId: 'new' }); }}>
-              {say('worldConversationNew')}
-            </button>
-          </div>
-        </>
+        <button type="button" className="waka-new-away" aria-label={say('worldClose')} tabIndex={-1}
+          onClick={() => setMakingNew(false)} />
       ) : null}
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
@@ -16551,12 +16702,29 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            principle page first made a person confirm a choice they had
            already made by pressing share. */
         onShare={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true})}/>:null}
+      {/* ═══ CHATS DO NOT HAVE AN OWNER THE WAY AN ARCHIVE DOES ══════════
+          Founder: "I don't think there should be a difference between me and
+          my agent's chat. Inspiration, sure. But I don't see a reason why
+          that should change."
+
+          Right, and the split was not only unmotivated, it was incoherent:
+          this LIST was scoped to whichever wall you were standing on while
+          `ConversationPanel` below has always taken `storageScope` — the
+          account's own profile. So standing on an agent's wall showed you a
+          list of its conversations and then opened them under yours. Two
+          answers to "whose talk is this" on one path.
+
+          An archive genuinely has two owners — your material is yours and
+          its material is its own, which is why saving on an agent's wall is
+          refused outright. A conversation is with WAKA, and changing which
+          face it is wearing is not a change of who is talking. One list, one
+          scope, matching the panel that was already right. */}
       {storageScope&&viewNavigation.view?.open==='conversations'?<ConversationsOverlay
-        key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:talks`}
-        locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
-        title={say(atWall.kind==='agent'?'worldAgentConversations':'worldOpenConversations')}
+        key={`${storageScope.accountId}:${storageScope.profileId}:talks`}
+        locale={locale} profileId={storageScope.profileId}
+        title={say('worldOpenConversations')}
         onClose={viewNavigation.closeOpen}
-        onOpen={id=>viewNavigation.write({...EMPTY_VIEW,conversationId:id??'new'})}/>:null}
+        onOpen={id=>openTalk(id)}/>:null}
 
       {/* THE CONVERSATION ITSELF, ALSO OVER THE WORLD.
           Founder: "also dont move talk to waka in a new page. find better
@@ -16607,8 +16775,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 returns to, the way the archive's does, and nothing else on
                 the surface claims to name it. */}
             <header className="waka-over-head">
+              {/* THROUGH THE SAME DOOR THE DOCK USES, so this cannot grow a
+                  second opinion about depth. Writing the address directly
+                  pushed an entry, which is how four presses became four
+                  closes; `openOverHome` is where that rule lives. */}
               <button type="button" className="waka-over-back"
-                onClick={()=>viewNavigation.write({...EMPTY_VIEW,open:'conversations'})}>
+                onClick={()=>openOverHome('conversations')}>
                 <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
                   <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
                     strokeLinecap="round" strokeLinejoin="round"/>

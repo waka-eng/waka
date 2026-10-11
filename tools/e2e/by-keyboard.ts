@@ -46,6 +46,7 @@
 import { type BrowserContext, type Page, type Route } from "playwright";
 import postgres from "postgres";
 import { launchChromium } from "./browser";
+import { saveAnInspiration } from "./keep";
 
 /** The same seam `at-scale` and `the-timeline` use. Optional here — see below. */
 const dbUrl = (): string | undefined =>
@@ -192,13 +193,7 @@ async function main(): Promise<void> {
        keyboard pass over an empty world, which is the same vacuous success
        every other gate in this session had to be talked out of. */
     for (let i = 0; i < args.keep; i += 1) {
-      await page.locator(".jar-mouth-rest").first().click({ timeout: 8_000 });
-      await page.waitForTimeout(700);
-      await page.fill(
-        'textarea[aria-label="Capture inspiration"]',
-        `something worth finding again ${i} ${uniq()}`,
-      );
-      await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
+      await saveAnInspiration(page, `something worth finding again ${i} ${uniq()}`);
       await page.waitForTimeout(4_000);
     }
 
@@ -280,22 +275,56 @@ async function main(): Promise<void> {
       () => document.querySelector("canvas")?.getAttribute("tabindex") !== null,
     )) as boolean;
 
+    /**
+     * ── KEEPING SOMETHING WITH NO MOUSE, BY THE DOOR THAT EXISTS ───────────
+     *
+     * This used to tab until it landed on `.jar-mouth-rest`, press Enter,
+     * type and press Enter again. That walk PASSED, and it should not have:
+     * `.jar-mouth-rest` is the closed composer slot at `opacity: 0`, so the
+     * keyboard route this gate was certifying ran entirely through a control
+     * nobody can see. The founder's keyboard "worked" by using the bug.
+     *
+     * The slot is `inert` now, and the route is the one a sighted person
+     * takes: the plus in the dock, then the first of the two verbs it
+     * raises, then the field, then Save. Nothing here is reached by class
+     * except as a name for the focused element — every press is Tab or
+     * Enter, which is the only way this gate can claim what it claims.
+     */
+    const focused = async (): Promise<string> =>
+      (await page.evaluate(() => {
+        const at = document.activeElement as HTMLElement | null;
+        if (!at) return "";
+        const cls = typeof at.className === "string" ? at.className : "";
+        return `${cls} ${at.innerText ?? ""} ${at.getAttribute("aria-label") ?? ""}`;
+      })) as string;
+    /** Tab until the focused element answers to `want`, or give up. */
+    const tabTo = async (want: RegExp, limit = 30): Promise<boolean> => {
+      for (let i = 0; i < limit; i += 1) {
+        await page.keyboard.press("Tab");
+        await page.waitForTimeout(100);
+        if (want.test(await focused())) return true;
+      }
+      return false;
+    };
+
     let keptByKeyboard = false;
     try {
       await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-      for (let i = 0; i < 30; i += 1) {
-        await page.keyboard.press("Tab");
-        await page.waitForTimeout(100);
-        const isMouth = (await page.evaluate(() =>
-          String((document.activeElement as HTMLElement | null)?.className ?? "").includes(
-            "jar-mouth-rest",
-          ),
-        )) as boolean;
-        if (!isMouth) continue;
+      if (await tabTo(/waka-dock-item--new/)) {
         await page.keyboard.press("Enter");
-        await page.waitForTimeout(900);
+        await page.waitForTimeout(700);
+        /* The sheet is the plus's own child now, so its first row is the
+           very next tab stop rather than the last thing on the bar. The
+           walk still steps forward rather than assuming it. */
+        if (!/waka-new-one/.test(await focused())) await tabTo(/waka-new-one/, 6);
+        await page.keyboard.press("Enter");
+        await page.waitForTimeout(1_200);
         await page.keyboard.type("kept with no mouse at all");
-        await page.waitForTimeout(300);
+        await page.waitForTimeout(400);
+        /* SAVE IS NOT ON THE FIELD'S OWN ENTER HERE. The notepad takes
+           multi-line writing, so Enter makes a line; the keep is the button
+           in the corner, which is what a person tabs to. */
+        await tabTo(/jar-note-save/, 8);
         await page.keyboard.press("Enter");
         await page.waitForTimeout(4_500);
         keptByKeyboard = (await page.evaluate(async () => {
@@ -303,7 +332,6 @@ async function main(): Promise<void> {
           const b = (await r.json()) as { inspirations?: Array<{ textPreview: string }> };
           return (b.inspirations ?? []).some((x) => x.textPreview.includes("no mouse at all"));
         })) as boolean;
-        break;
       }
     } catch {
       keptByKeyboard = false;

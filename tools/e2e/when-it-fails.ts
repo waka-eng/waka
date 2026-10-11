@@ -54,6 +54,7 @@
  */
 import { type Browser, type BrowserContext, type Page, type Route } from "playwright";
 import { launchChromium } from "./browser";
+import { saveAnInspiration } from "./keep";
 /**
  * HOW THE ROUTE IS BROKEN. Three shapes, because `whyFailed` has three
  * branches and only one of them had ever run on screen.
@@ -258,10 +259,7 @@ async function keepOne(page: Page, base: string, text: string): Promise<void> {
     await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(6_000);
   }
-  await page.locator(".jar-mouth-rest").first().click();
-  await page.waitForTimeout(700);
-  await page.fill('textarea[aria-label="Capture inspiration"]', text);
-  await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
+  await saveAnInspiration(page, text);
   await page.waitForTimeout(5_000);
 }
 
@@ -376,12 +374,7 @@ const ACTS: Act[] = [
     reach: async (page, base) => {
       await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(6_000);
-      await page.locator(".jar-mouth-rest").first().click();
-      await page.waitForTimeout(700);
-      await page.fill('textarea[aria-label="Capture inspiration"]', "a thought the server will refuse");
-    },
-    press: async (page) => {
-      await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
+      await saveAnInspiration(page, "a thought the server will refuse");
     },
   },
   {

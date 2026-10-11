@@ -39,6 +39,7 @@
 import { type Browser, type Page } from "playwright";
 import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
+import { saveAnInspiration } from "./keep";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
 const PASSWORD = "answers-the-hand-1";
@@ -321,10 +322,7 @@ async function run(base: string): Promise<number> {
       "the second press is the person asking whether the first one landed",
       "every surface in this world is asked the same question",
     ]) {
-      await page.locator(".jar-mouth-rest").first().click();
-      await page.waitForTimeout(700);
-      await page.fill('textarea[aria-label="Capture inspiration"]', text);
-      await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
+      await saveAnInspiration(page, text);
       await page.waitForTimeout(4_500);
     }
 
