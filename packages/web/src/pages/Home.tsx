@@ -14594,11 +14594,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                              answer, and a sitting that ended silently after
                              the one answer the person took most care over
                              would be the worst place to drop it. */
-                          setClaimQueue(queue => {
-                            const left = queue.filter(row => row.id !== claim.id);
-                            if (!left.length) setCharSay(say('worldSittingDone'));
-                            return left;
-                          });
+                          const left = claimQueue.filter(row => row.id !== claim.id);
+                          setClaimQueue(left);
+                          if (!left.length) setCharSay(say('worldSittingDone'));
                         });
                       }}>
                         {say(correcting.saving ? 'worldSaving' : 'worldSave')}
@@ -14655,11 +14653,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                            would be the one lie that costs this product its
                            licence, since the whole proposition is that its
                            account of you is checkable. */
-                        setClaimQueue(queue => {
-                          const left = queue.slice(1);
-                          if (!left.length) setCharSay(say('worldSittingDone'));
-                          return left;
-                        });
+                        /* Computed out here, not inside the updater: a
+                           `setState` updater has to be pure, and React calls
+                           it twice in development to prove it. `claimQueue` is
+                           already in scope at the press, so there is nothing
+                           to read from inside one. */
+                        const left = claimQueue.slice(1);
+                        setClaimQueue(left);
+                        if (!left.length) setCharSay(say('worldSittingDone'));
                       }}
                     >
                       {say(value === 'true' ? 'worldYes' : value === 'partly' ? 'worldPartly' : 'worldNotTrue')}
