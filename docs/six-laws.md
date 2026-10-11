@@ -250,6 +250,57 @@ deliberately changes no number, say so where someone auditing will look.
 
 ---
 
+## Law 11 — Under a statement about the person, the controls answer it; they never administer it
+
+> "Just changing the text and removing duplicate is not enough. Just rethink
+> the full interaction here. When the user looks at this top of mind, what
+> would they want to do? How would they want to do that interaction? This is
+> definitely not the right way." — 2026-10-11
+
+This is the law that none of the ten above catches, which is why it took a
+second complaint about the same block to find it. Law 1 asks whether a control
+names what it does; all four of these did. Law 4 asks whether it prints
+something already known; none of them did. They were each individually
+defensible and collectively wrong, because the question was never "is this
+verb correct" — it was "is a verb what belongs here at all."
+
+**The test.** When a surface shows a sentence claiming to describe a person,
+read the controls under it and ask which side they are on:
+
+  RESPONSE — yes, not quite, not me, that matters more to me, here is what
+  is closer. These are the person speaking back about themselves.
+
+  ADMINISTRATION — regenerate, pin, reorder, rename, edit, discard. These are
+  the person doing upkeep on an object.
+
+A surface may offer administration. It may never offer ONLY administration,
+and administration may never sit in the same row, register and rhythm as the
+answers — because then the person has to work out which of five things is the
+reply to the question they are already silently asking.
+
+**Why this one is expensive to get wrong.** The reaction to a sentence about
+yourself is involuntary and immediate. If there is nowhere to put it in the
+second it happens, it is gone, and the product has turned the most alive
+moment it will ever get into a filing task. That is also why the answer row
+cannot hide behind a gesture nobody has reason to make: the question itself
+must be visible at rest, even when the answers are not.
+
+**Where it was broken, and what each one became.**
+
+| surface | had | now |
+|---|---|---|
+| top of mind (home) | `Write a new one` · `Keep on top` · `Edit wording` · `Not this` — four administrations, no answer | `Is this you?` → **Yes · Not quite · Not me**; the administrations moved to a quiet aside beside the staleness line they remedy |
+| principles | `Move up` / `Move down` — the ranking act, labelled as list mechanics. The i18n keys were `worldMattersMore` / `worldMattersLess`, so the code knew what it meant and the person was told where the row would go | **Matters more to me** / **Matters less to me** — the key's own meaning, said out loud |
+| the creature's claim | — | nothing. It was already right, and it is where the answer came from |
+
+**The model is in the product, not in this document.** `jar-char-claim-answers`
+is the register: a question, three peer answers, no primary, and one of them
+opens a field to say what is closer. Any new surface that shows a person a
+sentence about themselves wears it. When the top of mind did not, the home
+screen carried two sentences about the same person asking for the same thing
+in two different languages — which is Law 5 as well, arriving by a different
+road.
+
 ## How to use this
 
 Before shipping a surface, walk the six. The laws are ordered by how often
