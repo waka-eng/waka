@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { readViewLocation, viewHref, type ViewLocation } from './view-location';
 
-interface StoredView { scope: string; query: string; composerFrom?: string;reviewFrom?:string;shareFrom?:string;conversationFrom?:string }
+interface StoredView { scope: string; query: string; composerFrom?: string;reviewFrom?:string;shareFrom?:string;conversationFrom?:string;openFrom?:string }
 /** Router owns browser history; the world owns rendering and restoration. */
 export function useViewNavigation(scope: string | null) {
   const location = useLocation(), navigate = useNavigate();
@@ -28,7 +28,13 @@ export function useViewNavigation(scope: string | null) {
     const reviewFrom=next.reviewId ? (!before?.reviewId&&!options.replace?previous:stored?.scope===current.scope?stored.reviewFrom:undefined):undefined;
     const shareFrom=next.sharePrinciple?(!before?.sharePrinciple&&!options.replace?previous:stored?.scope===current.scope?stored.shareFrom:undefined):undefined;
     const conversationFrom=next.conversationId?(!before?.conversationId&&!options.replace?previous:stored?.scope===current.scope?stored.conversationFrom:undefined):undefined;
-    current.navigate(to, { replace: options.replace, state: { wakaView: { scope: current.scope, query: options.query ?? '', ...(composerFrom ? { composerFrom } : {}),...(reviewFrom?{reviewFrom}:{}),...(shareFrom?{shareFrom}:{}),...(conversationFrom?{conversationFrom}:{}) } } });
+    /* WHERE THE WORLD WAS WHEN AN OVERLAY WENT UP. Remembered for the same
+       reason the composer's origin is: dismissing has to be a RETURN through
+       history, so the browser's own Back agrees with Escape and with the
+       close. Writing `open:null` forward instead would leave a Back that
+       reopens the thing you just dismissed. */
+    const openFrom=next.open?(!before?.open&&!options.replace?previous:stored?.scope===current.scope?stored.openFrom:undefined):undefined;
+    current.navigate(to, { replace: options.replace, state: { wakaView: { scope: current.scope, query: options.query ?? '', ...(composerFrom ? { composerFrom } : {}),...(reviewFrom?{reviewFrom}:{}),...(shareFrom?{shareFrom}:{}),...(conversationFrom?{conversationFrom}:{}),...(openFrom?{openFrom}:{}) } } });
   }, []);
   const closeComposer = useCallback(() => {
     const current = latest.current;
@@ -55,5 +61,24 @@ export function useViewNavigation(scope: string | null) {
     if(stored?.scope===current.scope&&stored.shareFrom===to)current.navigate(-1);
     else current.navigate(to,{replace:true});
   },[]);
-  return { view, href, key: location.key, query, write, closeComposer,closeReview,closeShare, own };
+  /**
+   * PUTTING DOWN WHAT YOU HELD UP.
+   *
+   * Founder: "for your inspirations, this should just be a modal that you can
+   * escape to go back to your top of mind." The whole point of the overlays
+   * is that leaving one lands you exactly where you were, so this walks back
+   * through history when it was this surface that pushed the overlay, and
+   * only falls back to rewriting the address when it was not — a cold link
+   * straight to `/?open=saves` has no history behind it to return to, and
+   * there the world's own address IS the way back.
+   */
+  const closeOpen=useCallback(()=>{
+    const current=latest.current,before=readViewLocation(current.location.pathname,current.location.search);
+    if(!before?.open)return;
+    const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
+    own.current=null;
+    if(stored?.scope===current.scope&&stored.openFrom) current.navigate(-1);
+    else current.navigate(viewHref({...before,open:null}),{replace:true});
+  },[]);
+  return { view, href, key: location.key, query, write, closeComposer,closeReview,closeShare,closeOpen, own };
 }

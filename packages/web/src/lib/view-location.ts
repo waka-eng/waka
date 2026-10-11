@@ -1,5 +1,28 @@
 /** URLs carry identity and view metadata, never memory or search text. */
 export type ViewSection = 'top' | 'field' | 'sky';
+/**
+ * WHAT IS OPEN OVER THE WORLD.
+ *
+ * Founder: "for your inspirations, after I click on it, I feel like I'm lost
+ * how to go back to the previous screen, and I didn't realise clicking on top
+ * of mind would leave me there. So maybe for your inspirations, this should
+ * just be a modal that you can escape to go back to your top of mind."
+ *
+ * These were three ADDRESSES and are now three overlays, and the difference
+ * is the whole fix. An address replaces the world: the world unmounts, the
+ * camera forgets where it was, and the only way back is to find a control
+ * that happens to name where you came from — which is why pressing "Top of
+ * mind" to leave the archive felt like being moved rather than returning.
+ * A parameter on the world's own address cannot do that. The pathname does
+ * not change, so the world behind never unmounts, and going back is dropping
+ * the parameter rather than navigating somewhere new.
+ *
+ * ONE AT A TIME, BY CONSTRUCTION. A union rather than three booleans,
+ * because two of these open at once is not a state anyone meant and a
+ * boolean trio makes it representable.
+ */
+export type ViewOpen = 'saves' | 'principles' | 'conversations';
+const OPEN: readonly ViewOpen[] = ['saves', 'principles', 'conversations'];
 export interface ViewLocation {
   wallId: string | null;
   label?: string;
@@ -15,8 +38,9 @@ export interface ViewLocation {
   principleId:string|null;
   sharePrinciple:boolean;
   conversationId:string|null;
+  open: ViewOpen | null;
 }
-export const EMPTY_VIEW: ViewLocation = { wallId: null, section: 'top', inspirationId: null, reflectionId: null, memberId: null, at: null, find: false, compose: false,reviewId:null,reviewAnswerId:null,principleId:null,sharePrinciple:false,conversationId:null };
+export const EMPTY_VIEW: ViewLocation = { wallId: null, section: 'top', inspirationId: null, reflectionId: null, memberId: null, at: null, find: false, compose: false,reviewId:null,reviewAnswerId:null,principleId:null,sharePrinciple:false,conversationId:null,open:null };
 const id = (value: string | null) => value && /^[a-zA-Z0-9_-]{1,120}$/.test(value) ? value : null;
 
 export function readViewLocation(pathname: string, search = ''): ViewLocation | null {
@@ -44,6 +68,8 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
   view.reflectionId = params.get('reflection') === 'open' ? 'open' : id(params.get('reflection'));
   if (!view.inspirationId) view.reflectionId = null;
   view.memberId = id(params.get('member'));
+  const open = params.get('open');
+  view.open = OPEN.find((name) => name === open) ?? null;
   view.find = params.get('find') === '1';
   view.compose = params.get('compose') === '1';
   const section = params.get('view');
@@ -66,6 +92,7 @@ export function viewHref(view: ViewLocation): string {
   if (view.inspirationId && view.reflectionId) params.set('reflection', view.reflectionId);
   if (view.find) params.set('find', '1');
   if (view.compose) params.set('compose', '1');
+  if (view.open) params.set('open', view.open);
   return path + (params.size ? `?${params}` : '');
 }
 

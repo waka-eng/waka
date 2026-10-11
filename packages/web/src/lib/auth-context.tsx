@@ -40,6 +40,7 @@ import {
   useRef,
   useState,
 } from "react";
+import {clearUnsentDrafts} from './draft-eviction';
 import {setInspirationSnapshotOwner} from './inspiration-snapshots';
 import type { ReactNode } from "react";
 
@@ -370,7 +371,33 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     [applyViewer],
   );
 
+  /*
+   * SIGNING OUT HAS TO TAKE THE UNSENT WORDS WITH IT.
+   *
+   * Draft text outlived logout in `localStorage`, so the next person at the
+   * browser could read the save the previous one had not decided to keep and
+   * the message they had not decided to send. `clearUnsentDrafts` is the
+   * narrow version of that — see its header for what is deliberately left
+   * behind, which is everything the returning owner is entitled to find.
+   *
+   * It hangs off `logout`, not off `applyViewer(null)`, and the difference
+   * matters: hydration also clears the viewer when `/auth/me` cannot be
+   * reached, and that is a person with a dead network and a valid session, not
+   * a person leaving. Evicting there would delete a draft as a consequence of
+   * bad wifi.
+   *
+   * The two platforms clear at different moments for the same reason they log
+   * out differently. Web wipes local state first and treats the server round
+   * trip as best-effort, so the drafts go with that wipe. Native reports a
+   * failed secure retirement instead of claiming a logout that did not happen,
+   * so it clears only once `apiLogout()` has resolved — a person still signed
+   * in because the keychain write failed must not already have lost what they
+   * were typing.
+   */
   const logout = useCallback(async (): Promise<void> => {
+    const leaving = viewer
+      ? { accountId: viewer.account.id, profileId: viewer.profile.id }
+      : null;
     // Wipe local state FIRST so the UI updates immediately even if the
     // network call hangs. The server-side cookie clear is a best-effort
     // follow-up; `apiLogout()` swallows network errors by design.
@@ -378,11 +405,13 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       // Native invalidation is emitted after durable retirement, before the
       // server round trip. A failed secure write must not claim successful logout.
       await apiLogout();
+      clearUnsentDrafts(leaving);
       return;
     }
     applyViewer(null);
+    clearUnsentDrafts(leaving);
     await apiLogout();
-  }, [applyViewer]);
+  }, [applyViewer, viewer]);
 
   const refresh = useCallback(async (): Promise<ApiViewer | null> => {
     const startedAt = authMutationRef.current;

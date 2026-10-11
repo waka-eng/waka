@@ -8,12 +8,34 @@
  * anything that opens over the thing they were reading: press away, and it
  * goes; press Escape, and it goes.
  *
- * The rest of the sheets never learned it. The account sheet, a room's
- * settings, the join sheet, a statement's provenance room and the antechamber
- * each closed only by finding their own small word — which is fine the first
- * time and a trap every time after, because the way out of the LAST sheet is
- * never where the way out of this one is. One hook, so a sheet added later
- * gets both without anyone remembering to.
+ * The rest of the sheets never learned it. A room's settings, the join sheet,
+ * a statement's provenance room and two more besides each closed only by
+ * finding their own small word — which is fine the first time and a trap
+ * every time after, because the way out of the LAST sheet is never where the
+ * way out of this one is. One hook, so a sheet added later gets both without
+ * anyone remembering to.
+ *
+ * THAT LIST IS SHORTER THAN IT WAS, AND NOT BECAUSE THE RULE RELAXED. It used
+ * to open with "the account sheet", which no longer exists in any form: the
+ * account is a card under the settings cog in the top bar, and it closes
+ * itself from inside `components/Menu.tsx`, because it belongs to that bar
+ * rather than opening over the world. The antechamber left the other way —
+ * it moved to the settings page, where it is a `DialogSurface` that owns its
+ * own dismissal. Three callers remain, all of them in `pages/Home.tsx`: a
+ * room's settings, the join sheet, a statement's provenance room.
+ *
+ * Two surfaces leaving without a line of this file changing is the argument
+ * for it. Each took its way out with it, and the hook is where the rule lives
+ * rather than something each sheet had to remember.
+ *
+ * WHAT THE REMAINING THREE ACTUALLY TAKE FROM HERE, since all three are
+ * `DialogSurface`s and that surface already answers Escape itself: the press
+ * away, always — a surface has no way to hear a press that lands outside it —
+ * and Escape in the one case the surface cannot hear, which is a press after
+ * focus has left the sheet. Click the world behind an open sheet and focus is
+ * on the body; the surface's own `onKeyDown` never fires, and the listener
+ * here does. So the two halves do not overlap, and the `[data-jar-surface]`
+ * check below is this hook standing aside for the half that is not its own.
  *
  * WHY POINTERDOWN AND NOT CLICK. The sheet should be gone before whatever the
  * press was actually for happens, and a click that lands on the world would

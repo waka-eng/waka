@@ -427,10 +427,9 @@
    never from weather.
    ======================================================================= */
 
-.bg-field,
-.noise {
-  display: none;
-}
+/* `.bg-field` / `.noise` were hidden here rather than deleted, and that is
+   why they outlived three craft passes. They are gone now — rules and
+   component both. See the note in `global.css`. */
 
 body {
   background: var(--bg);

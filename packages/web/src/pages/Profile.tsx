@@ -621,6 +621,19 @@ export default function ProfilePage(): JSX.Element {
      * card's eyebrow and title are gone rather than repeated.
      */
     <main className="waka-page profile-page">
+      {/* THE WAY OUT, WHICH HAD NEVER WORKED HERE. The cog on every screen
+          navigates to this page, and `Menu`'s one-press exit — the control
+          the founder asked for three times, "one click to go back to top of
+          mind" — looked its row up by a string suffix that no row had
+          carried since the switcher became a list of owners. So the chevron
+          at the top of the settings page rendered, read "Your top of mind",
+          and did nothing, which is worse than no control at all: it answers
+          the question and then does not. It presses `items[0]` now, and
+          `test/page-exit.test.tsx` presses it from this page for real.
+          The foot of the page keeps its own `Back home` link as well, and
+          that is not a duplicate worth removing: this page is long enough
+          that somebody at the bottom of it should not have to travel back to
+          the chrome to leave. */}
       <Menu
         locale={locale}
         items={menu.items}
@@ -711,13 +724,16 @@ export default function ProfilePage(): JSX.Element {
               value={name}
               disabled={submitting || deleting}
               required
-              aria-describedby="profile-nickname-hint"
               aria-invalid={!trimmedDisplayName || undefined}
               onChange={(event) => setName(event.currentTarget.value)}
             />
-            <span id="profile-nickname-hint" className="field-hint">
-              {t(locale, "profileNicknameNoSpacesHint")}
-            </span>
+            {/* NO HINT. It said "This is how WAKA addresses and shows you.
+                Spaces are okay." — the first half restates the label
+                "Display name", and the second half prints the ABSENCE of a
+                constraint, which is the purest form of Law 4: a person who
+                has not tried to type a space is being told about a rule that
+                does not exist. Founder, pointing at "Enter to keep": "remove
+                things not 100% necessary." */}
           </label>
           <label className="field">
             <span className="field-label">{t(locale, "profileLanguageLabel")}</span>
@@ -743,10 +759,20 @@ export default function ProfilePage(): JSX.Element {
           </label>
           {open !== "public" ? (
             <p className="profile-disclose">
+              {/* TWO ENGLISH SENTENCES WERE WRITTEN STRAIGHT INTO THIS FILE,
+                  and one of them was not a control's name.
+                  "your page is public — change it" is a STATE and an ACT
+                  crammed into one label, which is Law 1 both ways round: read
+                  aloud, it is a status line you cannot predict the effect of
+                  pressing. The act is all a control may say. Whether the page
+                  is already public is answered by the panel the press opens —
+                  the checkbox and the live URL are both in there — rather
+                  than by a button narrating itself.
+                  They were also the only two strings on this page not in the
+                  catalogue, so the Korean settings page said them in English
+                  and nothing anywhere could notice. */}
               <button type="button" onClick={() => setOpen("public")}>
-                {publicProfileEnabled
-                  ? "your page is public — change it"
-                  : "make a public page"}
+                {t(locale, publicProfileEnabled ? "profilePublicChange" : "profilePublicMake")}
               </button>
             </p>
           ) : null}
@@ -772,25 +798,47 @@ export default function ProfilePage(): JSX.Element {
                   autoComplete="off"
                   value={publicHandle}
                   disabled={submitting || deleting}
-                  aria-describedby="profile-public-handle-hint"
+                  aria-describedby={handleError ? "profile-public-handle-hint" : undefined}
                   aria-invalid={handleError ? true : undefined}
                   onChange={(event) => setPublicHandle(event.currentTarget.value)}
                 />
               </div>
-              <span
-                id="profile-public-handle-hint"
-                className={handleError ? "field-error" : "field-hint"}
-              >
-                {handleError ?? t(locale, "profilePublicHandleHint")}
-              </span>
+              {/* THE RULE ARRIVES WHEN IT IS BROKEN, AND NOT BEFORE.
+                  This slot printed `profilePublicHandleHint` at rest —
+                  "Used only for your public URL, like waka.im/@your-handle.
+                  Use 3–24 letters, numbers, hyphens, or underscores; no
+                  spaces." Its first sentence is the panel's own subtitle two
+                  elements up, and its second is `profilePublicHandleInvalid`
+                  verbatim, which is what appears the moment the handle is
+                  actually wrong. So the page said the same thing three times
+                  and one of them was a specification to memorise before
+                  typing. Founder: "so crowded!" */}
+              {handleError ? (
+                <span id="profile-public-handle-hint" className="field-error">
+                  {handleError}
+                </span>
+              ) : null}
             </label>
-            <p className="login-subtitle">{t(locale, "profilePublicPrivacyHint")}</p>
+            {/* WHAT SHARING ACTUALLY SHARES — said ONCE, and pointed at.
+                Each of these two checkboxes carried an `sr-only` span
+                repeating a paragraph that is already on this screen: the
+                first repeated the privacy paragraph directly above it, the
+                second repeated the panel's own subtitle. So a person using a
+                screen reader heard the same disclosure three times in one
+                panel while a sighted person read it once. Law 4 names this
+                case exactly — "aria-labels that duplicate visible text".
+                The association is what was worth keeping, not the copy, so
+                both boxes now describe themselves with the VISIBLE paragraph
+                and the clones are gone. */}
+            <p className="login-subtitle" id="profile-public-privacy">
+              {t(locale, "profilePublicPrivacyHint")}
+            </p>
             <label className="profile-toggle-row">
               <input
                 type="checkbox"
                 checked={publicProfileEnabled}
                 disabled={submitting || deleting}
-                aria-describedby="profile-public-profile-description"
+                aria-describedby="profile-public-privacy"
                 onChange={(event) => {
                   const checked = event.currentTarget.checked;
                   setPublicProfileEnabled(checked);
@@ -798,26 +846,40 @@ export default function ProfilePage(): JSX.Element {
                 }}
               />
               <span>{t(locale, "profilePublicEnabled")}</span>
-              <span id="profile-public-profile-description" className="sr-only">
-                {t(locale, "profilePublicPrivacyHint")}
-              </span>
             </label>
             <label className="profile-toggle-row">
               <input
                 type="checkbox"
                 checked={publicTopOfMindEnabled}
                 disabled={submitting || deleting || !publicProfileEnabled}
-                aria-describedby="profile-public-top-of-mind-description"
+                aria-describedby="profile-public-privacy"
                 onChange={(event) => setPublicTopOfMindEnabled(event.currentTarget.checked)}
               />
               <span>{t(locale, "profilePublicTopOfMindEnabled")}</span>
-              <span id="profile-public-top-of-mind-description" className="sr-only">
-                {t(locale, "profilePublicHint")}
-              </span>
             </label>
             {publicProfileUrl ? (
-              <a className="profile-public-link" href={`/@${normalizedPublicHandle}`}>
-                {publicProfileUrl}
+              /* IT OPENS BESIDE THE SETTINGS PAGE, NOT INSTEAD OF IT.
+                 This was a plain in-app link, so pressing it unmounted
+                 settings and landed the owner on their own public page —
+                 which has no chrome, no switcher and no cog, because it is
+                 built for strangers. The only control there says "Open WAKA"
+                 and goes to the world. So the owner checking their public
+                 page lost the page they were configuring and could not get
+                 back to it in one press: Law 2's own example, "reaching it
+                 unmounted the world".
+                 A new tab is the one fix that leaves nothing to go back TO,
+                 because settings never left. And because a tab opening is a
+                 side effect a link must declare — Law 1 — the control says so
+                 instead of printing the URL. The URL was the label before,
+                 which named a destination and hid the act; it is still the
+                 href, which is where a URL belongs. */
+              <a
+                className="profile-public-link"
+                href={`/@${normalizedPublicHandle}`}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                {t(locale, "profilePublicOpenInNewTab")}
               </a>
             ) : null}
           </section>
@@ -978,7 +1040,15 @@ export default function ProfilePage(): JSX.Element {
                     type="text"
                     value={draft}
                     disabled={busy}
-                    aria-label={memory.name}
+                    /* THE LABEL NAMES THE FIELD, NOT THE VALUE IN IT. This
+                       was `aria-label={memory.name}` — the field's own
+                       contents announced as the field's name, so a screen
+                       reader said "claude, edit text, claude", and it said
+                       the SERVER's name while the box held an unsaved draft.
+                       Law 4: do not say what the person can already read.
+                       `profileMemoryRename` is what this box is for, and it
+                       is the word on the control that commits it. */
+                    aria-label={t(locale, "profileMemoryRename")}
                     onChange={(event) => {
                       // Read the value here, not inside the updater: React
                       // runs that callback after the handler returns, and by
@@ -1485,7 +1555,12 @@ export default function ProfilePage(): JSX.Element {
             <p className="login-eyebrow" id="profile-danger-title">
               {t(locale, "profileDangerZone")}
             </p>
-            <p className="login-subtitle">{t(locale, "profileDeleteHint")}</p>
+            {/* The consequence, said where it is visible, and referenced by
+                both controls below rather than cloned into an `sr-only` span
+                that said it a second time. */}
+            <p className="login-subtitle" id="profile-delete-description">
+              {t(locale, "profileDeleteHint")}
+            </p>
           </div>
           <label className="field">
             <span className="field-label">{t(locale, "profileDeleteConfirmLabel")}</span>
@@ -1507,9 +1582,6 @@ export default function ProfilePage(): JSX.Element {
           >
             {deleting ? t(locale, "profileDeleting") : t(locale, "profileDelete")}
           </button>
-          <span id="profile-delete-description" className="sr-only">
-            {t(locale, "profileDeleteHint")}
-          </span>
         </section>
         {/* ONE PLACE FOR THINGS YOU CAN DO, ORDERED BY CONSEQUENCE.
             These were scattered — sign out top-right, delete mid-page, back
@@ -1524,12 +1596,20 @@ export default function ProfilePage(): JSX.Element {
           <Link className="login-link" to="/">{t(locale, "profileBackHome")}</Link>
         </p>
           {tab === "you" && open !== "danger" ? (
+            /* NAMED FOR WHAT IT REVEALS, NOT FOR WHAT IT WOULD DO. This read
+               "delete this account" — hardcoded English, and a lie: it opens
+               a confirmation, it does not delete anything. Two controls on
+               one page both reading "Delete account", one of which deletes,
+               is the exact shape of "so many different buttons that I have no
+               idea what its supposed to do". The two folds above it already
+               name their contents the same quiet way ("keys your agents hold
+               & grants"), so this one does too. */
             <button
               type="button"
               className="profile-disclose-inline"
               onClick={() => setOpen("danger")}
             >
-              delete this account
+              {t(locale, "profileDeleteSection")}
             </button>
           ) : null}
         </div>

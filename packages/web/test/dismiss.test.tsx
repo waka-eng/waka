@@ -8,11 +8,22 @@
  * are the same expectation, and it is not about those two surfaces: it is
  * what anyone expects of a thing that opens over what they were reading.
  *
- * Five sheets never learned it — the account sheet, a room's settings, the
- * join sheet, a statement's provenance room, the antechamber — and each one
- * closed only by finding its own small word. That is survivable once and a
- * trap every time after, because the way out of the last sheet is never where
- * the way out of this one is.
+ * The sheets never learned it — a room's settings, the join sheet, a
+ * statement's provenance room, and two more at the time — and each one closed
+ * only by finding its own small word. That is survivable once and a trap
+ * every time after, because the way out of the last sheet is never where the
+ * way out of this one is.
+ *
+ * TWO OF THOSE FIVE HAVE SINCE MOVED, WHICH IS THE CASE FOR TESTING THE HOOK
+ * AND NOT THE SHEETS. The list here used to begin with "the account sheet",
+ * and there is no account sheet: the account is a card under the settings cog
+ * in the top bar, closing itself inside `components/Menu.tsx`. The
+ * antechamber went to the settings page and closes through its own
+ * `DialogSurface`. Both left without this file noticing, and nothing it
+ * asserts was weakened by either — because what is asserted is
+ * `useDismissAway`, not the surfaces that happen to call it this month. A
+ * suite that mounted five real sheets would be two mounts of dead markup by
+ * now, and would have gone red over a move rather than a bug.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): nothing. `useDismissAway` is a hook
  * over two window listeners, so it can be driven directly — a component that

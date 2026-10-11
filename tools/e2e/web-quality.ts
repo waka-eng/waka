@@ -111,13 +111,21 @@ try{
     const sent=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/api/conversations');
     await chat.getByRole('button',{name:'Send',exact:true}).click();await sent;await page.request.get(`${origin}/fixture?conversation-reply=complete`);
     const reply=chat.locator('.chat-messages [data-role="assistant"]').last();await reply.waitFor({state:'visible'});
-    const sourceSummary=reply.locator('.chat-source-summary');assert.equal(await sourceSummary.evaluate((node:HTMLDetailsElement)=>node.open),false);
-    await sourceSummary.locator('summary').press('Enter');assert.ok(await sourceSummary.locator('button').count()>0);
-    await reply.locator('.jar-item-actions summary').press('Enter');
-    await reply.getByRole('button',{name:'Correct reply',exact:true}).click();assert.equal(await chat.locator('.chat-correction').isVisible(),true);
+    /* WHAT THIS USED TO WALK, AND WHY IT DOES NOT. Three steps stood here: it
+       opened the footnote list under the reply (`.chat-source-summary`), opened
+       the per-message actions disclosure, and pressed "Correct reply" to check
+       that `.chat-correction` appeared. All three controls were removed on
+       2026-10-10 when the surface was cut to a transcript, a box and a stop —
+       founder: "so many different buttons that I have no idea what its supposed
+       to do." So the walk now checks the SHAPE instead of the vanished
+       controls: once a reply has landed and nothing is being generated, the
+       only button on the page is the box's own. That is the property the
+       reduction has to keep true, and it is the one a screenshot alone would
+       not catch regressing. */
+    assert.deepEqual(await chat.locator('button').allTextContents(),['Send'],'The reply leaves one control on the surface');
     await page.screenshot({path:resolve(output,`chat-${size.width}.png`)});
     journeys.push({viewport:size,confirmedSaves:1,duplicateWrites:0,automaticReflections:0,optionalReflect:true,searchReopen:true,
-      saveBeforeQuestion:true,explicitQuestion:true,reviewNextKeeps:true,keyboardItemActions:true,chatSources:true,chatCorrection:true});
+      saveBeforeQuestion:true,explicitQuestion:true,reviewNextKeeps:true,keyboardItemActions:true,chatOneControl:true});
     await context.close();
   }
   const final=await (await fetch(`${origin}/fixture`)).json();

@@ -52,6 +52,22 @@
   --waka-scrim: color-mix(in srgb, #000 58%, transparent);
 
   /**
+   * THE SHADOW UNDER A FLOATING SURFACE, named because it was copied.
+   *
+   * `0 24px 60px rgb(0 0 0 / 55%)` was written out at three call sites — the
+   * sheet that opens on one kept thing, the corner's list, and the overlay
+   * the archive became — and the third and fourth existed only because the
+   * first was there to copy. That is how the six radii and the three scrims
+   * happened: a value that is correct is pasted rather than named, and then
+   * the fifth copy is 58% because someone eyeballed it.
+   *
+   * It pairs with `--waka-scrim` and belongs beside it: a thing that floats
+   * over the world sinks the world and casts on it, and those are two halves
+   * of one decision.
+   */
+  --waka-lift: 0 24px 60px rgb(0 0 0 / 55%);
+
+  /**
    * THE INK THAT SITS ON THE CREATURE'S OWN LIGHT.
    *
    * Everywhere else in this product the ink is light and the ground is dark.
@@ -717,7 +733,8 @@
    They are the same thing now, because they are the same element. */
 
 .waka-page-status {
-  margin: 0;
+  /* Same air the grid takes, for the same reason — see `.waka-days`. */
+  margin: var(--sp-40) 0 0;
   font-family: var(--waka-face);
   font-size: var(--t-ui);
   color: var(--muted);
@@ -734,6 +751,477 @@
   font-family: var(--waka-face);
   font-size: var(--t-ui);
   cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------------
+ * WHAT YOU HOLD UP IN FRONT OF THE WORLD
+ *
+ * Founder: "for your inspirations, after I click on it, I feel like I'm lost
+ * how to go back to the previous screen, and I didn't realise clicking on top
+ * of mind would leave me there. So maybe for your inspirations, this should
+ * just be a modal that you can escape to go back to your top of mind."
+ *
+ * Your inspirations, your principles and your conversations were pages, and
+ * being a page is what made them a trap: reaching one unmounted the world, so
+ * there was nothing left to return to and every way out read as a trip
+ * somewhere new. These are the same three surfaces as overlays. The world is
+ * still behind them — still lit, still at the same camera — which is the
+ * whole reason dismissal feels like putting something down.
+ *
+ * SO THE SCRIM IS NOT QUITE OPAQUE, ON PURPOSE. It has to sink the world far
+ * enough that a grid of cards reads as the thing in front, and not so far
+ * that the world stops being visibly there. If you cannot see what you are
+ * about to go back to, an overlay is just a page with extra steps.
+ *
+ * IT IS WIDER THAN A SHEET AND SHORTER THAN A PAGE. `.waka-sheet` is 34rem
+ * because one kept thing is a column of prose; these hold grids and lists, so
+ * they take the page's own 1040px measure. The height is capped so the
+ * world's edges stay visible on every side — an overlay that reaches the
+ * viewport's edges is indistinguishable from having navigated.
+ * ------------------------------------------------------------------------- */
+
+.waka-over-scrim {
+  position: fixed;
+  inset: 0;
+  /* UNDER THE CARD SHEET, OVER EVERYTHING ELSE. The sheet that opens on one
+     kept thing (z-70) opens INSIDE this, so it has to come out on top; the
+     corner lists and the menu (z-60) are chrome belonging to the world
+     behind, so they go under. */
+  z-index: 65;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--sp-20) + env(safe-area-inset-top)) var(--sp-20)
+    calc(var(--sp-20) + env(safe-area-inset-bottom));
+  background: var(--waka-scrim);
+}
+
+.waka-over {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-20);
+  width: min(1040px, 100%);
+  max-height: 88dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--sp-24);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
+  background: var(--waka-raised);
+  box-shadow: var(--waka-lift);
+}
+
+/**
+ * IT NAMES ITSELF, which as a page it deliberately did not.
+ *
+ * The rule then was right: one control named the view — the switcher at the
+ * top of the screen — and a page heading repeating it made the name appear
+ * twice. An overlay has no switcher above it, and the world behind is showing
+ * somebody's top of mind, so an untitled grid would be floating over an
+ * unrelated statement with nothing saying which of the two you were reading.
+ * One namer per surface, and for an overlay the surface is the namer.
+ */
+.waka-over-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-16);
+}
+
+.waka-over-title {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: var(--t-lead);
+  font-weight: 300;
+  color: var(--ink);
+}
+
+/* THE WAY OUT IS VISIBLE, not merely known. Escape works and the scrim works
+   and neither announces itself — and this surface exists because a person
+   could not find the way back from its predecessor, so the one that can be
+   seen is not optional. Quiet at rest, inked on approach: light is the only
+   meaning channel. */
+.waka-over-close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: calc(-1 * var(--sp-12)) calc(-1 * var(--sp-8)) 0 0;
+  border: 0;
+  border-radius: var(--waka-r-control);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.waka-over-close:hover,
+.waka-over-close:focus-visible {
+  color: var(--ink);
+}
+
+/* The count and the search share a line: the count tells you whether
+   searching is worth it, and the field is what you search with. */
+.waka-over-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-12) var(--sp-16);
+}
+
+.waka-over-count {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.waka-over-search {
+  flex: 1 1 12rem;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-input);
+}
+
+.waka-over-search::placeholder {
+  color: var(--muted);
+}
+
+.waka-over-search:focus-visible {
+  border-color: var(--ink);
+  outline: none;
+}
+
+.waka-over-status {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  color: var(--muted);
+}
+
+.waka-over-retry,
+.waka-over-new {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: var(--sp-12) var(--sp-20);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
+  background: var(--waka-raised);
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  cursor: pointer;
+  /* ONE LINE, ALWAYS. Founder: "all buttons single line, never wrapping." A
+     control that reflows to two lines stops reading as one act. */
+  white-space: nowrap;
+}
+
+.waka-over-retry:hover,
+.waka-over-retry:focus-visible,
+.waka-over-new:hover,
+.waka-over-new:focus-visible {
+  border-color: var(--ink);
+}
+
+/* ---------------------------------------------------------------------------
+ * WHAT TO OPEN — the left corner's list
+ *
+ * Anchored to the corner it belongs to rather than centred on the screen: it
+ * is a continuation of the press that opened it, and a list that appears
+ * somewhere else makes you look for it. Same register as the view switcher's
+ * own sheet, because they are the same kind of control asking two different
+ * questions. See `lib/page-menu`.
+ * ------------------------------------------------------------------------- */
+
+.waka-opens {
+  position: absolute;
+  top: calc(100% + var(--sp-8));
+  left: 0;
+  z-index: 60;
+  min-width: 14rem;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-8);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
+  background: var(--waka-raised);
+  box-shadow: var(--waka-lift);
+}
+
+/* ---------------------------------------------------------------------------
+ * THE PRINCIPLES, AS CARDS YOU WOULD HOLD UP
+ *
+ * Founder: "I want your principles page to be something where people would
+ * love to share them. Brainstorm different ways to design an experience where
+ * people have the urge and motivation to want to share this publicly."
+ *
+ * The machinery for sharing was already finished and good — a real image, a
+ * square or a story, remembered drafts. The problem was upstream of it: what
+ * you arrived at was a column of sentences in a text colour, and a list is
+ * not a thing anyone shares. You share ONE statement with a shape around it.
+ * A screenshot of a list is illegible, which is the honest test of whether
+ * something was ever shareable, and the list failed it.
+ *
+ * So the urge is not created by a share button. It is created by the artifact
+ * ALREADY BEING ON SCREEN: these are the exported card at reading size, same
+ * statement, same face, same proof line. By the time anyone presses share
+ * they have already seen the thing and decided they like it.
+ *
+ * THE PROOF LINE IS WHAT SEPARATES THIS FROM A FORTUNE COOKIE. A nice
+ * sentence is something anyone could type. "Held since August, drawn from 14
+ * things you kept" is the half a stranger cannot fake — it says the sentence
+ * was earned rather than composed. It is quiet and small because it is
+ * evidence, not a headline.
+ * ------------------------------------------------------------------------- */
+
+.waka-held {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr));
+  gap: var(--sp-16);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.waka-held-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--sp-24);
+  width: 100%;
+  height: 100%;
+  /* A CARD, NOT A LINE — so it has the proportions of the thing it would be
+     exported as. Squarish rather than tall: a statement is one or two lines
+     and the space under it is what makes the sentence look held rather than
+     listed. */
+  min-height: 11rem;
+  padding: var(--sp-24);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-surface);
+  background: var(--cell);
+  text-align: left;
+  /* NO `cursor: pointer` HERE. It had one while the card WAS the button; the
+     card is a container now and the statement inside it is the control, so a
+     hand on the padding promised a press the padding does not answer. Law 1:
+     a control names what it does, and a cursor is the smallest label there
+     is. */
+}
+
+.waka-held-card:hover,
+.waka-held-card:focus-visible {
+  border-color: var(--ink);
+  outline: none;
+}
+
+/* THE STATEMENT IS THE CONTROL THAT FILLS THE CARD, so it carries none of a
+   button's own chrome and grows to take the empty space — pressing anywhere
+   in the card that is not the share still opens the principle. */
+.waka-held-open {
+  flex: 1 1 auto;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.waka-held-open:focus-visible {
+  outline: none;
+}
+
+/* The proof and the act share the card's last line: the proof is why you
+   would share it, so the press belongs beside the reason rather than under
+   it. Wraps to two lines before it ever crowds. */
+.waka-held-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-8) var(--sp-16);
+}
+
+/* Quiet at rest, inked on approach — the same register as every other
+   secondary act in this product, and never a glyph: founder, on a cog that
+   did not look like settings, "make settings look like settings". */
+.waka-held-share {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-fine);
+  cursor: pointer;
+  /* ONE LINE, ALWAYS. Founder: "all buttons single line, never wrapping." */
+  white-space: nowrap;
+}
+
+.waka-held-share:hover,
+.waka-held-share:focus-visible {
+  color: var(--ink);
+}
+
+.waka-held-words {
+  font-family: var(--waka-face);
+  font-size: var(--t-reading);
+  font-weight: 300;
+  line-height: 1.25;
+  /* The statement is the whole point, so it gets the one typographic luxury
+     on the card: tightened tracking at reading size, which is what makes a
+     sentence look set rather than typed. */
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.waka-held-proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-8);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+
+/* The name is the attribution, so it is the one part of the proof line that
+   is not dimmed — a card with no visible owner is not a card anyone shares. */
+.waka-held-who {
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------------------
+ * YOUR CONVERSATIONS
+ *
+ * A list, because what a person wants here is almost always "the one about X,
+ * from last week". The preview is the first line that has words in it and the
+ * date sits at the end of the row, which is the only two things you recognise
+ * a past conversation by.
+ * ------------------------------------------------------------------------- */
+
+.waka-talks {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* THE ROW IS A CONTAINER NOW, because it carries two acts: open it, and
+   erase it. The hairline and the hover still belong to the whole row, so
+   they stay here rather than moving onto the control that fills it. */
+.waka-talks-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-16);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--sp-12) var(--sp-8);
+  /* A hairline between rows rather than a box around each: these are one
+     list, and twelve bordered cards would read as twelve surfaces. */
+  border-bottom: 1px solid var(--line);
+}
+
+.waka-talks li:last-child .waka-talks-row {
+  border-bottom: 0;
+}
+
+.waka-talks-row:hover,
+.waka-talks-row:focus-within {
+  background: var(--cell);
+}
+
+/* Opening is the row's whole width minus whatever the delete takes, so the
+   press target stays the size of the thing you are aiming at. */
+.waka-talks-open {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-16);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.waka-talks-open:focus-visible {
+  outline: none;
+}
+
+/* THE DESTRUCTIVE VERB IS THE QUIETEST THING ON THE ROW, and only inks when
+   reached for. It is beside a list people scan, so anything louder would be
+   read as the row's purpose. */
+.waka-talks-del,
+.waka-talks-ask button {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 var(--sp-4);
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-fine);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.waka-talks-del:hover,
+.waka-talks-del:focus-visible,
+.waka-talks-ask button:hover,
+.waka-talks-ask button:focus-visible {
+  color: var(--ink);
+}
+
+/* The ask replaces the verb in place: a sheet over a list would make you
+   lose your place in the list to answer a question about one line of it. */
+.waka-talks-ask {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-4) var(--sp-8);
+}
+
+/* DISABLED DIMS THE FILL, NEVER THE LABEL. This product has shipped the
+   blank-rectangle bug before — a darkened label on a light fill on a dark
+   theme reads as an empty box. There is no fill here, so the label simply
+   stays legible and the cursor says it is busy. */
+.waka-talks-go:disabled {
+  color: var(--muted);
+  cursor: progress;
+}
+
+.waka-talks-warn {
+  flex: 1 1 100%;
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+
+.waka-talks-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--waka-face);
+  font-size: var(--t-body);
+  font-weight: 300;
+  color: var(--ink);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.waka-talks-when {
+  flex: 0 0 auto;
+  color: var(--muted);
 }
 
 /* ---------------------------------------------------------------------------
@@ -966,7 +1454,7 @@
   border: 1px solid var(--line);
   border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
-  box-shadow: 0 24px 60px rgb(0 0 0 / 55%);
+  box-shadow: var(--waka-lift);
 }
 
 .waka-sheet-picture {
@@ -1367,7 +1855,12 @@
   grid-template-rows: repeat(7, 1fr);
   grid-auto-flow: column;
   gap: var(--sp-6);
-  margin: 0;
+  /* THE AIR THAT USED TO BELONG TO AN EMPTY HEADER. `.waka-page-head` sat
+     above this holding nothing but two comments, and its `margin-bottom` was
+     the only reason the grid did not start under the chrome. The page dropped
+     the header; the air it was really providing is stated here, on the thing
+     that needs it, rather than carried by an element with no contents. */
+  margin: var(--sp-40) 0 0;
   padding: 0;
   list-style: none;
   overflow-x: auto;
@@ -1825,6 +2318,191 @@
   cursor: default;
 }
 
+
+/* ---------------------------------------------------------------------------
+ * SOMEBODY ELSE'S TOP OF MIND — /@handle
+ *
+ * The one surface in the product a stranger ever sees, and until this pass the
+ * one surface still wearing the deleted flat screens' clothes: five pastel
+ * post-its at hand-set tilts, each with its own paper colour, its own ink
+ * colour, a `saturate()` decay ramp and `cursor: grab` on a page where nothing
+ * can be dragged. `pages/PublicProfile.tsx` carries the full account of what
+ * that broke and why nobody noticed.
+ *
+ * It is the product's own material here: the page's ground, the page's face,
+ * the page's grain, and ONE channel. A reading is ordered by weight and light
+ * is how this product says weight, so the first line is at full ink and each
+ * one after it is a step quieter — which is the post-it `--decay` kept and
+ * finally said in the channel the product actually has.
+ *
+ * NOT `.waka-page`. That class reserves a 44px band at the top for the fixed
+ * chrome corners, and this page has no chrome: no switcher, no cog, nothing
+ * that belongs to an account. Borrowing it would reserve room for furniture
+ * that never arrives, which is how the archive got a header with nothing in
+ * it. The measure and the ground are the same; the reserve is not.
+ * ------------------------------------------------------------------------- */
+
+.waka-public {
+  position: relative;
+  min-height: 100dvh;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: clamp(var(--sp-48), 12vh, var(--sp-96)) clamp(20px, 5vw, 32px)
+    calc(var(--sp-56) + env(safe-area-inset-bottom));
+  background: var(--bg);
+  /* ONE FACE, EVERYWHERE — and this page is where "everywhere" was a claim
+     rather than a fact. The face is set on the shell rather than per element
+     so the corner's button and the fields of any future control inherit it
+     through `font-family: inherit` instead of each asking by name. */
+  font-family: var(--waka-face);
+}
+
+/* THE GRAIN IS NOT DECLARED HERE. Founder, on the speech bubble: "it should
+   also be the same grainy texture" — and the texture is one decision for the
+   whole product, so it is one rule. `chrome.css` holds it, and `.waka-public`
+   and `.waka-page` were added to its selector list in the same pass; the note
+   there records that two of the three surfaces it now covers had lost the
+   grain without any rule looking wrong. Writing a second tile here is how
+   this product ended up with three scrims and six radii. */
+
+.waka-public-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-12) var(--sp-20);
+  margin: 0 0 var(--sp-48);
+}
+
+/* Whose page this is. The name used to be set apart from "'s top of mind" in
+   its own span so it could be styled differently — a second treatment inside
+   one sentence, which is the "second voice" this file opens by refusing. One
+   line, one weight; the sentence does the work. */
+.waka-public-title {
+  margin: 0;
+  flex: 1 1 16rem;
+  font-family: var(--waka-face);
+  font-weight: 300;
+  font-size: clamp(28px, 3vw, 40px);
+  line-height: 1.24;
+  letter-spacing: 0.012em;
+  text-wrap: balance;
+  color: var(--ink);
+}
+
+/* The address, on the page that could not be loaded. */
+.waka-public-handle {
+  flex: 1 1 100%;
+  margin: 0 0 var(--sp-8);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+/* THE ONLY CONTROL ON THE PAGE, so it is a word with a rule under it rather
+   than a filled pill — the product's one interactive signal. It was a pill
+   named `.nc-lang--top`, left over from a language switcher deleted long ago:
+   a class naming a control that no longer exists, on a button doing something
+   else entirely. */
+.waka-public-enter {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--t-ui);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, var(--ink) 40%, transparent);
+  transition: text-decoration-color 0.2s ease;
+}
+
+/* The light moves to the rule under the word — the word is already at full
+   ink and has nothing left to brighten. Hover and focus together, because a
+   focus answer written apart from its hover drifts from it the first time
+   either is touched. */
+.waka-public-enter:hover,
+.waka-public-enter:focus-visible {
+  text-decoration-color: var(--ink);
+}
+
+/* Loading, empty, and the body of the page that is not here — one register
+   for all three, because they are the same kind of sentence. */
+.waka-public-state {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.waka-public-head .waka-public-state {
+  flex: 1 1 100%;
+  margin: var(--sp-16) 0 var(--sp-24);
+}
+
+.waka-public-reading {
+  display: grid;
+  gap: var(--sp-40);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.waka-public-said {
+  display: grid;
+  gap: var(--sp-8);
+}
+
+/**
+ * ONE RAMP, AND IT IS THE RAMP.
+ *
+ * `--waka-said-weight` arrives from the page as a single number from 1 down.
+ * It is spent HERE and only here, on ink, which is the whole difference
+ * between this and what it replaced: the post-it version spent its ramp on
+ * opacity AND saturation AND paper colour, so a reading's third line was
+ * simultaneously fainter, greyer and on different coloured paper.
+ *
+ * Mixed toward the ground rather than set as an opacity, so the words sit ON
+ * the page instead of becoming see-through — an opacity ramp over a grain
+ * layer lets the film read through the type.
+ */
+.waka-public-body {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-weight: 300;
+  font-size: var(--t-lead);
+  line-height: 1.5;
+  color: color-mix(
+    in srgb,
+    var(--ink) calc(var(--waka-said-weight, 1) * 100%),
+    var(--bg)
+  );
+}
+
+/* The first line of a reading is what is most on this person's mind, and it
+   is the one thing a visitor to this page came to read. It gets the size the
+   world gives a reading, not a size of its own. */
+.waka-public-said:first-child .waka-public-body {
+  font-size: var(--t-reading);
+  line-height: 1.34;
+}
+
+/* "These words were kept and what held them up has moved." A fact about the
+   line above it, so it is quieter than the line and not a line of its own. */
+.waka-public-aside {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: var(--t-fine);
+  line-height: 1.55;
+  color: var(--muted);
+}
 
 /* ---------------------------------------------------------------------------
  * SETTINGS

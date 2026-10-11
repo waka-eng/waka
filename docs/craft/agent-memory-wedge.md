@@ -351,7 +351,7 @@ path; it is the privacy identity.
 **10. The team door** (gated on the founder identity question, items 5
 and 8, and the veto decision). When it opens: `waka_get_room` — a
 read-only MCP tool serving the room's approved artifact through the
-human's seat (a per-route carve-out of `humanProfilesOnly` on GETs only;
+human's seat (a per-route carve-out of `humanSessionsOnly` on GETs only;
 the tally is already member-type-blind), with room-read named as a scope
 on the consent page. Eyes before hands before votes. Willingness-to-pay
 gets tested with hand-invoiced pilots on today's governance, not with

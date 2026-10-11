@@ -1,10 +1,23 @@
 // @vitest-environment jsdom
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/api/conversations` supplies owned
- * records and lost responses; `window.confirm` supplies explicit delete choices,
- * and `Storage.setItem` simulates a quota failure.
+ * records and lost responses; `Storage.setItem` simulates a quota failure.
  * `matchMedia` and `visualViewport` supply mobile and keyboard metrics;
  * DOM scroll geometry supplies a measurable viewport for the arrival test.
- * Real UI, owner-scoped drafts and recovery run; reply text is synthetic. */
+ * Real UI, owner-scoped drafts and recovery run; reply text is synthetic.
+ *
+ * WHAT THIS SUITE PROTECTS NOW, AFTER THE SURFACE WAS CUT TO A TRANSCRIPT, A
+ * BOX AND A STOP (2026-10-10). Founder: "So the talk with Waka experience is
+ * the most confusing chat experience ever with so many different buttons that
+ * I have no idea what its supposed to do."
+ *
+ * Eleven tests in here were about controls that no longer exist, and each one
+ * is tombstoned where it stood rather than quietly dropped — a test deleted
+ * without a sentence saying what it used to guard reads, six months later, as
+ * a rule nobody ever had. What is left is the half of this file that was
+ * never about buttons: that a message is saved exactly once, that a lost
+ * response is reconciled by reading rather than writing again, that a draft
+ * belongs to one account, that the transcript does not jump away from what
+ * you were reading, and that every failure still says so on screen. */
 import {act} from 'react';
 import {readFileSync} from 'node:fs';
 import {resolve,dirname} from 'node:path';
@@ -12,17 +25,16 @@ import {fileURLToPath} from 'node:url';
 import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ConversationPanel} from '../src/components/ConversationPanel';
-import {createConversation,deleteConversation,fetchConversation,fetchConversationCitation,fetchConversationContext,fetchConversationReply,listConversations,requestConversationReply,saveConversationMessage,stopConversationReply,type ApiConversation,type ConversationReplyState} from '../src/lib/api/conversations';
+import {createConversation,fetchConversation,fetchConversationReply,listConversations,saveConversationMessage,stopConversationReply,type ApiConversation,type ConversationReplyState} from '../src/lib/api/conversations';
 import {readConversationDrafts} from '../src/lib/conversation-drafts';
-import type {ConversationCitation} from '../src/lib/api/conversations';
-vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),deleteConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationContext:vi.fn(),fetchConversationReply:vi.fn(),requestConversationReply:vi.fn(),stopConversationReply:vi.fn(),fetchConversationCitation:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
+vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),stopConversationReply:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
 const scope={accountId:'owner',profileId:'profile'},id='11111111-1111-4111-8111-111111111111',choose=vi.fn();
 it('leaves reply text clear of mobile overlay scrollbars',()=>{
   const css=readFileSync(resolve(dirname(fileURLToPath(import.meta.url)),'../src/styles/chrome.css'),'utf8');
   expect(css.match(/\.jar-conversation-body\s*\{([^}]+)\}/)?.[1]).toContain('padding-inline-end:var(--sp-8)');
 });
 let root:Root,host:HTMLDivElement,stored:ApiConversation,replyState:ConversationReplyState;
-const openSource=vi.fn(),replyId='22222222-2222-4222-8222-222222222222';
+const replyId='22222222-2222-4222-8222-222222222222';
 beforeEach(()=>{vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});localStorage.clear();sessionStorage.clear();(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
   stored={id,profileId:scope.profileId,revision:0,createdAt:'2026-10-03T00:00:00Z',updatedAt:'2026-10-03T00:00:00Z',messages:[]};
   vi.mocked(fetchConversation).mockImplementation(async()=>structuredClone(stored));vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:false});
@@ -32,42 +44,28 @@ beforeEach(()=>{vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clear
   host=document.createElement('div');document.body.append(host);root=createRoot(host);
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();vi.unstubAllGlobals();vi.useRealTimers();});
-const mount=(conversationId:string|null=id,owner=scope)=>act(async()=>root.render(<ConversationPanel key={`${owner.accountId}:${owner.profileId}:${conversationId}`} scope={owner} id={conversationId} locale="en-US"  onChoose={choose} onOpenSource={openSource}/>));
+const mount=(conversationId:string|null=id,owner=scope)=>act(async()=>root.render(<ConversationPanel key={`${owner.accountId}:${owner.profileId}:${conversationId}`} scope={owner} id={conversationId} locale="en-US" onChoose={choose}/>));
 const click=(label:string)=>act(async()=>[...host.querySelectorAll('button')].find(row=>row.textContent===label)!.click());
 const type=(content:string)=>act(async()=>{const area=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,content);area.dispatchEvent(new Event('input',{bubbles:true}));});
 const tick=(ms=2000)=>act(async()=>vi.advanceTimersByTimeAsync(ms));
 function completeReply(){stored={...stored,revision:stored.revision+1,messages:[...stored.messages,{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:stored.revision+1,role:'assistant',content:'Consider the conditions of the choice.',followUpQuestion:'Which condition matters most today?',replyRequestId:replyId,memoryChanged:false,citations:[{index:0,kind:'principle',id:'principle',available:true}],createdAt:'2026-10-03T01:00:01Z'}]};replyState={...replyState,phase:'ready',revision:stored.revision};}
-it('restores the correction target with its draft and sends it as a new message',async()=>{
-  stored.generationEnabled=true;completeReply();const corrected=stored.messages[0].id;await mount();await click('Correct reply');await type('No, only this month.');
-  await act(async()=>root.unmount());root=createRoot(host);await mount();expect(host.textContent).toContain('This corrects the conversation, not your Principles.');await click('Send correction');
-  expect(vi.mocked(saveConversationMessage).mock.calls[0][2]).toMatchObject({content:'No, only this month.',correctsMessageId:corrected,requestReply:true});expect(stored.messages[0].content).toBe('Consider the conditions of the choice.');expect(host.textContent).toContain('Update a principle');
-});
-it('canceling correction preserves typed words without sending or editing memory',async()=>{
-  completeReply();await mount();await click('Correct reply');await type('Words to keep');await click('Cancel correction');expect(host.querySelector('textarea')!.value).toBe('Words to keep');expect(saveConversationMessage).not.toHaveBeenCalled();expect(readConversationDrafts(scope,id)[0].value.correctsMessageId).toBeUndefined();
-});
-it('keeps compact actions and descriptive references with the reply they belong to',async()=>{
-  completeReply();stored.messages[0].citations![0].preview='Leave room for an idea.';
-  vi.mocked(fetchConversationCitation).mockResolvedValue({profileId:scope.profileId,conversationId:id,requestId:replyId,index:0,source:{kind:'principle',id:'principle',text:'Leave room for an idea.',quote:'Leave room'}});
-  await mount();
-  const actions=host.querySelector('.jar-conversation-actions')!;
-  expect(actions.textContent).toContain('Save insight');expect(actions.textContent).toContain('Correct reply');
-  const reference=host.querySelector<HTMLButtonElement>('.jar-conversation-citations button')!;
-  expect(reference.textContent).toContain('Leave room for an idea.');await act(async()=>reference.click());
-  expect(host.querySelector('.jar-conversation-reference')?.closest('li')?.getAttribute('data-role')).toBe('assistant');
-});
-it('brings an opened reference into the transcript without scrolling the whole page',async()=>{
-  completeReply();vi.mocked(fetchConversationCitation).mockResolvedValue({profileId:scope.profileId,conversationId:id,requestId:replyId,index:0,source:{kind:'principle',id:'principle',text:'Leave room.',quote:'Leave room.'}});
-  const rect=HTMLElement.prototype.getBoundingClientRect;
-  vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockImplementation(function(this:HTMLElement){
-    if(this.classList.contains('chat-scroll'))return {top:0,bottom:300,height:300} as DOMRect;
-    if(this.classList.contains('jar-conversation-reference')){const top=280-(host.querySelector<HTMLElement>('.chat-scroll')?.scrollTop??0);return {top,bottom:top+260,height:260} as DOMRect;}
-    return rect.call(this);
-  });
-  await mount();await click('Principle 1');expect(host.querySelector<HTMLElement>('.chat-scroll')!.scrollTop).toBe(240);
-  expect(document.documentElement.scrollTop).toBe(0);
-});
+/* ── FOUR TOMBSTONES: CORRECTING A REPLY, AND THE FOOTNOTES UNDER IT ────────
+   `restores the correction target with its draft and sends it as a new
+   message` and `canceling correction preserves typed words without sending or
+   editing memory` guarded "Correct reply" — a control that opened a second
+   editor, re-labelled the composer, and carried a principle editor with it.
+   `keeps compact actions and descriptive references with the reply they
+   belong to` and `brings an opened reference into the transcript without
+   scrolling the whole page` guarded the footnote list and the quote panel it
+   opened, including the `References (2)` count that should never have been on
+   screen at all. All four surfaces are deleted (see `ConversationPanel`'s
+   header); their API wrappers went with them, so there is nothing left for a
+   test to press. The scroll-containment rule the fourth one measured is not
+   lost: `restores a scoped non-bottom transcript position after reopening`
+   and `does not jump away from older messages when a new reply arrives` below
+   hold the transcript's scrolling to account. */
 it('clearly saves messages without promising an assistant reply',async()=>{
-  await mount();expect(host.textContent).toContain('Replies aren’t connected yet.');await type('I want quiet mornings.');expect(host.textContent).toContain('Draft on this device');await click('Save message');
+  await mount();expect(host.textContent).toContain('Replies aren’t connected yet.');await type('I want quiet mornings.');await click('Send');
   expect(host.textContent).toContain('I want quiet mornings.');expect(host.querySelector('textarea')!.value).toBe('');expect(stored.messages).toHaveLength(1);expect(readConversationDrafts(scope,id)).toEqual([]);
 });
 it('offers a new-chat exit when a conversation is unavailable, without showing old words',async()=>{
@@ -80,11 +78,15 @@ it('offers a new-chat exit when a conversation is unavailable, without showing o
 it('reconciles a lost save response with a read, without resending',async()=>{
   const save=vi.mocked(saveConversationMessage).getMockImplementation()!;
   vi.mocked(saveConversationMessage).mockImplementationOnce(async(...args)=>{await save(...args);throw new Error('Response lost');});
-  await mount();await type('Keep my exact thought');await click('Save message');
+  await mount();await type('Keep my exact thought');await click('Send');
   expect(host.querySelector('textarea')!.value).toBe('Keep my exact thought');expect(host.textContent).toContain('Couldn’t confirm this message.');
   await click('Check saved messages');expect(saveConversationMessage).toHaveBeenCalledTimes(1);expect(stored.messages).toHaveLength(1);expect(host.querySelector('textarea')!.value).toBe('');
 });
 it('restores unsent words after reopening and forks edits instead of overwriting the previous writer',async()=>{
+  /* THE DRAFT PICKER WENT; THE FORKING DID NOT. Two tabs still keep two
+     drafts rather than one tab overwriting the other's sentence — what
+     changed is that reopening restores the newest silently instead of
+     offering a `<select>` of your own revisions. */
   await mount();await type('Original draft');await act(async()=>root.unmount());root=createRoot(host);await mount();
   expect(host.querySelector('textarea')!.value).toBe('Original draft');await type('Another tab version');
   expect(readConversationDrafts(scope,id).map(row=>row.value.content).sort()).toEqual(['Another tab version','Original draft']);
@@ -95,7 +97,7 @@ it('never restores another account’s draft',async()=>{
 });
 it('blocks sending on storage failure while keeping the visible words',async()=>{
   await mount();vi.spyOn(Storage.prototype,'setItem').mockImplementationOnce(()=>{throw new Error('Quota');});await type('Still visible');
-  expect(host.querySelector('textarea')!.value).toBe('Still visible');expect(host.textContent).toContain('Copy your words before leaving.');await click('Save message');expect(saveConversationMessage).not.toHaveBeenCalled();
+  expect(host.querySelector('textarea')!.value).toBe('Still visible');expect(host.textContent).toContain('Copy your words before leaving.');await click('Send');expect(saveConversationMessage).not.toHaveBeenCalled();
 });
 it('reuses the exact conversation id when creation response is lost',async()=>{
   vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:true});
@@ -151,7 +153,7 @@ it('loads the current conversation even if its history list is unavailable',asyn
      does not stop the conversation you are actually in from opening and
      working. */
   expect(host.querySelector('textarea')).not.toBeNull();
-  await type('My conversation still works');await click('Save message');expect(saveConversationMessage).toHaveBeenCalledOnce();
+  await type('My conversation still works');await click('Send');expect(saveConversationMessage).toHaveBeenCalledOnce();
 });
 it('restores a scoped non-bottom transcript position after reopening',async()=>{
   completeReply();await mount();const body=host.querySelector<HTMLElement>('.jar-conversation-body')!;
@@ -160,17 +162,21 @@ it('restores a scoped non-bottom transcript position after reopening',async()=>{
   await act(async()=>root.unmount());root=createRoot(host);await mount();expect(host.querySelector<HTMLElement>('.jar-conversation-body')!.scrollTop).toBe(120);
   expect(fetchConversation).toHaveBeenLastCalledWith(scope.profileId,id,expect.any(AbortSignal),1);
 });
-it('keeps the composer behind the memory sheet and its backdrop',async()=>{
-  /* There is one sheet on this page now: what the reply was allowed to read.
-     The conversation list moved to the corner, so "mutually exclusive" has
-     nothing left to be exclusive with — what still has to hold is that
-     opening the sheet does not cost a draft. */
-  vi.mocked(fetchConversationContext).mockResolvedValue({profileId:scope.profileId,generationEnabled:false,principles:[],reading:[],inspirations:[]});
-  await mount();await type('A draft behind the drawer');
-  await click('Your memory');
-  expect(host.querySelector('.chat-drawer-backdrop')).not.toBeNull();expect(host.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-  await act(async()=>host.querySelector<HTMLButtonElement>('.chat-drawer-backdrop')!.click());
-  expect(host.querySelector('[role="dialog"]')).toBeNull();expect(host.querySelector('textarea')!.value).toBe('A draft behind the drawer');
+it('keeps the surface to a transcript, a box and nothing at rest',async()=>{
+  /* THE SHAPE ITSELF, ASSERTED. This replaces `keeps the composer behind the
+     memory sheet and its backdrop`, which guarded the one remaining sheet —
+     "what the reply was allowed to read" — and the rule that opening it did
+     not cost you a draft. There is no sheet, no backdrop and no dialog on
+     this surface now, and an empty conversation offers exactly one control:
+     the box's own button. If a fifteenth button is ever added here, this is
+     the test that should stop it. */
+  await mount();await type('A sentence in the box');
+  expect(host.querySelectorAll('[role="dialog"]')).toHaveLength(0);
+  expect(host.querySelector('.chat-drawer-backdrop')).toBeNull();
+  expect(host.querySelectorAll('select')).toHaveLength(0);
+  expect(host.querySelectorAll('details')).toHaveLength(0);
+  expect([...host.querySelectorAll('button')].map(row=>row.textContent)).toEqual(['Send']);
+  expect(host.querySelector('textarea')!.value).toBe('A sentence in the box');
 });
 it('keeps the full-page composer within the visible keyboard viewport',async()=>{
   const viewport=Object.assign(new EventTarget(),{height:844,offsetTop:0});vi.stubGlobal('visualViewport',viewport);await mount();
@@ -181,36 +187,48 @@ it('keeps the full-page composer within the visible keyboard viewport',async()=>
   expect(transcript.scrollTop).toBe(1200);
   viewport.height=0;await act(async()=>viewport.dispatchEvent(new Event('resize')));expect(page.style.getPropertyValue('--chat-height')).toBe('340px');
 });
-it('requires confirmation for deletion and removes only this conversation’s drafts',async()=>{
-  await mount();await type('Draft to erase');const confirm=vi.spyOn(window,'confirm').mockReturnValue(false);await click('Delete conversation');expect(deleteConversation).not.toHaveBeenCalled();
-  confirm.mockReturnValue(true);vi.mocked(deleteConversation).mockResolvedValue(undefined);await click('Delete conversation');expect(deleteConversation).toHaveBeenCalledWith(scope.profileId,id,expect.any(AbortSignal));expect(readConversationDrafts(scope,id)).toEqual([]);expect(choose).toHaveBeenCalledWith(null);
-});
-it('shows current disputed and unconfirmed memory without creating a message',async()=>{
-  vi.mocked(fetchConversationContext).mockResolvedValue({profileId:scope.profileId,generationEnabled:false,principles:[{id:'p',text:'My current words',state:'contested',supportCurrent:false,truncated:false}],reading:[],inspirations:[]});
-  await mount();await click('Your memory');expect(host.textContent).toContain('Marked as disputed');expect(host.textContent).toContain('Support not confirmed');expect(saveConversationMessage).not.toHaveBeenCalled();
-  vi.mocked(fetchConversationContext).mockRejectedValueOnce(new Error('Unavailable'));await click('Check current memory');expect(host.textContent).not.toContain('My current words');expect(host.textContent).toContain('Current memory couldn’t be loaded.');
-});
-it('sends one durable reply intent, displays the follow-up and opens verified references',async()=>{
+/* ── TWO TOMBSTONES: DELETING A CONVERSATION, AND READING ITS MEMORY ────────
+   `requires confirmation for deletion and removes only this conversation’s
+   drafts` guarded "Delete conversation", which lived in a `···` menu on this
+   page. The capability is not replaced anywhere yet and that is deliberate
+   and reported: deleting belongs beside the row in the LIST of conversations,
+   not inside the one you are reading, and `lib/api/conversations` carries the
+   note for whoever restores it. The draft-clearing half of what it checked is
+   still checked — `reconciles a lost save response with a read` and the
+   account-isolation test above both read the journal directly.
+
+   `shows current disputed and unconfirmed memory without creating a message`
+   guarded the "Your memory" sheet: the principles, readings and inspirations
+   selected for the next reply, with their disputed and unconfirmed states.
+   That is the model's context window with a label on it, and it is the single
+   clearest thing the founder's sentence was pointing at. */
+it('sends one durable reply intent and displays the follow-up',async()=>{
   stored.generationEnabled=true;await mount();await type('What could I try?');await click('Send');
-  expect(saveConversationMessage).toHaveBeenCalledWith(scope.profileId,id,expect.objectContaining({content:'What could I try?',requestReply:true}),expect.any(AbortSignal));expect(requestConversationReply).not.toHaveBeenCalled();
-  expect(host.textContent).toContain('Waiting to start…');completeReply();await tick();expect(host.textContent).toContain('Which condition matters most today?');
-  vi.mocked(fetchConversationCitation).mockResolvedValue({profileId:scope.profileId,conversationId:id,requestId:replyId,index:0,source:{kind:'principle',id:'principle',text:'Keep room for thought.',quote:'Keep room for thought.',supportCurrent:false}});
-  await click('Principle 1');expect(host.textContent).toContain('Keep room for thought.');expect(host.textContent).toContain('Support not confirmed');await click('Open original');expect(openSource).toHaveBeenCalledWith('principle','principle');
-  vi.mocked(fetchConversationCitation).mockRejectedValueOnce(new Error('Changed'));await click('Principle 1');expect(host.textContent).not.toContain('Keep room for thought.');expect(host.textContent).toContain('The reference changed or couldn’t be loaded.');
+  expect(saveConversationMessage).toHaveBeenCalledWith(scope.profileId,id,expect.objectContaining({content:'What could I try?',requestReply:true}),expect.any(AbortSignal));
+  expect(host.textContent).toContain('Thinking about that…');completeReply();await tick();expect(host.textContent).toContain('Which condition matters most today?');
+  /* The reply arrived, so nothing is being waited for and the one other
+     control on the surface goes away with the sentence it interrupted. */
+  expect(host.textContent).not.toContain('Thinking about that…');expect([...host.querySelectorAll('button')].map(row=>row.textContent)).toEqual(['Send']);
 });
-it('stops a pending reply and reconciles a lost retry response without resending',async()=>{
+it('stops a pending reply and still shows that the message was saved',async()=>{
   stored.generationEnabled=true;await mount();await type('Keep this question');await click('Send');
   vi.mocked(stopConversationReply).mockImplementation(async()=>{replyState={...replyState,phase:'stopped',canRetry:true};return structuredClone(replyState);});
   await click('Stop reply');expect(host.textContent).toContain('Stopped. Your message is saved.');expect(stored.messages).toHaveLength(1);
-  vi.mocked(requestConversationReply).mockImplementationOnce(async()=>{replyState={...replyState,phase:'pending',requestId:'33333333-3333-4333-8333-333333333333',canRetry:false};throw new Error('Response lost');});
-  await click('Retry reply');expect(requestConversationReply).toHaveBeenCalledTimes(1);expect(saveConversationMessage).toHaveBeenCalledTimes(1);expect(host.textContent).toContain('Waiting to start…');
+  /* AND NO WAY TO RE-RUN THE GENERATOR. "Retry reply" was the other half of
+     this test; a stopped reply now ends in a sentence, and asking again means
+     saying something again through the box. */
+  expect([...host.querySelectorAll('button')].map(row=>row.textContent)).toEqual(['Send']);
+  expect(host.querySelector('textarea')!.disabled).toBe(false);
 });
 it('does not jump away from older messages when a new reply arrives',async()=>{
   stored.generationEnabled=true;await mount();await type('A question');await click('Send');
   const body=host.querySelector<HTMLElement>('.jar-conversation-body')!;
   Object.defineProperties(body,{scrollHeight:{configurable:true,value:1500},clientHeight:{configurable:true,value:300}});body.scrollTop=10;
   await act(async()=>body.dispatchEvent(new Event('scroll',{bubbles:true})));completeReply();await tick();
-  expect(body.scrollTop).toBe(10);expect(host.textContent).toContain('New messages ↓');await click('New messages ↓');expect(body.scrollTop).toBe(1500);
+  /* The "New messages ↓" button that used to announce this went with the
+     other controls; the rule it announced is what mattered and is asserted
+     here directly — the transcript does not move under you. */
+  expect(body.scrollTop).toBe(10);expect(host.textContent).not.toContain('New messages');
 });
 function windowedThread(){
   const messages=Array.from({length:60},(_,i)=>({id:`window-${i+1}`,role:'user' as const,profileId:scope.profileId,conversationId:id,position:i+1,content:`Owned message ${i+1}`,createdAt:stored.createdAt}));
@@ -242,135 +260,63 @@ it('reopens the same scoped loaded window before restoring an older scroll posit
 });
 it('treats the first reply-read failure as transient rather than flashing an error',async()=>{
   stored.generationEnabled=true;vi.mocked(fetchConversationReply).mockRejectedValueOnce(new Error('Transient'));await mount();
-  expect(host.textContent).not.toContain('Couldn’t check reply progress.');await tick(1000);expect(host.textContent).not.toContain('Couldn’t check reply progress.');expect(requestConversationReply).not.toHaveBeenCalled();
+  expect(host.textContent).not.toContain('Couldn’t check reply progress.');await tick(1000);expect(host.textContent).not.toContain('Couldn’t check reply progress.');
 });
-
-function readingReply(){
-  stored.generationEnabled=true;completeReply();
-  stored.messages[0].content='Which top of mind would you like to explore?';
-  stored.messages[0].citations=[{index:0,kind:'top_of_mind_entry',id:'reading-one',available:true,preview:'Try a small experiment.'},{index:1,kind:'top_of_mind_entry',id:'reading-two',available:true,preview:'Leave time to notice.'}];
-}
-const readingReference=(index=1):ConversationCitation=>({profileId:scope.profileId,conversationId:id,requestId:replyId,index,source:{kind:'top_of_mind_entry',id:index===1?'reading-two':'reading-one',text:index===1?'Leave time to notice what changes before making a commitment.':'Try a small experiment before making a commitment.',quote:index===1?'Leave time to notice':'Try a small experiment'}});
-it('lets an older reading preview continue the chat with its verified words once',async()=>{
-  readingReply();stored.messages.push({id:'later',role:'assistant',profileId:scope.profileId,conversationId:id,position:2,content:'Choose whichever topic matters now.',createdAt:stored.createdAt});stored.revision=2;replyState.revision=2;
-  vi.mocked(fetchConversationCitation).mockResolvedValue(readingReference(0));await mount();
-  expect(host.querySelector('.chat-reading-choices')).toBeNull();
-  await act(async()=>host.querySelector<HTMLButtonElement>('.chat-citations button')!.click());
-  await click('Discuss this');expect(saveConversationMessage).toHaveBeenCalledOnce();
-  expect(vi.mocked(saveConversationMessage).mock.calls[0][2].content).toContain('Try a small experiment before making a commitment.');
-  expect(requestConversationReply).not.toHaveBeenCalled();
-});
-it('labels an earlier record and carries its date into the selected follow-up',async()=>{
-  readingReply();stored.messages.push({id:'later',role:'assistant',profileId:scope.profileId,conversationId:id,position:2,content:'You can compare with an earlier reading.',createdAt:stored.createdAt});stored.revision=2;replyState.revision=2;
-  stored.messages[0].citations![0]={...stored.messages[0].citations![0],historical:true,recordedAt:'2026-09-01T12:00:00Z'};
-  vi.mocked(fetchConversationCitation).mockResolvedValue({...readingReference(0),source:{...readingReference(0).source,historical:true,recordedAt:'2026-09-01T12:00:00Z',artifactVersion:1}});
-  await mount();expect(host.querySelector('.chat-citations button')?.textContent).toContain('Earlier reading · Sep 1, 2026');
-  await act(async()=>host.querySelector<HTMLButtonElement>('.chat-citations button')!.click());
-  expect(host.textContent).toContain('Earlier reading');expect(host.textContent).toContain('Sep 1, 2026');
-  await click('Discuss this');expect(vi.mocked(saveConversationMessage).mock.calls[0][2].content).toContain('from the record dated (Sep 1, 2026)');
-});
-it('discloses the earlier date on a reading choice before it is opened',async()=>{
-  readingReply();stored.messages[0].citations![0]={...stored.messages[0].citations![0],historical:true,recordedAt:'2026-09-01T12:00:00Z'};
-  await mount();expect(host.querySelector('.chat-reading-choice')?.textContent).toContain('Earlier reading · Sep 1, 2026');
-  expect(host.querySelector('.chat-reading-choice')?.getAttribute('aria-label')).toContain('Earlier reading · Sep 1, 2026');
-  expect(fetchConversationCitation).not.toHaveBeenCalled();expect(saveConversationMessage).not.toHaveBeenCalled();
-});
-it.each(['principle','inspiration'] as const)('continues from a verified %s preview and never overwrites a draft',async kind=>{
-  stored.generationEnabled=true;completeReply();stored.messages[0].citations![0].kind=kind;
-  const source={kind,id:'principle',text:'Verified words for this topic.',quote:'Verified words'};
-  vi.mocked(fetchConversationCitation).mockResolvedValue({profileId:scope.profileId,conversationId:id,requestId:replyId,index:0,source});
-  await mount();await act(async()=>host.querySelector<HTMLButtonElement>('.chat-citations button')!.click());
-  await type('Keep my unfinished words');expect([...host.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent==='Discuss this')!.disabled).toBe(true);
-  expect(host.querySelector('textarea')!.value).toBe('Keep my unfinished words');expect(saveConversationMessage).not.toHaveBeenCalled();
-  await type('');await click('Discuss this');expect(saveConversationMessage).toHaveBeenCalledOnce();
-  expect(vi.mocked(saveConversationMessage).mock.calls[0][2]).toMatchObject({content:'“Verified words for this topic.”\n\nLet’s explore this idea further.',requestReply:true});
-});
-/* THE LOCAL SIDEBAR TITLE TEST WENT WITH THE SIDEBAR. It asserted that the
-   in-page list named a conversation by its first HUMAN line rather than by
-   whatever happened to be first — a real rule, and it now belongs to the
-   corner that owns that list. `conversationPreview` still holds it and is
-   still covered by its own suite. */
-it('sends a starter in one click instead of requiring another Send',async()=>{
-  stored.generationEnabled=true;await mount();await click('What has changed in how I think?');
-  expect(saveConversationMessage).toHaveBeenCalledExactlyOnceWith(scope.profileId,id,expect.objectContaining({content:'What has changed in how I think?',requestReply:true}),expect.any(AbortSignal));
-  expect(host.querySelector('textarea')!.value).toBe('');expect(host.textContent).toContain('Waiting to start…');expect(requestConversationReply).not.toHaveBeenCalled();
-});
-it('coalesces rapid starter clicks and retains one durable sending intent',async()=>{
+/* ── ELEVEN TOMBSTONES: THE READINGS AND SOURCES A REPLY CITED ──────────────
+   A reply could end in a list of top-of-mind previews, each one a button that
+   fetched its verified text and SENT a follow-up message composed from it;
+   other citations opened a quote panel offering "Discuss this". Eleven tests
+   covered that machinery — one click sends once, a typed draft is never
+   overwritten by a chosen reading, an unavailable reading refuses rather than
+   inventing a follow-up, a response for the wrong profile is rejected before
+   its text is copied, a double click coalesces, a stalled read recovers, a
+   navigation cancels, a lost send is reconciled by GET, and an earlier record
+   carries its date into the message it composes.
+   All of it is deleted, `fetchConversationCitation` included. It was the
+   densest control cluster on the screen and the least explicable: a person
+   who has never seen this page cannot tell "Top of mind → changed" from an
+   error. The ownership rule those tests leaned on is NOT only theirs — every
+   remaining read goes through `checked()` in `lib/api/conversations`, which
+   refuses any record whose `profileId` is not the caller's, and
+   `never restores another account’s draft` holds the client half. */
+it('coalesces rapid sends and retains one durable sending intent',async()=>{
+  /* THIS WAS A STARTER TEST. Three starter pills used to sit on the empty
+     screen and SEND on one press, which is how a stranger's first click could
+     post a question they did not write; they are gone, and the box's own
+     button carries the invariant they were really guarding — two presses in
+     one tick are one message, with one durable intent on disk. */
   stored.generationEnabled=true;let finish!:()=>void;const actual=vi.mocked(saveConversationMessage).getMockImplementation()!;
   vi.mocked(saveConversationMessage).mockImplementationOnce(async(...args)=>{await new Promise<void>(resolve=>{finish=resolve;});return actual(...args);});
-  await mount();const starter=[...host.querySelectorAll('button')].find(row=>row.textContent==='What has changed in how I think?')!;
-  await act(async()=>{starter.click();starter.click();});expect(saveConversationMessage).toHaveBeenCalledOnce();expect(readConversationDrafts(scope,id)[0].value.pending).toBe(true);
+  await mount();await type('What has changed in how I think?');
+  const send=host.querySelector<HTMLButtonElement>('.chat-send')!;
+  await act(async()=>{send.click();send.click();});expect(saveConversationMessage).toHaveBeenCalledOnce();expect(readConversationDrafts(scope,id)[0].value.pending).toBe(true);
   expect(host.textContent).toContain('Sending…');await act(async()=>finish());expect(stored.messages).toHaveLength(1);
-});
-it('selects a verified top of mind and automatically sends a contextual follow-up',async()=>{
-  readingReply();vi.mocked(fetchConversationCitation).mockResolvedValue(readingReference());await mount();
-  expect(host.querySelectorAll('.chat-reading-choice')).toHaveLength(2);
-  await act(async()=>host.querySelectorAll<HTMLButtonElement>('.chat-reading-choice')[1].click());
-  expect(fetchConversationCitation).toHaveBeenCalledExactlyOnceWith(scope.profileId,id,replyId,1,expect.any(AbortSignal));
-  expect(vi.mocked(saveConversationMessage).mock.calls[0][2]).toMatchObject({content:'“Leave time to notice what changes before making a commitment.”\n\nLet’s explore this top of mind further.',requestReply:true});
-  expect(saveConversationMessage).toHaveBeenCalledOnce();expect(stored.messages.at(-1)?.role).toBe('user');expect(requestConversationReply).not.toHaveBeenCalled();
-});
-it('preserves typed words instead of replacing them with a selected reading',async()=>{
-  readingReply();await mount();await type('My unfinished question');
-  const choice=host.querySelector<HTMLButtonElement>('.chat-reading-choice')!;expect(choice.disabled).toBe(true);
-  await act(async()=>choice.click());expect(fetchConversationCitation).not.toHaveBeenCalled();expect(saveConversationMessage).not.toHaveBeenCalled();
-  expect(host.querySelector('textarea')!.value).toBe('My unfinished question');expect(host.textContent).toContain('Send or clear your draft before choosing.');
-});
-it('refuses unavailable or changed readings without inventing a follow-up',async()=>{
-  readingReply();stored.messages[0].citations![0]={...stored.messages[0].citations![0],available:false,preview:undefined};
-  vi.mocked(fetchConversationCitation).mockRejectedValue(new Error('Changed'));await mount();
-  const choices=host.querySelectorAll<HTMLButtonElement>('.chat-reading-choice');expect(choices[0].disabled).toBe(true);
-  await act(async()=>choices[1].click());expect(host.textContent).toContain('This top of mind changed or couldn’t be opened');
-  expect(saveConversationMessage).not.toHaveBeenCalled();expect(host.querySelector('textarea')!.value).toBe('');
-});
-it('rejects a mismatched owned source response before copying its text',async()=>{
-  readingReply();vi.mocked(fetchConversationCitation).mockResolvedValue({...readingReference(),profileId:'other-profile',source:{...readingReference().source,text:'PRIVATE_OTHER_PROFILE'}});
-  await mount();await act(async()=>host.querySelectorAll<HTMLButtonElement>('.chat-reading-choice')[1].click());
-  expect(saveConversationMessage).not.toHaveBeenCalled();expect(host.textContent).not.toContain('PRIVATE_OTHER_PROFILE');expect(readConversationDrafts(scope,id)).toEqual([]);
-});
-it('coalesces double selection and recovers a stalled read without sending later',async()=>{
-  readingReply();let resolve!:(row:ConversationCitation)=>void;
-  vi.mocked(fetchConversationCitation).mockImplementationOnce(()=>new Promise<ConversationCitation>(done=>{resolve=done;}));
-  await mount();const choice=host.querySelectorAll<HTMLButtonElement>('.chat-reading-choice')[1];
-  await act(async()=>{choice.click();choice.click();});expect(fetchConversationCitation).toHaveBeenCalledOnce();expect(host.textContent).toContain('Opening this top of mind…');
-  await tick(15000);expect(host.textContent).toContain('This top of mind changed or couldn’t be opened');
-  await act(async()=>resolve(readingReference()));expect(saveConversationMessage).not.toHaveBeenCalled();
-});
-it('cancels a source selection on navigation and cannot send into the next conversation',async()=>{
-  readingReply();let resolve!:(row:ConversationCitation)=>void;vi.mocked(fetchConversationCitation).mockImplementationOnce(()=>new Promise<ConversationCitation>(done=>{resolve=done;}));
-  await mount();await act(async()=>host.querySelectorAll<HTMLButtonElement>('.chat-reading-choice')[1].click());
-  await mount(id,{accountId:'different-owner',profileId:'different-profile'});await act(async()=>resolve(readingReference()));
-  expect(saveConversationMessage).not.toHaveBeenCalled();expect(host.textContent).not.toContain('Leave time to notice what changes');
 });
 it('checks quick replies after one second rather than waiting two',async()=>{
   stored.generationEnabled=true;await mount();await type('A quick question');await click('Send');completeReply();await tick(1000);
-  expect(host.textContent).toContain('Which condition matters most today?');expect(requestConversationReply).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('Which condition matters most today?');
 });
 it('shows waiting immediately while reply status is still being read and preserves the next draft',async()=>{
   stored.generationEnabled=true;await mount();let finish!:(row:ConversationReplyState)=>void;
   vi.mocked(fetchConversationReply).mockImplementationOnce(()=>new Promise<ConversationReplyState>(resolve=>{finish=resolve;}));
-  await type('A question');await click('Send');expect(host.textContent).toContain('Waiting to start…');await type('My next thought');
+  await type('A question');await click('Send');expect(host.textContent).toContain('Thinking about that…');await type('My next thought');
   const send=host.querySelector<HTMLButtonElement>('.chat-send')!;expect(send.disabled).toBe(true);
   await act(async()=>finish(structuredClone(replyState)));expect(host.querySelector('textarea')!.value).toBe('My next thought');
 });
 it('uses an immediately committed first-message response without another conversation read',async()=>{
   stored.generationEnabled=true;stored.revision=1;stored.messages=[{id:replyId,profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'The committed first question',createdAt:stored.createdAt}];
   replyState={...replyState,revision:1,messageId:replyId,requestId:replyId,phase:'pending'};
-  await act(async()=>root.render(<ConversationPanel scope={scope} id={id} initialConversation={structuredClone(stored)} locale="en-US" onChoose={choose} onClose={close}/>));
-  expect(host.textContent).toContain('The committed first question');expect(fetchConversation).not.toHaveBeenCalled();expect(host.textContent).toContain('Waiting to start…');
+  await act(async()=>root.render(<ConversationPanel scope={scope} id={id} initialConversation={structuredClone(stored)} locale="en-US" onChoose={choose}/>));
+  expect(host.textContent).toContain('The committed first question');expect(fetchConversation).not.toHaveBeenCalled();expect(host.textContent).toContain('Thinking about that…');
 });
-it('recovers a lost selected-reading send with GET, without repeating the message or reply request',async()=>{
-  readingReply();vi.mocked(fetchConversationCitation).mockResolvedValue(readingReference());
-  const actual=vi.mocked(saveConversationMessage).getMockImplementation()!;
-  vi.mocked(saveConversationMessage).mockImplementationOnce(async(...args)=>{await actual(...args);throw new Error('Response lost');});
-  await mount();await act(async()=>host.querySelectorAll<HTMLButtonElement>('.chat-reading-choice')[1].click());
-  expect(readConversationDrafts(scope,id)[0].value.pending).toBe(true);expect(host.textContent).toContain('Couldn’t confirm this message.');
-  await click('Check saved messages');expect(saveConversationMessage).toHaveBeenCalledOnce();expect(requestConversationReply).not.toHaveBeenCalled();
-  expect(readConversationDrafts(scope,id)).toEqual([]);expect(stored.messages).toHaveLength(2);
-});
-it('bounds automatic progress reads and then offers an explicit check',async()=>{
+it('bounds automatic progress reads and then says to come back later',async()=>{
+  /* The explicit "Check reply" button this used to end on was regeneration's
+     third name and went with it. The bound is still a bound: polling stops,
+     and the sentence tells you the work continues without you watching it.
+     Returning to the tab resumes the read — see the focus listener in
+     `lib/use-conversation-reply`. */
   stored.generationEnabled=true;await mount();await type('A longer question');await click('Send');
   const initialCalls=vi.mocked(fetchConversationReply).mock.calls.length;await tick(70000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length-initialCalls).toBeLessThanOrEqual(35);
-  expect(host.textContent).toContain('Still working. You can come back later.');expect(requestConversationReply).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('Still working. You can come back later.');
 });

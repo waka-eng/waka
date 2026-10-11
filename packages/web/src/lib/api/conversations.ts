@@ -1,11 +1,9 @@
-import {ApiError,apiPath,getJson,postJson,deleteJson} from './http';
+import {ApiError,apiPath,deleteJson,getJson,postJson} from './http';
 export type ConversationSourceKind='principle'|'top_of_mind_entry'|'inspiration';
 export interface ApiConversationMessage{id:string;profileId:string;conversationId:string;position:number;role:'user'|'assistant';content:string;createdAt:string;correctsMessageId?:string|null;savedInspirationIds?:string[];followUpQuestion?:string|null;memoryChanged?:boolean;replyRequestId?:string|null;citations?:Array<{index:number;kind:ConversationSourceKind;id:string;available:boolean;preview?:string;historical?:boolean;recordedAt?:string}>}
 export interface ApiConversation{id:string;profileId:string;revision:number;createdAt:string;updatedAt:string;messages:ApiConversationMessage[];messageWindowStart?:number;preview?:string;generationEnabled?:boolean;initialPrinciple?:{id:string;statement:string;state:string}|null}
 export interface ConversationSummary{id:string;profileId:string;revision:number;updatedAt:string;preview:string}
-export interface ConversationContext{profileId:string;generationEnabled:boolean;principles:Array<{id:string;text:string;state:string;supportCurrent:boolean;truncated:boolean}>;reading:Array<{id:string;text:string;supportCurrent:boolean;truncated:boolean;historical?:boolean;recordedAt?:string}>;inspirations:Array<{id:string;text:string;truncated:boolean}>}
 export interface ConversationReplyState{profileId:string;conversationId:string;messageId:string|null;requestId:string|null;phase:'idle'|'pending'|'running'|'ready'|'failed'|'stopped'|'stale';revision:number;failureCode:string|null;retryAfter:string|null;runAfter:string|null;canRetry:boolean;generationEnabled:boolean}
-export interface ConversationCitation{profileId:string;conversationId:string;requestId:string;index:number;source:{kind:ConversationSourceKind;id:string;text:string;quote:string;state?:string;supportCurrent?:boolean;historical?:boolean;recordedAt?:string;artifactVersion?:number}}
 const path=(profile:string,suffix='')=>apiPath(`/conversations${suffix}?profile=${encodeURIComponent(profile)}`);
 const windowPath=(profile:string,suffix:string,from?:number)=>path(profile,suffix)+(from!==undefined?`&from=${from}`:'&limit=30');
 const legacyWindowRefusal=(error:unknown)=>error instanceof ApiError&&error.status===400&&error.message==='Invalid profile';
@@ -36,18 +34,40 @@ export async function listConversations(profile:string,signal?:AbortSignal){cons
 export async function fetchConversation(profile:string,id:string,signal?:AbortSignal,from?:number){return checked(await readWindow(profile,`/${encodeURIComponent(id)}`,signal,from),profile,id);}
 export async function createConversation(profile:string,id:string,signal?:AbortSignal,principleId?:string,firstMessage?:{id:string;content:string;requestReply?:boolean}){return checked(await writeWindow(profile,'',{id,...(principleId?{principleId}:{}),...(firstMessage?{firstMessage}:{})},'Could not start the conversation.',signal),profile,id);}
 export async function saveConversationMessage(profile:string,id:string,input:{id:string;content:string;revision:number;requestReply?:boolean;correctsMessageId?:string},signal?:AbortSignal,from?:number){return checked(await writeWindow(profile,`/${encodeURIComponent(id)}/messages`,input,'Could not confirm this message. Check your saved messages before retrying.',signal,from),profile,id);}
-export async function deleteConversation(profile:string,id:string,signal?:AbortSignal){const result=await deleteJson<{deleted:boolean}>(path(profile,`/${encodeURIComponent(id)}`),{},'Could not confirm deletion.',signal);if(result?.deleted!==true)throw invalid();}
-export async function fetchConversationContext(profile:string,id:string,signal?:AbortSignal){
-  const row=await getJson<ConversationContext>(path(profile,`/${encodeURIComponent(id)}/context`),'Could not read current memory.',signal);
-  if(row?.profileId!==profile||typeof row.generationEnabled!=='boolean'||![row.principles,row.reading,row.inspirations].every(Array.isArray)||row.principles.length>10||row.reading.length>5||row.inspirations.length>6)throw invalid();
-  const memories=[...row.principles,...row.reading,...row.inspirations];
-  if(memories.some(item=>typeof item.id!=='string'||typeof item.text!=='string'||item.text.length>1600||typeof item.truncated!=='boolean')||memories.reduce((sum,item)=>sum+item.text.length,0)>16000||[...row.principles,...row.reading].some(item=>typeof item.supportCurrent!=='boolean')||row.reading.some(item=>!historicalMetadataValid(item)))throw invalid();return row;
-}
+/* DELETING A CONVERSATION LEFT WITH THE `···` MENU IT WAS HIDDEN IN.
+ * Founder on the surface that held it: "so many different buttons that I have
+ * no idea what its supposed to do."
+ *
+ * IT IS BACK, AND IT IS WHERE THAT NOTE SAID TO PUT IT. The removal was
+ * right and so was the reason: the only thing calling it was a `···` menu
+ * inside the conversation you were reading, where "delete" sits one slip away
+ * from "send". What it was waiting for was a LIST of conversations to sit
+ * beside, and that list now exists — `components/ConversationsOverlay`, one
+ * of the three things the left corner opens over the world.
+ *
+ * So the verb has a row to belong to and `createConversation` has its partner
+ * again (`test/verb-pairs.test.ts`). Soft delete on the server: the row keeps
+ * its `deletedAt` and stops being listed, because fading never deletes. */
+/* WHAT THE REPLY WAS ALLOWED TO READ (`fetchConversationContext`) AND THE
+ * QUOTE BEHIND A FOOTNOTE (`fetchConversationCitation`) WENT WITH THEIR TWO
+ * SURFACES: the "Your memory" sheet and the references list under each reply.
+ * Both answered a question about generation rather than about the
+ * conversation, and both are described at length in `ConversationPanel`'s
+ * header. The routes remain on the server. `historicalMetadataValid` stays
+ * because saved messages still carry citation metadata on the wire and it is
+ * still checked before anything is believed. */
 function checkedReply(row:ConversationReplyState,profile:string,id:string){if(!row||row.profileId!==profile||row.conversationId!==id||!['idle','pending','running','ready','failed','stopped','stale'].includes(row.phase)||!Number.isSafeInteger(row.revision)||typeof row.canRetry!=='boolean'||typeof row.generationEnabled!=='boolean'||![row.retryAfter,row.runAfter].every(value=>value===null||Number.isFinite(Date.parse(value)))||![row.messageId,row.requestId].every(value=>value===null||typeof value==='string'))throw invalid();return row;}
 export async function fetchConversationReply(profile:string,id:string,signal?:AbortSignal){return checkedReply(await getJson(path(profile,`/${encodeURIComponent(id)}/reply`),'Could not check the reply.',signal),profile,id);}
-export async function requestConversationReply(profile:string,id:string,input:{messageId:string;afterRequestId:string|null},signal?:AbortSignal){return checkedReply(await postJson(path(profile,`/${encodeURIComponent(id)}/replies`),input,'Could not confirm the reply request.',signal),profile,id);}
-export async function stopConversationReply(profile:string,id:string,requestId:string,signal?:AbortSignal){return checkedReply(await postJson(path(profile,`/${encodeURIComponent(id)}/replies/${encodeURIComponent(requestId)}/stop`),{},'Could not confirm stopping.',signal),profile,id);}
-export async function fetchConversationCitation(profile:string,id:string,requestId:string,index:number,signal?:AbortSignal){
-  const row=await getJson<ConversationCitation>(path(profile,`/${encodeURIComponent(id)}/replies/${encodeURIComponent(requestId)}/references/${index}`),'This reference is no longer available as quoted.',signal);
-  if(!row||row.profileId!==profile||row.conversationId!==id||row.requestId!==requestId||row.index!==index||!row.source||!historicalMetadataValid(row.source)||!['principle','top_of_mind_entry','inspiration'].includes(row.source.kind)||typeof row.source.text!=='string'||typeof row.source.quote!=='string'||!row.source.text.includes(row.source.quote))throw invalid();return row;
+/* ASKING FOR THE REPLY AGAIN (`requestConversationReply`) IS GONE. A reply
+ * is requested once, by the act of sending the message; "Retry reply", "Get a
+ * reply" and "Check reply" were three buttons for re-running the generator and
+ * the founder could not tell what any of them did. A reply that fails still
+ * says so in a sentence; saying something again is how you ask again. */
+/* Erasing one, from the list it is listed in. The server soft-deletes, so
+   this is the end of the conversation being OFFERED rather than the end of
+   its existence — and it reports failure rather than swallowing it, because
+   a row that silently stays is a person pressing delete twice. */
+export async function deleteConversation(profile:string,id:string,signal?:AbortSignal){
+  await deleteJson<{deleted:boolean}>(path(profile,`/${encodeURIComponent(id)}`),{},'Could not delete this conversation.',signal);
 }
+export async function stopConversationReply(profile:string,id:string,requestId:string,signal?:AbortSignal){return checkedReply(await postJson(path(profile,`/${encodeURIComponent(id)}/replies/${encodeURIComponent(requestId)}/stop`),{},'Could not confirm stopping.',signal),profile,id);}

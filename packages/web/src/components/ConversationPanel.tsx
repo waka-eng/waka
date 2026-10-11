@@ -1,37 +1,109 @@
+/**
+ * A TRANSCRIPT, A BOX, AND ONE WAY TO STOP.
+ *
+ * Founder, 2026-10-10: "So the talk with Waka experience is the most confusing
+ * chat experience ever with so many different buttons that I have no idea what
+ * its supposed to do." Pointing at the same screen earlier: "so ugly."
+ *
+ * He was counting correctly. This panel rendered FOURTEEN controls and
+ * forty-nine pieces of copy, and almost none of them were about talking. They
+ * were about the machinery UNDER talking: which memories the reply had been
+ * allowed to read, which reply request was in flight and whether it could be
+ * asked for again, which revision a saved draft was written against, which
+ * principle you might like to re-word while you were here. Every one of them
+ * was a real mechanism — and a person opening this screen for the first time
+ * cannot tell a mechanism from a mistake.
+ *
+ * THE BAR THAT DECIDED EVERY REMOVAL: would someone who has never seen this
+ * screen know what the control does, and want it on their first visit? Nothing
+ * that exposes generation plumbing passes that bar, however honest the
+ * plumbing is. So what is left is what a conversation IS:
+ *
+ *   THE TRANSCRIPT — what was said, in order, your turns dim and the reply
+ *   lit, with its own top edge ("Load earlier messages") because a transcript
+ *   that cannot reach its own beginning is not a transcript.
+ *
+ *   THE BOX — one field, one filled button, three labels between them
+ *   ("Send", "Sending…", "Try sending again"). One control, its states.
+ *
+ *   AND ONE OTHER THING — "Stop reply", which exists only while a reply is
+ *   being written. At rest this surface has no third control at all, which is
+ *   the whole point; while WAKA is answering it has exactly one, sitting
+ *   beside the sentence that says WAKA is answering.
+ *
+ * WHAT WENT, AND WHERE A FUTURE READER SHOULD LOOK FOR IT. Each of these is
+ * also commented at the site it used to occupy:
+ *
+ *   YOUR MEMORY (`ConversationMemory`, `fetchConversationContext`) — a sheet
+ *   listing the principles, readings and inspirations selected for the reply.
+ *   This is the clearest possible example of the bar above: it is the model's
+ *   context window with a label on it. Deleted outright.
+ *
+ *   REFERENCES (the `details` per reply, `ConversationReadingChoices`,
+ *   `ConversationSourceDate`, `fetchConversationCitation`) — footnotes under
+ *   each reply, opening a quote, offering "Discuss this". It also printed a
+ *   COUNT — `References (2)` — against the founder law that states render and
+ *   numerals never. Deleted outright.
+ *
+ *   CORRECT REPLY / UPDATE A PRINCIPLE (`ConversationPrincipleEdit`) — a
+ *   second editor, with its own confirmation checkbox, conflict reconciliation
+ *   and retry, nested inside a chat message. Editing a principle belongs on
+ *   the principles surface, which has it.
+ *
+ *   SAVE INSIGHT / SAVE THOUGHT (`ConversationThought`) — the authored-save
+ *   flow under every message: a disclosure, a textarea, an "I adopt this"
+ *   checkbox, a draft picker, check and retry. Saving is this product's
+ *   central act and it still has its own box on the home screen; it does not
+ *   also need eight controls per transcript row. If it comes back here it
+ *   comes back as ONE button that opens ONE field.
+ *
+ *   CONVERSATION OPTIONS (`···`) — a menu holding a draft picker and "Delete
+ *   conversation". Deleting belongs to the LIST of conversations, beside the
+ *   row being deleted, not inside the conversation you are reading; the
+ *   client wrapper went with it (see `lib/api/conversations`). The draft
+ *   picker exposed revisions of your own unsent sentence; the newest is
+ *   restored silently now, and every fork is still on disk.
+ *
+ *   STARTERS — three buttons that SENT a message on one press, on the first
+ *   screen a stranger sees. The box's own placeholder asks the same question
+ *   and waits to be answered.
+ *
+ *   RETRY REPLY / GET A REPLY / CHECK REPLY — regeneration, by three names.
+ *   A failed reply still says so in plain words; the way to ask again is to
+ *   say something again.
+ *
+ * FAILURE IS STILL VISIBLE EVERYWHERE IT WAS. That was the one thing removal
+ * was not allowed to touch: a lost save still says "Couldn’t confirm this
+ * message", with the one control that can reconcile it next to the sentence;
+ * an unopenable conversation still says so and still offers the only move
+ * left; a reply that fails, stops or is rate-limited still prints a sentence
+ * saying which. A quiet surface is not the same as a quiet failure.
+ */
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
-import {createConversation,deleteConversation,fetchConversation,fetchConversationCitation,fetchConversationContext,listConversations,saveConversationMessage,type ApiConversation,type ConversationCitation,type ConversationContext,type ConversationSourceKind} from '../lib/api/conversations';
+import {createConversation,fetchConversation,listConversations,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
 import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage';
 import {useConversationReply} from '../lib/use-conversation-reply';
-import {ConversationThought} from './ConversationThought';
-import {ConversationPrincipleEdit} from './ConversationPrincipleEdit';
-import {ConversationMemory} from './ConversationMemory';
 import {ConversationText} from './ConversationText';
-import {ConversationReadingChoices} from './ConversationReadingChoices';
-import {ConversationSourceDate} from './ConversationSourceDate';
-import {fetchPrinciples,type ApiInspiration,type ApiPrinciple} from '../lib/api';
+import {fetchPrinciples,type ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
-import {readConversationDrafts,storeConversationDraft,clearConversationDraft,clearConversationDrafts,type ConversationDraft as Draft,type StoredConversationDraft} from '../lib/conversation-drafts';
+import {readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft as Draft,type StoredConversationDraft} from '../lib/conversation-drafts';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onOpenSource,onInspirationSaved,onPrincipleUpdated}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onOpenSource?:(kind:ConversationSourceKind,id:string)=>void;onInspirationSaved?:(row:ApiInspiration)=>void;onPrincipleUpdated?:(row:ApiPrinciple)=>void}){
+export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void}){
   const journal=id??`new:${initialPrincipleId??'general'}`;
   const initial=initialConversation?.id===id&&initialConversation.profileId===scope.profileId?initialConversation:null;
   const bootstrap=useRef(initial);
   const [conversation,setConversation]=useState<ApiConversation|null>(initial),[draft,setDraft]=useState<Draft|null>(null);
   const [busy,setBusy]=useState(false),[loading,setLoading]=useState(!initial),[error,setError]=useState<string|null>(null),[storageFailed,setStorageFailed]=useState(false);
-  const [context,setContext]=useState<ConversationContext|null>(null),[memoryOpen,setMemoryOpen]=useState(false),[memoryBusy,setMemoryBusy]=useState(false),[memoryFailed,setMemoryFailed]=useState(false);
   const [mobile,setMobile]=useState(()=>window.matchMedia?.('(max-width:760px)').matches??false);
   const [earlierBusy,setEarlierBusy]=useState(false),[earlierFailed,setEarlierFailed]=useState(false);
   const prependScroll=useRef<{height:number;top:number}|null>(null);
   const [focusPrinciple,setFocusPrinciple]=useState<ApiPrinciple|null>(null),[focusFailed,setFocusFailed]=useState(false);
-  const lifecycle=useRef(new AbortController()),draftRef=useRef<Draft|null>(null),working=useRef(false),memorySerial=useRef(0);
+  const lifecycle=useRef(new AbortController()),draftRef=useRef<Draft|null>(null),working=useRef(false);
   const conversationRef=useRef<ApiConversation|null>(initial),writer=useRef(crypto.randomUUID()),receipt=useRef<StoredConversationDraft>();
-  const [drafts,setDrafts]=useState<StoredConversationDraft[]>([]),[generationEnabled,setGenerationEnabled]=useState<boolean|null>(initial?.generationEnabled??null);
-  const [readingChoice,setReadingChoice]=useState<{messageId:string;index:number}|null>(null),[readingChoiceFailed,setReadingChoiceFailed]=useState<string|null>(null),choosingReading=useRef(false);
-  const [citation,setCitation]=useState<{requestId:string;index:number;value:ConversationCitation|null;failed:boolean}|null>(null),citationSerial=useRef(0);
-  const root=useRef<HTMLElement>(null),body=useRef<HTMLDivElement>(null),editor=useRef<HTMLTextAreaElement>(null),nearBottom=useRef(true),[newMessages,setNewMessages]=useState(false);
+  const [generationEnabled,setGenerationEnabled]=useState<boolean|null>(initial?.generationEnabled??null);
+  const root=useRef<HTMLElement>(null),body=useRef<HTMLDivElement>(null),editor=useRef<HTMLTextAreaElement>(null),nearBottom=useRef(true);
   const restoredScroll=useRef<{top:number;nearBottom:boolean;messageWindowStart?:number}|null>(null),scrollKey=profileStorageKey(scope,`conversationScroll:${journal}`)!;
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
-  const sourceName=(kind:ConversationSourceKind)=>say(kind==='principle'?'worldConversationPrincipleRef':kind==='inspiration'?'worldConversationInspirationRef':'worldConversationReadingRef');
   useEffect(()=>{const media=window.matchMedia?.('(max-width:760px)');if(!media)return;const change=()=>setMobile(media.matches);media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
   useLayoutEffect(()=>{const viewport=window.visualViewport,node=root.current;if(!viewport||!node)return;const update=()=>{if(!Number.isFinite(viewport.height)||viewport.height<=0||!Number.isFinite(viewport.offsetTop))return;node.style.setProperty('--chat-height',`${viewport.height}px`);node.style.setProperty('--chat-top',`${viewport.offsetTop}px`);if(nearBottom.current&&body.current)body.current.scrollTop=body.current.scrollHeight;};update();viewport.addEventListener('resize',update);viewport.addEventListener('scroll',update);return()=>{viewport.removeEventListener('resize',update);viewport.removeEventListener('scroll',update);};},[]);
   useLayoutEffect(()=>{const node=editor.current;if(!node)return;node.style.height='auto';node.style.height=`${Math.max(52,Math.min(node.scrollHeight,180))}px`;},[draft?.content,conversation?.id,loading]);
@@ -42,38 +114,35 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     try{if(owner.signal.aborted)throw new Error('Conversation request stopped');const value=await Promise.race([work(request.signal),canceled]);if(request.signal.aborted||owner.signal.aborted)throw new Error('Conversation request stopped');return value;}
     finally{window.clearTimeout(timer);owner.signal.removeEventListener('abort',abort);request.signal.removeEventListener('abort',stopped);}
   };
-  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{receipt.current=storeConversationDraft(scope,journal,next,receipt.current);setDrafts(readConversationDrafts(scope,journal));setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
+  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{receipt.current=storeConversationDraft(scope,journal,next,receipt.current);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
   const observe=(next:ApiConversation)=>{
     if(conversationRef.current?.id===next.id&&conversationRef.current.profileId===next.profileId&&conversationRef.current.revision>next.revision)next=conversationRef.current;
-    conversationRef.current=next;setConversation(next);setGenerationEnabled(next.generationEnabled??false);setContext(null);setCitation(null);citationSerial.current++;memorySerial.current++;setMemoryBusy(false);
-        const pending=draftRef.current;
-    if(pending?.pending&&next.messages.some(message=>message.id===pending.id&&message.content===pending.content&&(message.correctsMessageId??undefined)===pending.correctsMessageId)){
+    conversationRef.current=next;setConversation(next);setGenerationEnabled(next.generationEnabled??false);
+    const pending=draftRef.current;
+    if(pending?.pending&&next.messages.some(message=>message.id===pending.id&&message.content===pending.content)){
       try{if(receipt.current)clearConversationDraft(receipt.current);}catch{setStorageFailed(true);}
       receipt.current=undefined;draftRef.current=null;setDraft(null);setError(null);
       if(!id){onCreated?.(next);onChoose(next.id);}
     }
-    try{setDrafts(readConversationDrafts(scope,journal));}catch{setStorageFailed(true);}
   };
   const reply=useConversationReply(scope.profileId,id,Boolean(conversation?.generationEnabled),conversation?.revision??0,observe,conversation?.messageWindowStart);
   const replyPending=reply.state?.phase==='pending'||reply.state?.phase==='running';
   const latestMessage=conversation?.messages.at(-1);
   const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&(!reply.state||reply.error));
   const awaitingReply=replyPending||replyUnconfirmed;
-  useLayoutEffect(()=>{
-    const node=body.current,panel=node?.querySelector<HTMLElement>('.jar-conversation-reference');if(!citation||!node||!panel)return;
-    const visible=node.getBoundingClientRect(),opened=panel.getBoundingClientRect();
-    if(opened.height>visible.height||opened.top<visible.top)node.scrollTop+=opened.top-visible.top;
-    else if(opened.bottom>visible.bottom)node.scrollTop+=opened.bottom-visible.bottom;
-  },[citation]);
   useLayoutEffect(()=>{const node=body.current;if(!node||!conversation)return;const saved=restoredScroll.current;
     if(prependScroll.current){const previous=prependScroll.current;node.scrollTop=previous.top+node.scrollHeight-previous.height;prependScroll.current=null;return;}
     if(saved){nearBottom.current=saved.nearBottom;node.scrollTop=saved.nearBottom?node.scrollHeight:saved.top;restoredScroll.current=null;}
-    else if(nearBottom.current){node.scrollTop=node.scrollHeight;setNewMessages(false);}else setNewMessages(true);
+    /* STILL NO JUMP AWAY FROM WHAT YOU WERE READING. The "New messages ↓"
+       button that used to appear when a reply landed above your scroll
+       position went with the other controls; the rule it existed to announce
+       did not. If you are reading older words, nothing moves. */
+    else if(nearBottom.current)node.scrollTop=node.scrollHeight;
   },[conversation?.messages.length]);
-  /* THE LIST ITSELF MOVED TO THE CORNER. What this still reads it for is
+  /* THE LIST ITSELF LIVES IN THE CORNER. What this still reads it for is
      `generationEnabled` — whether replies are connected at all, which the
      composer's own state depends on and which this endpoint happens to
-     carry. The conversations it returns are no longer rendered here. */
+     carry. The conversations it returns are not rendered here. */
   const refreshList=async()=>{const next=await run(signal=>listConversations(scope.profileId,signal));if(!lifecycle.current.signal.aborted&&!id)setGenerationEnabled(next.generationEnabled);};
   const loadHistory=()=>{void refreshList().catch(()=>undefined);};
   const refresh=async()=>{
@@ -104,7 +173,11 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   };
   useEffect(()=>{
     lifecycle.current=new AbortController();
-    try{const saved=readConversationDrafts(scope,journal);setDrafts(saved);if(saved[0]){receipt.current=saved[0];draftRef.current=saved[0].value;setDraft(saved[0].value);}}catch{setStorageFailed(true);}
+    /* THE NEWEST UNSENT SENTENCE, WITHOUT ASKING WHICH. Two tabs each fork
+       their own draft and both are still on disk; what went is the `<select>`
+       that offered them to you by their first fifty characters, which is a
+       revision list wearing a label. */
+    try{const saved=readConversationDrafts(scope,journal);if(saved[0]){receipt.current=saved[0];draftRef.current=saved[0].value;setDraft(saved[0].value);}}catch{setStorageFailed(true);}
     try{const saved=JSON.parse(sessionStorage.getItem(scrollKey)??'null');if(saved&&Number.isFinite(saved.top)&&saved.top>=0&&typeof saved.nearBottom==='boolean'&&(saved.messageWindowStart===undefined||Number.isSafeInteger(saved.messageWindowStart)&&saved.messageWindowStart>=1&&saved.messageWindowStart<=200))restoredScroll.current={...saved,messageWindowStart:saved.messageWindowStart??1};}catch{/* Scrolling is recoverable without a stored position. */}
     void refresh();return()=>lifecycle.current.abort();
   },[scope.accountId,scope.profileId,id,initialPrincipleId]);
@@ -113,71 +186,30 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID()}:{})};
     if(!keep(intent))return;working.current=true;setBusy(true);setError(null);nearBottom.current=true;
     try{
-      const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(intent.correctsMessageId?{correctsMessageId:intent.correctsMessageId}:{}),...(generationEnabled?{requestReply:true}:{})},from=conversationRef.current?.messageWindowStart;
+      const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(generationEnabled?{requestReply:true}:{})},from=conversationRef.current?.messageWindowStart;
         return from!==undefined?saveConversationMessage(scope.profileId,id,input,signal,from):saveConversationMessage(scope.profileId,id,input,signal);})
         :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:generationEnabled===true}));
       if(!lifecycle.current.signal.aborted){observe(next);if(id)reply.check();}
     }catch{if(!lifecycle.current.signal.aborted)setError(say('worldConversationSaveFailed'));}
     finally{working.current=false;if(!lifecycle.current.signal.aborted)setBusy(false);}
   };
-  const remove=async()=>{
-    if(!id||busy||!window.confirm(say('worldConversationDeleteConfirm')))return;setBusy(true);setError(null);
-    try{await run(signal=>deleteConversation(scope.profileId,id,signal));if(lifecycle.current.signal.aborted)return;clearConversationDrafts(scope,id);onChoose(null);}
-    catch{if(!lifecycle.current.signal.aborted)setError(say('worldConversationDeleteFailed'));}finally{if(!lifecycle.current.signal.aborted)setBusy(false);}
-  };
-  const memory=async()=>{
-    setMemoryOpen(true);if(!id||memoryBusy)return;const serial=++memorySerial.current;setMemoryBusy(true);setMemoryFailed(false);setContext(null);
-    try{const next=await run(signal=>fetchConversationContext(scope.profileId,id,signal));if(!lifecycle.current.signal.aborted&&serial===memorySerial.current)setContext(next);}
-    catch{if(!lifecycle.current.signal.aborted&&serial===memorySerial.current)setMemoryFailed(true);}finally{if(!lifecycle.current.signal.aborted&&serial===memorySerial.current)setMemoryBusy(false);}
-  };
-  const closeMemory=()=>{setMemoryOpen(false);memorySerial.current++;setMemoryBusy(false);};
-  const openCitation=async(requestId:string,index:number)=>{
-    if(!id)return;const serial=++citationSerial.current;setCitation({requestId,index,value:null,failed:false});
-    try{const value=await run(signal=>fetchConversationCitation(scope.profileId,id,requestId,index,signal));if(!lifecycle.current.signal.aborted&&serial===citationSerial.current)setCitation({requestId,index,value,failed:false});}
-    catch{if(!lifecycle.current.signal.aborted&&serial===citationSerial.current)setCitation({requestId,index,value:null,failed:true});}
-  };
-  const edit=(content:string)=>{const current=draftRef.current,own=current?.writer===writer.current;keep({id:own?current.id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content,revision:conversation?.revision??0,pending:false,...(current?.correctsMessageId?{correctsMessageId:current.correctsMessageId}:{})});};
-  const suggestionBlocked=busy||loading||generationEnabled===null||awaitingReply||storageFailed||focusFailed||Boolean(draft?.pending||draft?.content.trim())||(conversation?.revision??0)>=(generationEnabled?199:200);
-  const sendSuggestion=(content:string)=>{
-    if(working.current||choosingReading.current||suggestionBlocked||draftRef.current?.pending||draftRef.current?.content.trim())return;
-    edit(content);void save();
-  };
-  const chooseSource=async(messageId:string,requestId:string,reference:NonNullable<ApiConversation['messages'][number]['citations']>[number])=>{
-    if(!id||generationEnabled!==true||suggestionBlocked||working.current||choosingReading.current||!reference.available||draftRef.current?.pending||draftRef.current?.content.trim())return;
-    const revision=conversationRef.current?.revision;choosingReading.current=true;setBusy(true);setReadingChoice({messageId,index:reference.index});setReadingChoiceFailed(null);
-    try{
-      const current=await run(signal=>fetchConversationCitation(scope.profileId,id,requestId,reference.index,signal));
-      if(lifecycle.current.signal.aborted)return;
-      if(current.profileId!==scope.profileId||current.conversationId!==id||current.requestId!==requestId||current.index!==reference.index||current.source.kind!==reference.kind||current.source.id!==reference.id||conversationRef.current?.revision!==revision)throw new Error('Reading changed');
-      if(draftRef.current?.pending||draftRef.current?.content.trim())return;
-      const text=current.source.text.length<=3000?current.source.text:current.source.quote;
-      const content=`“${text}”\n\n${current.source.historical&&current.source.recordedAt?`${say('worldChatExploreEarlierReadingMessage')} (${new Date(current.source.recordedAt).toLocaleDateString(locale,{dateStyle:'medium',timeZone:'UTC'})})`:say(reference.kind==='top_of_mind_entry'?'worldChatExploreReadingMessage':'worldChatExploreSourceMessage')}`;
-      if(!keep({id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content,revision:revision??0,pending:false}))return;
-      nearBottom.current=true;await save();
-    }catch{if(!lifecycle.current.signal.aborted)setReadingChoiceFailed(messageId);}
-    finally{choosingReading.current=false;if(!lifecycle.current.signal.aborted){setReadingChoice(null);setBusy(false);}}
-  };
+  const edit=(content:string)=>{const current=draftRef.current,own=current?.writer===writer.current;keep({id:own?current.id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content,revision:conversation?.revision??0,pending:false});};
   const first=conversation?.initialPrinciple??focusPrinciple,canCompose=!id||Boolean(conversation);
-  const otherDrafts=drafts.filter(row=>row.value.content.trim()&&row.value.id!==draft?.id);
-  return <main ref={root} className="chat-page" data-memory-open={memoryOpen||undefined}>
-    <div className="chat-top">
-      {/* The switcher at the top of the screen names this page too, so the
-          name is not printed again here. See Menu's `label`. */}
-      {/* ALL CONVERSATIONS IS NOT HERE ANY MORE. It is the top-left corner
-          now, on every screen including this one, so a second door to the
-          same list sitting in this page's own row was the duplication the
-          corner was built to remove.
-          What is left is the one thing that belongs to THIS conversation:
-          what the reply was allowed to read. */}
-      <button type="button" aria-expanded={memoryOpen} onClick={()=>memoryOpen?closeMemory():void memory()}>{say('worldChatMemory')}</button>
-      {id||otherDrafts.length?<details className="chat-options"><summary aria-label={say('worldConversationOptions')}>···</summary><div className="chat-options-menu">
-        {otherDrafts.length?<label>{say('worldShareDrafts')}<select value="" disabled={busy||Boolean(draft?.pending)||storageFailed} onChange={event=>{const selected=drafts.find(row=>row.value.id===event.target.value);if(selected){receipt.current=selected;draftRef.current=selected.value;setDraft(selected.value);}}}>
-          <option value="">{say('worldConversationMessage')}</option>{otherDrafts.map(row=><option key={row.key} value={row.value.id}>{row.value.content.slice(0,50)}</option>)}
-        </select></label>:null}
-        {id?<button type="button" disabled={busy} onClick={()=>void remove()}>{say('worldConversationDelete')}</button>:null}
-      </div></details>:null}
-    </div>
-    {memoryOpen?<button type="button" className="chat-drawer-backdrop" aria-hidden="true" tabIndex={-1} onClick={closeMemory}/>:null}
+  const full=(conversation?.revision??0)>=(generationEnabled?199:200);
+  /* ONE SENTENCE FOR THE REPLY'S BAD NEWS, AND NO BUTTON UNDER IT. Three of
+     the five states that used to print here carried a control — retry, ask,
+     check — and one of them, `stale`, was a word about the model's context
+     rather than about anything the person did. What a person needs from a
+     reply that did not arrive is to know it did not arrive. */
+  const replyNotice=reply.error?'worldConversationReplyCheckFailed' as const
+    :reply.state?.retryAfter&&reply.state.phase!=='ready'?'worldConversationReplyLimit' as const
+    :reply.state?.phase==='failed'?'worldConversationReplyFailed' as const
+    :reply.state?.phase==='stopped'?'worldConversationReplyStopped' as const:null;
+  return <main ref={root} className="chat-page">
+    {/* NO ROW ACROSS THE TOP AT ALL. `.chat-top` held "Your memory" and a
+        `···` menu, and a comment arguing it was "not a second header" — which
+        it was, on a product whose other screens have one bar and two corner
+        buttons. The corners are the navigation here as everywhere. */}
     <section className="chat-main" aria-label={say('worldConversationTitle')}>
       {generationEnabled===false?<p className="chat-notice">{say('worldConversationFoundation')}</p>:null}
       {error?<div className="chat-notice" role="alert">{error} {!draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldRoomHistoryRetry')}</button>:null}
@@ -189,62 +221,56 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         {!conversation&&!draft?.pending?<button type="button" disabled={busy} onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button>:null}</div>:null}
       {loading?<p className="chat-notice" role="status">{say('worldChatLoading')}</p>:null}
       {focusFailed?<p className="chat-notice" role="alert">{say('worldPrincipleUnavailable')} <button type="button" onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button></p>:null}
-      <div className="jar-conversation-body chat-scroll" ref={body} onScroll={()=>{const node=body.current;if(!node)return;nearBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<80;if(nearBottom.current)setNewMessages(false);try{sessionStorage.setItem(scrollKey,JSON.stringify({top:node.scrollTop,nearBottom:nearBottom.current,...(conversationRef.current?.messageWindowStart!==undefined?{messageWindowStart:conversationRef.current.messageWindowStart}:{})}));}catch{/* The transcript remains available. */}}}>
+      <div className="jar-conversation-body chat-scroll" ref={body} onScroll={()=>{const node=body.current;if(!node)return;nearBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<80;try{sessionStorage.setItem(scrollKey,JSON.stringify({top:node.scrollTop,nearBottom:nearBottom.current,...(conversationRef.current?.messageWindowStart!==undefined?{messageWindowStart:conversationRef.current.messageWindowStart}:{})}));}catch{/* The transcript remains available. */}}}>
         <div className="chat-transcript">
+          {/* The transcript's own top edge, not a feature beside it: a window
+              of thirty messages that cannot reach the thirty before it is a
+              transcript with its beginning cut off. */}
           {(conversation?.messageWindowStart??1)>1?<div className="chat-earlier"><button type="button" disabled={earlierBusy||busy||loading} onClick={()=>void loadEarlier()}>{say(earlierBusy?'worldChatEarlierLoading':'worldChatEarlierMessages')}</button>{earlierFailed?<p role="alert">{say('worldChatEarlierFailed')}</p>:null}</div>:null}
-          {first?<div className="chat-topic"><span>{say('worldConversationStartingFrom')}</span><blockquote>{first.statement}</blockquote>{first.state==='contested'?<p>{say('worldConversationContested')}</p>:null}</div>:null}
-          {canCompose&&!conversation?.messages.length&&!draft?.pending?<section className="chat-welcome"><h2>{say('worldConversationFirst')}</h2><p>{say('worldChatContextHint')}</p><div className="chat-starters">
-            {(['worldConversationStarterChoice','worldConversationStarterMeaning','worldConversationStarterChange'] as const).map(key=><button key={key} type="button" disabled={suggestionBlocked} onClick={()=>sendSuggestion(say(key))}>{say(key)}</button>)}
-          </div></section>:null}
+          {/* WHAT THIS CONVERSATION IS ABOUT, when it was opened from a
+              principle. The quote stays because arriving from elsewhere with
+              no sign of where you came from is its own confusion; the state
+              word under it ("Marked as disputed") went, because a principle's
+              standing is the principles surface's sentence to say. */}
+          {first?<div className="chat-topic"><span>{say('worldConversationStartingFrom')}</span><blockquote>{first.statement}</blockquote></div>:null}
           <ol className="chat-messages" aria-label={say('worldConversationMessages')} aria-live="polite" aria-relevant="additions">
             {(conversation?.messages??[]).map(message=><li key={message.id} data-role={message.role}><p className="chat-message-heading">{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</p>
-              {message.memoryChanged?<p className="chat-muted">{say('worldConversationMemoryChanged')}</p>:null}
               <ConversationText text={message.content}/>{message.followUpQuestion?<ConversationText text={message.followUpQuestion}/>:null}
-              {message.correctsMessageId?<><p className="chat-muted">{say('worldChatCorrectionSaved')}</p><ConversationPrincipleEdit scope={scope} contextId={`${id}:${message.id}`} locale={locale} onUpdated={row=>{onPrincipleUpdated?.(row);void refresh();reply.check();}}/></>:null}
-              <ConversationThought scope={scope} message={message} locale={locale} onSaved={row=>{onInspirationSaved?.(row);void refresh();}} onOpen={onOpenSource?sourceId=>onOpenSource('inspiration',sourceId):undefined}
-                actions={message.role==='assistant'?<button type="button" disabled={busy||Boolean(draft?.content)||Boolean(draft?.pending)} onClick={()=>{keep({id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content:'',revision:conversation!.revision,pending:false,correctsMessageId:message.id});editor.current?.focus();}}>{say('worldChatCorrectReply')}</button>:null}/>
-              {message.citations?.length?<details className="chat-source-summary"><summary>{say('worldConversationReferences')} ({message.citations.length})</summary>
-              {message.replyRequestId&&message.id===latestMessage?.id&&generationEnabled&&message.citations?.some(reference=>reference.kind==='top_of_mind_entry')?<ConversationReadingChoices
-                references={message.citations.filter(reference=>reference.kind==='top_of_mind_entry')} locale={locale} disabled={suggestionBlocked} hasDraft={Boolean(draft?.content.trim())}
-                opening={readingChoice?.messageId===message.id?readingChoice.index:null} failed={readingChoiceFailed===message.id}
-                onChoose={reference=>void chooseSource(message.id,message.replyRequestId!,reference)}/>:null}
-              {message.citations?.some(reference=>!(message.id===latestMessage?.id&&generationEnabled&&reference.kind==='top_of_mind_entry'))&&message.replyRequestId?<div className="chat-citations jar-conversation-citations" aria-label={say('worldConversationReferences')}>{message.citations.filter(reference=>!(message.id===latestMessage?.id&&generationEnabled&&reference.kind==='top_of_mind_entry')).map(reference=><button key={reference.index} type="button" disabled={!reference.available} aria-expanded={citation?.requestId===message.replyRequestId&&citation?.index===reference.index} onClick={()=>void openCitation(message.replyRequestId!,reference.index)}><span>{sourceName(reference.kind)} {reference.index+1}</span><ConversationSourceDate locale={locale} historical={reference.historical} recordedAt={reference.recordedAt}/>{reference.preview?<span className="jar-citation-preview">{reference.preview}{reference.preview.length===96?'…':''}</span>:null}{!reference.available?` · ${say('worldConversationReferenceChanged')}`:''}</button>)}</div>:null}
-              {citation&&citation.requestId===message.replyRequestId?<section className="jar-conversation-reference" aria-label={say('worldConversationReferences')}>
-                <button type="button" onClick={()=>{citationSerial.current++;setCitation(null);}}>{say('worldClose')}</button>
-                {citation.failed?<p role="alert">{say('worldConversationReferenceFailed')}</p>:citation.value?<><p>{sourceName(citation.value.source.kind)}</p><ConversationSourceDate locale={locale} historical={citation.value.source.historical} recordedAt={citation.value.source.recordedAt}/><blockquote>{citation.value.source.quote}</blockquote>
-                  {generationEnabled&&message.citations?.find(reference=>reference.index===citation.index&&reference.available)?<button type="button" disabled={suggestionBlocked} onClick={()=>{const reference=message.citations!.find(row=>row.index===citation.index)!;void chooseSource(message.id,message.replyRequestId!,reference);}}>{say('worldChatDiscussSource')}</button>:null}
-                  {draft?.content.trim()&&generationEnabled?<p className="chat-muted">{say('worldChatReadingDraft')}</p>:null}
-                  {readingChoiceFailed===message.id?<p role="alert">{say('worldChatSourceSelectionFailed')}</p>:null}
-                  {citation.value.source.state==='contested'?<p>{say('worldConversationContested')}</p>:null}{citation.value.source.supportCurrent===false?<p>{say('worldConversationUnconfirmed')}</p>:null}
-                  {onOpenSource&&citation.value.source.kind!=='top_of_mind_entry'?<button type="button" onClick={()=>onOpenSource(citation.value!.source.kind,citation.value!.source.id)}>{say('worldConversationOpenSource')}</button>:null}
-                </>:<p role="status">{say('worldChatMemoryLoading')}</p>}
-              </section>:null}
-              </details>:null}
+              {/* Under each reply there used to be: an actions disclosure, a
+                  takeaway editor with an adoption checkbox, a correction
+                  button, a principle editor, and a footnote list with a
+                  count in its label. See this file's header. */}
             </li>)}
             {draft?.pending&&!conversation?.messages.some(message=>message.id===draft.id)?<li className="chat-sending" data-role="user"><span>{say('worldConversationYou')}</span><ConversationText text={draft.content}/><small role="status">{say(busy?'worldChatSending':'worldReviewPending')}</small></li>:null}
           </ol>
-          {awaitingReply&&!reply.error?<div className="chat-thinking" role="status"><span className="chat-thinking-dots" aria-hidden="true"><i/><i/><i/></span> {say(reply.waiting?'worldConversationReplyWaiting':reply.state?.phase==='running'?'worldConversationThinking':'worldConversationQueued')}</div>:null}
+          {/* THE ONE OTHER CONTROL ON THE SURFACE, AND IT IS HERE RATHER THAN
+              IN THE FOOTER ON PURPOSE: it interrupts this sentence, so it
+              stands beside this sentence. The status text keeps the live
+              region to itself — a button inside one gets re-announced every
+              time the phase changes. */}
+          {awaitingReply&&!reply.error?<div className="chat-thinking"><span className="chat-thinking-dots" aria-hidden="true"><i/><i/><i/></span>
+            <span role="status">{say(reply.waiting?'worldConversationReplyWaiting':'worldConversationThinking')}</span>
+            {replyPending?<button type="button" disabled={reply.busy} onClick={()=>void reply.stop()}>{say('worldConversationStop')}</button>:null}</div>:null}
         </div>
       </div>
       {canCompose?<footer className="chat-composer">
-        {draft?.correctsMessageId?<div className="chat-correction"><span>{say('worldChatCorrectionNote')}</span><button type="button" disabled={busy||draft.pending} onClick={()=>keep({...draft,correctsMessageId:undefined})}>{say('worldChatCancelCorrection')}</button></div>:null}
-        {newMessages?<button type="button" onClick={()=>{if(body.current)body.current.scrollTop=body.current.scrollHeight;nearBottom.current=true;setNewMessages(false);}}>{say('worldConversationLatest')}</button>:null}
-        {generationEnabled?<div className="chat-reply-status" aria-live="polite">
-          {reply.error?<p>{say('worldConversationReplyCheckFailed')}</p>:reply.state?.retryAfter&&reply.state.phase!=='ready'?<p>{say('worldConversationReplyLimit')} {new Date(reply.state.retryAfter).toLocaleTimeString(locale,{hour:'numeric',minute:'2-digit'})}</p>:
-            reply.state?.phase==='failed'?<p>{say('worldConversationReplyFailed')}</p>:reply.state?.phase==='stopped'?<p>{say('worldConversationReplyStopped')}</p>:reply.state?.phase==='stale'?<p>{say('worldConversationReplyStale')}</p>:null}
-          {replyPending?<button type="button" disabled={reply.busy} onClick={()=>void reply.stop()}>{say('worldConversationStop')}</button>:null}
-          {reply.state?.canRetry&&!reply.error?<button type="button" disabled={reply.busy||reply.checking} onClick={()=>void reply.request()}>{say(reply.state.phase==='idle'?'worldConversationAsk':'worldConversationRetryReply')}</button>:null}
-          {reply.error||reply.waiting||reply.state?.retryAfter&&reply.state.phase!=='ready'?<button type="button" disabled={reply.busy||reply.checking} onClick={reply.check}>{say('worldConversationCheckReply')}</button>:null}
-        </div>:null}
-        <div className="chat-input-row"><label className="chat-input-label"><span>{say(draft?.correctsMessageId?'worldChatCorrectionPrompt':'worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say(draft?.correctsMessageId?'worldChatCorrectionPrompt':'worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
-          <button className="chat-send" type="button" disabled={busy||loading||generationEnabled===null||awaitingReply||storageFailed||focusFailed||!draft?.content.trim()||(conversation?.revision??0)>=(generationEnabled?199:200)} onClick={()=>void save()}>{say(busy&&draft?.pending?'worldChatSending':draft?.pending?'worldConversationRetry':draft?.correctsMessageId?'worldChatSendCorrection':generationEnabled?'worldConversationSend':'worldConversationSave')}</button>
+        {generationEnabled&&replyNotice?<p className="chat-reply-status" role="status">{say(replyNotice)}</p>:null}
+        <div className="chat-input-row"><label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
+          {/* ONE BUTTON, THREE STATES. It used to carry five labels, two of
+              which announced a mode ("Save message" when replies are not
+              connected) rather than an act. The notice above the transcript
+              already says replies are not connected; the button says Send
+              either way, because sending is what you are doing. */}
+          <button className="chat-send" type="button" disabled={busy||loading||generationEnabled===null||awaitingReply||storageFailed||focusFailed||!draft?.content.trim()||full} onClick={()=>void save()}>{say(busy&&draft?.pending?'worldChatSending':draft?.pending?'worldConversationRetry':'worldConversationSend')}</button>
         </div>
-        {draft?.content&&!draft.pending?<small className="chat-muted" role="status">{say('worldReviewDraftOnDevice')}</small>:null}
-        {storageFailed?<p role="alert">{say('worldConversationDraftFailed')}</p>:null}
+        {storageFailed?<p className="chat-muted" role="alert">{say('worldConversationDraftFailed')}</p>:null}
+        {/* A SAVE THAT WAS NOT CONFIRMED KEEPS ITS ONE WAY OUT. This reads
+            the conversation back rather than writing again, which is why it
+            survived the sweep of retry-shaped controls: it is the only way to
+            learn whether words you can still see on screen actually landed. */}
         {draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldConversationCheck')}</button>:null}
-        {(conversation?.revision??0)>=(generationEnabled?199:200)?<p>{say('worldConversationFull')}</p>:null}
+        {full?<p className="chat-muted">{say('worldConversationFull')}</p>:null}
       </footer>:null}
     </section>
-    {memoryOpen?<ConversationMemory context={context} startingPrinciple={first} locale={locale} busy={memoryBusy} error={memoryFailed} canRead={Boolean(id&&conversation)} onRead={()=>void memory()} onClose={closeMemory}/>:null}
   </main>;
 }

@@ -54,6 +54,12 @@ pull the next item — do not surface the choice.
 - `docs/generation.md` — a signal promotes `emerging → active` at 3 evidence.
 - `docs/HANDOVER-2026-09-01.md` — session handover: open PRs, queue, gates,
   local facts, deploy runbook. Start here when picking up mid-stream.
+- `docs/six-laws.md` — **every design complaint the founder has made, sorted
+  by what was actually wrong.** Each law carries their own words and a
+  prediction of where it is still broken. Read it before shipping a surface,
+  and when a new complaint arrives, FIND ITS LAW FIRST and fix it everywhere
+  that law applies, in that commit. Fixing it only on the reported screen is
+  what made the document necessary.
 - Founder laws: light is the only meaning channel; motion explains, never
   decorates; the world never moves unless the user moved it; fading never
   deletes; states render, numerals never.

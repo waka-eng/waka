@@ -131,19 +131,31 @@ afterEach(() => {
 });
 
 /**
- * THE COUNT IS ON THE PAGE IT COUNTS.
+ * THE COUNT IS ON THE SURFACE IT COUNTS.
  *
  * It rode the bottom bar's Inspirations button, then the menu row that
- * replaced that, and both are gone — a fact about the archive belongs on the
- * archive rather than on whatever happens to point at it. So this mounts the
- * archive's own page. Same span, same words, same `loadInspirations` behind
- * it, which is where the "never smaller than what arrived" invariant lives.
+ * replaced that, then the archive's own page — and all three are gone. A fact
+ * about the archive belongs on the archive rather than on whatever happens to
+ * point at it, which has been true through every move and is why only the
+ * mount below changed each time.
+ *
+ * THE ARCHIVE IS AN OVERLAY NOW. Founder: "for your inspirations, after I
+ * click on it, I feel like I'm lost how to go back to the previous screen."
+ * Being a page is what made it a trap — reaching it unmounted the world, so
+ * there was nothing to return to. So this mounts `SavesOverlay` instead of a
+ * page. Same span, same words, same `loadInspirations` behind it, which is
+ * where the "never smaller than what arrived" invariant actually lives.
+ *
+ * It takes its profile and its title from whoever opens it rather than
+ * working them out itself, so the mount supplies both — that is the whole
+ * reason the overlay cannot disagree with the world behind it about whose
+ * archive is on screen.
  */
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
 async function doorText(): Promise<string> {
-  const { Inspirations } = await import("../src/pages/Inspirations");
+  const { SavesOverlay } = await import("../src/components/SavesOverlay");
   const { AuthProvider } = await import("../src/lib/auth-context");
   host = document.createElement("div");
   document.body.appendChild(host);
@@ -153,7 +165,19 @@ async function doorText(): Promise<string> {
       createElement(
         MemoryRouter,
         null,
-        createElement(AuthProvider, null, createElement(Inspirations)),
+        createElement(
+          AuthProvider,
+          null,
+          createElement(SavesOverlay, {
+            locale: "en-US",
+            /* `undefined` is "mine", which is what every case here is about.
+               The profile is the caller's to supply precisely so that an
+               agent's archive and your own cannot be confused. */
+            profileId: undefined,
+            title: "Your inspirations",
+            onClose: () => undefined,
+          }),
+        ),
       ),
     );
   });

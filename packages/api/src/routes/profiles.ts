@@ -20,7 +20,7 @@ import { z } from "zod";
 
 import { profiles, type Profile } from "../db/index.js";
 import { getDb } from "../lib/db.js";
-import { type AuthEnv, requireAuth } from "../lib/middleware.js";
+import { type AuthEnv, humanSessionsOnly, requireAuth } from "../lib/middleware.js";
 import { validationDetails } from "../lib/validation.js";
 
 /**
@@ -79,12 +79,20 @@ profilesRoutes.get("/", async (c) => {
   return c.json({ profiles: rows.map(serializeProfile) });
 });
 
-profilesRoutes.post("/", async (c) => {
+/*
+ * ADDING, RENAMING, AND REMOVING A MEMORY ARE ACCOUNT-OWNER ACTS, and the
+ * three handlers below say so with the shared middleware rather than with a
+ * profile-type comparison of their own. The comparison they used to write was
+ * true for a keeper key — a credential in a config file, bound to the human
+ * profile — so a stolen MCP config could have minted itself memories and
+ * deleted the person's. See `humanSessionsOnly` in lib/middleware.ts for why
+ * the inline form kept losing its `keyScoped` half.
+ *
+ * GET stays open to an agent session on purpose: it has to know which
+ * profiles exist to know what it may read.
+ */
+profilesRoutes.post("/", humanSessionsOnly, async (c) => {
   const session = c.get("session");
-  if (session.profile.type !== "human") {
-    return c.json({ error: "Only the account owner can add a profile" }, 403);
-  }
-
   let rawBody: unknown;
   try {
     rawBody = await c.req.json();
@@ -124,11 +132,8 @@ profilesRoutes.post("/", async (c) => {
   return c.json({ profile: serializeProfile(created!) }, 201);
 });
 
-profilesRoutes.patch("/:profileId", async (c) => {
+profilesRoutes.patch("/:profileId", humanSessionsOnly, async (c) => {
   const session = c.get("session");
-  if (session.profile.type !== "human") {
-    return c.json({ error: "Only the account owner can rename a profile" }, 403);
-  }
   if (!profileIdSchema.safeParse(c.req.param("profileId")).success) {
     return c.json({ error: "Profile not found" }, 404);
   }
@@ -169,11 +174,8 @@ profilesRoutes.patch("/:profileId", async (c) => {
  * can go: the human profile is the account's own memory and outlives
  * everything except the account itself.
  */
-profilesRoutes.delete("/:profileId", async (c) => {
+profilesRoutes.delete("/:profileId", humanSessionsOnly, async (c) => {
   const session = c.get("session");
-  if (session.profile.type !== "human") {
-    return c.json({ error: "Only the account owner can remove a profile" }, 403);
-  }
   if (!profileIdSchema.safeParse(c.req.param("profileId")).success) {
     return c.json({ error: "Profile not found" }, 404);
   }

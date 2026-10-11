@@ -8,7 +8,7 @@ import { act } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, keepBox, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, chooseFromCorner, closeOverlay, keepBox, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { loadInspirations, loadInspiration, type InspirationDetail } from '../src/lib/data';
 import {fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
 
@@ -40,22 +40,75 @@ async function settle() {
 }
 async function navigate(to: string | number) { await act(async () => { if (typeof to === 'number') go(to); else go(to); }); await settle(); }
 
-it('keeps named personal destinations available and records section navigation for Back',async()=>{
+/**
+ * THE THREE NAVIGATION COMPLAINTS, AS INVARIANTS.
+ *
+ * Founder, after walking the product: "for your inspirations, after I click
+ * on it, I feel like I'm lost how to go back to the previous screen, and I
+ * didn't realise clicking on top of mind would leave me there... I go to my
+ * agent and then now I have no way to get back to my top of mind without
+ * going to my agent's top of mind."
+ *
+ * Three reports with one cause: reaching your own material UNMOUNTED THE
+ * WORLD. The previous shape of this suite asserted the opposite — that each
+ * of the three had its own pathname — because at the time that was the fix
+ * being shipped. Having a real address was not enough and the founder's three
+ * sentences are why: an address replaces the world, and once the world is
+ * gone there is nothing to return to, only somewhere else to navigate.
+ *
+ * So what is checked here is the thing being promised now, and each
+ * expectation below is one of the three sentences made mechanical.
+ */
+it('opens your own material over a world that never leaves, and the world is one press back',async()=>{
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  /* The archive and the principles are PAGES now, not positions on a vertical
-     axis the camera travelled. So the thing to check is that each destination
-     has a real address and that Back walks them — which is the capability the
-     old `view=field` / `view=sky` query params were standing in for. */
-  await chooseFromMenu(world.container,'Your inspirations');await settle();
-  expect(location.pathname).toBe('/inspirations');
-  await chooseFromMenu(world.container,'Your principles');await settle();
-  expect(location.pathname).toBe('/principles');
-  await navigate(-1);expect(location.pathname).toBe('/inspirations');
-  /* Find left the menu entirely: it is a thing you do TO your inspirations,
-     so it is a search field on that page now rather than a destination. The
-     menu holds places; it held one verb, and that was the odd one out. */
+
+  /* ONE — THE PATHNAME DOES NOT MOVE. This is the whole fix in one
+     assertion: an overlay is a parameter on the world's own address, so the
+     world is never unmounted and the camera never forgets where it was. If
+     this ever reads '/inspirations' again, "I'm lost how to go back" is
+     back with it. */
+  await chooseFromCorner(world.container,'Your inspirations');await settle();
+  expect(location.pathname).toBe('/');
+  expect(new URLSearchParams(location.search).get('open')).toBe('saves');
+
+  /* TWO — THERE IS A WAY OUT THAT CAN BE SEEN. Escape and the scrim both
+     work, and neither announces itself; the founder got lost on a surface
+     whose exits were all invisible, so the seen one is the one under test.
+     It lands back on the world with nothing held up. */
+  await closeOverlay(world.container);await settle();
+  expect(location.pathname).toBe('/');
+  expect(new URLSearchParams(location.search).get('open')).toBeNull();
+
+  /* The other two open the same way, because three things of the same kind
+     that opened differently would be the next bug report. */
+  await chooseFromCorner(world.container,'Your principles');await settle();
+  expect(new URLSearchParams(location.search).get('open')).toBe('principles');
+  await closeOverlay(world.container);await settle();
+  await chooseFromCorner(world.container,'Your conversations');await settle();
+  expect(new URLSearchParams(location.search).get('open')).toBe('conversations');
+  await closeOverlay(world.container);await settle();
+
+  /* THREE — THE SWITCHER ASKS ONE QUESTION AND CANNOT STRAND YOU. It offers
+     owners and nothing else, so pressing it can never put you on a different
+     KIND of surface — which is what "I didn't realise clicking on top of
+     mind would leave me there" was describing. Going to the agent and back
+     is one press each way, and the way back exists without having to travel
+     further into the agent to find it. */
+  await chooseFromMenu(world.container,"Your agent's top of mind");await settle();
+  expect(location.pathname.startsWith('/w/')).toBe(true);
   await chooseFromMenu(world.container,'Your top of mind');await settle();
   expect(location.pathname).toBe('/');
+});
+
+/* FIND LEFT THE LIST ENTIRELY, and stays gone: it is a thing you do TO your
+   inspirations, so it is a search field on that overlay rather than a
+   destination. Both lists hold nouns now; this one held the only verb. */
+it('offers owners in the switcher and things to open in the corner, and never mixes them',async()=>{
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
+  const opener=[...world.container.querySelectorAll<HTMLButtonElement>('.waka-corners button[aria-controls]')][0]!;
+  await act(async()=>opener.click());
+  const rows=[...world.container.querySelectorAll('.waka-menu .waka-menu-item')].map(node=>node.textContent?.trim());
+  expect(rows).toEqual(['Your top of mind',"Your agent's top of mind"]);
 });
 
 it('keeps the selected principle and its route after editing, so Back returns to the prior view',async()=>{

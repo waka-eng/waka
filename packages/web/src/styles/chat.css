@@ -28,10 +28,19 @@
  * should be read, on a product whose rule is that states render and numerals
  * never. The order of the transcript already says when.
  *
- * HISTORY AND MEMORY ARE SHEETS, NEVER COLUMNS. Both were permanent furniture
- * at desk widths and a drawer on a phone. A column you are not reading is a
- * column spending attention, so they are drawers at every width now — the
- * same overlay the rest of the product opens things in.
+ * AND THEN THE SHEETS WENT TOO. History and memory were columns, then drawers
+ * at every width, and now neither is on this surface: the list of
+ * conversations belongs to the corner that owns it on every screen, and "what
+ * the reply was allowed to read" was the model's context window with a label
+ * on it. Founder, 2026-10-10: "so many different buttons that I have no idea
+ * what its supposed to do."
+ *
+ * SO THIS FILE DRESSES THREE THINGS AND NOTHING ELSE: the transcript, the box,
+ * and — only while a reply is being written — one quiet button beside the
+ * sentence saying it is being written. There is no row across the top, no
+ * footnote list under a reply, no editor inside a message, no `···`. Every
+ * rule for those was deleted rather than left to rot; `ConversationPanel`'s
+ * header says what each one was and why it went.
  *
  * EVERY SIZE COMES FROM THE SCALE IN global.css, and the face is the one
  * `claims.css` names. This file introduces no token and no colour.
@@ -64,8 +73,7 @@
 /* One quiet control register for the whole surface. The composer's send
    button opts back out below — it is the only filled control here, exactly
    as it is the only filled control on the home screen. */
-.chat-page button,
-.chat-page summary {
+.chat-page button {
   box-sizing: border-box;
   border: 0;
   background: none;
@@ -76,18 +84,29 @@
   cursor: pointer;
 }
 
-.chat-page button:hover,
-.chat-page summary:hover {
+.chat-page button:hover:not(:disabled) {
   color: var(--ink);
 }
 
+/**
+ * A DISABLED CONTROL DIMS ITS FILL AND KEEPS ITS LABEL READABLE.
+ *
+ * This rule used to be `opacity: 0.45`, which fades the WORDS as well as
+ * whatever is behind them. On this ground that is how a control becomes a
+ * blank rectangle — a bug this repo has shipped before — and an unreadable
+ * label is worse than a bright one, because a person cannot even tell what it
+ * is they are not allowed to press. So the label stays at `--muted` (7:1) and
+ * the only filled control on the surface drops its fill instead; see
+ * `.chat-send:disabled` at the bottom of the file. What a disabled control
+ * loses here is its hover, and most of them say their state in the label
+ * anyway ("Loading earlier messages…", "Sending…").
+ */
 .chat-page button:disabled {
-  opacity: 0.45;
+  color: var(--muted);
   cursor: default;
 }
 
 .chat-page button:focus-visible,
-.chat-page summary:focus-visible,
 .chat-page textarea:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
@@ -102,73 +121,12 @@
  * viewport and are not in this flow.
  * ------------------------------------------------------------------------- */
 
-/**
- * NOT A SECOND HEADER.
- *
- * This row sat under the centred title with its controls pushed to the right
- * edge, which drew a second bar across the top of a screen that already has
- * one. It holds a single quiet control now — what the reply was allowed to
- * read — on the transcript's own column, so it reads as part of the
- * conversation rather than as chrome above it.
- */
-.chat-top {
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-8) var(--sp-16);
-  width: 100%;
-  max-width: 680px;
-  box-sizing: border-box;
-  margin: 0 auto;
-  padding: calc(var(--waka-corner) + var(--sp-8) + env(safe-area-inset-top))
-    clamp(20px, 6vw, 28px) var(--sp-8);
-}
-
-
-.chat-page .chat-top button {
-  padding: 0;
-  font-size: var(--t-fine);
-}
-
-.chat-options {
-  position: relative;
-}
-
-.chat-options summary {
-  list-style: none;
-}
-
-.chat-options summary::-webkit-details-marker {
-  display: none;
-}
-
-.chat-options-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + var(--sp-8));
-  width: 260px;
-  max-width: calc(100vw - var(--sp-24));
-  box-sizing: border-box;
-  z-index: 5;
-  display: grid;
-  gap: var(--sp-8);
-  padding: var(--sp-12);
-  background: var(--waka-raised);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-surface);
-}
-
-.chat-options-menu > button {
-  width: 100%;
-  text-align: left;
-}
-
-.chat-options-menu label {
-  display: block;
-  font-size: var(--t-fine);
-  color: var(--muted);
-}
+/* NOTHING SITS ABOVE THE TRANSCRIPT ANY MORE. `.chat-top` was a row pinned
+ * under the corners holding "Your memory" and a `···` menu, with a comment
+ * insisting it was "not a second header" — which is what a second header
+ * always says. `.chat-options` and `.chat-options-menu` dressed the menu's
+ * popover: a draft picker and "Delete conversation". All three are gone with
+ * the controls they framed. */
 
 /* ---------------------------------------------------------------------------
  * The transcript
@@ -217,9 +175,7 @@
   padding-bottom: var(--sp-24);
 }
 
-.chat-messages,
-.chat-sidebar ul,
-.chat-memory ul {
+.chat-messages {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -285,47 +241,11 @@
   color: var(--muted);
 }
 
-/* ---------------------------------------------------------------------------
- * The opening, before anything is said
- * ------------------------------------------------------------------------- */
-
-.chat-welcome {
-  padding-block: clamp(var(--sp-32), 8vh, var(--sp-56));
-}
-
-.chat-welcome h2 {
-  margin: 0 0 var(--sp-12);
-  font-family: var(--waka-face);
-  font-size: var(--t-reading);
-  font-weight: 300;
-  line-height: 1.4;
-  color: var(--ink);
-  text-wrap: balance;
-}
-
-.chat-welcome > p {
-  margin: 0;
-  font-size: var(--t-ui);
-  color: var(--muted);
-}
-
-.chat-starters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-8);
-  margin-top: var(--sp-24);
-}
-
-.chat-page .chat-starters button {
-  padding: var(--sp-8) var(--sp-16);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  text-align: left;
-}
-
-.chat-page .chat-starters button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
-}
+/* THE OPENING IS NOW THE EMPTY TRANSCRIPT AND THE BOX'S OWN QUESTION.
+ * `.chat-welcome` and `.chat-starters` dressed a heading, a hint and three
+ * pills — and the pills SENT a message on one press, which is a surprising
+ * thing for the first screen a stranger sees to do. The placeholder in the
+ * field asks the same question and waits. */
 
 /* What the conversation started from — a principle, or a reading. */
 .chat-topic {
@@ -348,127 +268,19 @@
 }
 
 /* ---------------------------------------------------------------------------
- * Sources, corrections, notices
+ * Notices
+ *
+ * WHAT WAS DELETED FROM THIS SECTION, so nobody looks for it: `.chat-source-
+ * summary`, `.chat-citations`, `.chat-source-date`, `.chat-reading-choices`,
+ * `.chat-reading-choice`, `.chat-reading-choice-heading`, `.chat-reading-
+ * choice-text` and `.jar-conversation-reference` dressed the footnotes under
+ * each reply — including a summary that printed a COUNT, against the law that
+ * states render and numerals never. `.jar-conversation-actions`,
+ * `.jar-conversation-thought`, `.jar-conversation-adopt` and `.jar-item-
+ * actions` dressed the save-a-thought editor and its adoption checkbox;
+ * `.chat-correction` dressed "Correct reply". The surface has no per-message
+ * control left to dress.
  * ------------------------------------------------------------------------- */
-
-.chat-source-summary {
-  margin-top: var(--sp-12);
-  font-size: var(--t-fine);
-  color: var(--muted);
-}
-
-.chat-source-summary > summary {
-  cursor: pointer;
-}
-
-.chat-source-summary > summary:hover,
-.chat-source-summary > summary:focus-visible {
-  color: var(--ink);
-}
-
-.chat-citations {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-8);
-  margin-top: var(--sp-12);
-}
-
-.chat-page .chat-citations button {
-  max-width: 100%;
-  padding: var(--sp-8) var(--sp-12);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-control);
-  text-align: left;
-  font-size: var(--t-fine);
-}
-
-.chat-source-date {
-  display: block;
-}
-
-.chat-reading-choices {
-  display: grid;
-  gap: var(--sp-8);
-  margin-block: var(--sp-16);
-}
-
-.chat-reading-choices > p {
-  margin: 0;
-  font-size: var(--t-fine);
-  color: var(--muted);
-}
-
-.chat-page .chat-reading-choice {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  width: 100%;
-  padding: var(--sp-12);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-surface);
-  text-align: left;
-}
-
-.chat-reading-choice-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--sp-12);
-  width: 100%;
-  font-size: var(--t-meta);
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-
-.chat-reading-choice-text {
-  line-height: 1.5;
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-
-.chat-page .jar-conversation-reference {
-  margin-top: var(--sp-12);
-  padding: var(--sp-16);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-surface);
-  background: var(--waka-raised);
-  font-size: var(--t-ui);
-}
-
-.chat-page .jar-conversation-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-16);
-  margin-top: var(--sp-12);
-}
-
-.chat-page .jar-conversation-actions button,
-.chat-page .jar-item-actions > summary {
-  margin: 0;
-  padding-inline: 0;
-  font-size: var(--t-fine);
-}
-
-.chat-page .jar-item-actions {
-  margin-left: 0;
-}
-
-.chat-page .jar-conversation-thought section {
-  margin-block: var(--sp-12);
-}
-
-.chat-page .jar-conversation-adopt {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  margin-top: var(--sp-12);
-  font-size: var(--t-ui);
-}
-
-.chat-page .jar-conversation-adopt input {
-  width: var(--sp-16);
-  height: var(--sp-16);
-  flex: none;
-}
 
 .chat-page blockquote {
   margin-inline: 0;
@@ -487,18 +299,6 @@
   box-sizing: border-box;
   margin: 0 auto;
   padding: 0 clamp(20px, 6vw, 28px) var(--sp-12);
-  font-size: var(--t-fine);
-  color: var(--muted);
-}
-
-.chat-correction {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-12);
-  margin-bottom: var(--sp-8);
-  padding-left: var(--sp-12);
-  border-left: 1px solid var(--line);
   font-size: var(--t-fine);
   color: var(--muted);
 }
@@ -619,19 +419,8 @@
   outline: none;
 }
 
-.chat-page select {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  margin-top: var(--sp-4);
-  padding: var(--sp-8);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-control);
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-}
+/* `.chat-page select` went with the only two selects here: the draft picker
+   in the `···` menu and the one inside the save editor. */
 
 /* The primary action, and the only filled control on the surface — the same
    one the home screen's box ends with. */
@@ -653,162 +442,25 @@
   color: var(--muted);
 }
 
+/* A SENTENCE, NOT A TOOLBAR. This was a flex row because three buttons —
+   stop, retry, check — stood in it beside the text. Two of the three were
+   regeneration and went; stopping moved up beside the "thinking" line it
+   interrupts. What is left is one plain sentence about a reply that failed,
+   stopped or is rate-limited. */
 .chat-reply-status {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-12);
+  margin: 0;
   font-size: var(--t-fine);
   color: var(--muted);
-}
-
-.chat-reply-status p {
-  flex: 1;
-  margin: 0;
 }
 
 /* ---------------------------------------------------------------------------
- * The two sheets
+ * No sheets
  *
- * Past conversations, and what the reply was allowed to read. Drawers at
- * every width — see the note at the top of the file.
+ * `.chat-sidebar` and `.chat-memory` — two 340px drawers with their own
+ * headers, lists, timestamps and a `.chat-drawer-backdrop` to dismiss them —
+ * are deleted. The sidebar's rules had already outlived the sidebar: the list
+ * of conversations moved to the corner and nothing in this package rendered
+ * `.chat-sidebar` any more, which is exactly how CSS rots unnoticed. The
+ * memory drawer went on 2026-10-10 with the control that opened it.
  * ------------------------------------------------------------------------- */
-
-.chat-page .chat-sidebar,
-.chat-page .chat-memory {
-  position: absolute;
-  inset-block: 0;
-  z-index: 4;
-  width: min(340px, 100%);
-  box-sizing: border-box;
-  padding: calc(var(--waka-corner) + var(--sp-16) + env(safe-area-inset-top))
-    clamp(20px, 6vw, 28px) calc(var(--sp-20) + env(safe-area-inset-bottom));
-  overflow-y: auto;
-  background: var(--waka-raised);
-  color: var(--ink);
-  font-size: var(--t-ui);
-}
-
-.chat-page .chat-sidebar {
-  inset-inline: 0 auto;
-  border-right: 1px solid var(--line);
-}
-
-.chat-page .chat-memory {
-  inset-inline: auto 0;
-  border-left: 1px solid var(--line);
-}
-
-.chat-sidebar header,
-.chat-memory header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--sp-12);
-  margin-bottom: var(--sp-20);
-}
-
-.chat-sidebar h2,
-.chat-memory h2 {
-  margin: 0;
-  font-family: var(--waka-face);
-  font-size: var(--t-fine);
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.chat-page .chat-sidebar .chat-new {
-  width: 100%;
-  margin-bottom: var(--sp-20);
-  padding: var(--sp-12) var(--sp-16);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-control);
-  text-align: left;
-}
-
-.chat-page .chat-sidebar nav button {
-  display: block;
-  width: 100%;
-  margin-bottom: var(--sp-4);
-  padding: var(--sp-12);
-  border-radius: var(--waka-r-control);
-  text-align: left;
-}
-
-.chat-page .chat-sidebar nav button:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-}
-
-.chat-page .chat-sidebar nav button[aria-current] {
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
-  color: var(--ink);
-}
-
-.chat-sidebar nav span {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-
-.chat-sidebar time {
-  display: block;
-  margin-top: var(--sp-4);
-  font-size: var(--t-meta);
-  color: var(--muted);
-}
-
-.chat-memory section {
-  padding-block: var(--sp-16);
-  border-bottom: 1px solid var(--line);
-}
-
-.chat-memory h3 {
-  margin: 0 0 var(--sp-8);
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.chat-memory p {
-  margin: 0;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.chat-memory li + li {
-  margin-top: var(--sp-12);
-}
-
-.chat-memory small {
-  display: block;
-  margin-top: var(--sp-4);
-  font-size: var(--t-meta);
-  color: var(--muted);
-}
-
-.chat-page .chat-drawer-backdrop,
-.chat-page .chat-drawer-backdrop:hover {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: var(--waka-scrim);
-}
-
-@media (max-width: 760px) {
-  .chat-page .chat-sidebar,
-  .chat-page .chat-memory {
-    width: 100%;
-  }
-}
 }

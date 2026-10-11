@@ -26,12 +26,22 @@ beforeEach(()=>{
   host=document.createElement('div');document.body.append(host);root=createRoot(host);
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.useRealTimers();});
-const button=(label:string)=>[...host.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent===label)!;
+/* THE FIRST QUESTION IS TYPED NOW, NOT PICKED. Both tests here used to press
+   a starter pill — one of three buttons on the empty screen that SENT a
+   message on a single press. They are gone (see `ConversationPanel`'s
+   header), so the first question arrives the way every other one does: typed
+   into the box, sent with the box's own button. Nothing else about what these
+   two protect has changed. */
+const send=()=>act(async()=>host.querySelector<HTMLButtonElement>('.chat-send')!.click());
+const ask=async(words:string)=>{
+  await act(async()=>{const area=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,words);area.dispatchEvent(new Event('input',{bubbles:true}));});
+  await send();
+};
 it('retains the confirmed first question through the real new-to-id route without another GET',async()=>{
-  await render();await act(async()=>button('What has changed in how I think?').click());
+  await render();await ask('What has changed in how I think?');
   expect(createConversation).toHaveBeenCalledOnce();expect(fetchConversation).not.toHaveBeenCalled();
   expect(host.querySelector('.chat-messages > li[data-role="user"]')?.textContent).toContain('What has changed in how I think?');
-  expect(host.textContent).toContain('Waiting to start…');expect(host.textContent).not.toContain('This conversation couldn’t be opened.');
+  expect(host.textContent).toContain('Thinking about that…');expect(host.textContent).not.toContain('This conversation couldn’t be opened.');
   /* STARTING OVER MOVED TO THE CORNER, which this harness does not mount —
      it renders the panel alone, so there is no "New conversation" button
      here to press. What the test was really protecting is above and
@@ -39,7 +49,7 @@ it('retains the confirmed first question through the real new-to-id route withou
      without a second GET. */
 });
 it('clears the bootstrap on a profile switch instead of showing another owner’s committed question',async()=>{
-  await render();await act(async()=>button('What has changed in how I think?').click());
+  await render();await ask('What has changed in how I think?');
   owner.account='other-owner';owner.profile='other-profile';await render();
   expect(fetchConversation).toHaveBeenCalledWith('other-profile',row!.id,expect.any(AbortSignal));
   expect(host.querySelector('.chat-messages')?.textContent).not.toContain('What has changed in how I think?');
