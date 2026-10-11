@@ -367,16 +367,18 @@
   color: var(--ink);
 }
 
+/* THE WAY OUT, BEHIND THE LIST. A full-screen target so leaving never has
+   to be aimed at, and a button so a keyboard can ignore it. */
 .waka-menu-scrim {
   position: fixed;
   inset: 0;
   z-index: 50;
+  padding: 0;
+  border: 0;
   background: var(--waka-scrim);
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-  padding: max(var(--sp-24), env(safe-area-inset-top)) var(--sp-16);
+  cursor: default;
 }
+
 
 .waka-menu {
   display: flex;
@@ -409,14 +411,25 @@
  * source order — both are one class, so nothing but position separates them
  * — and the list kept opening in the top-left corner it was moved out of.
  */
-.waka-menu-scrim--under {
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: calc(var(--waka-corner) + var(--sp-16) + env(safe-area-inset-top));
-}
 
+/**
+ * THE LIST HANGS FROM THE CONTROL THAT OPENED IT.
+ *
+ * It used to be laid out by the scrim, centred on the VIEWPORT — which is
+ * only under the trigger when the two corners happen to be the same width.
+ * Founder: "I want the dropdown to be centered, not skewed towards the
+ * left." Anchored to the switch, it is centred on the thing that opened it
+ * by construction rather than by coincidence.
+ */
 .waka-menu--under {
-  width: min(16rem, calc(100vw - var(--sp-32)));
+  position: absolute;
+  top: calc(100% + var(--sp-8));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  width: max-content;
+  min-width: 14rem;
+  max-width: min(20rem, calc(100vw - var(--sp-32)));
 }
 
 .waka-menu-item {

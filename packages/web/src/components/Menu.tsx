@@ -65,7 +65,7 @@ export interface MenuItem {
    * Hovering explains, pressing switches. They are separate states on
    * purpose: a person reaching to read is not reaching to navigate.
    */
-  explain?: string[];
+  explain?: string;
   /**
    * How much is behind this door, announced but not printed.
    *
@@ -246,6 +246,97 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
                 the weaker of them: it could only ever describe the view you
                 had already arrived at, and it could only be reached by a
                 pointer. */}
+            {open ? (
+              <>
+                {/* THE WAY OUT IS THE WORLD, AND THE LIST IS UNDER THE
+                    CONTROL. The sheet used to be centred on the VIEWPORT,
+                    which is only under the trigger when the two corners
+                    happen to be the same width — founder: "I want the
+                    dropdown to be centered, not skewed towards the left."
+                    It hangs from the switch now, so it is centred on the
+                    thing that opened it by construction rather than by
+                    coincidence. The scrim stays full-screen behind it: a way
+                    out you have to aim at is not one. */}
+                <button
+                  type="button"
+                  className="waka-menu-scrim"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  onClick={() => setOpen(false)}
+                />
+                <nav
+            id={panelId}
+            className="waka-menu waka-menu--under"
+            aria-label={t(locale, "worldMenuLabel")}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {items.map((item, index) => (
+              /* A ROW IS THE DESTINATION PLUS WHAT IT IS.
+                 Founder: "there should be like an info icon next to each of
+                 the top of mind, principles, the inspirations so that users
+                 can see what these are."
+                 The explanation used to hang off the switcher's own trigger,
+                 which could only ever describe the view you were ALREADY on —
+                 so the one person it could not help was the one who does not
+                 yet know what these three are. Per row it can be read before
+                 going anywhere, which is the whole point of asking. */
+              <span key={item.id} className="waka-menu-row">
+                <button
+                  ref={index === 0 ? first : undefined}
+                  type="button"
+                  className={`waka-menu-item${item.id === current ? " waka-menu-item--here" : ""}${item.className ? ` ${item.className}` : ""}`}
+                  /* The rung you are standing on is marked and still pressable:
+                     pressing it closes the list, which is the same thing the
+                     caret does and the thing a person expects from a control
+                     they opened by mistake. */
+                  aria-current={item.id === current ? "page" : undefined}
+                  disabled={item.disabled}
+                  onClick={() => {
+                    setOpen(false);
+                    item.onSelect();
+                  }}
+                >
+                  {t(locale, item.label)}
+                  {item.note ? <span className="sr-only jar-saved-count">{item.note}</span> : null}
+                </button>
+                {item.explain ? (
+                  <>
+                    {/* PRESS, NOT HOVER. This list is opened by a press and is
+                        used on a phone, where there is no hover to reveal
+                        anything with — an explanation only a mouse can reach
+                        is not an explanation. It opens the lines IN PLACE
+                        rather than over the rows, so the list never covers
+                        the thing you are choosing between. */}
+                    <button
+                      type="button"
+                      className="waka-menu-why"
+                      aria-expanded={explained === item.id}
+                      aria-label={t(locale, "worldWhatIsThis")}
+                      onClick={() => setExplained((shown) => (shown === item.id ? null : item.id))}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" focusable="false">
+                        <circle cx="7.5" cy="7.5" r="6.1" stroke="currentColor" strokeWidth="1.2" fill="none" />
+                        <path d="M7.5 6.6v4.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                        <circle cx="7.5" cy="4.5" r="0.85" fill="currentColor" />
+                      </svg>
+                    </button>
+                    {explained === item.id ? (
+                      <span className="waka-menu-explain" role="note">{item.explain}</span>
+                    ) : null}
+                  </>
+                ) : null}
+              </span>
+            ))}
+            {/* NO "CLOSE MENU" ROW. Founder, pointing at it: "this also is so
+                useless." It was, and three ways out already exist and always
+                did: the scrim behind it, Escape, and choosing any destination.
+                A row that only undoes the press that opened the sheet is a row
+                you read every time you look for a place to go — and it sat at
+                the bottom of a four-item list, where it was a quarter of what
+                the menu appeared to offer. */}
+          </nav>
+              </>
+            ) : null}
           </div>
         ) : null}
 
@@ -304,91 +395,6 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
         ) : null}
         </span>
       </div>
-
-      {open ? (
-        <div
-          className="waka-menu-scrim waka-menu-scrim--under"
-          data-jar-chrome="1"
-          data-jar-interactive="1"
-          onClick={() => setOpen(false)}
-        >
-          <nav
-            id={panelId}
-            className="waka-menu waka-menu--under"
-            aria-label={t(locale, "worldMenuLabel")}
-            onClick={(event) => event.stopPropagation()}
-          >
-            {items.map((item, index) => (
-              /* A ROW IS THE DESTINATION PLUS WHAT IT IS.
-                 Founder: "there should be like an info icon next to each of
-                 the top of mind, principles, the inspirations so that users
-                 can see what these are."
-                 The explanation used to hang off the switcher's own trigger,
-                 which could only ever describe the view you were ALREADY on —
-                 so the one person it could not help was the one who does not
-                 yet know what these three are. Per row it can be read before
-                 going anywhere, which is the whole point of asking. */
-              <span key={item.id} className="waka-menu-row">
-                <button
-                  ref={index === 0 ? first : undefined}
-                  type="button"
-                  className={`waka-menu-item${item.id === current ? " waka-menu-item--here" : ""}${item.className ? ` ${item.className}` : ""}`}
-                  /* The rung you are standing on is marked and still pressable:
-                     pressing it closes the list, which is the same thing the
-                     caret does and the thing a person expects from a control
-                     they opened by mistake. */
-                  aria-current={item.id === current ? "page" : undefined}
-                  disabled={item.disabled}
-                  onClick={() => {
-                    setOpen(false);
-                    item.onSelect();
-                  }}
-                >
-                  {t(locale, item.label)}
-                  {item.note ? <span className="sr-only jar-saved-count">{item.note}</span> : null}
-                </button>
-                {item.explain?.length ? (
-                  <>
-                    {/* PRESS, NOT HOVER. This list is opened by a press and is
-                        used on a phone, where there is no hover to reveal
-                        anything with — an explanation only a mouse can reach
-                        is not an explanation. It opens the lines IN PLACE
-                        rather than over the rows, so the list never covers
-                        the thing you are choosing between. */}
-                    <button
-                      type="button"
-                      className="waka-menu-why"
-                      aria-expanded={explained === item.id}
-                      aria-label={t(locale, "worldWhatIsThis")}
-                      onClick={() => setExplained((shown) => (shown === item.id ? null : item.id))}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" focusable="false">
-                        <circle cx="7.5" cy="7.5" r="6.1" stroke="currentColor" strokeWidth="1.2" fill="none" />
-                        <path d="M7.5 6.6v4.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                        <circle cx="7.5" cy="4.5" r="0.85" fill="currentColor" />
-                      </svg>
-                    </button>
-                    {explained === item.id ? (
-                      <span className="waka-menu-explain" role="note">
-                        {item.explain.map((line) => (
-                          <span key={line}>{line}</span>
-                        ))}
-                      </span>
-                    ) : null}
-                  </>
-                ) : null}
-              </span>
-            ))}
-            {/* NO "CLOSE MENU" ROW. Founder, pointing at it: "this also is so
-                useless." It was, and three ways out already exist and always
-                did: the scrim behind it, Escape, and choosing any destination.
-                A row that only undoes the press that opened the sheet is a row
-                you read every time you look for a place to go — and it sat at
-                the bottom of a four-item list, where it was a quarter of what
-                the menu appeared to offer. */}
-          </nav>
-        </div>
-      ) : null}
     </>
   );
 }
