@@ -13941,15 +13941,38 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 discoverable gesture, so the form is named underneath it and
                 the name is the control. It says where you are and changes it
                 in one press. */}
+            {/* WHICH FORM IT IS WEARING, AND HOW TO CHANGE IT.
+                Founder: "instead of my agent being on the left, it should
+                show up when I click on the right button, and it should be
+                easily changeable between me and my agent at this part of the
+                experience."
+                Both sides, in the order the words go: you on the left, your
+                agent on the right. A single label that toggled said where you
+                were and hid where else you could be — which is the same
+                mistake the wall dropdown made, with one option instead of a
+                list. Two words, one inked, and switching is a press on the
+                other.
+                It belongs here rather than in a corner because the creature
+                IS the identity: the canvas already dissolves between the two
+                forms and holds the aura constant to say it is the same
+                companion throughout. */}
             {!mouthOpen && agentWall ? (
-              <button
-                type="button"
-                className="jar-char-form jar-label"
-                aria-pressed={atWall.kind === 'agent'}
-                onClick={() => simApiRef.current?.goToWall(atWall.kind === 'agent' ? 0 : agentWall.col)}
-              >
-                {say(atWall.kind === 'agent' ? 'worldWallMyAgent' : 'worldWallMe')}
-              </button>
+              <span className="jar-char-form" role="group" aria-label={say('worldWallMyAgent')}>
+                {([null, agentWall] as const).map(wall => {
+                  const standing = wall ? atWall.kind === 'agent' : atWall.kind !== 'agent';
+                  return (
+                    <button
+                      key={wall ? wall.id : 'me'}
+                      type="button"
+                      className={`jar-char-face jar-label${standing ? ' jar-char-face--standing' : ''}`}
+                      aria-pressed={standing}
+                      onClick={() => { if (!standing) simApiRef.current?.goToWall(wall ? wall.col : 0); }}
+                    >
+                      {say(wall ? 'worldWallMyAgent' : 'worldWallMe')}
+                    </button>
+                  );
+                })}
+              </span>
             ) : null}
             {!mouthOpen && claimQueue[0] ? (
               <div className="jar-char-claim">

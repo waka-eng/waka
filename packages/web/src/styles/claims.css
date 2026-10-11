@@ -2135,8 +2135,24 @@
  * aura constant to say it is the same companion throughout.
  * ------------------------------------------------------------------------- */
 
+/**
+ * ME / MY AGENT, under the creature.
+ *
+ * Both sides, in the order the words go. A single label that toggled said
+ * where you were and hid where else you could be — the same mistake the wall
+ * dropdown made, with one option instead of a list.
+ *
+ * Inked, never coloured: the side you are standing on wears the same fill
+ * every chosen thing in this product wears.
+ */
 .jar-char-form {
   pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.jar-char-face {
   min-height: var(--sp-32);
   padding: 0 var(--sp-12);
   border: 1px solid transparent;
@@ -2148,20 +2164,22 @@
   cursor: pointer;
 }
 
-.jar-char-form:hover {
+.jar-char-face:hover {
   color: var(--ink);
 }
 
-/* Wearing the agent's face is a STATE, so it renders as one. */
-.jar-char-form[aria-pressed="true"] {
+.jar-char-face--standing {
   border-color: var(--line);
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
   color: var(--ink);
+  cursor: default;
 }
 
-.jar-char-form:focus-visible {
+.jar-char-face:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
+
 
 
 /* ---------------------------------------------------------------------------
