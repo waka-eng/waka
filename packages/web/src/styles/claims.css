@@ -3093,6 +3093,15 @@
 }
 
 .jar-char-face {
+  /* 32 WITH A POINTER, THE CORNER'S OWN TARGET WITH A THUMB.
+     MEASURED 2026-10-11 at 390x844 with touch emulated: these came back 32px
+     tall — the identity switch, the control this product asks a person to
+     use most often after the box, below the floor every other pressable here
+     holds. A mouse can hit 32; a thumb aiming between two words 43px apart
+     cannot, and missing this one swaps whose material you are reading.
+
+     The claim's slot below already reserves its height, so growing these
+     cannot move the creature — which is the reason that reserve exists. */
   min-height: var(--sp-32);
   padding: 0 var(--sp-12);
   border: 1px solid transparent;
@@ -3102,6 +3111,12 @@
   font-family: var(--waka-face);
   white-space: nowrap;
   cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .jar-char-face {
+    min-height: var(--waka-corner);
+  }
 }
 
 .jar-char-face:hover {
