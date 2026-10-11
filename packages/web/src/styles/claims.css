@@ -1865,7 +1865,18 @@
 .waka-composer-body {
   position: relative;
   display: flex;
-  flex-direction: column;
+  /* ONE ROW: the words, and everything that acts on them, on the same line.
+     `flex-end` keeps the controls on the field's bottom edge as it grows with
+     what is typed, rather than drifting to a middle. */
+  flex-direction: row;
+  align-items: flex-end;
+  /* AND IT WRAPS BEFORE IT CRUSHES THE FIELD. Measured one-row at the real
+     680px column: field 298px, controls 372px — fine. At 390px the bar is
+     310px, the controls still want 372, and the field was squeezed to THIRTY
+     TWO PIXELS. A row that cannot fit is not a row; the basis below is what
+     decides when to stop pretending it is one. */
+  flex-wrap: wrap;
+  gap: var(--sp-8);
   border: 1px solid var(--field-edge);
   border-radius: var(--waka-r-surface);
   background: var(--waka-raised);
@@ -1877,70 +1888,25 @@
 }
 
 /**
- * ═══ CAPTURE IS A GESTURE, NOT A PROMPT ═══════════════════════════════════
+ * ═══ ONE COMPACT BAR, ALWAYS — IT DOES NOT EXPAND ═══════════════════════
  *
- * Founder: "I feel like this page is trying to do too much at once. It's
- * trying to show the user the top of mind, ask them to save the inspiration,
- * and also asking them to review the claim. Maybe we should make it so that
- * we're only asking the user to do one thing at a time." And, choosing the
- * shape for this one: a quiet line that opens when you engage with it.
+ * Founder: "also the bottom bar that like the chat board that expands when I
+ * click on it, I feel like that's useless, just half the original chat bar."
  *
- * A RESTING BOX WITH TWO LABELLED BUTTONS IN IT IS A PROMPT. It reads as a
- * third thing demanding an answer, beside the wall and the creature, and it
- * demands it on every screen of the product, forever, whether or not anybody
- * has anything to say. Measured at rest it was ~110px: a 44px field, then a
- * row holding a microphone and two words nobody has yet given anything to do.
+ * WHAT WAS TRIED AND REJECTED, recorded so it is not tried again. The box was
+ * ~110px at rest — a 44px field above a row holding a microphone and two
+ * labelled destinations — and the first attempt at "stop being a prompt" made
+ * it COLLAPSE: one line at rest, growing to show Save and Ask the moment
+ * anybody engaged. It measured well (46px resting) and it was the wrong
+ * idea. A control that changes shape when you touch it makes the person
+ * learn two layouts for one thing, and it buys height on exactly the screens
+ * where nobody is looking at the box anyway.
  *
- * At rest it is now the field and the microphone — one line, about 46px. The
- * two destinations come back the instant there are words to send somewhere,
- * which is the instant they first mean anything.
- *
- * THE MICROPHONE NEVER LEAVES, and that is the whole reason this is done with
- * position rather than by hiding the row. It is the one control here that is
- * not a destination for words — it is how the words get in — so a person who
- * wants to speak rather than type must be able to see that they can before
- * they have typed anything. Hiding it until first keystroke would be the
- * "control that appears on keystroke cannot be found before the keystroke"
- * failure this product has already fixed twice. It moves to the end of the
- * line instead of stacking under it.
- *
- * `:placeholder-shown` IS THE "NOTHING TYPED YET" TEST, and it is paired with
- * `:not(:focus-within)` deliberately: focus alone would collapse the box the
- * moment somebody clicked away mid-sentence, with their own half-written
- * words still sitting in it and the way to send them gone.
+ * The right answer was the simpler one the founder named: make it SMALLER AND
+ * LEAVE IT ALONE. The field and everything that acts on it share one row, the
+ * way the conversation's composer already does — same shape, same resting
+ * height, one material.
  */
-.waka-composer-body:not(:focus-within):has(.jar-keep-box:placeholder-shown) {
-  /* The field sets the height; the microphone rides on top of it. */
-  display: block;
-}
-
-.waka-composer-body:not(:focus-within):has(.jar-keep-box:placeholder-shown)
-  .waka-composer-foot {
-  position: absolute;
-  inset-block: 0;
-  inset-inline-end: var(--sp-4);
-  align-items: center;
-  padding: 0;
-}
-
-/* Where words GO is meaningless before there are words. The microphone, which
-   is how words arrive, stays. */
-.waka-composer-body:not(:focus-within):has(.jar-keep-box:placeholder-shown)
-  .waka-composer-ask,
-.waka-composer-body:not(:focus-within):has(.jar-keep-box:placeholder-shown)
-  .waka-composer-send,
-.waka-composer-body:not(:focus-within):has(.jar-keep-box:placeholder-shown)
-  .waka-composer-where {
-  display: none;
-}
-
-/* Room for the microphone at the end of the line, so a long placeholder never
-   runs under it. */
-.waka-composer-body:not(:focus-within):has(.jar-keep-box:placeholder-shown)
-  .jar-keep-box {
-  padding-inline-end: calc(var(--waka-corner) + var(--sp-8));
-}
-
 /* The input loses its own frame: the BODY is the frame now, which is what
    stops the composer reading as a box inside a box. */
 /**
@@ -1957,7 +1923,11 @@
  * It is prose now, and prose is set like the rest of the product's prose.
  */
 .waka-composer-body .jar-keep-box {
-  width: 100%;
+  /* 14rem is the width below which typing stops being possible rather than
+     merely tight. Above it the field takes whatever the controls leave; below
+     it the whole row wraps and the field gets the line to itself. */
+  flex: 1 1 14rem;
+  min-width: 0;
   /* A RESTING BOX IS ONE LINE TALL. 56 plus a footer made an empty field
      most of the bottom third of a phone — a lot of screen spent on nothing
      typed yet. It grows with what you write (`field-sizing: content`), so
@@ -2114,11 +2084,12 @@
 }
 
 .waka-composer-foot {
+  flex: none;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-8) var(--sp-12);
-  padding: 0 var(--sp-12) var(--sp-12);
+  gap: var(--sp-8);
+  padding: 0 var(--sp-8) var(--sp-8) 0;
   font-family: var(--waka-face);
   font-size: var(--t-meta);
   color: var(--muted);
