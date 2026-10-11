@@ -398,15 +398,18 @@ const CHAR_SIZE = 120;
  * in instead. A constant can be wrong by a few pixels; a measurement is wrong
  * by whatever the person happened to write.
  *
- * `POSTER_SLOT` is three lines of `--t-reading` at its desktop ceiling (30px
- * x 1.25 x 3 = 113) plus the provenance band and the row of verbs under it.
- * The statement is anchored to the BOTTOM of that band in `home.css`, so a
+ * `POSTER_SLOT` is the band's WHOLE height, top padding included — the
+ * padding is what clears the switcher, so counting the bar again on top of it
+ * would push the creature down by 56px of nothing. Inside it: three lines of
+ * `--t-reading` at its desktop ceiling (30px x 1.25 x 3 = 113), the
+ * provenance band, and the row of verbs.
+ *
+ * The statement is anchored to the FOOT of that band in `home.css`, so a
  * longer one grows upward into its own air rather than downward into the
- * creature, and a shorter one leaves the gap above itself where it reads as
- * margin. `TOP_BAR_H` is the fixed chrome above it.
+ * creature, and a shorter one leaves the gap above itself, where air against
+ * the top edge reads as margin rather than as a hole.
  */
-const TOP_BAR_H = 56;
-const POSTER_SLOT = 190;
+const POSTER_SLOT = 300;
 /** An orb eases down into its home over this long. */
 const ARRIVE_MS = 520;
 /** How many of the newest orbs share the peek row in section A. */
@@ -6144,7 +6147,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * things. That is the founder's "information hierarchy" complaint,
        * arrived at by arithmetic.
        */
-      const Y_MIN = TOP_BAR_H + POSTER_SLOT + gap + CHAR_SIZE * 0.5;
+      const Y_MIN = POSTER_SLOT + gap + CHAR_SIZE * 0.5;
       const Y_MAX = 420;
       /* THE ONE CONTENT-DEPENDENT CLAMP LEFT, and it only ever engages on a
          window too short to hold the composition at all. Without it the body

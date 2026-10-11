@@ -301,6 +301,77 @@ describe("the four breaks that a browser found and reading did not", () => {
   });
 });
 
+describe("nothing is pushed off a scroller's origin", () => {
+  /**
+   * THE FLEXBOX TRAP THAT HAS NOW BITTEN THIS CODEBASE TWICE, IN TWO FILES.
+   *
+   * `justify-content: flex-end` (or `center`) inside a scroll container does
+   * not extend the scrollable area — it moves the content off the scrollable
+   * ORIGIN. Overflow in the block-start direction becomes unreachable, and
+   * the scroller reports `scrollHeight === clientHeight` while doing it, so
+   * nothing about the element looks wrong and no measurement of it finds the
+   * problem. The content is not clipped. It is gone.
+   *
+   *   2026-10-10, `.chat-transcript`: 442px of a conversation above the frame
+   *   at 320x568, unreachable, with the scroller reporting no overflow.
+   *
+   *   2026-10-11, `.jar-hq-inner`: the top of a five-line top of mind, same
+   *   symptom, found within an hour of writing the band — by the author of
+   *   the first fix, who had documented it in `chat.css` the night before.
+   *
+   * That is what makes it a class rather than an instance. The fix in both
+   * cases is an auto margin on the child, which does the same thing when
+   * there is room and nothing at all when there is not.
+   *
+   * This asks the rule the question directly: no rule anywhere in these
+   * sheets may both scroll in the block axis and push its own content away
+   * from the origin.
+   */
+  const PUSHERS = /justify-content:\s*(flex-end|center|end|safe\s+flex-end)/;
+  const SCROLLS = /overflow(-y)?:\s*(auto|scroll)/;
+
+  for (const file of ["home.css", "claims.css", "chat.css", "chrome.css"]) {
+    it(`${file} never scrolls a block axis it has pushed content off`, () => {
+      /* PER SELECTOR, NOT PER RULE — and the first version of this gate was
+         per rule, which a one-line sabotage walked straight through: the two
+         declarations only have to meet on the ELEMENT, not in the same block.
+         Splitting them across two rules for the same selector is the exact
+         shape a later tidy-up produces, so the union is what gets asked. */
+      const text = rules(file);
+      const scrolls = new Set<string>();
+      const pushes = new Set<string>();
+      const rowish = new Set<string>();
+      for (const match of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const body = match[2]!;
+        for (const part of match[1]!.split(",")) {
+          const selector = part.trim().replace(/\s+/g, " ");
+          if (!selector || selector.startsWith("@")) continue;
+          if (SCROLLS.test(body)) scrolls.add(selector);
+          if (PUSHERS.test(body)) pushes.add(selector);
+          /* A ROW IS INNOCENT. `justify-content` acts on the MAIN axis, so a
+             row-direction flex pushing content to the inline end is doing
+             nothing to the block axis it scrolls. Only a column — or a
+             default-direction block — can strand its own top. */
+          if (/flex-direction:\s*row/.test(body)) rowish.add(selector);
+        }
+      }
+      const guilty = [...scrolls].filter((s) => pushes.has(s) && !rowish.has(s)).sort();
+      expect(
+        guilty,
+        "these selectors scroll AND push their content off the scroll " +
+          "origin:\n  " + guilty.join("\n  ") + "\n" +
+          "Block-start overflow is UNREACHABLE when content is moved by " +
+          "`justify-content` rather than by an auto margin, and the scroller " +
+          "reports `scrollHeight === clientHeight` while hiding it — so " +
+          "nothing looks broken and no measurement finds it. Use " +
+          "`margin-block-start: auto` on the first child instead: it yields " +
+          "to overflow and `justify-content` does not. `.chat-transcript` " +
+          "lost 442px of a conversation this way and `.jar-hq-inner` lost the " +
+          "top of a reading."      ).toEqual([]);
+    });
+  }
+});
+
 describe("the acts are reachable by a thumb", () => {
   /**
    * THE LINE `home.css` DREW, APPLIED HERE TOO.
