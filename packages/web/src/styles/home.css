@@ -279,6 +279,10 @@
    * sets a 256px height floor for reflow and a hard-capped band with no
    * scroll fails it at 400% zoom.
    */
+  /* The band comes down with the creature so the group stays a group — see
+     `--jar-band-top` in the layout pass. Zero on short windows, where the
+     band already sits where it should. */
+  margin-block-start: var(--jar-band-top, 0px);
   height: 300px;
   display: flex;
   flex-direction: column;
@@ -811,10 +815,19 @@
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+/* ONE CENTRED LINE, NOT THREE THINGS ACROSS 680px. This was a three-column
+   grid — mark, copy at `1fr`, action — so the copy took every spare pixel and
+   shoved the little mark to the far left edge and "Details" to the far right,
+   with a void between each. Rendered under a centred statement and above a
+   centred creature it read as debris rather than as a line, which is Gestalt
+   proximity doing what it always does: things that far apart stop being one
+   thing. It hugs its own content now and centres with everything else in the
+   column. */
 .jar-source-status--quiet {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
   gap: var(--sp-8);
   margin-top: var(--sp-8);
   color: var(--w-muted);
@@ -827,6 +840,12 @@
    (#36), which is the difference between an explanation you can open and a
    specification printed under the thing you came to read. */
 .jar-source-hint { font-size: var(--t-note); line-height: 1.5; }
+/* The mark sits with the words rather than in a column of its own. */
+.jar-source-status--quiet .jar-source-copy {
+  flex: 0 1 auto;
+  text-align: center;
+}
+
 .jar-source-mark { color: var(--jar-ink); margin-top: 2px; }
 .jar-source-mark circle { opacity: .55; }
 .jar-source-mark[data-processing] circle { animation: jar-source-glow 3s ease-in-out infinite; }
@@ -1957,24 +1976,33 @@
      reading, the companion and the box divide the height between them, and
      the companion is placed at the midpoint of what is left so the two gaps
      are equal by construction rather than by eye. */
-  top: auto;
+  /* `top: auto` lived here, from when the box was pinned to the bottom. It
+     is the cluster's last element now — see the note below. */
   /* At least a thumb's clearance, and more where the device asks for it —
      `max()` rather than the bare inset, which is 0 on most phones and left
      the box flush against the bottom edge. */
-  /* ═══ AND THE COMPOSITION HAS A CEILING NOW, which is the vertical twin of
-     the `max-width: 680px` the column has always had. That cap was the one
-     thing missing: the horizontal axis stopped growing and the vertical axis
-     never did, so every pixel of extra window height became air.
+  /* ═══ THE BOX HANGS FROM THE CLUSTER, NOT FROM THE VIEWPORT FLOOR ═════
+     Founder, having looked at a night's work: "not much seemed to have
+     changed." Measured on a 1512x900 window: the creature floating with
+     ~380px of dead black beneath it — 42% of the screen — because the box
+     was `bottom: 0`-ish and the creature was not. The 1040px composition
+     ceiling tried earlier only engages above 1040px of viewport, so on the
+     window most people actually use it changed nothing.
 
-     Past a 1040px band the box stops travelling with the bottom edge and the
-     surplus falls BELOW it, where it is the margin of a page rather than a
-     hole inside a composition. The founder's instruction — "place this text
-     input box at the bottom of the space" — is honoured against the space the
-     composition occupies rather than against whatever height a monitor
-     happens to have; on every window shorter than the band, which is every
-     phone and most laptops, `max()` picks the inset and nothing changes at
-     all. */
-  bottom: max(var(--sp-8), env(safe-area-inset-bottom), calc((100dvh - 1040px) / 2));
+     The box is the last element of the creature's cluster — the statement,
+     the creature, its question, and the place you answer back. A cluster
+     whose last element is nailed to the bottom of whatever monitor somebody
+     owns is not a cluster: Gestalt proximity says elements separated by
+     whitespace read as less related, so the gap was dissolving the box's
+     relationship to the thing it belongs to.
+
+     `--jar-box-top` is written by the layout pass from the creature's chin
+     plus the voice block, and already clamped so it never travels off a
+     short window. See the note there for why reading the claim's height to
+     place the BOX is not the thing the previous commit forbade: the rule is
+     that the CREATURE does not move with content. */
+  top: var(--jar-box-top, var(--jar-mouth-top, 58%));
+  bottom: auto;
   /* the air between the last word and the field's top edge */
   padding: 0 var(--sp-20) var(--sp-14);
   text-align: center;

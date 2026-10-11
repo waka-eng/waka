@@ -1796,6 +1796,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** What the companion is saying: its own line when tapped, and the told
       weather when an arrival has something on the record to tell. */
   const [charSay, setCharSay] = useState("");
+  /* The box's own measured height, kept across frames so the layout pass can
+     place the box before it has re-measured it this frame. `MOUTH_H` is the
+     first-paint fallback and nothing more. */
+  const slotH = useRef(0);
   /* The panel and the selection are ONE state: opening is selecting, and
      closing — by Esc, by a tap on the dimmed field, by tapping the same orb
      again — releases. It lags `selectedId` at BOTH ends: it does not appear
@@ -6148,7 +6152,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * arrived at by arithmetic.
        */
       const Y_MIN = POSTER_SLOT + gap + CHAR_SIZE * 0.5;
-      const Y_MAX = 420;
+      /* 0.42 AND 620, AND BOTH CAME FROM LOOKING AT IT.
+         0.34 with a 420 ceiling put the whole cluster in the top third of a
+         1330px window with 734px of black under it — which is not calm, it is
+         NN/g's "false floor": a page with little at the top leaves people
+         unsure anything else exists, and they read the empty band as the end.
+         The attention data that argued for keeping content high is still
+         right, and it argues for the cluster being ABOVE centre, not pinned
+         to the ceiling of the screen. 0.42 puts the box's foot near 60% of
+         the window at every size anybody uses, which leaves the statement in
+         the top third where the eye lands and the surplus in one pool below
+         rather than two around. */
+      const Y_MAX = 620;
       /* THE ONE CONTENT-DEPENDENT CLAMP LEFT, and it only ever engages on a
          window too short to hold the composition at all. Without it the body
          would sit ON the box rather than above it, and an overlap is a worse
@@ -6157,7 +6172,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const floor = seam - CHAR_SIZE * 0.62 - gap;
       companion.y = compactHome
         ? -view.h * 3
-        : Math.min(Math.max(Math.min(Math.max(Y_MIN, view.h * 0.34), Y_MAX), 0), Math.max(floor, CHAR_SIZE));
+        : Math.min(Math.max(Math.min(Math.max(Y_MIN, view.h * 0.42), Y_MAX), 0), Math.max(floor, CHAR_SIZE));
       /* WHAT SITS UNDER THE COMPANION, AND IN WHAT ORDER (founder, 2026-08-25:
          "keep something should be shown right below the character").
          The mouth first, directly beneath the body, because keeping something
@@ -6170,6 +6185,66 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          `home.css`. The variable stays for the compact case, which stacks
          rather than centres. */
       root!.style.setProperty("--jar-mouth-top", `${compactHome ? activityLayout.composerTop : chin + 18}px`);
+      /**
+       * ═══ AND THE BOX COMES UP TO MEET THE CREATURE ══════════════════════
+       *
+       * Founder, after a night of work on this screen: "not much seemed to
+       * have changed." Signed in and looked at it, which I should have done
+       * far earlier: on a 1512x900 window the creature floats with roughly
+       * 380px of dead black beneath it — 42% of the screen — because the box
+       * is pinned to the viewport floor and the creature is not. The 1040px
+       * composition ceiling added earlier never engages at laptop heights, so
+       * for the window most people actually use, nothing had changed at all.
+       *
+       * THE BOX IS NOT A VIEWPORT OBJECT. It is the last element of the
+       * creature's cluster — the statement, the creature, its question, and
+       * the place you answer back — and a cluster whose last element is
+       * nailed to the bottom of whatever monitor you own is not a cluster.
+       * Gestalt proximity is the whole of it: elements separated by
+       * whitespace read as less related, so 380px of gap dissolves the box's
+       * relationship to the thing it belongs to. That is the "information
+       * hierarchy" complaint, measured.
+       *
+       * So it hangs below the voice block, which hangs below the chin. The
+       * surplus falls BELOW the box, in one pool, where it is the margin of a
+       * page rather than a hole inside a picture.
+       *
+       * READING `voiceH` HERE IS SAFE, and it is worth saying why given the
+       * commit that removed it from the creature's own position. The rule is
+       * that the CREATURE must not move with content. The box moving as a
+       * question appears beneath it is not a violation — it is the cluster
+       * breathing, and the person caused it by having something to answer.
+       *
+       * THE FLOOR IS THE LAST CLAMP. On a window too short to hold the
+       * cluster, the box stops descending and sits on its own inset rather
+       * than travelling off the bottom edge — the same `max()` the CSS used
+       * to do alone.
+       */
+      /* ═══ AND THE STATEMENT TRAVELS WITH THE CLUSTER ═══════════════════
+         The band is the first element of the group, not a banner nailed to
+         the top of the window. Left at `top: 0` it stayed put while the
+         creature descended, so on a tall window the statement sat alone up
+         top with ~290px of black between it and the thing it belongs to —
+         two groups again, which is the defect this whole pass is about.
+
+         `Y_MIN` is exactly the band's height plus the gap plus half a body,
+         so `Y - Y_MIN` is the distance the band has to come down to keep its
+         FOOT the same 24px above the creature at every window height. At the
+         shortest windows it resolves to zero and the band sits where it
+         always did. */
+      const voiceH = measured.charSay.current?.offsetHeight ?? 0;
+      const boxH = slotH.current || MOUTH_H;
+      const inset = 8;
+      const wanted = chin + 18 + voiceH + gap;
+      const floorTop = view.h - boxH - inset;
+      root!.style.setProperty(
+        "--jar-band-top",
+        `${compactHome ? 0 : Math.round(Math.max(0, companion.y - Y_MIN))}px`,
+      );
+      root!.style.setProperty(
+        "--jar-box-top",
+        `${compactHome ? activityLayout.composerTop : Math.round(Math.min(wanted, floorTop))}px`,
+      );
       /* AND HOW TALL THE BOX IS, so the companion's voice can never reach it.
          The voice block hangs from the chin and grows DOWNWARD; the box is
          pinned to the bottom and grows UPWARD. Nothing stopped them meeting,
@@ -6180,7 +6255,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          a reserve that drifts from the thing it reserves for is a collision
          waiting for a narrower window. */
       const slot = root!.querySelector<HTMLElement>(".jar-mouth-slot");
-      if (slot) root!.style.setProperty("--jar-mouth-h", `${Math.round(slot.offsetHeight)}px`);
+      if (slot) {
+        slotH.current = Math.round(slot.offsetHeight);
+        root!.style.setProperty("--jar-mouth-h", `${slotH.current}px`);
+      }
       /* AND THE CHARACTER STATES ITS SIZE, rather than being guessed at.
          The same rule as the seam and the mouth's top: chrome states its
          place, nothing guesses at it. It is a constant now (CHAR_SIZE), and
