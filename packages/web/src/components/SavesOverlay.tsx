@@ -417,9 +417,59 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
              undone. `deleteInspiration` has existed in the client for
              months with no caller; this is the first door onto it. */
           <article className="waka-over-one">
-            <span className="jar-panel-when jar-label">
-              {dateStamp(open.capturedMs, locale)}
-            </span>
+            {/* ═══ THE TOP ROW: WHEN IT IS, AND THE ONE DESTRUCTIVE VERB ══
+                Founder: "delete being at bottom left like this is weird.
+                Where did mic and image attachment buttons go?"
+
+                Both halves are one mistake, and it is a bad one. The NOTEPAD
+                — the page you write a new thought on — puts attaching in the
+                bottom-left corner: record and photo, two glyphs, exactly
+                there. This page put DELETE in that corner. The same slot on
+                two screens for the same kind of object, meaning "add
+                something" on one and "destroy this" on the other. Nobody
+                should have to notice which page they are on to know what the
+                bottom-left corner does.
+
+                So the corner is vacated. Delete goes to the top row, beside
+                the date, which is the slot the notepad reserves for the
+                thing that is ABOUT the note rather than part of writing it —
+                and it is as far from the attach corner as this page has.
+
+                ATTACHING TO A SAVED THOUGHT IS NOT BUILT, and saying so is
+                better than leaving the question hanging: the upload queue,
+                the draft media store and the recorder all belong to the
+                composer, and wiring them into the archive is real work
+                rather than a missing button. */}
+            <div className="waka-note-top">
+              <span className="jar-panel-when jar-label">
+                {dateStamp(open.capturedMs, locale)}
+              </span>
+              <span className="waka-note-foot">
+                {asking ? (
+                  <>
+                    <button type="button" className="waka-note-erase" disabled={saving}
+                      onClick={() => {
+                        setSaving(true);
+                        void deleteInspiration(open.id)
+                          .then(() => {
+                            setRows((all) => all.filter((row) => row.id !== open.id));
+                            setAsking(false);
+                            setOpen(null);
+                          })
+                          .catch(() => setSaveFailed(true))
+                          .finally(() => setSaving(false));
+                      }}>
+                      {say(saving ? "worldDeleting" : "worldDeleteItAnyway")}
+                    </button>
+                    <button type="button" onClick={() => setAsking(false)}>{say("worldNotNow")}</button>
+                  </>
+                ) : (
+                  <button type="button" className="waka-note-erase" onClick={() => setAsking(true)}>
+                    {say("worldDelete")}
+                  </button>
+                )}
+              </span>
+            </div>
 
             {pictureOf(open) ? (
               <img className="waka-sheet-picture" src={pictureOf(open)!} alt="" />
@@ -441,31 +491,6 @@ export function SavesOverlay({ locale, profileId, title, onClose }: {
               <p className="jar-settings-warn" role="alert">{say("worldClaimCorrectFailed")}</p>
             ) : null}
 
-            <p className="waka-note-foot">
-              {asking ? (
-                <>
-                  <button type="button" className="waka-note-erase" disabled={saving}
-                    onClick={() => {
-                      setSaving(true);
-                      void deleteInspiration(open.id)
-                        .then(() => {
-                          setRows((all) => all.filter((row) => row.id !== open.id));
-                          setAsking(false);
-                          setOpen(null);
-                        })
-                        .catch(() => setSaveFailed(true))
-                        .finally(() => setSaving(false));
-                    }}>
-                    {say(saving ? "worldDeleting" : "worldDeleteItAnyway")}
-                  </button>
-                  <button type="button" onClick={() => setAsking(false)}>{say("worldNotNow")}</button>
-                </>
-              ) : (
-                <button type="button" className="waka-note-erase" onClick={() => setAsking(true)}>
-                  {say("worldDelete")}
-                </button>
-              )}
-            </p>
           </article>
         ) : phase === "loading" ? (
           <p className="waka-over-status" role="status">

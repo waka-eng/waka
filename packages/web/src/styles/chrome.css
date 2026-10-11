@@ -1084,48 +1084,26 @@ a:focus-visible {
    the long way round is worse than none: it makes the same page two
    different-looking pages depending on the route in. This tile is in the
    stylesheet and therefore always there. */
-/* ═══ THE LAMP, AND IT IS ON EVERY PAGE ══════════════════════════════════
+/* ═══ THE LAMP IS OUT, AND IT SHOULD NOT HAVE BEEN LIT ══════════════════
  *
- * Founder: "몽글몽글 소중소중 dreamy dreamy... in this page nothing feels
- * like that", with an empty conversation on screen — eight hundred pixels of
- * perfectly flat black between a grey sentence and a box.
+ * A soft warm pool was added to every page ground here, against the reading
+ * that the pages were "flat" while the world is "dimly lit". Founder, twice,
+ * with the archive beside the home screen: "too bright. I prefer this darker
+ * navy" — and both screens are the same token, so what they were seeing was
+ * this.
  *
- * FLAT IS THE WORD THAT MATTERS. The world is not dark, it is DIMLY LIT: the
- * creature has an aura, the ground has a vignette, and everything on it sits
- * somewhere on a falloff. A page painted `#06080d` edge to edge has no
- * falloff at all, so it reads as an absence rather than as a room — and no
- * amount of spacing, radius or type fixes an absence.
+ * The diagnosis was right and the remedy was the wrong object. What makes
+ * the world dim-lit rather than flat is that the CREATURE is in it: the
+ * light has a body, and everything else sits on its falloff. A gradient
+ * behind an empty page is a lamp lighting an empty room — it raises the
+ * ground without giving the eye anything to be lit BY, which reads exactly
+ * as "brighter", because that is all it is.
  *
- * So the pages get the same lamp. One soft warm pool, centred, very weak,
- * `::before` so it sits under the content and over the ground. It is not a
- * decoration: it is the same statement the vignette makes in the world —
- * there is a light here, and what you are reading is near it.
- *
- * WHY IT CANNOT BE SEEN AS A SHAPE. `--moon-warm` at 3.5% over a ground
- * whose luminance is 0.0024 lifts the centre by roughly one code value per
- * channel, falling off to nothing by 70% of the radius. There is no edge to
- * notice; what you notice is that the corners are darker than the middle,
- * which is what every lit room looks like and what no unlit screen does.
- *
- * AND IT OBEYS THE MOTION LAW. It does not move, pulse or respond. The
- * world's light answers what is alive in the field; this one is furniture —
- * a lamp in the corner of the room rather than a thing with an opinion. */
-.login-shell::before,
-.waka-page::before,
-.waka-public::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(
-      120% 90% at 50% 38%,
-      color-mix(in srgb, var(--moon-warm) 2%, transparent) 0%,
-      color-mix(in srgb, var(--moon-warm) 0.8%, transparent) 42%,
-      transparent 72%
-    );
-}
+ * So the pages are the same flat night the world's ground is, and the thing
+ * that will light them is the companion standing on them — see
+ * `character/raster.ts`'s rest pose and `components/Companion.tsx`. The
+ * grain below stays: a texture is not a light source and was never the
+ * complaint. */
 
 /* ═══ A PAGE ARRIVES, IT DOES NOT APPEAR ════════════════════════════════
  *
@@ -1671,6 +1649,34 @@ body .profile-signout-button {
 .jar-composer-heading h2 { margin: 0; font-size: var(--t-body); font-weight: 500; }
 .jar-inspiration-composer button { min-height: var(--sp-44); min-width: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: none; color: var(--w-ink); font: inherit; font-size: var(--t-ui); cursor: pointer; }
 .jar-inspiration-composer button:disabled { opacity: .5; cursor: default; }
+/* THE WAY BACK IS NOT ONE OF THOSE BUTTONS, and this override is here rather
+   than in `home.css` because of where the cascade actually resolves.
+
+   Founder, twice, with a screenshot of a chevron in a rounded outlined box:
+   "why is this still here?" and then "아니 이거 별로라고 내가 몇번을 말해?"
+   — and they were right to ask twice, because the first fix did not render.
+   `.jar-note-back` was rewritten to be a plain chevron with a name, in
+   `home.css` inside `@layer chrome`; this file is UNLAYERED, and an
+   unlayered rule beats every layered one regardless of specificity. So the
+   generic composer-button box above went on winning and nothing on screen
+   changed. Two lessons, both recorded because both are cheap to repeat: a
+   change to a layered rule can be silently overruled from an unlayered
+   file, and a CSS edit that is never looked at in a browser is not a fix.
+
+   The notepad's own grammar is corners without boxes — the tools pill and
+   the save already opt out the same way. This is the third. */
+.jar-inspiration-composer .jar-note-back {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--w-muted);
+  font-size: var(--t-body);
+}
+.jar-inspiration-composer .jar-note-back:hover,
+.jar-inspiration-composer .jar-note-back:focus-visible {
+  color: var(--w-ink);
+}
 .jar-inspiration-composer button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
 .jar-inspiration-composer .jar-composer-text { position: static; display: block; width: 100%; max-width: none; min-height: calc(var(--sp-44) * 3); max-height: calc(var(--sp-44) * 6); margin: var(--sp-12) 0; padding: var(--sp-8) 0; background: none; border: 0; border-bottom: 1px solid var(--w-muted); border-radius: 0; color: var(--w-ink); font-size: var(--t-input); line-height: 1.6; letter-spacing: normal; text-transform: none; text-align: left; resize: vertical; }
 .jar-composer-tools, .jar-composer-actions, .jar-composer-visibility { display: flex; flex-wrap: wrap; gap: var(--sp-8); }

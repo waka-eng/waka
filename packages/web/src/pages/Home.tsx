@@ -135,7 +135,7 @@ import type { ApiConversation } from "../lib/api/conversations";
 import { useMeasured } from "../canvas/measured";
 import { setStanding as publishStanding } from "../lib/standing";
 import { renderScale } from "../canvas/scale";
-import { BODY_TIERS, bodyPath } from "../character/raster";
+import { BODY_TIERS, EYE_LON, FACE_R, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, EYE_INK, EYE_R, bodyPath } from "../character/raster";
 import { GroupPanel } from "../space-kinds/GroupPanel";
 import { eventsAtStop, groupHistoryCaption, groupHistoryEvents, type HistoryGrain } from "../space-kinds/group-history";
 import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSettings";
@@ -660,9 +660,11 @@ const GROUNDS_LIT_MS = 1600;
  * longitude; the pair are ~1 radian apart, which is what puts them where they
  * have always sat when the companion is facing you.
  */
-const EYE_LON = 0.5;
-/** The equator's radius as seen head-on, as a fraction of the body's width. */
-const FACE_R = 0.34;
+/* `EYE_LON` AND `FACE_R` MOVED TO `character/raster.ts`, with the rest of
+   the creature's anatomy, when a page started drawing the creature too. The
+   loop still owns its BEHAVIOUR — yaw, pitch, blink, gaze, the cell grid —
+   and imports the numbers those behaviours are applied to. See the block at
+   the top of that file; `rest-pose.test.ts` fails if a copy grows back. */
 /**
  * The traveler (v8). Pressing toward a neighbouring column, the companion
  * turns and glides ahead of the world over this long, easing in…
@@ -7354,7 +7356,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                unison would be the chorus line again. */
             bodyPath(ctx!, ms, ms, be);
             ctx!.clip();
-            ctx!.fillStyle = "#2b2822";
+            /* The same ink the companion's own eyes use — a member is the
+               same species, and the literal was written out twice. */
+            ctx!.fillStyle = EYE_INK;
             const er = ms * be.eyeR * 1.35;
             const eyY = ms * be.eyeLat;
             /* toward you, or toward what you are looking at — in the member's
@@ -7512,8 +7516,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            dead — the nubs are anatomy, so there is no state in which they are
            not painted — and the constant was the only thing still implying
            otherwise. */
-        const nubR = companion.size * lerp(0.062, 0.1, bodyLit);
-        const nubRgb = mix([166, 163, 156], [214, 209, 197], bodyLit);
+        const nubR = companion.size * lerp(NUB_R_DIM, NUB_R_LIT, bodyLit);
+        const nubRgb = mix(NUB_DIM, NUB_LIT, bodyLit);
         const nubFront = rgbCss(nubRgb, 1);
         /* the far side of a form is darker than the near side */
         const nubBack = rgbCss(mix(nubRgb, [0, 0, 0], 0.15), 1);
@@ -7523,8 +7527,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           const s = Math.sin(a);
           /* pointing at or away from you, a nub reads smaller */
           ctx!.fillStyle = behind ? nubBack : nubFront;
-          const nx = s * bw * 0.42;
-          const ny = bh * 0.24;
+          const nx = s * bw * NUB_X;
+          const ny = bh * NUB_Y;
           const nr = nubR * Math.max(Math.abs(s), 0.35);
           if (formMachine) {
             /* A NUB IS MADE OF THE SAME CELLS THE BODY IS. It used to be a
@@ -7562,8 +7566,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           ctx!.fill();
         };
         ctx!.globalAlpha = 1;
-        drawNub(-Math.PI / 2, true);
-        drawNub(Math.PI / 2, true);
+        drawNub(-NUB_LON, true);
+        drawNub(NUB_LON, true);
 
         const bodyTier = Math.round(bodyLit * (BODY_TIERS - 1));
         if (form.prevBody) {
@@ -7628,8 +7632,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            one is a dot on the equator: it slides toward the silhouette,
            foreshortens, and fades out over the last quarter-radian rather
            than popping off the edge. */
-        ctx!.fillStyle = "#2b2822";
-        const er = companion.size * 0.038;
+        ctx!.fillStyle = EYE_INK;
+        const er = companion.size * EYE_R;
         /* THE LOOK, AS LATITUDE. The eyes sit on the surface of a turning
            form, so looking up or down is a latitude offset in exactly the way
            the yaw is a longitude one: it moves them across the face, and it
@@ -7699,8 +7703,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         ctx!.restore();
 
         /* the near nub last of all: it passes IN FRONT of the face */
-        drawNub(-Math.PI / 2, false);
-        drawNub(Math.PI / 2, false);
+        drawNub(-NUB_LON, false);
+        drawNub(NUB_LON, false);
         ctx!.restore();
       }
 
