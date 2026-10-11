@@ -3177,6 +3177,18 @@
     flex: 1 0 100%;
     justify-content: flex-end;
   }
+
+  /* AND THE RESTING ROW STAYS ONE LINE. Wrapping the row without this sent
+     `delete` down onto a second line on every row in the list, because the
+     preview's `flex-basis: auto` is its full un-truncated text — 461px for
+     an ordinary title — so it alone asked for more than the row had and
+     pushed its neighbour off. From a zero basis the preview claims only what
+     is left after the verb, which is what it was already doing before the
+     row could wrap. Only the confirm group takes a line of its own, and only
+     while it is open. */
+  .waka-talks-open {
+    flex: 1 1 0;
+  }
 }
 
 /**
@@ -3314,5 +3326,62 @@
   .waka-drawer-items button {
     min-width: var(--sp-24);
     min-height: var(--sp-24);
+  }
+}
+
+/**
+ * A PHONE ON ITS SIDE, WITH A PHOTO ATTACHED.
+ *
+ * MEASURED 2026-10-10. The save box at its tallest — the attachment drawer
+ * open, a picture attached so the "what made this moment feel like something"
+ * question is showing, and an error line under it — is 378px of composer
+ * above 22px of the slot's own clearance. The slot is pinned to the bottom
+ * and grows UPWARD with nothing stopping it, so on a short window the top of
+ * the composer runs off the top of the screen:
+ *
+ *   568×320  (SE, sideways)        80px of the drawer off the top
+ *   844×390  (14, sideways)        10px off the top
+ *   932×430  (16 Pro Max)          fits, but the drawer's toggle sits at y=30,
+ *                                  underneath the 56px chrome row
+ *   390×844  (portrait)            fits with 400px to spare
+ *
+ * The non-negotiable part is the bottom: the field you type in (102px) and
+ * the row with save and chat in it (56px) have to be on screen or the surface
+ * does nothing. So what gives is the two blocks ABOVE it, and they give in
+ * the order of how much they are needed — the list of attached files scrolls
+ * instead of stacking, and the question keeps its words but loses a row of
+ * field and some air.
+ *
+ * That recovers 28px, which fixes 844×390 and 932×430 outright. 568×320 is
+ * still about 50px short, and it cannot be fixed from here: 158px of field
+ * and actions plus a question and a file list does not fit 320px of window,
+ * and the honest fix is a scrollable wrapper around the drawer and the
+ * question in `Home.tsx` — which belongs to another session today. Written
+ * down rather than guessed at.
+ *
+ * WHAT DOES NOT GIVE: "Keep it without saying". Founder's rule is that saving
+ * is never gatekept, so the line that says the question is optional is the
+ * one part of that block that cannot be traded for height — a question with
+ * no visible way past it is a gate with a friendly face on it.
+ */
+@media (max-height: 520px) {
+  .waka-composer-drawer {
+    padding: var(--sp-8);
+  }
+
+  .waka-drawer-items {
+    max-height: var(--sp-40);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .waka-moment {
+    padding: var(--sp-12);
+  }
+
+  /* One row at rest instead of two. `field-sizing: content` still grows it as
+     you type, and its own `max-height: 7rem` still catches it. */
+  .waka-moment-why {
+    min-height: var(--sp-36);
   }
 }
