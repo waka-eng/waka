@@ -1800,6 +1800,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      place the box before it has re-measured it this frame. `MOUTH_H` is the
      first-paint fallback and nothing more. */
   const slotH = useRef(0);
+  /* Whether the creature is holding up its offer to write. */
+  const [capturing, setCapturing] = useState(false);
   /* The panel and the selection are ONE state: opening is selecting, and
      closing — by Esc, by a tap on the dimmed field, by tapping the same orb
      again — releases. It lags `selectedId` at BOTH ends: it does not appear
@@ -13307,7 +13309,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                        creature up the screen. The position is a function of
                        the window alone now, so the band can collapse to
                        nothing and the creature does not move a pixel. */
-                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}${here&&w.kind==='self'&&!mouthOpen&&claimQueue[0]?' jar-hq-inner--yielded':''}`}
+                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}${here&&w.kind==='self'&&!mouthOpen?' jar-hq-inner--yielded':''}`}
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
                     {/* R01 makes the personal reading explicit while keeping
@@ -14159,7 +14161,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           focus and scrolling above it. Files and words share one save intent. */}
       {phase === 'ready' ? <>
         <div ref={measured.mouth} className="jar-mouth" data-jar-chrome="1">
-          <div className={'jar-mouth-slot' + (atNow ? '' : ' jar-mouth-slot--away')} {...(!atNow || inField || inSky ? { inert: '' } : {})}>
+          {/* THE RESTING BAR IS GONE. Founder: "rather than clicking on save
+              a thought, can we just make clicking on the character..." — so
+              the box only exists once somebody has asked for it, and the
+              asking is the creature's bubble. The slot still renders while
+              the composer is open, because that is where the composer lives;
+              it simply has nothing to show at rest. The ruling that saving is
+              never more than one gesture away is intact: pressing the
+              creature IS the gesture. */}
+          <div className={'jar-mouth-slot' + (atNow ? '' : ' jar-mouth-slot--away') + (mouthOpen ? '' : ' jar-mouth-slot--closed')} {...(!atNow || inField || inSky ? { inert: '' } : {})}>
           {/* A BOX, NOT A BUTTON (founder ruling). The resting state used to be
               a labelled button that opened a drawer, so keeping a thought cost
               a press before it cost a word, and a file had nowhere to land
@@ -14490,6 +14500,52 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               it is the only thing on screen that came from the product rather
               than from you — so it carries the door into a conversation
               about itself. */}
+          {/* ═══ PRESSING THE CREATURE IS HOW YOU SAVE ══════════════════
+              Founder: "rather than clicking on save a thought, can we just
+              make clicking on the character and it would have a speech
+              bubble to say save inspiration and clicking on that opens up a
+              brand new note page."
+
+              The reference's character holds up a pebble in one state and a
+              pencil in another — the one thing addressed to you comes from
+              the creature, never from a bar bolted to the bottom of the
+              screen. So the creature carries BOTH offers: the note below its
+              chin is the claim waiting on you, and its own bubble is the
+              invitation to write.
+
+              A WORD UNDER IT, NOT A MYSTERY. This file already rules that
+              "pressing a creature is not a discoverable gesture" — which is
+              why the form switch is named underneath it. The same applies
+              here: the bubble opens on a press, and the press target is the
+              body itself, positioned off the two variables the layout pass
+              already writes for the bubble above it. */}
+          {!mouthOpen && !charSay ? (
+            <button
+              type="button"
+              className="jar-char-press"
+              aria-label={say('worldSaveInspiration')}
+              aria-expanded={capturing}
+              data-jar-chrome="1"
+              data-jar-interactive="1"
+              onClick={() => setCapturing(v => !v)}
+            />
+          ) : null}
+          {!mouthOpen && !charSay && capturing ? (
+            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
+              <div className="jar-char-bubble-body">
+                {/* A LINE OF THE SAME SPEECH, not a pill. The rule is already
+                    written on the bubble next door: "a pill inside a speech
+                    bubble is a dialog box with an OK in it." */}
+                <button
+                  type="button"
+                  className="jar-char-bubble-go"
+                  onClick={() => { setCapturing(false); openMouth(); }}
+                >
+                  {say('worldSaveInspiration')}
+                </button>
+              </div>
+            </div>
+          ) : null}
           {!mouthOpen && charSay && charSay !== say('worldSavedWord') ? (
             <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
               <div className="jar-char-bubble-body">
@@ -14759,6 +14815,53 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   ))}
                 </p>
                 )}
+              </div>
+            ) : !mouthOpen && !standingAsAgent && lead ? (
+              /* ═══ WHEN NOTHING IS BEING ASKED, THE SEAT HOLDS YOUR READING
+                 Founder: "where is my top of mind now? I don't see it
+                 anywhere in the experience."
+
+                 It had effectively disappeared, and the cause was mine: the
+                 statement band above the creature YIELDS whenever a claim is
+                 waiting, and a claim is almost always waiting — so the only
+                 way back to your own reading was to answer a whole sitting
+                 of three. A thing you can only reach by finishing a chore is
+                 not on the screen.
+
+                 ONE SEAT, TWO CONTENTS. The note the creature holds up is
+                 "what WAKA has to say to you right now", and that is either
+                 a question it needs answered or the reading it currently
+                 holds — never both, never neither. It also makes the loop
+                 visible for free: answer the last claim and the seat fills
+                 with the statement those answers are written from. */
+              <div className="jar-char-claim jar-char-claim--reading">
+                <p className="jar-char-claim-statement">{lead.body}</p>
+                {/* ITS VERBS COME WITH IT. They used to live in the band above
+                    the creature; that band now yields on this wall always, so
+                    leaving them there would have made three controls nobody
+                    can reach — the dead-press shape this codebase gates
+                    against. Edit, Remove, and ask for a new one: the three the
+                    founder named. */}
+                <p className="jar-poster-aside">
+                  <button
+                    type="button"
+                    className="jar-board-act"
+                    onClick={() => editing.begin("entry", lead.id, lead.body)}
+                  >
+                    {say("worldEditWording")}
+                  </button>
+                  <button type="button" className="jar-board-act" onClick={() => dropLead(lead)}>
+                    {say("worldRemoveLower")}
+                  </button>
+                  <button
+                    type="button"
+                    className="jar-board-act"
+                    disabled={readingChecking}
+                    onClick={() => setBoard({ step: "asking" })}
+                  >
+                    {say("worldWriteANewOne")}
+                  </button>
+                </p>
               </div>
             ) : null}
             {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
