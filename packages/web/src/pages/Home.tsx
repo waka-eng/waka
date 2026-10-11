@@ -2297,7 +2297,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * the generator already reads it ("a verdict of partly is an invitation to
    * sharpen, not an arbitration"; `docs/six-laws.md`, Law 10).
    */
-  const [correcting, setCorrecting] = useState<{ id: string; text: string; saving: boolean; failed: boolean } | null>(null);
+  /* `correcting` WENT WITH THE FIELD IT HELD. It tracked which claim had its
+     two-row correction textarea open, and the textarea is gone: founder,
+     "when the user clicks on partly and not true, can we open a chat
+     experience rather than asking user to answer in that small space?" The
+     paragraphs above describe a decision about `partly` that still stands —
+     it files at once, with no round trip — and the state that made "not
+     true" the expensive answer has no job left. See the note at the answer
+     row in the claim block. */
   /**
    * AND THE QUEUE BELONGS TO THE WALL YOU ARE STANDING ON.
    *
@@ -2434,10 +2441,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   useEffect(() => {
     if (phase !== 'ready' || offline) return;
     /* The wall changed under the queue, so the old wall's question must not
-       stay on screen while the new one is in flight — and neither may a
-       half-typed correction, which belongs to one claim on one wall. */
+       stay on screen while the new one is in flight. The half-typed
+       correction this also used to clear no longer exists — see the note on
+       `correcting` above. */
     setClaimQueue([]);
-    setCorrecting(null);
     loadClaims();
   }, [phase, offline, loadClaims]);
   const composerOpenRef = useRef(mouthOpen); composerOpenRef.current = mouthOpen;
@@ -15129,93 +15136,49 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     claim's own reading, where the evidence already lives —
                     and the correction field below is what answers the
                     "argue back" half here. */}
-                {/* CORRECT A CLAIM — what "not true" opens, and the only
-                    typing in the confirm loop.
-                    Five components used to stand where this field stands:
-                    `ReviewPanel`, `ReviewDialogue`, `ReviewResult`,
-                    `ReflectionFlow`, and the review's own evidence block —
-                    84 strings, generated open questions, and a draft
-                    lifecycle with storage, copying, discarding and a
-                    "this device couldn't keep your draft" recovery path.
-                    Founder's verdict on all of it: *"Confirming a claim needs
-                    none of that. Typing happens in one place only: when you
-                    correct."* The components are deleted; their shape is in
-                    git history under those names, and the words a person
-                    already wrote in them are still read — `ReviewEvidence`
-                    still quotes them under a principle, which is what they
-                    were being collected for.
-                    WHY SAYING WHAT IS TRUE INSTEAD IS WORTH A FIELD AT ALL.
-                    "Not true" on its own tells the loop a sentence is wrong
-                    and nothing about what is right, so the next pass has no
-                    more to go on than the last one did. One sentence here is
-                    the difference between refusing a reading and replacing
-                    it. It is optional on purpose — the answer is already
-                    complete without it, and making the negative answer the
-                    expensive one is how a person learns to pick a different
-                    one. */}
-                {correcting?.id === claimQueue[0].id ? (
-                  <div className="jar-char-claim-mine">
-                    {/* THE QUESTION REGISTER, NOT THE LABEL REGISTER.
-                        `.jar-label` is uppercase and tracked (`system.css`),
-                        which is a voice for eyebrows — "PRIVATE", "SAVED" —
-                        and a question set in capitals reads as a form field
-                        rather than as something being asked. `.jar-reflect-q`
-                        is this product's existing register for exactly this
-                        shape: one sentence above a box you answer in. It is
-                        a real `<label>` rather than a paragraph so the words
-                        and the box are one control to a screen reader, and
-                        pressing the words focuses the field. */}
-                    <label className="jar-reflect-q" htmlFor="claim-correction">{say('worldClaimCorrect')}</label>
-                    <textarea
-                      id="claim-correction"
-                      className="jar-char-claim-edit"
-                      value={correcting.text}
-                      rows={2}
-                      autoFocus
-                      readOnly={correcting.saving}
-                      onChange={e => setCorrecting(current => current && { ...current, text: e.target.value, failed: false })}
-                      /* Escape leaves the field without answering. It does
-                         NOT record the verdict: nothing was sent when the
-                         button was pressed, so the claim is simply still
-                         being asked, which is the truth. */
-                      onKeyDown={e => { if (e.key === 'Escape' && !correcting.saving) { e.preventDefault(); setCorrecting(null); } }}
-                    />
-                    {correcting.failed ? <p className="jar-settings-warn" role="alert">{say('worldClaimCorrectFailed')}</p> : null}
-                    <p className="jar-char-claim-answers">
-                      {/* ONE PRESS, ONE POST, whether or not words were
-                          typed. The verdict and the correction are the same
-                          act and travel together — recording "not true"
-                          first and the words second would file two rows for
-                          one answer, and the second one could fail alone. */}
-                      <button type="button" disabled={correcting.saving} onClick={() => {
-                        const claim = claimQueue[0]!;
-                        const words = correcting.text.trim();
-                        setCorrecting(current => current && { ...current, saving: true, failed: false });
-                        const sent = sayVerdict(claim.id, 'not_true', undefined, claim.contested, claim.statementRevision, words || undefined);
-                        if (!sent) { setCorrecting(current => current && { ...current, saving: false, failed: true }); return; }
-                        void sent.then(landed => {
-                          if (!landed) { setCorrecting(current => current && { ...current, saving: false, failed: true }); return; }
-                          /* The claim only leaves once the answer is on the
-                             record. Advancing first — which the other two
-                             answers do — would pull the sentence out from
-                             under the field they are typing into. */
-                          setCorrecting(null);
-                          /* THE SAME TERMINAL BEAT AS YES AND PARTLY — see
-                             the note on those. A correction is still an
-                             answer, and a sitting that ended silently after
-                             the one answer the person took most care over
-                             would be the worst place to drop it. */
-                          const left = claimQueue.filter(row => row.id !== claim.id);
-                          setClaimQueue(left);
-                          if (!left.length) setCharSay(say('worldSittingDone'));
-                        });
-                      }}>
-                        {say(correcting.saving ? 'worldSaving' : 'worldSave')}
-                      </button>
-                      <button type="button" disabled={correcting.saving} onClick={() => setCorrecting(null)}>{say('worldLeaveIt')}</button>
-                    </p>
-                  </div>
-                ) : (
+                {/* ═══ "NOT QUITE" AND "NOT ME" OPEN A CONVERSATION ═══════
+                    Founder: "the yes / partly / not true button is a little
+                    bit weird. And then when the user clicks on partly and
+                    not true, can we open a chat experience rather than
+                    asking user to answer in that small space?"
+
+                    WHAT STOOD HERE. "Not true" opened a two-row textarea
+                    inside the claim's card, with a Save and a Leave it — the
+                    only typing in the whole confirm loop, deliberately, and
+                    argued for at the time: "'not true' on its own tells the
+                    loop a sentence is wrong and nothing about what is right,
+                    so the next pass has no more to go on than the last one
+                    did."
+
+                    That argument was right about WHY the words matter and
+                    wrong about where they go. Saying what is actually true
+                    of you is the most considered thing this product ever
+                    asks for, and it was being asked for in a box two lines
+                    tall, wedged under the sentence being disputed, with a
+                    Save button — which is a form, at the exact moment a
+                    person has something to say. The place for that is the
+                    place this product already has for saying things.
+
+                    SO BOTH SOFT ANSWERS GO THERE, not just the hard one.
+                    "Partly" had no field at all and filed in silence, which
+                    is the opposite failure: the answer with the most left
+                    unsaid was the one given nowhere to say it.
+
+                    THE VERDICT IS STILL FILED FIRST, and immediately. The
+                    old flow withheld it until the words were written so that
+                    one answer made one row; a conversation is not a row, so
+                    there is nothing to wait for, and an answer that depends
+                    on finishing a chat would be an answer lost whenever
+                    somebody closed the tab.
+
+                    WHAT THIS GIVES UP, named rather than discovered later:
+                    nothing writes `correctionText` any more. `ReviewEvidence`
+                    still quotes the corrections already on record, and the
+                    server still accepts the field, but the UI has stopped
+                    producing them — the elaboration lives in the
+                    conversation now. If that signal should keep feeding
+                    principle evidence, the honest place to take it from is
+                    the first thing the person says in the chat this opens. */}
                 <p className="jar-char-claim-answers">
                   {(['true', 'partly', 'not_true'] as const).map(value => (
                     <button
@@ -15234,11 +15197,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                            same answer. Yes and partly advance at once — a
                            judgement about yourself should not wait on a round
                            trip. */
-                        if (value === 'not_true') {
-                          setCorrecting({ id: claim.id, text: '', saving: false, failed: false });
-                          return;
-                        }
                         sayVerdict(claim.id, value, undefined, claim.contested, claim.statementRevision);
+                        /* AND THE TWO SOFT ANSWERS CARRY ON SOMEWHERE THEY
+                           CAN BE SAID. "Yes" is finished the moment it is
+                           pressed — there is nothing to add to agreeing —
+                           so it alone stays on this screen and lets the
+                           sitting continue. See the note above the row. */
+                        if (value !== 'true') {
+                          /* Seeded with the claim itself, which is the same
+                             shape the other two doors into a conversation
+                             use (`lead.body`, a kept thing). The verdict
+                             just filed reaches the reply on its own:
+                             `recentFeedback()` passes every value into the
+                             generation payload beside the statement it was
+                             given about. */
+                          void talkAbout({ id: '', text: claim.statement });
+                        }
                         /* ═══ THE SITTING ENDS ON SOMETHING ════════════════
                            Every product that asks for a run of small
                            judgements terminates the run deliberately, and
@@ -15278,7 +15252,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     </button>
                   ))}
                 </p>
-                )}
               </div>
             ) : !mouthOpen && !standingAsAgent && lead ? (
               /* ═══ WHEN NOTHING IS BEING ASKED, THE SEAT HOLDS YOUR READING
