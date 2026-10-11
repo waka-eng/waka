@@ -2475,7 +2475,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      screen. `.waka-page` is the thing that matters here, and these three
      parameters are what mount one. */
   asideRef.current = Boolean(
-    viewNavigation.view?.open || viewNavigation.view?.conversationId || viewNavigation.view?.sharePrinciple,
+    viewNavigation.view?.open || viewNavigation.view?.conversationId ||
+    viewNavigation.view?.sharePrinciple || viewNavigation.view?.compose,
   );
   useEffect(() => { if (!mouthOpen && recording.phase !== 'idle') void recording.stop(); }, [mouthOpen, recording.phase, recording.stop]);
   const [newInspirationRequested, setNewInspirationRequested] = useState(false);
@@ -13165,7 +13166,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       /* THE SAME THREE, so the DOM chrome and the canvas step aside
          together. They were two different conditions and the chat sat in
          the gap between them. */
-      className={`jar${viewNavigation.view?.open || viewNavigation.view?.conversationId || viewNavigation.view?.sharePrinciple ? " jar--aside" : ""}`}
+      className={`jar${viewNavigation.view?.open || viewNavigation.view?.conversationId || viewNavigation.view?.sharePrinciple || viewNavigation.view?.compose ? " jar--aside" : ""}`}
       aria-label="Waka"
     >
       {/* the world's early face, until the first real frame: the same ground,
@@ -16383,7 +16384,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </button>
       ) : null}
 
-      /* THE "N INSPIRATIONS" DOOR IS GONE FROM HERE TOO.
+      {/* THE "N INSPIRATIONS" DOOR IS GONE FROM HERE TOO.
          Same stale pattern as the Principles pill and Find: a control that
          only ever rendered on walls that were not your own, from when the
          self wall had chrome and the others had none. Founder, on an agent's
@@ -16392,7 +16393,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          It is also a numeral printed on a screen, which the product's own law
          forbids — it survived the law for exactly as long as it was invisible
          to whoever wrote it. The archive is a destination in the switcher on
-         every wall now. */
+         every wall now. */}
 
       {/* The mouth belongs below the companion, but a person can also be in
           the ground, the sky, or the room's past. From there the same act is
@@ -16418,13 +16419,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           nothing like each other: one is people, one is a machine that writes
           on its own wall. Two words in a strip could not carry that, so the
           choice is made here, where a sentence fits. */}
-      /* MAKING A PLACE WENT WITH THE LIST THAT OFFERED IT.
+      {/* MAKING A PLACE WENT WITH THE LIST THAT OFFERED IT.
          The only door into this sheet was the last row of the wall dropdown,
          and that dropdown is a two-state switch now — me, my agent — because
          those are the two places the product currently holds. A sheet nothing
          can open is not a feature in reserve, it is a branch the next reader
          has to work out is unreachable. Rooms come back with their own door;
-         git holds this until they do. */
+         git holds this until they do. */}
 
       {/* ---------------- THE REFLECTION, ON ITS OWN ----------------
           Founder, 2026-08-25: "have reflect workflow in modal."
