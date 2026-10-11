@@ -333,3 +333,72 @@ Three findings decide the shape of the fix:
 
 This honours the Oct 8 instruction's intent ("things feel so skewed to the
 bottom") while discarding the literal implementation, which has no cap.
+
+---
+
+## 9. What was built
+
+Seven commits, each gated.
+
+| | |
+|---|---|
+| `ccefa970` | `companion.y` becomes a function of the window alone; both blank reserves deleted; the composition gets a 1040px ceiling |
+| `f948fbef` | the statement band yields while the creature is asking; the claims room stops answering and becomes a doorway; a sitting is three |
+| `a183fc75` | the sitting ends on the statement coming back, with the creature saying what happens next |
+| `b5445b3b` | the band is sized from measurement (300px); the block-start-overflow trap is gated as a class |
+| `5c55c168` | the capture bar names one purpose; 110px → 46px, field 298px → 504px |
+| `13972e66` | the terminal beat stops firing from inside a state updater |
+
+### Measured after
+
+**Creature drift — the ruling, finally held.** Identical `y` for any statement
+length, any claim length, for pressing "Not true", and between the asking and
+reading states. Previously up to 75px.
+
+**Position and air:**
+
+| viewport | creature | gap above | box at |
+|---|---|---|---|
+| 760 | 324–444 | 24px | 692 |
+| 890 | 324–444 | 24px | 822 |
+| 1330 | 360–480 | 60px | 1125 (lifted by the ceiling) |
+| 1700 | 360–480 | 60px | 1310 (lifted by the ceiling) |
+
+**The capture bar:** 110px → 46px at rest, identical whether or not anybody is
+typing; the field 298px → 504px; wraps rather than crushing below `14rem`
+(at 390px it was being squeezed to 32px — a text input nobody could type in).
+
+**The band:** 300px, measured against real sentences — the founder's own top
+of mind needs 260px at 1512 and 275px at 390. Overflow is reachable, which it
+was not before.
+
+### Two bugs found and fixed in passing
+
+**The flexbox trap, reintroduced by me in a second file.**
+`justify-content: flex-end` in a scroll container moves content off the
+scrollable origin rather than extending the scrollable area, so block-start
+overflow is unreachable AND the scroller reports no overflow while hiding it.
+Measured with a five-line statement: "fits" at every width, top of the
+sentence silently gone. Same defect that cost `.chat-transcript` 442px of a
+conversation the night before — found by me, documented by me, repeated by me
+within a day. Now gated as a class across four stylesheets, reasoning per
+SELECTOR rather than per rule, because the first version of the gate was
+walked through by a one-line sabotage that split the two declarations across
+two rules.
+
+**A state updater with a side effect.** `setCharSay` fired from inside the
+`setClaimQueue` updater, so the closing line could fire twice for one press.
+
+### Still open, deliberately
+
+- **Principles arriving as a card.** Needs server support for "this has held
+  long enough".
+- **The claims room as a backlog of ANSWERED claims.** Blocked, not declined:
+  `ApiSignal` carries no verdict, so "the claim, and what you said about it"
+  cannot be rendered without a server change. Noted in the component.
+- **`/days` has no entry point.** A built surface nobody can reach. It wants
+  deciding, not smuggling in while this pass is removing vocabulary.
+- **Air below the creature on very tall windows.** Bounded now by the 1040px
+  ceiling, not eliminated. The full fix is one capped band holding all three
+  elements, which means the creature's canvas coordinates and the composer's
+  CSS position deriving from the same number.
