@@ -141,6 +141,35 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
  * It lives here rather than in groups.ts (where the same predicate was written
  * for a narrower reason) so that the next account-level route reaches for it
  * without knowing about groups.
+ *
+ * THE DUPLICATION WAS NOT THE PROBLEM; THE HALF THAT GOT DROPPED WAS. Nine
+ * handlers across five route files wrote `session.profile.type !== "human"`
+ * inline and not one of them wrote `|| session.keyScoped`, because the
+ * predicate reads complete without it. It is not. A keeper key resolves to a
+ * session whose profile IS the human — `keeper-key-auth.ts` joins on
+ * `profiles.type = 'human'` by design and marks the session `keyScoped` —
+ * so every hand-rolled copy looked at a standing credential sitting in an
+ * MCP config file on disk, read "human", and waved it through to add a
+ * profile, rename one, delete one, enumerate the account's live connections,
+ * end any of them, download the whole archive, take a seat in a room, and
+ * merge the person's signals. Each of those is precisely the class of act
+ * the 2026-08-29 ruling put behind "the person at a browser".
+ *
+ * None of it was reachable, and that is the thinnest kind of safe: the only
+ * thing in front of those nine was `keeperKeyMayPass` — ONE positive list,
+ * in ONE middleware, naming ten GET prefixes and one POST. A defence whose
+ * whole strength is an allowlist nobody has widened yet is a defence that
+ * ends the first time someone widens it, and the widening will look like a
+ * one-line product change rather than like granting a config file the power
+ * to delete profiles. Depth is the point: the gate at the door AND the gate
+ * on the route, so the two have to fail together.
+ *
+ * So all nine call this now, and `human-only-gate.test.ts` fails the build if
+ * a tenth writes the predicate by hand. A route may still test a session's
+ * profile type inline when the refusal is conditional rather than the whole
+ * door (`inspirations-capture.ts` refuses only conversation-sourced saves) —
+ * the gate asks for `keyScoped` in the same breath, which is the half that
+ * was missing every time.
  */
 export const humanSessionsOnly: MiddlewareHandler<AuthEnv> = async (c, next) => {
   const session = c.get("session");

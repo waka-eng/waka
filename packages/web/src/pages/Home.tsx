@@ -70,7 +70,7 @@ import { DialogSurface } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { useNavigate } from "react-router-dom";
 import { useViewNavigation } from '../lib/use-view-navigation';
-import { EMPTY_VIEW, resolveViewWall, viewHref, type ViewLocation } from '../lib/view-location';
+import { EMPTY_VIEW, resolveViewWall, viewHref, type ViewLocation, type ViewOpen } from '../lib/view-location';
 import { InspirationSearch } from '../components/InspirationSearch';
 
 import { hueCss } from "../lib/appearance";
@@ -129,7 +129,10 @@ import {
   type BeingSprites,
   type Palette,
 } from "../canvas/palette";
-import { ChatCorner } from "../components/ChatCorner";
+import { OpenCorner } from "../components/OpenCorner";
+import { SavesOverlay } from "../components/SavesOverlay";
+import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
+import { ConversationsOverlay } from "../components/ConversationsOverlay";
 import { useMeasured } from "../canvas/measured";
 import { setStanding as publishStanding } from "../lib/standing";
 import { renderScale } from "../canvas/scale";
@@ -10002,7 +10005,26 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      in the archive when they disagreed — a careful fix to a control that
      should not have been printing a number at all. */
 
-  const menu = usePageMenu(locale, auth?.account?.id, agentWall ? { id: agentWall.id, name: agentWall.name } : null);
+  /**
+   * HOLDING SOMETHING UP IN FRONT OF THE WORLD.
+   *
+   * Founder: "for your inspirations, after I click on it, I feel like I'm
+   * lost how to go back to the previous screen... maybe for your
+   * inspirations, this should just be a modal that you can escape to go back
+   * to your top of mind."
+   *
+   * It goes through the world's own history writer rather than a bare
+   * navigate, which is the difference between an overlay and a page. The
+   * pathname does not change — only a parameter on it — so this component
+   * never unmounts, the camera stays exactly where it was, and dismissing is
+   * a return rather than a trip somewhere else. See `ViewOpen` in
+   * `lib/view-location` and `closeOpen` in `lib/use-view-navigation`.
+   */
+  const openOverHome = useCallback((what: ViewOpen) => {
+    const nav = viewNavigationRef.current;
+    nav.write({ ...(nav.view ?? EMPTY_VIEW), open: what });
+  }, []);
+  const menu = usePageMenu(locale, auth?.account?.id, agentWall ? { id: agentWall.id, name: agentWall.name } : null, openOverHome);
 
   /**
    * THE REACH — the ground, addressable without a pointer.
@@ -11959,10 +11981,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   /* ═══ EVERY SHEET CLOSES THE SAME TWO WAYS ═══
      The founder ruled it about the make-another-place sheet ("if click
      outside modal, close it") and about the dial's rail the same day; it is
-     not a fact about those two. The five sheets below closed only by finding
+     not a fact about those two. The sheets below closed only by finding
      their own small word, and the way out of the last sheet is never where
      the way out of this one is. See `lib/dismiss.ts` for why pointerdown and
-     why Escape stops propagating. */
+     why Escape stops propagating.
+
+     IT WAS FIVE AND IT IS THREE, which is the useful part of this note now.
+     The account sheet became a card under the settings cog that closes from
+     inside the top bar, and the antechamber moved to `pages/Profile` as a
+     `DialogSurface` that owns its own dismissal. Both left WITHOUT this
+     comment noticing, which is the argument for the hook rather than against
+     it: each surface took its way out with it, and nothing had to be
+     remembered here. The three that remain are a room's settings, the join
+     sheet, and a statement's provenance. */
   const closeSettings = useCallback(() => setSettingsFor(null), []);
   const closeJoin = useCallback(() => setPendingJoin(null), []);
   const closeProv = useCallback(() => setProv(null), []);
@@ -12483,7 +12514,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     reflectionId: reflectOn || reflectOpen ? (requestedViewRef.current?.inspirationId === (reflectOn?.id ?? selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
     find: seek !== null, compose: mouthOpen,reviewId:viewNavigation.view?.reviewId??null,reviewAnswerId:viewNavigation.view?.reviewAnswerId??null,
     principleId:atWall.kind==='self'&&inSky?pick:null,
-    sharePrinciple:atWall.kind==='self'&&inSky&&(viewNavigation.view?.sharePrinciple??false),conversationId:viewNavigation.view?.conversationId??null };
+    sharePrinciple:atWall.kind==='self'&&inSky&&(viewNavigation.view?.sharePrinciple??false),conversationId:viewNavigation.view?.conversationId??null,
+    /* WHAT IS HELD UP IS NOT SOMETHING THE WORLD OBSERVES, so it is carried
+       rather than derived — the same as the review, the conversation and the
+       share above it.
+
+       This line is load-bearing and its absence was a real bug, not a test
+       artefact. The effect below rewrites the address from `observedView`
+       eighty milliseconds after anything the camera can see changes, which is
+       how "the world never moves unless the user moved it" is enforced. But
+       anything NOT in this object is not preserved by that rewrite — it is
+       ERASED by it. So opening your inspirations worked, and then a tick
+       later the canonicaliser replaced the URL without `open` and the overlay
+       vanished on its own.
+
+       Every field here that reads `viewNavigation.view?.x ?? null` is a field
+       that belongs to a surface over the world rather than to the world, and
+       the pattern is the reminder: a new one has to join this list on the day
+       it is added, or it will appear to work and then undo itself. */
+    open:viewNavigation.view?.open??null };
   const observedHref = viewHref(observedView), observedRef = useRef(observedView); observedRef.current = observedView;
   useEffect(() => {
     if (phase !== 'ready' || restoringViewRef.current || navigationProblem) return;
@@ -13003,7 +13052,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         {here&&w.kind==='self'&&atNow&&!offline&&!topOfMind?.supportChanged
                           ?readingLoadPhase==='loading'?say('worldPersonalReadingLoading')
                             :readingLoadPhase==='failed'?<>{say('worldPersonalReadingLoadFailed')} <button type="button" className="jar-board-act" onClick={()=>retryReadingLoadRef.current()}>{say('worldRoomHistoryRetry')}</button></>
-                            :say(inspirations?.length?'worldPersonalReadingNotReady':'worldPersonalReadingEmpty')
+                            /* "NOT READY" AND "NOTHING KEPT" ARE DIFFERENT
+                               FACTS, and this line told the second one to
+                               people for whom the first was true. It asked
+                               `inspirations?.length` alone — but the archive
+                               arrives in pages, and on the first short page
+                               that array is `[]` while `fieldBeyond` holds
+                               the hundreds still coming. So an account with
+                               two and a half thousand kept things was told
+                               "keep something you want to come back to" for
+                               as long as the walk took.
+
+                               `fieldBeyond` is the remainder and the hint
+                               below already consults it for exactly this
+                               reason; this branch was the one place that
+                               forgot to, which is why the bug only showed on
+                               a cold load of a large archive — the hardest
+                               state to catch by looking, and the one where
+                               being told you have nothing is worst. */
+                            :say(inspirations?.length||fieldBeyond?'worldPersonalReadingNotReady':'worldPersonalReadingEmpty')
                           :c.formingAlt ?? say("worldFormingNothingAdopted")}
                       </p>
                     )}
@@ -15184,6 +15251,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             onRemoved={(id) => reflectionRemoved(id, reflectOn.id)}
             onDone={() => setReflectOn(null)}
           />
+          {/* A WAY OUT FOR SOMEBODY WHO DOES NOT WANT TO ANSWER.
+              This surface had none. `ReflectionFlow` carries a finish for
+              whoever reflects, and Escape and a press-away close it — but
+              both of those are invisible, so a person who opened this and
+              simply did not feel like answering had nothing to press. That
+              is the exact shape of the founder's most-repeated complaint
+              ("I feel like I'm lost how to go back"), on a surface that
+              ASKS YOU A QUESTION, which is the worst place to trap someone:
+              declining has to be as easy as answering or the question is not
+              really being asked.
+
+              "not now" rather than "close", because that is what the press
+              means here and it is already this product's word for declining
+              a prompt — the seek line, the room form and a room's settings
+              all offer it. A fourth way of saying the same thing would be
+              the drift the consistency pass exists to stop. */}
+          <p className="jar-ask jar-ask--row jar-reflect-room-out">
+            <button type="button" onClick={() => setReflectOn(null)}>
+              {say("worldNotNow")}
+            </button>
+          </p>
         </DialogSurface>
       ) : null}
 
@@ -15194,7 +15282,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         onOpenPrinciple={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id})}
         onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'field',inspirationId:id})}/>:null}
       <div className={`jar-personal-shortcuts${atWall.kind==='self'?' jar-personal-shortcuts--self':''}${!inField&&!inSky&&wallCount>0&&(!atNow||(charSay!==''&&!mouthOpen))?' jar-personal-shortcuts--above-count':''}`}
-        hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}>
+        hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple||viewNavigation.view?.open)}>
       {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'&&(inField||inSky)&&!viewNavigation.view?.reviewId?<button type="button" className="jar-review-shortcut" data-jar-chrome="1"
         onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
       {phase==='ready'&&(inField||inSky||!atNow)?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
@@ -15235,9 +15323,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            lives, and the corner went to chat — which genuinely is a
            destination, because it has a list of past conversations behind
            it and nowhere else to be reached from. */
-        left={storageScope ? <ChatCorner locale={locale}
-          profileId={atWall.kind === 'agent' ? atWall.id : storageScope.profileId}
-          onOpen={id => navigate(`/chat/${id ?? 'new'}`)} /> : null}
+        left={storageScope ? <OpenCorner locale={locale} items={menu.openRows} /> : null}
         onSettings={()=>navigate('/profile')}
         account={auth?.account ? { name: auth.profile?.name, email: auth.account.email } : null}
         onSignOut={auth ? () => { void auth.logout(); } : undefined}
@@ -15251,6 +15337,56 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         key={`${storageScope.accountId}:${storageScope.profileId}:${viewNavigation.view.principleId}`} scope={storageScope}
         id={viewNavigation.view.principleId} name={auth?.profile?.name??''} locale={locale} onClose={viewNavigation.closeShare}
         onChoose={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true},{replace:true})}/>:null}
+
+      {/* THE THREE THINGS YOU HOLD UP IN FRONT OF THE WORLD.
+          Founder: "for your inspirations, after I click on it, I feel like
+          I'm lost how to go back to the previous screen, and I didn't realise
+          clicking on top of mind would leave me there. So maybe for your
+          inspirations, this should just be a modal that you can escape to go
+          back to your top of mind."
+
+          ALL THREE, NOT JUST THE ONE THAT WAS COMPLAINED ABOUT. The archive
+          was the surface the founder got lost on, but the principles and the
+          conversations were the same machine with the same bug — reaching any
+          of them unmounted the world, and once the world is gone there is
+          nothing to return TO, only somewhere else to navigate. Fixing the
+          one that was noticed would have left two that had not been noticed
+          yet, which is how this product accumulated the problem in the first
+          place.
+
+          THEY NAME THEMSELVES, and they name WHOSE. The world behind is
+          showing somebody's top of mind, and an unlabelled grid floating over
+          an unrelated statement would be a second anonymous surface. The
+          title follows the wall rather than the stored stance, so it cannot
+          disagree with the world it is covering. */}
+      {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
+        key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
+        locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
+        title={say(atWall.kind==='agent'?'worldAgentField':'worldMenuField')}
+        onClose={viewNavigation.closeOpen}/>:null}
+      {storageScope&&viewNavigation.view?.open==='principles'?<PrinciplesOverlay
+        key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
+        locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
+        name={atWall.kind==='agent'?atWall.name:auth?.profile?.name??''}
+        title={say(atWall.kind==='agent'?'worldAgentPrinciples':'worldPrinciplesShortcut')}
+        onClose={viewNavigation.closeOpen}
+        /* Opening one REPLACES the overlay rather than stacking on it: the
+           principle's own surface is the next thing to read, not a sheet on
+           top of a sheet, and `closeOpen` would otherwise have to know which
+           of two things it was closing. */
+        onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id})}
+        /* STRAIGHT TO THE ARTIFACT, skipping the principle's own surface.
+           The card already shows what would be shared; the share surface is
+           the larger version of that same card. Routing through the
+           principle page first made a person confirm a choice they had
+           already made by pressing share. */
+        onShare={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true})}/>:null}
+      {storageScope&&viewNavigation.view?.open==='conversations'?<ConversationsOverlay
+        key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:talks`}
+        locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
+        title={say(atWall.kind==='agent'?'worldAgentConversations':'worldOpenConversations')}
+        onClose={viewNavigation.closeOpen}
+        onOpen={id=>navigate(`/chat/${id ?? 'new'}`)}/>:null}
 
       {/* MAKING OR JOINING A ROOM. A form, and it is honest about being one:
           typed text, a submit and an error line all need to reflow and be

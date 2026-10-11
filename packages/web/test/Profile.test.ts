@@ -201,8 +201,24 @@ describe("ProfilePage account actions", () => {
 
     expect(container.querySelector<HTMLInputElement>("input[name='publicHandle']")).toBeTruthy();
     expect(checkboxes).toHaveLength(2);
-    expect(checkboxes[0]?.getAttribute("aria-describedby")).toBe("profile-public-profile-description");
-    expect(checkboxes[1]?.getAttribute("aria-describedby")).toBe("profile-public-top-of-mind-description");
+    /* BOTH BOXES DESCRIBE THEMSELVES WITH THE VISIBLE PARAGRAPH, and this
+       assertion used to name two `sr-only` spans instead — one repeating the
+       privacy paragraph printed directly above these boxes, the other
+       repeating the panel's own subtitle. So a person using a screen reader
+       heard the same disclosure three times in one panel while a sighted
+       person read it once, which is Law 4's named case: "aria-labels that
+       duplicate visible text."
+       What was worth keeping is the ASSOCIATION, not the second copy of the
+       words, so this now pins the thing that matters: each box points at a
+       description, and that description is an element the eye can also find. */
+    for (const box of checkboxes) {
+      const describedBy = box.getAttribute("aria-describedby");
+      expect(describedBy).toBe("profile-public-privacy");
+      const description = container.querySelector(`#${describedBy}`);
+      expect(description?.className, "the description a box points at must be on screen")
+        .not.toContain("sr-only");
+      expect(description?.textContent).toContain("not visible");
+    }
     await act(async () => {
       checkboxes[0]!.click();
     });
@@ -222,6 +238,15 @@ describe("ProfilePage account actions", () => {
     );
   });
 
+  /**
+   * The consequence of deleting an account is stated ONCE and pointed at by
+   * both controls. It used to be stated twice: visibly under the section's
+   * eyebrow, and again in an `sr-only` span carrying the identical message
+   * key — so the warning was printed for the eye and then read out a second
+   * time for anyone not using one. Law 4 is that a person is not told what
+   * they can already see, and a screen-reader user is a person who can
+   * already "see" the paragraph above the field.
+   */
   it("describes the destructive delete confirmation input and action", async () => {
     const container = await renderProfilePage();
     const deleteInput = Array.from(container.querySelectorAll<HTMLInputElement>("input[type='text']")).at(-1);
@@ -231,7 +256,30 @@ describe("ProfilePage account actions", () => {
 
     expect(deleteInput?.getAttribute("aria-describedby")).toBe("profile-delete-description");
     expect(deleteButton?.getAttribute("aria-describedby")).toBe("profile-delete-description");
-    expect(container.querySelector("#profile-delete-description")?.textContent).toContain("Type DELETE");
+    const description = container.querySelector("#profile-delete-description");
+    expect(description?.textContent).toContain("Type DELETE");
+    expect(description?.className, "the warning is read where it is printed, not cloned")
+      .not.toContain("sr-only");
+    expect(container.querySelectorAll("#profile-delete-description")).toHaveLength(1);
+  });
+
+  /**
+   * NO FIELD HINTS ON THE SETTINGS PAGE — Law 4, and the founder named this
+   * surface for it. Three were printed at rest and all three said something
+   * the screen already said: the display name's hint restated its label and
+   * then announced the ABSENCE of a constraint ("Spaces are okay"), and the
+   * handle's hint restated the panel's subtitle and then said, in advance,
+   * the exact sentence the error shows when the handle is wrong.
+   * The LANGUAGE hint stays and is deliberately exempt: it is not a
+   * restatement, it is the one place the page admits that changing the
+   * setting rewrites your top of mind. Law 1 — a control with a side effect
+   * beyond its label has to say so — outranks Law 4 there.
+   */
+  it("prints no hint that restates a label it sits under", async () => {
+    const container = await renderProfilePage();
+    const hints = Array.from(container.querySelectorAll(".field-hint"));
+    expect(hints).toHaveLength(1);
+    expect(hints[0]?.textContent).toContain("rewrites your top of mind");
   });
 });
 

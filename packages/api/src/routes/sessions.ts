@@ -21,13 +21,25 @@ import { z } from "zod";
 
 import { profiles, sessions } from "../db/index.js";
 import { getDb } from "../lib/db.js";
-import { type AuthEnv, requireAuth } from "../lib/middleware.js";
+import { type AuthEnv, humanSessionsOnly, requireAuth } from "../lib/middleware.js";
 
 const sessionIdSchema = z.string().uuid();
 
 export const sessionsRoutes = new Hono<AuthEnv>();
 
 sessionsRoutes.use("*", requireAuth);
+/*
+ * BLANKET, NOT PER HANDLER. Both routes below are account-owner acts and any
+ * third one will be too — seeing and ending connections is the remedy
+ * `auth-cli.ts` leans on, so the surface that administers it must not be
+ * administrable by something the person would use the remedy against. Mounted
+ * once so a new route cannot be added without it, which is exactly how the two
+ * inline `profile.type !== "human"` checks that used to sit in the handlers
+ * came to disagree with the shared gate: they never refused a `keyScoped`
+ * session, so a keeper key could enumerate every live connection on the
+ * account and end them. See `humanSessionsOnly` in lib/middleware.ts.
+ */
+sessionsRoutes.use("*", humanSessionsOnly);
 
 /**
  * Every live connection to this account, newest first.
@@ -37,10 +49,6 @@ sessionsRoutes.use("*", requireAuth);
  */
 sessionsRoutes.get("/", async (c) => {
   const session = c.get("session");
-  if (session.profile.type !== "human") {
-    return c.json({ error: "Only the account owner can see connections" }, 403);
-  }
-
   const rows = await getDb()
     .select({
       id: sessions.id,
@@ -84,9 +92,6 @@ sessionsRoutes.get("/", async (c) => {
  */
 sessionsRoutes.delete("/:sessionId", async (c) => {
   const session = c.get("session");
-  if (session.profile.type !== "human") {
-    return c.json({ error: "Only the account owner can end a connection" }, 403);
-  }
   if (!sessionIdSchema.safeParse(c.req.param("sessionId")).success) {
     return c.json({ error: "Connection not found" }, 404);
   }

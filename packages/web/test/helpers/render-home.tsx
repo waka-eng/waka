@@ -557,6 +557,47 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
   await act(async () => row.click());
 }
 
+/**
+ * THE LEFT CORNER — what to open over the world.
+ *
+ * Founder: "for your inspirations, after I click on it, I feel like I'm lost
+ * how to go back to the previous screen." Your inspirations, your principles
+ * and your conversations stopped being rows in the top-centre switcher when
+ * they stopped being pages: the switcher answers WHOSE material you are
+ * reading, and these three are things you hold up in front of the world and
+ * put back down. Two controls, two questions — see `lib/page-menu`.
+ *
+ * So a suite that used to reach them through `chooseFromMenu` reaches them
+ * here instead. What those suites were testing is unchanged; only the route
+ * to the control moved, which is exactly why this is a helper and not a
+ * rewritten assertion.
+ */
+export async function chooseFromCorner(container: HTMLElement, label: string): Promise<void> {
+  const opener = [...container.querySelectorAll<HTMLButtonElement>(".waka-corners button")]
+    .find((node) => node.getAttribute("aria-label") === "Open");
+  if (!opener) throw new Error("the open corner is not on this screen: " +
+    [...container.querySelectorAll<HTMLButtonElement>(".waka-corners button")].map(n=>n.getAttribute("aria-label")).join(" | "));
+  await act(async () => opener.click());
+  const row = [...container.querySelectorAll<HTMLButtonElement>(".waka-opens .waka-menu-item")].find(
+    (node) => node.textContent?.trim().startsWith(label),
+  );
+  if (!row) {
+    const had = [...container.querySelectorAll(".waka-opens .waka-menu-item")]
+      .map((node) => node.textContent?.trim())
+      .join(", ");
+    throw new Error(`no row named ${label} in the corner. It offers: ${had}`);
+  }
+  await act(async () => row.click());
+}
+
+/** Dismissing an overlay the way a person does: the visible close. Escape and
+    the scrim also work, and the point of Law 2 is that the SEEN one exists. */
+export async function closeOverlay(container: HTMLElement): Promise<void> {
+  const close = container.querySelector<HTMLButtonElement>(".waka-over .waka-over-close");
+  if (!close) throw new Error("no visible way out of this overlay");
+  await act(async () => close.click());
+}
+
 /** The capture entry is a field now, not a button that opens one. */
 export function keepBox(container: HTMLElement): HTMLTextAreaElement {
   const box = container.querySelector<HTMLTextAreaElement>("textarea.jar-keep-box");

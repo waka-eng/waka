@@ -30,6 +30,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { t, type MessageKey, type SupportedLocale } from "../lib/locales";
+import { MenuRows } from "./MenuRows";
 
 export interface MenuItem {
   /** Stable key; also what a test names a row by. */
@@ -136,7 +137,6 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
   const [open, setOpen] = useState(false);
   /** Which row has its lines open, if any. One at a time: a list where every
       row can be expanded at once is a page of prose wearing a list's shape. */
-  const [explained, setExplained] = useState<string | null>(null);
   /** Whether the account card is showing under the cog. */
   const [account_open, setAccountOpen] = useState(false);
   const panelId = useId();
@@ -164,12 +164,6 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
     if (hidden) setOpen(false);
   }, [hidden]);
 
-  /* Closing the list forgets which row was explained: reopening to a sheet
-     you left mid-thought is the small haunt the rule above avoids. */
-  useEffect(() => {
-    if (!open) setExplained(null);
-  }, [open]);
-
   /* The two things this bar can open are mutually exclusive: one sheet at a
      time, so neither is read through the other. */
   useEffect(() => {
@@ -179,8 +173,30 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
     if (hidden) setAccountOpen(false);
   }, [hidden]);
 
-  /* Escape closes the card, and a press anywhere else does too — the same
-     two ways out the list has. */
+  /**
+   * ESCAPE CLOSES THE CARD. THE PRESS-AWAY IS THE SCRIM, AND IT WAS MISSING.
+   *
+   * This comment used to say "and a press anywhere else does too — the same
+   * two ways out the list has", above an effect that registers a `keydown`
+   * and nothing else. The list had a full-screen scrim; this card had no
+   * scrim and no pointer listener, so the only ways out were Escape and
+   * finding the cog again. Both of those are invisible, which is precisely
+   * the complaint this product keeps getting: founder, on the surface one
+   * corner over, "I feel like I'm lost how to go back."
+   *
+   * The comment is the interesting part of the bug. It described the right
+   * behaviour, so every reader after it — including the audit that walked
+   * these two corners looking for exactly this — had reason to believe the
+   * press-away existed. A comment that states an intention the code does not
+   * implement is worse than no comment: it spends the one chance anyone had
+   * to notice.
+   *
+   * The scrim is now rendered beside the card, so the two ways out are real
+   * and are the same two the list offers. This effect keeps the key, because
+   * the card is not a `DialogSurface` — it is a `role="note"` inside the bar,
+   * which is right (it is a check, not a sheet to work in) and means nothing
+   * else is listening for Escape on its behalf.
+   */
   useEffect(() => {
     if (!account_open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -221,7 +237,25 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
             <button
               type="button"
               className="waka-switch-trigger"
-              onClick={() => items.find((item) => item.id.endsWith("top-of-mind"))?.onSelect()}
+              /* THE FIRST ROW IS YOUR OWN TOP OF MIND, and that is a
+                 property of the list rather than a string to match on.
+
+                 This matched `id.endsWith("top-of-mind")` and silently
+                 stopped working the moment the switcher became a list of
+                 OWNERS — the ids are "me" and "agent:<id>" now, nothing ends
+                 in "top-of-mind", `find` returned undefined, and the one
+                 control the founder asked for by name ("I find it so annoying
+                 that from talk with Waka, there's no one click to go back to
+                 top of mind") became a button that did nothing at all. A
+                 press that no-ops is worse than a missing control: it reads
+                 as the product being broken rather than as a thing not
+                 offered.
+
+                 `items[0]` is the honest expression of the intent. The list
+                 is ordered you-first by construction in `lib/page-menu`, and
+                 the fallback below means this cannot become a dead press
+                 again even if the shape changes under it. */
+              onClick={() => (items[0] ?? items.find((item) => item.id === current))?.onSelect()}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false">
                 <path
@@ -300,63 +334,8 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
             aria-label={t(locale, "worldMenuLabel")}
             onClick={(event) => event.stopPropagation()}
           >
-            {items.map((item, index) => (
-              /* A ROW IS THE DESTINATION PLUS WHAT IT IS.
-                 Founder: "there should be like an info icon next to each of
-                 the top of mind, principles, the inspirations so that users
-                 can see what these are."
-                 The explanation used to hang off the switcher's own trigger,
-                 which could only ever describe the view you were ALREADY on —
-                 so the one person it could not help was the one who does not
-                 yet know what these three are. Per row it can be read before
-                 going anywhere, which is the whole point of asking. */
-              <span key={item.id} className="waka-menu-row">
-                <button
-                  ref={index === 0 ? first : undefined}
-                  type="button"
-                  className={`waka-menu-item${item.id === current ? " waka-menu-item--here" : ""}${item.className ? ` ${item.className}` : ""}`}
-                  /* The rung you are standing on is marked and still pressable:
-                     pressing it closes the list, which is the same thing the
-                     caret does and the thing a person expects from a control
-                     they opened by mistake. */
-                  aria-current={item.id === current ? "page" : undefined}
-                  disabled={item.disabled}
-                  onClick={() => {
-                    setOpen(false);
-                    item.onSelect();
-                  }}
-                >
-                  {t(locale, item.label)}
-                  {item.note ? <span className="sr-only jar-saved-count">{item.note}</span> : null}
-                </button>
-                {item.explain ? (
-                  <>
-                    {/* PRESS, NOT HOVER. This list is opened by a press and is
-                        used on a phone, where there is no hover to reveal
-                        anything with — an explanation only a mouse can reach
-                        is not an explanation. It opens the lines IN PLACE
-                        rather than over the rows, so the list never covers
-                        the thing you are choosing between. */}
-                    <button
-                      type="button"
-                      className="waka-menu-why"
-                      aria-expanded={explained === item.id}
-                      aria-label={t(locale, "worldWhatIsThis")}
-                      onClick={() => setExplained((shown) => (shown === item.id ? null : item.id))}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true" focusable="false">
-                        <circle cx="7.5" cy="7.5" r="6.1" stroke="currentColor" strokeWidth="1.2" fill="none" />
-                        <path d="M7.5 6.6v4.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                        <circle cx="7.5" cy="4.5" r="0.85" fill="currentColor" />
-                      </svg>
-                    </button>
-                    {explained === item.id ? (
-                      <span className="waka-menu-explain" role="note">{item.explain}</span>
-                    ) : null}
-                  </>
-                ) : null}
-              </span>
-            ))}
+            <MenuRows locale={locale} items={items} current={current} first={first}
+              onChose={() => setOpen(false)} />
             {/* NO "CLOSE MENU" ROW. Founder, pointing at it: "this also is so
                 useless." It was, and three ways out already exist and always
                 did: the scrim behind it, Escape, and choosing any destination.
@@ -396,6 +375,20 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
             navigation to answer either costs the screen you were reading.
             Everything that genuinely needs a page is one press further. */}
         {account_open ? (
+          <>
+            {/* FULL-SCREEN, AND NOT AIMED AT. The same reasoning the list's
+                scrim carries: "a way out you have to aim at is not one." It
+                is a button rather than a div so it is a real press target
+                with a real handler, and `aria-hidden` + `tabIndex={-1}` keep
+                it out of the reading order — the card already names its own
+                way out for anyone arriving by keyboard. */}
+            <button
+              type="button"
+              className="waka-menu-scrim"
+              aria-hidden="true"
+              tabIndex={-1}
+              onClick={() => setAccountOpen(false)}
+            />
           <span className="waka-account" role="note">
             {account?.name ? <span className="waka-account-name">{account.name}</span> : null}
             {account?.email ? <span className="waka-account-email">{account.email}</span> : null}
@@ -422,6 +415,7 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
               </button>
             ) : null}
           </span>
+          </>
         ) : null}
         </span>
       </div>

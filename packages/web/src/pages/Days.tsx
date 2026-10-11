@@ -117,19 +117,27 @@ export function Days(): JSX.Element {
 
   return (
     <main className="waka-page">
+      {/* THE PAGE DOES NOT NAME ITSELF, AND THE WAY OUT IS IN THE CHROME.
+          The switcher at the top of the screen names the view, and printing
+          the same words again as a heading made the name appear twice on two
+          of the three pages and once on the third — which is exactly the
+          inconsistency the founder saw between them. One namer, one style,
+          everywhere.
+          What stood here was an EMPTY `<header>` holding two comments, one of
+          which argued against a back button on the grounds that "the browser
+          already has a back". Law 2 of `docs/six-laws.md` refuses that
+          argument in as many words — "Browser Back is not an exit" — and the
+          control the comment was declining to duplicate HAD STOPPED WORKING:
+          `Menu`'s one-press exit looked the row up by a string suffix no row
+          carried any more, so it rendered, read "Your top of mind", and
+          no-opped. It presses `items[0]` now — your own world, by a property
+          of the list rather than by a name match — and
+          `test/page-exit.test.tsx` presses it for real from this page.
+          So the header is gone, because an element whose only contents are
+          two comments is 40px of margin pretending to be a heading, and the
+          exit is where every other page keeps it. */}
       <Menu locale={locale} items={menu.items} current={menu.current} left={<ChatCorner locale={locale} profileId={menu.standing.id ?? auth?.profile?.id} onOpen={id => navigate(`/chat/${id ?? "new"}`)} />} label="worldDaysTitle" onSettings={menu.onSettings}
         account={auth?.account ? { name: auth?.profile?.name, email: auth?.account.email } : null} />
-      <header className="waka-page-head">
-        {/* NO BACK BUTTON. The menu is the navigation and the browser
-            already has a back — a third way out of a page is not a
-            convenience, it is one more thing to read in a header whose job
-            is to name the page. */}
-        {/* THE PAGE DOES NOT NAME ITSELF ANY MORE. The switcher at the top
-            of the screen names the view, and printing the same words again
-            as a heading made the name appear twice on two of the three pages
-            and once on the third — which is exactly the inconsistency the
-            founder saw between them. One namer, one style, everywhere. */}
-      </header>
 
       {phase === "loading" ? (
         <p className="waka-page-status" role="status">
@@ -147,6 +155,12 @@ export function Days(): JSX.Element {
       ) : kept === 0 ? (
         <p className="waka-page-status">{say("worldDaysEmpty")}</p>
       ) : (
+        /* THE LIST'S NAME STAYS, AND IT IS NOT THE DUPLICATION LAW 4 MEANS.
+            It does repeat the words on the switcher above it — but the
+            switcher is a BUTTON, so a person moving by landmark or by list
+            never hears it, and what they would reach instead is "list, 119
+            items" with no way to know what the items are. Law 4 governs what
+            is printed; nothing here is printed. */
         <ol className="waka-days" aria-label={say("worldDaysTitle")}>
           {cells.map((cell) => (
             <li key={cell.key}>
@@ -164,11 +178,14 @@ export function Days(): JSX.Element {
                    which is why this is a link to a date rather than a second
                    dial living on this page. */
                 onClick={() => navigate(`/?at=${Date.parse(`${cell.key}T12:00:00Z`)}`)}
-                title={`${cell.label} — ${
-                  cell.kept
-                    ? formatMessage(locale, "worldDaysKept", { count: cell.kept })
-                    : say("worldDaysNone")
-                }`}
+                /* NO `title`. It carried the same sentence as the span below
+                   it, which made the hover a printed count — "3 kept" — on a
+                   page whose entire argument is that a busy day is a brighter
+                   day. Founder law: states render, numerals never. A tooltip
+                   is rendering; the dot already says it, in the one channel
+                   this product gives meaning to; and the span below says it
+                   out loud for anyone who cannot read a brightness. Saying it
+                   a third time in a numeral undoes the picture. */
               >
                 <span className="sr-only">
                   {cell.label} —{" "}

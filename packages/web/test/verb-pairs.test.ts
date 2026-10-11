@@ -152,10 +152,29 @@ const REGISTER: Record<string, string> = {
 
   // rooms
   createGroup: "deleteGroup",
+  // TALKING, AFTER THE SURFACE WAS CUT BACK (2026-10-10). Founder: "So the
+  // talk with Waka experience is the most confusing chat experience ever with
+  // so many different buttons that I have no idea what its supposed to do."
+  // Three wrappers went with the controls that called them, so three entries
+  // changed shape here. This gate is why they could not go quietly: a
+  // register naming a partner nobody wires is the F6 shape all over again.
+  /* ERASING ONE IS BACK, AND IT IS BACK WHERE THE NOTE SAID TO PUT IT.
+     `deleteConversation` was removed with the `···` menu inside the
+     conversation you were reading — the only thing calling it, and a place
+     where "delete" sat one slip from "send". Its tombstone said it belonged
+     beside the row in the LIST of conversations, and that list now exists:
+     `components/ConversationsOverlay`, one of the three things the left
+     corner opens over the world. So the pair is whole again rather than
+     RULED, which is the outcome this gate was holding the question open
+     for. */
   createConversation: "deleteConversation",
-  requestConversationReply: "stopConversationReply",
-  stopConversationReply: "requestConversationReply",
-  deleteConversation: "RULED: confirmed erasure removes message content; a new conversation is the next entry, not restoration",
+  deleteConversation: "createConversation",
+  stopConversationReply:
+    "RULED: stopping is itself the way back from a reply being written. Its old " +
+    "partner `requestConversationReply` re-ran the generator behind three " +
+    "buttons — Retry reply, Get a reply, Check reply — and a reply is now " +
+    "requested once, by sending the message. Asking again is saying something " +
+    "again, which is the composer, not a verb of its own.",
   saveConversationMessage: "RULED: authored conversation messages are immutable; confirm deletion of the conversation to erase them, never automatically create a belief",
   deleteGroup: "createGroup",
   joinGroup: "leaveGroup",

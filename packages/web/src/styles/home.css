@@ -576,7 +576,29 @@
 /* Offered only after "not true" — a sequence, never a menu, so the
    destructive answer is never sitting beside the harmless ones. */
 .jar-ask--after { margin-top: var(--sp-6); opacity: 1; }
-.jar-ask button:disabled { opacity: 0.45; cursor: default; }
+/* DISABLED DIMS THE AFFORDANCE, NEVER THE WORDS.
+   `opacity: 0.45` was the bug, and it is a bug this product has shipped
+   before and been shown by the founder, who pointed at a disabled control and
+   saw a blank rectangle. Opacity fades EVERYTHING, and these buttons are
+   transparent with `color: inherit` — so the only thing it had to fade was
+   the label, against a near-black ground. The word became unreadable at the
+   exact moment a person most needed to read it: when they had just pressed
+   something and nothing happened.
+   So the label holds at a legible muted ink and the cursor carries the state
+   instead. On a FILLED control the same rule says dim the fill and leave the
+   label alone — never the reverse.
+
+   `--jar-muted`, AND THE NUMBER IS WHY. Measured against `--jar-deep`:
+   `--jar-ink` 17.4:1, `--jar-muted` 5.5:1, `--jar-faint` 2.3:1. Faint was the
+   obvious reach for "disabled" and it is the bug wearing a token — 2.3:1 is
+   not dimmer text, it is text you cannot read. Muted clears 4.5:1 and still
+   reads as unavailable beside its enabled neighbour, because on this ground
+   the difference between 17 and 5 is plainly visible. The ratio is the test;
+   "looks disabled" is not. */
+.jar-ask button:disabled {
+  color: var(--jar-muted);
+  cursor: default;
+}
 
 /* WHAT YOU SAID, WORN BY THE STATEMENT.
    Agreed: unchanged, full weight. Half-agreed: lighter, the claim loosened.
@@ -3720,7 +3742,12 @@
   line-height: 1.6;
   color: var(--jar-faint);
 }
-.jar-prov-room-close {
+/* THE DECLINE SITS WHERE THE CLOSE SITS. Both surfaces are a thing opened
+   over the world with one press that puts it back down, so the press is in
+   the same corner on both — the way out of the last sheet should be where
+   the way out of this one is, which is the whole argument in `lib/dismiss`. */
+.jar-prov-room-close,
+.jar-reflect-room-out {
   margin: var(--sp-16) 0 0;
   justify-content: flex-end;
 }

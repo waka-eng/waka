@@ -525,66 +525,36 @@ body {
 }
 
 /* -----------------------------------------------------------------------
- * Layout shell — background field + noise + drop overlay
+ * THE PARCHMENT WASH AND ITS NOISE ARE GONE, AND SO IS THE COMPONENT.
  *
- * Three stacked fixed-position layers reproduced verbatim from the
- * prototype. The blobs render at z-index 0 (parchment-tone wash that fades
- * in when the user saves an inspiration via `body.dropped`). The grain
- * noise sits at z-index 1 so it textures the wash without occluding it.
- * The `.wrap` content well sits at z-index 2 — defined further down with
- * the header rules.
+ * `.bg-field` / `.bg-blob` / `.noise` painted three 900px cream blobs
+ * (#d8d3c7, #c9c3b4, #e8e3d4) under a fractal-noise sheet, faded in by a
+ * `body.dropped` class when a save landed. `<BackgroundField />` rendered
+ * them. Two laws at once, which is why it survived as long as it did — each
+ * pass judged it by one of them and let it through on the other:
  *
- * The drop-overlay is invisible until the user drags a file onto the
- * window, at which point a `body.dragging` class fades it in. Matching the
- * prototype, the toggle is body-class driven so the drag handler can flip
- * one bit instead of mutating component state.
+ * LAW 5 — ONE MATERIAL. These are parchment-era colours. `multiply`-blending
+ * a cream wash over a near-black product does nothing anyone would choose; it
+ * was a survivor of the single-file prototype the React tree replaced, kept
+ * on the theory that a future sub-AC would wire it up. `system.css` had
+ * already set it `display: none` rather than remove it, which is how a thing
+ * stays in a codebase forever: disabled is not deleted, and the next reader
+ * finds a rule that looks load-bearing.
+ *
+ * LAW 6 — NOTHING MOVES UNLESS THE USER MOVED IT. Founder: "the bottom of the
+ * page still has the old like floating circles. I can see it like float up
+ * and down once in a while. So make sure that the bottom is completely clear.
+ * Like this is like now considered dead and unused code." They were right
+ * that it was dead, and it took two more passes to find the last host — the
+ * public profile, which is where a shared principle lands and therefore the
+ * first thing a stranger ever sees of this product.
+ *
+ * The grain the product actually uses is `--jar-grain`, baked from the
+ * palette and composited once. See `claims.css`.
+ *
+ * The drop overlay below is NOT part of this and stays: it is invisible until
+ * the user drags a file onto the window, which is motion that explains.
  * ---------------------------------------------------------------------*/
-
-.bg-field {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.bg-blob {
-  position: absolute;
-  width: 900px;
-  height: 900px;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.6);
-  transition:
-    opacity 900ms ease,
-    transform var(--duration-page) var(--ease-organic);
-  mix-blend-mode: multiply;
-}
-
-body.dropped .bg-blob {
-  opacity: 0.7;
-  transform: translate(-50%, -50%) scale(1.1);
-}
-body.dropped .bg-blob.b1 {
-  background: #d8d3c7;
-}
-body.dropped .bg-blob.b2 {
-  background: #c9c3b4;
-}
-body.dropped .bg-blob.b3 {
-  background: #e8e3d4;
-}
-
-.noise {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-}
-
 
 /* -----------------------------------------------------------------------
  * Content well + page header
@@ -1838,9 +1808,16 @@ textarea {
   color: var(--ink-1);
 }
 
+/* DISABLED DIMS THE FILL, NEVER THE LABEL. These are the rename, remove and
+   mint verbs on the settings page, and every one of them swaps its own word
+   while it is busy — "Renaming…", "Removing…", "Minting…". Dimming the whole
+   control to 45% dimmed exactly the word that was put there to say what is
+   happening, so the one moment the label matters is the one moment it cannot
+   be read. There is no fill on these, so the ink is all there is to move, and
+   `progress` says busy where `default` said forbidden. */
 .profile-memory-action:disabled {
-  opacity: 0.45;
-  cursor: default;
+  color: var(--muted);
+  cursor: progress;
 }
 
 .profile-memory-action.is-destructive:hover:not(:disabled) {

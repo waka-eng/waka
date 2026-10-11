@@ -33,8 +33,6 @@ import { SurfaceBoundary } from "./components/SurfaceBoundary";
 import { AuthProvider } from "./lib/auth-context";
 import { installPreloadRecovery } from "./lib/preload-recovery";
 import LoginPage from "./pages/Login";
-import { Inspirations } from "./pages/Inspirations";
-import { Principles } from "./pages/Principles";
 import { Days } from "./pages/Days";
 import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
@@ -149,13 +147,30 @@ ReactDOM.createRoot(root).render(
         <Routes>
           {MobileChecks && <Route path="/mobile-check" element={<Suspense fallback={null}><MobileChecks /></Suspense>} />}
           <Route path="/login" element={<LoginPage />} />
-          {/* PAGES, NOT PLACES THE CAMERA TRAVELS TO (founder ruling). The
-              archive and the principles used to be the bottom and the top of
-              a vertical axis you moved the world along. They are addresses
-              now, which also gives them a Back that works and a link that can
-              be sent. */}
-          <Route path="/inspirations" element={<RequireAuth><Inspirations /></RequireAuth>} />
-          <Route path="/principles" element={<RequireAuth><Principles /></RequireAuth>} />
+          {/* THE ARCHIVE AND THE PRINCIPLES ARE NOT PAGES ANY MORE.
+              Founder: "for your inspirations, after I click on it, I feel
+              like I'm lost how to go back to the previous screen, and I
+              didn't realise clicking on top of mind would leave me there. So
+              maybe for your inspirations, this should just be a modal that
+              you can escape to go back to your top of mind."
+
+              They were places the camera travelled to, then they were pages
+              with their own addresses, and both were wrong in the same way:
+              reaching them UNMOUNTED THE WORLD. A page was given everything a
+              page can have — a URL, a working browser Back, a switcher naming
+              it — and still felt like a trap, because once the world is gone
+              there is nothing to go back to, only somewhere else to go. They
+              are overlays now, held up in front of a world that never left.
+              See `ViewOpen` in `lib/view-location`.
+
+              THE OLD ADDRESSES STILL ANSWER. Links were sent and bookmarks
+              were made while these were pages, and a 404 would be this
+              change breaking something for the sake of tidiness. They land on
+              the world with the overlay already up, which is what the address
+              always meant. `replace` so Back does not bounce through the
+              redirect. */}
+          <Route path="/inspirations" element={<Navigate to="/?open=saves" replace />} />
+          <Route path="/principles" element={<Navigate to="/?open=principles" replace />} />
           <Route path="/days" element={<RequireAuth><Days /></RequireAuth>} />
           <Route path="/:handle" element={<PublicProfilePage />} />
           <Route

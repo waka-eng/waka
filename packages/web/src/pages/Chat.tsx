@@ -29,9 +29,12 @@ export default function ChatPage(){
   const principleId=!id?new URLSearchParams(location.search).get('principle')??undefined:undefined;
   const owner=`${scope.accountId}:${scope.profileId}`;
   if(committed.current&&(committed.current.owner!==owner||committed.current.row.id!==id))committed.current=null;
+  /* NO `onOpenSource` ANY MORE. It existed for one caller: the footnotes
+     under each reply, which opened a quoted principle or inspiration on its
+     own page. The footnotes are gone (see `ConversationPanel`'s header), so
+     the only thing this page navigates to is another conversation. */
   return <><Menu locale={locale} items={menu.items} current={menu.current} left={<ChatCorner locale={locale} profileId={menu.standing.id ?? scope.profileId} onOpen={id => navigate(`/chat/${id ?? "new"}`)} />} label="worldMenuTalk" onSettings={menu.onSettings}/><ConversationPanel key={`${scope.accountId}:${scope.profileId}:${id??'new'}:${principleId??''}`}
     scope={scope} id={id} initialPrincipleId={principleId} initialConversation={committed.current?.row} locale={locale}
     onCreated={row=>{if(row.profileId===scope.profileId)committed.current={owner,row};}}
-    onChoose={next=>{if(next!==id||principleId)navigate(`/chat/${next??'new'}`,{replace:!id&&Boolean(next),state:location.state});}}
-    onOpenSource={(kind,sourceId)=>navigate(kind==='principle'?`/principles/${encodeURIComponent(sourceId)}`:`/inspirations/${encodeURIComponent(sourceId)}`)}/></>;
+    onChoose={next=>{if(next!==id||principleId)navigate(`/chat/${next??'new'}`,{replace:!id&&Boolean(next),state:location.state});}}/></>;
 }

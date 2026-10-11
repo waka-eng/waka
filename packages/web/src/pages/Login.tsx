@@ -47,7 +47,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSignIn";
 import { ApiError } from "../lib/api";
@@ -55,7 +55,38 @@ import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { formatMessage, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
-import { resolveRedirect } from "../lib/sign-in-destination";
+import { resolveRedirect, safeInAppPath } from "../lib/sign-in-destination";
+
+/**
+ * THE ONE WAY BACK OUT OF THE DOOR, and why there is exactly one.
+ *
+ * Law 2 of `docs/six-laws.md`: every surface you can enter has a visible way
+ * out, and it costs one press. The door is the hardest case in the product,
+ * because for most people arriving here there is genuinely nowhere behind
+ * them — and a control offering to return a person to a protected URL they
+ * were just bounced off would bounce them straight back. A way out that
+ * returns you to where you were refused is not a way out, it is a loop.
+ *
+ * There is one real case, and it is the only one this returns a path for: a
+ * stranger reading somebody's PUBLIC page who presses "Create your WAKA".
+ * `PublicProfile` sends them here with `state.from` set to `/@handle`, and
+ * that page is readable signed out — so going back works, and today nothing
+ * offers it. They were reading something, they pressed a button to find out
+ * what this is, and the page they were reading is gone with no control
+ * anywhere that returns it.
+ *
+ * SO THE TEST IS "CAN THEY ACTUALLY GET BACK", not "did they come from
+ * somewhere". A public handle path is the whole answer to that question while
+ * signed out, which is why this matches the shape rather than trusting
+ * `from`. It runs `safeInAppPath` first regardless: `from` is visitor-
+ * influenced, and `sign-in-destination.ts` is where this product keeps the
+ * rule about that.
+ */
+export function wayBackFrom(from: unknown): string | null {
+  const path = safeInAppPath(from);
+  if (!path) return null;
+  return /^\/@[^/]+$/.test(path) ? path : null;
+}
 
 // ---------------------------------------------------------------------------
 // Shared constants
@@ -576,6 +607,7 @@ export default function LoginPage(): JSX.Element {
   /* Why the door is standing here, when the reason is "we could not ask" —
      see `AuthContextValue.serverUnreachable`. It never decides access. */
   const { serverUnreachable } = useAuth();
+  const wayBack = wayBackFrom((location.state as { from?: unknown } | null)?.from);
 
   /**
    * Surface the OAuth error code (if any) the API redirected us back with
@@ -767,6 +799,17 @@ export default function LoginPage(): JSX.Element {
         <OrDivider locale={locale} />
 
         <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} />
+
+        {/* BACK TO WHAT THEY WERE READING — see `wayBackFrom` for why this is
+            the only arrival this page can honestly offer a way out of, and
+            why most visitors correctly see nothing here. */}
+        {wayBack ? (
+          <p className="login-footer">
+            <Link className="login-link" to={wayBack}>
+              {t(locale, "loginBackToPage")}
+            </Link>
+          </p>
+        ) : null}
       </section>
     </main>
   );

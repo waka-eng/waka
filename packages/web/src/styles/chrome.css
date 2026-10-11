@@ -1,11 +1,16 @@
 /* assigned to the `chrome` layer — see styles/layers.css for the order */
 @layer chrome {
-.jar-conversation-thought { margin: var(--sp-8) 0; }
-.jar-conversation-thought section { padding: var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); }
-.jar-conversation-thought textarea { width: 100%; min-height: var(--sp-96); font-size: var(--t-lead); }
-.jar-conversation-thought button { min-height: var(--sp-44); margin: var(--sp-4) var(--sp-8) var(--sp-4) 0; }
-.jar-conversation .jar-conversation-adopt { display: flex; align-items: center; gap: var(--sp-8); min-height: var(--sp-44); }
-.jar-conversation-adopt input { width: var(--sp-20); height: var(--sp-20); flex: none; }
+/* ELEVEN RULES WENT OUT OF THIS FILE ON THE CHAT SWEEP, and the first six of
+   them were the first six lines in it.
+   `.jar-conversation-thought`, `-adopt`, `-citations`, `-reference`,
+   `-topic`, `-starters` and `-question` match nothing in the tree any more:
+   the console they dressed was cut, and its stylesheet was not. That is the
+   same failure `e2e:dead-css` found ninety-six selectors of, and it is worth
+   naming the cost rather than just deleting them — `COLOUR_CEILING` in
+   `test/type-scale.test.ts` carries a note about the day those ninety-six
+   were removed and took twenty-one colour literals with them, which the
+   ratchet had no way to notice. Dead rules are not inert. They are slack.
+   `.jar-conversation-body` stays: `ConversationPanel` still wears it. */
 /*
  * THE FLAT SCREENS, WEARING THE WORLD'S SKIN.
  *
@@ -122,6 +127,39 @@ body {
   color: var(--w-ink);
   font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
     "Segoe UI", Roboto, sans-serif;
+}
+
+/**
+ * ONE FACE, EVERYWHERE — and this is where "everywhere" stopped being true.
+ *
+ * Founder: "can we make the font consistent across all the experience?"
+ * `claims.css` opens with that ruling and answers it by naming `--waka-face`
+ * and asking for it on every element the WORLD draws. The rule above is this
+ * layer's answer to the same question, and it is a DIFFERENT face: Pretendard
+ * and the platform sans.
+ *
+ * Which would not matter if nothing inherited from it. Everything does. The
+ * fields on the door, the fields on the settings page and every submit in
+ * both say `font-family: inherit` — so every input a person has ever typed
+ * into in this product has been set in the system sans while the sentence
+ * they were typing about was set in Jost, three inches above it. Law 3: the
+ * ruling landed on the surfaces the founder was looking at, and `chrome.css`
+ * dresses the three that had never been looked at.
+ *
+ * STATED ON THE SHELLS, NOT ON `body`. `body` is shared with the world, whose
+ * own stylesheets name their face element by element — changing it there
+ * would be a change to screens this pass is not auditing, to no visible
+ * effect. These three shells are the ones wearing the wrong face, so these
+ * three ask for the right one, and everything inside them inherits it.
+ *
+ * Pretendard does not leave: it is the SECOND family in `--waka-face`, which
+ * is how Korean keeps a face that has the glyphs for it while Latin gets
+ * Jost. The stack was always built for both.
+ */
+.login-shell,
+.profile-page,
+.waka-public {
+  font-family: var(--waka-face);
 }
 
 .login-subtitle,
@@ -347,8 +385,11 @@ a:focus-visible {
    A palette is only a palette if every surface in it is named. Each container
    that paints its own ground is listed here, so nothing is left inheriting a
    colour from the theme it is no longer in. */
-.login-shell,
-.profile-shell {
+/* `.profile-shell` is NOT in this list, and its absence is the finding.
+   Settings was rebuilt on `.waka-page .profile-page` and `claims.css` paints
+   that ground; every rule here still keyed to `.profile-shell` was dressing
+   an element that no longer exists. */
+.login-shell {
   background: var(--w-ground);
   color: var(--w-ink);
 }
@@ -704,9 +745,22 @@ a:focus-visible {
   accent-color: var(--w-ink);
   cursor: pointer;
 }
-.profile-toggle-row input:disabled,
-.profile-toggle-row input:disabled + span {
+/* AND THE SAME MISTAKE THIS BLOCK WAS WRITTEN TO FIX, five rules below the
+   note describing it: "the words describing what you are about to make
+   public were not readable at all. On a privacy control that is the worst
+   possible bug." The fix above repaired the resting state and left the
+   disabled one dimming the sentence to 45% — which is where the second
+   checkbox SPENDS MOST OF ITS LIFE, because it is disabled until the first
+   one is on. So the label a person most needs while deciding whether to
+   share their top of mind was the one label never shown at full ink.
+   The BOX dims, because the box is what cannot be pressed. The words say
+   what the box would do either way. */
+.profile-toggle-row input:disabled {
   opacity: 0.45;
+  cursor: default;
+}
+.profile-toggle-row input:disabled + span {
+  color: var(--w-muted);
   cursor: default;
 }
 /* the save verb sits after the form, not across it — but the doorway's own
@@ -852,11 +906,12 @@ a:focus-visible {
 .profile-header h1,
 .login-shell h1,
 .login-shell h2,
-.profile-shell h1,
-.profile-shell h2,
 .nc-canvas h1,
 .nc-canvas h2 {
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  /* The token, not its value. `--waka-face` IS this stack; writing it out
+     means the next person changes the token, watches the product follow, and
+     has no way to see the two headings that did not. */
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: clamp(28px, 3vw, 40px);
   letter-spacing: 0.012em;
@@ -870,9 +925,31 @@ a:focus-visible {
    an overlay blend, so it leaves black black by construction and lives on the
    midtones — the type and the rules — without ever lifting the ground.
    Fixed to the frame, like film grain belongs to the lens rather than to what
-   is being filmed. */
+   is being filmed.
+
+   THREE SURFACES JOINED ON THE CRAFT PASS, and two of them had lost this
+   WITHOUT ANY RULE LOOKING WRONG. `.profile-shell` is dead: the settings page
+   was rebuilt on `.waka-page .profile-page` with its own note saying it now
+   "carries the same chrome as every other screen" — and the grain was keyed
+   to the class it had just stopped wearing, so the one surface this selector
+   was written to repair has been smooth ever since. `.waka-page` also dresses
+   `/days`, which never had it. `.waka-public` is the page a stranger lands
+   on, and it is the surface where "this is the same product as the thing it
+   is advertising" has to be legible before a single word is read.
+   Law 3 of `docs/six-laws.md`, three times in one selector list: a rename, a
+   new page, and a public surface, none of which could inherit a texture that
+   had to be opted into by class name.
+
+   AND IT IS THE SVG, NOT `--jar-grain`. The world publishes its baked tile as
+   a custom property from `pages/Home.tsx` at runtime — so a person who lands
+   DIRECTLY on `/days`, `/profile` or `/@handle` has never mounted the world
+   and the property does not exist. A grain that only appears if you arrived
+   the long way round is worse than none: it makes the same page two
+   different-looking pages depending on the route in. This tile is in the
+   stylesheet and therefore always there. */
 .login-shell::after,
-.profile-shell::after {
+.waka-page::after,
+.waka-public::after {
   content: "";
   position: fixed;
   inset: 0;
@@ -914,7 +991,6 @@ a:focus-visible {
    file). Nothing new is being designed here; this is the same design, made
    order-independent. */
 
-body .profile-shell,
 body .login-shell {
   background:
     radial-gradient(
@@ -941,7 +1017,10 @@ body .login-card {
 }
 body .profile-header h1,
 body .login-title {
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  /* The token, not its value. `--waka-face` IS this stack; writing it out
+     means the next person changes the token, watches the product follow, and
+     has no way to see the two headings that did not. */
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: clamp(28px, 3vw, 40px);
   letter-spacing: 0.012em;
@@ -1154,9 +1233,18 @@ body .login-card .btn-doorway:hover:not(:disabled),
 body .login-card .btn-doorway:focus-visible:not(:disabled) {
   opacity: 0.88;
 }
+/* DISABLED DIMS THE FILL, NEVER THE LABEL — and this is the one control in
+   the product where getting it wrong is worst. `opacity: 0.45` on a FILLED
+   pill dims the ground and the word together, so "Signing in…" — the one
+   sentence telling a person their password is being checked right now —
+   became a pale grey shape with nothing legible in it, at the exact second
+   they are waiting to find out whether they are locked out of everything
+   they kept. The founder has reported this bug's shape before.
+   So the fill drops toward the ground and the word stays a word. */
 body .login-card .btn-doorway:disabled {
-  opacity: 0.45;
-  cursor: default;
+  background: color-mix(in srgb, var(--w-ink) 45%, var(--w-ground));
+  color: var(--w-ground);
+  cursor: progress;
 }
 /* AND THE DIVIDER NEEDS ROOM NOW THAT SOMETHING SOLID IS ABOVE IT.
    It used to sit between a white pill and a row of text tabs, where the tabs'
@@ -1252,6 +1340,14 @@ body textarea {
    the confirmation carries the warning. */
 body .login-footer {
   margin: 0;
+}
+/* EXCEPT ON THE DOOR, which has no `.profile-foot` to own the spacing. The
+   rule above was written for the settings page, where the foot row sets its
+   own margin — and it quietly flattened the only other user of this class.
+   Onboarding's way out is in this footer (Law 2), and a way out touching the
+   submit above it reads as part of the form. */
+body .login-shell .login-footer {
+  margin-top: var(--sp-28);
 }
 body .profile-foot {
   display: flex;
@@ -1393,7 +1489,11 @@ body .profile-signout-button {
 .jar-review h3 { font-size:var(--t-lead); font-weight:500; }
 .jar-review-body { overflow-y:auto; min-height:0; overscroll-behavior:contain; padding-block:var(--sp-16); }
 .jar-review button { min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8) var(--sp-12); margin:var(--sp-4); border:1px solid var(--w-edge); border-radius:var(--sp-12); background:none; color:var(--w-ink); font:inherit; font-size:var(--t-note); cursor:pointer; }
-.jar-review button:disabled { opacity:.45; cursor:default; }
+/* The label stays a label; see the doorway's note above for the bug this is
+   the same shape as. A sheet's verbs sit on no fill, so nothing needs dimming
+   but the ink, and `progress` is the honest cursor for a button that is busy
+   rather than forbidden. */
+.jar-review button:disabled { color:var(--w-muted); cursor:progress; }
 .jar-review button:hover:not(:disabled) { background:var(--w-raised); }
 .jar-review-card { outline:none; touch-action:pan-y pinch-zoom; }
 .jar-review-card:focus-visible { outline:1px solid var(--w-edge); outline-offset:var(--sp-4); }
@@ -1450,14 +1550,11 @@ body .profile-signout-button {
 .jar-conversation h2 { font-size:var(--t-lead); font-weight:500; }
 .jar-conversation-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; padding-inline-end:var(--sp-8); }
 .jar-conversation button,.jar-conversation summary { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); font:inherit; color:inherit; background:transparent; border:1px solid var(--w-edge); border-radius:var(--sp-8); cursor:pointer; }
-.jar-conversation button:disabled { opacity:.45; cursor:default; }
+.jar-conversation button:disabled { color:var(--w-muted); cursor:progress; }
 .jar-conversation ul,.jar-conversation ol { list-style:none; padding:0; }
 .jar-conversation li { padding-block:var(--sp-12); border-bottom:1px solid var(--w-edge); overflow-wrap:anywhere; }
 .jar-conversation li p { white-space:pre-wrap; }
 .jar-conversation li[data-role="assistant"] { border-left:2px solid var(--w-edge); padding-left:var(--sp-12); }
-.jar-conversation-question { color:var(--w-ink); }
-.jar-conversation-citations,.jar-conversation-starters { display:flex; flex-wrap:wrap; gap:var(--sp-8); }
-.jar-conversation-reference,.jar-conversation-topic { margin-block:var(--sp-12); padding:var(--sp-12); border:1px solid var(--w-edge); border-radius:var(--sp-8); }
 .jar-conversation blockquote { margin:var(--sp-12) 0; white-space:pre-wrap; overflow-wrap:anywhere; }
 .jar-conversation-reply { display:flex; align-items:center; flex-wrap:wrap; gap:var(--sp-8); }
 .jar-conversation-reply p { flex:1 1 140px; margin:0; }
@@ -1592,9 +1689,7 @@ body .profile-signout-button {
 .jar-source-details summary { min-height:var(--sp-44); display:flex; align-items:center; cursor:pointer; color:var(--w-muted); }
 .jar-conversation-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-4) var(--sp-12); }
 .jar-conversation .jar-conversation-actions button { margin:0; padding-inline:0; border:0; border-radius:0; font-size:var(--t-note); text-decoration:underline; text-underline-offset:var(--sp-4); }
-.jar-conversation-citations button { text-align:left; max-width:100%; font-size:var(--t-note); }
 .jar-citation-preview { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; color:var(--w-muted); margin-top:var(--sp-4); }
-.jar-conversation .jar-conversation-thought section { margin-top:var(--sp-8); }
 .jar-panel .jar-panel-vis button,.jar-panel .jar-panel-foot button,.jar-panel .jar-panel-askrow button,.jar-reflection-flow button { min-height:var(--sp-44); }
 .jar-reflection-delete { margin-top:var(--sp-12); padding-top:var(--sp-8); border-top:1px solid var(--w-edge); }
 .jar-reflection-delete-actions { display:flex; flex-wrap:wrap; gap:var(--sp-12); }

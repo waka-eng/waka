@@ -1,39 +1,57 @@
 /**
- * THE THREE VIEWS OF YOUR OWN MATERIAL, and the two corners beside them.
+ * TWO CONTROLS, TWO QUESTIONS — WHOSE, AND WHAT.
  *
- * THIS WAS A HAMBURGER AND IT IS NOT ANY MORE. Founder: "maybe the top center
- * of the page should stay top of mind with a carrot and then clicking that can
- * let the user change to your inspirations and principles... then the left
- * button we no longer need a hamburger and maybe that can be the entry point
- * into the chat."
+ * Founder: "maybe the dropdown for top of mind should be your top of mind,
+ * your agent's top of mind, and that's how you move across the agents. I feel
+ * like it's so confusing that I go to my agent and then now I have no way to
+ * get back to my top of mind without going to my agent's top of mind."
  *
- * WHY THIS IS RIGHT, AND NOT JUST SMALLER. A hamburger is a door with no
- * label: it can tell you that other places exist but never which one you are
- * standing in. These three are not unrelated places that happen to need a
- * list — they are the SAME MATERIAL AT THREE DEPTHS. What you kept, what it
- * adds up to now, and what has endured. One axis, so the honest control is a
- * switcher that names the rung you are on, not a menu that hides all of them
- * equally.
+ * THE BUG THAT SENTENCE DESCRIBES, precisely. The top-centre switcher used to
+ * list the three VIEWS of whoever you currently were — your inspirations,
+ * your top of mind, your principles — and took the owner from a hidden stance
+ * set somewhere else. So it could name which depth you were at and could
+ * never name whose material you were reading, which is why standing as the
+ * agent left no row that said "mine". The one fact you needed back was the
+ * one fact the control could not express.
  *
- * It also costs the home screen nothing. The words "Top of mind" were already
- * printed above the statement; they are the control now. A label became a
- * control, and a door disappeared.
+ * It had been six rows for exactly one commit — both owners times all three
+ * views — and the founder rejected that too, correctly: "I don't like that
+ * there are six options." Six rows was the right diagnosis and the wrong
+ * cure. It made every press answer two questions at once, so a list you read
+ * to change one thing made you re-choose the other.
  *
- * AND TALKING LIVES IN THE BOX, NOT IN A CORNER. It spent one commit as a
- * speech bubble on the left, which was a misreading: the founder had asked
- * for that corner to switch which of your things you are standing on, and
- * said talking should be reachable from the box you type in. It is — "Chat
- * about this" sits beside Keep, as a second destination for whatever you
- * just wrote. The corner went back to what it was asked for.
+ * So the two questions get two controls, and neither can answer the other's:
+ *
+ *   WHOSE — the top centre. Your top of mind, your agent's top of mind. Two
+ *   rows, one axis, and nothing else lives here. That last part is the fix
+ *   for "I didn't realise clicking on top of mind would leave me there":
+ *   when the only thing a control can do is change the owner, pressing it
+ *   can never put you on a different KIND of surface. It is also why the
+ *   stance stops being hidden — the owner is now a consequence of the row
+ *   you pressed and of the address you are at, never of a remembered
+ *   setting.
+ *
+ *   WHAT — the left corner. Your inspirations, your principles, your
+ *   conversations. These are not places; they are things you open OVER the
+ *   world and dismiss back out of (see `ViewOpen` in `lib/view-location`).
+ *   Listing them beside the owner was the original sin: it made three
+ *   overlays and one location look like four peers, so leaving an overlay
+ *   meant picking a destination.
+ *
+ * WHY THE CORNER IS THE RIGHT HOME FOR "WHAT", and survives what is coming.
+ * Founder: "I want to add the social feature back soon, so I don't know how
+ * to make the interaction good if I replace the top left button with a
+ * chat." Rooms are things you open over the world too, so they join this
+ * list rather than displacing anything; and a room is also an OWNER whose
+ * material can be read, which the top-centre switch already generalises to
+ * without changing shape. Neither control has to be renegotiated.
  *
  * WHAT IS STILL NOT HERE, AND WHY:
  *
- *   - Rooms and agents. Set aside by ruling. The walls exist and the camera
- *     still travels them; they are not places the product offers.
  *   - Your days. Set aside by ruling. `/days` still answers and every dot on
  *     it still opens the reading on that date.
  *   - Find. It is a thing you do TO your inspirations, so it is a search
- *     field on that page rather than a destination of its own.
+ *     field on that overlay rather than an entry of its own.
  */
 import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -41,75 +59,52 @@ import { useLocation, useNavigate } from "react-router-dom";
 import type { MenuItem } from "../components/Menu";
 import { t, type SupportedLocale } from "./locales";
 import { setStanding, useStanding, type Standing } from "./standing";
+import type { ViewOpen } from "./view-location";
 
 export interface PageMenu {
+  /** WHOSE. The top-centre switcher: you, or your agent. */
   items: MenuItem[];
+  /** WHAT. The left corner: the three things that open over the world. */
+  openRows: MenuItem[];
   /**
-   * ME / MY AGENT, on a page that has no world to travel.
+   * ME / MY AGENT, as the rest of the product sees it.
    *
-   * The corner is a wall switch, and on the home screen pressing it moves a
-   * camera. On the archive and the principles there is no camera — there is
-   * only whose material is being read — so the same control writes the stance
-   * directly and the page reloads under it. One control, one meaning, two
-   * mechanisms, because the two surfaces are genuinely different machines.
+   * Still written, because the companion's own form follows it and the save
+   * box needs to know who it is saving for. What changed is that it is no
+   * longer the SOURCE of whose material a surface shows — the address is.
+   * A stance that only reflects the address cannot disagree with it.
    */
   standing: Standing;
   stand: (next: Standing | null) => void;
-  /** Which of the three is being looked at, or null on a page that is none. */
+  /** Which owner is being read, for the switcher's own checkmark. */
   current: string | null;
   onSettings: () => void;
 }
 
 /**
- * The three, in the order the loop runs — and each says how it is made.
+ * THE THREE THINGS YOU OPEN, and each says what it is made of.
  *
  * Founder, on the top of mind: "show hover card to explain how this is
- * created." The other two get the same treatment because the question is the
- * same question: a person looking at a page of their own material should be
- * able to find out, without asking anyone, where it came from.
+ * created." All of them get it, because the question is the same question: a
+ * person looking at a page of their own material should be able to find out,
+ * without asking anyone, where it came from.
+ *
+ * ONE PARAGRAPH, NOT A LIST OF FACTS. Founder: "make it a single paragraph,
+ * don't split it into separate sentences." Three stacked clauses read as a
+ * specification — things you are expected to retain — when the question is
+ * only "what is this". A paragraph is read once and understood; a list is
+ * scanned and remembered, and nobody wants to remember what a tab means.
  */
-const VIEWS: ReadonlyArray<{
-  id: string;
+const OPENS: ReadonlyArray<{
+  what: ViewOpen;
   label: MenuItem["label"];
-  /** The same view, named as the agent's. */
+  /** The same thing, named as the agent's. */
   agentLabel: MenuItem["label"];
-  path: string;
-  /**
-   * ONE PARAGRAPH, NOT A LIST OF FACTS.
-   *
-   * Founder: "make it a single paragraph. Don't split it into separate
-   * sentences. Just have one to two sentences in the same paragraph that
-   * explains it intuitively."
-   *
-   * The list form was wrong for what this is. Three stacked clauses read as
-   * a specification — things you are expected to retain — when the question
-   * is only "what is this". A paragraph is read once and understood; a list
-   * is scanned and remembered, and nobody wants to remember what a tab
-   * means.
-   */
-  explain: MenuItem["label"];
+  explain?: MenuItem["label"];
 }> = [
-  {
-    id: "inspirations",
-    label: "worldMenuField",
-    agentLabel: "worldAgentField",
-    path: "/inspirations",
-    explain: "worldFieldWhatIs",
-  },
-  {
-    id: "top-of-mind",
-    label: "worldMenuTopOfMind",
-    agentLabel: "worldAgentTopOfMind",
-    path: "/",
-    explain: "worldReadingWhatIs",
-  },
-  {
-    id: "principles",
-    label: "worldPrinciplesShortcut",
-    agentLabel: "worldAgentPrinciples",
-    path: "/principles",
-    explain: "worldPrinciplesWhatIs",
-  },
+  { what: "saves", label: "worldMenuField", agentLabel: "worldAgentField", explain: "worldFieldWhatIs" },
+  { what: "principles", label: "worldPrinciplesShortcut", agentLabel: "worldAgentPrinciples", explain: "worldPrinciplesWhatIs" },
+  { what: "conversations", label: "worldOpenConversations", agentLabel: "worldAgentConversations" },
 ];
 
 /* The account comes from the caller, the way the locale does. Reaching into
@@ -119,92 +114,66 @@ const VIEWS: ReadonlyArray<{
 export function usePageMenu(
   locale: SupportedLocale,
   accountId?: string | null,
-  /** The account's agent, when it has one. Named here so the list can say
-      whose material each row leads to. */
+  /** The account's agent, when it has one. Without one there is only one
+      owner, and a switcher with a single row is a label pretending to be a
+      control — the caller renders the words instead. */
   agent?: { id: string; name: string } | null,
+  /** Opens one of the three over the world. Supplied by whoever owns the
+      world's view state, so opening an overlay goes through the same history
+      writer as everything else rather than a second one. */
+  onOpen?: (what: ViewOpen) => void,
 ): PageMenu {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const standing = useStanding(accountId);
   return useMemo(() => {
-    /**
-     * THE LIST SAYS WHOSE, ROW BY ROW.
-     *
-     * Founder: "clicking on your inspirations leads to not my agent's
-     * inspiration but mine. Maybe this dropdown should be more clear: your
-     * inspirations, your top of mind, your principles, and then your agent's
-     * inspirations, your agent's top of mind, your agent's principles."
-     *
-     * That is the fix for three separate bugs, and they had one cause: whose
-     * material you were looking at was a HIDDEN STANCE, and the rows named
-     * only the view. So the label said "Your inspirations" while standing as
-     * the agent, picking a row changed the view but not the owner, and the
-     * control that was supposed to say where you are could not say the one
-     * thing that had actually changed.
-     *
-     * Six rows, each naming both halves of the answer. The stance stops
-     * being something you set elsewhere and remember — it is a consequence
-     * of the row you pressed, which is the only way a person can be sure
-     * what they are about to read.
-     */
-    /**
-     * THREE ROWS, AND THEY FOLLOW THE CREATURE.
-     *
-     * Founder: "I don't like that there are six options — this should be
-     * dynamically changing depending on what I selected in the character."
-     *
-     * Right, and six was me answering the wrong question. The six rows were
-     * a fix for a real bug — the switcher could not say WHOSE material a row
-     * led to — but the identity already has a control, and it is the
-     * creature. Offering both owners here made the switcher answer a
-     * question the creature had already answered, and a list that repeats a
-     * choice you have made is a list you have to read twice.
-     *
-     * So the views follow the stance: three rows, named for whoever you are
-     * currently being. The creature says who; this says which.
-     */
-    /* Longest path first, so "/" does not claim "/inspirations". A wall
-       address is the agent's top of mind, which no VIEWS path matches. */
+    /* THE ADDRESS SAYS WHOSE, not the stored stance. A wall address is an
+       agent's top of mind; "/" is yours. Reading it from the URL is what
+       makes the switcher incapable of lying about where you are. */
     const onAWall = pathname.startsWith("/w/");
-    const view =
-      onAWall
-        ? "top-of-mind"
-        : [...VIEWS]
-            .sort((a, b) => b.path.length - a.path.length)
-            .find((row) => (row.path === "/" ? pathname === "/" : pathname.startsWith(row.path)))
-            ?.id ?? null;
-    const owner = onAWall
-      ? pathname.split("/")[2] ?? null
-      : standing.id;
-    const current = view ? `${owner ?? "me"}:${view}` : null;
+    const owner = onAWall ? decodeURIComponent(pathname.split("/")[2] ?? "") || null : null;
+
+    const items: MenuItem[] = [
+      {
+        id: "me",
+        label: "worldMenuTopOfMind",
+        onSelect: () => {
+          /* The stance follows the press, so the companion's form and the
+             save box's destination agree with the address immediately
+             rather than after whatever writes it next. */
+          setStanding(accountId, null);
+          navigate("/");
+        },
+        explain: t(locale, "worldReadingWhatIs"),
+      },
+    ];
+    if (agent) {
+      items.push({
+        id: `agent:${agent.id}`,
+        label: "worldAgentTopOfMind",
+        onSelect: () => {
+          setStanding(accountId, { id: agent.id, name: agent.name });
+          navigate(`/w/${encodeURIComponent(agent.id)}`);
+        },
+        explain: t(locale, "worldReadingWhatIs"),
+      });
+    }
 
     return {
-      items: VIEWS.map((row) => ({
-        id: `${standing.id ?? "me"}:${row.id}`,
-        /* Named for the owner you are standing as. The creature's own label
+      items,
+      openRows: OPENS.map((row) => ({
+        id: row.what,
+        /* Named for the owner whose world is on screen. The switcher above
            says the same thing; this says it again where a person is about to
            act on it, which is the one place repetition earns its place. */
-        label: standing.id ? row.agentLabel : row.label,
-        /**
-         * THE TOP OF MIND IS A WALL. "/" is YOUR wall specifically, not "the
-         * top of mind" in general — the agent's has its own address, and a
-         * row that always navigated to "/" answered a different question
-         * than the one asked.
-         */
-        onSelect: () =>
-          navigate(
-            row.id === "top-of-mind"
-              ? standing.id
-                ? `/w/${encodeURIComponent(standing.id)}`
-                : "/"
-              : row.path,
-          ),
-        explain: t(locale, row.explain),
+        label: owner ? row.agentLabel : row.label,
+        onSelect: () => onOpen?.(row.what),
+        ...(row.explain ? { explain: t(locale, row.explain) } : {}),
       })),
-      current,
+      current: owner ? `agent:${owner}` : "me",
       standing,
       stand: (next: Standing | null) => setStanding(accountId, next),
       onSettings: () => navigate("/profile"),
     };
-  }, [accountId, agent?.id, agent?.name, locale, navigate, pathname, standing]);
+  }, [accountId, agent?.id, agent?.name, locale, navigate, onOpen, pathname, standing]);
 }

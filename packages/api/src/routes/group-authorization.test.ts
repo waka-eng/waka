@@ -241,8 +241,11 @@ describe("an agent-bound session", () => {
     const response = await app.request(path, init);
 
     expect(response.status).toBe(403);
+    /* The message is the shared gate's, not a group-specific one: the rule
+       moved from a local `humanProfilesOnly` to `humanSessionsOnly`, which
+       also refuses a keeper key the local copy let in. */
     await expect(response.json()).resolves.toEqual({
-      error: "Groups are between people, not agent profiles",
+      error: "This is the account holder's decision and cannot be made by an agent session",
     });
     // Refused for who it is, before anyone asks whether it has a seat.
     expect(loadMembership).not.toHaveBeenCalled();
