@@ -282,6 +282,27 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               below already asks one. The three starter pills that used to
               live here sent a message on a single press; they are not coming
               back. */}
+          {/* ONE LINE WHERE THE FIRST REPLY WILL SIT, so the first real turn
+              replaces it in place and nothing jumps.
+
+              THE COMPANION BELONGS HERE AND IS NOT HERE YET. Founder, of the
+              home screen: "this is my only favorite screen of the
+              experience" — and of this one: "nothing here feels 몽글몽글."
+              The difference between those two sentences is that one of them
+              has the creature in it. A conversation with WAKA with no WAKA
+              in it is a form, which is what it reads as.
+
+              IT WAS TRIED AND TAKEN BACK OUT, and the reason is worth
+              keeping. `rasterBody` bakes the SILHOUETTE; the eyes and the
+              nubs are live passes in the frame loop, entangled with yaw,
+              pitch, blink, the machine-cell grid and the glow the nubs
+              swell with. A page-side creature therefore came out as a
+              faceless dome — worse than none — and drawing the face a
+              second time here would put two drawers of the product's most
+              important object in the tree with nothing holding them in
+              step. The work is to give `character/raster.ts` a rest pose
+              that both the loop and a page call. Until then this surface
+              says its line and no more. */}
           {!conversation?.messages.length&&!draft?.content&&!loading&&!error?<p className="chat-opening">{say('worldConversationOpening')}</p>:null}
           <ol className="chat-messages" aria-label={say('worldConversationMessages')} aria-live="polite" aria-relevant="additions">
             {(conversation?.messages??[]).map(message=><li key={message.id} data-role={message.role}><p className="chat-said">{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</p>
