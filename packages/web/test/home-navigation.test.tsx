@@ -457,3 +457,54 @@ it('keeps the dock standing while a conversation is open', async () => {
     'the bottom bar goes missing on the one surface that most needs it',
   ).toBeTruthy();
 });
+
+/**
+ * ═══ A COMMENT IS NOT COPY ═════════════════════════════════════════════
+ *
+ * Found on 2026-10-11, on every screen in the product at once: two block
+ * comments sitting in JSX CHILD position rather than inside braces, so React
+ * rendered them as text. Four hundred words of engineering prose — "the
+ * Principles pill and Find", "git holds this until they do" — printed over
+ * the world, in the product, to whoever opened it.
+ *
+ * They had been there since the commit that wrote them. Nobody saw it
+ * because the destinations painted an opaque ground over the world and the
+ * leak sat underneath; the moment a page became transparent so it could
+ * stand on the world's own floor, four hundred words came up through it.
+ * That is the worst shape a bug can have — harmless-looking for weeks, then
+ * surfaced by an unrelated change, everywhere at once.
+ *
+ * WHY THIS IS A RUNTIME CHECK AND NOT A GREP. The first attempt read the
+ * source for a comment opening a line in child position, and flagged twelve
+ * ordinary code comments that happened to follow a line ending in a brace —
+ * a gate nobody could keep green. The renderer knows the answer exactly: a
+ * comment that reached the DOM is a text node with the marker in it. No
+ * heuristic, no exemptions.
+ *
+ * It covers what this suite mounts, which is the world — both leaks were
+ * there, and it is the file where a stray comment is most likely, being by
+ * far the largest tree in the product.
+ */
+it('renders no engineering comment as text on screen', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  const leaked: string[] = [];
+  const walk = (node: Node) => {
+    if (node.nodeType === 3) {
+      const text = node.nodeValue ?? '';
+      if (text.includes('/*') || text.includes('*/')) {
+        const host = node.parentElement;
+        leaked.push(`${host?.className || host?.tagName}: ${text.trim().slice(0, 70)}`);
+      }
+      return;
+    }
+    node.childNodes.forEach(walk);
+  };
+  walk(world.container);
+  expect(
+    leaked,
+    'a block comment is in JSX child position, so React is printing it on ' +
+      'screen. Wrap it in braces — `{/* … */}`. Two of these printed four ' +
+      'hundred words over every surface in the product and went unnoticed ' +
+      'for weeks because an opaque page happened to be covering them.\n',
+  ).toEqual([]);
+});

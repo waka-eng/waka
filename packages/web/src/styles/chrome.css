@@ -1127,8 +1127,20 @@ a:focus-visible {
  * there when you press its row, which is what a bottom bar has always
  * promised. */
 
+/* `.waka-page` LEFT THIS SELECTOR, and the reason is the whole of the
+   founder's "it's a slightly different shade".
+
+   A destination does not paint a ground any more — it shows the world's,
+   which the canvas draws WITH ITS OWN GRAIN already on it. This tile then
+   went on top, so every page in the product wore the texture twice while
+   the world wore it once. Two grains at 9% is not 9%, and the difference
+   is small, uniform and exactly the kind of thing that reads as "a
+   slightly different shade" rather than as a bug.
+
+   The two that keep it have no canvas behind them: the door and the public
+   page are the only surfaces in this product that are genuinely flat, and
+   the tile is the one thing stopping them looking like a different app. */
 .login-shell::after,
-.waka-page::after,
 .waka-public::after {
   content: "";
   position: fixed;

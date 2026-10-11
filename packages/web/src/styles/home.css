@@ -262,10 +262,34 @@
  * Opacity rather than `display`, so nothing reflows underneath and the world
  * is in exactly the same place when the archive closes.
  */
-.jar--aside .jar-mouth-slot,
-.jar--aside .jar-char-say,
-.jar--aside .jar-source-status,
-.jar--aside .jar-char-bubble {
+/* ═══ WHAT STEPS ASIDE IS THE WORLD'S CONTENT, NOT A LIST OF ITS PARTS ═══
+ *
+ * This named four classes — the mouth's slot, the companion's line, the
+ * source status and the bubble — which was a list of the things anybody had
+ * noticed showing through, and it held only while the pages painted an
+ * opaque ground over everything else.
+ *
+ * They do not any more. Founder: "I want the background for now to be the
+ * same background for inspiration, chat and principles... with the floating
+ * dots and stuff. Why does it have to be different?" So a destination and
+ * the notepad show the world's real ground — and the moment they did, every
+ * part of the world NOT on that list of four came through with it: two
+ * posters and a forming line, printed across a blank page somebody was
+ * writing on.
+ *
+ * The fix is to stop listing parts. The world has exactly two layers that
+ * carry CONTENT — `.jar-atmos`, which scrolls the posters, the field and the
+ * sky, and `.jar-hq`, which holds the companion's bubble and its claim — plus
+ * the mouth, which is the home screen's own box. Those three step aside. What
+ * is left is `.jar-canvas` and `.jar-grain`: the ground, the vignette and the
+ * dust, which are the whole reason a page stands on the world instead of
+ * painting over it.
+ *
+ * Child selectors on purpose. `.waka-page` is itself a child of `.jar`, so a
+ * wholesale `.jar--aside > *` would fade the page along with the world. */
+.jar--aside > .jar-atmos,
+.jar--aside > .jar-hq,
+.jar--aside > .jar-mouth {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
@@ -4596,7 +4620,24 @@
       calc(var(--sp-20) + var(--waka-corner) + var(--sp-24) + env(safe-area-inset-bottom));
     border: 0;
     border-radius: 0;
-    background: var(--jar-atmos);
+    /* ═══ IT STANDS ON THE WORLD'S GROUND LIKE EVERY OTHER PLACE ═══════
+       Founder: "I want the background for now to be the same background
+       for inspiration, chat and principles... and when for new inspiration
+       and new chat, it's not even the same."
+
+       The four destinations stopped painting a ground two commits ago and
+       show the world's own — same navy, same vignette, same floating dots,
+       because it IS the world rather than a copy of it. This surface was
+       missed, and `var(--jar-atmos)` is exactly the trap that made the
+       destinations look wrong before them: the same TOKEN as the world, so
+       the colour matches and the vignette and the dust do not. A flat
+       value where there should be a falloff is what "not even the same"
+       looks like.
+
+       The companion steps aside for it the way it does for a destination —
+       `asideRef` in `Home.tsx` counts `compose` now, so the creature is
+       not drawn through a blank page somebody is writing on. */
+    background: transparent;
     transform: none;
   }
 
