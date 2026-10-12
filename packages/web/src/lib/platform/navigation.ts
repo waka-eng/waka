@@ -19,7 +19,15 @@ export function nativeLinkDestination(raw: string, appId: string, webOrigin: str
     const path = url.pathname + url.search + url.hash;
     if (url.pathname === '/login') return path;
     if (!safeInAppPath(path)) return null;
-    if (['/profile', '/onboarding'].includes(url.pathname) || /^\/@[a-z0-9_-]{3,24}$/.test(url.pathname) ||
+    /* `/profile` LEFT THIS LIST (2026-10-11), the same way `/review/...` did
+       the day before, and for the same reason: the route is gone. The
+       settings page became a panel in the corner, so `/profile` is no longer
+       declared in `main.tsx`. It did NOT start 404ing — it falls through to
+       `<Route path="/:handle">`, which fails to resolve "profile" as a handle
+       and redirects to "/". A deep link that opens the app on the wrong
+       screen is worse than one the app refuses, because the person believes
+       they arrived. */
+    if (url.pathname === '/onboarding' || /^\/@[a-z0-9_-]{3,24}$/.test(url.pathname) ||
       readViewLocation(url.pathname, url.search)) return path;
   } catch { /* A foreign or malformed URL never controls app navigation. */ }
   return null;

@@ -60,7 +60,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import type { MenuItem } from "../components/Menu";
 import type { SupportedLocale } from "./locales";
 import { setStanding, useStanding, type Standing } from "./standing";
-import type { ViewLocation, ViewOpen } from "./view-location";
+import { readViewLocation, type ViewLocation, type ViewOpen } from "./view-location";
 
 /**
  * ═══ THE SURFACES THAT HAVE NO OWNER, SO NOTHING MAY BE LIT AS THEIRS ════
@@ -191,12 +191,60 @@ export function usePageMenu(
   const { pathname, search } = useLocation();
   const standing = useStanding(accountId);
   return useMemo(() => {
-    /* THE ADDRESS SAYS WHOSE, not the stored stance. A wall address is an
-       agent's top of mind; "/" is yours. Reading it from the URL is what
-       makes the switcher incapable of lying about where you are. */
-    const onAWall = pathname.startsWith("/w/");
-    const open = new URLSearchParams(search).get("open");
-    const owner = onAWall ? decodeURIComponent(pathname.split("/")[2] ?? "") || null : null;
+    /**
+     * THE ADDRESS SAYS WHOSE, not the stored stance. A wall address is an
+     * agent's top of mind; "/" is yours. Reading it from the URL is what
+     * makes the switcher incapable of lying about where you are.
+     *
+     * ── AND IT IS READ BY THE READER, NOT BY HAND ─────────────────────────
+     *
+     * These three lines used to be their own URL parser:
+     *
+     *     const onAWall = pathname.startsWith("/w/");
+     *     const open = new URLSearchParams(search).get("open");
+     *     const owner = onAWall ? decodeURIComponent(pathname.split("/")[2] ?? "") || null : null;
+     *
+     * — a second address reader in `lib/`, beside `readViewLocation`, which
+     * exists for exactly this and is what the rest of the product reads the
+     * address through (`use-view-navigation.ts` wraps it; `Home` holds the
+     * result as `viewNavigation.view`). Two parsers for one address, both in
+     * this directory, both consumed by the same component.
+     *
+     * WHAT THE HAND-WRITTEN ONE GOT WRONG, which is the reason this is a
+     * defect and not a tidy-up:
+     *
+     *   IT VALIDATED NOTHING. `readViewLocation` returns `null` for a `/w/`
+     *   address it cannot parse — an over-long or malformed wall id, four
+     *   segments where there may be three — and the switcher's own rule is
+     *   that the labels follow the ADDRESS. For an unparseable one the hand
+     *   parser still produced a non-null `owner`, so all four rows read
+     *   "Your agent's …" on a page standing nowhere.
+     *
+     *   IT READ `open` ON ADDRESSES THAT HAVE NO `open`. `/chat/:id` and
+     *   `/principles/:id` return early from the real parser with
+     *   `open: null`, because the parameter means nothing there; the hand
+     *   parser read the query string on any path at all.
+     *
+     *   IT TOOK THE RAW STRING. `view.open` is narrowed to `ViewOpen`, so a
+     *   hand-typed `?open=anything` is already gone by the time the rung is
+     *   chosen below, rather than being filtered by a second list there.
+     *
+     * THE REJECTED ALTERNATIVE was to take `view: ViewLocation | null` as a
+     * parameter — both callers hold one already (`Home.tsx` as
+     * `viewNavigation.view`, `Days.tsx` adjacent) — which is what the
+     * argument above this function says about the account and the locale.
+     * It is still the better shape and it is a change to both call sites;
+     * the reason it is not taken here is narrower than taste. That argument
+     * is about CONTEXT: a hook every page uses must not reach into a
+     * provider its callers merely happen to have, or it becomes unmountable
+     * in any test that does not mock one. `readViewLocation` is a pure
+     * function of two strings this hook already holds from `useLocation`,
+     * so calling it costs nothing and reaches into nothing. What mattered
+     * was that there stop being two parsers.
+     */
+    const view = readViewLocation(pathname, search);
+    const open = view?.open ?? null;
+    const owner = view?.wallId ?? null;
 
     const items: MenuItem[] = VIEWS.map((row) => ({
       id: row.id,
@@ -215,7 +263,7 @@ export function usePageMenu(
     return {
       items,
       /**
-       * WHICH RUNG IS BEING READ — AND ONLY THE THREE COUNT.
+       * WHICH RUNG IS BEING READ — AND ONLY A RUNG COUNTS.
        *
        * The world is your top of mind when nothing is held up over it, and
        * the overlay's own parameter says otherwise. But `open` has a fourth
@@ -227,10 +275,27 @@ export function usePageMenu(
        *
        * Conversations are held up over your top of mind without being a depth
        * of your material, so the honest answer while one is open is the rung
-       * underneath it — which is what this now says.
+       * underneath it — which is what this says.
+       *
+       * ── ASKED OF `VIEWS`, BECAUSE THE LIST HAS ONE HOME ──────────────────
+       *
+       * This read `open === "saves" || open === "claims" || open ===
+       * "principles"`: the rungs, written out a second time, thirty-five
+       * lines below the array that declares them. `claims` joined `VIEWS` on
+       * 2026-10-11 and this literal had to be hand-edited to match — the
+       * N+1th call site `keep-ready.ts`'s header warns about, in a file whose
+       * own comment records what happened the last time these two drifted.
+       * A fifth rung would have reproduced that bug exactly.
+       *
+       * AND IT ANSWERS WITH THE ROW'S OWN `id` RATHER THAN WITH `open`. The
+       * two coincide for three of the four rows and CANNOT for the fourth:
+       * the top of mind's `what` is `null`, because nothing is held up over
+       * the world, while its id is `"top-of-mind"`. Taking the id is what
+       * makes the fallback and the hit the same expression instead of a
+       * string repeated in both branches.
        */
-      current:
-        open === "saves" || open === "claims" || open === "principles" ? open : "top-of-mind",
+      current: (VIEWS.find((row) => row.what === open) ?? VIEWS.find((row) => row.what === null))?.id
+        ?? "top-of-mind",
       standing,
       stand: (next: Standing | null) => setStanding(accountId, next),
     };

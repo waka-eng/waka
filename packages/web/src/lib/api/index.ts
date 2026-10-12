@@ -8,7 +8,6 @@
  *   ------------------------     ------------------------
  *   auth.ts                      auth.ts          /api/auth
  *   profiles.ts                  profiles.ts      /api/profiles
- *   sessions.ts                  sessions.ts      /api/sessions
  *   inspirations.ts              inspirations.ts  /api/inspirations   (layer 1)
  *   attachments.ts               attachments.ts   /api/attachments
  *   signals.ts                   signals.ts       /api/signals        (layer 2)
@@ -16,12 +15,22 @@
  *   principles.ts                principles.ts    /api/principles     (layer 4)
  *   top-of-mind.ts               top-of-mind.ts   /api/top-of-mind    (layer 3)
  *   groups.ts                    groups.ts        /api/groups
- *   keeper-keys.ts               keeper-keys.ts   /api/keeper-keys
- *   agent-grants.ts              agent-grants.ts  /api/agent-grants
- *   consultations.ts             consultations.ts /api/consultations
  *   feedback.ts                  feedback.ts      /api/feedback
  *   public-profiles.ts           public-profiles.ts  /api/public/profiles
  *   http.ts                      —  the fetch wrapper they all share
+ *
+ * FOUR ROWS CAME OUT OF THAT TABLE and are listed here rather than silently
+ * dropped, because the table is the one place the two sides of the wire are
+ * written down together and a reader needs to know these were removed, not
+ * forgotten: `sessions.ts`, `keeper-keys.ts`, `agent-grants.ts` and
+ * `consultations.ts`. Their surfaces went with the settings cut — see
+ * `SettingsPanel`'s header for which five sections did not survive it — and
+ * the route files they named are gone too.
+ *
+ * A TABLE THAT NAMES A DELETED FILE IS WORSE THAN NO TABLE, which is why
+ * this is a fix and not a tidy-up: the rows survived the deletion of the
+ * modules they pointed at, so the one artefact that claims to map client to
+ * route was lying about four of them.
  *
  * The vocabulary throughout is the vocabulary of `docs/data-model.md`, one
  * name per concept: an **account** logs in, a **profile** owns memory, and a
@@ -68,9 +77,3 @@ export * from "./agents";
 export * from "./feedback";
 export * from "./public-profiles";
 export * from "./weather";
-/* `reading` AND `signal-duplicates` CAME BACK (2026-10-11), with the two
-   machinery doors they answer. Both were deleted as clients nothing called
-   once the settings page went; both routes stood the whole time. They are
-   reached from the "i" in the top corner now — see `HowItWorksPanel`. */
-export * from "./reading";
-export * from "./signal-duplicates";

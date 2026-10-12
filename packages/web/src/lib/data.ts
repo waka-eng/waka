@@ -28,8 +28,10 @@
  * What the canon took away, and what the world must therefore stop drawing:
  *
  *   - An inspiration has no score. There is no `resonanceScore`, no five-axis
- *     `signalScores`. Aliveness is computed from time and attention alone
- *     (see `aliveness`), which was always the honest input.
+ *     `signalScores`. Aliveness is computed from time and attention alone,
+ *     which was always the honest input — and it is computed in
+ *     `lib/aliveness.ts` and spent by `space/inspiration/field.ts`, never
+ *     here; see the tombstone below for why this file does not own it.
  *   - An inspiration is never shared as itself into another account beyond
  *     the rooms its author's account belongs to, and only when marked public;
  *     an orb in the field has no out-loud/held state to render any more.
@@ -525,28 +527,42 @@ export async function loadSignal(id: string,signal?:AbortSignal): Promise<Signal
   return { ...toSignal(row), evidence: (row.evidence ?? []).map((e) => toEvidence(row.id, e)), reviewEvidence: row.reviewEvidence ?? [] };
 }
 
-/* ---------------------------------------------------------------- aliveness */
-
-/**
- * HOW ALIVE AN INSPIRATION IS, 0..1 — the only channel the world spends on it.
+/* ------------------------------------------------- aliveness: NOT HERE, and
+ *                                                    why it must not come back
  *
- * Unchanged in shape from the founder's formula; changed in inputs only where
- * the canon removed one. The half-life is a week on the later of captured and
- * updated, attention adds on top of that decay, and the two flat terms are
- * unmultiplied so a memory with words attached never reads as fully dark.
+ * THERE WAS AN `aliveness(c, now)` IN THIS FILE AND IT WAS A SECOND SCORING
+ * MODEL. It carried five re-typed literals — 7, 0.25, 2, 0.15, 0.1 — which
+ * are `FIELD_DECAY_HALF_LIFE_DAYS`, `FIELD_REFLECTION_WEIGHT`,
+ * `FIELD_REFLECTION_SATURATION`, `FIELD_FLOOR_CITED` and
+ * `FIELD_FLOOR_IN_GROUP` spelled out again, plus `86_400_000` where
+ * `lib/num.ts` exports `DAY_MS`. Nothing imported it. The light every person
+ * actually sees comes from `colorBall` in `space/inspiration/field.ts`, which
+ * reads those constants from `lib/aliveness.ts`.
  *
- * `resonanceScore` is gone from the canon and is NOT reintroduced by guessing:
- * a machine score the person never saw was never a good input to how alive
- * their own memory looks.
+ * `lib/aliveness.ts` was written to end precisely this, in its own words:
+ * "What is not acceptable is the previous state: the same idea carrying two
+ * different numbers, in two places, with nothing connecting them." This file
+ * WAS that previous state, still standing — under the product's most
+ * load-bearing name, in the module every page imports, with a doc comment
+ * presenting itself as canonical. The two copies had already drifted:
+ * `lib/aliveness.ts` grades a memory's carry and lets attention survive the
+ * decay it is supposed to resist; the copy here multiplied attention BY the
+ * decay and knew nothing about carry.
+ *
+ * THE REJECTED ALTERNATIVE was to keep the name and have it call the real
+ * thing — import the constants, or re-export `carryOf`. That buys a second
+ * entry point into one formula, which is how this started: `data.ts` is the
+ * fetch-and-shape layer, and brightness is a render concern that belongs with
+ * the renderer that spends it. Anyone needing aliveness outside the field
+ * should import from `lib/aliveness.ts` and say so there, where the argument
+ * for every number is written down and `generation-doc.test.ts` holds the
+ * document to the code.
+ *
+ * It survived audits because `reachable.test.ts` matched symbol names against
+ * raw file text, and `field.ts`'s `from "../../lib/aliveness"` made the word
+ * `aliveness` look like a caller. That gate now blanks comments and module
+ * paths; see its `PRIVATE_ENOUGH` note.
  */
-export function aliveness(c: Inspiration, now: number): number {
-  const days = Math.max(0, (now - Math.max(c.updatedMs, c.capturedMs)) / 86_400_000);
-  const decay = Math.pow(0.5, days / 7);
-  const attention = 0.25 * Math.min(c.reflectionCount, 2) * decay;
-  const hasWords = c.reflectionCount > 0 ? 0.15 : 0;
-  const hasAttachment = c.attachments.length > 0 ? 0.1 : 0;
-  return Math.max(0, Math.min(1, decay + attention + hasWords + hasAttachment));
-}
 
 /**
  * ONE PIECE OF EVIDENCE, AS THE WORLD SHOWS IT — with who it came from.
