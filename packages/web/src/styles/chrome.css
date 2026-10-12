@@ -1804,6 +1804,18 @@ button.jar-tile-face,
   .jar-personal-shortcuts .jar-capture-shortcut { grid-row:2; grid-column:1; }
 }
 
-}
 
-.jar-personal-shortcuts--sky { bottom:calc(128px + env(safe-area-inset-bottom)); }
+  /* ═══ MOVED INSIDE THE LAYER (2026-10-12) ══════════════════════════════
+     This rule arrived from `dev` in "Open group members and restore
+     intuitive vertical navigation" and landed AFTER this file's closing
+     brace, which is the quietest way a cascade bug gets made: our side
+     wrapped the sheet in `@layer chrome`, dev appended at the end, and git
+     merged both without a conflict. An unlayered rule beats every layered
+     one at any specificity, so this one `bottom` was silently outranking
+     all of `home.css` and `chat.css`.
+
+     Nothing failed. `one-cascade.test.ts` caught it, which is the whole
+     reason that gate counts rules per sheet rather than trusting that a
+     file with `@layer` at the top is layered all the way down. */
+  .jar-personal-shortcuts--sky { bottom: calc(128px + env(safe-area-inset-bottom)); }
+}

@@ -108,7 +108,29 @@ const STYLES = resolve(HERE, "../src/styles");
  * left with four of slack in it, which is what the companion case below is
  * for and what it caught.
  */
-const UNLAYERED_CEILING = 341;
+/* RAISED 341 -> 349 ON THE `dev` MERGE (2026-10-12), which is the one
+   direction this number is not supposed to move, so the reason is written
+   down rather than the number quietly edited.
+
+   341 was measured on this branch before `origin/dev` was merged in. The
+   merge brought eight rules that had been written on `dev` since 2026-10-08
+   and they land in `claims.css`, which is the sheet that is entirely
+   unlayered — so there was nowhere else for them to go. They are not new
+   unlayered rules in the sense this gate exists to catch; they are old
+   rules arriving for the first time.
+
+   WHAT THE GATE DID CATCH IN THE SAME MERGE, and the reason it earns its
+   keep: a ninth rule landed OUTSIDE `chrome.css`'s `@layer chrome` block.
+   Our side wrapped that sheet; `dev` appended to the end of it; git merged
+   both without a conflict and the rule ended up past the closing brace,
+   silently outranking every layered sheet. Nothing else would have seen
+   it. It is inside the block now, which is why this is 349 and not 350.
+
+   THE DIRECTION STILL ONLY GOES DOWN from here. The way to make this
+   number fall properly is to give `claims.css` a layer — 322 rules that
+   currently beat every other sheet — which is deliberately not done
+   because it restyles surfaces nobody can verify by reading. */
+const UNLAYERED_CEILING = 349;
 
 /** Read the rules, not the prose — the same blanking the other gates use. */
 const commentsBlanked = (css: string): string =>
