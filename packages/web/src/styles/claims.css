@@ -361,6 +361,25 @@
   gap: var(--sp-2);
 }
 
+/* ═══ A GLYPH THE WEIGHT OF THE WORDS BESIDE IT ═══════════════════════
+   Founder, with the mic and the photo standing between "Inspirations" and
+   "Chats": "these two icons feel too big compared to the other text."
+
+   Measured: the labels are `--t-meta`, 12px, and `HomeActionIcon` draws at a
+   flat 24 — exactly double, in a row where the two kinds of thing are
+   supposed to read as peers. An icon matches text at roughly 1.4x its font
+   size, which is where a lowercase glyph's optical height lands beside an
+   ascender; at 12px that is 16.8, and the 1.7/24 stroke scales to 1.2px,
+   which is a 12px stem to within a tenth.
+
+   IN `em`, NOT PIXELS, so the pair cannot drift apart again: the tool's own
+   font-size is `--t-meta`, the same token the labels take, so retuning the
+   dock's type carries the glyphs with it. */
+.waka-dock-tool svg {
+  width: 1.4em;
+  height: 1.4em;
+}
+
 .waka-dock-tool {
   display: grid;
   place-items: center;
@@ -385,6 +404,60 @@
   width: auto;
   padding: 0 var(--sp-12);
   font-variant-numeric: tabular-nums;
+}
+
+/* ═══ THE ONE FILLED CONTROL IN THE BAR ═══════════════════════════════════
+   Founder: "the save button is very hard to see."
+
+   It was an outline on a dark page, which is the register everything else in
+   this product wears — so the one control that ENDS something looked like
+   the controls that do not. Filled, it is the only solid shape in the bar
+   and reads at a glance, which is exactly what the complaint asked for.
+
+   THE SAME TREATMENT THE CHAT'S SEND ALREADY HAS, and that is the point
+   rather than a coincidence: a product with one primary action per surface
+   should draw it the same way on every surface. `.chat-send` is `--ink` on
+   `--bg`; so is this.
+
+   IT SITS BESIDE ITS ALTERNATIVE, not alone. "Save as draft" stays an
+   outline-free word, because a draft is what happens anyway if you leave —
+   naming it is honesty about an existing exit, not a second thing to
+   choose. Two filled pills would make it a decision. */
+.waka-dock-tool--keep {
+  width: auto;
+  padding: 0 var(--sp-16);
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.waka-dock-tool--keep:disabled {
+  background: none;
+  color: var(--muted);
+}
+
+/* ═══ WHERE A PASSING SENTENCE GOES ═══════════════════════════════════════
+   Founder: "states should show and disappear in the bottom bar only."
+
+   See the long note at `waka-dock-making` in `Home.tsx` for why the bar is
+   the right home for them. What this rule has to get right is that the bar
+   must not JUMP when one arrives and leaves — the dock is centred on the
+   viewport, so a word appearing inside it moves every label in the row.
+
+   It cannot be helped by `position: absolute` without losing the bar's own
+   background behind the text, so it is bounded instead: the line is capped,
+   ellipsised, and set at the bar's own fine step, which keeps the worst case
+   to a few characters of shift rather than a whole sentence of it. A state
+   worth more words than this is an error with an action, and those stay in
+   the page as controls — see the note in `InspirationComposer`. */
+.waka-dock-state {
+  max-width: 14rem;
+  overflow: hidden;
+  padding-inline: var(--sp-8);
+  color: var(--muted);
+  font-size: var(--t-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .waka-dock-tool:disabled {
@@ -1311,13 +1384,55 @@
      the body's width and the creature read as a pebble with a rim. */
   width: calc(var(--waka-companion-size) * 4);
   height: calc(var(--waka-companion-size) * 4);
+  /* ═══ THE LAMP TAKES NO ROOM ════════════════════════════════════════
+     The box has to be four times the body or the falloff is clipped (see
+     above). It must not also be four times the body to its NEIGHBOURS: on
+     the loading screen the creature is 190px and this wrapper was 760,
+     so the word underneath was pushed a third of a screen down and off the
+     bottom of the viewport — and the pair, centred as a column, put the
+     creature visibly above the middle. Founder, on exactly that symptom
+     elsewhere: "I wanted the character to be at the very very center."
+
+     Pulled back by `(4 - 1) / 2` of the size on every side, the element
+     occupies exactly the body's own footprint while still painting its
+     light out to the full radius. Light is not an object; it should no
+     more push a sentence around than it should take a press, which the
+     `pointer-events` below already says in the other direction. */
+  margin: calc(var(--waka-companion-size) * -1.5);
   /* It is light, not an object, so it never takes a press and never pushes
      the thing beside it around. */
   pointer-events: none;
+  /* ═══ WITH A FALLBACK, BECAUSE ONE CALLER IS OUTSIDE `.jar` ══════════
+     `--jar-live` is declared on `.jar`, and `LoadingHome` renders before
+     that element exists — so here the var resolves to nothing, the
+     `color-mix` is invalid, and the whole `background` declaration is
+     dropped. Not a dimmer glow: NO glow, silently, on the first screen
+     anybody sees.
+
+     This is the failure `LoadingHome`'s own header has warned about since
+     2026-08-27 ("the drawer once portalled to `document.body` and lost the
+     whole palette the same way"), met again the moment that screen started
+     using the real companion instead of its hand-drawn likeness.
+
+     THE FALLBACK IS A TOKEN, NOT A LITERAL, and the first attempt at this
+     got it wrong: writing `#fff2dc` twice is the exact drift
+     `type-scale.test.ts` fails the build over — "a colour was written raw
+     when a token already holds that exact value; change the token and this
+     rule will not follow". The gate caught it, and it was right to: a
+     fallback that goes stale when the lamp is retuned is worse than no
+     fallback, because it only shows up on the one screen nobody renders
+     twice.
+
+     `--moon-warm` is declared on `:root` and holds `--jar-live`'s value by
+     construction — the two ARE one colour, written down in `chrome.css`'s
+     ink note ("the one warm thing on screen — the creature's bubble,
+     `--moon-warm`"). So this reads: the world's light, or, where the world
+     has not been built yet, the same light from the vocabulary that is
+     always there. */
   background: radial-gradient(
     circle at 50% 50%,
-    color-mix(in srgb, var(--jar-live) 22%, transparent) 0%,
-    color-mix(in srgb, var(--jar-live) 9%, transparent) 15%,
+    color-mix(in srgb, var(--jar-live, var(--moon-warm)) 22%, transparent) 0%,
+    color-mix(in srgb, var(--jar-live, var(--moon-warm)) 9%, transparent) 15%,
     transparent 55%
   );
 }
@@ -1524,11 +1639,17 @@
 /* THE WAY BACK IS THE NAME. Quiet at rest and inked on approach, like every
    other secondary act — it is a return, not a destination, and a return that
    shouts is a page that does not expect you to stay. */
+/* A CHEVRON ALONE NEEDS A TARGET THE WORDS USED TO GIVE IT. It was an
+   inline row — chevron, gap, destination — so the text supplied the width.
+   With the name gone to `aria-label` (see the note in `SavesOverlay`) an
+   11px glyph would be an 11px press. Square at the product's corner size,
+   and the glyph centred in it. */
 .waka-over-back {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-8);
-  min-height: 44px;
+  display: inline-grid;
+  place-items: center;
+  width: var(--waka-corner);
+  min-height: var(--waka-corner);
+  margin-inline-start: calc(var(--sp-12) * -1);
   padding: 0;
   border: 0;
   background: transparent;
@@ -1593,15 +1714,26 @@
   flex: 0 0 auto;
   min-width: 0;
   min-height: 44px;
-  /* A RULE, NOT A BOX. The archive has no boxes left in it — the saves are
-     text on a hairline and the sheet around them is gone — so a bordered
-     input was the last rectangle on the surface, and it read as the one
-     thing somebody had forgotten to finish. An underline is what a search
-     field is: a place to write, on a line. */
-  padding: 0 0 var(--sp-8);
-  border: 0;
-  border-bottom: 1px solid var(--jar-panel-edge);
-  border-radius: 0;
+  /* ═══ A BOX, BECAUSE THE LIST BELOW IT IS ALSO LINES ════════════════
+     Founder, with the underlined field directly above the archive: "make
+     it a more traditional boxed search bar, because right now it has too
+     similar of a visual with the inspirations below as the list."
+
+     That is the argument against the old note here, and it is better than
+     the old note. "A rule, not a box" was reasoned from "the archive has
+     no boxes left in it" — true, and the thing it missed is that the
+     archive is a COLUMN OF HAIRLINES. A field whose entire appearance is
+     one hairline, sitting at the top of a stack of rows separated by
+     hairlines, does not read as a field at all; it reads as the first row.
+     Distinctness is what a control on a page of content needs, and here
+     sameness was costing exactly that.
+
+     QUIETER THAN THE DOCK, same as the chat's box — an edge and a corner,
+     no fill and no shadow, so the one floating object on screen stays the
+     only one. */
+  padding: 0 var(--sp-14);
+  border: 1px solid var(--field-edge);
+  border-radius: 12px;
   background: transparent;
   color: var(--ink);
   font-family: var(--waka-face);
@@ -1610,16 +1742,11 @@
 
 .waka-over-search:focus-visible {
   outline: none;
-  border-bottom-color: color-mix(in srgb, var(--ink) 55%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 80%, transparent);
 }
 
 .waka-over-search::placeholder {
   color: var(--muted);
-}
-
-.waka-over-search:focus-visible {
-  border-color: var(--ink);
-  outline: none;
 }
 
 .waka-over-status {
@@ -4002,6 +4129,10 @@
   transition: opacity 0.9s ease-out;
 }
 
+/* WHILE IT IS ANSWERING YOU. Founder: "clicking on the character should
+   just make it shine and bright." That half of the old press behaviour is
+   the half that was liked, so the light stayed when the sentence it used to
+   raise went; see `LIT_MS` in `Home.tsx` for why it outlasts the press. */
 .jar-char-press--lit {
   opacity: 1;
   transition: opacity 0.14s ease-out;
@@ -4015,52 +4146,18 @@
 }
 
 /**
- * THE OFFER THE PRESS RAISES — a sentence you press, not a button in a box.
+ * ═══ THE OFFER'S RULES ARE GONE WITH THE OFFER ═══════════════════════════
  *
- * Founder: "change the speech bubble to 'feeling inspired? save inspiration'."
- * It is the creature SAYING something, so it is set as speech and underlined
- * the way `jar-char-bubble-go` is — a pill inside a speech bubble is a dialog
- * with an OK in it, which is the note already written one rule below.
+ * `.jar-char-offer` styled one sentence — "Feeling inspired? Save it." —
+ * which the founder has now struck four times, the last with a screenshot
+ * and the general form of the rule: "an agent should never prompt user to
+ * save something."
+ *
+ * KEPT FROM IT, because it outlived its sentence: a reply to a press the
+ * person just made does not need an underline saying it can be pressed, and
+ * whatever replaces it still has to carry its own `:focus-visible`, since
+ * `global.css` clears the default outline everywhere.
  */
-.jar-char-offer {
-  appearance: none;
-  -webkit-appearance: none;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  font-size: var(--t-ui);
-  line-height: 1.45;
-  letter-spacing: normal;
-  text-transform: none;
-  text-align: center;
-  /* NO UNDERLINE. Founder: "the feeling inspired save it should not have an
-     underline."
-
-     WHAT IS GIVEN UP, because this file's own rule is that underline is the
-     page's single interactivity signal: the words no longer carry a mark
-     saying they can be pressed. What they have instead is stronger and was
-     already true — the bubble appeared BECAUSE the person just pressed the
-     creature, so it is an answer to their own gesture rather than a control
-     they have to discover, and it is the only thing in the bubble. A rule
-     drawn under a five-word reply to a press you just made is explaining a
-     thing the press already explained.
-
-     THE KEYBOARD STILL NEEDS ONE, AND THE UNDERLINE WAS IT. `global.css`
-     sets `:focus-visible { outline: none }` and makes every control supply
-     its own, so deleting the rule below would have left this with no focus
-     state at all — which `e2e:by-keyboard` fails the build over, correctly.
-     A ring is not an underline: it appears only when reached by key, so it
-     is absent from the thing the founder was looking at. */
-  cursor: pointer;
-}
-
-.jar-char-offer:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 3px;
-  border-radius: var(--waka-r-hand-sm);
-}
 
 .jar-char-bubble {
   position: absolute;
@@ -4127,7 +4224,13 @@
    * the comfort. Expressed as a mix of the two palette tokens rather than a
    * hex, so it tracks the ramp if the ground or the light is ever retuned.
    */
-  background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep));
+  /* ONE TOKEN, TWO SURFACES. The tail below repeated this mix as a second
+     literal, and its own comment names what that costs: "left at flat
+     `--jar-live` while the body dimmed, it would have been a bright notch
+     exactly where the two meet". A second weight of bubble now exists, so
+     the drift that warning describes was one edit away from happening. */
+  --bubble-fill: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep));
+  background: var(--bubble-fill);
   color: var(--waka-on-light);
   text-align: center;
   /* The creature's own falloff: a tight ring, then two doublings out into
@@ -4142,6 +4245,39 @@
     0 0 76px color-mix(in srgb, var(--jar-live) 5%, transparent);
   /* The film sits inside it (see ::before), which has to clip to the shape. */
   isolation: isolate;
+}
+
+/**
+ * ═══ THE SECOND WEIGHT: EVERYTHING THAT IS NOT THE TOP OF MIND ═══════════
+ *
+ * Founder, holding a reading beside an observation: "the speech bubble that
+ * shows the top of mind versus everything else should have slightly
+ * different visual. Let's keep the current white one for the top of mind,
+ * but everything else let's lower the opacity of this speech bubble a little
+ * bit so it's differentiated."
+ *
+ * NOT `opacity`, THOUGH THAT IS THE WORD. Fading the element fades the dark
+ * ink on it toward the dark ground behind, so the one surface in the product
+ * with ink ON it is the one surface where the obvious reading of that
+ * instruction costs legibility. The fill moves instead and the ink stays
+ * where it is, which is the same effect to the eye and none of the cost.
+ *
+ * MEASURED, like the fill above it. The reading sits at 84% toward the
+ * light — 12.25:1 against the ground, matched to the creature's own body.
+ * This sits at 70%: 8.57:1 against the ground, so it is plainly a step back
+ * rather than a different material, and the ink on it still reads at 8.25:1,
+ * which is above AAA for this size. "A little bit", measured.
+ *
+ * THE HALO GOES WITH THE FILL. A full corona around a quieter panel puts the
+ * brightness back at its edge, which is where the eye lands first — the same
+ * note the fill above already carries.
+ */
+.jar-char-bubble--aside .jar-char-bubble-body {
+  --bubble-fill: color-mix(in srgb, var(--jar-live) 70%, var(--jar-deep));
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--jar-live) 12%, transparent),
+    0 0 34px color-mix(in srgb, var(--jar-live) 6%, transparent),
+    0 0 76px color-mix(in srgb, var(--jar-live) 3%, transparent);
 }
 
 /**
@@ -4242,7 +4378,7 @@
      the body dimmed, it would have been a bright notch exactly where the two
      meet, which is the one join a person's eye follows down to the
      creature. */
-  background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep));
+  background: var(--bubble-fill);
 }
 
 .jar-char-bubble-body p {

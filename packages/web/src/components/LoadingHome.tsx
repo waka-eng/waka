@@ -7,24 +7,50 @@
  * instead". Loading used to be a white page with a word on it — the product
  * changing clothes twice on the way in. Now the way in looks like arriving:
  * the ground is already the ground, the companion is already home, and the
- * one line under it says the only fact there is. When the world wakes, the
- * real being stands where this one stood.
+ * one line under it says the only fact there is.
  *
- * Inline styles, deliberately and only here: this face renders BEFORE `.jar`
- * exists, outside the subtree that defines every `--jar-*` token (the drawer
- * once portalled to `document.body` and lost the whole palette the same way),
- * so `var()` would resolve to nothing. The values mirror the world's: the
- * ground is `--jar-atmos`'s value, the glow is the warm note's, the body is
- * the being's ivory as the bake renders it.
+ * ═══ AND IT IS THE REAL COMPANION NOW, NOT A LIKENESS ═══════════════════
+ *
+ * Founder, with this screen beside the world: "current loading page is so
+ * ugly. Why can't it not be the same character that we see here in the
+ * loading screen as well?"
+ *
+ * WHAT WAS HERE: six absolutely-positioned divs with their own geometry —
+ * a dome built from a four-value border-radius, two nubs at `bottom: 26`,
+ * eyes at `33%`, and five hex literals. A hand-drawn SECOND OPINION about
+ * the anatomy, which is precisely the class of thing `rest-pose.test.ts`
+ * exists to prevent between the loop and `restPose`, written before that
+ * function existed and never revisited after it did. It did not match, and
+ * the mismatch is the complaint: the nubs sat low and overlapped the chin,
+ * the dome was an ellipse rather than the baked body, and the whole face was
+ * smooth where the real one carries the emulsion.
+ *
+ * SO IT DRAWS THE SAME POSE THE PAGES DRAW. `Companion` is `restPose` with
+ * every behaviour at zero, built from the anatomy constants the frame loop
+ * imports, so there is now exactly one creature in this product and three
+ * places that ask for it.
+ *
+ * THE COST, STATED. `Companion` pulls the raster and the body bake into the
+ * entry chunk, where before this screen cost six divs. It is the right
+ * trade: the alternative is a drawing that is wrong, and wrong on the first
+ * screen anybody sees. The bake is a few hundred lines of arithmetic over a
+ * canvas the size of the creature, which is not what anyone is waiting for.
+ *
+ * WHAT IS STILL INLINE, AND WHY. The ground and the word. This renders
+ * BEFORE `.jar` exists, outside the subtree that defines every `--jar-*`
+ * token, so `var()` would resolve to nothing — the drawer once portalled to
+ * `document.body` and lost the whole palette the same way. `Companion` reads
+ * the ramp through `getComputedStyle` WITH FALLBACKS that match `home.css`,
+ * so it is correct here by design rather than by luck.
  */
 
+import { Companion } from "./Companion";
 import { readStoredLocale, t } from "../lib/locales";
 
-const ground = "#06080d";
-const ivoryHigh = "#ece7db";
-const ivoryLow = "#d9d3c5";
-const nub = "#d9d4c8";
-const eye = "#141412";
+/* `--jar-atmos`'s own value. One night across the world and the pages —
+   founder: "I like the darker shade shown in Now" — and this is the first
+   thing anybody sees of it, so it cannot be the old lighter literal. */
+const ground = "#05080f";
 
 export function LoadingHome(): JSX.Element {
   return (
@@ -42,79 +68,9 @@ export function LoadingHome(): JSX.Element {
         justifyContent: "center",
       }}
     >
-      <div style={{ position: "relative", width: 240, height: 190 }}>
-        {/* the same warm halo the bake gives the resting being */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            inset: -110,
-            background:
-              "radial-gradient(circle at 50% 46%, rgba(255,242,220,0.14), rgba(255,242,220,0) 62%)",
-          }}
-        />
-        {/* the hands, tucked at the cheeks the way the bake rests them */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            left: -4,
-            bottom: 26,
-            width: 46,
-            height: 46,
-            borderRadius: "50%",
-            background: nub,
-          }}
-        />
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            right: -4,
-            bottom: 26,
-            width: 46,
-            height: 46,
-            borderRadius: "50%",
-            background: nub,
-          }}
-        />
-        {/* the dome, lit from above the way the world lights it */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            left: 10,
-            right: 10,
-            top: 0,
-            bottom: 0,
-            borderRadius: "52% 52% 46% 46% / 62% 62% 40% 40%",
-            background: `radial-gradient(ellipse at 50% 26%, ${ivoryHigh}, ${ivoryLow} 78%)`,
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              left: "33%",
-              top: "39%",
-              width: 13,
-              height: 13,
-              borderRadius: "50%",
-              background: eye,
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              right: "33%",
-              top: "39%",
-              width: 13,
-              height: 13,
-              borderRadius: "50%",
-              background: eye,
-            }}
-          />
-        </div>
-      </div>
+      {/* THE SIZE THE OLD DRAWING OCCUPIED, so the screen it replaces does
+          not jump in scale between a build and the next one. */}
+      <Companion size={190} />
       {/* the resting line's slot, wearing the label register's face; the word
           is the only honest one this early */}
       <div

@@ -127,6 +127,7 @@ import {
   type Palette,
 } from "../canvas/palette";
 import { SavesOverlay } from "../components/SavesOverlay";
+import { whyNotKept } from "../lib/keep-ready";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { ClaimsOverlay } from "../components/ClaimsOverlay";
 import { ConversationsOverlay } from "../components/ConversationsOverlay";
@@ -619,7 +620,22 @@ const FORM_FADE_MS = 320;
  * is the product's output and the offer is an interruption of it, however
  * welcome. An interruption should be the shorter of the two.
  */
-const OFFER_MS = 3000;
+/* WHAT A PRESS ON THE CREATURE RACES AGAINST. `sayTheWeather` fetches, so
+   the sentence for press N arrives after press N+1 has already asked for a
+   different one — and on a fast double-press the two resolutions land out of
+   order and the bubble swaps under the hand. Founder, with a recording:
+   "there are like glitches sometimes in the speech bubble when I click on it
+   too fast."
+
+   Every press takes a number; a resolution that is not the current number is
+   dropped. This is the same guard `ConversationPanel` spells `mine(owner)` —
+   a late answer to a question nobody is asking any more is not an answer. */
+let speechEpoch = 0;
+
+/* HOW LONG THE CREATURE STAYS BRIGHT AFTER A PRESS. Long enough to cover the
+   fetch on a normal connection, so the light and the sentence read as one
+   event rather than two. */
+const LIT_MS = 1400;
 /**
  * HOW LONG THE BUBBLE STAYS DOWN WHILE THE CREATURE CHANGES FORM.
  *
@@ -1856,9 +1872,22 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * earlier — "once in a while show the pencil icon?" — was answered with
    * state rather than a timer.
    */
-  const [offering, setOffering] = useState(false);
-  const offerTimer = useRef<number | null>(null);
-  useEffect(() => () => { if (offerTimer.current !== null) window.clearTimeout(offerTimer.current); }, []);
+  /* THE OFFER IS GONE. Founder, for the fourth time, with a screenshot of
+     the creature holding "Feeling inspired? Save it.": "an agent should
+     never prompt user to save something."
+     It was half of this press's rotation, which is why removing it also
+     ends the two-state swap the bubble was glitching between. See
+     `creatureSpeaks`.
+
+     THE SHINE IS NOT GONE WITH IT, and the distinction is the founder's own:
+     "clicking on the character should just make it shine and bright" was
+     liked; the sentence it used to raise was not. So what `offering` drove
+     visually survives as exactly that and nothing else — a creature that
+     brightens while it is answering you. It is purely a light, so it carries
+     no words and opens no page; `charSay` is what arrives. */
+  const [lit, setLit] = useState(false);
+  const litTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (litTimer.current !== null) window.clearTimeout(litTimer.current); }, []);
   /** The loop's own fallback line, reachable from a press. Assigned inside
       the frame effect, where it is written. */
   const sayLineRef = useRef<(() => string) | null>(null);
@@ -1886,17 +1915,23 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * product asking.
    */
   const creatureSpeaks = useCallback(() => {
-    const turn = creatureTurn.current++;
-    if (offerTimer.current !== null) window.clearTimeout(offerTimer.current);
-    if (turn % 2 === 0) {
-      setCharSay('');
-      setOffering(true);
-      offerTimer.current = window.setTimeout(() => setOffering(false), OFFER_MS);
-      return;
-    }
-    /* The weather replaces the offer rather than stacking on it: the bubble
-       holds one thing, and `charSay` is the branch that wins. */
-    setOffering(false);
+    creatureTurn.current++;
+    /* ONE THING, NOT TWO ALTERNATING. The rotation used to be offer, then
+       weather, then offer — and the offer was "Feeling inspired? Save it.",
+       which the founder has now struck four times. With it gone there is one
+       kind of answer and the press simply turns the page of the record.
+
+       THAT IS ALSO THE GLITCH FIX, and it is worth saying why rather than
+       taking the luck. Two states meant two writers: `offering` was
+       synchronous and `charSay` arrived from a fetch, so a fast press could
+       raise the offer and then have the previous press's sentence land on top
+       of it — the bubble's first branch requires `!charSay`, so the whole
+       bubble was torn down and rebuilt mid-press. One writer cannot do that
+       to itself; the epoch below handles two presses of the same kind. */
+    speechEpoch += 1;
+    setLit(true);
+    if (litTimer.current !== null) window.clearTimeout(litTimer.current);
+    litTimer.current = window.setTimeout(() => setLit(false), LIT_MS);
     const fallback = sayLineRef.current;
     if (fallback) sayTheWeatherRef.current(fallback);
   }, []);
@@ -2231,6 +2266,18 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    */
   const draft = composerDraft.draft.text, setDraft = composerDraft.setText;
   const inputMedia = useMemo(() => inspirationInputMedia(draft, composerDraft.draft.media), [draft, composerDraft.draft.media]);
+  /* ═══ WHAT THE BAR NEEDS TO KNOW ABOUT A NOTE BEING WRITTEN ════════════
+     Three facts, derived HERE rather than in the dock's own markup, because
+     they are facts about the draft and the draft lives here. The dock is a
+     thousand lines down the file and two of these are the same conditions
+     the composer's submit already guards on — computing them twice, in two
+     places, is how a Save that is enabled and a `keepIt` that returns on its
+     first line end up disagreeing. */
+  /** Whether there is anything to keep at all. The composer's own `empty`,
+      which also counted a pending link; a link typed into the words is
+      already in `draft`, and `linkText` is only ever set while the restored
+      link field is open. */
+  const composerHasWords = Boolean(draft.trim() || inputMedia.length || (composerDraft.draft.linkText ?? '').trim());
   /* the words where a callback can reach them without re-binding per keystroke */
   const draftRef = useRef("");
   draftRef.current = draft;
@@ -3617,6 +3664,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   /** Which of the day's clauses the next tap speaks, keyed to the list. */
   const weatherTurnRef = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   const sayTheWeather = useCallback((fallback: () => string) => {
+    /* WHOSE PRESS THIS IS. Captured before the fetch and checked after it:
+       a sentence that was asked for two presses ago is not the sentence
+       anybody is waiting for, and writing it is the swap the founder
+       recorded. See `speechEpoch`. */
+    const asked = speechEpoch;
+    const mine = () => asked === speechEpoch;
     if (offlineRef.current) {
       setCharSay(fallback());
       return;
@@ -3698,6 +3751,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         const lines = spoken.map(
           (x) => asSentence(`${x.sentence.text} ${day?.label ?? "today"}.`, localeRef.current),
         );
+        if (!mine()) return;
         if (lines.length > 0) {
           const key = lines.join("|");
           if (weatherTurnRef.current.key !== key) {
@@ -3710,7 +3764,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           setCharSay(fallback());
         }
       })
-      .catch(() => setCharSay(fallback()));
+      .catch(() => { if (mine()) setCharSay(fallback()); });
   }, []);
   const sayTheWeatherRef = useRef(sayTheWeather);
   sayTheWeatherRef.current = sayTheWeather;
@@ -11207,15 +11261,68 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     catch { if (composerEpoch.current === epoch) setMouthNote('Couldn’t upload this file yet. Your draft is still here.'); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   };
+  /* ═══ WHETHER SAVE CAN BE PRESSED, AND WHAT THE BAR IS SAYING ═════════
+     Both read by the dock. They sit here, directly above `keepIt`, because
+     the first is that function's own guard said once instead of twice —
+     `whyNoSend` in `ConversationPanel` is the same shape for the same
+     reason, and it was written after a Send that looked pressable and did
+     nothing on press. The failure a disabled state prevents is a control
+     that absorbs a press silently; the failure TWO copies of the condition
+     cause is the same thing wearing a different hat. */
+  const whyNotKeeping = whyNotKept({
+    hasWords: composerHasWords,
+    ready: composerDraft.ready,
+    saving: Boolean(inspirationSave.pending) || inspirationSave.busy || preparingInspiration,
+    uploading: checkingFiles || Boolean(uploadingMediaId),
+    recording: recording.phase !== 'idle',
+    undecidedRecording: Boolean(composerDraft.draft.recordingCandidate),
+    invalidFiles: inputMedia.filter(item => item.validationError).length,
+    files: inputMedia.length,
+  });
+  const composerCanKeep = composerHasWords && whyNotKeeping === null;
+  /** The one transient line the bar shows while a note is open, in the order
+      a person needs it: what went wrong first, then what is happening. The
+      recorder's clock is not here — it is a control you press to stop, and
+      it already stands in the bar as one. */
+  const composerState = mouthNote || composerDraft.error || recording.error
+    || (!composerDraft.ready ? say('worldComposerOpening') : '')
+    || (uploadingMediaId ? say('worldComposerUploading') : '')
+    || (recording.phase === 'idle' ? recording.notice : '');
+
   const keepIt = useCallback(async () => {
     let text = draftRef.current.trim();
     const initialMedia = composerDraft.current.current.media;
     const pendingLink=composerDraft.current.current.linkText??'';
     try{text=inspirationWithPendingLink(text,pendingLink);}catch{setMouthNote(say('worldComposerInvalidLink'));return;}
-    if (composerDraft.current.current.recordingCandidate) { setMouthNote('Choose which recording to keep before saving.'); return; }
-    if (initialMedia.some(item => item.validationError)) { setMouthNote('Remove the files marked below before saving. Your other selections are kept.'); return; }
-    if ((!text && !initialMedia.length) || inspirationSave.pending || inspirationSave.busy || preparingInspirationRef.current || checkingFilesCount.current || !composerDraft.ready || recording.phase !== 'idle') return;
-    if (inspirationInputMedia(text, initialMedia).length > 5) { setMouthNote('Keep up to five attachments in one inspiration.'); return; }
+    /* ═══ ONE COPY OF THE RULE, ASKED AGAIN AT THE MOMENT OF THE PRESS ══
+       These were five hand-written guards — three of them with their own
+       English sentences typed inline, none of them the same text as the
+       disabled state on the button above them. `whyNotKept` is now the only
+       statement of what blocks a save, so the bar's Save and this function
+       cannot disagree about whether a press should do anything.
+
+       IT IS STILL ASKED HERE, and that is not belt-and-braces. The button's
+       answer was computed on the last render; this reads the draft store's
+       CURRENT contents, which a background flush or another tab may have
+       moved underneath it. A disabled button is a courtesy — this is the
+       actual gate.
+
+       SILENT WHEN THERE IS NOTHING TO KEEP, as before: a blank note's Save
+       does not exist, so a press cannot arrive from one, and a complaint
+       about having written nothing is not worth saying. */
+    const media = inspirationInputMedia(text, initialMedia);
+    const blocked = whyNotKept({
+      hasWords: Boolean(text || initialMedia.length),
+      ready: composerDraft.ready,
+      saving: Boolean(inspirationSave.pending) || inspirationSave.busy || preparingInspirationRef.current,
+      uploading: Boolean(checkingFilesCount.current),
+      recording: recording.phase !== 'idle',
+      undecidedRecording: Boolean(composerDraft.current.current.recordingCandidate),
+      invalidFiles: initialMedia.filter(item => item.validationError).length,
+      files: media.length,
+    });
+    if (blocked) { setMouthNote(say(blocked)); return; }
+    if (!text && !initialMedia.length) return;
     if(pendingLink.trim()){
       composerDraft.setText(text);composerDraft.setLinkText('');draftRef.current=text;setDraft(text);
     }
@@ -15009,8 +15116,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               {atWall.kind === 'agent' ? null : (
               <button
                 type="button"
-                className={`jar-char-press${offering ? ' jar-char-press--lit' : ''}`}
-                aria-label={say('worldSaveInspiration')}
+                className={`jar-char-press${lit ? ' jar-char-press--lit' : ''}`}
+                aria-label={say('worldCreatureSpeak')}
                 data-jar-chrome="1"
                 data-jar-interactive="1"
                 onClick={creatureSpeaks}
@@ -15055,21 +15162,34 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   saying "something belongs here", which is worse than air;
                   the press target above stays, so the offer is always one
                   press away whether or not anything is being held up. */}
-              {offering || lead || bubbleHoldsTheLine ? (
+              {lead || bubbleHoldsTheLine ? (
+                /* ═══ TWO WEIGHTS OF BUBBLE, AND ONLY TWO ═══════════════
+                   Founder, with the reading beside an observation: "the
+                   speech bubble that shows the top of mind versus everything
+                   else should have slightly different visual. Let's keep the
+                   current white one for the top of mind, but everything else
+                   let's lower the opacity of this speech bubble a little bit
+                   so it's differentiated."
+
+                   The rule underneath it is the product's own: the top of
+                   mind is the OUTPUT — the thing the whole machine exists to
+                   write — and everything else the creature says is it
+                   talking. One is a conclusion, the rest is weather. Full
+                   white for the conclusion; the weather sits back.
+
+                   `--aside` rather than `--dim`: it is not a disabled or
+                   lesser control, it is a different register of speech, and
+                   naming it for the state would invite the next person to
+                   reach for it whenever a bubble felt loud. */
                 <div
-                  className="jar-char-bubble"
+                  className={`jar-char-bubble${lead ? '' : ' jar-char-bubble--aside'}`}
                   data-jar-chrome="1"
-                  /* Every state of this bubble is pressable now — the
-                     offer, a reading, and the empty line — so the flag is
-                     unconditional rather than a list of which two. */
+                  /* Both states of this bubble are pressable — a reading and
+                     the empty line — so the flag is unconditional. */
                   data-jar-interactive="1"
                 >
                   <span className="jar-char-bubble-body">
-                    {offering ? (
-                      <button type="button" className="jar-char-offer" onClick={startNewInspiration}>
-                        {say('worldCreatureOffer')}
-                      </button>
-                    ) : (
+                    {(
                       /* THE READING IS A DOOR; THE EMPTY LINE IS NOT.
                          Founder: "the speech bubble should show its top of
                          mind at the moment. And the user can click on it to
@@ -15153,7 +15273,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             </>
           ) : null}
           {!mouthOpen && charSay && charSay !== say('worldSavedWord') ? (
-            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
+            /* ALWAYS THE LIGHTER WEIGHT. Nothing that reaches `charSay` is
+               the top of mind — it is the record talking, a result, or a
+               failure — so this bubble never takes the full white. See the
+               note on `--aside` above. */
+            <div className="jar-char-bubble jar-char-bubble--aside" data-jar-chrome="1" data-jar-interactive="1">
               <div className="jar-char-bubble-body">
                 {/* THE SENTENCE IS THE DOOR — there is no longer a second
                     line under it offering to open one.
@@ -16885,6 +17009,75 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif"
                   onChange={event => { const files = [...event.target.files ?? []]; event.target.value = '';
                     if (files.length) void addInspirationFiles(files); }} />
+
+                {/* ═══ KEEPING IT IS A BAR ACTION NOW ═══════════════════════
+                    Founder, with the pale pill in the bottom-right corner of
+                    the note: "the save button is very hard to see. Maybe the
+                    save button should be in the bottom bar as well. And then
+                    it should have save or save as draft."
+
+                    IT WAS HARD TO SEE BECAUSE IT WAS NOWHERE. A lone control
+                    floating in the corner of an otherwise empty page has no
+                    neighbour to be read against and no object to belong to —
+                    and this product now has exactly one object at the bottom
+                    of every screen. Putting it in the bar is not a relocation
+                    for tidiness; it is the control finally having a place.
+
+                    AND THE TWO ENDINGS SIT TOGETHER, which is the half the
+                    founder asked for and the half that was genuinely missing.
+                    Leaving a half-written note already kept it — `saveAsDraft`
+                    is what Now and the chevron both call — but nothing on
+                    screen ever said so, so the only visible way out of a note
+                    you were not finished with was a button that finished it.
+                    Named side by side, the choice is a choice.
+
+                    ONLY ONCE THERE IS SOMETHING TO KEEP, which is the note
+                    the floating button already carried: "an always-present
+                    Save on a blank page is a button for a thing that does not
+                    exist." A blank note still leaves by the chevron or by
+                    Now. */}
+                {composerHasWords ? (
+                  <>
+                    <button type="button" className="waka-dock-tool waka-dock-tool--wide"
+                      disabled={recording.phase !== 'idle'}
+                      onClick={saveAsDraft}>{say('worldSaveDraft')}</button>
+                    {/* THE WORD IS "SAVE" AND THE NAME IS LONGER, which is
+                        the split every short label in a bar needs: beside
+                        "Save as draft" one word is unambiguous, and read
+                        aloud on its own by a screen reader it is not. */}
+                    <button type="button" className="waka-dock-tool waka-dock-tool--keep"
+                      aria-label={say('worldSaveInspiration')}
+                      /* AND IT SAYS WHY IT CANNOT BE PRESSED, the same way
+                         the chat's Send does and for the reason written
+                         there: the reason belongs to the control, and is
+                         wanted only by somebody who has just tried. */
+                      title={whyNotKeeping ? say(whyNotKeeping) : undefined}
+                      disabled={!composerCanKeep}
+                      onClick={() => { void keepIt(); }}>{say('worldSave')}</button>
+                  </>
+                ) : null}
+
+                {/* ═══ AND THE TRANSIENT STATE, IN THE BAR AND NOWHERE ELSE ══
+                    Founder, with "Recording canceled." printed across the
+                    middle of an empty note: "states should show and disappear
+                    in the bottom bar only."
+
+                    The rule is sharper than the instance. A sentence that
+                    arrives and leaves on its own is the one kind of text that
+                    must not be in the page's flow: it pushes whatever is
+                    under it, it appears in the part of the screen somebody is
+                    reading or writing in, and when it goes it leaves a hole
+                    the eye has to re-find its place in. The bar is where
+                    transient things belong because the bar is already the
+                    thing that changes — it has a slot that transforms, it is
+                    out of the way of the words, and it is the same place on
+                    every screen.
+
+                    `role="status"` so it is still announced; it is the
+                    position that changed, not whether it is said. */}
+                {composerState ? (
+                  <span className="waka-dock-state" role="status">{composerState}</span>
+                ) : null}
               </span>
             ) : (
             <button
@@ -17181,13 +17374,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   second opinion about depth. Writing the address directly
                   pushed an entry, which is how four presses became four
                   closes; `openOverHome` is where that rule lives. */}
+              {/* A CHEVRON, AND NOT ITS NAME — see the long note on the
+                  same control in `SavesOverlay`. Founder, pointing at "‹ All
+                  chats": "remove". The destination stays on the label a
+                  screen reader reads. */}
               <button type="button" className="waka-over-back"
+                aria-label={say('worldBackToChats')}
                 onClick={()=>openOverHome('conversations')}>
                 <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
                   <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
                     strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-                {say('worldBackToChats')}
               </button>
             </header>
             <ConversationPanel key={`${owner}:${talkId??'new'}:${viewNavigation.view.principleId??''}`}

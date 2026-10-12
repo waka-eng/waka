@@ -120,7 +120,13 @@
      value and cannot drift — which is the whole reason they are declared
      here rather than in each surface. */
   --jar-deep: #05080f;
-  --jar-atmos: #0a0e18;
+  /* THE SAME LITERAL AS `--jar-deep` ABOVE, AND AS `--moon-ground`.
+     This is the root the world sits on and the pages inherit; the gradient
+     volume paints `--jar-deep` over most of it, so any difference between
+     the two showed up as a lighter band at the overshoot at either end of
+     the descent, and as every page being a shade paler than Now. Founder:
+     "I like the darker shade shown in Now." There is now one night. */
+  --jar-atmos: #05080f;
   /* the sky: the same ground, a few percent thinner */
   --jar-sky: #060910;
   --jar-ink: #e8edf4;
@@ -4806,27 +4812,13 @@
     color: var(--jar-ink);
   }
 
-  /* KEEPING IT, opposite the pill. */
-  .jar-inspiration-composer .jar-note-save {
-    position: fixed;
-    z-index: 59;
-    right: calc(var(--sp-20) + env(safe-area-inset-right));
-    /* ON THE DOCK'S LINE. The dock and the tool pill are `--waka-corner` tall
-       inside `--sp-6` of padding; a bare 44px button at the same bottom inset
-       hangs six pixels below both, which reads as a third row rather than a
-       third object on one. */
-    bottom: calc(var(--sp-20) + var(--sp-6) + env(safe-area-inset-bottom));
-    min-height: var(--waka-corner);
-    padding-inline: var(--sp-20);
-    border: 0;
-    border-radius: var(--r-pill);
-    background: var(--jar-ink);
-    color: var(--jar-atmos);
-    font-size: var(--t-meta);
-    letter-spacing: normal;
-    text-transform: none;
-    cursor: pointer;
-  }
+  /* KEEPING IT MOVED TO THE BAR, so its rules go with it. Founder: "the
+     save button is very hard to see. Maybe the save button should be in the
+     bottom bar as well." `.waka-dock-tool--keep` in `claims.css` is where
+     it lives now, and it carries what this block had learned — that a
+     control at the bottom of this page has to sit on the dock's own line
+     rather than six pixels below it, which it now does by being IN the
+     dock. */
 
   /* `.jar-seek.` prefixed so this outranks `chrome.css`'s own
      `.jar-inspiration-composer .jar-composer-text`, which sets the size and
@@ -4874,10 +4866,10 @@
   /* THE TWO `:has(:placeholder-shown)` HIDES ARE GONE WITH WHAT THEY HID.
      They kept the attach row and the footer off a blank page — the right
      answer to the wrong question, because the founder's ruling on that block
-     was "remove all", not "remove it until there are words". Both are now
-     corners (`.jar-note-tools`, `.jar-note-save`) and the only thing still
-     conditional is Save, which is conditional in the MARKUP: a button for a
-     thing that does not exist should not be in the document either. */
+     was "remove all", not "remove it until there are words". Both ended up
+     in the dock, and the one thing still conditional is Save, which is
+     conditional in the MARKUP: a button for a thing that does not exist
+     should not be in the document either. */
 
   /* One column down the middle of the page, at the measure the rest of the
      product reads at. The fixed corners are excluded — they are positioned
@@ -4892,7 +4884,7 @@
     max-width: none;
   }
 
-  .jar-inspiration-composer > :not(.jar-note-tools):not(.jar-note-save):not(.jar-note-top) {
+  .jar-inspiration-composer > :not(.jar-note-tools):not(.jar-note-top) {
     width: 100%;
     max-width: 34rem;
     margin-inline: auto;

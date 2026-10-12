@@ -21,9 +21,18 @@
  * read it as memories lost.
  *
  * So both numbers appear when they differ, and — the half that is easy to lose
- * later — NEITHER appears twice when they do not. A door that reads
- * `9 of 9 inspirations` on an ordinary account would be a worse bug than the
- * one this fixes, because every account would meet it.
+ * later — NEITHER appears twice when they do not. A door that reads `(9/9)`
+ * on an ordinary account would be a worse bug than the one this fixes,
+ * because every account would meet it.
+ *
+ * THE SENTENCE BECAME A PARENTHESIS, AND THE INVARIANT DID NOT MOVE.
+ * Founder, with "Your inspirations" over a second line reading "36
+ * inspirations": "just say Your Inspirations (36)." So the count joined the
+ * title instead of standing under it, and `worldInspirationCount` /
+ * `worldInspirationCountCapped` went with the line they wrote. What is tested
+ * here is unchanged: that two numbers appear only when they differ, and that
+ * the stated size is never below what is on screen. Only the spelling of the
+ * expectations moved.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6). Three seams.
  *
@@ -194,14 +203,14 @@ describe("the count under the door", () => {
     heldTotal = 9;
     /* The ordinary case, and the one every account lives in for a long time:
        nine kept, nine held, and nothing said about a ceiling nobody met. */
-    expect(await doorText()).toBe("9 inspirations");
+    expect(await doorText()).toBe("(9)");
   });
 
   it("says both when the archive holds more than the walk reached", async () => {
     heldTotal = 2500;
     /* The first number is still the orbs in the ground the caret takes you
        into (founder, 2026-08-25). The second is what is actually kept. */
-    expect(await doorText()).toBe("9 of 2500 inspirations");
+    expect(await doorText()).toBe("(9/2500)");
   });
 
   it("never states a size smaller than what it is standing on", async () => {
@@ -220,6 +229,6 @@ describe("the count under the door", () => {
      * ordinary case rather than printed.
      */
     heldTotal = 2;
-    expect(await doorText()).toBe("9 inspirations");
+    expect(await doorText()).toBe("(9)");
   });
 });

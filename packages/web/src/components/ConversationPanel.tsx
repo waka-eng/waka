@@ -338,14 +338,19 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         </div>
       </div>
       {canCompose?<footer className="chat-composer">
-        {/* WHAT THE BOX WILL DO WHEN YOU PRESS SEND, BESIDE THE BOX. This
-            notice used to be a band pinned to the panel's top edge — the far
-            end of a 950px panel from the only control it describes — and
-            because the transcript below it sat on the bottom, the two of
-            them framed 500px of nothing. It is a standing fact about this
-            install, not an event in the conversation, so it annotates the
-            control it constrains. */}
-        {generationEnabled===false?<p className="chat-notice">{say('worldConversationFoundation')}</p>:null}
+        {/* THE INSTALL'S OWN CONFIGURATION IS NOT NEWS FOR THE PERSON TYPING.
+            "WAKA can't reply yet — no model is connected. What you write is
+            kept." stood above this field on every local build. Founder,
+            pointing at it: "remove this."
+
+            It is a true sentence and it was still wrong here, for the reason
+            the permanent explainers went out everywhere else: it is read once
+            and stepped over forever, it describes the deployment rather than
+            anything the person did, and it occupied the line directly above
+            the one control on the surface. Somebody who presses Send with no
+            model connected still learns what happened — the message is kept,
+            which is what the sentence promised, and `whyNoSend` names any
+            state where the button cannot be pressed at all. */}
         {generationEnabled&&replyNotice?<p className="chat-reply-status" role="status">{say(replyNotice)}</p>:null}
         <div className="chat-input-row"><label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
           {/* ONE BUTTON, THREE STATES. It used to carry five labels, two of
