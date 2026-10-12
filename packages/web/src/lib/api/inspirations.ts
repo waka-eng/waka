@@ -81,6 +81,10 @@ export interface ApiInspiration {
   text: string;
   kind: ApiInspirationKind | null;
   source: ApiInspirationSource;
+  /** What this keep is about, in a word or two, read off the keep itself.
+      Absent on an older server and null for anything the reading could not
+      place — both mean "in all, and in nothing else". */
+  category?: string | null;
   /** Whether the rooms this account is in can see it. Never inferred. */
   visibility: ApiInspirationVisibility;
   createdAt: string;
@@ -298,67 +302,20 @@ export async function deleteInspiration(id: string, options: ProfileScoped & { s
 // Reflections — the Q&A on one capture
 // ---------------------------------------------------------------------------
 
-/** POST /inspirations/:id/reflections */
-export async function createReflection(
-  inspirationId: string,
-  input: CreateReflectionRequest,
-  options: InspirationSaveOptions = {},
-): Promise<ApiReflection> {
-  const intent = { ...options };
-  const payload = JSON.parse(JSON.stringify(input)) as CreateReflectionRequest;
-  const path = apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections${intent.profile ? `?profile=${encodeURIComponent(intent.profile)}` : ''}`);
-  const body = await reconcileInspirationSave(() => postJson<{ reflection: ApiReflection; processing?: ApiInspirationProcessingReceipt; saveRequest?: ApiInspirationSaveReceipt }>(
-    path,
-    payload,
-    "Failed to save reflection",
-    intent.signal,
-    intent.requestId,
-  ), intent, 'reflection', inspirationId);
-  return { ...body.reflection, ...(body.processing ? { processing: body.processing } : {}), ...(body.saveRequest ? { saveRequest: body.saveRequest } : {}) };
-}
+/* THE FOUR VERBS THAT WROTE ONE ARE GONE (2026-10-10): `createReflection`,
+   `requestReflectionQuestion`, `fetchReflectionQuestionStatus` and
+   `deleteReflection`, with `ApiReflectionQuestionStatus`. Their only caller
+   was `components/ReflectionFlow.tsx` — a generated follow-up question, a
+   textarea, a device draft and a delete-with-confirmation — which the founder
+   folded into the claim queue's one correction field: *"Typing happens in one
+   place only: when you correct."*
 
-export interface ApiReflectionQuestionStatus {
-  phase: "idle" | "processing" | "ready" | "failed";
-  question?: string;
-}
+   A REFLECTION IS STILL A THING, and is still written. `CreateInspirationRequest`
+   carries `reflections`, so a photo moment's "why" rides the capture that
+   prompted it in a single POST, which is how an answer given at capture time
+   should have travelled all along — no second journalled act, no metered
+   question, no draft to lose. And `ApiInspiration.reflections` still comes
+   back on every read, which is what the save's panel renders.
 
-/** Queue one metered follow-up grounded in the latest saved answer. */
-export async function requestReflectionQuestion(
-  inspirationId: string, afterReflectionId: string, retry = false,
-  options: {signal?: AbortSignal; profile?: string} = {},
-): Promise<ApiReflectionQuestionStatus> {
-  return postJson<ApiReflectionQuestionStatus>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflection-question${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
-    { afterReflectionId, ...(retry ? { retry: true } : {}) },
-    "Could not start a follow-up question",
-    options.signal,
-  );
-}
-
-export async function fetchReflectionQuestionStatus(
-  inspirationId: string, afterReflectionId: string,
-  options: {signal?: AbortSignal; profile?: string} = {},
-): Promise<ApiReflectionQuestionStatus> {
-  return getJson<ApiReflectionQuestionStatus>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflection-question/status` +
-      `?afterReflectionId=${encodeURIComponent(afterReflectionId)}${options.profile ? `&profile=${encodeURIComponent(options.profile)}` : ''}`),
-    "Could not load the follow-up question",
-    options.signal,
-  );
-}
-
-
-/** DELETE /inspirations/:id/reflections/:reflectionId */
-export async function deleteReflection(
-  inspirationId: string,
-  reflectionId: string,
-): Promise<void> {
-  await requestVoid(
-    apiPath(
-      `/inspirations/${encodeURIComponent(inspirationId)}/reflections/${encodeURIComponent(reflectionId)}`,
-    ),
-    "DELETE",
-    undefined,
-    "Failed to delete reflection",
-  );
-}
+   The server keeps all four routes. Nothing here claims they are gone; this
+   client simply no longer has a screen that needs them. */

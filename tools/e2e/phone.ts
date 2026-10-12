@@ -65,6 +65,7 @@ import { type Browser, type Page } from "playwright";
 import { settleAfterArrival } from "./arrival";
 import { aimAt, maybeOrbs, readBlobs, readOrbs } from "./orbs";
 import { launchChromium } from "./browser";
+import { saveAnInspiration } from "./keep";
 interface View {
   name: string;
   width: number;
@@ -461,10 +462,7 @@ async function walk(browser: Browser, view: View, negative: boolean): Promise<Fi
     "A target under a thumb is a target missed.",
     "Sixteen pixels, or the page zooms itself.",
   ]) {
-    await page.locator(".jar-mouth-rest").first().tap();
-    await page.waitForTimeout(700);
-    await page.fill('textarea[aria-label="Capture inspiration"]', text);
-    await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().tap();
+    await saveAnInspiration(page, text, { touch: true });
     await page.waitForTimeout(4_500);
   }
   await page.waitForTimeout(2_000);

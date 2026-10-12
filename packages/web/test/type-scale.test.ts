@@ -57,8 +57,20 @@ import { describe, expect, it } from "vitest";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STYLES = resolve(HERE, "../src/styles");
 
-/** The stylesheets the product is keeping. `surface.css` is exempt — see above. */
-const GOVERNED = ["home.css", "chrome.css", "global.css"] as const;
+/**
+ * The stylesheets the product is keeping. `surface.css` is exempt — see above.
+ *
+ * `claims.css` and `chat.css` JOINED ON 2026-10-08, and the fact that they
+ * could be written and grow without ever being listed here is the whole
+ * reason the founder could say "font sizes, type, placement — everything is
+ * so inconsistent and all over the place" while every gate was green. The
+ * governed files were the ones that existed when this was written; the pages
+ * built on top of them inherited the rules in spirit and nothing in fact.
+ *
+ * A gate with a hand-written list of what it watches only watches the past.
+ * Anything added to `src/styles` belongs in this list on the day it is added.
+ */
+const GOVERNED = ["home.css", "chrome.css", "global.css", "claims.css", "chat.css"] as const;
 
 /**
  * THE CEILING, and it is a number to be lowered.
@@ -68,12 +80,28 @@ const GOVERNED = ["home.css", "chrome.css", "global.css"] as const;
  * `16px`, `17px`, `9px`, and the display-cluster one-offs (`20`–`44px`) that
  * belong to headings nobody has decided the scale for yet.
  */
-const CEILING = 13;
+const CEILING = 2;
 /* 21 -> 13 on 2026-08-26. Not a pass over the call sites: `e2e:dead-css`
    deleted ninety-six unreachable selectors and eight of the remaining
    literals went out inside them. A ratchet only ratchets if it follows the
    count down, and these two tightened themselves by failing the moment the
-   slack opened. */
+   slack opened.
+
+   13 -> 2 on 2026-10-08, and this one WAS a pass over the call sites.
+   Founder: "font sizes, type, placement — everything is so inconsistent and
+   all over the place." It was, and the cause was two parallel systems: the
+   older surfaces wore the named steps while the pages built on top of them
+   (`claims.css`, `chat.css`) wrote raw pixels — so the same ROLE came out at
+   three sizes depending on which screen you were standing on. An eyebrow was
+   10px on one screen, 11px on another and 12px on a third; a quiet control
+   was 12px here and 13px there.
+   Every one of those is a named step now, chosen by role rather than by
+   eye — quiet meta `--t-meta`, interface text `--t-ui` (which absorbed the
+   eyebrow, the quiet control and the list row when six steps became three on
+   2026-10-11), prose `--t-body`, fields `--t-input`, a sentence of
+   yours `--t-lead`, the one with weight `--t-reading`. A whole dead claims
+   stylesheet went out in the same pass, taking a third set of sizes with it.
+   What is left is the two display one-offs on the landing page. */
 
 /**
  * READ THE RULES, NOT THE PROSE.
@@ -117,14 +145,25 @@ function onTheScale(value: string): boolean {
  * counted here. The point is not shorter CSS — `var(--sp-14)` is longer than
  * `14px`. It is that "off the grid" becomes something a machine can see.
  */
-const SPACE_CEILING = 32;
+const SPACE_CEILING = 29;
 /* 38 -> 33 on 2026-08-26, for the same reason as `CEILING` above: the
    literals left with the dead rules that carried them.
    33 -> 32 on 2026-09-08: the mouth's coarse-pointer air was a raw 13px on
    each side of the resting phrase. Fixing the founder's jump meant saying the
    same number to the field, which would have been two more literals — so it
    moved to `--sp-14` instead, which is on the grid, lands the act on 47
-   rather than 45, and clears 44 either way. Two literals gone, none added. */
+   rather than 45, and clears 44 either way. Two literals gone, none added.
+
+   32 -> 29 on 2026-10-10, and for the third time this number has fallen
+   because DEAD RULES WENT OUT, not because anybody drained a call site.
+   Founder, three times: "remove all unused and deadcode across the
+   codebase." 142 dead selector parts across 127 rules went, and the three
+   raw values they were carrying went with them — the room form's `3px` row
+   gap under a name nothing renders, the capture shortcut's `47px` offset for
+   a modifier the markup never builds, and the forming line's margin.
+   This is exactly the slack the companion test below exists to catch: the
+   count fell three and the ceiling would have gone on permitting three new
+   literals, which is how a ratchet quietly stops being one. */
 
 /** Spacing values, per governed file, as written. */
 function spacingIn(file: string): string[] {
@@ -132,7 +171,13 @@ function spacingIn(file: string): string[] {
   const decl = /\b(padding|margin|gap|row-gap|column-gap)(-top|-right|-bottom|-left)?:\s*([^;{}]+);/g;
   for (const m of read(file).matchAll(decl)) {
     const value = m[3]!;
-    if (/var\(|calc\(|env\(/.test(value)) continue;
+    /* `clamp(` joins them on 2026-10-08. A fluid gutter is a CHOSEN CURVE,
+       not a value that drifted off the grid — the page padding that narrows
+       from 28px to 20px on a phone is one decision, and flagging it as two
+       stray literals asks for it to be replaced by a fixed step, which is a
+       worse page. The type half of this same file has always counted
+       `clamp()` as on the scale; this is the spacing half agreeing. */
+    if (/var\(|calc\(|env\(|clamp\(/.test(value)) continue;
     for (const px of value.matchAll(/\b\d+px\b/g)) out.push(`${file}: ${m[1]}${m[2] ?? ""}: ${px[0]}`);
   }
   return out;
@@ -188,10 +233,62 @@ describe("the spacing grid is one grid", () => {
  * forced. Colour is the most design-sensitive of the three scales, and a blind
  * mapping of 97 values is a redesign nobody asked for.
  */
-const COLOUR_CEILING = 104;
+/* 90 -> 84 on 2026-10-11, and the six went out as a SIDE EFFECT rather than
+   as a tidy-up, which is the best way for a ratchet to move. Founder:
+   "몽글몽글 소중소중 dreamy dreamy." The primitives that carry this
+   product's edges and raised tones were neutral white alphas —
+   `rgba(255, 255, 255, 0.14)` and friends — sitting inside a warm palette,
+   so every hairline in the product was the one cold thing on its screen.
+   Each became `color-mix(in srgb, var(--moon-warm) N%, transparent)`, which
+   is a token reference and therefore not a literal. Warming the material
+   drained six of these by writing the colour the way it should have been
+   written anyway. */
+const COLOUR_CEILING = 84;
 /* 125 -> 104 on 2026-08-26. Nobody drained twenty-one colours: the dead rules
    that held them were deleted by `e2e:dead-css`, and this ceiling had no way
-   to notice, which is the whole point of the test added below. */
+   to notice, which is the whole point of the test added below.
+
+   89 -> 90 on 2026-10-11, and UP, which a ratchet is not supposed to do. The
+   one literal is `--moon-field-edge: rgba(255, 255, 255, 0.38)` in the palette
+   block of `chrome.css`. It is the case this ratchet's own failure message
+   asks for by name — "if it is a tier the palette should own, name it" — and
+   naming a tier costs exactly one literal, at the declaration, which is where
+   every literal is supposed to be. Measured first: the two composers in this
+   product were drawn with a 1.41:1 hairline on a ground where 3:1 is the
+   floor at which a boundary can be relied on to be seen at all. Raising
+   `--moon-edge` instead would have cost zero literals and repainted every
+   border in the product to buy two inputs an edge.
+
+   109 -> 90 on 2026-10-10. Nobody drained nineteen colours by hand: the 37
+   dead `.nc-*` rules in `global.css` went out and the literals went with
+   them. `.nc-note` and its stage were the flat screens' post-it — paper
+   colour, ink colour, five pastel tints, two wall keyframes — and the last
+   `.tsx` touching any of it was rewritten away. This is the second time this
+   number has fallen for exactly that reason, which is the argument for the
+   companion test below rather than for this one: a ratchet only ratchets if
+   it follows the count DOWN, and slack is room for the thing it was built to
+   stop.
+
+   104 -> 109 on 2026-10-08, and this is the ONE direction this number is not
+   supposed to move. It moved because the GOVERNED list grew: `claims.css` and
+   `chat.css` had been written and grown entirely outside it, so their colours
+   were never counted by anything. Raising the ceiling to admit them is a
+   one-time rebase of the BASELINE, not slack handed to a call site — the
+   alternative is leaving two live stylesheets unwatched, which is how they
+   drifted in the first place.
+   The five admitted are real: the raised surface's whisper of white, the
+   scrim's black, and two mask stops that are opacity rather than colour.
+   Three scrims written three ways (55%, 62%, and a flat black at .55
+   opacity) became one `--waka-scrim` in the same pass, and a `var(--jar-live,
+   #fff2dc)` fallback that duplicated its own token went out — so the count
+   admitted is already lower than what was found. From here it only falls.
+
+   90 -> 89 on 2026-10-10. One literal, and it is logged for the same reason
+   the nineteen before it were: it left inside a dead rule rather than being
+   drained. `.jar-here-list` was the sheet the wall rows used to hang in, and
+   its `0 18px 44px -26px rgba(0, 0, 0, 0.8)` lift was the last raw colour in
+   that corner of `home.css`. The rows outlived their container — they are in
+   the menu's own surface now — so the shadow went and they stayed. */
 
 /** Colour literals, per governed file. */
 function coloursIn(file: string): string[] {
@@ -273,9 +370,14 @@ describe("the type scale is one scale", () => {
       "--t-lead",
       "--t-body",
       "--t-input",
-      "--t-note",
+      /* `--t-note` (14) AND `--t-fine` (12) LEFT THE SCALE on 2026-10-11,
+         and the list is the right place to notice: five steps inside four
+         pixels is not a hierarchy, and the founder called it — "keep
+         consistent throughout without too many variations. This size is
+         perfect." `--t-note` folded into `--t-ui`, `--t-fine` and the old
+         11px `--t-meta` into one 12px `--t-meta`. The reasoning is in
+         system.css where the steps are declared. */
       "--t-ui",
-      "--t-fine",
       "--t-meta",
       "--t-label",
       "--t-micro",
@@ -316,7 +418,9 @@ describe("the type scale is one scale", () => {
         "A new literal means a size was chosen at a call site instead of taken " +
         "from the scale. Either it is one of the named steps — use the token — " +
         "or it is a step the scale is missing, in which case name it in " +
-        "system.css and say why, the way `--t-note` and `--t-fine` were named.",
+        "system.css and say why — but read the note on the reading cluster " +
+        "first: `--t-note` and `--t-fine` were named that way and then " +
+        "removed for being indistinguishable from their neighbours.",
     ).toBeLessThanOrEqual(CEILING);
   });
 

@@ -210,7 +210,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       KEPT.calls.push({ id: inspirationId, text: input.text });
       return { id: inspirationId, text: input.text };
     },
-    /* The write behind "keep these words". Its RESULT is discarded by the page
+    /* The write behind "Keep these words". Its RESULT is discarded by the page
        — the new sentence is already in hand — so this only has to resolve.
        What matters is that it is mocked at all: unmocked it would reach the
        network, fail, and the page would put the machine's sentence back, which
@@ -224,7 +224,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
        the row when the request died, which would strand the let-go case
        below: "then let it go" is only offered while the not-true stands. */
     createFeedback: async () => ({ id: "feedback-1" }),
-    /* The writes behind "then let it go" and "put it back". The page reads
+    /* The writes behind "then let it go" and "Put it back". The page reads
        only `status` from the restore's result; the dismissal's result is not
        read at all — what matters is that neither reaches a network that is
        not there. The real law they enact is pinned server-side by
@@ -514,7 +514,7 @@ describe("changing a memory's words", () => {
         (b.textContent ?? "").trim(),
       ),
       "and while the words are open the row is about the words, not about the memory",
-    ).not.toContain("delete");
+    ).not.toContain("Delete");
     await act(async () => keep.click());
     await layout.step(10);
 
@@ -535,7 +535,7 @@ describe("changing a memory's words", () => {
     expect(
       layout.container.querySelector(".jar-panel-save")?.textContent,
       "and the foot says what just happened",
-    ).toBe("saved");
+    ).toBe("Saved");
   });
 });
 
@@ -559,7 +559,7 @@ describe("deleting a memory", () => {
   it("goes without a word when no signal was ever read from it", { timeout: 30_000 }, async () => {
     await layout.toField();
     const panel = await openMemory("something I kept, 5");
-    await pressPanelVerb(panel, "delete");
+    await pressPanelVerb(panel, "Delete");
     await layout.step(20);
 
     expect(
@@ -585,7 +585,7 @@ describe("deleting a memory", () => {
   it("says what is lost when a signal stands on it, and only then", { timeout: 30_000 }, async () => {
     await layout.toField();
     const panel = await openMemory("something I kept, 0");
-    await pressPanelVerb(panel, "delete");
+    await pressPanelVerb(panel, "Delete");
     await layout.step(20);
 
     const ask = layout.container.querySelector(".jar-panel-askrow");
@@ -607,7 +607,7 @@ describe("deleting a memory", () => {
     /* the lit answer is keeping it: this is a door that would rather not be
        walked through */
     const keep = [...(ask?.querySelectorAll<HTMLElement>("button") ?? [])].find(
-      (b) => (b.textContent ?? "").trim() === "keep it",
+      (b) => (b.textContent ?? "").trim() === "Keep it",
     );
     expect(keep?.className, "keeping is the lit half of the pair").toContain("jar-where-on");
     await act(async () => keep!.click());
@@ -627,7 +627,7 @@ describe("deleting a memory", () => {
     await layout.toField();
     const panel = await openMemory("something I kept, 0");
     const goPrivate = [...panel.querySelectorAll<HTMLElement>(".jar-panel-vis button")].find(
-      (b) => (b.textContent ?? "").trim() === "private",
+      (b) => (b.textContent ?? "").trim() === "Private",
     );
     expect(goPrivate, "a public memory offers the way back to private").toBeTruthy();
     await act(async () => goPrivate!.click());
@@ -644,7 +644,7 @@ describe("deleting a memory", () => {
     ).toBe(true);
 
     const keep = [...(ask?.querySelectorAll<HTMLElement>("button") ?? [])].find(
-      (b) => (b.textContent ?? "").trim() === "keep it public",
+      (b) => (b.textContent ?? "").trim() === "Keep it public",
     );
     expect(keep?.className, "keeping it public is the lit half").toContain("jar-where-on");
     await act(async () => keep!.click());
@@ -762,10 +762,22 @@ describe("stepping between memories", () => {
       "the memory opened next has its footer — an edit left behind on the last " +
         "card must not strip this one of everything it offers",
     ).not.toBeNull();
+    /* `Delete`, WHERE THIS ASSERTED `Reflect` (2026-10-10). The marker had to
+       change because the verb did: the footer's left cell offered `Reflect` on
+       a save with no answers, which opened the writing flow the founder
+       folded — it now offers `Read reflection` only when there is an answer to
+       read, and this memory has none, so that cell is empty by design.
+       `Delete` is the better marker anyway and was the one to reach for first:
+       it exists ONLY on the reading footer (the editing footer offers Add a
+       picture / Save / Leave it), so it still distinguishes the two footers,
+       and unlike `Reflect` it does not depend on what the memory happens to
+       carry. The property under test is unchanged — an edit left behind on a
+       card you can no longer see must not strip the next card of everything
+       it offers. */
     expect(
       [...(foot?.querySelectorAll("button") ?? [])].map((b) => (b.textContent ?? "").trim()),
       "and it is the reading footer, not the one that belongs to an open edit",
-    ).toContain("reflect");
+    ).toContain("Delete");
     expect(
       (
         layout.container.querySelector(".jar-panel--in .jar-panel-text")?.textContent ?? ""

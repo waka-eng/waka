@@ -51,21 +51,44 @@
   --accent: #0f0f0e;
   --error: #b3261e;
 
-  /* ---------------------------------------------------------------------
-   * Typography tokens
+  /**
+   * ═══ ONE FACE, AND NOW IT REALLY IS ONE ════════════════════════════════
    *
-   * The prototype pairs three faces:
-   *   • Instrument Serif → headlines and inspiration text (warm, editorial)
-   *   • Inter Tight     → UI body copy (neutral, modern)
-   *   • JetBrains Mono  → meta labels, eyebrows, button captions (technical)
+   * Founder: "audit font size and type used across the entire experience.
+   * Keep consistent throughout without too many variations." And, a month
+   * earlier, on the same thing: "can we make the font consistent across all
+   * the experience? I don't know what the weird cursive thing is."
    *
-   * Fallbacks mirror the originals so the pre-webfont paint still feels
-   * close to the final design. Defined as variables so a component
-   * referencing `font-family: var(--font-serif)` survives a future face
-   * swap without code churn.
-   * -------------------------------------------------------------------*/
-  --font-sans: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-serif: "Instrument Serif", "Times New Roman", serif;
+   * WHAT STOOD HERE, and it is worth the paragraph because nothing about it
+   * looked wrong in the stylesheet. These tokens paired three faces for the
+   * flat screens — Instrument Serif for headlines, Inter Tight for body,
+   * JetBrains Mono for labels — while the WORLD was rebuilt around one
+   * (`--waka-face`: Jost over Pretendard). So the product had two typographic
+   * systems, and which one you were reading depended on which screen you
+   * happened to be standing on.
+   *
+   * AND ON THE WEB IT WAS WORSE THAN THAT. `index.html` loads exactly two
+   * families — Pretendard and Jost — and says so in a comment ending "no
+   * third face in the world". Neither Instrument Serif nor Inter Tight is
+   * among them. So every flat screen fell through to its FALLBACK: the
+   * login's headline rendered in Times New Roman, which is almost certainly
+   * the "weird cursive thing". The mobile build imports the real faces
+   * (`mobile-fonts.css`), so the same screen had one look on a phone and
+   * another in a browser.
+   *
+   * Both now name the face that is actually loaded, which is the one the
+   * product is designed in. The TOKENS SURVIVE rather than being replaced at
+   * every call site, because `--voice-room` / `--voice-you` in system.css
+   * describe a real distinction — a sentence the machine claims about you
+   * versus one you wrote — and that distinction is still worth being able to
+   * express in weight and size even when the family is shared.
+   *
+   * MONO IS UNTOUCHED and stays a real monospace: invite codes, ids and raw
+   * values are the one place a second face carries information rather than
+   * decoration, and `ui-monospace` resolves to a loaded system face.
+   * ─────────────────────────────────────────────────────────────────────── */
+  --font-sans: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  --font-serif: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
 
   /* ---------------------------------------------------------------------
@@ -76,16 +99,15 @@
    * rhythm). Provided as discrete tokens to keep component CSS terse and
    * audit-friendly.
    * -------------------------------------------------------------------*/
-  --space-px: 1px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-7: 32px;
-  --space-8: 40px;
-  --space-9: 56px;
+  /* THE SECOND SPACING FAMILY STOOD HERE, and there is only one now.
+     `--space-1 … --space-9` were an ORDINAL scale: you had to know that
+     --space-7 meant 32px. `--sp-N` in system.css is the same two-pixel grid
+     named after what each step IS, which is why the gate governs that one.
+     Two families meant the same gap could be written two ways and nothing
+     could see that the newer surfaces had drifted off the grid entirely —
+     see the note on SPACE_CEILING in type-scale.test.ts. Every call site
+     moved with no geometry change; `--space-px` became the plain `1px` the
+     78 border sites in home.css and chrome.css already wrote. */
 
   /* ---------------------------------------------------------------------
    * Border / radius tokens
@@ -142,277 +164,7 @@
   }
 }
 
-.nc-canvas {
-  /* This public paper surface must not inherit the dark app's pale ink. */
-  --ink: #1a1a1a;
-  --w-ink: var(--ink);
-  --ink-1: var(--ink);
-  --ink-3: color-mix(in srgb, var(--ink) 72%, transparent);
-  position: relative;
-  min-height: 100vh;
-  height: 100dvh;
-  background: #ffffff;
-  color: var(--ink);
-  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.nc-canvas--top-of-mind {
-  height: auto;
-  min-height: 100dvh;
-  overflow: visible;
-}
-
-.nc-titlecard {
-  position: relative;
-  z-index: 2;
-  padding: clamp(var(--sp-32), 5vh, var(--sp-56)) clamp(var(--sp-28), 6vw, var(--sp-64)) clamp(var(--sp-16), 3vh, var(--sp-32));
-  max-width: 1100px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-16);
-}
-
-.nc-title {
-  margin: 0;
-  font-family: "Fraunces", "Times New Roman", serif;
-  font-weight: 300;
-  font-size: clamp(42px, 6vw, 72px);
-  line-height: 1.18;
-  letter-spacing: -0.025em;
-  color: var(--ink);
-  text-transform: lowercase;
-}
-
-.nc-title-name {
-  font-style: italic;
-  font-weight: 400;
-}
-
-.nc-stage {
-  position: relative;
-  flex: 1;
-  overflow: visible;
-}
-
-.nc-stage::before {
-  content: "";
-  display: block;
-  height: 680px;
-  min-width: 1080px;
-}
-
-.nc-stage--top-of-mind-wall {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), max-content));
-  align-content: center;
-  align-items: start;
-  justify-content: center;
-  gap: clamp(var(--sp-24), 5vw, var(--sp-56)) clamp(var(--sp-18), 4vw, var(--sp-44));
-  width: min(1180px, calc(100vw - 32px));
-  /* Fill the space between the room title and the capture bar, rather than
-     reserving a fixed block and letting the remainder fall out as void. */
-  min-height: max(300px, calc(100dvh - 340px));
-  margin: clamp(var(--sp-14), 3vh, var(--sp-32)) auto 0;
-  padding: var(--sp-12) clamp(var(--sp-4), 2vw, var(--sp-18)) var(--sp-24);
-}
-
-.nc-stage--top-of-mind-wall::before {
-  display: none;
-}
-
-.nc-stage--top-of-mind-wall .nc-loading {
-  position: static;
-  transform: none;
-  grid-column: 1 / -1;
-  justify-self: center;
-}
-
-
-.nc-loading {
-  position: absolute;
-  top: 60px;
-  left: 50%;
-  margin: 0;
-  transform: translateX(-50%);
-  color: #999;
-  font-family: "Inter Tight", sans-serif;
-  font-size: var(--t-note);
-}
-
-.nc-note {
-  position: relative;
-  width: min(var(--w, 320px), 100%);
-  max-width: min(560px, calc(100vw - 32px));
-  max-height: none;
-  min-height: 132px;
-  background: var(--bg);
-  background-image:
-    linear-gradient(135deg, var(--jar-sheet-lip), rgba(255, 255, 255, 0) 38%),
-    linear-gradient(rgba(0, 0, 0, 0.018), rgba(0, 0, 0, 0.018));
-  color: var(--ink);
-  padding: var(--sp-26) var(--sp-28) var(--sp-56);
-  border-radius: 2px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  transform: translate(var(--dx, 0), var(--dy, 0)) rotate(var(--tilt, 0deg));
-  box-shadow: 0 10px 18px -16px rgba(0, 0, 0, 0.18);
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  z-index: 1;
-  transform-origin: center;
-  transition: transform 180ms ease-out,
-    opacity 160ms ease,
-    filter 160ms ease,
-    box-shadow 180ms ease,
-    border-color 160ms ease,
-    z-index 0s linear 320ms;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-18);
-  opacity: var(--decay, 1);
-  filter: saturate(calc(0.5 + 0.5 * var(--decay, 1)));
-}
-
-.nc-note:has(textarea:focus) {
-  cursor: default;
-}
-
-.nc-note:hover,
-.nc-note:focus-within {
-  transform: translate(var(--dx, 0), var(--dy, 0)) rotate(0deg);
-  border-color: rgba(0, 0, 0, 0.14);
-  box-shadow: 0 20px 36px -24px rgba(0, 0, 0, 0.26);
-  z-index: 20;
-  opacity: 1;
-  filter: saturate(1);
-  transition: transform 160ms ease-out,
-    box-shadow 180ms ease,
-    border-color 200ms ease,
-    z-index 0s;
-}
-
-/* A NOTE NEEDS NO FOCUS RULE OF ITS OWN. It used to wear a 3px ring; the
-   founder's ruling took every ring away, and the obvious replacement — lift it
-   toward the reader, the way its hover does — turned out to be already
-   written. `:focus-within` above matches an element that has focus ITSELF as
-   well as one containing it, so a focused note already lifts. Two attempts at
-   this added four colour literals between them and the palette ratchet caught
-   both; the third attempt is no rule at all. */
-
-.nc-note--featured {
-  z-index: 5;
-}
-
-
-
-
-
-
-
-
-@keyframes nc-note-modal-open {
-  from {
-    opacity: 0;
-    transform: translateY(4px) scale(0.99);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes nc-note-open {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -49%) scale(0.985) rotate(0deg);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1) rotate(0deg);
-  }
-}
-
-
-.nc-note-body {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: 24px;
-  line-height: 1.2;
-  font-weight: 450;
-  letter-spacing: 0;
-  color: var(--ink);
-}
-
-.nc-note-preview {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: var(--sp-10);
-}
-
-.nc-note-body--preview {
-  display: block;
-  overflow: visible;
-  overflow-wrap: normal;
-  word-break: normal;
-  hyphens: none;
-}
-
-.nc-note--featured .nc-note-body--preview {
-  overflow-wrap: normal;
-}
-
-.nc-note-support {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--t-body);
-  line-height: 1.4;
-}
-
-
-@keyframes nc-note-spinner {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (max-width: 760px) {
-
-  .nc-titlecard {
-    padding-top: var(--sp-32);
-  }
-
-  .nc-stage {
-    overflow: auto;
-    padding: var(--sp-20) var(--sp-20) 120px;
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-28);
-  }
-
-  .nc-stage::before {
-    display: none;
-  }
-
-  .nc-note {
-    position: relative;
-    top: auto;
-    left: auto;
-    width: 100%;
-    max-width: 480px;
-    margin: 0 auto;
-    transform: translate(var(--dx, 0), var(--dy, 0)) rotate(var(--tilt, 0deg));
-  }
-
-  .nc-note--featured .nc-note-body {
-    font-size: 22px;
-  }
 
   }
 
@@ -526,66 +278,36 @@ body {
 }
 
 /* -----------------------------------------------------------------------
- * Layout shell — background field + noise + drop overlay
+ * THE PARCHMENT WASH AND ITS NOISE ARE GONE, AND SO IS THE COMPONENT.
  *
- * Three stacked fixed-position layers reproduced verbatim from the
- * prototype. The blobs render at z-index 0 (parchment-tone wash that fades
- * in when the user saves an inspiration via `body.dropped`). The grain
- * noise sits at z-index 1 so it textures the wash without occluding it.
- * The `.wrap` content well sits at z-index 2 — defined further down with
- * the header rules.
+ * `.bg-field` / `.bg-blob` / `.noise` painted three 900px cream blobs
+ * (#d8d3c7, #c9c3b4, #e8e3d4) under a fractal-noise sheet, faded in by a
+ * `body.dropped` class when a save landed. `<BackgroundField />` rendered
+ * them. Two laws at once, which is why it survived as long as it did — each
+ * pass judged it by one of them and let it through on the other:
  *
- * The drop-overlay is invisible until the user drags a file onto the
- * window, at which point a `body.dragging` class fades it in. Matching the
- * prototype, the toggle is body-class driven so the drag handler can flip
- * one bit instead of mutating component state.
+ * LAW 5 — ONE MATERIAL. These are parchment-era colours. `multiply`-blending
+ * a cream wash over a near-black product does nothing anyone would choose; it
+ * was a survivor of the single-file prototype the React tree replaced, kept
+ * on the theory that a future sub-AC would wire it up. `system.css` had
+ * already set it `display: none` rather than remove it, which is how a thing
+ * stays in a codebase forever: disabled is not deleted, and the next reader
+ * finds a rule that looks load-bearing.
+ *
+ * LAW 6 — NOTHING MOVES UNLESS THE USER MOVED IT. Founder: "the bottom of the
+ * page still has the old like floating circles. I can see it like float up
+ * and down once in a while. So make sure that the bottom is completely clear.
+ * Like this is like now considered dead and unused code." They were right
+ * that it was dead, and it took two more passes to find the last host — the
+ * public profile, which is where a shared principle lands and therefore the
+ * first thing a stranger ever sees of this product.
+ *
+ * The grain the product actually uses is `--jar-grain`, baked from the
+ * palette and composited once. See `claims.css`.
+ *
+ * The drop overlay below is NOT part of this and stays: it is invisible until
+ * the user drags a file onto the window, which is motion that explains.
  * ---------------------------------------------------------------------*/
-
-.bg-field {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.bg-blob {
-  position: absolute;
-  width: 900px;
-  height: 900px;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.6);
-  transition:
-    opacity 900ms ease,
-    transform var(--duration-page) var(--ease-organic);
-  mix-blend-mode: multiply;
-}
-
-body.dropped .bg-blob {
-  opacity: 0.7;
-  transform: translate(-50%, -50%) scale(1.1);
-}
-body.dropped .bg-blob.b1 {
-  background: #d8d3c7;
-}
-body.dropped .bg-blob.b2 {
-  background: #c9c3b4;
-}
-body.dropped .bg-blob.b3 {
-  background: #e8e3d4;
-}
-
-.noise {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-}
-
 
 /* -----------------------------------------------------------------------
  * Content well + page header
@@ -603,15 +325,15 @@ body.dropped .bg-blob.b3 {
   z-index: 2;
   max-width: 1480px;
   margin: 0 auto;
-  padding: 36px var(--space-8) var(--space-9);
+  padding: 36px var(--sp-40) var(--sp-56);
 }
 
 .wrap > header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  padding-bottom: var(--space-3);
-  margin-bottom: var(--space-7);
+  padding-bottom: var(--sp-12);
+  margin-bottom: var(--sp-32);
 }
 
 .wrap h1 {
@@ -845,10 +567,12 @@ body.dropped .bg-blob.b3 {
   max-width: 420px;
   background: var(--cell);
   border: var(--border-hairline);
-  padding: var(--space-8) 36px;
+  padding: var(--sp-40) 36px;
 }
 
-.login-eyebrow {
+.login-eyebrow,
+
+.profile-eyebrow {
   color: var(--muted);
   margin: 0 0 var(--sp-14) 0;
 }
@@ -860,17 +584,21 @@ body.dropped .bg-blob.b3 {
   font-weight: 400;
 }
 
-.login-subtitle {
+.login-subtitle,
+
+.profile-subtitle {
   margin: 0 0 var(--sp-28) 0;
   color: var(--muted);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
 }
 
-.login-form {
+.login-form,
+
+.profile-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--sp-16);
 }
 
 .field {
@@ -902,7 +630,7 @@ body.dropped .bg-blob.b3 {
   color: var(--error);
   background: rgba(179, 38, 30, 0.06);
   border: 1px solid rgba(179, 38, 30, 0.25);
-  padding: 10px var(--space-3);
+  padding: 10px var(--sp-12);
 }
 
 .form-success {
@@ -910,7 +638,7 @@ body.dropped .bg-blob.b3 {
   color: var(--ink);
   background: rgba(15, 15, 14, 0.04);
   border: var(--border-hairline);
-  padding: 10px var(--space-3);
+  padding: 10px var(--sp-12);
 }
 
 
@@ -919,7 +647,7 @@ body.dropped .bg-blob.b3 {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--sp-18);
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--sp-20);
 }
 
 .profile-email {
@@ -953,8 +681,8 @@ body.dropped .bg-blob.b3 {
 .profile-memories-panel,
 .profile-danger-panel {
   display: grid;
-  gap: var(--space-4);
-  margin-top: var(--space-3);
+  gap: var(--sp-16);
+  margin-top: var(--sp-12);
 }
 
 .profile-public-heading,
@@ -964,12 +692,38 @@ body.dropped .bg-blob.b3 {
   gap: var(--sp-8);
 }
 
-.profile-public-heading .login-eyebrow,
-.profile-memories-heading .login-eyebrow,
-.profile-danger-heading .login-eyebrow,
-.profile-public-heading .login-subtitle,
-.profile-danger-heading .login-subtitle {
+.profile-public-heading .profile-eyebrow,
+.profile-memories-heading .profile-eyebrow,
+.profile-danger-heading .profile-eyebrow,
+.profile-public-heading .profile-subtitle,
+.profile-danger-heading .profile-subtitle {
   margin: 0;
+}
+
+/* THE THREE DOORS INTO THE MACHINERY.
+   Quiet text, wrapping rather than colliding — they are things to look at
+   once, not controls to reach for, so none of them is a filled button. */
+.profile-machinery-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-12) var(--sp-20);
+  margin: 0;
+}
+
+.profile-machinery-row button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.profile-machinery-row button:hover,
+.profile-machinery-row button:focus-visible {
+  color: var(--ink);
 }
 
 .profile-handle-row {
@@ -982,7 +736,7 @@ body.dropped .bg-blob.b3 {
   padding-right: var(--sp-10);
   color: var(--ink);
   font-family: var(--font-serif);
-  font-size: 24px;
+  font-size: var(--t-reading);
   line-height: 1;
 }
 
@@ -994,7 +748,7 @@ body.dropped .bg-blob.b3 {
   gap: var(--sp-10);
   color: var(--ink);
   cursor: pointer;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.35;
 }
 
@@ -1033,7 +787,7 @@ body.dropped .bg-blob.b3 {
 
 .profile-public-link {
   color: var(--muted);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   overflow-wrap: anywhere;
 }
 
@@ -1060,9 +814,11 @@ body.dropped .bg-blob.b3 {
   cursor: not-allowed;
 }
 
-.login-footer {
-  margin-top: var(--space-6);
-  font-size: var(--t-fine);
+.login-footer,
+
+.profile-footer {
+  margin-top: var(--sp-24);
+  font-size: var(--t-meta);
   color: var(--muted);
   text-align: center;
 }
@@ -1079,7 +835,7 @@ body.dropped .bg-blob.b3 {
 .login-tabs {
   display: flex;
   gap: 0;
-  margin: 0 0 var(--space-5) 0;
+  margin: 0 0 var(--sp-20) 0;
   border: var(--border-hairline);
 }
 
@@ -1088,7 +844,7 @@ body.dropped .bg-blob.b3 {
   background: transparent;
   color: var(--muted);
   border: none;
-  padding: var(--space-3) 14px;
+  padding: var(--sp-12) 14px;
   cursor: pointer;
   transition:
     background var(--duration-fast) var(--ease-standard),
@@ -1100,7 +856,10 @@ body.dropped .bg-blob.b3 {
 }
 
 
-.login-link {
+.login-link,
+
+
+.profile-link {
   background: none;
   border: none;
   padding: 0;
@@ -1110,7 +869,9 @@ body.dropped .bg-blob.b3 {
   cursor: pointer;
 }
 
-.login-link:hover {
+.login-link:hover,
+
+.profile-link:hover {
   text-decoration: none;
 }
 
@@ -1127,13 +888,13 @@ body.dropped .bg-blob.b3 {
   color: var(--ink);
   background: var(--cell);
   border: 1px solid var(--ink);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--sp-12) var(--sp-16);
   margin: 0 0 var(--sp-18) 0;
   width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
+  gap: var(--sp-12);
   cursor: pointer;
   transition:
     background var(--duration-fast) var(--ease-standard),
@@ -1318,42 +1079,6 @@ body.dropped .bg-blob.b3 {
   }
 }
 
-.nc-lang--top {
-  position: fixed;
-  top: 18px;
-  right: 18px;
-  z-index: 90;
-  background: transparent;
-  padding: 0;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-.nc-profile-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  border: 1px solid rgba(26, 23, 20, 0.14);
-  border-radius: 999px;
-  background: rgba(255, 253, 247, 0.62);
-  color: rgba(26, 23, 20, 0.68);
-  padding: 0 13px;
-  text-decoration: none;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    border-color var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.nc-profile-link:hover,
-.nc-profile-link:focus-visible {
-  border-color: rgba(26, 23, 20, 0.28);
-  background: rgba(255, 253, 247, 0.9);
-  color: rgba(26, 23, 20, 0.92);
-  outline: 0;
-}
-
 @keyframes drawerSearchMorph {
   from {
     opacity: 0.72;
@@ -1501,11 +1226,6 @@ textarea {
     line-height: 1.08;
   }
 
-  .nc-titlecard {
-    padding-top: var(--sp-72);
-    padding-right: 124px;
-  }
-
   .meta {
     grid-column: 1 / -1;
     width: 100%;
@@ -1516,24 +1236,13 @@ textarea {
     line-height: 1.2;
   }
 
-  .login-link {
+  .login-link,
+
+  .profile-link {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
     padding-block: 8px;
-  }
-
-  
-  
-  
-  .nc-lang--top {
-    top: max(20px, env(safe-area-inset-top));
-    right: 18px;
-  }
-
-  .nc-profile-link {
-    min-height: 40px;
-    padding: 0 var(--sp-14);
   }
 }
 
@@ -1581,38 +1290,6 @@ textarea {
 @media (hover: none) {
   }
 
-/* ============================================================
- * The thought is set as a thought.
- *
- * Post-it bodies used the interface sans, which made the wall's content read
- * in the same voice as its chrome. Fraunces separates the two: everything the
- * product says about itself stays in sans, and the thoughts are in serif.
- * ============================================================ */
-.nc-note-body--preview {
-  font-family: "Fraunces", "Times New Roman", serif;
-  font-weight: 400;
-  letter-spacing: -0.005em;
-  line-height: 1.32;
-}
-
-
-
-@keyframes nc-wall-leave {
-  to {
-    opacity: 0;
-    transform: translate(var(--dx, 0), calc(var(--dy, 0px) - 42px))
-      rotate(var(--tilt, 0deg)) scale(0.97);
-  }
-}
-
-@keyframes nc-wall-arrive {
-  from {
-    opacity: 0;
-    transform: translate(var(--dx, 0), calc(var(--dy, 0px) + 54px))
-      rotate(var(--tilt, 0deg)) scale(0.98);
-  }
-}
-
 /* Motion is the whole idea here, but it is not worth making anyone ill. */
 @media (prefers-reduced-motion: reduce) {
 }
@@ -1640,7 +1317,7 @@ textarea {
   grid-auto-columns: 1fr;
   gap: 0;
   padding: 3px;
-  margin-top: var(--space-3);
+  margin-top: var(--sp-12);
   border: 1px solid var(--rule);
   border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--ink) 3%, transparent);
@@ -1795,7 +1472,7 @@ textarea {
 }
 
 .profile-row-meta {
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--ink-3);
 }
 
@@ -1804,7 +1481,7 @@ textarea {
 .profile-row-actions {
   flex: 0 0 auto;
   display: flex;
-  gap: var(--space-2);
+  gap: var(--sp-8);
   justify-content: flex-end;
 }
 
@@ -1813,9 +1490,16 @@ textarea {
   color: var(--ink-1);
 }
 
+/* DISABLED DIMS THE FILL, NEVER THE LABEL. These are the rename, remove and
+   mint verbs on the settings page, and every one of them swaps its own word
+   while it is busy — "Renaming…", "Removing…", "Minting…". Dimming the whole
+   control to 45% dimmed exactly the word that was put there to say what is
+   happening, so the one moment the label matters is the one moment it cannot
+   be read. There is no fill on these, so the ink is all there is to move, and
+   `progress` says busy where `default` said forbidden. */
 .profile-memory-action:disabled {
-  opacity: 0.45;
-  cursor: default;
+  color: var(--muted);
+  cursor: progress;
 }
 
 .profile-memory-action.is-destructive:hover:not(:disabled) {
@@ -1829,7 +1513,7 @@ textarea {
 
 
 /* Section hints stay readable: one measure, not full-bleed. */
-.profile-memories-heading .login-subtitle {
+.profile-memories-heading .profile-subtitle {
   max-width: 52ch;
 }
 

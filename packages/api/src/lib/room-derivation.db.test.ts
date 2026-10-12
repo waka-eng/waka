@@ -227,7 +227,7 @@ describe("a room distilling from its pooled ground", () => {
       expect(input.relatedInspirations?.map((row) => row.id)).toEqual([related]);
       await t.sql`UPDATE inspirations SET visibility = 'private' WHERE id = ${related}`;
       return { statements: [{ statement: "Do not keep this", reason: "Earlier words",
-        relatedEvidence: [{ inspirationId: related, quote: "Earlier public words." }] }] };
+        relatedEvidence: [{ inspirationId: related, quote: "Earlier public words." }] }], category: null };
     });
     const result = await deriveSignalsForInspiration(
       { inspirationId: keep, reason: "created", deriveIntoProfileId: mind },
@@ -274,7 +274,7 @@ describe("a room distilling from its pooled ground", () => {
     for (const inputScope of ["personal", "public"] as const) {
       await ensureInspirationEmbedding({ profileId: owner, inspirationId: earlier, inputScope, db: t.db, client: s.embeddingClient });
     }
-    const extract = vi.spyOn(s.provider, "extractSignalCandidates").mockResolvedValue({ statements: [] });
+    const extract = vi.spyOn(s.provider, "extractSignalCandidates").mockResolvedValue({ statements: [], category: null });
     const run = () => deriveSignalsForInspiration(
       { inspirationId: keep, reason: "edited", deriveIntoProfileId: mind },
       { db: t.db as never, modelProvider: s.provider, embeddingClient: s.embeddingClient },

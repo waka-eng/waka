@@ -208,14 +208,14 @@ export function createOpenRouterModelProvider(): ModelProvider {
         input.inspiration.text.trim().length > 0 ||
         input.reflections.length > 0 ||
         input.attachments.length > 0;
-      if (!hasMaterial) return { statements: [] };
+      if (!hasMaterial) return { statements: [], category: null };
       const payload = await ask(
         () => buildSignalExtractionRequest(input),
         "signal extraction",
         "WAKA_MODEL_EXTRACT",
         "signal_candidates",
       );
-      if (payload === MODEL_DECLINED) return { statements: [] };
+      if (payload === MODEL_DECLINED) return { statements: [], category: null };
       if (payload === null) throw new ModelDidNotAnswerError("signal extraction");
       return parseSignalCandidates(payload, input);
     },

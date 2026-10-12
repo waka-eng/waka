@@ -8,7 +8,7 @@
 import {act} from 'react';
 import {afterEach,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {installCanvasStub,setViewport} from './helpers/canvas-stub';
-import {apiMockFrom,dataMockFrom,mountWorld,VIEWER_ID,type MountedWorld} from './helpers/render-home';
+import {apiMockFrom,dataMockFrom,mountWorld,VIEWER_ID,type MountedWorld, keepBox} from './helpers/render-home';
 import type {TopOfMind} from '../src/lib/data';
 import {profileStorageKey} from '../src/lib/profile-storage';
 const facts=vi.hoisted(()=>({inspirations:[{id:'source-one',text:'A synthetic source',daysAgo:0}],groups:[]}));
@@ -25,6 +25,22 @@ afterEach(()=>{world?.unmount();world=undefined;vi.useRealTimers();});
 const board=(body='Leave room for a small experiment.',profileId=reads.owner):TopOfMind=>({id:'reading-'+profileId,profileId,version:1,reason:'regenerated',createdMs:Date.now(),
   entries:[{id:'entry-one',type:'hypothesis',body,belief:null,prompt:null,locked:false,pinned:false,dismissed:false,sortOrder:0,citedSignals:[],createdMs:Date.now()}]});
 const forming=()=>world!.container.querySelector('.jar-hq-inner--activities .jar-forming');
+/**
+ * THE SETTLED EMPTY LINE MOVED INTO THE COMPANION'S MOUTH.
+ *
+ * Founder, on that sentence printed across the middle of the screen with the
+ * speech bubble floating through the word "formed": "I haven't formed
+ * anything yet should be shown instead of the top of mind if it's not
+ * existing yet."
+ *
+ * So it is said once, by the thing that would know, and `.jar-forming` keeps
+ * only the two states the companion cannot speak to — LOADING and FAILED,
+ * which are facts about a fetch rather than about what it has read. That
+ * split is the whole of what these cases protect and it is now the harder
+ * half: a companion that says "nothing yet" while the read is still in flight
+ * is not slow, it is wrong, and it is wrong in the first person.
+ */
+const settled=()=>world!.container.querySelector('.jar-char-bubble-reading');
 const poster=()=>world!.container.querySelector('h1.jar-poster[data-jar-chrome="1"]');
 const retry=()=>[...world!.container.querySelectorAll<HTMLButtonElement>('.jar-hq-inner--activities .jar-forming button')].find(row=>row.textContent==='Try again')!;
 const expectLoading=()=>{
@@ -32,7 +48,7 @@ const expectLoading=()=>{
   expect(forming()?.getAttribute('role')).toBe('status');
   expect(world!.container.textContent).not.toContain('No reading yet');
   expect(world!.container.textContent).not.toContain('Capture your first inspiration');
-  expect(world!.container.querySelector('.jar-home-activities')).not.toBeNull();
+  expect(world!.container.querySelector('.waka-corners')).not.toBeNull();
 };
 it('keeps Home usable while a delayed reading loads, without claiming it is empty',async()=>{
   world=await mountWorld(facts);expectLoading();expect(reads.requests).toHaveLength(1);expect(reads.requests[0]!.profile).toBe(VIEWER_ID);
@@ -42,14 +58,25 @@ it('keeps Home usable while a delayed reading loads, without claiming it is empt
 });
 it('shows the real empty state only after the owned response confirms no reading',async()=>{
   world=await mountWorld(facts);expectLoading();await act(async()=>reads.requests[0]!.resolve(null));
-  expect(forming()?.textContent).toContain('No reading yet');
+  /* THE WORDS CHANGED AND THE CLAIM DID NOT. Founder: "this should say no
+     top of mind formed yet, add more inspirations. Don't say no reading."
+     "Reading" is the machinery's word for the thing; "top of mind" is the
+     product's, and it is the one on every other surface. What this case is
+     about is unchanged — the real empty state appears only once an OWNED
+     response has confirmed there is nothing, never while a read is still in
+     flight. */
+  expect(settled()?.textContent).toContain('No top of mind formed yet');
+  /* AND THE POSTER NO LONGER SAYS IT TOO. The same sentence in two registers
+     sixty pixels apart, with the bubble overlapping the words, is exactly
+     what the founder reported. */
+  expect(forming()).toBeNull();
   expect(world.container.textContent).not.toContain('Loading your top of mind');expect(refreshTopOfMind).not.toHaveBeenCalled();
 });
 it('does not tell someone to capture their first inspiration until both reads confirm the empty state',async()=>{
   facts.inspirations=[];world=await mountWorld(facts);expectLoading();
   await act(async()=>reads.requests[0]!.resolve(null));
-  expect(forming()?.textContent).toContain('Keep something you want to come back to.');
-  expect(forming()?.textContent).not.toContain('Loading your top of mind');
+  expect(settled()?.textContent).toContain('Keep something you want to come back to.');
+  expect(world.container.textContent).not.toContain('Loading your top of mind');
 });
 it('shows a read failure, preserves a Capture draft, and coalesces explicit read-only retries',async()=>{
   world=await mountWorld(facts);
@@ -57,16 +84,17 @@ it('shows a read failure, preserves a Capture draft, and coalesces explicit read
   expect(forming()?.textContent).toContain('Couldn’t load your top of mind');
   expect(forming()?.getAttribute('role')).toBe('alert');
   expect(world.container.textContent).not.toContain('No reading yet');
-  const capture=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent?.trim()==='Capture inspiration')!;
-  await act(async()=>capture.click());const textarea=world.container.querySelector<HTMLTextAreaElement>('[aria-label="Capture inspiration"] textarea')!;
+  const capture=keepBox(world.container);
+  const textarea=capture;
   await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(textarea,'Keep my unfinished spark');textarea.dispatchEvent(new Event('input',{bubbles:true}));});
-  const close=[...world.container.querySelectorAll<HTMLButtonElement>('[aria-label="Capture inspiration"] button')].find(row=>row.textContent==='close')!;
-  await act(async()=>close.click());
   await act(async()=>{retry().click();retry().click();});expect(reads.requests).toHaveLength(2);
   await act(async()=>reads.requests[1]!.resolve(board()));await world.step(2);
-  const resume=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent?.trim()==='Continue your draft')!;
-  await act(async()=>resume.click());
-  expect(world.container.querySelector<HTMLTextAreaElement>('[aria-label="Capture inspiration"] textarea')?.value).toBe('Keep my unfinished spark');
+  /* There is no "continue" step any more: the draft never left the box, so the
+     only thing to prove is that it is still sitting there after the failure
+     and the retries. A placeholder about resuming would be a promise about a
+     drawer that no longer exists. */
+  expect(keepBox(world.container).value).toBe('Keep my unfinished spark');
+  expect(keepBox(world.container).value).toBe('Keep my unfinished spark');
   expect(world.container.textContent).not.toContain('Couldn’t load your top of mind');expect(refreshTopOfMind).not.toHaveBeenCalled();
 });
 it('aborts a stalled read, permits retry and refuses its late completion',async()=>{

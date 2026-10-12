@@ -39,7 +39,7 @@
  * `signal-derivation-thresholds.ts` for the failure it produced.
  */
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull } from "drizzle-orm";
 
 import {
   inspirationEmbeddings,
@@ -79,6 +79,7 @@ import {
   RELATED_INSPIRATION_MIN_COSINE,
   RELATED_INSPIRATION_SCAN_LIMIT,
   SIGNAL_BATCH_DEDUPE_MIN_COSINE,
+  MAX_EXISTING_CATEGORIES,
 } from "./signal-derivation-thresholds.js";
 import type { StatementEmbeddingClient } from "./signal-embeddings.js";
 import {
@@ -302,7 +303,7 @@ export async function deriveSignalsForInspiration(
     await wakeCommittedBackgroundJobs();
     return emptyResult('no_candidates');
   }
-  const [profileRows, existingStatements] = await Promise.all([
+  const [profileRows, existingStatements, existingCategories] = await Promise.all([
     db
       .select({ preferredLocale: profiles.preferredLocale, groupId: profiles.groupId })
       .from(profiles)
@@ -320,6 +321,23 @@ export async function deriveSignalsForInspiration(
       )
       .orderBy(desc(signals.lastEvidenceAt))
       .limit(MATCH_CANDIDATE_SCAN_LIMIT),
+    /* THE SHELVES THIS ARCHIVE ALREADY HAS.
+       Ordered by how much each holds, because the cap bites: shown the
+       busiest first, the model reuses the shelf a capture most likely
+       belongs on, and a long tail of one-offs cannot crowd out the
+       categories that actually organise the archive. Read from the KEEPER's
+       own captures — a room's shelves are not the person's.
+
+       Without this the row of tabs is useless: asked cold, a model names
+       each capture with a fresh phrase, and fifty saves become fifty
+       categories of one. */
+    db
+      .select({ category: inspirations.category, held: count() })
+      .from(inspirations)
+      .where(and(eq(inspirations.profileId, inspiration.profileId), isNotNull(inspirations.category)))
+      .groupBy(inspirations.category)
+      .orderBy(desc(count()))
+      .limit(MAX_EXISTING_CATEGORIES),
   ]);
 
   /*
@@ -383,6 +401,7 @@ export async function deriveSignalsForInspiration(
         : [],
     ),
     existingStatements,
+    existingCategories: existingCategories.flatMap((row) => (row.category ? [row.category] : [])),
     relatedInspirations,
   });
 
@@ -459,6 +478,26 @@ export async function deriveSignalsForInspiration(
   try {
     outcome = await db.transaction(async (tx) => {
       await acquireSignalDerivationLock(tx, profileId);
+      /**
+       * THE SHELF THE CAPTURE GOES ON.
+       *
+       * Written against the KEEPER's row, not the profile being derived
+       * into: on a room pass the capture still belongs to the person who
+       * kept it, and a room's reading does not get to re-file someone's
+       * archive.
+       *
+       * Only ever written when the reading named one. A pass that returns
+       * null leaves whatever was there — a capture that was placed once and
+       * re-read later during a model wobble should not quietly lose its
+       * shelf, and "could not place it this time" is not the same fact as
+       * "it belongs nowhere".
+       */
+      if (extraction.category) {
+        await tx
+          .update(inspirations)
+          .set({ category: extraction.category })
+          .where(eq(inspirations.id, inspiration.id));
+      }
       const applied = await applyCandidates(tx, {
         profileId,
         inputPolicy: isGroup ? GROUP_INPUT_POLICY : undefined,

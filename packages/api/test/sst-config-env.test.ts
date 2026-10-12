@@ -180,3 +180,54 @@ describe("SST principle generation cadence", () => {
     ).toEqual([]);
   });
 });
+
+describe("the attachments bucket stays private, which is what makes its CORS rule free", () => {
+  /*
+    WHY THIS GATE EXISTS, AND WHY IT DOES NOT ASSERT THE ORIGIN LIST.
+
+    The bucket's CORS block allows `*`, and three separate audits have flagged
+    it. The reasoning for keeping it is written beside it in `sst.config.ts`
+    and comes down to one fact: a CORS rule decides whether a BROWSER lets
+    script read a response, never whether S3 serves one. Authorization here is
+    SigV4 — a five-minute signature over one key under one profile's prefix,
+    minted only after a session check — and `curl` honours no CORS rule, so
+    narrowing the origin list would change nothing about who can read an
+    object.
+
+    That argument has exactly one precondition: the bucket is private. Public
+    read would create the unauthenticated request that CORS would then be the
+    last thing standing in front of, and `*` would stop being free in the same
+    commit. So the precondition is what gets a gate, rather than the origin
+    list that does not matter — and if someone makes this bucket public, this
+    fails and sends them to the comment that tells them what else to change.
+  */
+  const attachments = sstConfig.match(
+    /new sst\.aws\.Bucket\("Attachments", \{(?<body>[\s\S]*?)\n    \}\);/,
+  );
+
+  it("is declared at all, so a rename cannot make this gate vacuous", () => {
+    expect(attachments?.groups?.body).toBeTypeOf("string");
+    /* The thing the whole argument is about, held here so that a CORS block
+       removed or rewritten elsewhere still meets this reasoning on the way. */
+    expect(attachments?.groups?.body).toEqual(expect.stringContaining('allowOrigins: ["*"]'));
+  });
+
+  it("grants no public or CDN access, and installs no policy of its own", () => {
+    const body = attachments?.groups?.body ?? "";
+    /* `access` is SST's switch for public / CloudFront reads; `transform`
+       is how a raw bucket policy would be attached underneath it. Either one
+       can create a read this bucket's model does not expect. */
+    expect(
+      body,
+      'The Attachments bucket declares access or a policy transform. If reads can now happen without a presigned URL, the `allowOrigins: ["*"]` CORS rule above it is no longer free — pin it to the known web origins in this same change, and read the comment beside it first.',
+    ).not.toMatch(/\b(access|transform|policy)\s*:/);
+  });
+
+  it("is reached only through the link, so the signing identity stays the Lambda role", () => {
+    /* No `allow:` statement anywhere hands `s3:GetObject` on this bucket to
+       anything but the linked functions' roles. If one appeared, the "every
+       byte is signature-gated" claim would need re-checking. */
+    expect(sstConfig).toEqual(expect.stringContaining("attachmentsBucket,"));
+    expect(sstConfig).not.toMatch(/Principal:\s*"\*"/);
+  });
+});

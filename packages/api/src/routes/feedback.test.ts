@@ -57,6 +57,85 @@ function mountWith(deps: FeedbackRouteDependencies = {}) {
 }
 
 describe("POST /api/feedback", () => {
+  it("scopes the verdict to the profile that is answering rather than ignoring it", async () => {
+    /* AN AGENT'S CLAIMS ARE ANSWERED ON THE AGENT'S BEHALF.
+       An account's agent keeps its own things and is read for its own
+       claims, so a person standing on their agent's wall is ruling on a
+       sentence about the AGENT. Filed under the session's own profile that
+       verdict is about a signal the session does not own, and
+       `targetBelongsToProfile` refuses it — which read as the claim being
+       broken rather than the stance.
+       What this asserts is the wiring: the field reaches scope resolution
+       instead of being dropped on the floor. Whether that resolution then
+       GRANTS the act is `profileAccessError`'s decision against a real
+       database, which is why the next test covers the refusal and this one
+       stops at the question being asked. */
+    const agentProfileId = "00000000-0000-4000-8000-0000000000a9";
+    const createFeedback = vi.fn(async () => feedbackRecord);
+    const loadProfile = vi.fn(async () => null);
+    const app = mountWith({ createFeedback, loadProfile: loadProfile as never });
+
+    await app.request("/api/feedback", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetType: "signal", targetId, value: "true", profile: agentProfileId }),
+    });
+
+    expect(loadProfile).toHaveBeenCalledWith(expect.anything(), agentProfileId);
+    /* And nothing was written under the session's own profile on the way. */
+    expect(createFeedback).not.toHaveBeenCalled();
+  });
+
+  it("files under the session's own profile when no profile is named", async () => {
+    const createFeedback = vi.fn(async () => feedbackRecord);
+    const loadProfile = vi.fn(async () => null);
+    const app = mountWith({ createFeedback, loadProfile: loadProfile as never });
+
+    /* An entry rather than a signal: a signal verdict also resolves contested
+       pairs, which is a second real query this mount has no database for. The
+       fact under test is whose profile the row is filed under, and that is
+       decided before either. */
+    const response = await app.request("/api/feedback", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetType: "top_of_mind_entry", targetId, value: "true" }),
+    });
+
+    expect(response.status).toBe(201);
+    /* The unchanged path costs no lookup: every caller that existed before
+       agents had claims still writes exactly as it did. */
+    expect(loadProfile).not.toHaveBeenCalled();
+    expect(createFeedback).toHaveBeenCalledWith({}, expect.objectContaining({ profileId }));
+  });
+
+  it("refuses a profile in another account the same way it refuses one that does not exist", async () => {
+    /* The pair of status codes must not become an oracle: a real id
+       belonging to a stranger has to answer exactly like a made-up one, or
+       any caller can enumerate profile ids across the install. */
+    const createFeedback = vi.fn(async () => feedbackRecord);
+    const app = mountWith({
+      createFeedback,
+      loadProfile: (async () => ({
+        id: "00000000-0000-4000-8000-0000000000b7",
+        accountId: "00000000-0000-4000-8000-0000000000ff",
+        type: "human",
+      })) as never,
+    });
+
+    const response = await app.request("/api/feedback", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        targetType: "signal", targetId, value: "true",
+        profile: "00000000-0000-4000-8000-0000000000b7",
+      }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(createFeedback).not.toHaveBeenCalled();
+  });
+
+
   it('passes the displayed revision through and refuses changed wording with a recoverable conflict', async () => {
     const createFeedback = vi.fn(async () => { throw new FeedbackTargetChangedError(); });
     const app = mountWith({ createFeedback });

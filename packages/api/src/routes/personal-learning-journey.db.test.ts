@@ -44,6 +44,7 @@ beforeEach(async () => {
   extract.mockImplementation(async (input: SignalCandidateExtractionInput) => ({
     statements: input.reflections.some((answer) => answer.answer === answers[1]!.answer)
       ? [{ statement, quote: answers[1]!.answer }] : [],
+    category: null,
   }));
   assess.mockImplementation(async (input: SignalSupportAssessmentInput) => {
     const witness = input.sources.find((source) => source.kind === 'reflection'
@@ -180,7 +181,7 @@ describe('personal learning journey', () => {
   it('distinguishes no new candidates, a daily hold, and a completed unchanged reading', async () => {
     const f = await saveThreeAnswers(); await drain();
     const before = await getLiveTopOfMind(t.db as never, { profileId: f.profileId });
-    extract.mockResolvedValue({ statements: [] });
+    extract.mockResolvedValue({ statements: [], category: null });
     const repeated = await f.app.request(f.path, { method: 'PATCH', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ text: 'An unhurried evening' }) });
     expect(repeated.status).toBe(200);
@@ -192,7 +193,7 @@ describe('personal learning journey', () => {
 
     const addedAnswer = 'A short sketch helps me plan.';
     const addedStatement = 'Sketching helps me plan';
-    extract.mockResolvedValue({ statements: [{ statement: addedStatement, quote: addedAnswer }] });
+    extract.mockResolvedValue({ statements: [{ statement: addedStatement, quote: addedAnswer }] , category: null });
     vi.mocked(GeminiEmbeddingHttpClient.prototype.embed).mockImplementation(async (text) =>
       [text === addedStatement ? 0 : 1, text === addedStatement ? 1 : 0, ...new Array<number>(766).fill(0)]);
     const saved = await f.post(`${f.path}/reflections`, { question: 'Anything else?', answer: addedAnswer });

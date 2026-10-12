@@ -51,7 +51,6 @@
  */
 
 import {
-  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -64,14 +63,13 @@ import {
 } from "react";
 import { PrincipleRead } from "../components/PrincipleRead";
 import { publicWebOrigin } from '../lib/public-origins';
-import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlow";
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
-import { ReadingFormationHelp } from '../components/ReadingFormationHelp';
+import { createConversation } from "../lib/api/conversations";
 import { DialogSurface } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useViewNavigation } from '../lib/use-view-navigation';
-import { EMPTY_VIEW, resolveViewWall, viewHref, type ViewLocation } from '../lib/view-location';
+import { EMPTY_VIEW, resolveViewWall, viewHref, type ViewLocation, type ViewOpen } from '../lib/view-location';
 import { InspirationSearch } from '../components/InspirationSearch';
 
 import { hueCss } from "../lib/appearance";
@@ -83,13 +81,11 @@ import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
 import { useInspirationProcessing } from '../lib/use-inspiration-processing';
 import { useAuthoredSave } from '../lib/use-authored-save';
 import { useInspirationDraft } from '../lib/use-inspiration-draft';
-import { useAudioRecording } from '../lib/use-audio-recording';
+import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
-import { ReviewPanel } from '../components/ReviewPanel';
-import { useReviewEntry } from '../lib/use-review-entry';
-import { HomeActivities } from '../components/HomeActivities';
-import {PrinciplesShortcutLabel} from '../components/PrinciplesShortcutLabel';
-import {PersonalNavigation} from '../components/PersonalNavigation';
+import { paintField } from '../space/inspiration/field-paint';
+import { Menu } from '../components/Menu';
+import { usePageMenu } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
@@ -98,6 +94,7 @@ import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
+import { listClaims, type ApiClaim } from '../lib/api';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
 import { inspectInspirationPhoto } from '../lib/inspiration-photo';
 import { uploadInspirationMedia } from '../lib/inspiration-media-upload';
@@ -129,9 +126,16 @@ import {
   type BeingSprites,
   type Palette,
 } from "../canvas/palette";
+import { SavesOverlay } from "../components/SavesOverlay";
+import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
+import { ClaimsOverlay } from "../components/ClaimsOverlay";
+import { ConversationsOverlay } from "../components/ConversationsOverlay";
+import { ConversationPanel } from "../components/ConversationPanel";
+import type { ApiConversation } from "../lib/api/conversations";
 import { useMeasured } from "../canvas/measured";
+import { setStanding as publishStanding } from "../lib/standing";
 import { renderScale } from "../canvas/scale";
-import { BODY_TIERS, bodyPath } from "../character/raster";
+import { BODY_TIERS, EYE_LON, FACE_R, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, EYE_INK, EYE_R, bodyPath } from "../character/raster";
 import { GroupPanel } from "../space-kinds/GroupPanel";
 import { eventsAtStop, groupHistoryCaption, groupHistoryEvents, type HistoryGrain } from "../space-kinds/group-history";
 import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSettings";
@@ -166,7 +170,6 @@ import {
   EASE_GLOW_IN,
   EASE_GLOW_OUT,
 } from "../space/inspiration/field";
-import { paintField } from "../space/inspiration/field-paint";
 import {
   bornBall,
   makeAgentBall,
@@ -190,6 +193,7 @@ import type { AgentBundle } from "../lib/agent-contract";
 import { MOCK_AGENTS, MOCK_AGENT_BUNDLES } from "../lib/fixture/agent-walls";
 import { offlineHome, type OfflineHome } from "../lib/fixture/offline-home";
 import {
+  asSentence,
   dateStamp,
   citedWords,
   dateWords,
@@ -201,11 +205,8 @@ import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 import type { MessageKey } from "../lib/locales";
 
 import {
-  fetchSignalDuplicates,
-  resolveSignalDuplicate,
   affirmGroupProposal,
   declineGroupProposal,
-  createGroup,
   fetchPrinciples,
   createProfile,
   fetchGroupProposals,
@@ -214,8 +215,6 @@ import {
   fetchGroupTimeline,
   type ApiGroupTimeline,
   type ApiGroupTopOfMind,
-  type ApiReflection,
-  type ApiInspiration,
   leaveGroup,
   removeGroupMember,
   renameGroup,
@@ -233,11 +232,9 @@ import {
   deleteInspiration,
   createFeedback,
   releaseSignal,
-  restoreSignal,
   dismissTopOfMindEntry,
   restoreTopOfMindEntry,
   releaseTopOfMindEntry,
-  holdTopOfMindEntry,
   updateInspiration,
   fetchProfiles,
   type ApiGroupProposal,
@@ -256,17 +253,10 @@ import {
   type ApiPrinciple,
   type ApiGroupFieldInspiration,
   type ApiGroupWallSignal,
-  type ApiReading,
-  fetchTheReading,
-  type ApiAntechamberRow,
-  type ApiSignalDuplicate,
   fetchTheWeather,
   ApiError,
 } from "../lib/api";
-import { AntechamberPanel } from "../components/AntechamberPanel";
-import { DuplicatesPanel } from "../components/DuplicatesPanel";
 import { LoadingHome } from "../components/LoadingHome";
-import { ReadingPanel } from "../components/ReadingPanel";
 import {
   loadInspiration,
   loadInspirations,
@@ -288,7 +278,12 @@ import { RECEIPTS } from "../lib/receipts";
 import { useOptionalAuth } from "../lib/auth-context";
 
 import "../styles/home.css";
-
+/* THE CONVERSATION'S OWN SHEET, loaded here because the conversation is part
+   of the world now. It used to be imported by `pages/Chat`, and deleting that
+   page took the entire stylesheet out of the bundle with it — the transcript
+   rendered with no styling at all for one commit. A surface that moves has to
+   bring its sheet. */
+import "../styles/chat.css";
 
 /**
  * MOONLIGHT — the surface, chosen.
@@ -318,30 +313,6 @@ const SPARKS = 26;
  * most-repeated note.
  */
 /**
- * HOW MUCH OF THE GROUND IS ALREADY ON SCREEN AT HEADQUARTERS.
- *
- * 96 became 140 on 2026-08-28. The founder: "overall balancing feels kinda
- * off.. some places are more crowded than others. which is exacerbated on
- * mobile." Measured, the imbalance was one gap, and it was always the same
- * gap — between the mouth and this line:
- *
- *   the mouth -> the peek line   336px on 2000x1150
- *                                211px on 1440x900
- *                                183px on 390x844
- *
- * while the three things along the top of a phone sat 8px and 3px apart. And
- * it grows with the screen because the character is anchored to the middle of
- * the viewport while the field is anchored to the bottom, so every pixel of
- * extra height lands in that one band and nowhere else.
- *
- * THE ANSWER IS NOT MORE SPACING SOMEWHERE ELSE. That band is empty because
- * the ground was held down, and the thing that belongs in it is the ground.
- * Raising the peek fills it with the world's own content — more of what you
- * keep, already on screen when you arrive — rather than distributing the void
- * more evenly. The world is what the space is for.
- */
-const PEEK = 140;
-/**
  * The dial's strip, as a FALLBACK ONLY — the real number is measured off the
  * dial itself every time the world is measured (see `measure`).
  *
@@ -368,7 +339,17 @@ const DIAL_H = 92;
  * every time a line of typing wrapped, which is the one thing this page does
  * not do.
  */
-const MOUTH_H = 52;
+/* The room the composer keeps at the bottom of the screen. A CONSTANT on
+   purpose — see the note where it is used: the companion must not move when
+   the composer grows a drawer or a question, so this is the reserve, not a
+   measurement. Raised from 52 when the composer gained a footer and a primary
+   action: 52 was the height of a single-line box that no longer exists, and a
+   reserve smaller than the thing it reserves for is the companion sitting on
+   its own input. */
+const MOUTH_H = 128;
+
+/** How far below the fold the field begins. See `fieldTop`. */
+const FIELD_CLEARANCE = 24;
 /** The least the topmost orb is ever left clear of the top edge. */
 const FIELD_EDGE = 6;
 /**
@@ -408,6 +389,27 @@ const SELF_WALL_NAME = "Me";
  * out of room. Nothing shrinks now, so there is no floor to name.
  */
 const CHAR_SIZE = 120;
+/**
+ * THE TWO CONSTANTS THAT REPLACED TWO MEASUREMENTS.
+ *
+ * `companion.y` used to read the live heights of the poster and the claim,
+ * which is why the creature drifted with content and why two blank reserves
+ * had to be installed to stop it. These are the fixed bands those blocks live
+ * in instead. A constant can be wrong by a few pixels; a measurement is wrong
+ * by whatever the person happened to write.
+ *
+ * `POSTER_SLOT` is the band's WHOLE height, top padding included — the
+ * padding is what clears the switcher, so counting the bar again on top of it
+ * would push the creature down by 56px of nothing. Inside it: three lines of
+ * `--t-reading` at its desktop ceiling (30px x 1.25 x 3 = 113), the
+ * provenance band, and the row of verbs.
+ *
+ * The statement is anchored to the FOOT of that band in `home.css`, so a
+ * longer one grows upward into its own air rather than downward into the
+ * creature, and a shorter one leaves the gap above itself, where air against
+ * the top edge reads as margin rather than as a hole.
+ */
+const POSTER_SLOT = 300;
 /** An orb eases down into its home over this long. */
 const ARRIVE_MS = 520;
 /** How many of the newest orbs share the peek row in section A. */
@@ -603,6 +605,41 @@ const MOOD_GLANCE = 0.45;
  */
 const FORM_FADE_MS = 320;
 /**
+ * HOW LONG THE CREATURE HOLDS ITS OFFER UP BEFORE GOING BACK TO THE READING.
+ *
+ * Founder: "the time to go back to the top of mind should be so much shorter,
+ * like half what it is right now."
+ *
+ * Six seconds was argued from reading speed — four to read the sentence, a
+ * beat to reach for it — and that reasoning is about the wrong thing. The
+ * sentence is five words and the person pressed the creature a moment ago,
+ * so they are not reading it cold; they are deciding, and a decision not
+ * made in three seconds is a no. What the extra three seconds actually did
+ * was hold the ONE THING THIS SCREEN IS FOR off the screen — the top of mind
+ * is the product's output and the offer is an interruption of it, however
+ * welcome. An interruption should be the shorter of the two.
+ */
+const OFFER_MS = 3000;
+/**
+ * HOW LONG THE BUBBLE STAYS DOWN WHILE THE CREATURE CHANGES FORM.
+ *
+ * Founder: "when the character is spinning from me to my agent, the speech
+ * bubble should be gone and it should reappear."
+ *
+ * Right, and the canvas already agreed with them: the form change hides
+ * inside a half turn, and the comment on it forbids any frame where two
+ * creatures are both in focus. The bubble was the one part of the companion
+ * that did not turn — it hung in the air, unchanged, over a body dissolving
+ * into somebody else's, and announced that the words and the creature were
+ * two unrelated objects.
+ *
+ * It covers the turn (`UNWIND_MS`) rather than the dissolve (`FORM_FADE_MS`),
+ * because what the eye follows is the turn: the dissolve finishes while the
+ * creature is still facing away, and bringing the bubble back then would put
+ * words over the back of its head.
+ */
+const FORM_HUSH_MS = UNWIND_MS;
+/**
  * ARRIVING IN A ROOM, WHOSE GROUNDS ARE HERE IS LIT THIS LONG.
  *
  * A room pours ONE member's memories — yours, until you move to somebody
@@ -624,9 +661,11 @@ const GROUNDS_LIT_MS = 1600;
  * longitude; the pair are ~1 radian apart, which is what puts them where they
  * have always sat when the companion is facing you.
  */
-const EYE_LON = 0.5;
-/** The equator's radius as seen head-on, as a fraction of the body's width. */
-const FACE_R = 0.34;
+/* `EYE_LON` AND `FACE_R` MOVED TO `character/raster.ts`, with the rest of
+   the creature's anatomy, when a page started drawing the creature too. The
+   loop still owns its BEHAVIOUR — yaw, pitch, blink, gaze, the cell grid —
+   and imports the numbers those behaviours are applied to. See the block at
+   the top of that file; `rest-pose.test.ts` fails if a copy grows back. */
 /**
  * The traveler (v8). Pressing toward a neighbouring column, the companion
  * turns and glides ahead of the world over this long, easing in…
@@ -698,15 +737,12 @@ const PITCH_FULL = 1400;
  * lays out itself and by nothing else.
  */
 
-
 // ---------------------------------------------------------------------------
 // THE SPECIES: one companion, many beings
 // ---------------------------------------------------------------------------
 
-
 /* rgbToHsl went with the tint pairs: it existed to pick the lighter end of a
    gradient pair, and there are no pairs left to pick between. */
-
 
 
 /**
@@ -776,11 +812,9 @@ function markPassages(
 
 
 
-
 // ---------------------------------------------------------------------------
 // Walls: the horizontal axis, and what stands on it (v10)
 // ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // AGENT WALLS — each rebuilt from its agent's OWN layers
@@ -932,7 +966,6 @@ async function loadAgentBundle(
         };
 }
 
-
 interface Layout {
   wallL: number;
   wallR: number;
@@ -985,7 +1018,35 @@ function computeLayout(vw: number, vh: number, dialH: number): Layout {
     /* The peek line sits clear of the time dial, which is fixed to the
        bottom of the viewport in both sections — otherwise the topmost orbs
        and the dial occupy the same strip. */
-    fieldTop: vh - dialH - PEEK,
+    /* NO PEEK (founder ruling: no scrolling down, and no dots along the
+       bottom). The field used to start `PEEK` pixels above the fold so a strip
+       of memories showed under the home screen — an invitation to scroll down,
+       back when scrolling down was how you reached them. The archive is a page
+       now, so the ground begins exactly at the bottom edge: nothing of it is in
+       frame at rest, and all of it is there the moment the camera goes down.
+       Done here rather than by skipping the paint, because a field that stops
+       drawing while the camera is easing cannot tell "not here" from "not yet"
+       — which is flaky in exactly the way its own suite then reports.
+
+       `vh` exactly, not `vh - dialH`: the dial's strip is chrome drawn OVER
+       the bottom of the viewport, so reserving it still left the topmost orbs
+       inside the frame. The ground begins where the screen ends. */
+    /**
+     * THE FIELD STARTS BELOW THE FOLD, AND CLEARS IT.
+     *
+     * `vh` put the field's top edge exactly ON the bottom of the viewport,
+     * which is only clear if nothing ever moves — and every orb carries a
+     * slow sine drift on both axes, so the top row bobbed in and out of the
+     * bottom of the screen. Founder: "the bottom of the page still has the
+     * old floating circles, I can see it float up and down once in a while."
+     *
+     * The peek row places itself at `top + r + ampY`, so the arithmetic
+     * already intends the topmost pixel at full upward drift to land on
+     * `top`. Landing ON the line is the bug: a boundary that is exactly
+     * touched is a boundary that sub-pixel rounding crosses. The clearance
+     * is the margin that makes "below the fold" true rather than marginal.
+     */
+    fieldTop: vh + FIELD_CLEARANCE,
     /* AND THE FIELD ENDS EXACTLY WHERE THE DIAL BEGINS — not forty pixels of
        air above it. The reserve is a real, measured piece of chrome, so it is
        the only thing the field owes the bottom of the screen. */
@@ -996,7 +1057,6 @@ function computeLayout(vw: number, vh: number, dialH: number): Layout {
 // ---------------------------------------------------------------------------
 // Palette + sprites (rastered once at load and on DPR change, never per frame)
 // ---------------------------------------------------------------------------
-
 
 
 
@@ -1049,7 +1109,6 @@ function computeLayout(vw: number, vh: number, dialH: number): Layout {
  *
  * ==========================================================================
  */
-
 
 /**
  * Where the reading panel sits, in viewport coordinates. Either `top` or
@@ -1118,7 +1177,35 @@ interface SimApi {
   /** The traveler: one column left or right, the companion leading. */
   travel: (dir: 1 | -1) => void;
   /** Walk to a wall by column, from the axis map along the bottom. */
-  goToWall: (col: number) => void;
+  /**
+   * TRAVEL TO A WALL — or, with `instant`, BE THERE WITHOUT TRAVELLING.
+   *
+   * Founder: "I kind of want to give the feeling of like rather than my agent
+   * like moving rooms it kind of like switching itself up to its agent form.
+   * Do you get what I mean?" And, three separate times: "the agent the
+   * character shouldn't move left It should move right."
+   *
+   * Those are one request, and `instant` is the answer to both. The second
+   * sentence was read literally for a long time — put the agent on the other
+   * side of the axis — and the axis is the wrong place to fix it: agents sit
+   * at negative columns, rooms at positive, and swapping them moves rooms
+   * for a reason that has nothing to do with rooms. Measured, it costs
+   * twenty-four room-suite failures and a harness that silently assumed
+   * which side rooms live on.
+   *
+   * But the direction only matters BECAUSE there is a glide to have a
+   * direction. The founder's own words say the creature should change rather
+   * than travel — and the canvas already believed that: the change of form is
+   * a dissolve, and the aura is deliberately never pixelated because "its
+   * colour temperature is one of the two invariants that say this is still
+   * the same companion." The navigation was the only thing still insisting
+   * these were two PLACES.
+   *
+   * So the form switch arrives without a crossing. Nothing slides left,
+   * nothing slides right, and one account with two profiles reads as one
+   * companion with two faces — which is what it is.
+   */
+  goToWall: (col: number, instant?: boolean) => void;
   /* `revealMemory` LIVED HERE and is gone. It flew the camera from a statement
      down to the memory it was read from — the only navigation in the world
      caused by reading rather than by moving, and the founder ruled it out
@@ -1284,10 +1371,8 @@ export interface FieldAudit {
 /* What is NOT "outside" for each sheet: the sheet, and the control that
    opens it — pressing that again is the control's own toggle, not a
    dismissal, and treating it as one closes and reopens in the same press. */
-const KEEP_ACCOUNT = [".jar-settings", ".jar-account"] as const;
 const KEEP_SHEET = [".jar-settings", ".jar-seek"] as const;
 const KEEP_PROV = [".jar-prov-room", ".jar-panel"] as const;
-const KEEP_ANTE = [".jar-antechamber", ".jar-settings"] as const;
 
 export default function HomePage(): JSX.Element {
   /* No gate. This is home now — it is what a signed-in person lands on, in
@@ -1393,7 +1478,9 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    */
   const [fieldBeyond, setFieldBeyond] = useState<number>(0);
   const [fieldLoading,setFieldLoading]=useState(false);
-  const [fieldFailed,setFieldFailed]=useState(false);
+  /* Written by the field loader, read by nothing on this screen any more:
+     the archive is a page now and reports its own failure there. */
+  const [,setFieldFailed]=useState(false);
   const retryFieldRef=useRef<(()=>void)|null>(null);
   const fieldLoadingRef=useRef(false);fieldLoadingRef.current=fieldLoading;
   /**
@@ -1478,7 +1565,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
   const [principlesRead,setPrinciplesRead]=useState(false);
   const acceptPrinciples=useCallback((rows:ApiPrinciple[])=>{setPrinciples(rows);setPrinciplesRead(true);},[]);
-  const [groupPrincipleCounts, setGroupPrincipleCounts] = useState<Record<string, number>>({});
   /**
    * LAYER FOUR BECOMES SOMETHING YOU CAN ANSWER, not only read.
    *
@@ -1749,6 +1835,86 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** What the companion is saying: its own line when tapped, and the told
       weather when an arrival has something on the record to tell. */
   const [charSay, setCharSay] = useState("");
+  /**
+   * ═══ THE CREATURE WAS JUST PRESSED, AND IS OFFERING ════════════════════
+   *
+   * Founder: "clicking on the character should just make it shine and bright,
+   * and maybe we can change the speech bubble from the top of mind content to
+   * 'feeling inspired? save inspiration', and then a few seconds later it can
+   * come back to top of mind."
+   *
+   * This replaces a press that went straight into the notepad. The press is
+   * an ANSWER now rather than a door: you poke it, it lights up and offers,
+   * and the offer is the thing you press to write. One extra press buys the
+   * gesture its whole character — a creature that reacts is a creature, and
+   * one that teleports you to a form is a button with a face on it.
+   *
+   * THE RETURN IS NOT THE WORLD MOVING ON ITS OWN. The law is that nothing
+   * changes unless the person moved it, and they did: this whole sequence is
+   * one press and its settling. What would break the law is a bubble that
+   * cycled unprompted, which is why the rotation the founder asked about
+   * earlier — "once in a while show the pencil icon?" — was answered with
+   * state rather than a timer.
+   */
+  const [offering, setOffering] = useState(false);
+  const offerTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (offerTimer.current !== null) window.clearTimeout(offerTimer.current); }, []);
+  /** The loop's own fallback line, reachable from a press. Assigned inside
+      the frame effect, where it is written. */
+  const sayLineRef = useRef<(() => string) | null>(null);
+  /** Which thing the next press says. */
+  const creatureTurn = useRef(0);
+  /**
+   * ═══ PRESSING IT KEEPS CHANGING WHAT IT SAYS ═══════════════════════════
+   *
+   * Founder: "clicking on the character should keep changing what it says.
+   * Like, I see, like, feeling inspired, save it, and that's like your
+   * memory was consulted the X times, blah blah blah."
+   *
+   * THE ROTATION ALREADY EXISTED AND WAS UNREACHABLE, which is the part
+   * worth recording. `sayTheWeather` walks the day's clauses one per press
+   * (`weatherTurnRef`), and `sayLine` below picks a fresh field line and
+   * never repeats the last one. Both were wired to the CANVAS hit-test —
+   * and `.jar-char-press`, an invisible disc, sits on top of the canvas and
+   * took every press for itself, showing the save offer and nothing else.
+   * So the product had two things to say, a mechanism for alternating them,
+   * and a button over the top that said one of them forever.
+   *
+   * One target, one rotation. The offer first, because that is the order
+   * the founder listed and because saving is what the screen is for; then
+   * what has been happening, which is the record talking rather than the
+   * product asking.
+   */
+  const creatureSpeaks = useCallback(() => {
+    const turn = creatureTurn.current++;
+    if (offerTimer.current !== null) window.clearTimeout(offerTimer.current);
+    if (turn % 2 === 0) {
+      setCharSay('');
+      setOffering(true);
+      offerTimer.current = window.setTimeout(() => setOffering(false), OFFER_MS);
+      return;
+    }
+    /* The weather replaces the offer rather than stacking on it: the bubble
+       holds one thing, and `charSay` is the branch that wins. */
+    setOffering(false);
+    const fallback = sayLineRef.current;
+    if (fallback) sayTheWeatherRef.current(fallback);
+  }, []);
+
+  /* WHETHER THE DOCK'S PLUS IS OPEN. A press on a place is navigation and
+     lives in the address; a press on the plus is not going anywhere yet, so
+     it stays here — putting it in the URL would make "I was about to make
+     something" a page you could link to and come back to. */
+  /** The picker the dock's making-slot opens while a note is being written. */
+  const dockFileInput = useRef<HTMLInputElement>(null);
+  /** Which saves the archive is showing, when it was opened by asking a
+      claim where it came from. Cleared by its own control and by leaving. */
+  const [savesFocus, setSavesFocus] = useState<{ label: string; ids: readonly string[] } | null>(null);
+  const [makingNew, setMakingNew] = useState(false);
+  /* The box's own measured height, kept across frames so the layout pass can
+     place the box before it has re-measured it this frame. `MOUTH_H` is the
+     first-paint fallback and nothing more. */
+  const slotH = useRef(0);
   /* The panel and the selection are ONE state: opening is selecting, and
      closing — by Esc, by a tap on the dimmed field, by tapping the same orb
      again — releases. It lags `selectedId` at BOTH ends: it does not appear
@@ -1773,9 +1939,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * One sheet, two doors into it, and the choice is made inside it where
    * there is room to say what each thing IS.
    */
-  const [newPlace, setNewPlace] = useState(false);
   /** Whether the top-left split button is listing the other walls. */
-  const [wallPick, setWallPick] = useState(false);
   /** Which pattern in the sky is being read. Its verdict row belongs to it. */
   /**
    * WHOSE GROUNDS ARE OPEN — and why the grounds are not simply always shown.
@@ -1888,27 +2052,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     void readingRefresh.start();
   }, [readingRefresh.start]);
 
-  /**
-   * HOLD THIS ONE UP — and there is no un-holding, by the canon's design.
-   * You either keep a statement or you say it is not you; a toggle back
-   * through "held" would be a third state that means nothing. So the button
-   * disappears once it has been used, rather than offering to undo itself.
-   */
-  const holdLead = useCallback((entry: Entry) => {
-    setNotes((prev) =>
-      prev ? prev.map((n) => (n.id === entry.id ? { ...n, pinned: true } : n)) : prev,
-    );
-    /* the receipt for the pin — the board's own quiet channel */
-    setBoardToast(say(RECEIPTS.pinned.messageKey));
-    window.setTimeout(() => setBoardToast(null), 6000);
-    if (offlineRef.current) return;
-    const finish = beginReadingMutation();
-    holdTopOfMindEntry(entry.id).catch(() => {
-      setNotes((prev) =>
-        prev ? prev.map((n) => (n.id === entry.id ? { ...n, pinned: false } : n)) : prev,
-      );
-    }).finally(finish);
-  }, []);
+  /* HOLDING WAS A PRESS AND IS NOT ONE NOW. `holdLead` lived here and set
+     `pinned`, behind a verb the founder twice said they could not read — "i
+     dont get what these 4 options mean (held up isnt even clickable)" — and
+     then named the three that should be here without it: "let user either
+     edit it or remove it and ask it to reread". The client
+     (`holdTopOfMindEntry`), its endpoint and the board's reading of `pinned`
+     are all untouched; what went is the control, because a callback with no
+     caller is the unreachable shape this file keeps deleting elsewhere. */
 
   /**
    * NOT THIS ONE. Dismissing is not deleting: the canon keeps the entry and
@@ -2117,7 +2268,260 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     writeProfileText(storageScope, "keepPublic", keepPublic ? "1" : "");
   }, [keepPublic, storageScope]);
   const [mouthOpen, setMouthOpen] = useState(() => readProfileText(storageScope, "draft") !== "");
+  /* The attachment drawer's disclosure. Open on arrival of a file — you just
+     dropped it and the one thing you want is to see that it landed — and
+     collapsible from there, which is the only state the pattern's count
+     badge is for. */
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  /**
+   * WHY THIS MOMENT, ASKED WHILE THE MOMENT IS STILL IN YOUR HANDS.
+   *
+   * Founder: people share photos of their most inspiring moments, and "as
+   * they upload each photo" they say why it felt special. At upload, not
+   * later in a queue — a photo you chose ten seconds ago is a thing you can
+   * still answer about, and the same photo next Tuesday is a thing you have
+   * to reconstruct.
+   *
+   * It rides the save as a REFLECTION, which already exists as "the short
+   * human-authored Q&A hanging off a capture… the person's own words, and
+   * input to extraction". So the answer is not a caption sitting beside the
+   * picture — it is material the reading is drawn from, which is the only
+   * reason it is worth asking for.
+   */
+  const [momentWhy, setMomentWhy] = useState("");
+
+
+  /**
+   * THE CLAIM THE COMPANION IS HOLDING.
+   *
+   * Founder: claims belong on the top of mind, shown as the agent asking you
+   * to confirm — "I want the top of mind to be where the user always starts
+   * their journey." So there is no claims page to visit: the one thing WAKA
+   * needs from a person and cannot do alone is asked where the person already
+   * is, by the thing that did the reading.
+   *
+   * ONE AT A TIME. The queue is fetched a page deep so answering can advance
+   * without a round trip, but only the head of it is ever on screen — the
+   * founder's own rule for this surface is one line at a time, and a list of
+   * claims under the character would be the dense version of exactly the
+   * thing that ruling removed.
+   */
+  /* Whose wall a verdict is being given on, read at the moment of the press
+     rather than closed over — `sayVerdict` is built once and the wall moves
+     under it. */
+  const answeringAsRef = useRef<string | undefined>(undefined);
+  const [claimQueue, setClaimQueue] = useState<ApiClaim[]>([]);
+  /**
+   * CORRECTING A CLAIM — THE ONLY PLACE IN THE PRODUCT THAT TAKES TYPING
+   * BESIDES THE ONE BOX.
+   *
+   * This state is what is left of five components (2026-10-10). Founder's
+   * workflow design, on the writing-based reflection flow that used to live
+   * here: *"Review isn't a smaller version of confirm — it's a different
+   * mental model. Its placeholder is 'What comes to mind?'. It generates open
+   * questions, collects written answers, and carries draft storage, draft
+   * copying, draft discarding, and 'this device couldn't keep your draft'
+   * recovery. Confirming a claim needs none of that. Typing happens in one
+   * place only: when you correct."*
+   *
+   * So: one field, one claim, no draft lifecycle. `text` lives in memory for
+   * as long as the field is open and goes to the server with the verdict it
+   * belongs to. There is deliberately NO localStorage behind it — a draft
+   * store is the thing that was just deleted, and re-growing one here for a
+   * sentence that is two taps from being saved would be the fold undoing
+   * itself. What protects the words instead is that the field does not close
+   * on failure: `failed` keeps them on screen with the reason beside them.
+   *
+   * WHY IT HANGS OFF "NOT TRUE" AND NOT "PARTLY". Also the founder's
+   * instruction — *"one text field, reached only after 'not quite'"*. Partly
+   * used to open a rewrite of the claim's own wording here, and that act is
+   * not lost: it still lives on the reading's ground rows, where the sentence
+   * sits in its own context and rewording it is the point. In the queue,
+   * partly is now exactly as cheap as yes — one press, no round trip — and
+   * the generator already reads it ("a verdict of partly is an invitation to
+   * sharpen, not an arbitration"; `docs/six-laws.md`, Law 10).
+   */
+  /* `correcting` WENT WITH THE FIELD IT HELD. It tracked which claim had its
+     two-row correction textarea open, and the textarea is gone: founder,
+     "when the user clicks on partly and not true, can we open a chat
+     experience rather than asking user to answer in that small space?" The
+     paragraphs above describe a decision about `partly` that still stands —
+     it files at once, with no round trip — and the state that made "not
+     true" the expensive answer has no job left. See the note at the answer
+     row in the claim block. */
+  /**
+   * AND THE QUEUE BELONGS TO THE WALL YOU ARE STANDING ON.
+   *
+   * Founder: "the claims should also be different per my agent and me no?"
+   * They should, and for a sharper reason than consistency: a claim is a
+   * reading of what someone has KEPT, and an agent keeps its own things on
+   * its own wall. Asking you to rule on a sentence drawn from your archive
+   * while you are standing in your agent's is asking the wrong person about
+   * the wrong material — and the verdict would be recorded against whichever
+   * profile the request happened to default to.
+   */
+  /**
+   * AN AGENT CONFIRMS ITSELF, SO IT NEVER ASKS YOU.
+   *
+   * Founder: "my agent should never have claims user should confirm since
+   * agent should self confirm right?"
+   *
+   * Right, and the reason is what a claim IS. The question on a claim is "is
+   * this true of you?" — it is asking the subject to recognise themselves in
+   * a sentence drawn from their own material. You are the only one who can
+   * answer that about you. Handing an agent's claims to you asks you to
+   * certify someone else's self-description, which is not a judgement you are
+   * in a position to make and not one the loop wants: the confidence it would
+   * feed back into belongs to the agent's reading, not yours.
+   *
+   * So standing on an agent's wall there is no queue at all. The agent's own
+   * material still forms claims on the server — nothing about generation
+   * changes — they are simply never put to you. The creature on that wall has
+   * nothing to ask, which is also why its speech is the only thing it offers
+   * there.
+   *
+   * NOT the same as hiding them. `undefined` would have asked for YOUR claims
+   * while standing in the agent's ground — the bug this block was written to
+   * stop, and the reason the queue is keyed to the wall at all.
+   */
+  const standingAsAgent = atWall.kind === 'agent';
+  /**
+   * THE BUBBLE GOES DOWN WHILE THE CREATURE TURNS, AND COMES BACK AFTER.
+   *
+   * Founder: "when the character is spinning from me to my agent, the speech
+   * bubble should be gone and it should reappear."
+   *
+   * WHICH WALL YOU ARE ON is the only honest trigger available here. The
+   * dissolve itself lives in the canvas loop — `form.prevBody`, `form.at` —
+   * which is a ref the render never reads and must not start reading, because
+   * the loop writes it at sixty hertz and a state mirror of it would re-render
+   * the whole world every frame. The wall changes on the same beat the turn
+   * is armed (see `arriveColumn`), so watching the wall watches the turn.
+   *
+   * CLEARED ON UNMOUNT AND ON THE NEXT CHANGE, so a fast switch back and
+   * forth leaves the bubble hushed until the LAST turn finishes rather than
+   * popping it back up mid-spin on the first timer.
+   */
+  const [turning, setTurning] = useState(false);
+  const turnedFrom = useRef<string | null>(null);
+  const wallSeat = `${atWall.kind}:${atWall.kind === 'agent' ? atWall.id : ''}`;
+  useEffect(() => {
+    if (turnedFrom.current === null) { turnedFrom.current = wallSeat; return; }
+    if (turnedFrom.current === wallSeat) return;
+    turnedFrom.current = wallSeat;
+    setTurning(true);
+    const timer = window.setTimeout(() => setTurning(false), FORM_HUSH_MS);
+    return () => window.clearTimeout(timer);
+  }, [wallSeat]);
+  const claimsFor = standingAsAgent ? atWall.id : undefined;
+  /**
+   * WHETHER THE CREATURE'S BUBBLE IS UP AND SPEAKING FOR THE WALL.
+   *
+   * The poster's empty line consults this so the same sentence is not printed
+   * twice on one screen — see the branch in the wall's heading.
+   *
+   * "NOTHING YET" AND "NOT LOADED YET" ARE DIFFERENT FACTS, and this is where
+   * confusing them would do the most damage: a companion that says "I haven't
+   * formed anything yet" while the read is still in flight is not slow, it is
+   * WRONG, and it says so in the first person. So on your own wall the bubble
+   * waits for the read to settle; the poster keeps the loading and failed
+   * lines, which are facts about a fetch and not about the companion. An
+   * agent's line comes from its own chrome and has nothing to wait for.
+   */
+  const bubbleHoldsTheLine =
+    /* ONLY FOR WALLS THE COMPANION SPEAKS FOR. A room's poster says what the
+       ROOM is waiting for, in the room's own voice, and the companion is a
+       visitor there — so silencing it in favour of a bubble would replace a
+       sentence about the room with a sentence about you. Caught by
+       `group-dial`, which lost "Some earlier wording is hidden" off a
+       historical version the moment this suppression stopped asking whose
+       wall it was on. */
+    (atWall.kind === "self" || atWall.kind === "agent") &&
+    !mouthOpen && !charSay && !turning &&
+    /* AND THE WAIT IS ABOUT THE WALL, NOT ABOUT WHO YOU ARE BEING.
+       The paragraph above already says it — "an agent's line comes from its
+       own chrome and has nothing to wait for" — and the code then asked
+       `standingAsAgent`, which is whether you have SWITCHED FORM, not whose
+       wall you are looking at. Travel to your agent's column without
+       switching, and this went false while your own reading was still in
+       flight, so the suppression below lifted and "I haven't formed anything
+       yet" printed across the middle of the screen with the bubble floating
+       through the word "formed" — the exact collision the founder reported
+       on the self wall, reappearing one column over.
+
+       Founder, with the screenshot: "why are you saying I haven't formed
+       anything behind? It should only be a text that it says." */
+    (atWall.kind === "agent" || standingAsAgent || readingLoadPhase === "ready");
+
+  answeringAsRef.current = claimsFor;
+  const loadClaims = useCallback(() => {
+    if (standingAsAgent) { setClaimQueue([]); return; }
+    void listClaims({ limit: 8 })
+      /* ═══ THREE IS A SITTING ═══════════════════════════════════════════
+         Not eight, which is what this used to hold. A claim is expensive to
+         answer — it asks a person to consult themselves — and the research
+         on products that ask for repeated judgements is unanimous that the
+         quality of the answers degrades fast. Anki's entire philosophy is
+         capping intake, and its manual says why: "More than one Anki user has
+         excitedly studied hundreds of new cards over their first few days of
+         using the program, and then has become overwhelmed by the reviews
+         required."
+
+         That matters more here than it does for a flashcard, because bad
+         answers do not just waste a review — they are what the top of mind
+         and the principles get written FROM. The outputs are only ever as
+         good as the attention paid to the three questions above them.
+
+         And being stopped by the product reads as the product respecting the
+         cost; running dry reads as a chore completed. The rest of the queue
+         is still visible in its own room, which is now a doorway back to
+         here. */
+      .then(({ claims }) => setClaimQueue(claims.slice(0, 3)))
+      /* A queue that cannot be fetched is silence, not an error on the home
+         screen: nothing here is broken for the person, there is simply
+         nothing being asked. */
+      .catch(() => setClaimQueue([]));
+  }, [standingAsAgent]);
+  useEffect(() => {
+    if (phase !== 'ready' || offline) return;
+    /* The wall changed under the queue, so the old wall's question must not
+       stay on screen while the new one is in flight. The half-typed
+       correction this also used to clear no longer exists — see the note on
+       `correcting` above. */
+    setClaimQueue([]);
+    loadClaims();
+  }, [phase, offline, loadClaims]);
   const composerOpenRef = useRef(mouthOpen); composerOpenRef.current = mouthOpen;
+  /* ═══ THE WORLD STEPS ASIDE FOR A DESTINATION, CANVAS INCLUDED ═════════
+     Founder: "I like the now page's navy blue and the other navy blue
+     backgrounds are too light. Can I use the exact same background as
+     what's under now, with the floating dots and stuff? Why does it have to
+     be different?"
+
+     It did not have to be. A destination painted an opaque ground over the
+     world — the same token, so the colour matched, but flat: no vignette,
+     no dust, no stars. Those come from the canvas, so a page that covers
+     the canvas cannot have them, and "too light" is what a ground with its
+     vignette removed looks like.
+
+     So the page stops painting and the real world shows through it. The
+     DOM chrome already knew how to do this — `.jar--aside` fades the
+     bubble, the mouth and the companion's line — and the one thing left
+     drawing over the list was the COMPANION itself, on the canvas, where a
+     stylesheet cannot reach it. This ref is how the loop hears the same
+     fact the class is stating. */
+  const asideRef = useRef(false);
+  /* EVERY SURFACE THAT MOUNTS A PAGE, not just the ones that set `open`.
+     The first version of this asked `view.open` alone and the chat broke
+     immediately: a conversation sets `conversationId`, so the world went on
+     drawing its companion and its bubble straight through the page's own
+     creature and its opening line — two companions and two sentences on one
+     screen. `.waka-page` is the thing that matters here, and these three
+     parameters are what mount one. */
+  asideRef.current = Boolean(
+    viewNavigation.view?.open || viewNavigation.view?.conversationId ||
+    viewNavigation.view?.sharePrinciple || viewNavigation.view?.compose,
+  );
   useEffect(() => { if (!mouthOpen && recording.phase !== 'idle') void recording.stop(); }, [mouthOpen, recording.phase, recording.stop]);
   const [newInspirationRequested, setNewInspirationRequested] = useState(false);
   /** The one honest line: it did not keep. Never a modal, never a silence. */
@@ -2213,24 +2617,48 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
   const auth = useOptionalAuth();
+  /**
+   * THE WORLD IS WHERE "WHOSE" IS DECIDED, AND IT SAYS SO OUT LOUD.
+   *
+   * The three views are routes and a route cannot see which wall a camera is
+   * parked on, so without this you could stand on your agent's wall, open
+   * Principles, and read your own. One writer and many readers, deliberately:
+   * the wall is the truth here — it moves with the camera, with the back
+   * button, with a link someone sent you — and the pages follow it rather
+   * than keeping a second idea of the same fact. See `lib/standing`.
+   */
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    publishStanding(
+      auth?.account?.id,
+      atWall.kind === 'agent' ? { id: atWall.id, name: atWall.name } : null,
+    );
+  }, [phase, atWall.kind, atWall.id, atWall.name, auth?.account?.id]);
   /* THE WORLD SPEAKS THE PROFILE'S LANGUAGE. One normalized value for this
      render, one ref for the closures the sim and the handlers hold across
      renders, and one stable `say` that always reads the ref — so a callback
      minted before a language change still speaks the language of the moment
      it fires. */
   const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
-  const reviewEntry = useReviewEntry(storageScope, viewNavigation.view?.reviewId, locale);
+
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const say = useCallback((key: MessageKey) => t(localeRef.current, key), []);
+  /* AND IT IS THE WALL'S OWN SENTENCE, not one sentence for both. Your wall
+     says what it is waiting for — something kept, or a pattern to recur in
+     what you have kept — and an agent says it has formed nothing. The poster
+     chose between exactly these; the bubble is the poster's new seat, so it
+     makes the same choice from the same facts rather than a simpler one. */
+  const restingWord = standingAsAgent
+    ? chrome.formingAlt ?? say("worldFormingNothingAdopted")
+    : say(inspirations?.length || fieldBeyond ? "worldPersonalReadingNotReady" : "worldPersonalReadingEmpty");
+
   /* The self wall's NAME is canon ("Me" — it also mints the /w/me address);
      what a person reads is the catalog's word for it. User-given names —
      agents, rooms — render as given. */
-  const wallName = useCallback(
-    (w: { kind: string; name: string }): string =>
-      w.kind === "self" ? t(localeRef.current, "worldMe") : w.name,
-    [],
-  );
+  /* `wallName` went with the list it labelled: the corner is a two-state
+     switch now and names its two sides itself, in words chosen for a person
+     ("me", "my agent") rather than from the wall's stored name. */
   /**
    * WHO IS ASKING — and offline, which invented person is.
    *
@@ -2281,6 +2709,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     });
     return out;
   }, [agentRoster, groups]);
+  /* The one agent this account has, if it has one. Only its existence and
+     its column are needed here — the creature's form switch is a toggle
+     between your own wall and that one. */
+  const agentWall = walls.find(w => w.kind === 'agent') ?? null;
   const wallsRef = useRef<Space[]>([]);
   wallsRef.current = walls;
   const agentsRef = useRef<AgentBundle[]>([]);
@@ -3189,7 +3621,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setCharSay(fallback());
       return;
     }
-    fetchTheWeather({ antechamber: false })
+    /* The wall says whose day this is. `atWallRef` rather than `atWall`
+       because this callback is built once and must read the CURRENT wall,
+       not the one that existed when it was made — the same reason every
+       other seam in this file reaches through a ref. */
+    fetchTheWeather({ antechamber: false,
+      ...(atWallRef.current.kind === 'agent' ? { profile: atWallRef.current.id } : {}) })
       .then((weather) => {
         const day = weather.days[0];
         /* counts only, and no day label — the founder liked the sentence
@@ -3252,8 +3689,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            sentence somebody says. The label was already a phrase that reads
            as an ending — "today", "two days ago" — so it only ever wanted to
            be there. */
+        /* SPOKEN ALONE, SO IT TAKES A CAPITAL. The API writes these as
+           CLAUSES, lower case, because the full record joins them; the
+           creature says one on its own, which makes it a sentence. See
+           `asSentence` — and note that `capitalized.test.ts` cannot see
+           these at all, because they are assembled on the server rather
+           than drawn from the catalogue it reads. */
         const lines = spoken.map(
-          (x) => `${x.sentence.text} ${day?.label ?? "today"}.`,
+          (x) => asSentence(`${x.sentence.text} ${day?.label ?? "today"}.`, localeRef.current),
         );
         if (lines.length > 0) {
           const key = lines.join("|");
@@ -3271,6 +3714,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, []);
   const sayTheWeatherRef = useRef(sayTheWeather);
   sayTheWeatherRef.current = sayTheWeather;
+  /* The loop is built once and must call the CURRENT rotation, the same
+     reason every other seam in this file reaches through a ref. */
+  const creatureSpeaksRef = useRef(creatureSpeaks);
+  creatureSpeaksRef.current = creatureSpeaks;
 
   /**
    * WHAT ARRIVED WHILE YOU WERE GONE — shown by going there, not by saying so.
@@ -3327,7 +3774,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const requested = requestedViewRef.current;
     // An explicit route or an already-started interaction belongs to the
     // person. A returning-visitor greeting is never navigation authority.
-    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.reviewId || requested?.principleId || requested?.conversationId) {
+    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.principleId || requested?.conversationId) {
       stamp(); return undefined;
     }
     const interactionAtGreeting = navigationInteraction.current;
@@ -3343,7 +3790,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       .catch(() => undefined);
     const timers: number[] = [];
     const tell = () => {
-      if (toldRef.current) setCharSay(toldRef.current);
+      /* THE THIRD PLACE A SERVER CLAUSE IS SPOKEN ALONE, and it was missed
+         when the other two were fixed — caught by a probe that printed what
+         the creature was actually saying: "you kept a memory." The
+         away-window sentence comes off the same API as the day's clauses,
+         lower case for the same reason, and lands straight in the bubble.
+         `capitalized.test.ts` lists all three by name now. */
+      if (toldRef.current) setCharSay(asSentence(toldRef.current, localeRef.current));
     };
     const fresh = inspirations.filter((c) => c.capturedMs > since);
     if (fresh.length === 0) {
@@ -3389,9 +3842,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     return () => timers.forEach((id) => window.clearTimeout(id));
   }, [inspirations, phase]);
 
-
   /* ------------- derived data (changes only when data changes) ------------- */
-
 
   /**
    * THE DATES YOU CAN ACTUALLY GO TO (founder, 2026-08-30: "instead of this
@@ -3551,6 +4002,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (grainEl && pal.grainUrl) {
       grainEl.style.backgroundImage = `url(${pal.grainUrl})`;
       grainEl.style.backgroundSize = `${GRAIN_PX * GRAIN_TILE}px ${GRAIN_PX * GRAIN_TILE}px`;
+      /* AND THE SAME FILM IS AVAILABLE TO THE DOM.
+         The world's grain is one layer painted over the canvas, so anything
+         drawn ABOVE that layer — the creature's speech, for one — came out
+         clean while everything under it carried the emulsion. Founder: "the
+         speech bubble doesn't match the grainy texture of the character and
+         the product."
+         The tile is published as a variable rather than copied, so there is
+         one film and it is baked once: a second tile would be a second
+         texture that looks like the first until a DPR change moves one of
+         them. */
+      root!.style.setProperty("--jar-grain", `url(${pal.grainUrl})`);
+      root!.style.setProperty("--jar-grain-size", `${GRAIN_PX * GRAIN_TILE}px`);
     }
     const bag = ballsRef.current;
     if (bag) for (const b of bag.list) colorBall(b, TRef.current);
@@ -3574,7 +4037,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      and the image branch in `field-paint`. The attachment's image is still
      fetched and still shown where a picture belongs — inside the memory when
      you open it. It simply never becomes the memory's body. */
-
 
   /** THE SKY, AS THE FORMING LINE COUNTS IT: the signals still emerging,
       each with the moment it first appeared so the dial can wind past it. */
@@ -4348,11 +4810,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       return best;
     };
     /** Snap a coordinate to the machine's grid, by however machine it is. */
-    const grid = (v: number): number => {
-      if (mech < 0.02) return v;
-      const q = 1 + mech * 7;
-      return Math.round(v / q) * q;
-    };
     /**
      * THE FRAME LOOP'S OWN STATE — whether it is turning, and since when.
      *
@@ -5318,6 +5775,36 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      * offer one. Above it — headquarters and the sky — travel is unchanged.
      */
     function canTravelHere(): boolean {
+      /**
+       * SIDEWAYS IS FOR ROOMS, AND ROOMS ARE NOT OFFERED YET.
+       *
+       * Founder: "the moving left and right should only be used for changing
+       * rooms, which we're not offering at the moment so keep that code to
+       * move, but disable it."
+       *
+       * The axis was built for three kinds of neighbour — agents one way,
+       * rooms the other — and two of those three are gone from the product:
+       * rooms are set aside by ruling, and changing to your agent became a
+       * turn in place rather than a journey, because the creature is one
+       * companion with two faces rather than two creatures in two places.
+       * That left a whole degree of freedom whose only remaining destination
+       * was a wall you can already reach by pressing a face.
+       *
+       * So every USER-DRIVEN lateral gesture stops here: the drag, the
+       * sideways wheel, the arrow keys, and the edge affordance that offers
+       * them. `goToWall` is untouched and still carries the form change and
+       * any deep link — this gates the gestures, not the mechanism, which is
+       * the difference between disabling a thing and deleting it.
+       *
+       * ONE FLAG RATHER THAN FOUR DELETIONS, deliberately. The travel code is
+       * some of the most carefully tuned in the file — the sqrt duration, the
+       * companion's lead and yaw, the rubber-band, the crossing quantisation
+       * — and rooms will want every bit of it. Deleting it to re-derive it
+       * later is how the room form became unreachable code that nobody could
+       * safely remove. Flip this to `true` on the day rooms come back.
+       */
+      const ROOMS_ARE_OFFERED = false;
+      if (!ROOMS_ARE_OFFERED) return false;
       if (cam.aiming) return false;
       const atHQ = Math.abs(cam.y) < 2;
       const atSky = hasSky(curWall().kind) && Math.abs(cam.y - view.layout.minCam) < 2;
@@ -5828,27 +6315,120 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * The features quantise against the body's own live cell instead (see
        * the eye and nub passes), which is what actually makes them agree.
        */
-      const lo = hqH + companion.size * 0.5 + gap;
-      const hi = seam - companion.size * 0.5 - gap;
-      /*
-       * THE COMPANION SITS IN THE MIDDLE OF THE SCREEN, not in the middle of
-       * what is left over.
+      /**
+       * WHAT HANGS OFF THE CHIN COUNTS AS PART OF THE COMPANION.
        *
-       * It used to centre on `(hqH + seam) / 2` — the midpoint of the slot
-       * between headquarters and the mouth. That reads as centred only when
-       * the poster happens to be short. A tall one pushes the body down, so
-       * the character drifts with content it has nothing to do with, and on a
-       * wall with an empty headquarters it sat noticeably low.
+       * Founder, on a phone: "things feel so skewed to the bottom."
        *
-       * `view.h / 2` is the viewport's middle in layout coordinates at
-       * headquarters rest, which is where the companion is looked at. The
-       * clamp is unchanged and still decides: `lo` keeps the body off the
-       * poster, `hi` keeps it out of the mouth and the dial, so centring is a
-       * PREFERENCE the slot can still overrule rather than a position that can
-       * overlap. When the slot is roomy — which is most of the time — the
-       * preference wins and the body is where the eye expects it.
+       * The band below centred the BODY between the reading and the box, and
+       * that was right when the only thing under the chin was a one-line
+       * receipt. It is not right now: the claim lives there — a sentence and
+       * three answers — so the thing a person actually sees as "the creature"
+       * is a block two hundred pixels taller than the body, and centring the
+       * body left all of that growing downward into the gap above the box
+       * while the air above the body stayed untouched. The result reads as a
+       * screen with a hole in the lower third.
+       *
+       * Measured, not assumed, and for the same reason the box's own height
+       * is measured: the voice block is a claim or a receipt or nothing at
+       * all, and a constant would be wrong two of those three times.
        */
-      companion.y = compactHome ? -view.h * 3 : hi >= lo ? clamp(view.h / 2, lo, hi) : (lo + hi) / 2;
+      /**
+       * ═══ THE COMPANION'S HEIGHT IS A FUNCTION OF THE WINDOW, AND OF
+       *     NOTHING ELSE ════════════════════════════════════════════════
+       *
+       * Founder ruling, twice: "make sure character is always at same
+       * position so changing between me and my agent doesn't change position
+       * of the agent", and "Even if the agent hasn't formed anything, the
+       * height where the top of mind goes should always be the same so that
+       * the character doesn't move vertically."
+       *
+       * THAT RULING WAS BEING VIOLATED BY THIS LINE. `companion.y` was
+       * `(lo + hi) / 2`, where `lo` was measured from the live poster and
+       * `hi` from the live claim. Replicating the layout pass numerically
+       * against the real constants, the creature drifted:
+       *
+       *   top of mind grows to 5 lines           +38px down
+       *   top of mind grows to 7 lines           +75px down
+       *   claim wraps to 3 lines                 -12px up
+       *   the person presses "Not true"          -19px up
+       *
+       * 75px is 62% of the creature's own body, and the last row is the
+       * worst of them: a normal press in the main loop moved the character.
+       *
+       * AND THE TWO BLANK RESERVES WERE A PATCH OVER THIS, not a design.
+       * `.jar-char-say`'s `min-height` existed only because `voiceH` was in
+       * this equation; `.jar-hq-inner`'s only because `hqH` was. Both have
+       * been deleted, because nothing reads the heights any more — which is
+       * what removes the "hole in the lower third" the comment below this
+       * block used to describe, on exactly the screens where it was worst.
+       *
+       * AND THE VOID WAS UNBOUNDED BY CONSTRUCTION. "The middle of what is
+       * left" splits every extra pixel of window height evenly into two
+       * gaps, with no cap:
+       *
+       *   iPhone 15 Pro   (760)   128px above, 78px below — 27% of the screen
+       *   MacBook Pro 14" (890)   173 / 123              — 33%
+       *   iPad Pro 11"   (1100)   298 / 248              — 50%
+       *   27" 1440p      (1330)   392 / 342              — 55%
+       *
+       * `home.css` caps the column at `max-width: 680px`. There was no
+       * vertical equivalent anywhere, and that is the whole of it: the
+       * horizontal axis stops growing and the vertical one never did.
+       *
+       * WHY 0.34 AND NOT 0.5. NN/g's scrolling-and-attention work puts more
+       * than 65% of above-fold viewing time in the TOP HALF of the viewport,
+       * so the vertical middle of a tall window is not the attention centre
+       * — parking the creature at 50% is a demotion, not neutrality. Google's
+       * own homepage declines to vertically centre for the same reason, and
+       * solves the surplus the way this now does: clamp the band, and let the
+       * extra height fall into ONE declared place rather than two accidental
+       * ones.
+       *
+       * THE OCT 8 INSTRUCTION SURVIVES, ITS IMPLEMENTATION DOES NOT. "place
+       * this text input box at the bottom of the space. so i want equal space
+       * between the top of mind, character, and input box" is right on a
+       * phone, where there is no surplus to distribute. As a RATIO it turns
+       * every pixel of desktop height into void — and equal spacing is
+       * anti-hierarchy by definition: Gestalt proximity says elements
+       * separated by whitespace read as less related, so two equal 400px gaps
+       * dissolve the statement, the creature and the box into three unrelated
+       * things. That is the founder's "information hierarchy" complaint,
+       * arrived at by arithmetic.
+       */
+      const Y_MIN = POSTER_SLOT + gap + CHAR_SIZE * 0.5;
+      /* ═══ THE CENTRE, BECAUSE THAT IS WHERE A COMPANION STANDS ════════
+         Founder: "I wanted the character to be at the very very center,
+         center vertically and center horizontally, but it looks a little
+         more skewed towards the top, which I don't like."
+
+         WHAT WAS HERE AND WHY IT IS NOT A LOSS. 0.42 with a 620 ceiling was
+         argued from NN/g's "false floor" — a page with little at the top
+         leaves people unsure anything else exists — and from attention data
+         that wants content high. Both were reasoning about a PAGE. This
+         screen stopped being a page: the statement moved into the bubble,
+         the claim moved down onto the dock, and the composer left the
+         middle entirely. What is left in the centre band is one creature,
+         and the thing those rules protect against — a reader thinking the
+         screen ends — cannot happen on a screen whose bottom edge is a
+         navigation bar that is always visible.
+
+         So the creature is centred, and the composition is symmetrical
+         about it: the bubble above, the dock and the claim below, the same
+         air each side. `Y_MIN` still binds on a window too short to hold
+         the poster and the body at once, which is the one case where
+         centring would overlap them. The ceiling is gone — it existed only
+         to keep the cluster above centre, which is the thing being
+         undone. */
+      /* THE ONE CONTENT-DEPENDENT CLAMP LEFT, and it only ever engages on a
+         window too short to hold the composition at all. Without it the body
+         would sit ON the box rather than above it, and an overlap is a worse
+         failure than a short window moving the creature once. On every window
+         tall enough for `Y_MAX` to be reachable it never binds. */
+      const floor = seam - CHAR_SIZE * 0.62 - gap;
+      companion.y = compactHome
+        ? -view.h * 3
+        : Math.min(Math.max(Math.max(Y_MIN, view.h * 0.5), 0), Math.max(floor, CHAR_SIZE));
       /* WHAT SITS UNDER THE COMPANION, AND IN WHAT ORDER (founder, 2026-08-25:
          "keep something should be shown right below the character").
          The mouth first, directly beneath the body, because keeping something
@@ -5857,7 +6437,84 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          reports what the loop did, and it says so in the mouth's own slot
          rather than in a row of its own — one place, one line. */
       const chin = Math.round(companion.y + companion.size * 0.62);
+      /* The box no longer hangs off the chin — it is pinned to the bottom in
+         `home.css`. The variable stays for the compact case, which stacks
+         rather than centres. */
       root!.style.setProperty("--jar-mouth-top", `${compactHome ? activityLayout.composerTop : chin + 18}px`);
+      /**
+       * ═══ AND THE BOX COMES UP TO MEET THE CREATURE ══════════════════════
+       *
+       * Founder, after a night of work on this screen: "not much seemed to
+       * have changed." Signed in and looked at it, which I should have done
+       * far earlier: on a 1512x900 window the creature floats with roughly
+       * 380px of dead black beneath it — 42% of the screen — because the box
+       * is pinned to the viewport floor and the creature is not. The 1040px
+       * composition ceiling added earlier never engages at laptop heights, so
+       * for the window most people actually use, nothing had changed at all.
+       *
+       * THE BOX IS NOT A VIEWPORT OBJECT. It is the last element of the
+       * creature's cluster — the statement, the creature, its question, and
+       * the place you answer back — and a cluster whose last element is
+       * nailed to the bottom of whatever monitor you own is not a cluster.
+       * Gestalt proximity is the whole of it: elements separated by
+       * whitespace read as less related, so 380px of gap dissolves the box's
+       * relationship to the thing it belongs to. That is the "information
+       * hierarchy" complaint, measured.
+       *
+       * So it hangs below the voice block, which hangs below the chin. The
+       * surplus falls BELOW the box, in one pool, where it is the margin of a
+       * page rather than a hole inside a picture.
+       *
+       * READING `voiceH` HERE IS SAFE, and it is worth saying why given the
+       * commit that removed it from the creature's own position. The rule is
+       * that the CREATURE must not move with content. The box moving as a
+       * question appears beneath it is not a violation — it is the cluster
+       * breathing, and the person caused it by having something to answer.
+       *
+       * THE FLOOR IS THE LAST CLAMP. On a window too short to hold the
+       * cluster, the box stops descending and sits on its own inset rather
+       * than travelling off the bottom edge — the same `max()` the CSS used
+       * to do alone.
+       */
+      /* ═══ AND THE STATEMENT TRAVELS WITH THE CLUSTER ═══════════════════
+         The band is the first element of the group, not a banner nailed to
+         the top of the window. Left at `top: 0` it stayed put while the
+         creature descended, so on a tall window the statement sat alone up
+         top with ~290px of black between it and the thing it belongs to —
+         two groups again, which is the defect this whole pass is about.
+
+         `Y_MIN` is exactly the band's height plus the gap plus half a body,
+         so `Y - Y_MIN` is the distance the band has to come down to keep its
+         FOOT the same 24px above the creature at every window height. At the
+         shortest windows it resolves to zero and the band sits where it
+         always did. */
+      const voiceH = measured.charSay.current?.offsetHeight ?? 0;
+      const boxH = slotH.current || MOUTH_H;
+      const inset = 8;
+      const wanted = chin + 18 + voiceH + gap;
+      const floorTop = view.h - boxH - inset;
+      root!.style.setProperty(
+        "--jar-band-top",
+        `${compactHome ? 0 : Math.round(Math.max(0, companion.y - Y_MIN))}px`,
+      );
+      root!.style.setProperty(
+        "--jar-box-top",
+        `${compactHome ? activityLayout.composerTop : Math.round(Math.min(wanted, floorTop))}px`,
+      );
+      /* AND HOW TALL THE BOX IS, so the companion's voice can never reach it.
+         The voice block hangs from the chin and grows DOWNWARD; the box is
+         pinned to the bottom and grows UPWARD. Nothing stopped them meeting,
+         and on a short window they met — the claim's card sat on the box's
+         top edge and the keep receipt was printed through it (founder: "so
+         crowded!"). Measured rather than assumed: MOUTH_H was a constant for
+         this once and went stale the moment the composer grew a footer, and
+         a reserve that drifts from the thing it reserves for is a collision
+         waiting for a narrower window. */
+      const slot = root!.querySelector<HTMLElement>(".jar-mouth-slot");
+      if (slot) {
+        slotH.current = Math.round(slot.offsetHeight);
+        root!.style.setProperty("--jar-mouth-h", `${slotH.current}px`);
+      }
       /* AND THE CHARACTER STATES ITS SIZE, rather than being guessed at.
          The same rule as the seam and the mouth's top: chrome states its
          place, nothing guesses at it. It is a constant now (CHAR_SIZE), and
@@ -6250,6 +6907,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      * than one wording. Two things it will never do: say the same thing twice
      * in a row, and restate a state the light has already rendered.
      */
+    /* EXPOSED TO THE COMPONENT, because the creature is pressed from the
+       DOM and spoken from the loop. See `creatureSpeaks`. */
+    sayLineRef.current = sayLine;
     function sayLine(): string {
       /* PARKED, NOT SCRUBBING. This read `scrubbingRef` — true only while a
          finger was on the rail — so the line existed for the duration of a
@@ -6404,7 +7064,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      * out here rather than inside `draw` so the frame does not allocate a
      * closure sixty times a second to ask one question.
      */
-    const panelOpen = () => panelOpenRef.current;
+
+    const grid = (v: number): number => {
+      if (mech < 0.02) return v;
+      const q = 1 + mech * 7;
+      return Math.round(v / q) * q;
+    };
 
     function draw(now: number) {
       const pal = paletteRef.current;
@@ -6412,8 +7077,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       ctx!.clearRect(cam.x, cam.y, view.w, view.h);
       if (!pal) return;
       const t = now / 1000;
-      const selId = selectedIdRef.current;
-      const depthSpan = Math.max(view.layout.fieldBottom - view.layout.fieldTop, 1);
 
       /* pass 0 — the deep background: dim sparkle points, then drifting dust
          motes. Together they are the air in front of the camera, and they are
@@ -6454,12 +7117,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         cam,
         view,
         t,
-        depthSpan,
-        selId,
+        depthSpan: Math.max(view.layout.fieldBottom - view.layout.fieldTop, 1),
+        selId: selectedIdRef.current,
         still: pour.active,
         mech,
         grid,
-        panelOpen,
+        panelOpen: () => panelOpenRef.current,
       });
 
       /* No connection visuals. The founder was explicit after seeing them:
@@ -6533,7 +7196,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const showPrev = formMix < 0.5 && form.prevBody !== null;
       const formBe = showPrev ? form.prevBe : wear.be;
       const formMachine = showPrev ? form.prevMachine : wear.machine;
-      if (companion.y - cam.y > -companion.size * 2 && companion.y - cam.y < view.h + companion.size * 2) {
+      /* AND IT IS NOT DRAWN AT ALL WHILE A DESTINATION IS UP. Not moved —
+         moved would mean it travels back when you leave, which is the world
+         moving without anybody moving it. It simply is not painted, the way
+         `.jar--aside` simply does not paint the bubble. Its ground, its
+         vignette and its dust keep drawing, which is the whole point: they
+         are what the page is standing on now. */
+      if (!asideRef.current && companion.y - cam.y > -companion.size * 2 && companion.y - cam.y < view.h + companion.size * 2) {
         /* the bob rides its own integrated phase: while the companion leads
            it quickens toward a walk, and at rest it is the hover it was */
         /* THE FLOAT BECOMES A TICK. A sine is how something alive hovers; a
@@ -6795,7 +7464,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                unison would be the chorus line again. */
             bodyPath(ctx!, ms, ms, be);
             ctx!.clip();
-            ctx!.fillStyle = "#2b2822";
+            /* The same ink the companion's own eyes use — a member is the
+               same species, and the literal was written out twice. */
+            ctx!.fillStyle = EYE_INK;
             const er = ms * be.eyeR * 1.35;
             const eyY = ms * be.eyeLat;
             /* toward you, or toward what you are looking at — in the member's
@@ -6861,6 +7532,28 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         /* the aura: layered pastel blooms at different radii, drifting on
            slow independent orbits. Additive, so it reads as emitted light. */
         ctx!.globalCompositeOperation = "lighter";
+        /* ═══ THE REACH IS THE READING, WHICH IS WHY IT STAYS SMALL ═══
+           This was widened to 3.4 on 2026-10-11, chasing auwa.life — whose
+           creature sits in a bloom five body-widths across with no edge
+           anywhere — and the founder stopped it before it shipped:
+
+             "no I like the small warm glow. Maybe auwa's bloom isn't best
+              here because the glowness is supposed to be showing how
+              inspired I am. So it's like the character is like a light
+              bulb. So glow is better in this case, no?"
+
+           It is, and the argument is already in this line: `lerp` between
+           1.25 and 2.1 ON `lit`. The reach IS the reading. A lamp that is
+           always huge cannot report anything, so the change would have
+           spent the product's clearest signal — how alive your field is,
+           read before a word — on looking like a reference.
+
+           THE REFERENCE IS A STILL AND THIS IS AN INSTRUMENT. auwa's
+           creature has one state and can afford a bloom tuned for that
+           frame; this one has a range, and the range is the point. Noted
+           here rather than in a document because the next person to put
+           the two screenshots side by side will reach for exactly this
+           number. */
         const auraR = companion.size * lerp(1.25, 2.1, lit) * (1 + companion.flare * 0.25);
         for (let i = 0; i < 4; i++) {
           const ph = t * (0.16 + i * 0.05) + i * 1.9;
@@ -6953,8 +7646,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            dead — the nubs are anatomy, so there is no state in which they are
            not painted — and the constant was the only thing still implying
            otherwise. */
-        const nubR = companion.size * lerp(0.062, 0.1, bodyLit);
-        const nubRgb = mix([166, 163, 156], [214, 209, 197], bodyLit);
+        const nubR = companion.size * lerp(NUB_R_DIM, NUB_R_LIT, bodyLit);
+        const nubRgb = mix(NUB_DIM, NUB_LIT, bodyLit);
         const nubFront = rgbCss(nubRgb, 1);
         /* the far side of a form is darker than the near side */
         const nubBack = rgbCss(mix(nubRgb, [0, 0, 0], 0.15), 1);
@@ -6964,8 +7657,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           const s = Math.sin(a);
           /* pointing at or away from you, a nub reads smaller */
           ctx!.fillStyle = behind ? nubBack : nubFront;
-          const nx = s * bw * 0.42;
-          const ny = bh * 0.24;
+          const nx = s * bw * NUB_X;
+          const ny = bh * NUB_Y;
           const nr = nubR * Math.max(Math.abs(s), 0.35);
           if (formMachine) {
             /* A NUB IS MADE OF THE SAME CELLS THE BODY IS. It used to be a
@@ -7003,8 +7696,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           ctx!.fill();
         };
         ctx!.globalAlpha = 1;
-        drawNub(-Math.PI / 2, true);
-        drawNub(Math.PI / 2, true);
+        drawNub(-NUB_LON, true);
+        drawNub(NUB_LON, true);
 
         const bodyTier = Math.round(bodyLit * (BODY_TIERS - 1));
         if (form.prevBody) {
@@ -7069,8 +7762,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            one is a dot on the equator: it slides toward the silhouette,
            foreshortens, and fades out over the last quarter-radian rather
            than popping off the edge. */
-        ctx!.fillStyle = "#2b2822";
-        const er = companion.size * 0.038;
+        ctx!.fillStyle = EYE_INK;
+        const er = companion.size * EYE_R;
         /* THE LOOK, AS LATITUDE. The eyes sit on the surface of a turning
            form, so looking up or down is a latitude offset in exactly the way
            the yaw is a longitude one: it moves them across the face, and it
@@ -7140,8 +7833,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         ctx!.restore();
 
         /* the near nub last of all: it passes IN FRONT of the face */
-        drawNub(-Math.PI / 2, false);
-        drawNub(Math.PI / 2, false);
+        drawNub(-NUB_LON, false);
+        drawNub(NUB_LON, false);
         ctx!.restore();
       }
 
@@ -7330,7 +8023,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       /* arrived before the data: the wall holds still until it can wake whole */
       if (trip.awaitingWake && !trip.active) tryWakeWall();
 
-
       /* the hold: down over about a second when the world has been left
          alone, and never below a fifth — still breathing, never frozen */
       const settleWant = now - stir.at > SETTLE_IDLE ? SETTLE_MIN : 1;
@@ -7347,7 +8039,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         computeInspiration();
         clock.lastActive = now;
       }
-
 
       const selActive = selectedIdRef.current !== null;
       /* The field never stops drifting, even while an orb is focused — only
@@ -7833,7 +8524,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          record has nothing to tell */
       if (overChar(cx, cy + cam.y)) {
         companion.flare = 1;
-        sayTheWeatherRef.current(sayLine);
+        /* THE SAME ROTATION THE BUTTON DRIVES. This branch is reachable
+           only while `.jar-char-press` is unmounted — it is not rendered
+           while the creature is already speaking — so two different answers
+           to one press is exactly the drift that put the offer in front of
+           the weather in the first place. */
+        creatureSpeaksRef.current();
         wake();
         return;
       }
@@ -7872,7 +8568,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        already covered by the first word in this list. */
     const isInteractive = (t: EventTarget | null) =>
       t instanceof Element &&
-      (isNativeSurface(t) || t.closest("button, a, textarea, input, select") !== null);
+      /* `[role="button"]` IS IN THIS LIST NOW. The poster is an `<h1>` that
+         declares itself a button — "the sentence itself is the control, there
+         is no button beside it" (founder, 2026-08-24) — and a selector that
+         only names real `<button>` elements read it as page, captured the
+         pointer for a drag, and swallowed the press. So the one control that
+         was deliberately not shaped like a button was the one control that
+         could not be pressed, and what the reading rests on has been
+         unreachable by pointer ever since. Anything that tells assistive
+         technology it is a button owns its own press. */
+      (isNativeSurface(t) ||
+        t.closest('button, a, textarea, input, select, [role="button"]') !== null);
 
     /** Hand the world back: the capture and the identity always go together. */
     const releaseOwner = (id: number) => {
@@ -8079,7 +8785,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             ? 2
             : 1;
       }
-      const dy = e.clientY - gesture.lastY;
+      /* The pointer's vertical travel is still TRACKED — the gesture router
+         below compares it against the horizontal to decide whether this drag
+         is a wall crossing — it just no longer moves the camera. */
       gesture.lastY = e.clientY;
       const dxm = e.clientX - gesture.lastX;
       gesture.lastX = e.clientX;
@@ -8122,10 +8830,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         wake();
         return;
       }
-      const out = cam.y < minCamNow() || cam.y > view.layout.maxCam;
-      cam.y -= dy * (out ? 0.35 : 1);
-      /* reduced motion keeps the direct 1:1 drag but drops the inertia */
-      if (!view.reduced) cam.vel = lerp(cam.vel, -dy / dts, kd(EASE_VEL, dts));
+      /* AND NOT BY DRAG EITHER. Same ruling as the wheel: there is nowhere
+         above or below to go, so dragging the world vertically only carried
+         the reading off the screen. The inertia goes with it — velocity that
+         can never be spent is a spring with nothing on the end of it. */
       gesture.lastT = nowT;
       wake();
     };
@@ -8253,12 +8961,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         }
         return;
       }
+      /* NO VERTICAL TRAVEL BY GESTURE (founder ruling, asked for repeatedly).
+         The wheel used to drive `cam.y` between the sky and the ground, which
+         is how a person reached their principles and their archive. Both are
+         PAGES now, so the gesture has nowhere left to go and scrolling the
+         world only moved the reading off the screen.
+
+         The camera's range is untouched on purpose: `toSky`, `toGround` and
+         the deep links that open one memory still move it programmatically,
+         and the panels that live in those bands — a principle being edited,
+         a memory's own card — are reached that way. What is removed is the
+         gesture, not the geometry. */
       gesture.wheelXAcc = 0;
-      cam.y = clamp(cam.y + e.deltaY, minCamNow() - 60, view.layout.maxCam + 60);
-      cam.aiming = false;
-      /* snap once the wheel goes quiet */
-      gesture.snapAt = nowW + 150;
-      wake();
     };
     const onKey = (e: KeyboardEvent) => {
       // This guard precedes ALL shortcuts, including slash. Editors and IME
@@ -8266,12 +8980,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (e.defaultPrevented || e.isComposing || e.metaKey || e.ctrlKey || e.altKey || isEditableTarget(e.target)) return;
       // A reading card owns its paging arrows; other panels keep their keys.
       if (isNativeSurface(e.target) && !(e.target instanceof Element && e.target.closest(".jar-panel"))) return;
-      const step =
-        e.key === "ArrowDown" || e.key === "PageDown"
-          ? 1
-          : e.key === "ArrowUp" || e.key === "PageUp"
-            ? -1
-            : 0;
+      /* THE VERTICAL KEYS DO NOT TRAVEL EITHER (founder ruling). The wheel and
+         the drag were stopped first and this was missed, so Arrow Up, Arrow
+         Down, PageUp and PageDown still walked the camera between the sky and
+         the ground — the same journey by a third instrument. Every way of
+         making that journey has to go, or the one that is left IS the
+         journey. */
+      const step = 0;
       const horiz = e.key === "ArrowLeft" || e.key === "ArrowRight";
       /* "/" IS FIND, EVERYWHERE. The gesture people already have for searching
          a page, and it puts the verb on the layout rather than in a menu. */
@@ -8390,6 +9105,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     /* HQ's content grows when the ambition and the band arrive, which moves
        the companion's slot — so that block's height is observed too */
     if (measured.hqInner.current) ro.observe(measured.hqInner.current);
+    /* AND SO IS WHAT THE COMPANION SAYS, for exactly the same reason.
+       The voice block arrives late — the claim is fetched — so the pass that
+       placed the companion measured an empty block and never looked again.
+       The companion stayed where it had been put before it had anything to
+       say, and the claim grew downward into the gap above the box. That is
+       the whole of "the page just feels unbalanced to my eyes": the lift was
+       computed correctly and then never recomputed. */
+    if (measured.charSay.current) ro.observe(measured.charSay.current);
 
     measure();
     /* `measure` is the first moment `vw` is real, so the horizontal camera can
@@ -8939,7 +9662,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * longer, but never five times longer. Nothing settles in between,
        * because nothing arrives in between.
        */
-      goToWall: (target: number) => {
+      goToWall: (target: number, instant?: boolean) => {
         const go = () => {
           lastGoRef.current = `enter col=${trip.col} target=${target}`;
           if (trip.col === target) {
@@ -8967,10 +9690,72 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           cam.xTarget = dest * view.w;
           cam.xBack = false;
           gesture.leadOn = false;
-          if (view.reduced) {
+          /**
+           * CHANGING FORM IS A TURN IN PLACE, NOT A CUT AND NOT A JOURNEY.
+           *
+           * Founder: "make transformation between me and my agent more
+           * natural", and before that: "rather than my agent like moving
+           * rooms it kind of like switching itself up to its agent form".
+           *
+           * `instant` began as the reduced-motion path, which was right about
+           * the camera and wrong about the creature. The dissolve was already
+           * built — `FORM_FADE_MS` across `form.at` — but its whole design is
+           * that it HIDES INSIDE THE TURN: the comment on it says "the
+           * companion turns away as yours and comes back as theirs, and there
+           * is no frame at which two different creatures are both in focus."
+           * Take the journey away and the turn goes with it, so the dissolve
+           * ran face-on: 320ms of two creatures double-exposed, which is
+           * exactly the thing that comment exists to forbid. It read as a
+           * glitch because it was one.
+           *
+           * So the camera still does not move — nothing slides left or right,
+           * which was the other half of the ask — and the creature turns
+           * where it stands. `yaw` is set a half turn away and `unwindAt`
+           * released on the same frame, so the existing unwind carries it
+           * back over `UNWIND_MS` on the cubic it already uses, with the
+           * dissolve finishing while the creature is still turned away. One
+           * motion, no new easing, and the aura never changes — which is what
+           * says it is the same companion the whole way through.
+           */
+          if (view.reduced || instant) {
             trip.col = dest;
             cam.x = cam.xTarget;
             companion.off = 0;
+            /* ONE LINE, because the unwind arms itself. `arriveColumn()`
+               below clears `unwindAt`, and the unwind branch then reads
+               whatever `yaw` is, normalises it the short way round and eases
+               it to zero over `UNWIND_MS`. Setting the turn is the whole
+               instruction; setting the easing too would be a second copy of
+               it, and the two would drift. */
+            if (instant && !view.reduced) {
+              /**
+               * A TURN, AND ONLY A TURN.
+               *
+               * Founder, on a recording of the form change: "its not spinning
+               * in the same place."
+               *
+               * The yaw is a planet turn — the features traverse a sphere
+               * while the body holds still — so the spin itself cannot move
+               * anything. What moves it is `lean`, which the draw composes
+               * from three terms: the travel offset, the camera's pitch, and
+               * `attendHold`, the lean toward something you just tapped. The
+               * form switch IS a tap, on a control right beside the creature,
+               * so it was leaning at the button it had just been pressed on
+               * for the whole length of the turn — a tilt plus a rotation
+               * reads as a wobble, not as a creature turning where it stands.
+               *
+               * All three are cleared here rather than suppressed in the draw
+               * because they are each correct in their own context: leaning
+               * into a drag, into camera motion, and toward a thing you
+               * pointed at are all behaviours worth keeping. They simply have
+               * no business in a change of form, which is not a direction.
+               */
+              companion.yaw = TAU / 2;
+              companion.off = 0;
+              companion.pitch = 0;
+              companion.attendHold = 0;
+              companion.attendUntil = 0;
+            }
             arriveColumn();
             wake();
             return;
@@ -9362,7 +10147,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     simApiRef.current?.hangRail();
   }, [parkedAt, timeOpen]);
 
-
   /* ---------------- the reading panel ----------------
      A focused orb's information appears BESIDE it: a small panel that cross-
      fades in, one size, anchored to the orb. Nothing slides, nothing is
@@ -9490,7 +10274,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const id = window.setTimeout(() => setCharSay(""), 4000);
     return () => window.clearTimeout(id);
   }, [charSay]);
-
 
   /* THE EVIDENCE INDEX HAS NO CHANGE SIGNAL ANY MORE, because it no longer
      changes after load. `provTick` was how React was told the ref had been
@@ -9856,42 +10639,134 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        and guards nothing, which `measure-groups.mjs` argues against by name.) */
   }, [atWall, agents, inspirations, groupFieldTick, standing, auth?.profile?.id]);
 
+  /* `wallTotal` went with the door that printed it. It existed so that
+     "N inspirations" could say both the number in the ground and the number
+     in the archive when they disagreed — a careful fix to a control that
+     should not have been printing a number at all. */
+
   /**
-   * HOW MANY ARE BEHIND THE DOOR, WHICH CAN BE MORE THAN ARE DRAWN.
+   * HOLDING SOMETHING UP IN FRONT OF THE WORLD.
    *
-   * Every ground in this product is loaded up to a ceiling — ten pages of two
-   * hundred for a personal or agent archive, four hundred for a room's field.
-   * The ceilings are deliberate: following a cursor forever lets one very old
-   * account stall the world's first paint. What was not deliberate is that
-   * nothing said so. At two and a half thousand memories the door read
-   * `2000 inspirations`, the ground drew two thousand orbs, and five hundred
-   * memories were absent from both with nothing said — in a product whose
-   * whole promise is that it keeps what you give it, and whose posture is no
-   * quiet corners.
+   * Founder: "for your inspirations, after I click on it, I feel like I'm
+   * lost how to go back to the previous screen... maybe for your
+   * inspirations, this should just be a modal that you can escape to go back
+   * to your top of mind."
    *
-   * The failure ran in the worst direction: it UNDERSTATED. Somebody who
-   * reached it had every reason to read it as memories lost.
-   *
-   * So the door prints both numbers when they differ. The first is still the
-   * balls in the ground the caret takes you into (founder, 2026-08-25) — the
-   * second is what the archive holds.
+   * It goes through the world's own history writer rather than a bare
+   * navigate, which is the difference between an overlay and a page. The
+   * pathname does not change — only a parameter on it — so this component
+   * never unmounts, the camera stays exactly where it was, and dismissing is
+   * a return rather than a trip somewhere else. See `ViewOpen` in
+   * `lib/view-location` and `closeOpen` in `lib/use-view-navigation`.
    */
-  const wallTotal = useMemo<number>(() => {
-    if (atWall.kind === "agent") {
-      const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
-      return a?.inspirationTotal ?? a?.inspirations.length ?? 0;
+  /* ONE IMMEDIATELY COMMITTED RESPONSE, not persistent or cross-owner memory.
+     It moved here with the conversation: `createConversation` returns the row
+     holding the first question, and re-reading it over the network would show
+     an empty transcript for a beat after a person has just watched their own
+     words land. Cleared the moment the owner or the conversation changes, so
+     one account can never see another's committed question. */
+  const committedTalk = useRef<{owner:string;row:ApiConversation}|null>(null);
+
+  /**
+   * ═══ THE FOUR PLACES ARE PLACES, SO YOU MOVE — YOU DO NOT STACK ═════════
+   *
+   * Founder: "If I click on inspiration, then chat, then inspiration, then
+   * chat, then I have to close it four times before seeing the now. Like,
+   * are you not moving the pages and opening modals instead? You should move
+   * the pages."
+   *
+   * Exactly what was happening, and the arithmetic is simple. Every press
+   * here PUSHED a history entry, and `closeOpen` walks back ONE — so four
+   * presses built four entries and the close undid them one at a time.
+   * `openFrom` had carried the world's address forward correctly all along;
+   * the depth was the problem, not the memory.
+   *
+   * A DESTINATION REPLACES A DESTINATION. The four are peers in a bar at the
+   * bottom of the screen, which is the one arrangement every person already
+   * has a model for: moving between tabs does not deepen anything, and
+   * leaving gets you out from wherever you happen to be standing. So the
+   * depth from the world is always exactly one, `navigate(-1)` is both a
+   * true return AND a single press, and the browser's own Back keeps
+   * agreeing with Escape and with the close — which is the property the
+   * history-based dismissal was chosen for in the first place.
+   *
+   * AND A CONVERSATION IS ONE OF THE THINGS IT REPLACES. The dock stands on
+   * an open chat now, which it did not before, so these rows became
+   * reachable from a state they had never been pressed in: `open` would have
+   * been set with `conversationId` still beside it — two surfaces on screen
+   * at once — and the `null` row returned on its first line, so "Now" was a
+   * lit, labelled, dead control. That is the sixth time a handler here has
+   * not matched a state it could be pressed in; this one was born in the
+   * same change that made it reachable.
+   */
+  /**
+   * Whether you are standing somewhere other than the world, which is the
+   * whole of the question "does this press move me, or deepen me".
+   *
+   * `compose` BELONGS IN HERE AND WAS LEFT OUT, and the founder found it
+   * twice: "bottom bar seems to be opening on top of things rather than
+   * switching the pages", and then exactly — "if I click on inspirations,
+   * then chat, then new inspiration, then new chat, and then click now, I
+   * have to click now like four times to actually get there."
+   *
+   * Four surfaces, four presses, because the notepad was the one place this
+   * predicate did not recognise as being away from the world. Everything
+   * that opens from a destination REPLACES it, so the depth from the world
+   * stays one and a close is one press — except the notepad, which pushed,
+   * and then every surface opened after it pushed on top of that. Each
+   * press of Now then walked back exactly one entry, through the whole
+   * chain, which is what being made to press it four times IS.
+   */
+  const standingAway = (view: ViewLocation | null | undefined) =>
+    Boolean(view?.open || view?.conversationId || view?.compose);
+
+  const openOverHome = useCallback((what: ViewOpen | null) => {
+    const nav = viewNavigationRef.current;
+    /* `null` IS YOUR TOP OF MIND, which is the world itself — so that row
+       puts down whatever is held up rather than navigating anywhere. It is
+       why pressing it cannot strand you, which is the whole of the founder's
+       "I didn't realise clicking on top of mind would leave me there".
+       WHATEVER is held up: a destination, or a conversation, which have
+       separate closes because they have separate addresses. */
+    if (what === null) {
+      if (nav.view?.conversationId) nav.closeConversation();
+      else if (nav.view?.open) nav.closeOpen();
+      return;
     }
-    if (atWall.kind === "group") {
-      /* and the remainder is NOT added: `groupBeyondRef` is what the room's
-         ceiling held back, for the ROOM, and nothing says whose those are.
-         Attributing them to the member you happen to be standing in would be
-         the same lie this door was just fixed for, pointing the other way.
-         D5's promise is kept where it can be honoured — your own archive and
-         an agent's, where the count and the remainder describe one set. */
-      return groundCount(groupFieldRef.current.get(atWall.id), standing, viewerIdRef.current);
-    }
-    return (inspirations?.length ?? 0) + fieldBeyond;
-  }, [atWall, agents, inspirations, groupFieldTick, fieldBeyond, standing, auth?.profile?.id]);
+    /* AND THE NOTEPAD IS PUT DOWN. Same rule in the other direction: a place
+       and the note you were writing cannot both be the place you are. The
+       draft is untouched — `closeComposer` keeps the words, and the archive's
+       own new-note button opens straight back onto them. */
+    nav.write(
+      { ...(nav.view ?? EMPTY_VIEW), open: what, compose: false, conversationId: null },
+      standingAway(nav.view) ? { replace: true } : {},
+    );
+  }, []);
+
+  /**
+   * AND A CONVERSATION IS A PLACE, ON THE SAME TERMS.
+   *
+   * It wants its own function only because it writes a different parameter;
+   * the rule is `openOverHome`'s and must not be restated. Reached from the
+   * chats list, it REPLACES that list rather than sitting on top of it —
+   * which is what makes "Now" one press from inside a chat instead of two,
+   * and the chat's own close one press instead of landing you back on the
+   * list you were trying to leave.
+   *
+   * WHAT PAYS FOR IT: the browser's Back from a conversation reaches the
+   * world rather than the chats. The step back to the list is a visible
+   * chevron on the surface itself, which is what Law 2 asks for and what
+   * browser Back explicitly is not — "a list is not an exit. Browser Back is
+   * not an exit."
+   */
+  const openTalk = useCallback((id: string | null) => {
+    const nav = viewNavigationRef.current;
+    nav.write(
+      { ...EMPTY_VIEW, conversationId: id ?? 'new' },
+      standingAway(nav.view) ? { replace: true } : {},
+    );
+  }, []);
+  const menu = usePageMenu(locale, auth?.account?.id, agentWall ? { id: agentWall.id, name: agentWall.name } : null, openOverHome);
 
   /**
    * THE REACH — the ground, addressable without a pointer.
@@ -10183,8 +11058,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     // Capture is an explicit navigation intent. Record it before boot/roster
     // restoration or the world's debounced observer can close the new editor.
     const nav=viewNavigationRef.current;
-    nav.write({...EMPTY_VIEW,...nav.view,section:'top',at:null,compose:true,find:false,
-      inspirationId:null,reflectionId:null,reviewId:null,reviewAnswerId:null,principleId:null,sharePrinciple:false,conversationId:null});
+    /* AND NO ROOM OVER IT. `open` was the one field this list did not clear,
+       so pressing a dock row while a room was up left the archive standing on
+       the notepad — the two surfaces the founder caught in one screenshot,
+       with the dock greyed out between them. The notepad is a place, and
+       arriving at a place means leaving the last one. */
+    /* REPLACING WHATEVER YOU WERE STANDING ON, for the reason in
+       `standingAway`: the notepad is a place you MOVE to, not a depth you
+       add, and pushing one made every close after it a step through a
+       chain rather than a return to the world. */
+    nav.write({...EMPTY_VIEW,...nav.view,section:'top',at:null,compose:true,find:false,open:null,
+      inspirationId:null,reflectionId:null,principleId:null,sharePrinciple:false,conversationId:null},
+      standingAway(nav.view) ? { replace: true } : {});
   }, []);
 
   /** The shortcut returns to the present wall before putting the pen in hand. */
@@ -10270,16 +11155,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         attachmentRequestsRef.current.add(linkKey);
         void finalizeAttachment({ type: 'link', inspirationId: made.id, url }).catch(() => { attachmentRequestsRef.current.delete(linkKey); });
       }
+      /* `shouldReflect` IS GONE (2026-10-10), and it had never once been
+         true. It read `intent.reflect`, which came from `keepIt(andReflect)`,
+         which came from `InspirationComposer`'s `onSubmit` — and the composer
+         has only ever called `onSubmit(false)`. So the branch it guarded
+         (opening a question sheet on the thing just saved) was unreachable
+         code behind a flag nothing could set. It went with the fold rather
+         than because of it; see the tombstone on the sheet itself. */
       return () => { if (!remaining && !preserveNewer && !composerDraft.current.current.media.length) {
-        const shouldReflect = initiated && intent.reflect && composerOpenRef.current;
         setMouthOpen(false);
         if (initiated) simApiRef.current?.acknowledge('kept');
-        setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : 'saved to your own wall');
-        if (shouldReflect) setReflectOn({ id: made.id, text: displayText, attachments: detail.attachments });
-        else {
-          if(initiated&&storageScope)setRecentInspiration({owner:`${storageScope.accountId}:${storageScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
-          viewNavigationRef.current.closeComposer();
-        }
+        setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : say('worldSavedToYourWall'));
+        if(initiated&&storageScope)setRecentInspiration({owner:`${storageScope.accountId}:${storageScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
+        viewNavigationRef.current.closeComposer();
       } };
     },
     onRemoved: async (intent) => {
@@ -10319,7 +11207,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     catch { if (composerEpoch.current === epoch) setMouthNote('Couldn’t upload this file yet. Your draft is still here.'); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   };
-  const keepIt = useCallback(async (andReflect = false) => {
+  const keepIt = useCallback(async () => {
     let text = draftRef.current.trim();
     const initialMedia = composerDraft.current.current.media;
     const pendingLink=composerDraft.current.current.linkText??'';
@@ -10353,13 +11241,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (attachments.length > 5) throw new Error('Keep up to five attachments in one inspiration.');
       const reference = await composerDraft.flush(); current();
       const kind = attachments.length === 1 && !text ? attachments[0]!.type : attachments.length ? 'mixed' : 'note';
+      /* Said at upload, kept with the thing it is about. Unanswered is not
+         recorded at all: an empty reflection row is a question the person was
+         asked and did not answer, which is a different fact from one they
+         were never asked, and only one of those is true here. */
+      const why = momentWhy.trim();
+      const reflections = why
+        ? [{ question: say('worldMomentAsk'), answer: why }]
+        : undefined;
       inspirationSave.start({ operation: 'inspiration', input: { text, kind, source: 'app',
-        ...(attachments.length ? { attachments } : {}), ...(keepPublic ? { visibility: 'public' as const } : {}) },
-        reflect: andReflect, ...(reference ? { draft: reference } : {}) });
+        ...(attachments.length ? { attachments } : {}), ...(reflections ? { reflections } : {}),
+        ...(keepPublic ? { visibility: 'public' as const } : {}) },
+        ...(reference ? { draft: reference } : {}) });
+      setMomentWhy('');
       setCharSay('');
     } catch (reason) { if (composerEpoch.current === epoch) setMouthNote(reason instanceof ApiError ? say('worldComposerUploadFailed') : reason instanceof Error ? reason.message : 'Could not save this inspiration. Your draft is here.'); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
-  }, [keepPublic, inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase]);
+  }, [keepPublic, inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
 
   const addInspirationFiles = async (files: File[], audio = false) => {
     const epoch = fileOwnerEpoch.current;
@@ -10628,8 +11526,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {panelNeighbours.prev ? (
         <button
           type="button"
-          aria-label="the inspiration before this one"
-          title="the inspiration before this one"
+          aria-label={say('worldStepBack')}
+          title={say('worldStepBack')}
           className={caretLit === -1 ? "jar-caret-lit" : undefined}
           onClick={() => stepToMemory(panelNeighbours.prev)}
         >
@@ -10639,8 +11537,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {panelNeighbours.next ? (
         <button
           type="button"
-          aria-label="the inspiration after this one"
-          title="the inspiration after this one"
+          aria-label={say('worldStepForward')}
+          title={say('worldStepForward')}
           className={caretLit === 1 ? "jar-caret-lit" : undefined}
           onClick={() => stepToMemory(panelNeighbours.next)}
         >
@@ -10732,8 +11630,63 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * its visibility on screen around a textarea (founder, 2026-08-25: "have
    * reflect workflow in modal"). Null unless the mouth asked.
    */
-  const [reflectOn, setReflectOn] = useState<{ id: string; text: string; attachments: InspirationDetail['attachments'] } | null>(null);
   const [recentInspiration,setRecentInspiration]=useState<{owner:string;id:string;text:string;attachments:InspirationDetail['attachments']}|null>(null);
+  /**
+   * FROM KEEPING A THING TO TALKING ABOUT IT.
+   *
+   * Founder: "from saving inspirations to going into a chat experience should
+   * actually feel quite natural... having a separate entry point into saving
+   * an inspiration versus talking about it with WAKA shouldn't be separate."
+   *
+   * It is not a second entry point and it is not a mode on the box. The box
+   * has one job and never asks you to classify what you are about to type —
+   * that hesitation would land on the save, which is the one act that must
+   * have none. Saving is a deposit; talking is a withdrawal; a box that might
+   * do either makes you decide which before you have written anything.
+   *
+   * So talking is a CONSEQUENCE of keeping. You keep something, the creature
+   * says what it did, and that moment carries one way forward. Pressing it
+   * opens a conversation that already has a subject — your own words, sent as
+   * the first thing said, with a reply asked for. Which is also why there is
+   * no blank "talk to WAKA" room worth having: a conversation with no subject
+   * is the one kind this product cannot be better at than anything else.
+   *
+   * IGNORING IT COSTS NOTHING. The receipt is as skippable as it was before;
+   * this adds a door beside it, not a question in front of it.
+   */
+  /** Whether this input can drag at all, which decides what the box offers. */
+  const [touchOnly, setTouchOnly] = useState(
+    () => window.matchMedia?.('(pointer: coarse)').matches ?? false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia?.('(pointer: coarse)');
+    if (!mq) return;
+    const change = () => setTouchOnly(mq.matches);
+    mq.addEventListener('change', change);
+    return () => mq.removeEventListener('change', change);
+  }, []);
+  const [talking, setTalking] = useState(false);
+  const talkAbout = useCallback(async (kept: { id: string; text: string }) => {
+    const profileId = storageScope?.profileId;
+    if (!profileId || talking) return;
+    setTalking(true);
+    try {
+      const conversationId = crypto.randomUUID();
+      await createConversation(profileId, conversationId, undefined, undefined, {
+        id: crypto.randomUUID(),
+        content: kept.text,
+        requestReply: true,
+      });
+      setRecentInspiration(null);
+      navigate(`/chat/${conversationId}`);
+    } catch {
+      /* The keep itself already landed — this failed to open a room to talk
+         about it in, which is a different and much smaller thing to say. */
+      setCharSay(say('worldTalkFailed'));
+    } finally {
+      setTalking(false);
+    }
+  }, [navigate, say, storageScope?.profileId, talking]);
   const inspirationOwner=storageScope?`${storageScope.accountId}:${storageScope.profileId}`:null;
   const visibleInspiration=recentInspiration?.owner===inspirationOwner?recentInspiration:null;
 
@@ -10761,6 +11714,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * Agreement is recorded too, not only dissent: a pattern that only ever
    * hears from the people it got wrong is a pattern the server learns nothing
    * from.
+   *
+   * AND SINCE 2026-10-10 IT CARRIES THE ONE PLACE A PERSON TYPES.
+   * Founder's workflow design: *"Typing happens in one place only: when you
+   * correct."* So `correctionText` rides the same POST as the verdict it
+   * belongs to rather than becoming a second act with a second store —
+   * `feedback.correction_text` has been on the row since the route was
+   * written, and `top-of-mind-synthesis.ts` already reads it back into the
+   * generation payload beside the statement it corrects. Nothing new was
+   * invented to hold these words; what was missing was a way to say them.
+   *
+   * IT RETURNS WHAT HAPPENED, which the three cheap answers never needed.
+   * A verdict that does not land rolls its own light back and that is enough
+   * — the row is still there to press again. A CORRECTION cannot be handled
+   * that way: the words are the person's, they are not on screen anywhere
+   * else, and losing them silently is the one failure this product refuses.
+   * `null` means nothing was sent (offline); the promise resolves false when
+   * the server refused it, and the caller keeps the words and says so.
    */
   const sayVerdict = useCallback(
     (
@@ -10769,7 +11739,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       targetId?: string,
       contested?: boolean,
       targetRevision?: string,
-    ) => {
+      correctionText?: string,
+    ): Promise<boolean> | null => {
       setVerdicts((prev) => new Map(prev).set(id, value));
       /* the receipt: what this answer taught the loop, said where the act
          happened, worded only as strongly as its enforcing test allows —
@@ -10779,10 +11750,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         : value === "not_true"
           ? say(RECEIPTS.verdictNo.messageKey)
           : say(RECEIPTS.verdictKept.messageKey);
-      if (offlineRef.current) return;
-      createFeedback({ targetType: "signal", targetId: targetId ?? id, value, ...(targetRevision ? { targetRevision } : {}) })
+      if (offlineRef.current) return null;
+      /* Filed by whoever is standing here. A claim read from an agent's wall
+         is about the agent, and a verdict on it under your own profile is a
+         verdict about a signal you do not own — which the server refuses, as
+         it should. */
+      return createFeedback({ targetType: "signal", targetId: targetId ?? id, value,
+        ...(correctionText ? { correctionText } : {}),
+        ...(targetRevision ? { targetRevision } : {}),
+        ...(answeringAsRef.current ? { profile: answeringAsRef.current } : {}) })
         .then(() => {
-          if (!readingMountedRef.current) return;
+          if (!readingMountedRef.current) return true;
           setVerdictReceipt({ id, text: receipt });
           window.setTimeout(() => setVerdictReceipt((r) => (r?.id === id ? null : r)), 7000);
           /* AN ARBITRATION JUST HAPPENED. A verdict on a contested ground
@@ -10790,10 +11768,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              the pair has TWO sides — only the server knows the other one,
              so the settled light is fetched, not guessed. `partly` resolves
              nothing and the refetch honestly brings the waver back. */
-          if (!contested) return;
+          if (!contested) return true;
           loadPersonalReading()
             .then((tom) => absorbBoard(tom))
             .catch(() => undefined);
+          return true;
         })
         .catch((error) => {
         /* it did not land, and the row should not claim it did */
@@ -10803,6 +11782,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           return next;
         });
         if ((error as { code?: string })?.code === 'feedback_target_changed') verifyReadingRef.current(false);
+        return false;
       });
     },
     [],
@@ -10865,7 +11845,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      "going to your rooms" switch, at the memory.
   */
 
-
   /**
    * THE STAR'S OTHER HALF — handing a sentence back.
    *
@@ -10927,48 +11906,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, []);
 
   /** Making a room, joining one, and the state of asking about either. */
-  const [groupForm, setGroupForm] = useState<{
-    mode: "make" | "join";
-    text: string;
-    busy: boolean;
-    error: string | null;
-  } | null>(null);
-
-  const submitGroup = useCallback(() => {
-    if (!groupForm || groupForm.busy) return;
-    const text = groupForm.text.trim();
-    if (text === "") return;
-    setGroupForm({ ...groupForm, busy: true, error: null });
-    const landed = (g: ApiGroupSummary) => {
-      /* newest room first, which is where the axis puts it: a new column
-         appears to the right and the traveller can walk to it immediately */
-      setGroups((prev) => [g, ...prev.filter((x) => x.id !== g.id)]);
-      setGroupForm(null);
-    };
-    const failed = (m: string) =>
-      setGroupForm((f) => (f ? { ...f, busy: false, error: m } : f));
-    if (groupForm.mode === "make") {
-      createGroup(text)
-        .then(landed)
-        /* THROUGH `whyFailed`, AND THE 401 IS WHY.
-           This said "That room could not be made. Try another name." to every
-           failure alike, so `e2e:when-it-fails --kind 401` showed a signed-out
-           person being sent to think up a different name — advice that cannot
-           work, about a problem they do not have. The name IS the likely
-           cause of a 409, and the fallback still says so; what was missing is
-           that the server gets to disagree. */
-        .catch((err: unknown) =>
-          failed(whyFailed(err, say("worldRoomNotMade"))),
-        );
-    } else {
-      /* a pasted invite link works as well as a bare code — the link is the
-         thing people will actually send each other */
-      const code = text.includes("/") ? text.split("/").filter(Boolean).pop() ?? text : text;
-      joinGroup(code)
-        .then((r) => landed(r.group))
-        .catch((err: unknown) => failed(whyFailed(err, say("worldNoRoomAnswered"))));
-    }
-  }, [groupForm, whyFailed]);
+  /* `groupForm` AND `submitGroup` ARE GONE WITH THE SHEET THEY DROVE.
+     Nothing opened that sheet — see the note where it used to render — so
+     this state could only ever be set from inside itself. `createGroup` went
+     with it, and so did the `createGroup: "deleteGroup"` entry in
+     `test/verb-pairs.test.ts` that only passed because this unreachable
+     handler referenced the verb. `joinGroup` survives on the `?join=<code>`
+     path, which never came through here. */
 
   /**
    * WHO IS IN HERE — and it is the same act as inviting.
@@ -11055,7 +11999,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     },
     [whyFailed],
   );
-
 
   /* ── THE FIVE ACTS ON A PRINCIPLE ──────────────────────────────────────
      Each reloads from the server rather than patching state by hand: rank is
@@ -11209,51 +12152,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * panels hanging off the same bar is a menu bar, which this world does not
    * have.
    */
-  const [accountOpen, setAccountOpen] = useState(false);
-  /* the reading: fetched once on first open, held for the session — the
-     rules do not change under a person mid-visit */
-  const [readingOpen, setReadingOpen] = useState(false);
-  const [theReading, setTheReading] = useState<ApiReading | null>(null);
-  /* the antechamber: fetched on every open — refusals accrue while the
-     world stands, and a stale dim place would claim the ground refused
-     less than it has */
-  const [antechamberOpen, setAntechamberOpen] = useState(false);
-  const [antechamber, setAntechamber] = useState<ApiAntechamberRow[] | null>(null);
-  /* the gardener's asks: fetched on every open — proposals accrue while the
-     panel is closed, and an ask answered stays answered */
-  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
-  const [duplicates, setDuplicates] = useState<ApiSignalDuplicate[] | null>(null);
-  const [resolvedDuplicates, setResolvedDuplicates] = useState<ReadonlySet<string>>(new Set());
-  const resolveDuplicate = useCallback(
-    (id: string, act: "merge" | "keep_apart") => {
-      if (offlineRef.current) return;
-      /* answer at once; the row only comes back if the server refused */
-      setResolvedDuplicates((prev) => new Set(prev).add(id));
-      resolveSignalDuplicate(id, act).catch(() => {
-        setResolvedDuplicates((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      });
-    },
-    [],
-  );
-  /** Anchors put back from the antechamber this session, so its rows answer
-      in the same beat rather than waiting for a refetch. */
-  const [restoredAnchors, setRestoredAnchors] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
-  const restoreFromAntechamber = useCallback((anchorSignalId: string) => {
-    if (offlineRef.current) return;
-    restoreSignal(anchorSignalId)
-      .then(() => {
-        setRestoredAnchors((prev) => new Set(prev).add(anchorSignalId));
-      })
-      .catch(() => {
-        /* it did not come back; the row keeps offering */
-      });
-  }, []);
   /** The rename box, while it is open: null when nobody is renaming. */
   const [renaming, setRenaming] = useState<{ id: string; text: string; busy: boolean } | null>(
     null,
@@ -11822,20 +12720,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   /* ═══ EVERY SHEET CLOSES THE SAME TWO WAYS ═══
      The founder ruled it about the make-another-place sheet ("if click
      outside modal, close it") and about the dial's rail the same day; it is
-     not a fact about those two. The five sheets below closed only by finding
+     not a fact about those two. The sheets below closed only by finding
      their own small word, and the way out of the last sheet is never where
      the way out of this one is. See `lib/dismiss.ts` for why pointerdown and
-     why Escape stops propagating. */
-  const closeAccount = useCallback(() => setAccountOpen(false), []);
+     why Escape stops propagating.
+
+     IT WAS FIVE AND IT IS THREE, which is the useful part of this note now.
+     The account sheet became a card under the settings cog that closes from
+     inside the top bar, and the antechamber moved to `pages/Profile` as a
+     `DialogSurface` that owns its own dismissal. Both left WITHOUT this
+     comment noticing, which is the argument for the hook rather than against
+     it: each surface took its way out with it, and nothing had to be
+     remembered here. The three that remain are a room's settings, the join
+     sheet, and a statement's provenance. */
   const closeSettings = useCallback(() => setSettingsFor(null), []);
   const closeJoin = useCallback(() => setPendingJoin(null), []);
   const closeProv = useCallback(() => setProv(null), []);
-  const closeAnte = useCallback(() => setAntechamberOpen(false), []);
-  useDismissAway(accountOpen, closeAccount, KEEP_ACCOUNT);
   useDismissAway(settingsFor !== null, closeSettings, KEEP_SHEET);
   useDismissAway(pendingJoin !== null, closeJoin, KEEP_SHEET);
   useDismissAway(prov !== null, closeProv, KEEP_PROV);
-  useDismissAway(antechamberOpen, closeAnte, KEEP_ANTE);
   const acceptJoin = useCallback(() => {
     if (!pendingJoin) return;
     const code = pendingJoin;
@@ -12120,70 +13023,26 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       });
   }, [panelId, panelBall, forget.step, inspirationRemovedFromView]);
 
-  const askToReflect = useCallback(() => {
+  /** Open the answers already on this save. A read, with nothing to write. */
+  const openReflections = useCallback(() => {
     if (!panelId || !panelBall) return;
-    /* another member's save is theirs to reflect on, not the viewer's */
+    /* another member's save is theirs, and so are its answers */
     if (panelBall.col !== undefined && !panelBall.own) return;
     setReflectOpen(true);
     viewNavigationRef.current.write({ ...observedRef.current, inspirationId: panelBall.sigId ?? panelId, reflectionId: 'open' }, { observed: true });
   }, [panelId, panelBall]);
 
-  const synchronizeReflections = useCallback((owner: string, row: ApiInspiration | null) => {
-    const revision = ++sourceListMutationRef.current;
-    const apply = (detail: InspirationDetail) => {
-      const before = inspirationsRef.current?.find((item) => item.id === owner)?.reflectionCount ?? detailsRef.current.get(owner)?.reflectionCount ?? 0;
-      detailsRef.current.set(owner, detail);
-      inspirationsRef.current = inspirationsRef.current?.map((item) => item.id === owner ? { ...item, reflectionCount: detail.reflectionCount } : item) ?? null;
-      setPanel((cur) => cur?.detail?.id === owner || cur?.id === owner ? { ...cur!, detail } : cur);
-      setInspirations((cur) => cur?.map((item) => item.id === owner ? { ...item, reflectionCount: detail.reflectionCount } : item) ?? null);
-      simApiRef.current?.reflectionChanged(owner, detail.reflectionCount - before);
-    };
-    if (row) apply(toInspirationDetail(row));
-    else {
-      detailsRef.current.delete(owner);
-      setPanel((cur) => cur?.detail?.id === owner ? { ...cur, detail: null } : cur);
-      void loadInspiration(owner, storageScope?.profileId).then((detail) => {
-        if (readingMountedRef.current && sourceListMutationRef.current === revision) apply(detail);
-      }).catch(() => undefined);
-    }
-  }, []);
-  const reflectionSaved = useCallback((made: ApiReflection) => {
-    if (made.processing) sourceProcessing.track(made.inspirationId, made.processing);
-    simApiRef.current?.acknowledge("answered");
-  }, []);
-
-  const reflectionRemoved = useCallback((id: string, owner: string) => {
-    sourceListMutationRef.current += 1;
-    if (!offlineRef.current) sourceProcessing.track(owner);
-    skyReadSequence.current += 1;
-    const withoutDeletedCopy = (row: Evidence): Evidence => row.inspirationId !== owner ? row : {
-      ...row, reason: null,
-      ...(row.quoteReflectionId === id || !row.quoteReflectionId
-        ? { quote: null, quoteSource: null, quoteReflectionId: null } : {}),
-    };
-    for (const [signalId, rows] of evidenceBySignalRef.current) evidenceBySignalRef.current.set(signalId, rows.map(withoutDeletedCopy));
-    setCitations((rows) => new Map([...rows].map(([key, evidence]) => [key, evidence.map(withoutDeletedCopy)])));
-    setProv((current) => current ? { ...current, rows: current.rows.map(withoutDeletedCopy) } : null);
-    setProvFull((current) => current?.id === owner ? null : current);
-    setProvenance((current) => {
-      if (!current.has(owner)) return current;
-      const next = new Map(current); next.set(owner, null); return next;
-    });
-    for (const item of ballsRef.current?.list ?? []) {
-      if ((item.sigId ?? item.id) === owner) item.quote = null;
-    }
-    const cached = detailsRef.current.get(owner);
-    if (cached) detailsRef.current.set(owner, {
-      ...cached,
-      reflectionCount: Math.max(0, cached.reflectionCount - 1),
-      reflections: cached.reflections.filter((item) => item.id !== id),
-    });
-    setPanel((cur) => cur?.detail?.id === owner ? { ...cur, detail: detailsRef.current.get(owner) ?? cur.detail } : cur);
-    setInspirations((cur) => cur?.map((item) => item.id === owner
-      ? { ...item, reflectionCount: Math.max(0, item.reflectionCount - 1) } : item) ?? null);
-    simApiRef.current?.reflectionChanged(owner, -1);
-    void readSkyRef.current().catch(() => undefined);
-  }, []);
+  /* `reflectionRemoved`, `reflectionSaved` and `synchronizeReflections` are
+     GONE (2026-10-10), and so is the writing flow whose four call sites were
+     their only callers: `ReflectionFlow` inside the save's panel, the
+     standalone reflect sheet, and `ReviewPanel`'s two. They kept the field,
+     the archive counts, the evidence quotes and the simulation in step with
+     an answer being written or deleted; nothing writes or deletes an answer
+     from this client any more, so keeping them would have been three handlers
+     waiting for an event the product cannot raise. Look for them under those
+     names in git history alongside `components/ReflectionFlow.tsx`.
+     The answers THEMSELVES are untouched: they arrive on the save
+     (`detail.reflections`) and are rendered read-only in the panel. */
 
   /* The passages worth marking inside the text: the words a PATTERN carried
      out of this memory, and only those. The second tier used to be the
@@ -12252,13 +13111,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const after = next?.entries.find((entry) => entry.pinned) ?? next?.entries[0];
     if (!absorbBoard(next)) throw new Error('Reading changed while opening');
     setSourcePrevious(before && after && before.body !== after.body ? { body: before.body, reading: next! } : null);
-    setReflectOn(null); setReflectOpen(false); setSelectedId(null);
+    setReflectOpen(false); setSelectedId(null);
     simApiRef.current?.goToWall(0); simApiRef.current?.toTop(); setPosterAsk(true);
   });
   const sourceNotice = !offline && !readingRefresh.busy && inspirationSave.phase === 'idle' ? <InspirationProcessingNotice
     processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null;
   const showHomeProcessing = Boolean(sourceProcessing.active && sourceProcessing.phase !== 'idle' && !offline && !readingRefresh.busy &&
-    inspirationSave.phase === 'idle' && atNow && !inField && !inSky && !reflectOn && !reflectOpen && !editing.open);
+    inspirationSave.phase === 'idle' && atNow && !inField && !inSky && !reflectOpen && !editing.open);
 
   const appliedViewKey = useRef<string | null>(null), viewRequest = useRef(0);
   const canonicalizeViewRef = useRef(false);
@@ -12279,7 +13138,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const current = () => !canceled && !controller.signal.aborted && viewRequest.current === serial && latestViewKey.current === key;
     setNavigationProblem(null);
     linkedReflectionRef.current = null;
-    setReflectOn(null); setReflectOpen(false); setSelectedId(null); setDetachedInspiration(null); setGroupPanel(null);
+    setReflectOpen(false); setSelectedId(null); setDetachedInspiration(null); setGroupPanel(null);
     setSeek(desired.find ? viewNavigation.query : null);
     setPick(desired.principleId);
     setMouthOpen(desired.compose);
@@ -12346,11 +13205,29 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const observedView: ViewLocation = { ...EMPTY_VIEW, wallId: atWall.kind === 'self' ? null : atWall.id,
     label: atWall.kind === 'self' ? undefined : (walls.find((wall) => wall.id === atWall.id)?.name ?? atWall.name),
     section: inSky ? 'sky' : inField ? 'field' : 'top', at: parkedAt, memberId: atWall.kind === 'group' ? standing : null,
-    inspirationId: reflectOn?.id ?? (selectedViewBall?.sigId ?? selectedId),
-    reflectionId: reflectOn || reflectOpen ? (requestedViewRef.current?.inspirationId === (reflectOn?.id ?? selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
-    find: seek !== null, compose: mouthOpen,reviewId:viewNavigation.view?.reviewId??null,reviewAnswerId:viewNavigation.view?.reviewAnswerId??null,
+    inspirationId: selectedViewBall?.sigId ?? selectedId,
+    reflectionId: reflectOpen ? (requestedViewRef.current?.inspirationId === (selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
+    find: seek !== null, compose: mouthOpen,
     principleId:atWall.kind==='self'&&inSky?pick:null,
-    sharePrinciple:atWall.kind==='self'&&inSky&&(viewNavigation.view?.sharePrinciple??false),conversationId:viewNavigation.view?.conversationId??null };
+    sharePrinciple:atWall.kind==='self'&&inSky&&(viewNavigation.view?.sharePrinciple??false),conversationId:viewNavigation.view?.conversationId??null,
+    /* WHAT IS HELD UP IS NOT SOMETHING THE WORLD OBSERVES, so it is carried
+       rather than derived — the same as the review, the conversation and the
+       share above it.
+
+       This line is load-bearing and its absence was a real bug, not a test
+       artefact. The effect below rewrites the address from `observedView`
+       eighty milliseconds after anything the camera can see changes, which is
+       how "the world never moves unless the user moved it" is enforced. But
+       anything NOT in this object is not preserved by that rewrite — it is
+       ERASED by it. So opening your inspirations worked, and then a tick
+       later the canonicaliser replaced the URL without `open` and the overlay
+       vanished on its own.
+
+       Every field here that reads `viewNavigation.view?.x ?? null` is a field
+       that belongs to a surface over the world rather than to the world, and
+       the pattern is the reminder: a new one has to join this list on the day
+       it is added, or it will appear to work and then undo itself. */
+    open:viewNavigation.view?.open??null };
   const observedHref = viewHref(observedView), observedRef = useRef(observedView); observedRef.current = observedView;
   useEffect(() => {
     if (phase !== 'ready' || restoringViewRef.current || navigationProblem) return;
@@ -12379,7 +13256,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   };
 
   return (
-    <div ref={measured.root} className="jar" aria-label="Waka">
+    <div
+      ref={measured.root}
+      /* ═══ THE WORLD STANDS DOWN WHILE AN ARCHIVE IS OPEN ═══════════════
+         The scrim over these surfaces is deliberately translucent so the
+         grain and the creature stay faintly behind them — that is what makes
+         an archive read as THIS PLACE holding up what you kept, rather than
+         as a page that replaced it. But translucency does not discriminate:
+         the save box, the creature's voice and the processing line came
+         through it too, and a composer drawn across a sentence somebody
+         wrote is not depth, it is a collision.
+         So the world's CHROME steps back and the world itself does not. */
+      /* THE SAME THREE, so the DOM chrome and the canvas step aside
+         together. They were two different conditions and the chat sat in
+         the gap between them. */
+      className={`jar${viewNavigation.view?.open || viewNavigation.view?.conversationId || viewNavigation.view?.sharePrinciple || viewNavigation.view?.compose ? " jar--aside" : ""}`}
+      aria-label="Waka"
+    >
       {/* the world's early face, until the first real frame: the same ground,
           the companion already home, one honest word. Shared with the auth
           splash so the whole way in is one unbroken place (founder,
@@ -12515,8 +13408,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       active={here && !offlineRef.current}
                       locale={locale}
                       refreshKey={w.kind === "group" ? groupReadTick : undefined}
-                      onRead={w.kind === "self" ? acceptPrinciples : (rows) => setGroupPrincipleCounts((counts) =>
-                        counts[w.id] === rows.length ? counts : { ...counts, [w.id]: rows.length })}
+                      /* A room's principle count had one reader: the
+                         top-centre pill that is gone. Counting them to feed
+                         nothing would be work done for a control that no
+                         longer exists. */
+                      onRead={w.kind === "self" ? acceptPrinciples : undefined}
                     /> : null}
                     {w.kind==='self'&&pick&&principlesRead&&!principles.some(row=>row.id===pick)?<p role="status" className="jar-values-sub">
                       {say('worldPrincipleUnavailable')} <button type="button" onClick={()=>{setPick(null);viewNavigation.write({...EMPTY_VIEW,section:'sky'},{replace:true});}}>{say('worldPrinciplesBack')}</button>
@@ -12676,7 +13572,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           {pick === pr.id && !pDraft ? (
                             <div className="jar-ask jar-principle-actions">
                               {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:pr.id,sharePrinciple:true})}>{say('worldSharePrinciple')}</button>:null}
-                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new',principleId:pr.id})}>{say('worldConversationFromPrinciple')}</button>:null}
+                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new',principleId:pr.id})}>{say('worldTalkAboutThis')}</button>:null}
                               {pr.citedSignals.length > 0 ? (
                                 <>
                                   <button
@@ -12790,16 +13686,77 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 ) : null}
                 {ready && c ? (
                   <div
-                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}`}
+                    /* ═══ ONE STATEMENT ON THE SCREEN, AND THE CREATURE HAS
+                           FIRST CLAIM ON IT ════════════════════════════════
+                       Founder: "I feel like this page is trying to do too much
+                       at once. It's trying to show the user the top of mind,
+                       ask them to save the inspiration, and also asking them
+                       to review the claim."
+
+                       Six products were torn down end to end — Oura, Readwise,
+                       Day One, Spotify Wrapped, Finch, Whoop — and every one
+                       of them puts EXACTLY ONE derived object on its home
+                       screen. Not one stacks even two. This screen stacked
+                       four.
+
+                       So the statement band yields while the creature is
+                       asking. Your top of mind and WAKA's question are both
+                       sentences about you, in the same register, and showing
+                       them together is what made the screen read as two
+                       products arguing. The band comes back the moment the
+                       sitting is answered — which is the whole point, because
+                       what comes back has been rewritten by the answers.
+
+                       THIS IS ONLY POSSIBLE NOW. Yielding used to be
+                       unthinkable: `companion.y` was measured from this
+                       block's live height, so hiding it would have thrown the
+                       creature up the screen. The position is a function of
+                       the window alone now, so the band can collapse to
+                       nothing and the creature does not move a pixel. */
+                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}${here&&w.kind==='self'&&!mouthOpen?' jar-hq-inner--yielded':''}`}
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
                     {/* R01 makes the personal reading explicit while keeping
                         the existing field, headline and companion layout. */}
                     {here&&w.kind==='self'&&(inspirations?.length||fieldBeyond||readingLoadPhase!=='ready')?<div className="jar-reading-heading" data-jar-chrome="1">
-                      <span>{say(atNow?'worldReadingTitle':'worldReadingEarlier')}</span>
-                      {atNow&&topOfMind&&topOfMind.createdMs>0?<time dateTime={new Date(topOfMind.createdMs).toISOString()}>{new Date(topOfMind.createdMs).toLocaleDateString(locale,{month:'short',day:'numeric'})}</time>:null}
-                      {atNow&&topOfMind?.id&&storageScope&&!offline?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale} compact/>:null}
+                      {/* THE NAME AND ITS EXPLANATION MOVED TO THE SWITCHER.
+                          Both stood here: "Top of mind", and a hover card
+                          saying how it is made. The switcher at the top of
+                          the screen now names the view, so printing the same
+                          two words again sixty pixels below it was the exact
+                          duplication that change removed everywhere else.
+                          The explanation went with the name — it belongs on
+                          the thing that names the view, not on a second label
+                          beside it.
+                          What is left here is the one thing that is about
+                          THIS reading rather than about the view: whether you
+                          are looking at a current one. */}
+                      {atNow ? null : <span>{say('worldReadingEarlier')}</span>}
+                      {/* "Changes" left the home screen with the other two
+                          explainers. What moved in the reading since last time
+                          is worth having, but it is a thing to go and look at,
+                          not a control sitting beside the sentence — the top of
+                          the page is for the sentence. */}
+                      {atNow&&topOfMind?.id&&storageScope&&!offline&&(inField||inSky)?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale} compact/>:null}
                     </div>:null}
+                    {/* THE BAND THIS SITS IN IS ALREADY HEIGHT-ZERO ON THE
+                        WALL YOU ARE STANDING ON — see `jar-hq-inner--yielded`
+                        on the line that builds this block's class. So the
+                        companion's bubble carrying the reading (founder: "the
+                        speech bubble should show its top of mind at the
+                        moment") does NOT duplicate this heading: there is
+                        nothing on screen to duplicate. A suppression was
+                        written here for a duplication that does not exist,
+                        and seventeen tests said so — the drift readout, the
+                        board acts and the grounds all live under this
+                        heading, reached by the dial rather than by the home
+                        screen, and all of them went dark at once.
+
+                        Noted rather than left silent, because the next person
+                        to see the reading in two places will reach for the
+                        same fix. The thing to change is which SURFACE the
+                        expansion belongs to, not whether this renders. */
+                    }
                     {c.text ? (
                       /* A STABLE KEY, AND A CARRIED/NEW SPLIT INSIDE IT.
                          The whole h1 used to be keyed by its words, so every
@@ -12841,7 +13798,42 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           <span className="jar-poster-away"> {c.awayFrom}</span>
                         ) : null}
                       </h1>
-                    ) : here && w.kind === 'self' && showHomeProcessing && readingLoadPhase === 'ready' && !topOfMind?.supportChanged ? null : (
+                    ) : here && w.kind === 'self' && showHomeProcessing && readingLoadPhase === 'ready' && !topOfMind?.supportChanged ? null
+                    /* THE EMPTY LINE IS SAID ONCE, BY THE CREATURE.
+                       Founder, on this paragraph printed across the middle of
+                       the screen with the speech bubble floating through the
+                       word "formed": "I haven't formed anything yet should be
+                       shown instead of the top of mind if it's not existing
+                       yet."
+                       The bubble carries it now (see `jar-char-bubble`), so on
+                       the wall you are standing on this paragraph would be the
+                       same sentence twice, in two registers, overlapping. It
+                       still renders while the reading is LOADING or has FAILED
+                       — those are facts about the fetch, not about the
+                       companion, and the bubble says neither — and on every
+                       wall the bubble is not over. */
+                    /* ═══ AN AGENT'S WALL NEVER PRINTS THIS LINE ═════════
+                       Founder, for at least the third time: "I told you so
+                       many times that the agent should never say 'feeling
+                       inspired save it', nor why is 'I haven't formed
+                       anything yet' shown as a big text behind it."
+
+                       It kept coming back because it was SUPPRESSED rather
+                       than absent: the condition was "hide this while the
+                       bubble is holding it", and `bubbleHoldsTheLine` is
+                       false whenever the bubble is holding anything ELSE —
+                       the creature speaking (`charSay`), the offer, a form
+                       change. So every one of those states lifted the
+                       suppression and the sentence came back up behind the
+                       bubble, which is the screenshot, twice.
+
+                       A condition with five ways to be false is not a rule.
+                       An agent's wall has one place for its own words and it
+                       is the bubble, unconditionally, so the paragraph is
+                       not rendered there at all — there is no state left for
+                       it to reappear in. */
+                    : w.kind === 'agent' ? null
+                    : here && bubbleHoldsTheLine && !topOfMind?.supportChanged ? null : (
                       /* NO GENERATED PLACEHOLDER, EVER. An invented ambition
                          for a wall that has not worked yet would teach the
                          reader that the poster is generated copy and destroy
@@ -12851,13 +13843,30 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         {here&&w.kind==='self'&&atNow&&!offline&&!topOfMind?.supportChanged
                           ?readingLoadPhase==='loading'?say('worldPersonalReadingLoading')
                             :readingLoadPhase==='failed'?<>{say('worldPersonalReadingLoadFailed')} <button type="button" className="jar-board-act" onClick={()=>retryReadingLoadRef.current()}>{say('worldRoomHistoryRetry')}</button></>
-                            :say(inspirations?.length?'worldPersonalReadingNotReady':'worldPersonalReadingEmpty')
+                            /* "NOT READY" AND "NOTHING KEPT" ARE DIFFERENT
+                               FACTS, and this line told the second one to
+                               people for whom the first was true. It asked
+                               `inspirations?.length` alone — but the archive
+                               arrives in pages, and on the first short page
+                               that array is `[]` while `fieldBeyond` holds
+                               the hundreds still coming. So an account with
+                               two and a half thousand kept things was told
+                               "keep something you want to come back to" for
+                               as long as the walk took.
+
+                               `fieldBeyond` is the remainder and the hint
+                               below already consults it for exactly this
+                               reason; this branch was the one place that
+                               forgot to, which is why the bug only showed on
+                               a cold load of a large archive — the hardest
+                               state to catch by looking, and the one where
+                               being told you have nothing is worst. */
+                            :say(inspirations?.length||fieldBeyond?'worldPersonalReadingNotReady':'worldPersonalReadingEmpty')
                           :c.formingAlt ?? say("worldFormingNothingAdopted")}
                       </p>
                     )}
                     {here && w.kind === 'self' && showHomeProcessing ? <InspirationProcessingNotice quiet introducePrinciples={!c.text && principles.length === 0}
                       processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null}
-                    {here && w.kind === 'self' && storageScope && !offline && atNow && !inField && !inSky ? <ReadingFormationHelp locale={locale} /> : null}
                     {here&&w.kind==='self'&&atNow&&readingLoadPhase==='ready'&&!inspirations?.length&&!fieldBeyond?<p className="jar-first-capture-hint">{say('worldFirstCaptureExample')}</p>:null}
                     {/* The dial's historical date stays attached to its read. */}
                     {c.asOf ? (
@@ -12866,12 +13875,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       </div>
                     ) : null}
                     {here&&w.kind==='self'&&storageScope&&!offline?<div className="jar-reading-actions" data-jar-chrome="1">
-                      {!atNow?<button type="button" onClick={()=>windTo(dial?.end??Date.now())}>{say('worldReadingToday')}</button>:<>
-                        {c.text?<button type="button" aria-expanded={posterAsk} onClick={()=>setPosterAsk(value=>!value)}>{say('worldReadingWhy')}</button>:null}
-                      </>}
+                      {/* "Why this reading" left with "How this forms": the home
+                          screen stopped carrying explanations of itself. Back
+                          to today stays — it is not an explanation, it is the
+                          way out of a date you scrubbed to. */}
+                      {!atNow?<button type="button" onClick={()=>windTo(dial?.end??Date.now())}>{say('worldReadingToday')}</button>:null}
                     </div>:null}
-                    {here&&w.kind==='self'&&storageScope&&!offline&&atNow?<HomeActivities locale={locale} reviewLabel={reviewEntry.label} resuming={reviewEntry.resuming} hasInspirations={Boolean(inspirations?.length||fieldBeyond)}
-                      onReview={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})} onChat={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new'})}/>:null}
+                    {/* THE ACTIVITY CARDS ARE GONE FROM THE PAGE (founder
+                        ruling). Review and Talk with WAKA are destinations,
+                        and destinations live behind the hamburger now — the
+                        home page holds the reading, the character and the box
+                        and nothing else. Neither feature was removed; both are
+                        rows in `menuItems` below. */}
                     {here && w.kind === "group" && atNow ? <button
                       type="button"
                       className="jar-room-shape"
@@ -13096,7 +14111,29 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                            sentence somebody wrote by hand, and saying so is
                            more useful than an empty band */
                         <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
-                          <p className="jar-prov-lead jar-label">{say(w.kind === "self" && lead?.supportChanged ? "worldReadingSupportChanged" : "worldWrittenByHand")}</p>
+                          {/* THE LABEL NAMES WHAT THIS IS; IT DOES NOT REPEAT
+                              WHAT IT SAYS. Founder, on a screenshot of this
+                              band: "has duplicatives + i dont get what it
+                              means."
+
+                              Both halves were true. When a reading's support
+                              had changed, this printed
+                              `worldReadingSupportChanged` — "This reading
+                              needs another look." — in the uppercase label
+                              register, with the SAME sentence set directly
+                              beneath it as the statement. One string, twice,
+                              in two voices, which reads as a stutter rather
+                              than as emphasis. Somebody had already noticed
+                              half of it: the branch further down suppresses
+                              the same repeat in the other place it could
+                              happen, and stopped there.
+
+                              And a status is not a provenance. This band's
+                              job is to say where the sentence came from —
+                              by hand, or from the chain above it. "Needs
+                              another look" is a state of the reading, and
+                              the sentence below is already carrying it. */}
+                          <p className="jar-prov-lead jar-label">{say("worldWrittenByHand")}</p>
                         </div>
                       )
                     ) : null}
@@ -13112,25 +14149,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             </span>
                             <button
                               type="button"
-                              className="jar-board-act jar-label"
+                              className="jar-board-act"
                               onClick={() => rereadGroupBoard(w.id)}
                             >
                               {say("worldReadAgain")}
                             </button>
                             <button
                               type="button"
-                              className="jar-board-act jar-label"
+                              className="jar-board-act"
                               onClick={() => setGroupReading("rest")}
                             >
                               {say("worldLeaveItCap")}
                             </button>
                           </>
                         ) : groupReading === "working" ? (
-                          <span className="jar-board-act jar-label">{say("worldReadingNow")}</span>
+                          <span className="jar-board-act">{say("worldReadingNow")}</span>
                         ) : (
                           <button
                             type="button"
-                            className="jar-board-act jar-label"
+                            className="jar-board-act"
                             onClick={() => setGroupReading("asking")}
                           >
                             {say("worldReadItAgain")}
@@ -13201,27 +14238,88 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         progress keeps them mounted regardless: a control that
                         vanished mid-work would take its own progress report
                         with it. */}
-                    {here && w.kind === 'self' && !showHomeProcessing && !reflectOn && !reflectOpen && !editing.open ? sourceNotice : null}
+                    {here && w.kind === 'self' && !showHomeProcessing && !reflectOpen && !editing.open ? sourceNotice : null}
                     {here && w.kind === "self" && !offline && !lead && readingMessage ? (
                       <p className="jar-board-acts jar-reading-status" role="status" data-jar-chrome="1">
                         {readingMessage === "worldReadingSupportChanged" ? null : say(readingMessage)}
                         {!readingRefresh.busy && (readingCheckFailed || readingChecking || topOfMind?.supportChanged || readingRefresh.canResume || ["error", "failed", "unknown"].includes(readingRefresh.phase)) ? (
-                          <button className="jar-board-act jar-label" type="button" disabled={readingChecking}
+                          <button className="jar-board-act" type="button" disabled={readingChecking}
                             onClick={() => readingCheckFailed ? verifyReadingRef.current(true) : void readingRefresh.start()}>
                             {say(readingCheckFailed || readingChecking ? "worldReadingCheckAgain" : readingRefresh.canResume ? "worldReadCheck" : "worldReadAgain")}
                           </button>
                         ) : null}
                       </p>
                     ) : null}
+                    {/* ────────────────────────────────────────────────────
+                        WHAT A PERSON WANTS TO DO WITH A SENTENCE ABOUT
+                        THEMSELVES IS ANSWER IT.
+
+                        Founder, on a screenshot of this block: "Just changing
+                        the text and removing duplicate is not enough. Just
+                        rethink the full interaction here. When the user looks
+                        at this top of mind, what would they want to do? How
+                        would they want to do that interaction? This is
+                        definitely not the right way."
+
+                        WHAT WAS HERE: `Write a new one` · `Keep on top` ·
+                        `Edit wording` · `Not this` — and every one of them is
+                        a way to MAINTAIN THE ARTIFACT. Regenerate it, pin it,
+                        retype it, discard it. Not one of them is a way to
+                        RESPOND TO THE OBSERVATION, which is the only thing
+                        that actually happens in a person's head when they
+                        read a sentence claiming to describe them. The
+                        reaction is involuntary and immediate — "...is that
+                        me?" — and the surface handed it a filing cabinet.
+
+                        THE RIGHT INTERACTION WAS ALREADY IN THE PRODUCT, two
+                        hundred pixels below this one. The creature's claim
+                        asks a statement and offers three peer answers, one of
+                        which opens a field to say what is closer
+                        (`jar-char-claim-answers`, and `setCorrecting` under
+                        "not true"). Two sentences about you were on one
+                        screen asking for the same thing in two different
+                        languages, and the one nobody complained about is the
+                        one that asks a question.
+
+                        So this is that model transposed, not a new invention:
+
+                          Yes       it holds — `holdLead`, settles at once
+                          Not quite opens the field — `editing.begin`, the
+                                    same shape as the claim's "not true"
+                          Not me    `dropLead`, settles at once and stays
+                                    undoable through `undrop` below
+
+                        AND THE MAINTENANCE VERBS DO NOT DISAPPEAR, THEY STOP
+                        PRETENDING TO BE ANSWERS. "Write a new one" is now
+                        beside the line that reports the reading has fallen
+                        behind — a remedy belongs next to the complaint it
+                        answers, not in a row of replies to a question it is
+                        not an answer to. "Hand it back to WAKA" only exists
+                        once you have written the sentence yourself, which
+                        makes it a fact about this sentence rather than a
+                        response to it, so it goes to the same quiet line.
+
+                        AT REST THE BLOCK IS ONE LINE: the question. Four
+                        permanent verbs made "a sentence with a toolbar under
+                        it — furniture, which this layout does not have", and
+                        that objection still stands; a question is not
+                        furniture, it is the shortest possible statement of
+                        what the surface is for. Pressing the sentence has
+                        been how you open it since 2026-08-24; now the thing
+                        it opens is an answer rather than an inventory.
+                        ──────────────────────────────────────────────────── */}
                     {here &&
                     w.kind === "self" &&
                     !offline &&
                     lead &&
                     !editing.open &&
-                    (posterAsk || board.step !== "rest" || readingMessage !== null) ? (
-                      <div className={`jar-board-acts${readingMessage !== null ? " jar-reading-status" : ""}`} data-jar-chrome="1">
+                    /* `board.step !== "rest"` stays: a confirmation already in
+                       flight must not be hidden out from under the person who
+                       started it. */
+                    (posterAsk || board.step !== "rest") ? (
+                      <div className="jar-board-acts" data-jar-chrome="1">
                         {readingRefresh.busy ? (
-                          <span className="jar-board-act jar-label" role="status">{say(readingMessage ?? "worldReadingNow")}</span>
+                          <span className="jar-board-act" role="status">{say(readingMessage ?? "worldReadingNow")}</span>
                         ) : board.step === "asking" ? (
                           <>
                             {/* WHAT WILL CHANGE, BEFORE IT CHANGES. Frostpunk's
@@ -13236,14 +14334,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             </span>
                             <button
                               type="button"
-                              className="jar-board-act jar-label"
+                              className="jar-board-act"
                               onClick={rebuildBoard}
                             >
                               {say("worldReadAgain")}
                             </button>
                             <button
                               type="button"
-                              className="jar-board-act jar-label"
+                              className="jar-board-act"
                               onClick={() => setBoard({ step: "rest" })}
                             >
                               {say("worldLeaveItCap")}
@@ -13251,82 +14349,135 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           </>
                         ) : (
                           <>
-                            {readingMessage || boardToast ? (
-                              <span className="jar-board-warn" role="status">
-                                {readingMessage ? say(readingMessage) : boardToast}
-                              </span>
-                            ) : null}
+                            {/* ── THREE VERBS, AND THEY ARE MAINTENANCE ON PURPOSE ──
+                                Founder, on the "Is this you? / Yes / Not
+                                quite / Not me" this replaces: "weird... for
+                                now maybe just let user either edit it or
+                                remove it and ask it to reread."
+
+                                WHY IT WAS WEIRD, which is worth recording
+                                because the general rule it bends is a good
+                                one. Law 11 says the controls under a sentence
+                                about a person must let them ANSWER it. That
+                                is right when WAKA wrote the sentence. This
+                                sentence says WRITTEN BY HAND directly above
+                                these buttons — the person wrote it
+                                themselves — and asking somebody to confirm
+                                their own words is not a question, it is a
+                                tic. The law holds; the surface it was applied
+                                to turned out to be two surfaces wearing one
+                                set of verbs.
+
+                                AND THE PAGE GETS ITS ONE ASK BACK. The
+                                creature's claim is four inches below this and
+                                asks a real question. Two answer rows on one
+                                screen is what "this page is trying to do too
+                                much at once" looked like, and suppressing
+                                only the RESTING invitation left both of them
+                                up the moment anybody pressed the statement.
+                                Maintenance verbs do not compete with a
+                                question, so now only one thing on the page
+                                asks anything.
+
+                                THE RICHER ANSWER, NOT BUILT because "for
+                                now" was the instruction: ask "Is this you?"
+                                only when the reading is WAKA's own, and offer
+                                these three when it is yours. The data is
+                                already here — `lead.locked` and the hand/
+                                chain provenance band above both know which it
+                                is. */}
                             <button
                               type="button"
-                              className="jar-board-act jar-label"
-                              disabled={readingChecking}
-                              onClick={() => readingCheckFailed ? verifyReadingRef.current(true)
-                                : readingRefresh.canResume ? void readingRefresh.start() : setBoard({ step: "asking" })}
-                            >
-                              {say(readingCheckFailed || readingChecking ? "worldReadingCheckAgain" : readingRefresh.canResume ? "worldReadCheck" : "worldReadItAgain")}
-                            </button>
-                            {/* Holding is the person overruling the ordering:
-                                the server keeps feeding the entry but never
-                                moves it off the poster again. */}
-                            {lead.pinned ? (
-                              <span className="jar-board-act jar-label jar-board-act--held">
-                                {say("worldHeldUp")}
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                className="jar-board-act jar-label"
-                                onClick={() => holdLead(lead)}
-                              >
-                                {say("worldKeepThisOneUp")}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className="jar-board-act jar-label"
+                              className="jar-board-act"
                               onClick={() => editing.begin("entry", lead.id, lead.body)}
                             >
-                              {say("worldSayItInMyWordsCap")}
+                              {say("worldEditWording")}
                             </button>
-                            {lead.locked ? (
-                              entrusting === lead.id ? (
-                                <>
-                                  <span className="jar-board-warn">
-                                    {say(RECEIPTS.releaseOffer.messageKey)}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    className="jar-board-act jar-label"
-                                    onClick={() => entrustLead(lead.id)}
-                                  >
-                                    {say("worldHandItBackCap")}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="jar-board-act jar-label"
-                                    onClick={() => setEntrusting(null)}
-                                  >
-                                    {say("worldLeaveItAsItIsCap")}
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="jar-board-act jar-label jar-star-act"
-                                  title={say(RECEIPTS.starHeld.messageKey)}
-                                  onClick={() => setEntrusting(lead.id)}
-                                >
-                                  {say("worldHandItBackToWaka")}
-                                </button>
-                              )
-                            ) : null}
                             <button
                               type="button"
-                              className="jar-board-act jar-label jar-board-act--quiet"
+                              className="jar-board-act"
                               onClick={() => dropLead(lead)}
                             >
-                              {say("worldNotThis")}
+                              {say("worldRemoveLower")}
                             </button>
+                            {/* THE QUIET LINE: facts about this sentence, and
+                                the remedies for them. Never answers. */}
+                            {/* ALWAYS MOUNTED, not only when the reading has
+                                fallen behind. A first pass gated this whole
+                                line on `readingMessage || boardToast ||
+                                lead.locked`, which reads fine and means that
+                                asking for a new sentence is only possible
+                                once WAKA has decided one is needed — the
+                                person loses the verb precisely when they are
+                                content enough with the reading to want to
+                                push on it. The STALENESS LINE is conditional,
+                                because it reports something; the remedy is
+                                not, because it is a thing you may want. */}
+                            <>
+                                {readingMessage || boardToast ? (
+                                  <span className="jar-board-warn" role="status">
+                                    {readingMessage ? say(readingMessage) : boardToast}
+                                  </span>
+                                ) : null}
+                                {/* "REFRESH READING" -> "WRITE A NEW ONE", because
+                                    the name was the defect and not the verb.
+                                    Founder: "i dont get what these 4 options
+                                    mean." "Refresh" is what you do to a web
+                                    page — it describes a mechanism rather than
+                                    the thing that happens, which is that WAKA
+                                    writes you a new sentence from what you have
+                                    saved since.
+
+                                    It stays mounted whether or not the reading
+                                    has fallen behind: an earlier attempt at
+                                    tidying this REMOVED the verb and orphaned
+                                    the confirm step above, leaving a branch
+                                    nothing could open. */}
+                                <button
+                                  type="button"
+                                  className="jar-board-act"
+                                  disabled={readingChecking}
+                                  onClick={() => readingCheckFailed ? verifyReadingRef.current(true)
+                                    : readingRefresh.canResume ? void readingRefresh.start() : setBoard({ step: "asking" })}
+                                >
+                                  {say(readingCheckFailed || readingChecking ? "worldReadingCheckAgain" : readingRefresh.canResume ? "worldReadCheck" : "worldWriteANewOne")}
+                                </button>
+                                {/* Only exists once the sentence is yours, so
+                                    it is a fact about the sentence and not a
+                                    reply to the question above. */}
+                                {lead.locked ? (
+                                  entrusting === lead.id ? (
+                                    <>
+                                      <span className="jar-board-warn">
+                                        {say(RECEIPTS.releaseOffer.messageKey)}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="jar-board-act"
+                                        onClick={() => entrustLead(lead.id)}
+                                      >
+                                        {say("worldHandItBackCap")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="jar-board-act"
+                                        onClick={() => setEntrusting(null)}
+                                      >
+                                        {say("worldLeaveItAsItIsCap")}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="jar-board-act jar-star-act"
+                                      title={say(RECEIPTS.starHeld.messageKey)}
+                                      onClick={() => setEntrusting(lead.id)}
+                                    >
+                                      {say("worldHandItBackToWaka")}
+                                    </button>
+                                  )
+                                ) : null}
+                            </>
                           </>
                         )}
                       </div>
@@ -13448,52 +14599,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               (`Ball.lens`) was never written from it, so it filtered nothing.
               The field field and the derive side survive for the rebuild. */}
 
-          {/* THE WAYS OUT: a neighbour's name waiting at the side it lives
-              past. They live in headquarters' own chrome, so they scroll away
-              with it — which is also how the field section ends up with none,
-              exactly as it should, since there is nothing different to travel
-              to down there.
+          {/* THE WAYS OUT ARE NOT ADVERTISED HERE ANY MORE.
+              A neighbouring wall's name used to wait at each margin — "‹ DEMO
+              AGENT" down the left edge of the home screen, a caret and a name
+              offering a walk sideways into an agent's wall or a room's.
+              Founder: "we're going to get rid of the rooms and agent related
+              stuff for now."
 
-              `.jar-way` is now the ONLY thing in these margins: the create
-              rails that shared them moved to the axis at the bottom, beside
-              the places they would join. The two once shared a class name
-              through two whole conflicting stylesheets and neither got the
-              layout it was written for; there is nothing left to collide
-              with. */}
-          {walls.map((w, i) => {
-            const left = walls[i - 1] ?? null;
-            const right = walls[i + 1] ?? null;
-            return (
-              <Fragment key={`edges-${spaceKey(w)}`}>
-                {left ? (
-                  <button
-                    type="button"
-                    className="jar-way jar-label"
-                    data-jar-chrome="1"
-                    style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col} + 10px)` }}
-                    onPointerDown={() => loadWall(left)}
-                    onClick={() => simApiRef.current?.travel(-1)}
-                  >
-                    <span className="jar-caret jar-caret--left" aria-hidden="true" />
-                    <span>{wallName(left)}</span>
-                  </button>
-                ) : null}
-                {right ? (
-                  <button
-                    type="button"
-                    className="jar-way jar-way--r jar-label"
-                    data-jar-chrome="1"
-                    style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col + 1} - 10px)` }}
-                    onPointerDown={() => loadWall(right)}
-                    onClick={() => simApiRef.current?.travel(1)}
-                  >
-                    <span>{wallName(right)}</span>
-                    <span className="jar-caret jar-caret--right" aria-hidden="true" />
-                  </button>
-                ) : null}
-              </Fragment>
-            );
-          })}
+              The walls themselves are untouched: the columns still exist, the
+              camera still travels them, and /w/:wall still answers. This is
+              the same ruling page-menu.ts already applied to the menu — they
+              are not destinations the product OFFERS, so nothing on the
+              screen the product opens on points at one. */}
         </div>
       ) : null}
 
@@ -13501,17 +14618,877 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           focus and scrolling above it. Files and words share one save intent. */}
       {phase === 'ready' ? <>
         <div ref={measured.mouth} className="jar-mouth" data-jar-chrome="1">
-          <div className={'jar-mouth-slot' + (atNow ? '' : ' jar-mouth-slot--away')} {...(!atNow || inField || inSky ? { inert: '' } : {})}>
-          <button type="button" ref={element => { measured.mouthSpot.current = element; }}
-            className="jar-mouth-rest jar-label"
-            style={mouthOpen ? { visibility: 'hidden' } : undefined}
-            onClick={() => { setCharSay(''); openMouth(); }}>
-            <HomeActionIcon kind="capture"/>
-            {draft.trim() || composerDraft.draft.media.length ? say('worldContinueDraft') : say('worldCaptureInspiration')}
-          </button>
-          {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
-          {!mouthOpen&&charSay&&charSay!==say('worldSavedWord')?<p className="jar-home-narration" role="status">{charSay}</p>:null}
-          {!mouthOpen&&visibleInspiration?<div className="jar-capture-receipt"><span role="status">{say('worldSavedWord')}</span><button type="button" onClick={()=>{setReflectOn(visibleInspiration);setRecentInspiration(null);}}>{say('worldReflect')}</button></div>:null}
+          {/* THE RESTING BAR IS GONE. Founder: "rather than clicking on save
+              a thought, can we just make clicking on the character..." — so
+              the box only exists once somebody has asked for it, and the
+              asking is the creature's bubble. The slot still renders while
+              the composer is open, because that is where the composer lives;
+              it simply has nothing to show at rest. The ruling that saving is
+              never more than one gesture away is intact: pressing the
+              creature IS the gesture. */}
+          {/* INERT WHEN IT IS NOT OFFERED, AND "CLOSED" IS NOT OFFERED.
+              `--closed` and `--away` both draw the slot at `opacity: 0` with
+              `pointer-events: none`, which stops the mouse and does nothing
+              at all to the keyboard. So the three controls inside it — the
+              field, the microphone and the send — stayed in the tab order on
+              every screen in the product: on the home screen they were tab
+              stops 2, 3 and 4, and pressing Enter on a box nobody can see is
+              the invisible half of Law 8. `pointer-events: none` is a mouse
+              statement; `inert` is the one that means "not offered". */}
+          <div className={'jar-mouth-slot' + (atNow ? '' : ' jar-mouth-slot--away') + (mouthOpen ? '' : ' jar-mouth-slot--closed')} {...(!atNow || inField || inSky || !mouthOpen ? { inert: '' } : {})}>
+          {/* A BOX, NOT A BUTTON (founder ruling). The resting state used to be
+              a labelled button that opened a drawer, so keeping a thought cost
+              a press before it cost a word, and a file had nowhere to land
+              until the drawer was already open. This is the same entry as an
+              actual field: type into it, paste into it, or drop a file on it,
+              and the composer takes over mid-gesture with whatever you gave
+              it already in hand. Nothing about the save path changed — the
+              draft store, the upload queue and the save intent below are the
+              ones that were already here. */}
+          {/* THE COMPOSER, IN THE ANATOMY ITS PATTERN NAMES.
+              Founder: use ChatComposerDrawer. Its documented shape is a frame
+              holding a DRAWER above the body, a body carrying the input and a
+              footer, a required primary action, and a status message outside
+              the body — and the drawer's own job is "supplementary content
+              such as attachments, context chips, or previews", collapsible
+              behind a count when there is something to collapse.
+
+              What was here was an input with chips loose underneath it and no
+              send control at all: Enter was the only way to keep, which is a
+              shortcut standing in for a button. The structure below is the
+              pattern's, wearing this product's tokens. */}
+          <div className="waka-composer">
+            {!mouthOpen && inputMedia.length ? (
+              <div className="waka-composer-drawer">
+                <button
+                  type="button"
+                  className="waka-drawer-toggle"
+                  aria-expanded={drawerOpen}
+                  aria-label={say(drawerOpen ? 'worldKeepHideItems' : 'worldKeepShowItems')}
+                  onClick={() => setDrawerOpen(value => !value)}
+                >
+                  <span className="waka-drawer-count">{inputMedia.length}</span>
+                  <span>{formatMessage(locale, 'worldKeepItems', { count: inputMedia.length })}</span>
+                </button>
+                {/* Collapsed descendants are out of the keyboard's reach as
+                    well as out of sight — the pattern is explicit that a
+                    collapsed drawer hides its content from assistive
+                    technology too, so this unmounts rather than hides. */}
+                {drawerOpen ? (
+                  <ul className="waka-drawer-items">
+                    {inputMedia.map(item => (
+                      <li key={item.id}>
+                        <span>{item.name}</span>
+                        <button
+                          type="button"
+                          aria-label={`${say('worldRemoveLower')} ${item.name}`}
+                          onClick={() => composerDraft.setMedia(composerDraft.current.current.media.filter(row => row.id !== item.id))}
+                        >
+                          ×
+                        </button>
+                        {item.uploadError ? <small role="alert">{item.uploadError}</small> : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* A PICTURE GETS ASKED ABOUT; A LINK DOES NOT. The question is
+                "what made this moment feel like something", and a moment is
+                what a photograph is of. Asking it of a pasted URL would be
+                asking a question that does not fit the thing, which is how a
+                prompt becomes a toll. */}
+            {!mouthOpen && inputMedia.some(item => item.type === 'image') ? (
+              <div className="waka-moment">
+                <label className="waka-moment-ask" htmlFor="waka-moment-why">
+                  {say('worldMomentAsk')}
+                </label>
+                <textarea
+                  id="waka-moment-why"
+                  className="waka-moment-why"
+                  rows={2}
+                  value={momentWhy}
+                  placeholder={say('worldMomentPlaceholder')}
+                  onChange={event => setMomentWhy(event.target.value)}
+                />
+                {/* Leaving is free and says so. The founder's rule is that
+                    saving is never gatekept, so a question that must be
+                    answered before a photo can be kept would be a gate with a
+                    friendly face on it. */}
+                <p className="waka-moment-skip">{say('worldMomentSkip')}</p>
+              </div>
+            ) : null}
+
+            <div className="waka-composer-body">
+              <textarea
+                ref={element => { measured.mouthSpot.current = element; }}
+                className="jar-mouth-rest jar-keep-box"
+                rows={1}
+                style={mouthOpen ? { visibility: 'hidden' } : undefined}
+                value={draft}
+                /* THERE IS NO DROP ON A PHONE. "Type, paste, or drop a file"
+                   is desktop copy, and it was shipping to a device where a
+                   third of it describes a gesture that does not exist. The
+                   pointer query is the honest test — it asks whether this
+                   input can drag, not how wide the window happens to be. */
+                /**
+                 * THE BOX SAYS WHAT IT IS FOR, AND THAT DEPENDS ON WHO YOU
+                 * ARE BEING.
+                 *
+                 * Founder, on the agent's wall: "When I have my agent
+                 * selected, I shouldn't be able to save inspiration. Instead,
+                 * the text should say 'Ask my agent anything'." And on their
+                 * own: "make this text say 'save an inspiration' or 'ask
+                 * anything about my past inspirations' or something like
+                 * that. Help me better write the sentence."
+                 *
+                 * "Type, paste, or drop — save it, or ask about it" named the
+                 * input methods first and the point second. The two things a
+                 * person can actually do lead now, and the methods are
+                 * discovered by doing them, which is how they were always
+                 * going to be discovered.
+                 *
+                 * On an agent's wall there is only one of the two. Saving
+                 * into someone else's archive is not a thing this product
+                 * does — your material is yours and its material is its own —
+                 * so the box asks the only question available there, and the
+                 * save beside it goes rather than sitting disabled. A control
+                 * that can never work is not a control.
+                 */
+                placeholder={say(standingAsAgent ? 'worldKeepPlaceholderAgent'
+                  : touchOnly ? 'worldKeepPlaceholderTouch' : 'worldKeepPlaceholderMine')}
+                aria-label={say('worldCaptureInspiration')}
+                aria-describedby="jar-keep-hint"
+                onChange={event => { draftRef.current = event.target.value; setDraft(event.target.value); setCharSay(''); setMouthNote(''); }}
+                onKeyDown={event => {
+                  /* Enter keeps, Shift+Enter makes a line. The button below is
+                     the primary action; this is the shortcut for it, not the
+                     only way in. */
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    void keepIt();
+                  }
+                }}
+                onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
+                onDrop={event => {
+                  if (!event.dataTransfer.files.length) return;
+                  event.preventDefault();
+                  setCharSay('');
+                  setDrawerOpen(true);
+                  void addInspirationFiles([...event.dataTransfer.files]);
+                }}
+                onPaste={event => {
+                  if (!event.clipboardData.files.length) return;
+                  event.preventDefault();
+                  setCharSay('');
+                  setDrawerOpen(true);
+                  void addInspirationFiles([...event.clipboardData.files]);
+                }}
+              />
+
+              {!mouthOpen ? (
+                <div className="waka-composer-foot" id="jar-keep-hint">
+                  {/* SPEAKING INTO IT (founder: "I want to have a button to
+                      let someone speak into it"). It is the recorder that
+                      already exists — the one the opened composer uses — and
+                      it keeps the audio as an audio inspiration rather than
+                      transcribing it into the field. A recording is the
+                      material; a transcript is a reading of it, and this
+                      product's whole shape is that readings are made later
+                      from material kept as it arrived.
+                      Absent, not disabled, where the browser cannot record:
+                      a control that can never work is not a control. */}
+                  {supportedRecordingType() ? (
+                    <button
+                      type="button"
+                      className={`waka-composer-mic${recording.phase === 'recording' ? ' waka-composer-mic--on' : ''}`}
+                      aria-label={say(recording.phase === 'recording' ? 'worldComposerStopRecording' : 'worldComposerRecord')}
+                      aria-pressed={recording.phase === 'recording'}
+                      disabled={recording.phase === 'requesting' || recording.phase === 'finishing' || !composerDraft.available}
+                      onClick={() => { if (recording.phase === 'recording') void recording.stop(); else void recording.start(); }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                        <rect x="5.6" y="1.6" width="4.8" height="8.2" rx="2.4"
+                          stroke="currentColor" strokeWidth="1.3" fill="none" />
+                        <path d="M3.2 7.6a4.8 4.8 0 0 0 9.6 0M8 12.4V14.4"
+                          stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
+                      </svg>
+                    </button>
+                  ) : null}
+                  {/* WHAT THE MICROPHONE IS DOING, AND WHAT WENT WRONG.
+                      Founder: "speech to text not working."
+
+                      It was working, in the sense that the code ran. What it
+                      could not do was SAY anything: `error`, `notice` and
+                      `seconds` were all computed by the hook and rendered by
+                      nobody. So a refused permission, a browser that cannot
+                      record, a disconnected microphone and a clip over the
+                      size limit were four different failures that each
+                      produced exactly one outcome on screen — nothing. The
+                      button looked pressed and the product looked broken,
+                      which is the same thing from the outside.
+
+                      This repo states the rule it was breaking: never turn a
+                      visible failure into a silent one. And the elapsed count
+                      is here for the same reason — a recorder with no
+                      running number is a control you have to trust rather
+                      than one you can watch. */}
+                  {recording.phase === 'recording' ? (
+                    <span className="waka-composer-recording" role="status">
+                      {formatMessage(locale, 'worldComposerRecordingFor', { seconds: recording.seconds })}
+                    </span>
+                  ) : null}
+                  {recording.error || recording.notice ? (
+                    <span className="waka-composer-recording-why" role={recording.error ? 'alert' : 'status'}>
+                      {recording.error || recording.notice}
+                    </span>
+                  ) : null}
+                  {/* WHAT IS NOT IN THIS FOOTER ANY MORE.
+                      "Enter to keep" — founder pointed at exactly this as the
+                      example of a thing that is not 100% necessary. It was
+                      also FALSE on a touch keyboard, where Enter makes a line,
+                      and it described a shortcut for the button standing
+                      beside it.
+                      "Save inspirations with MCP" — a setup instruction,
+                      printed under the box you type in every day. Setting up
+                      an agent is a once-ever act and it belongs with the keys
+                      that agent needs; it is on the settings page now, beside
+                      them.
+                      What is left is the action. */}
+                  {/* TWO DESTINATIONS FOR ONE PIECE OF TEXT, AND THAT IS NOT
+                      TWO FEATURES.
+
+                      Founder, first: "how do we make that natural without
+                      making the same component feel like it has like two
+                      random features?" Then, looking at the built version:
+                      "the fact that a single component is trying to achieve
+                      two things of saving inspiration and chatting about
+                      paths like inspiration, top of mind and principles
+                      doesn't feel confusing — really think about how to best
+                      design this."
+
+                      THE ANSWER IS NOT A MODE. Asking you to declare
+                      save-or-chat before typing classifies an intention you
+                      have not formed, and the cost of that hesitation lands
+                      on saving — the one act that must be free. Deciding
+                      before you type is a mode; deciding after you type is an
+                      action.
+
+                      WHAT MAKES IT READ AS ONE CHOICE RATHER THAN TWO
+                      FEATURES IS THE SHAPE. Three things do the work:
+
+                      1. BOTH ARE ALWAYS HERE. The second one used to appear
+                         the moment you typed a character, and a control that
+                         materialises mid-sentence is the single clearest way
+                         to tell someone a component has a hidden second job.
+                         They are both present and both inert until there is
+                         something to send; the footer never changes shape.
+                      2. THEY SHARE A SHAPE AND SIT TOGETHER. A text link
+                         beside a filled button reads as a feature parked next
+                         to a feature. Two buttons of the same size in the
+                         same group, one filled and one outlined, read as one
+                         question — where is this going — with two answers.
+                      3. THE MIC IS NOT ONE OF THEM. It is how you put words
+                         IN, not where they go, so it sits at the far end,
+                         away from the pair.
+
+                      Keep is the filled one because keeping is what the
+                      product is for and what the placeholder describes.
+
+                      NOT AUTO-DETECTED from a trailing "?" — an archive here
+                      already holds "how do we ensure Korean is part of it?"
+                      as a kept inspiration, so detection would misfire on
+                      this product's own material. */}
+                  <span className="waka-composer-where">
+                    {/* ONE ACT ON AN AGENT'S WALL, AND IT IS A SEND.
+                        Founder: "the one call to action should be... let's
+                        just make it a send icon." Two worded buttons are a
+                        choice between destinations; there is only one
+                        destination here, so the control stops arguing for
+                        itself and becomes the arrow every message box in the
+                        world already uses. It keeps its name for anyone
+                        listening rather than looking. */}
+                    <button
+                      type="button"
+                      className={standingAsAgent ? 'waka-composer-send waka-composer-send--icon' : 'waka-composer-ask'}
+                      disabled={talking || !draft.trim()}
+                      aria-label={standingAsAgent ? say('worldComposerSendAria') : undefined}
+                      onClick={() => { void talkAbout({ id: '', text: draft.trim() }); }}
+                    >
+                      {standingAsAgent ? (
+                        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                          <path d="M2.2 8h11M8.6 3.2 13.4 8l-4.8 4.8" fill="none" stroke="currentColor"
+                            strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      ) : say(talking ? 'worldTalkOpening' : 'worldComposerAsk')}
+                    </button>
+                    {standingAsAgent ? null : (
+                      <button
+                        type="button"
+                        className="waka-composer-send"
+                        disabled={!draft.trim() && inputMedia.length === 0}
+                        onClick={() => { void keepIt(); }}
+                      >
+                        {say('worldKeepSend')}
+                      </button>
+                    )}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Status sits OUTSIDE the body, as the pattern places it. */}
+            {!mouthOpen && mouthNote ? (
+              <p className="waka-composer-status" role="alert">{mouthNote}</p>
+            ) : null}
+          </div>
+          </div>
+          {/* WHAT THE COMPANION SAYS, UNDER THE COMPANION.
+              These three — the save notice, the narration line and the keep
+              receipt — used to live in the mouth's own slot, which was right
+              under the chin at the time. The box moved to the bottom of the
+              screen and they went with it, so the creature's own voice ended
+              up printed under the text field, the length of the page away
+              from the creature. They are its speech, so they sit where its
+              mouth is: `--jar-mouth-top` is still written from the chin every
+              layout pass, and it means the chin again. */}
+          {/* THE CREATURE SPEAKS UPWARD.
+              Founder: "I did like how clicking on the agent would make it
+              speak something. So above the agent, let's have a speech bubble
+              that makes the agent tell you something. And maybe have the
+              agent start a conversation so you can dive deeper."
+              Tapping it has always made it talk; what changed was that its
+              line sat under the chin, in the same column as the claim, so
+              one had to silence the other. A bubble over its head gives
+              speech its own place and lets both be true at once.
+              AND IT IS A WAY IN. What the creature just said is a subject —
+              it is the only thing on screen that came from the product rather
+              than from you — so it carries the door into a conversation
+              about itself. */}
+          {/* ═══ PRESSING THE CREATURE OPENS THE NOTEPAD ════════════════
+              Founder: "clicking on character should open save inspirations
+              note pad", with a mockup of the creature holding a PENCIL in its
+              speech bubble.
+
+              So the bubble is not a step — it is the label for the gesture.
+              It is always up when the creature has nothing else to say, the
+              way the reference's character always holds up a pebble or a
+              pencil, and it says what pressing the body will do. One press,
+              straight into the note; no toggle in between.
+
+              A PENCIL RATHER THAN THE WORDS. The reference puts an object in
+              the bubble, not a sentence, and an object is why the bubble can
+              share the screen with the claim below without competing: a glyph
+              is not a second thing to read. This is the creature's own
+              illustration register — the same place the body and its aura
+              live — not a UI icon set, which this product still does not have
+              and is not getting. */}
+          {!mouthOpen && !charSay && !turning ? (
+            <>
+              {/* NOT ON AN AGENT'S WALL. Founder, pressing the creature over
+                  there and being offered "Feeling inspired? Save one.":
+                  "when clicking on an agent you shouldn't prompt me to save
+                  an inspiration — I shouldn't be saving it for my agent."
+
+                  Right, and the product already knew: the keep box on an
+                  agent's wall drops its save and asks the only question
+                  available there, under the ruling "saving into someone
+                  else's archive is not a thing this product does — your
+                  material is yours and its material is its own", and the
+                  note beside it, "a control that can never work is not a
+                  control". That ruling was applied to the box and not to the
+                  creature, which is the same wall offering two different
+                  answers about whose archive you are standing in.
+
+                  So the press is ABSENT here rather than inert. Its
+                  accessible name is "Save inspiration" — a name for an act
+                  that does not exist on this wall — and a disabled control
+                  with a lying label is worse than no control. The bubble
+                  still speaks; it simply has nothing to offer. */}
+              {atWall.kind === 'agent' ? null : (
+              <button
+                type="button"
+                className={`jar-char-press${offering ? ' jar-char-press--lit' : ''}`}
+                aria-label={say('worldSaveInspiration')}
+                data-jar-chrome="1"
+                data-jar-interactive="1"
+                onClick={creatureSpeaks}
+              />
+              )}
+              {/* ═══ WHAT THE CREATURE IS HOLDING UP ═══════════════════════
+                  Three things, in this order, and the order is the whole
+                  design:
+
+                    you just pressed it  → the offer to write. Founder:
+                                           "clicking on the character should
+                                           just make it shine and bright, and
+                                           change the speech bubble to
+                                           'feeling inspired? save
+                                           inspiration', and then a few
+                                           seconds later come back to top of
+                                           mind."
+                    a reading exists     → the reading. It is the product's
+                                           output; it should be the thing the
+                                           creature is holding up.
+                    nothing read yet     → "I haven't formed anything yet",
+                                           said by the creature rather than
+                                           printed across the middle of the
+                                           screen. Founder, on the big centred
+                                           version of that line with the
+                                           bubble floating through it: "I
+                                           haven't formed anything yet should
+                                           be shown instead of the top of mind
+                                           if it's not existing yet." It is a
+                                           sentence about what the companion
+                                           knows, so it belongs in the
+                                           companion's mouth — and putting it
+                                           there removes the collision at the
+                                           same time.
+
+                  THE PENCIL IS GONE. It was standing in for the empty state
+                  ("I have nothing yet") and for the offer at once, which is
+                  two jobs for a glyph that can only say one thing. Both now
+                  have words. */}
+              {/* NO BUBBLE AT ALL WHILE THERE IS NOTHING TRUE TO PUT IN IT.
+                  An empty bubble over the creature's head would be a shape
+                  saying "something belongs here", which is worse than air;
+                  the press target above stays, so the offer is always one
+                  press away whether or not anything is being held up. */}
+              {offering || lead || bubbleHoldsTheLine ? (
+                <div
+                  className="jar-char-bubble"
+                  data-jar-chrome="1"
+                  /* Every state of this bubble is pressable now — the
+                     offer, a reading, and the empty line — so the flag is
+                     unconditional rather than a list of which two. */
+                  data-jar-interactive="1"
+                >
+                  <span className="jar-char-bubble-body">
+                    {offering ? (
+                      <button type="button" className="jar-char-offer" onClick={startNewInspiration}>
+                        {say('worldCreatureOffer')}
+                      </button>
+                    ) : (
+                      /* THE READING IS A DOOR; THE EMPTY LINE IS NOT.
+                         Founder: "the speech bubble should show its top of
+                         mind at the moment. And the user can click on it to
+                         go to a new page where the user can engage with it."
+                         "I haven't formed anything yet" leads nowhere,
+                         because there is nothing on the other side of it —
+                         a control that opens an empty page is worse than no
+                         control. */
+                      /* ═══ WHAT IT SAYS IS THE DOOR, AND THE DOOR IS A CHAT
+                         Founder, twice: "no matter what the character is
+                         saying, clicking on what it says should open up a
+                         chat. So even when user clicks on a top of mind, it
+                         should open up a chat" — and then, pinning the one
+                         exception: "except when it says 'feeling inspired,
+                         save it', then that should open a new inspiration."
+
+                         ONE RULE INSTEAD OF THREE. This bubble had a
+                         different destination per sentence: the offer opened
+                         the notepad, a reading opened `?open=reading`, and
+                         the empty line opened nothing at all — so what
+                         pressing the bubble did depended on which of three
+                         states it happened to be in, and two of them were
+                         unguessable. Now the sentence always leads into a
+                         conversation ABOUT itself, and the one exception is
+                         the one whose own words name a different act.
+
+                         WHY A CHAT RATHER THAN THE READING PAGE. The reading
+                         surface was built on "the user can click on it to go
+                         to a new page where the user can engage with it",
+                         and a chat is that sentence answered better: it is
+                         where engaging actually happens, and the statement
+                         arrives in it as the thing being talked about rather
+                         than as a heading with controls underneath.
+
+                         THE EMPTY LINE IS STILL NOT A DOOR. "I haven't
+                         formed anything yet" has nothing on the other side
+                         of it — a conversation seeded with a sentence about
+                         having nothing to say is a worse first chat than no
+                         chat, and a control that opens one is the "opens an
+                         empty page" failure this branch already refused. */
+                      lead ? (
+                        <button type="button" className="jar-char-bubble-reading jar-char-bubble-open"
+                          disabled={talking}
+                          onClick={() => { void talkAbout({ id: '', text: lead.body }); }}>
+                          {lead.body}
+                        </button>
+                      ) : (
+                        /* ═══ AND THE EMPTY LINE IS A DOOR AFTER ALL ═════
+                           Founder: "this should say no top of mind formed
+                           yet, add more inspirations. And then clicking on
+                           that speech bubble should lead to new
+                           inspiration. Don't say no reading."
+
+                           It was the one state of this bubble that led
+                           nowhere, on the argument that "a control that
+                           opens an empty page is worse than no control" —
+                           which was right about the page it used to open
+                           (the reading, which did not exist yet) and wrong
+                           about what the sentence is for. The line names a
+                           thing the person can DO something about, and the
+                           thing is saving another inspiration. A sentence
+                           that asks for something and cannot be acted on is
+                           the worse control.
+
+                           SO THE BUBBLE'S RULE HAS EXACTLY ONE SHAPE NOW:
+                           what the companion says is a door, and the door
+                           is a chat about what it said — EXCEPT when what
+                           it said names the act of saving, in which case it
+                           is the notepad. The offer ("Feeling inspired?
+                           Save it.") and this line are the two that name
+                           it, and they go to the same place. */
+                        <button type="button" className="jar-char-bubble-reading jar-char-bubble-open"
+                          onClick={startNewInspiration}>
+                          {restingWord}
+                        </button>
+                      )
+                    )}
+                  </span>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+          {!mouthOpen && charSay && charSay !== say('worldSavedWord') ? (
+            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
+              <div className="jar-char-bubble-body">
+                {/* THE SENTENCE IS THE DOOR — there is no longer a second
+                    line under it offering to open one.
+
+                    Founder: "no matter what the character is saying, clicking
+                    on what it says should open up a chat." A "Talk about
+                    this" beneath the words was already most of the way there
+                    — it was deliberately not a pill, for the reason below —
+                    but it still made a person read two lines to act on one,
+                    and it put the verb somewhere other than the thing the
+                    verb is about.
+
+                    KEPT FROM THE OLD NOTE, because the reasoning survives
+                    the control: "a pill inside a speech bubble is a dialog
+                    box with an OK in it — the bubble stops reading as
+                    something said and starts reading as something that wants
+                    an answer." That is still why this is a line of speech
+                    wearing a press, and not a button. */}
+                <button
+                  type="button"
+                  className="jar-char-bubble-reading jar-char-bubble-open"
+                  disabled={talking}
+                  role="status"
+                  onClick={() => { void talkAbout({ id: '', text: charSay }); }}
+                >
+                  {charSay}
+                </button>
+              </div>
+            </div>
+          ) : null}
+          <div ref={measured.charSay} className="jar-char-say" data-jar-chrome="1" data-jar-interactive="1">
+            {/* WHAT IT THINKS ABOUT YOU, ASKED WHERE YOU ALREADY ARE. The
+                claims page is gone: this is the one thing the product needs
+                from a person and cannot do alone, so it is asked by the thing
+                that did the reading, on the screen everyone starts on. One at
+                a time — a list of claims under the face would be the dense
+                version of the thing "one line at a time" removed. */}
+            {/* WHICH FORM IT IS WEARING, AND HOW TO CHANGE IT.
+                The switch belongs here and not in a corner: the creature IS
+                the identity, and the canvas already renders the agent as the
+                same companion in a machine form, dissolving between the two
+                with the aura held constant to say so. A corner toggle framed
+                that as travel between two places. This frames it as what it
+                is — one companion, two faces.
+                A WORD, NOT A MYSTERY. Pressing a creature is not a
+                discoverable gesture, so the form is named underneath it and
+                the name is the control. It says where you are and changes it
+                in one press. */}
+            {/* WHICH FORM IT IS WEARING, AND HOW TO CHANGE IT.
+                Founder: "instead of my agent being on the left, it should
+                show up when I click on the right button, and it should be
+                easily changeable between me and my agent at this part of the
+                experience."
+                Both sides, in the order the words go: you on the left, your
+                agent on the right. A single label that toggled said where you
+                were and hid where else you could be — which is the same
+                mistake the wall dropdown made, with one option instead of a
+                list. Two words, one inked, and switching is a press on the
+                other.
+                It belongs here rather than in a corner because the creature
+                IS the identity: the canvas already dissolves between the two
+                forms and holds the aura constant to say it is the same
+                companion throughout. */}
+            {/* THE FORM SWITCH MOVED TO THE TOP-LEFT CORNER. Founder:
+                "switch between me and my agent should go in top left now that
+                we have new entry point for chat." The corner was the chat
+                door until the dock took that job, and whose material you are
+                looking at is a better use of a fixed corner than a second
+                entrance to a room the dock already names. */}
+            {!mouthOpen && claimQueue[0] ? (
+              <div className="jar-char-claim">
+                {/* NO "IS THIS TRUE OF YOU?" ABOVE IT. Founder: "where this
+                    text appears and 'is this true of you' kind of is too much
+                    like information." It was a label explaining three buttons
+                    that already explain themselves — a sentence about you with
+                    yes / partly / not true underneath can only be asking one
+                    thing, and saying so out loud made the creature sound like
+                    it was reading a form. */}
+                <p className="jar-char-claim-statement">{claimQueue[0].statement}</p>
+                {/* ═══ WHERE IT CAME FROM, IN ONE LINE ════════════════════
+                    Founder: "how do we help the user deep dive into what
+                    inspirations led to this top of mind... without
+                    overwhelming the space we have?"
+
+                    THE LIST WAS TRIED HERE AND YOU REJECTED IT. Three
+                    evidence lines used to sit under this statement, and the
+                    verdict was "makes the page messy" and "we need to remove
+                    this or else it's gonna not have enough space". The ids
+                    stayed on the claim; it was the RENDERING that failed.
+
+                    So it is one line, in the register the principles surface
+                    already uses for exactly this — "held since August, drawn
+                    from 14 things you kept", which the craft notes call the
+                    whole difference between that card and a fortune cookie.
+                    One line cannot crowd anything, and pressing it opens the
+                    archive showing precisely those saves: a real list you
+                    can scan and open, rather than a paragraph about them.
+
+                    Absent when the claim arrived without its sources — an
+                    older server omits `from`, and a line claiming nothing is
+                    worse than no line. */}
+                {claimQueue[0].from?.length ? (
+                  <button type="button" className="jar-char-claim-from"
+                    onClick={() => {
+                      const claim = claimQueue[0]!;
+                      setSavesFocus({
+                        label: formatMessage(locale, "worldClaimFromCount", { count: claim.from!.length }),
+                        ids: claim.from!.map((row) => row.id),
+                      });
+                      openOverHome('saves');
+                    }}>
+                    {formatMessage(locale, "worldClaimFromCount", { count: claimQueue[0].from.length })}
+                  </button>
+                ) : null}
+                {/* WHAT IT READ THIS FROM IS GONE FROM HERE, AND THE REASON
+                    IS SPACE, NOT DOUBT ABOUT IT.
+
+                    Founder, on a screenshot of three evidence lines under a
+                    claim: "we need to remove this or else it's gonna not have
+                    enough space." They are right, and the thing that changed
+                    underneath is that this block now has a RESERVED height —
+                    the claim keeps its slot whether or not there is a claim,
+                    so the creature never moves when you switch faces. A list
+                    that grows by one line per save cannot live inside a slot
+                    whose whole job is not to grow.
+
+                    The argument for having had them stands and is worth
+                    keeping where someone will find it: a sentence about you
+                    with nothing under it can only be agreed with on feel,
+                    while the same sentence beside the things you actually
+                    kept can be CHECKED — which is the difference between a
+                    reading and a horoscope. It also changed what "not true"
+                    meant: with the saves on screen, rejecting a claim is
+                    correcting a misreading of evidence; without them it is
+                    being told who you are and having to argue back.
+
+                    So this is a relocation, not a deletion. The ids are still
+                    on the claim (`from`, with previews, from
+                    `routes/claims.ts`) and nothing about generation changed.
+                    They belong on a surface that can afford to grow — the
+                    claim's own reading, where the evidence already lives —
+                    and the correction field below is what answers the
+                    "argue back" half here. */}
+                {/* ═══ "NOT QUITE" AND "NOT ME" OPEN A CONVERSATION ═══════
+                    Founder: "the yes / partly / not true button is a little
+                    bit weird. And then when the user clicks on partly and
+                    not true, can we open a chat experience rather than
+                    asking user to answer in that small space?"
+
+                    WHAT STOOD HERE. "Not true" opened a two-row textarea
+                    inside the claim's card, with a Save and a Leave it — the
+                    only typing in the whole confirm loop, deliberately, and
+                    argued for at the time: "'not true' on its own tells the
+                    loop a sentence is wrong and nothing about what is right,
+                    so the next pass has no more to go on than the last one
+                    did."
+
+                    That argument was right about WHY the words matter and
+                    wrong about where they go. Saying what is actually true
+                    of you is the most considered thing this product ever
+                    asks for, and it was being asked for in a box two lines
+                    tall, wedged under the sentence being disputed, with a
+                    Save button — which is a form, at the exact moment a
+                    person has something to say. The place for that is the
+                    place this product already has for saying things.
+
+                    SO BOTH SOFT ANSWERS GO THERE, not just the hard one.
+                    "Partly" had no field at all and filed in silence, which
+                    is the opposite failure: the answer with the most left
+                    unsaid was the one given nowhere to say it.
+
+                    THE VERDICT IS STILL FILED FIRST, and immediately. The
+                    old flow withheld it until the words were written so that
+                    one answer made one row; a conversation is not a row, so
+                    there is nothing to wait for, and an answer that depends
+                    on finishing a chat would be an answer lost whenever
+                    somebody closed the tab.
+
+                    WHAT THIS GIVES UP, named rather than discovered later:
+                    nothing writes `correctionText` any more. `ReviewEvidence`
+                    still quotes the corrections already on record, and the
+                    server still accepts the field, but the UI has stopped
+                    producing them — the elaboration lives in the
+                    conversation now. If that signal should keep feeding
+                    principle evidence, the honest place to take it from is
+                    the first thing the person says in the chat this opens. */}
+                <p className="jar-char-claim-answers">
+                  {(['true', 'partly', 'not_true'] as const).map(value => (
+                    <button
+                      key={value}
+                      type="button"
+                      /* NO PRIMARY. The three answers are peers — see the
+                         note in claims.css for why lighting "yes" both broke
+                         the light-is-the-only-channel law and put a thumb on
+                         the scale of every principle written downstream. */
+                      onClick={() => {
+                        const claim = claimQueue[0]!;
+                        /* NOT TRUE IS THE ONE ANSWER THAT IS NOT FINISHED, so
+                           it alone sends nothing yet: the field below it may
+                           still change what goes on the record, and a verdict
+                           filed before the words would be a second row for the
+                           same answer. Yes and partly advance at once — a
+                           judgement about yourself should not wait on a round
+                           trip. */
+                        sayVerdict(claim.id, value, undefined, claim.contested, claim.statementRevision);
+                        /* AND THE TWO SOFT ANSWERS CARRY ON SOMEWHERE THEY
+                           CAN BE SAID. "Yes" is finished the moment it is
+                           pressed — there is nothing to add to agreeing —
+                           so it alone stays on this screen and lets the
+                           sitting continue. See the note above the row. */
+                        if (value !== 'true') {
+                          /* Seeded with the claim itself, which is the same
+                             shape the other two doors into a conversation
+                             use (`lead.body`, a kept thing). The verdict
+                             just filed reaches the reply on its own:
+                             `recentFeedback()` passes every value into the
+                             generation payload beside the statement it was
+                             given about. */
+                          void talkAbout({ id: '', text: claim.statement });
+                        }
+                        /* ═══ THE SITTING ENDS ON SOMETHING ════════════════
+                           Every product that asks for a run of small
+                           judgements terminates the run deliberately, and
+                           terminates it on a GIFT rather than a receipt:
+                           Readwise's last card is a bonus highlight, Finch's
+                           pet comes back from its adventure with a story.
+                           Nobody ends on "you're done", because that makes
+                           the queue the point, and the queue is not the
+                           point.
+
+                           WAKA has a better terminal beat available than any
+                           of them, and it costs nothing to show: the statement
+                           band un-yields the moment this queue empties, so the
+                           last act of the sitting is your own top of mind
+                           coming back. The person watches the thing they were
+                           answering FOR return to the screen.
+
+                           The line is what keeps that honest. The reading
+                           re-forms on the server from the signals as they now
+                           stand, which is not instant — so the creature says
+                           what is happening rather than claiming the sentence
+                           on screen has already changed. Overclaiming here
+                           would be the one lie that costs this product its
+                           licence, since the whole proposition is that its
+                           account of you is checkable. */
+                        /* Computed out here, not inside the updater: a
+                           `setState` updater has to be pure, and React calls
+                           it twice in development to prove it. `claimQueue` is
+                           already in scope at the press, so there is nothing
+                           to read from inside one. */
+                        const left = claimQueue.slice(1);
+                        setClaimQueue(left);
+                        if (!left.length) setCharSay(say('worldSittingDone'));
+                      }}
+                    >
+                      {say(value === 'true' ? 'worldYes' : value === 'partly' ? 'worldPartly' : 'worldNotTrue')}
+                    </button>
+                  ))}
+                </p>
+              </div>
+            ) : !mouthOpen && !standingAsAgent && lead ? (
+              /* ═══ WHEN NOTHING IS BEING ASKED, THE SEAT HOLDS YOUR READING
+                 Founder: "where is my top of mind now? I don't see it
+                 anywhere in the experience."
+
+                 It had effectively disappeared, and the cause was mine: the
+                 statement band above the creature YIELDS whenever a claim is
+                 waiting, and a claim is almost always waiting — so the only
+                 way back to your own reading was to answer a whole sitting
+                 of three. A thing you can only reach by finishing a chore is
+                 not on the screen.
+
+                 ONE SEAT, TWO CONTENTS. The note the creature holds up is
+                 "what WAKA has to say to you right now", and that is either
+                 a question it needs answered or the reading it currently
+                 holds — never both, never neither. It also makes the loop
+                 visible for free: answer the last claim and the seat fills
+                 with the statement those answers are written from. */
+              <div className="jar-char-claim jar-char-claim--reading">
+                {/* THE SENTENCE MOVED UP INTO THE BUBBLE; what stays here is
+                    what you can do about it. Printing it in both places would
+                    be the same words twice on one screen. */}
+                {/* ITS VERBS COME WITH IT. They used to live in the band above
+                    the creature; that band now yields on this wall always, so
+                    leaving them there would have made three controls nobody
+                    can reach — the dead-press shape this codebase gates
+                    against. Edit, Remove, and ask for a new one: the three the
+                    founder named. */}
+                <p className="jar-poster-aside">
+                  <button
+                    type="button"
+                    className="jar-board-act"
+                    onClick={() => editing.begin("entry", lead.id, lead.body)}
+                  >
+                    {say("worldEditWording")}
+                  </button>
+                  <button type="button" className="jar-board-act" onClick={() => dropLead(lead)}>
+                    {say("worldRemoveLower")}
+                  </button>
+                  <button
+                    type="button"
+                    className="jar-board-act"
+                    disabled={readingChecking}
+                    onClick={() => setBoard({ step: "asking" })}
+                  >
+                    {say("worldWriteANewOne")}
+                  </button>
+                </p>
+              </div>
+            ) : null}
+            {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
+            {/* ONE THING FROM ONE MOUTH. The narration ("you kept two memories
+                today") stacked under the claim, so the creature was reporting
+                the weather and asking you a question in the same breath — a
+                third block of words in a column that already had two. The
+                codebase's own whisper rule is one clause at a time; this is
+                that rule holding across the two things that can speak, not
+                just within each. The line comes back the moment the claim is
+                answered. */}
+            {/* WHAT IT SAYS NOW LIVES ABOVE ITS HEAD — see `.jar-char-bubble`.
+                It was a line under the chin, which put it in the same column
+                as the claim and meant one had to silence the other. Speech
+                and a question are different acts and now have different
+                places: the creature talks upward, and what it is asking you
+                stays beneath it. */}
+            {/* WHAT THE RECEIPT OFFERS IS THE CONVERSATION, not a second door to
+                a note. "Reflect" opened a private note on the thing just kept
+                — and the thing just kept already carries that door, on its own
+                card, where a note about a thing belongs. This is the move the
+                moment is actually for.
+                It is offered only when there are words to talk about: a keep
+                that is a file and nothing else has not said anything yet. */}
+            {!mouthOpen&&visibleInspiration?<div className="jar-capture-receipt"><span role="status">{say('worldSavedWord')}</span>
+              {visibleInspiration.text.trim()?<button type="button" disabled={talking} onClick={()=>{void talkAbout(visibleInspiration);}}>{say(talking?'worldTalkOpening':'worldTalkAboutThis')}</button>:null}
+            </div>:null}
           </div>
         </div>
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
@@ -13526,7 +15503,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           onRetryFile={id => { void retryDraftFile(id); }}
           onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
-          onVisibility={setKeepPublic} onClose={saveAsDraft} onSubmit={reflect => { void keepIt(reflect); }}
+          draftUpdatedMs={composerDraft.draft.updatedAt}
+          /* THE CHEVRON GOES TO THE ARCHIVE — in ONE write, not two.
+             `saveAsDraft` leaves through history (`closeComposer`) and
+             `openOverHome` writes the address, so calling them in sequence
+             raced: the pop landed last and the chevron put you on the world
+             with no archive in sight. The draft is kept by the store, not by
+             the navigation, so stopping any recording and writing the single
+             destination is the whole move. */
+          onPast={() => { void recording.stop(); setMouthNote(''); openOverHome('saves'); }}
+          onVisibility={setKeepPublic} onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void composerDraft.fork().catch(reason => setMouthNote(String(reason))); }} /> : null}
       </> : null}
 
@@ -13725,23 +15711,44 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
           {panelCanReflect&&!panelIsGroup&&panel.detail?.conversationOrigin?<p className="jar-review-context">{say(panel.detail.conversationOrigin.authorship==='adopted'?'worldChatAdoptedOrigin':'worldChatUserOrigin')}</p>:null}
           {reflectOpen && panelCanReflect && !panel.detail ? <p role="status">{say('worldOpeningAttachment')}</p> : null}
-          {reflectOpen && panelCanReflect && panel.detail && (panelBall?.sigId ?? panelId) ? (
-            <ReflectionFlow
-              key={panelBall?.sigId ?? panelId}
-              inspirationId={(panelBall?.sigId ?? panelId) as string}
-              scope={storageScope}
-              processing={!reflectOn && sourceProcessing.active?.inspirationId === (panelBall?.sigId ?? panelId) ? sourceNotice : null}
-              initialTurns={(panel.detail?.reflections ?? [])
+          {/* WHAT YOU ALREADY WROTE ABOUT THIS SAVE, READ BACK.
+              `ReflectionFlow` stood here — 297 lines that generated a
+              follow-up question, took an answer, kept a draft on the device,
+              recovered that draft when the device could not keep it, and
+              offered go deeper, retry, delete and copy-link around it. The
+              founder folded the whole flow: *"Typing happens in one place
+              only: when you correct."*
+              What could NOT be folded is the words. Answers written through
+              that flow are evidence the readings are drawn from; a save that
+              says "· Reflected" and then cannot show you what you reflected
+              would be the product hiding the person's own writing. So this is
+              the same material, read-only: the question it was asked under,
+              the answer underneath. No textarea, no draft, no verbs.
+              It wears `.jar-reflection-turn` and `.jar-reflect-q`, which are
+              `ReflectionFlow`'s own classes for exactly these two lines —
+              borrowed rather than invented so the type ladder stays one
+              ladder. Skipped questions never counted as reflected and still
+              do not appear. */}
+          {reflectOpen && panelCanReflect && panel.detail ? (
+            <div className="jar-reflection-flow">
+              {(panel.detail.reflections ?? [])
                 .filter((item) => !item.skipped && item.answer)
-                .map((item): ReflectionTurn => ({ id: item.id, question: item.question, answer: item.answer as string }))}
-              locale={locale}
-              focusReflectionId={viewNavigation.view?.reflectionId}
-              onCopyLink={(id) => void copyInspirationLink(id)}
-              onSaved={reflectionSaved}
-              onSynchronized={(row) => synchronizeReflections((panelBall?.sigId ?? panelId) as string, row)}
-              onRemoved={(id) => reflectionRemoved(id, (panelBall?.sigId ?? panelId) as string)}
-              onDone={() => { setReflectOpen(false); viewNavigation.write({ ...observedRef.current, reflectionId: null }, { observed: true, replace: true }); }}
-            />
+                .map((item) => (
+                  <div key={item.id} className="jar-reflection-turn" data-reflection-id={item.id}>
+                    <p className="jar-reflect-q">{item.question}</p>
+                    <p>{item.answer}</p>
+                  </div>
+                ))}
+              {/* ONE PRESS BACK TO THE MEMORY (Law 2). The old flow carried
+                  its own finish; a read with no finish is a surface you enter
+                  and cannot leave, which is the founder's most-repeated
+                  complaint. */}
+              <p className="jar-ask jar-ask--row">
+                <button type="button" onClick={() => { setReflectOpen(false); viewNavigation.write({ ...observedRef.current, reflectionId: null }, { observed: true, replace: true }); }}>
+                  {say('worldClose')}
+                </button>
+              </p>
+            </div>
           ) : null}
 
           {/* FORGET IT — and the law it does not break.
@@ -13899,10 +15906,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           !(forget.step === "asking" && forget.id === panelId) &&
           !unpublishAsk ? (
             <p className={`jar-ask jar-ask--after jar-panel-foot${panelHasReflection ? " jar-panel-foot--reflected" : ""}`}>
+              {/* THE VERB IS `READ`, AND ONLY WHEN THERE IS SOMETHING TO
+                  READ (2026-10-10). This cell used to offer `Reflect` on a
+                  save with no answers yet, which opened a generated question
+                  and a textarea — the writing flow the founder folded: *"Typing
+                  happens in one place only: when you correct."* So the
+                  write half is gone and the read half stays, because words a
+                  person already wrote do not stop being theirs when the door
+                  they wrote them through closes. On a save with no answers
+                  the cell is now empty, which is the honest state: there is
+                  nothing here to open. */}
               <span className="jar-panel-foot-l">
-              <button type="button" className={panelHasReflection ? "jar-panel-reflection-link" : undefined} onClick={askToReflect}>
-                {panelHasReflection ? say("worldReadReflection") : say("worldReflect")}
-              </button>
+              {panelHasReflection ? (
+                <button type="button" className="jar-panel-reflection-link" onClick={openReflections}>
+                  {say("worldReadReflection")}
+                </button>
+              ) : null}
               </span>
               <span className="jar-panel-foot-c">{panelStepCarets}</span>
               <span className="jar-panel-foot-r">
@@ -14085,72 +16104,24 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                stopped being a second door — and the right half answers the
                question that used to need a walk to the edge of the world:
                which other walls exist, and take me there. */
-            <span className="jar-here-split">
-              <button
-                type="button"
-                className="jar-here jar-back jar-label"
-                aria-expanded={settingsFor === spaceKey(atWall)}
-                onClick={() => {
-                  setWallPick(false);
-                  setSettingsFor(
-                    settingsFor === spaceKey(atWall) ? null : spaceKey(atWall),
-                  );
-                }}
-              >
-                {atWall.kind === "group"
-                  ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
-                  : wallName(atWall)}
-              </button>
-              <button
-                type="button"
-                className="jar-here-more jar-back jar-label"
-                aria-expanded={wallPick}
-                aria-label={say("worldGoToAnotherWall")}
-                onClick={() => {
-                  setSettingsFor(null);
-                  setWallPick((v) => !v);
-                }}
-              >
-                <span aria-hidden="true">▾</span>
-              </button>
-              {wallPick ? (
-                <span className="jar-here-list" role="menu">
-                  {walls.map((w) => {
-                    const mine = w.kind === atWall.kind && w.id === atWall.id;
-                    return (
-                      <button
-                        key={spaceKey(w)}
-                        type="button"
-                        role="menuitem"
-                        className={`jar-here-row jar-label${mine ? " is-here" : ""}`}
-                        onClick={() => {
-                          setWallPick(false);
-                          simApiRef.current?.goToWall(w.col);
-                        }}
-                      >
-                        {wallName(w)}
-                      </button>
-                    );
-                  })}
-                  {/* THE LIST OF YOUR WALLS IS ALSO WHERE YOU MAKE ONE. It
-                      listed every place you could go and offered no way to
-                      make another, so a person looking for their rooms in the
-                      obvious place had to know about a `+` at the far end of
-                      the screen. */}
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="jar-here-row jar-here-row--make jar-label"
-                    onClick={() => {
-                      setWallPick(false);
-                      setNewPlace(true);
-                    }}
-                  >
-                    {say("worldAddNew")}
-                  </button>
-                </span>
-              ) : null}
-            </span>
+            /* NOT WHEN IT WOULD ONLY SAY "ME" (founder ruling). At home on
+               your own wall this pill reads your own name back to you beside
+               the menu button, which is noise — you have not gone anywhere.
+               It still appears the moment where-you-are is a real question:
+               standing in a room, on an agent's wall, or down in the field.
+               Switching walls lives in the menu now, and the pill comes back
+               with `wallPick` because the list of walls is its own child —
+               choosing that row opens the pill already showing the list. */
+            /* THE WALL PICKER MOVED TO THE TOP-LEFT CORNER.
+               Founder: "the top left should be a drop-down modal that lets
+               you switch between your things. So like Agent 1, me." That is
+               exactly what this was — the name of the ground you are on and
+               the list of the others — and it was living in a bar that holds
+               nothing else now. It renders into `Menu`'s left corner now, so
+               it sits in the same row as the view switcher and the cog:
+               the whole navigation of the product in one row rather than two
+               bars stacked on each other. See `groundPicker`. */
+            null
           }
 
           {/* WHEN YOU ARE, BESIDE WHERE YOU ARE.
@@ -14170,7 +16141,31 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               say you had wound back. This says `now`, or the day you are
               parked at — so the fact lives in a word that is always there and
               the rail can be genuinely absent until you reach for it. */}
-          {dial && phase === "ready" && !dialAway ? (
+          {/* NO "NOW" IN YOUR OWN CORNER (founder ruling). It is the dial's
+              handle — where you are standing in your own history — and on the
+              home screen it sat in the top left underneath the menu button,
+              two controls in one corner. It is also the least useful one
+              there: pressing a word to learn that today is today, on the one
+              screen that is always today, while "Your days" is a page with
+              every day on it.
+
+              IT STAYS IN A ROOM, and it stays once you have wound away from
+              now. A room's board is one chain and winding it is how its
+              history is read at all — removing the handle there would strand
+              the whole dial, which is what trying it proved: 24 of its own
+              tests went red in one run. */}
+          {/* NOT ON AN AGENT'S WALL. Founder: "why does the agent one have
+              now? I want to make it exactly the same as my other pages."
+              The handle appeared on every wall that was not your own, which
+              bundled two different cases under one condition. A ROOM needs
+              it: a room's board is one chain and winding it is how its
+              history is read at all, which is why removing it there stranded
+              the whole dial and turned 24 of its tests red. An agent's wall
+              needs nothing of the kind — it reads like your own wall and
+              should look like it.
+              It also still appears on your own wall once you have wound away
+              from now, which is the one case where it is the way back. */}
+          {dial && phase === "ready" && !dialAway && (atWall.kind === "group" || parkedAt !== null) ? (
             <span className="jar-when-place">
             <button
               type="button"
@@ -14224,39 +16219,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             It was scaffolding and said so; its rows did not vanish — the
             flat screens and the loop's two doors now live in the account
             drop, the one sheet this bar already had. */}
-        {readingOpen ? (
-          <ReadingPanel reading={theReading} onClose={() => setReadingOpen(false)} />
-        ) : null}
-
-        {antechamberOpen ? (
-          <AntechamberPanel
-            rows={antechamber}
-            onClose={() => setAntechamberOpen(false)}
-            onRestoreAnchor={restoreFromAntechamber}
-            restoredAnchorIds={restoredAnchors}
-          />
-        ) : null}
-
-        {duplicatesOpen ? (
-          <DuplicatesPanel
-            rows={duplicates}
-            onClose={() => setDuplicatesOpen(false)}
-            onResolve={resolveDuplicate}
-            resolvedIds={resolvedDuplicates}
-          />
-        ) : null}
-
-        <button
-          type="button"
-          className="jar-account jar-back jar-label"
-          aria-expanded={accountOpen}
-          onClick={() => {
-            setAccountOpen((v) => !v);
-            setSettingsFor(null);
-          }}
-        >
-          {say("worldYourAccount")}
-        </button>
+        {/* THE GEAR IN THE TOP RIGHT IS THIS BUTTON NOW (founder ruling:
+            "top right should be everything regarding settings"). The labelled
+            pill that used to live here opened exactly the same panel, so
+            keeping both would have been one door drawn twice — and the pair
+            overlapped, because the gear is placed in the same corner. The
+            panel itself, its agent settings and every verb inside are
+            untouched; only the handle moved. */}
 
         {/* WHAT YOU ARE LOOKING AT, WHEN IT IS NOT YOURS. It lives in the
             fixed chrome rather than on a wall because it is a fact about the
@@ -14274,7 +16243,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           and a door onto a room that has been removed is worse than no door.
           The signals it counted are still derived and still write the poster —
           they are simply not somewhere a person goes. */}
-
 
       {/* AT EVERY HEIGHT, NOT JUST DOWN IN THE FIELD.
           It was gated on `inField`, so it was not even mounted at the height
@@ -14305,7 +16273,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         >
           {grounds.map((m) => {
             const here = m.mine ? standing === null : standing === m.id;
-            return (
+          
+  return (
               <button
                 key={m.id}
                 type="button"
@@ -14356,7 +16325,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               tidiness. A list that does not exist cannot be in front of
               anything, so there is no rest state left in which this can take
               a press that was meant for the world. */}
-          <div className="jar-dial-list" role="group" aria-label="wind this wall back to a date">
+          <div className="jar-dial-list" role="group" aria-label={say('worldDialLabel')}>
             {/* THE WAY BACK IS THE FIRST ROW. The rail had none: returning to
                 the present meant landing a drag within half a day of the top
                 of a line you could not see. */}
@@ -14478,25 +16447,33 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           is the opposite of what a room is for. The way up is a door to a
           place that says honestly what it holds, and that is as true standing
           in somebody else's room as in your own. */}
-      {phase === "ready" && !inField && !inSky ? (
-        <button
-          type="button"
-          /* THE SIGNPOST CARRIES THE SKY'S STATE. Dim, it is a door to a
-             place still forming; lit, the sky above this wall holds your
-             values now — light is the only meaning channel, so the word
-             itself is the announcement (founder, 2026-09-01: "make it more
-             clear that philosophies and values page exists above"). */
-          className={
-            ((atWall.kind === "self" ? principles?.length ?? 0 : groupPrincipleCounts[atWall.id] ?? 0) > 0)
-              ? "jar-values jar-values--held"
-              : "jar-values"
-          }
-          data-jar-chrome="1"
-          onClick={() => simApiRef.current?.toSky()}
-        >
-          <PrinciplesShortcutLabel locale={locale} count={atWall.kind === "self" ? principles?.length ?? null : groupPrincipleCounts[atWall.id]??null}/>
-        </button>
-      ) : null}
+      {/* THE PRINCIPLES PILL THAT STOOD HERE IS GONE.
+          It was a top-centre shortcut shown only on walls that were not your
+          own, from when the self wall had its own chrome and the others had
+          none. The view switcher covers every wall now and its middle row IS
+          Principles, so this drew a second control in the same place saying
+          the same word — founder, looking at an agent's wall: "why this
+          screen so different? it should get the full changes."
+          It was: the new chrome arrived on top of the old chrome, which had
+          never been swept because it only ever appeared where the new chrome
+          had not. */}
+      {/* AND `origin/dev` 8b11c2f5 EXTENDED THIS PILL TO YOUR OWN WALL rather
+          than removing it: it dropped the `atWall.kind!=="self"` gate and
+          made the lit state read `principles?.length` on the self wall. That
+          commit and this one are the same complaint answered from opposite
+          ends — it made every wall match by giving the self wall the old
+          chrome, and this branch made every wall match by giving every wall
+          the dock. The dock wins here because the pill's destination is
+          covered on EVERY wall by `PrinciplesOverlay` (dock row
+          `worldDockPrinciples` -> `openOverHome('principles')`, rendered
+          with `profileId={atWall.kind==='agent'?atWall.id:...}`), which also
+          carries the count, the share and the open — and because two
+          controls saying "Principles" in the same place is the exact defect
+          the quote above is about. The sky itself is NOT orphaned: opening a
+          principle from that overlay writes `section:'sky'`, and dev's
+          other change in this region — the caret back down, now unlocked on
+          the self wall too — is kept verbatim a few lines below, which is
+          what gives that state its one-press way out. */}
 
       {/* AND WHAT THE SKY SAYS, STANDING IN IT. One sentence, in prose. The
           numeral law needs nothing here: what is forming is not countable
@@ -14584,34 +16561,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </button>
       ) : null}
 
-      {/* NOT IN THE SKY (founder, 2026-08-25: "30 inspirations should be gone
-          from here"). It is the door into the ground, printed with how much
-          is behind it — and from up here the ground is two sections away, so
-          it was a door to somewhere you cannot get to in one step, sitting
-          under a sentence about the timeless half of a mind. */}
-      {phase === "ready" && !inField && !inSky && (atWall.kind === "self" || wallCount > 0) ? (
-        <button
-          type="button"
-          className={`jar-saved${atWall.kind === "self" ? " jar-saved--personal" : ""}`}
-          data-jar-chrome="1"
-          onClick={() => simApiRef.current?.toGround()}
-        >
-          <span className="jar-saved-count">
-            {/* TWO NUMBERS ONLY WHEN THEY DISAGREE. Under the ceiling — which
-                is where every account lives for a long time — this is exactly
-                what it always was: one number and the word. Past it, the door
-                stops printing the size of what arrived as though it were the
-                size of the archive. */}
-            {wallTotal > wallCount
-              ? formatMessage(locale, "worldInspirationCountCapped", {
-                  shown: wallCount,
-                  total: wallTotal,
-                })
-              : formatMessage(locale, "worldInspirationCount", { count: wallCount })}
-          </span>
-          <span className="jar-caret" aria-hidden="true" />
-        </button>
-      ) : null}
+      {/* THE "N INSPIRATIONS" DOOR IS GONE FROM HERE TOO.
+         Same stale pattern as the Principles pill and Find: a control that
+         only ever rendered on walls that were not your own, from when the
+         self wall had chrome and the others had none. Founder, on an agent's
+         wall: "I want to make it exactly the same as my other pages, but this
+         one still has the 10 inspiration bottom page and all of that."
+         It is also a numeral printed on a screen, which the product's own law
+         forbids — it survived the law for exactly as long as it was invisible
+         to whoever wrote it. The archive is a destination in the switcher on
+         every wall now. */}
+      {/* `origin/dev` 8b11c2f5 EXTENDED THIS ONE TO THE SELF WALL TOO, on the
+          same reasoning as the pill, and it loses to the same answer: the
+          archive is `SavesOverlay`, reached from the dock on every wall, and
+          the door's own text is a printed numeral — "states render, numerals
+          never". The exception that justified the numeral was that it is the
+          size of your own archive; the overlay says that in the place the
+          archive actually is. dev's `.jar-saved--personal` CSS is therefore
+          dropped from `home.css` rather than merged: there is no `.jar-saved`
+          left for it to modify. */}
 
       {/* The mouth belongs below the companion, but a person can also be in
           the ground, the sky, or the room's past. From there the same act is
@@ -14637,54 +16605,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           nothing like each other: one is people, one is a machine that writes
           on its own wall. Two words in a strip could not carry that, so the
           choice is made here, where a sentence fits. */}
-      {newPlace ? (
-        <>
-          {/* THE WAY OUT IS THE WORLD (founder, 2026-08-27: "remove not now
-              button. if click outside modal, close it"). A dialog offering
-              two places to go does not need a third control saying you would
-              rather stay — pressing anywhere that is not the dialog says that
-              already, and says it in the gesture a person already has. The
-              sheet is transparent and covers everything, so the world behind
-              it is what you press. Escape works too, and always did. */}
-          <div
-            className="jar-newplace-away"
-            data-jar-chrome="1"
-            aria-hidden="true"
-            onPointerDown={() => setNewPlace(false)}
-          />
-        <DialogSurface
-          className="jar-seek jar-newplace"
-          onClose={() => setNewPlace(false)}
-          data-jar-chrome="1"
-          role="dialog"
-          aria-label={say("worldMakeAnotherPlace")}
-        >
-          <p className="jar-prov-lead jar-label">{say("worldMakeAnotherPlace")}</p>
-          <button
-            type="button"
-            className="jar-newplace-row"
-            onClick={() => {
-              setNewPlace(false);
-              setGroupForm({ mode: "make", text: "", busy: false, error: null });
-            }}
-          >
-            <span className="jar-newplace-name">{say("worldARoom")}</span>
-            <span className="jar-newplace-what">{say("worldRoomWhat")}</span>
-          </button>
-          <button
-            type="button"
-            className="jar-newplace-row"
-            onClick={() => {
-              setNewPlace(false);
-              setAgentName("");
-            }}
-          >
-            <span className="jar-newplace-name">{say("worldAnAgent")}</span>
-            <span className="jar-newplace-what">{say("worldAgentWhat")}</span>
-          </button>
-        </DialogSurface>
-        </>
-      ) : null}
+      {/* MAKING A PLACE WENT WITH THE LIST THAT OFFERED IT.
+         The only door into this sheet was the last row of the wall dropdown,
+         and that dropdown is a two-state switch now — me, my agent — because
+         those are the two places the product currently holds. A sheet nothing
+         can open is not a feature in reserve, it is a branch the next reader
+         has to work out is unreachable. Rooms come back with their own door;
+         git holds this until they do. */}
 
       {/* ---------------- THE REFLECTION, ON ITS OWN ----------------
           Founder, 2026-08-25: "have reflect workflow in modal."
@@ -14702,56 +16629,371 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           moment that owns the screen — the same one the seek line and the
           delete ask wear. It says what was kept, asks, takes the answer, and
           goes. */}
-      {reflectOn ? (
-        <DialogSurface
-          className="jar-seek jar-reflect-room"
-          onClose={() => setReflectOn(null)}
-          data-jar-chrome="1"
-          role="dialog"
-          aria-label={say("worldReflectOnKept")}
-        >
-          <p className="jar-prov-lead jar-label">{say("worldSavedLead")}</p>
-          {/* what it was, in one line: enough to know which memory this is
-              about, never the whole thing back */}
-          <p className="jar-reflect-on">{reflectOn.text}</p>
-          <ReflectionFlow
-            key={reflectOn.id}
-            inspirationId={reflectOn.id}
-            scope={storageScope}
-            source={reflectOn.attachments.length ? <InspirationAttachments items={reflectOn.attachments} locale={locale} /> : undefined}
-            processing={sourceProcessing.active?.inspirationId === reflectOn.id ? sourceNotice : null}
-            initialTurns={[]}
-            locale={locale}
-            onSaved={reflectionSaved}
-            onSynchronized={(row) => synchronizeReflections(reflectOn.id, row)}
-            onRemoved={(id) => reflectionRemoved(id, reflectOn.id)}
-            onDone={() => setReflectOn(null)}
-          />
-        </DialogSurface>
-      ) : null}
-
-      {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.accountId}:${storageScope.profileId}:review`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
-        onSaved={reflectionSaved} onSynchronized={synchronizeReflections} onReflectionRemoved={reflectionRemoved} onInspirationRemoved={inspirationRemovedFromView}
-        onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}
-        onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}
-        onOpenPrinciple={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id})}
-        onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'field',inspirationId:id})}/>:null}
+      {/* THE STANDALONE REFLECT SHEET IS GONE, AND IT WAS ALREADY
+          UNREACHABLE BEFORE IT WAS DELETED (2026-10-10).
+          It opened when a save was made with `reflect: true`, and the only
+          thing that could ask for that was `InspirationComposer`, which calls
+          `props.onSubmit(false)` and has done for as long as the control has
+          existed — so `shouldReflect` was never true, `setReflectOn` was never
+          called, and a `DialogSurface` with a generated question, a textarea
+          and a "not now" way out sat in the tree being rendered by nothing.
+          That is the exact shape of Law 8 in `docs/six-laws.md`: it
+          type-checked, it read like live code, and it did nothing. It would
+          have gone with the fold either way — the fold removes writing flows
+          — but it is worth recording that the fold is not what killed it.
+          `worldReflectOnKept` and `jar-reflect-room` went with it. */}
+      {/* `ReviewPanel` STOOD HERE, AND SO DID THE WHOLE FOURTH PRODUCT
+          (2026-10-10). Founder's workflow design counted the surface: 84 of
+          the app's 847 user-facing strings belonged to Review — the largest
+          single concept in the product, against three strings for the
+          interaction meant to be at its centre — and ruled *"Collapse all
+          five into 'correct a claim' — one text field, reached only after
+          'not quite'."* The field is up beside the claim, in
+          `.jar-char-claim-mine`.
+          What went with this one call: `ReviewPanel`, `ReviewDialogue`,
+          `ReviewResult`, `ReflectionFlow`, `useReviewSession`,
+          `useReviewDialogue`, `useReviewEntry`, the review draft and
+          selection stores, the `/review/:id` route and its `?thought=`
+          deep link, and the three `lib/api` resources behind them. Answers
+          already written are still read: `ReviewEvidence` quotes them under
+          the principles they are evidence for, which is where the collecting
+          was pointed all along. */}
       <div className={`jar-personal-shortcuts${atWall.kind==='self'?' jar-personal-shortcuts--self':''}${atWall.kind==='self'&&inSky?' jar-personal-shortcuts--sky':''}${!inField&&!inSky&&wallCount>0&&(!atNow||(charSay!==''&&!mouthOpen))?' jar-personal-shortcuts--above-count':''}`}
-        hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}>
-      {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'&&(inField||inSky)&&!viewNavigation.view?.reviewId?<button type="button" className="jar-review-shortcut" data-jar-chrome="1"
-        onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
+        hidden={Boolean(panelOpen||mouthOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple||viewNavigation.view?.open)}>
+      {/* THE REVIEW SHORTCUT IS GONE FROM THIS CORNER. It was the one door
+          into the folded flow, and `useReviewEntry` existed only to decide
+          whether it should read "Review" or "Resume review" — a fetch on
+          every arrival to label a button. Capture keeps the corner. */}
+      {/* THE `--sky` MODIFIER IS `origin/dev` 8b11c2f5's, AND IT IS STILL
+          NEEDED. That commit unlocked the caret back down on the self wall
+          (`.jar-up--down.jar-up--personal`, which `home.css` parks at
+          bottom:76px), so on your own wall in the sky there is now a control
+          exactly where this row sits. 128px lifts the row clear of it. The
+          rest of dev's version of this hunk — the review shortcut and its
+          `reviewEntry.label` — is gone with the fold, and `useReviewEntry`
+          with it, so dev's relabelling of that button had nothing left to
+          relabel. */}
       {phase==='ready'&&(inField||inSky||!atNow)?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
         <HomeActionIcon kind="capture"/> {say('worldCaptureInspiration')}</button>:null}
-      {phase === 'ready'&&atWall.kind!=='self' ? <button type="button" className="jar-find-shortcut" data-jar-chrome="1"
-        onClick={() => setSeek('')} aria-label={say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
-        <span>{say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}</span>
-      </button> : null}
+      {/* AND SO IS FIND. Founder ruling, long since applied everywhere
+          else: "find is just it should be a search bar on the your
+          inspirations page instead." It survived here for the same reason the
+          pill did — this corner of the product was only ever drawn on walls
+          the ruling's author was not looking at. */}
       </div>
-      {phase==='ready'&&atWall.kind==='self'?<PersonalNavigation locale={locale} section={inField?'field':inSky?'sky':'top'} count={fieldLoading||fieldFailed?null:wallTotal} shown={wallCount} loading={fieldLoading} failed={fieldFailed}
-        hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}
-        onHome={()=>viewNavigation.write({...EMPTY_VIEW})} onInspirations={()=>{if(fieldFailed){retryFieldRef.current?.();return;}viewNavigation.write({...EMPTY_VIEW,section:'field'});}}
-        onPrinciples={()=>viewNavigation.write({...EMPTY_VIEW,section:'sky'})} onFind={()=>setSeek('')}/>:null}
+      {/* ONE DOOR ON THE LEFT, ONE ON THE RIGHT. `PersonalNavigation` used to
+          sit along the bottom with Home, Inspirations, Principles and Find —
+          four permanent controls on a page whose whole argument is that it
+          holds three things. Every one of those verbs survives, as a row in
+          the menu, so nothing was dropped to clear the screen. */}
+      {/* THE CHROME IS NOT ONLY FOR YOUR OWN WALL ANY MORE.
+          This was gated on standing at home because the left corner used to
+          be a hamburger full of rows about your own material. The corner is
+          the wall picker now — the control whose entire job is to say which
+          ground you are on and take you to another — so gating it on being
+          on your own ground made it unreachable from every wall it exists to
+          get you out of. The switcher and the cog belong everywhere for the
+          same reason they belong on the other pages. */}
+      {/* ═══ THE DOCK ════════════════════════════════════════════════════
+          Founder: "Do it like the mobile app where there are bottom buttons
+          so that we can move across sections. Like, have a bottom navbar."
+
+          THE FOUR RUNGS ACROSS THE TOP ARE GONE WITH IT. They named
+          inspirations and claims, and both of those now live ON the home
+          screen — so two of the four were doors to rooms you were already
+          standing in. What is left is genuinely separate places, and places
+          belong at the bottom where a thumb is.
+
+          CAPTURE IS A DESTINATION HERE, NOT A SECOND DEMAND. Founder, on the
+          screen with the note and the box on it at once: "there is a claim,
+          there is save a thought, there's too many things that are happening
+          at once here." The reference has no input on its home at all —
+          capture there is a door you press. This is that door, and saving is
+          still one gesture, which is the ruling that mattered.
+
+          WORDS, NOT ICONS. The reference uses a five-icon bar; this product
+          has one typeface and no icon set, and inventing one for the dock
+          would be a second meaning channel arriving through the back. Four
+          short words in the register this product already labels things in. */}
+      {/* THE DOCK STANDS ON AN OPEN CHAT TOO. It was hidden there and shown
+          on every other destination — including an open inspiration, which is
+          the same depth of the same gesture — so reading one conversation was
+          the single state in the product with no bottom bar. Founder, on the
+          surface that made this rule: "this should be its own page, so bottom
+          navigation always visible." A conversation is a page like the rest
+          of them now, so it keeps the bar like the rest of them. */}
+      {phase==='ready'&&!viewNavigation.view?.sharePrinciple ? (
+        <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
+          {([
+            /* "HOME" IS NOT A PLACE IN THIS PRODUCT. Founder: "I don't like
+               the word 'home', so maybe just the home should be a light bulb
+               icon? I don't know."
+
+               Not a lightbulb: a bulb means IDEA, and it would be sitting one
+               press away from a row called Inspirations — a glyph saying the
+               name of its neighbour. It would also be the only picture in a
+               row of words, which is a second meaning channel arriving for
+               one entry.
+
+               "Now" instead, which is what that screen actually is. The world
+               already calls it that everywhere underneath — `atNow`, the
+               present wall, the dial's end — and the row then reads as four
+               nouns rather than three nouns and a piece of app furniture. It
+               is where your companion is standing at this moment, holding up
+               what you are thinking about at this moment.
+
+               HOME PUTS DOWN WHATEVER IS HELD UP — a room OR the notepad.
+               It was wired to `closeOpen` alone, which returns on its first
+               line when there is no `open`, so from a half-written note the
+               row rendered, lit correctly, and did nothing. That is the fifth
+               time a control's handler has not matched the state it was for
+               (see `closeConversation`); `saveAsDraft` is the notepad's own
+               way out and it keeps the words. */
+            /* "HERE" HAS TO KNOW ABOUT A CONVERSATION TOO, now that the bar
+               stands on one. Without it the bar said you were at Now while
+               you were reading a chat, and its own row for the chats was
+               dark — the two rows that could tell you where you are, both
+               wrong, on the one surface that already had the worst record
+               for leaving people lost. */
+            { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open && !viewNavigation.view?.compose && !viewNavigation.view?.conversationId, go: () => { if (viewNavigation.view?.compose) saveAsDraft(); else openOverHome(null); } },
+            /* SAVE IS NOT A TAB. Founder: "home, inspirations -> let see list
+               of past inspirations with main CTA to save new, chat -> see
+               list of past chats with main CTA to start new chat,
+               principles." Saving is what you DO in the inspirations room,
+               not a room of its own — and it has two other doors already:
+               pressing the creature, and `?compose=1`. A fifth row leading
+               to a thing two other gestures already reach is vocabulary
+               without a place behind it. */
+            /* THE TWO ROOMS LEAD TO THE PAST; THE PLUS MAKES THE NEW ONE.
+               Founder, after a morning of trying it the other way round:
+               "from inspirations and conversations, it's not clear that I can
+               click the back button to see all inspirations... maybe
+               inspirations and conversations should lead to the past ones and
+               in the bottom navigation there should be a plus button that
+               opens up either save inspiration or start chat — would that be
+               better?"
+
+               Yes, and the reason the first arrangement failed is worth
+               keeping: a page reached by a NOUN has to be the noun. Pressing
+               "Inspirations" and landing on a blank note made the archive a
+               thing you had to know was behind a chevron, and a chevron is
+               not a label — nothing about it says what is on the other side.
+
+               One verb for making things, in the one place every phone puts
+               it, and the nouns mean what they say. */
+            { id: 'saves', label: 'worldDockSaves' as const, here: viewNavigation.view?.open === 'saves', go: () => openOverHome('saves') },
+            /* THE PLUS. Not a place, so it does not light and does not take
+               `aria-current`: it is the only verb in a row of nouns, and the
+               sheet it raises is where the verb is chosen. */
+            { id: 'new', label: 'worldDockNew' as const, here: false, go: () => setMakingNew(value => !value) },
+            /* CONVERSATIONS BEFORE PRINCIPLES, by the founder's own order:
+               "home, inspirations, conversations, and principles". It is also
+               the ladder's order — what you kept, what you said about it,
+               what has endured — so the row reads left to right the way the
+               material actually moves. */
+            { id: 'talk', label: 'worldDockTalk' as const, here: viewNavigation.view?.open === 'conversations' || Boolean(viewNavigation.view?.conversationId), go: () => openOverHome('conversations') },
+            { id: 'principles', label: 'worldDockPrinciples' as const, here: viewNavigation.view?.open === 'principles', go: () => openOverHome('principles') },
+          ]).map(item => (
+            /* THE SHEET HANGS OFF THE PLUS, not off the middle of the screen.
+               Founder, with a screenshot: "this not being aligned with the +
+               button — these little details are all missing rn."
+
+               Measured: the plus sits at 642 and the sheet at 640, because
+               the sheet was `position: fixed; left: 50%` — centred on the
+               VIEWPORT while the plus is centred in a row of four words of
+               unequal length. Two pixels at this window width, and the gap is
+               whatever the labels happen to weigh: a longer word on either
+               side moves the plus and the sheet does not follow. The founder
+               saw two pixels; what is wrong is that the two were never
+               related.
+
+               NOT A MEASUREMENT — A PARENT. The fix that suggests itself is
+               to observe the plus and write its centre to a custom property,
+               and this product has a law about exactly that road ("every
+               measurement feeding layout is observed, not sampled"). The
+               cheaper answer obeys it by not measuring at all: the sheet
+               becomes a child of the plus's own slot and is centred on it by
+               the box model, which cannot drift and has nothing to resample.
+
+               IT ALSO PUTS THE SHEET WHERE THE KEYBOARD EXPECTS IT. Rendered
+               after the whole nav, its two rows were the LAST things in the
+               tab order — so opening the menu and pressing Tab went to
+               "Chats", then "Principles", then a full-screen invisible
+               dismiss target, and only then to "New inspiration". Beside the
+               plus in source order, Tab goes straight into it. */
+            <span key={item.id} className={item.id === 'new' ? 'waka-dock-slot' : undefined}>
+            {/* ═══ THE BAR TRANSFORMS, IN THE ONE SLOT THAT SHOULD ═══════
+                Founder: "when the user is in inspirations, maybe this
+                bottom bar should transform so that the icons turn into the
+                speech or the image or a file — but then still a quick way
+                to access the navigation."
+
+                BOTH HALVES, WHICH IS THE WHOLE DIFFICULTY. A bar that
+                replaces itself wholesale costs a press to get the
+                navigation back, and the loudest complaint of the same day
+                was "I have to click now like four times to actually get
+                there". So the four PLACES never move. What changes is the
+                one slot that is not a place: the plus means "make
+                something", and while you are already making something that
+                slot is where the making happens.
+
+                It also empties the bottom-left corner, which is where the
+                tools used to float as a second object above the bar — the
+                "double layer" in its last remaining form, and the corner
+                the founder asked about twice.
+
+                A CHAT DOES NOT GET THIS, and the reason is arithmetic
+                rather than taste: a message field cannot fold into a 56px
+                slot beside four labels, and giving the bar over to it
+                entirely would put the navigation a press further away on
+                the surface people have most often reported being stuck in.
+                Its field already sits on the ground as a rule rather than
+                a second pill, so there is no layer to remove there. */}
+            {item.id === 'new' && viewNavigation.view?.compose ? (
+              <span className="waka-dock-making" role="group" aria-label={say('worldCaptureInspiration')}>
+                {supportedRecordingType() ? (
+                  recording.phase === 'idle' ? (
+                    <button type="button" className="waka-dock-tool"
+                      aria-label={say(inputMedia.some(m => m.type === 'audio') ? 'worldComposerRecordAgain' : 'worldComposerRecord')}
+                      disabled={!composerDraft.available}
+                      onClick={() => void recording.start()}><HomeActionIcon kind="record"/></button>
+                  ) : (
+                    <>
+                      {/* STOP KEEPS IT, CANCEL THROWS IT AWAY — both, because a
+                          recording you can start and stop but not discard is
+                          worse than one you cannot start. The clock is words
+                          rather than a glyph for the reason the composer gave:
+                          a red dot cannot say how long you have been talking. */}
+                      <button type="button" className="waka-dock-tool waka-dock-tool--wide"
+                        aria-label={say('worldComposerStop')}
+                        disabled={recording.phase === 'finishing'}
+                        onClick={() => void recording.stop()}>
+                        {Math.floor(recording.seconds / 60)}:{String(recording.seconds % 60).padStart(2, '0')}
+                      </button>
+                      <button type="button" className="waka-dock-tool waka-dock-tool--wide"
+                        disabled={recording.phase === 'finishing'}
+                        onClick={() => void recording.cancel()}>
+                        {say('worldComposerCancelRecording')}
+                      </button>
+                    </>
+                  )
+                ) : null}
+                <button type="button" className="waka-dock-tool" aria-label={say('worldComposerPhoto')}
+                  disabled={!composerDraft.available || recording.phase !== 'idle'}
+                  onClick={() => dockFileInput.current?.click()}><HomeActionIcon kind="photo"/></button>
+                <input ref={dockFileInput} type="file" multiple hidden
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif"
+                  onChange={event => { const files = [...event.target.files ?? []]; event.target.value = '';
+                    if (files.length) void addInspirationFiles(files); }} />
+              </span>
+            ) : (
+            <button
+              type="button"
+              className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}${item.id === 'new' ? ' waka-dock-item--new' : ''}`}
+              aria-current={item.here ? 'page' : undefined}
+              aria-expanded={item.id === 'new' ? makingNew : undefined}
+              aria-label={item.id === 'new' ? say('worldDockNew') : undefined}
+              onClick={item.go}
+            >
+              {item.id === 'new'
+                ? <svg width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false">
+                    <path d="M8.5 2.6v11.8M2.6 8.5h11.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                : say(item.label)}
+            </button>
+            )}
+            {item.id === 'new' && makingNew ? (
+              <div className="waka-new" role="menu" aria-label={say('worldDockNew')} data-jar-chrome="1" data-jar-interactive="1"
+                onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setMakingNew(false); } }}>
+                {/* "NEW X", BOTH OF THEM. Founder: "new inspiration, new chat."
+                    The two rows said "Save inspiration" and "New conversation" —
+                    a verb beside a noun, for two moves that are the same move
+                    aimed at two things. Under a plus, every row is "a new one of
+                    these"; saying it twice the same way is what makes the pair
+                    read as a pair. */}
+                <button type="button" role="menuitem" className="waka-new-one"
+                  onClick={() => { setMakingNew(false); startNewInspiration(); }}>
+                  {say('worldNewInspiration')}
+                </button>
+                <button type="button" role="menuitem" className="waka-new-one"
+                  onClick={() => { setMakingNew(false); openTalk(null); }}>
+                  {say('worldConversationNew')}
+                </button>
+              </div>
+            ) : null}
+            </span>
+          ))}
+        </nav>
+      ) : null}
+      {/* ═══ THE GROUND THAT TAKES THE DISMISSING PRESS ═════════════════
+          The sheet itself now hangs off the plus inside the dock — see the
+          note there. What stays out here is the full-screen target that
+          closes it, because that is the one part of this which genuinely
+          belongs to the whole window rather than to the button.
+
+          Nothing is drawn on it: dimming the world to ask a two-word
+          question is the modal weight this product spends its time
+          removing. It is `tabIndex={-1}` because it is a window-sized
+          invisible button, and it sat in the tab order between the bar and
+          the two rows the plus had just raised. The mouse is the only hand
+          it was ever for; Escape on the sheet and the plus itself are the
+          keyboard's way out. */}
+      {phase==='ready'&&makingNew ? (
+        <button type="button" className="waka-new-away" aria-label={say('worldClose')} tabIndex={-1}
+          onClick={() => setMakingNew(false)} />
+      ) : null}
+      {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
+        /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
+           Founder: "I kind of want to give the feeling of, rather than my
+           agent moving rooms, it kind of switches itself up to its agent
+           form."
+           That is the better model and the canvas already believed it: the
+           change of form is a DISSOLVE, not a cut, and the aura is
+           deliberately never pixelated because "its colour temperature is one
+           of the two invariants that say this is still the same companion."
+           The decision was already made in the drawing and contradicted by
+           the navigation — a corner toggle says these are two PLACES, while
+           the creature changing form says this is one companion with two
+           faces, which is what one account with two profiles actually is.
+           So the switch moved onto the creature, where the identity already
+           lives, and the corner went to chat — which genuinely is a
+           destination, because it has a list of past conversations behind
+           it and nowhere else to be reached from. */
+        /* CHAT HISTORY, BACK IN THE CORNER. Founder: "top left button should
+           be chat history since moving between inspirations, top of mind,
+           principles is done with the middle center dropdown." Conversations
+           are a history rather than a depth of your own material, which is
+           why they never sat among the three and why this corner is where
+           they belong. */
+        left={agentWall ? (
+              <span className="jar-char-form" role="group" aria-label={say('worldWallMyAgent')}>
+                {([null, agentWall] as const).map(wall => {
+                  const standing = wall ? atWall.kind === 'agent' : atWall.kind !== 'agent';
+                  return (
+                    <button
+                      key={wall ? wall.id : 'me'}
+                      type="button"
+                      className={`jar-char-face jar-label${standing ? ' jar-char-face--standing' : ''}`}
+                      aria-pressed={standing}
+                      /* NO CROSSING. The creature changes form where it is
+                         standing; it does not walk to another column to do
+                         it. Founder: "rather than my agent like moving rooms
+                         it kind of like switching itself up to its agent
+                         form" — and, three times, "the character shouldn't
+                         move left It should move right", which stops being a
+                         question the moment nothing slides either way. */
+                      onClick={() => { if (!standing) simApiRef.current?.goToWall(wall ? wall.col : 0, true); }}
+                    >
+                      {say(wall ? 'worldWallMyAgent' : 'worldWallMe')}
+                    </button>
+                  );
+                })}
+              </span>
+            ) : null}
+        onSettings={()=>navigate('/profile')}
+        account={auth?.account ? { name: auth.profile?.name, email: auth.account.email } : null}
+        onSignOut={auth ? () => { void auth.logout(); } : undefined}
+        hidden={Boolean(panelOpen||mouthOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
           query={seek} locale={locale} label={atWall.kind === 'group' ? say('worldFindYourInspirations') : undefined}
@@ -14762,80 +17004,227 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         id={viewNavigation.view.principleId} name={auth?.profile?.name??''} locale={locale} onClose={viewNavigation.closeShare}
         onChoose={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true},{replace:true})}/>:null}
 
-      {/* MAKING OR JOINING A ROOM. A form, and it is honest about being one:
-          typed text, a submit and an error line all need to reflow and be
-          reachable by keyboard, and none of that survives being painted into
-          the layout. So it is DOM, it sits over the layout rather than inside
-          it, and the layout holds perfectly still behind it. */}
-      {groupForm ? (
-        <DialogSurface className="jar-roomform" data-jar-chrome="1"
-          aria-label={say("worldARoom")} onClose={() => setGroupForm(null)}>
-          <div className="jar-roomform-tabs jar-label">
-            <button
-              type="button"
-              className={groupForm.mode === "make" ? "is-on" : undefined}
-              onClick={() => setGroupForm({ ...groupForm, mode: "make", error: null })}
-            >
-              {/* "ROOM", NOT "GROUP". This repo's rule is that identifiers
-                  speak canon and copy speaks human — `group` in the code,
-                  `room` on the screen — and this button was the one place the
-                  canon word reached a person. The comment eight lines above it
-                  says "MAKING OR JOINING A ROOM", the dialog that opens it
-                  offers "a room", and then the tab said Make a group.
+      {/* THE THREE THINGS YOU HOLD UP IN FRONT OF THE WORLD.
+          Founder: "for your inspirations, after I click on it, I feel like
+          I'm lost how to go back to the previous screen, and I didn't realise
+          clicking on top of mind would leave me there. So maybe for your
+          inspirations, this should just be a modal that you can escape to go
+          back to your top of mind."
 
-                  Found while fixing an e2e walk that could not reach this
-                  form, which is the second copy defect in two days turned up
-                  by reading a surface closely for an unrelated reason. */}
-              {say("worldMakeARoom")}
-            </button>
-            <button
-              type="button"
-              className={groupForm.mode === "join" ? "is-on" : undefined}
-              onClick={() => setGroupForm({ ...groupForm, mode: "join", error: null })}
-            >
-              {say("worldJoinWithLink")}
-            </button>
-          </div>
-          <input
-            className="jar-roomform-box"
-            autoFocus
-            value={groupForm.text}
-            placeholder={groupForm.mode === "make" ? say("worldWhatIsItAbout") : say("worldPasteTheLink")}
-            onChange={(e) => setGroupForm({ ...groupForm, text: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submitGroup();
-              if (e.key === "Escape") setGroupForm(null);
-            }}
-          />
-          {groupForm.error ? <p className="jar-roomform-err">{groupForm.error}</p> : null}
-          <p className="jar-ask">
-            <button type="button" onClick={submitGroup} disabled={groupForm.busy}>
-              {groupForm.busy ? "…" : groupForm.mode === "make" ? say("worldMakeIt") : say("worldGoIn")}
-            </button>
-            <span aria-hidden="true"> · </span>
-            <button type="button" onClick={() => setGroupForm(null)}>
-              {say("worldNotNow")}
-            </button>
-          </p>
-          {groups.length > 0 ? (
-            <div className="jar-share">
-              {groups.map((g) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  className="jar-share-row"
-                  onClick={() => copyInvite(g)}
-                >
-                  {g.name}
-                  <span className="jar-share-hint">
-                    {copied === g.id ? say("worldLinkCopied") : say("worldCopyInvite")}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </DialogSurface>
-      ) : null}
+          ALL THREE, NOT JUST THE ONE THAT WAS COMPLAINED ABOUT. The archive
+          was the surface the founder got lost on, but the principles and the
+          conversations were the same machine with the same bug — reaching any
+          of them unmounted the world, and once the world is gone there is
+          nothing to return TO, only somewhere else to navigate. Fixing the
+          one that was noticed would have left two that had not been noticed
+          yet, which is how this product accumulated the problem in the first
+          place.
+
+          THEY NAME THEMSELVES, and they name WHOSE. The world behind is
+          showing somebody's top of mind, and an unlabelled grid floating over
+          an unrelated statement would be a second anonymous surface. The
+          title follows the wall rather than the stored stance, so it cannot
+          disagree with the world it is covering. */}
+      {/* ═══ THE READING PAGE IS GONE, AND THE BUBBLE IS WHY ═══════════
+          It was reached from exactly one place: pressing the top of mind in
+          the creature's bubble, under "the user can click on it to go to a
+          new page where the user can engage with it". That press opens a
+          CONVERSATION now — founder: "even when user clicks on a top of
+          mind, it should open up a chat" — which is that sentence answered
+          better, because a chat is where engaging actually happens.
+
+          So the page had no door left. A surface nobody can reach is not a
+          feature in reserve, it is a thing that still compiles, still gets
+          read by whoever opens this file, and still has to be kept working
+          by everyone who changes the data under it. `?open=reading` goes
+          out of `ViewOpen` with it, so an old link fails honestly rather
+          than resolving to a blank world.
+
+          WHAT WENT WITH IT: `ReadingPage`, its provenance list, and the
+          copy that only it printed. `ReadingPanel` is untouched — it is a
+          different component and `/profile` still renders it. */}
+      {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
+        key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
+        locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
+        title={say(atWall.kind==='agent'?'worldAgentField':'worldMenuField')}
+        focus={savesFocus} onClearFocus={() => setSavesFocus(null)}
+        /* THE SWITCH IS IN THE CORNER, AND IT ALWAYS WAS. Founder: "if the
+           user changes it in the modal, then the page behind it should also
+           change." Still exactly what happens — `ME / MY AGENT` in the
+           top-left writes the address and every surface re-reads the owner
+           from it. What this overlay no longer carries is a SECOND pair of
+           buttons saying the same two words, which stood here while the
+           corner's pair stood behind this sheet's own left edge, clipped to
+           "MY AGE". The act survives; the duplicate does not. */
+        onClose={viewNavigation.closeOpen}/>:null}
+      {/* THE QUEUE, where answering eight in a row is a different activity
+          from being asked one. The creature keeps asking its single claim on
+          the home screen — that is the product's character and it stays — and
+          this is where a person goes to sit down and work through them. See
+          `ClaimsOverlay` for why this rung needed a door.
+
+          `sayVerdict` is passed down rather than reimplemented: a verdict is
+          filed by whoever is standing here, and a second writer could
+          disagree with the world about who that is. */}
+      {storageScope&&viewNavigation.view?.open==='claims'?<ClaimsOverlay
+        key={`${storageScope.accountId}:${storageScope.profileId}:claims`}
+        locale={locale}
+        onClose={viewNavigation.closeOpen}
+        answered={verdicts}
+        /* THE ROOM HANDS A CLAIM TO THE CREATURE; IT NEVER ANSWERS ONE.
+           Founder: "your claims are duplicated so that's like even bad." The
+           rule every shipping product follows is that a queue has exactly one
+           surface where an item is answerable, and other surfaces may only
+           advertise that it exists — GitHub's badge carries no item content,
+           Anki never renders a card on the deck screen. So pressing a row
+           here moves that claim to the front of the creature's queue and
+           closes the room, which makes the duplication impossible rather than
+           merely discouraged. */
+        onAsk={id=>{
+          setClaimQueue(queue=>{
+            const picked=queue.find(claim=>claim.id===id);
+            return picked?[picked,...queue.filter(claim=>claim.id!==id)]:queue;
+          });
+          viewNavigation.closeOpen();
+        }}/>:null}
+      {storageScope&&viewNavigation.view?.open==='principles'?<PrinciplesOverlay
+        key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
+        locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
+        name={atWall.kind==='agent'?atWall.name:auth?.profile?.name??''}
+        title={say(atWall.kind==='agent'?'worldAgentPrinciples':'worldPrinciplesShortcut')}
+        onClose={viewNavigation.closeOpen}
+        /* Opening one REPLACES the overlay rather than stacking on it: the
+           principle's own surface is the next thing to read, not a sheet on
+           top of a sheet, and `closeOpen` would otherwise have to know which
+           of two things it was closing. */
+        onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id})}
+        /* STRAIGHT TO THE ARTIFACT, skipping the principle's own surface.
+           The card already shows what would be shared; the share surface is
+           the larger version of that same card. Routing through the
+           principle page first made a person confirm a choice they had
+           already made by pressing share. */
+        onShare={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true})}/>:null}
+      {/* ═══ CHATS DO NOT HAVE AN OWNER THE WAY AN ARCHIVE DOES ══════════
+          Founder: "I don't think there should be a difference between me and
+          my agent's chat. Inspiration, sure. But I don't see a reason why
+          that should change."
+
+          Right, and the split was not only unmotivated, it was incoherent:
+          this LIST was scoped to whichever wall you were standing on while
+          `ConversationPanel` below has always taken `storageScope` — the
+          account's own profile. So standing on an agent's wall showed you a
+          list of its conversations and then opened them under yours. Two
+          answers to "whose talk is this" on one path.
+
+          An archive genuinely has two owners — your material is yours and
+          its material is its own, which is why saving on an agent's wall is
+          refused outright. A conversation is with WAKA, and changing which
+          face it is wearing is not a change of who is talking. One list, one
+          scope, matching the panel that was already right. */}
+      {storageScope&&viewNavigation.view?.open==='conversations'?<ConversationsOverlay
+        key={`${storageScope.accountId}:${storageScope.profileId}:talks`}
+        locale={locale} profileId={storageScope.profileId}
+        title={say('worldOpenConversations')}
+        onClose={viewNavigation.closeOpen}
+        onOpen={id=>openTalk(id)}/>:null}
+
+      {/* THE CONVERSATION ITSELF, ALSO OVER THE WORLD.
+          Founder: "also dont move talk to waka in a new page. find better
+          transition." And, of the page it used to be: "the most confusing
+          chat experience ever with so many different buttons that I have no
+          idea what its supposed to do."
+
+          Both sentences were about the same screen and only one of them was
+          about buttons. The controls were cut back to a transcript and a box;
+          this is the other half. A conversation was the last surface in the
+          product that still replaced the world, and it replaced it hardest —
+          its own page, its own chrome, its own corners, its own idea of where
+          you were standing. Every complaint about not being able to get back
+          was loudest there for that reason.
+
+          AND IT IS WHY THE ONE-PRESS RETURN CAN STOP BEING A CONTROL. That
+          control existed to undo a navigation, it was built three times, and
+          this morning it was a button that rendered, read "Your top of mind",
+          and did nothing — because it found its destination by matching a
+          string that had been renamed under it. An overlay cannot have that
+          bug: leaving is dismissal, the world is still behind, and there is
+          no destination to look up. The visible close below is the whole
+          mechanism. */}
+      {storageScope&&viewNavigation.view?.conversationId?(()=>{
+        const talkId=viewNavigation.view.conversationId==='new'?null:viewNavigation.view.conversationId;
+        const owner=`${storageScope.accountId}:${storageScope.profileId}`;
+        if(committedTalk.current&&(committedTalk.current.owner!==owner||committedTalk.current.row.id!==talkId))committedTalk.current=null;
+        return <div className="waka-page">
+          <DialogSurface className="waka-over waka-over--talk" aria-label={say('worldMenuTalk')}
+            onClose={viewNavigation.closeConversation}>
+            {/* ═══ THE WAY BACK TO THE LIST, which this surface was the one
+                place in the product not to have ═══════════════════════════
+                Founder: "chat and inspirations should have same look and
+                feel and workflow and experience."
+
+                Measured, an open inspiration had THREE ways out — a chevron
+                reading "All inspirations", a ✕, and a "Close" in its own
+                foot — and an open chat had ONE, which went to the world
+                rather than to the chats it came from. So the only surface in
+                the product you could not step back out of was the one the
+                founder has reported being lost in most. The two are now the
+                same pair: a chevron to the list, and a ✕ to the world.
+
+                AND THE TITLE SAID A FOURTH NAME. The bar says "Chats", the
+                list says "Your chats", and this said "Talk with WAKA" —
+                three names for one place, which is the thing Law 1 is about
+                before it is about verbs. The chevron names the place it
+                returns to, the way the archive's does, and nothing else on
+                the surface claims to name it. */}
+            <header className="waka-over-head">
+              {/* THROUGH THE SAME DOOR THE DOCK USES, so this cannot grow a
+                  second opinion about depth. Writing the address directly
+                  pushed an entry, which is how four presses became four
+                  closes; `openOverHome` is where that rule lives. */}
+              <button type="button" className="waka-over-back"
+                onClick={()=>openOverHome('conversations')}>
+                <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
+                  <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
+                    strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {say('worldBackToChats')}
+              </button>
+            </header>
+            <ConversationPanel key={`${owner}:${talkId??'new'}:${viewNavigation.view.principleId??''}`}
+              scope={storageScope} id={talkId}
+              initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
+              initialConversation={committedTalk.current?.row} locale={locale}
+              onCreated={row=>{if(row.profileId===storageScope.profileId)committedTalk.current={owner,row};}}
+              /* `replace` on the new-to-id hop so dismissing does not land
+                 back on the blank conversation you just started. */
+              onChoose={next=>{if(next!==talkId)viewNavigation.write({...EMPTY_VIEW,conversationId:next??'new'},{replace:!talkId&&Boolean(next)});}}/>
+          </DialogSurface>
+        </div>;
+      })():null}
+
+      {/* MAKING OR JOINING A ROOM BY TYPING IS GONE — IT WAS UNREACHABLE.
+          Founder: "get rid of the rooms and agent related stuff for now",
+          and later: "remove all unused and deadcode across the codebase."
+
+          A sheet with two tabs — make a room, join one by code — and NOTHING
+          EVER OPENED IT. Every `setGroupForm` call was inside the sheet or
+          its own submit handler, so the only way to reach it was to already
+          be in it. It had survived three cleanliness passes because it looks
+          alive from the inside: real state, a real submit, honest error
+          handling, a 401 branch someone had carefully fixed.
+
+          It was also holding a gate hostage. `test/verb-pairs.test.ts`
+          required `createGroup` to have a way back, and the pair was
+          satisfied only because this dead handler called it — a register
+          describing a verb the product does not offer, passing because
+          unreachable code referenced it. Both go in this commit; that is why
+          they are one change and not two.
+
+          JOINING BY LINK IS UNTOUCHED, which is the whole reason this is a
+          deletion and not a capability loss. A `?join=<code>` address still
+          sets `pendingJoin` and still opens the join sheet below — that path
+          never went through here. What is gone is typing a code into a form
+          nobody could open. */}
 
       {/* THE ROOM, OPENED. Who is in it, how to bring somebody, what you can
           put to them, and the way out — one surface, because they are all the
@@ -14893,114 +17282,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           screen: renaming a profile, language, sessions and deletion need
           focus traps and text that reflows at 200%, and that is what
           `/profile` is for. This is the door and the label on it. */}
-      {accountOpen && phase === "ready" ? (
-        <DialogSurface
-          className="jar-settings jar-settings--at-right"
-          onClose={closeAccount}
-          data-jar-chrome="1"
-          role="dialog"
-          aria-label={say("worldYourAccount")}
-        >
-          <div className="jar-settings-head">
-            <span className="jar-label">{say("worldSignedIn")}</span>
-            <button type="button" className="jar-settings-x" onClick={() => setAccountOpen(false)}>
-              {say("worldClose")}
-            </button>
-          </div>
+      {/* THE ACCOUNT SHEET THAT STOOD HERE IS GONE.
+          The gear opened it on this screen and navigated to /profile on every
+          other one — the same corner meaning two different things depending
+          on where you were standing, which is the exact objection the founder
+          raised about the hamburger ("why is the hamburger menu changing
+          depending on what screen I'm in?"). A corner cannot be the answer to
+          "where is settings" while also being a different answer here.
 
-          <p className="jar-settings-name">{auth?.profile?.name ?? say("worldYou")}</p>
-          {auth?.account?.email ? (
-            <p className="jar-settings-note">{auth.account.email}</p>
-          ) : null}
-
-          <p className="jar-ask">
-            <Link className="jar-settings-verb" to="/profile" onClick={() => setAccountOpen(false)}>
-              {say("worldAllSettings")}
-            </Link>
-          </p>
-
-          {/* THE LOOP'S TWO DOORS. Not flat screens, so not Links: each opens
-              a panel over the world — the rules it reads you by, and the dim
-              place where its refusals stand. They lived in the ≡ drawer until
-              the founder removed it (2026-08-24); this sheet was already
-              here, so they moved in rather than growing a new toggle. */}
-          <p className="jar-ask">
-            <button
-              type="button"
-              onClick={() => {
-                setAccountOpen(false);
-                setReadingOpen(true);
-                if (!theReading) {
-                  fetchTheReading()
-                    .then(setTheReading)
-                    .catch(() => undefined);
-                }
-              }}
-            >
-              {say("worldHowItReadsYou")}
-            </button>
-            <span aria-hidden="true"> · </span>
-            <button
-              type="button"
-              onClick={() => {
-                setAccountOpen(false);
-                setAntechamberOpen(true);
-                setAntechamber(null);
-                fetchTheWeather()
-                  .then((weather) => setAntechamber(weather.antechamber))
-                  .catch(() => setAntechamber([]));
-              }}
-            >
-              {say("worldTheAntechamber")}
-            </button>
-            <span aria-hidden="true"> · </span>
-            <button
-              type="button"
-              onClick={() => {
-                setAccountOpen(false);
-                setDuplicatesOpen(true);
-                setDuplicates(null);
-                fetchSignalDuplicates()
-                  .then(setDuplicates)
-                  .catch(() => setDuplicates([]));
-              }}
-            >
-              {say("worldGardenerAsks")}
-            </button>
-          </p>
-
-          {/* THE SIX LINKS TO THE FLAT SCREENS USED TO BE HERE, and the comment
-              that held them set their own condition: "they go when the world
-              can do everything they do". The world can, as of 2026-08-26 — the
-              screens and their eleven routes were deleted — and these were
-              left behind pointing at nothing.
-
-              Pressing one closed this sheet and dropped you back in the world
-              with no message, which is the same thing the product does for an
-              address that never existed. Six controls that look like doors and
-              are not is the worst kind of navigation a settings sheet can
-              offer, and it survived the deletion because the deletion swept
-              routes and stylesheets and never swept the things POINTING at
-              them. Found by walking the surfaces for the heuristic pass rather
-              than by any gate. */}
-
-          {/* SIGNING OUT IS NOT DESTRUCTIVE, so it does not ask twice — nothing
-              is lost and signing back in restores everything. It is last
-              because it is the one thing here that ends the session. */}
-          <p className="jar-ask jar-ask--after">
-            <button
-              type="button"
-              onClick={() => {
-                setAccountOpen(false);
-                void auth?.logout();
-              }}
-            >
-              {say("worldSignOutLower")}
-            </button>
-          </p>
-        </DialogSurface>
-      ) : null}
-
+          So the gear navigates, everywhere, and this sheet's contents were
+          already at the place it navigates to: the name, the address, and
+          signing out. The three panels it also opened — how it reads you, the
+          antechamber, the gardener's question — went with it. They are
+          diagnostics, not settings, and they were living behind a gear
+          because a gear was the nearest unlocked door. */}
       {pendingJoin && phase === "ready" ? (
         <DialogSurface
           className="jar-settings"

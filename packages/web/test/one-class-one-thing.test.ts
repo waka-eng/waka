@@ -85,8 +85,63 @@ const STYLES = resolve(HERE, "../src/styles");
  * (An earlier draft of this note exempted `surface.css`, copied from
  * `type-scale.test.ts`. That file was deleted on 2026-08-26 — the exemption
  * described a file that is not there, in a list it was not in.)
+ *
+ * `claims.css` AND `chat.css` JOINED ON 2026-10-10, two days after they
+ * joined `type-scale.test.ts`'s list for the same reason. The omission was
+ * identical and so was its cost: the two sheets that carry the switcher, the
+ * corners, all three overlays, the card grid, the composer and the chat
+ * console were the only live sheets in `src/styles` no structural gate read.
+ * A gate with a hand-written list of what it watches only watches the past.
+ *
+ * ── WHAT ADDING THEM SURFACED: NOTHING, AND THAT IS A FINDING ──────────────
+ *
+ * Zero new collisions. That is not the two sheets being clean — it is this
+ * gate being unable to see the shape they actually had. The 2026-10-10 audit
+ * named two duplications in `claims.css`,
+ * `.waka-composer-send:disabled` and `.waka-composer-ask:focus-visible`, and
+ * `BARE_CLASS` below excludes BOTH: a selector carrying `:disabled` or
+ * `:focus-visible` is not a bare class, so neither was ever a candidate.
+ *
+ * Checked by hand instead, and they are two different things:
+ *
+ *   - `.waka-composer-ask:focus-visible` really was declared twice, fifty
+ *     lines apart, with the same two declarations verbatim. REMOVED. Nothing
+ *     about it looked wrong, because the values agreed — the cascade produced
+ *     the correct ring from either block, which is exactly why it survived.
+ *   - `.waka-composer-send:disabled` is declared twice and is NOT a defect.
+ *     One block sets `cursor`, the other sets `border-color` / `background` /
+ *     `color`; the property sets are DISJOINT and the pairing carries a
+ *     comment explaining it ("both go quiet together, and neither
+ *     disappears"). An audit that counts declarations calls this a
+ *     duplication. It is one component answering one state in two places,
+ *     which is untidy and true.
+ *
+ * ── WHY THE GATE WAS NOT WIDENED TO CATCH THEM ─────────────────────────────
+ *
+ * Measured before deciding, because that is what the narrowings above were.
+ * Asking "does any selector set the same property in two unconditional
+ * blocks in one layer" reports FIFTY-ONE pairs across the governed sheets,
+ * and almost every one is the documented idiom: `chrome.css` redressing
+ * `global.css`, and `system.css` holding the register that `global.css`
+ * states loosely. Narrowing all the way to "same FILE, same selector, same
+ * property, same VALUE" — the only form that can never be a redress, a theme
+ * or a state — still reports ELEVEN.
+ *
+ * Eleven means an allowlist of eleven, and this file's own doctrine is that
+ * an allowlist that size "is not a gate — it is a list of things the gate has
+ * agreed not to look at". So the sheets are in the list and the rule is
+ * unchanged. The eleven are real and worth draining by hand; the day they are
+ * down to zero is the day this check is worth writing, and not before.
  */
-const GOVERNED = ["home.css", "chrome.css", "global.css", "system.css", "layers.css"] as const;
+const GOVERNED = [
+  "home.css",
+  "chrome.css",
+  "global.css",
+  "system.css",
+  "layers.css",
+  "claims.css",
+  "chat.css",
+] as const;
 
 /**
  * Properties that decide where a box is and how big it is.
@@ -256,29 +311,36 @@ function blocksIn(file: string): Block[] {
 }
 
 /**
- * THE ONE PAIR THIS GATE INHERITED AND DID NOT FIX, and it is a list that
- * only ever shrinks — the same ratchet `type-scale.test.ts` keeps.
+ * THE ONE PAIR THIS GATE INHERITED IS RETIRED, AND THE LIST IS NOW EMPTY.
  *
- * `.nc-stage--top-of-mind-wall` is declared in `global.css` and again in
- * `system.css`, both inside `@layer product`, and the two disagree about
- * three grid properties. Which one wins is decided by the order the BUNDLER
- * concatenates two files — the precise hazard `layers.css` was written to
- * end, still live inside a single layer.
+ * `.nc-stage--top-of-mind-wall` was declared in `global.css` and again in
+ * `system.css`, with three grid properties in disagreement — which of them
+ * won decided by the order the BUNDLER concatenated two files, the precise
+ * hazard `layers.css` was written to end, still live inside a single layer.
  *
- * It is not fixed here because merging two grid definitions blind would
- * restyle the public profile page, which this change has no business
- * touching. (An earlier draft said Phase 6 of `one-product-one-system.md`
- * deletes that page and the entry would go with it — it does not; that phase
- * lists `Surface.tsx`, `surface.css`, the agent and graph screens and the
- * flat routes, and `PublicProfile.tsx` is a live route in `main.tsx`.) The
- * condition that retires this entry is someone harmonising those three grid
- * properties on purpose. Nothing may be added to this list to make a build
- * pass: a new collision is a new bug.
+ * The note here said the condition for retiring it was "someone harmonising
+ * those three grid properties on purpose". That is not what happened, and
+ * what did happen is better: the class had no renderer left. `.nc-*` was the
+ * flat screens' language — the post-it, its stage, its titlecard — and
+ * `PublicProfile.tsx` was its last host anywhere in the tree until that page
+ * was rewritten in the product's own material. So the clash went out with 43
+ * dead rules rather than being resolved, which is the honest outcome for a
+ * collision between two definitions of a thing nobody draws.
+ *
+ * Two things worth keeping:
+ *
+ *   - This entry's own reasoning was WRONG about the escape route. It argued
+ *     the entry could not be fixed because merging the grids "would restyle
+ *     the public profile page, which this change has no business touching" —
+ *     correct at the time, and it quietly assumed the page would keep
+ *     needing those rules. The page is still live; its styling is not.
+ *   - The ceiling is zero now and the list is empty. Nothing may be added to
+ *     either to make a build pass: a new collision is a new bug.
  */
-const INHERITED = new Set([".nc-stage--top-of-mind-wall"]);
+const INHERITED = new Set<string>([]);
 
-/** A ratchet, and it only turns down. Nothing may be added to make a build pass. */
-const INHERITED_CEILING = 1;
+/** A ratchet, and it only turns down. It is at zero; it stays there. */
+const INHERITED_CEILING = 0;
 
 /**
  * THE LIMIT THIS GATE KNOWS IT HAS, written down rather than discovered.

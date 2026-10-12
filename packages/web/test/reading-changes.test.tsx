@@ -24,15 +24,24 @@ it('compares the displayed reading with its predecessor even when a newer readin
   await mount();expect(fetchTopOfMindVersions).not.toHaveBeenCalled();await click('What changed');
   expect(fetchTopOfMindVersions).toHaveBeenCalledWith({profile:'owner'},expect.any(AbortSignal));
   expect(vi.mocked(fetchTopOfMindVersion).mock.calls.map(row=>row[0])).toEqual(['shown','old']);
-  expect(document.querySelector('[role="dialog"]')!.textContent).toContain('The earlier words.');
+  /* THE EARLIER READING IS NO LONGER PRINTED IN FULL, and that is the
+     redesign rather than a regression: one passage is shown — the current
+     one — with the words this rewrite brought carrying the light, and the
+     words it dropped faded beneath. What still has to be true is that the
+     comparison was made against the PREDECESSOR of the displayed reading,
+     which the call order above asserts, and that its dropped words actually
+     surface. "The earlier words." against "The words currently displayed."
+     drops exactly one: "earlier". */
+  expect(document.querySelector('.jar-drift-left')!.textContent).toContain('earlier');
+  expect(document.querySelector('.jar-drift-reading')!.textContent).toContain('The words currently displayed.');
   expect(document.querySelector('[role="dialog"]')!.closest('.jar')).toBe(host);
   expect(document.querySelector('[role="dialog"]')!.textContent).not.toContain('A later reading');
-  await click('close');expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await click('Close');expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 it('can retry a failed read without replacing it with an invented first-reading state',async()=>{
   vi.mocked(fetchTopOfMindVersions).mockRejectedValueOnce(new Error('Unavailable'));await mount();await click('What changed');
   expect(document.querySelector('[role="alert"]')!.textContent).toContain('couldn’t be opened');expect(document.body.textContent).not.toContain('This is your first reading');
-  await click('Try again');expect(document.querySelector('[role="alert"]')).toBeNull();expect(document.body.textContent).toContain('The earlier words.');
+  await click('Try again');expect(document.querySelector('[role="alert"]')).toBeNull();expect(document.querySelector('.jar-drift-left')!.textContent).toContain('earlier');
 });
 it('refuses a foreign reading instead of displaying its words',async()=>{
   vi.mocked(fetchTopOfMindVersion).mockResolvedValueOnce({...readings[1],profileId:'other-owner'});

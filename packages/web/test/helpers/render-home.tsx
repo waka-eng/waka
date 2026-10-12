@@ -436,75 +436,113 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
     },
     async travelTo(name) {
       /*
-       * THE ROUTE A PERSON ACTUALLY HAS.
+       * TRAVEL BY COMMAND, BECAUSE THE DOORS KEEP MOVING.
        *
-       * This used to click the wall-names strip along the bottom of the
-       * screen. That strip is gone (founder, 2026-08-24: "remove") — every
-       * wall now hangs off the caret beside the name in the top-left corner,
-       * and a helper that still reaches for the old strip finds an empty list
-       * and fails twelve tests with a message about the group mock, which is
-       * not what is wrong.
+       * This has now chased three of them: a wall-names strip along the
+       * bottom, then the caret beside the name in the top-left, then a
+       * "Rooms and agents" row in the menu. Each was the route a person
+       * actually had at the time, and each was removed by a ruling — rooms
+       * and agents are set aside entirely for now, so at the moment there is
+       * no door at all.
        *
-       * So travel the way the person travels: open the list, press the row.
-       * The list closes on the press, hence re-opening it each attempt.
+       * A suite about what a ROOM holds should not keep breaking because the
+       * way in moved. So it goes through `wakaSim`, the same dev seam the
+       * ground uses, and finds its wall by asking where it landed: columns
+       * are signed with the owner at zero, so walking outward from there and
+       * checking `audit().wallId` arrives without knowing the layout.
        */
-      const openWallList = async () => {
-        const caret = container.querySelector<HTMLElement>(".jar-here-more");
-        if (!caret) {
-          throw new Error(
-            "no .jar-here-more — the top-left name has no caret, so there is " +
-              "no way to another wall at all. The top bar did not mount.",
-          );
-        }
-        if (caret.getAttribute("aria-expanded") !== "true") {
-          await act(async () => {
-            caret.click();
-          });
+      const sim = (window as unknown as {
+        wakaSim?: () => {
+          goToWall(col: number): void;
+          navigationState(): { moving: boolean };
+        } | null;
+      }).wakaSim;
+      if (!sim) throw new Error("window.wakaSim is absent — the simulation never started");
+      const api = sim();
+      if (!api) throw new Error("the simulation is not running");
+
+      const wanted = (id: string, kind: string) =>
+        name.test("Me") ? kind === "self" : name.test(id) || name.test(nameOfWall(id));
+
+      /* The fixture's own names, so a regexp written against what a person
+         reads still selects the right wall. */
+      const nameOfWall = (id: string): string =>
+        (facts.groups ?? []).find((group) => group.id === id)?.name ?? "";
+
+      /**
+       * WAIT FOR THE CROSSING, DO NOT GUESS AT ITS LENGTH.
+       *
+       * A crossing already in flight refuses the next one, by design. This
+       * used to answer that with a fixed `step(70)` per attempt, and that
+       * worked for one reason nobody had written down: rooms were at column
+       * +1, so the first non-zero try arrived immediately and no crossing
+       * ever had to be waited out.
+       *
+       * The moment the axis changed — agents to the right, rooms to the left,
+       * because the founder asked three times for the creature to move RIGHT
+       * — the first try landed on the agent and the walk had to cross back
+       * through zero to reach a room. That is a longer flight than 70ms of
+       * fake time, so the next `goToWall` was refused, the loop kept asking
+       * from the wrong place, and twenty-four room suites reported the
+       * PRODUCT as broken when what was wrong was this helper's assumption
+       * about which side rooms live on.
+       *
+       * Asking `navigationState().moving` removes the assumption entirely.
+       * The seam already exists and the world's own URL canonicaliser already
+       * polls it for exactly this reason.
+       */
+      const settle = async () => {
+        for (let turn = 0; turn < 40; turn += 1) {
+          if (!api.navigationState().moving) return;
+          await step(40);
         }
       };
+      await settle();
+      for (const col of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          await act(async () => api.goToWall(col));
+          await settle();
+          await step(40);
+          const where = audit();
+          if (wanted(where.wallId, where.wallKind)) return;
+        }
+      }
 
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        const here = container.querySelector(".jar-here")?.textContent ?? "";
-        if (name.test(here.trim())) break;
-        await openWallList();
-        await clickByText(".jar-here-row", name);
-        await step(90); /* travel eases over ~670ms */
-      }
-      await step(30);
-      /*
-       * ARRIVAL IS ASSERTED, NEVER ASSUMED.
-       *
-       * `goToWall` clamps its target to the walls that actually exist, so if
-       * the group never reached the list the click is a silent no-op and the
-       * camera stays where it was. A test that then checked the ground would
-       * be checking the wall it started on and passing — which is exactly the
-       * kind of green that let the original bug through. Better to be loud.
-       */
-      const here = (container.querySelector(".jar-here")?.textContent ?? "").trim();
-      if (!name.test(here)) {
-        await openWallList();
-        const offered = [...container.querySelectorAll(".jar-here-row")].map((n) =>
-          (n.textContent ?? "").trim(),
-        );
-        throw new Error(
-          `travelTo(${name}) did not arrive — still standing on "${here}". ` +
-            `The wall list offers: ${JSON.stringify(offered)}. ` +
-            `If the wall is missing from that list, the group fetch mock is wrong.`,
-        );
-      }
+      const here = audit();
+      throw new Error(
+        `travelTo(${name}) did not arrive — standing on ${here.wallKind} "${here.wallId}". ` +
+          `If the wall is missing, the group fetch mock is wrong.`,
+      );
     },
     async toField() {
-      const canvas = container.querySelector("canvas");
-      if (!canvas) throw new Error("no canvas — the layout never mounted");
-      for (let i = 0; i < 12; i += 1) {
-        await act(async () => {
-          canvas.dispatchEvent(
-            new WheelEvent("wheel", { deltaY: 240, bubbles: true, cancelable: true }),
-          );
-        });
-        await step(4);
+      /* THE WHEEL NO LONGER TRAVELS. Dragging and scrolling the world
+         vertically were removed — the archive and the principles are pages,
+         so there is nowhere above or below to go by gesture. The PLACE is
+         still there and the camera still visits it (a deep link to one
+         memory, the dial, a principle's evidence), so this drives the same
+         command those paths use instead of a gesture a person no longer has. */
+      const sim = (window as unknown as { wakaSim?: () => { toGround(): void } | null }).wakaSim;
+      if (!sim) throw new Error("window.wakaSim is absent — the simulation never started");
+      const api = sim();
+      if (!api) throw new Error("the simulation is not running");
+      /* `toGround` REFUSES WHILE A WALL TRIP IS IN FLIGHT, by design — two
+         travels at once is how a camera ends up between places. A test that
+         crosses to a room and then asks for its ground is asking inside
+         exactly that window, and the command is dropped silently. So ask
+         until it takes, rather than guessing at a wait long enough to cover
+         it: a fixed delay is either flaky or slow, and usually both. */
+      for (let attempt = 0; attempt < 14; attempt += 1) {
+        await act(async () => api.toGround());
+        await step(30);
+        /* ARRIVAL IS `camY` REACHING `fieldRest`, which the audit publishes
+           for exactly this reason: "where the camera was standing when this
+           was counted" beside "where it has to stand for the count to mean
+           anything". Stopping the moment it lands matters — every extra
+           iteration is thirty more frames of a live simulation, and the
+           camera is not the only thing moving in them. */
+        const where = audit();
+        if (Math.abs(where.camY - where.fieldRest) < 1) break;
       }
-      await step(60); /* the camera snaps to a rest point, then the pour lands */
     },
     async standIn(name) {
       await clickByText(".jar-grounds-row", name);
@@ -515,4 +553,118 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
       container.remove();
     },
   };
+}
+
+/**
+ * REACH A DESTINATION THE WAY A PERSON NOW DOES.
+ *
+ * The home page used to wear its destinations: a bottom nav with Home,
+ * Inspirations, Principles and Find, and two activity cards for Review and
+ * Talk. The founder moved all six behind the hamburger, so a suite that still
+ * queries `.jar-personal-navigation` is asserting against a shape the product
+ * no longer has.
+ *
+ * What those suites were actually testing — that the verb works, that the
+ * section is recorded for Back, that Capture survives a reload — is unchanged
+ * and still worth testing. Only the route to the control moved, so this helper
+ * carries that one difference and the assertions stay where they were.
+ */
+export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
+  /* THE PLACES MOVED TO THE BOTTOM. Founder: "have a bottom navbar." The
+     four rungs across the top are gone and the dock holds what is left — and
+     what is left is PLACES, which is why two of the four did not survive the
+     move: claims are answered on the home screen and saves are moving there.
+     What every suite using this helper tests is unchanged; only where the
+     control lives is. */
+  const rows = [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")];
+  /* BY LABEL, NOT BY TEXT ALONE. The dock's plus is drawn rather than
+     written — it is the one verb in a row of nouns — so its `textContent` is
+     empty and only its `aria-label` names it. Reading the accessible name is
+     also the better question to ask of any control: it is what a person
+     navigating by voice or by screen reader would say out loud. */
+  const name = (node: HTMLButtonElement) =>
+    (node.textContent?.trim() || node.getAttribute("aria-label")?.trim()) ?? "";
+  const row = rows.find((node) => name(node).startsWith(label));
+  if (!row) {
+    throw new Error(
+      `no dock row named ${label}. The dock offers: ${rows.map(name).join(", ")}`,
+    );
+  }
+  await act(async () => row.click());
+}
+
+/**
+ * THE LEFT CORNER — chat history, one press.
+ *
+ * Founder: "top left button should be chat history since moving between
+ * inspirations, top of mind, principles is done with the middle center
+ * dropdown." So the corner is a single act again, not a menu: pressing it
+ * holds the conversations list up over the world. The three views went back
+ * to `chooseFromMenu`, where they started.
+ */
+export async function pressChatCorner(container: HTMLElement): Promise<void> {
+  /* CHAT MOVED OUT OF THE CORNER AND INTO THE DOCK. Founder: "switch between
+     me and my agent should go in top left now that we have new entry point
+     for chat" — the corner holds the form switch now, and conversations are a
+     dock row like the other places. The name stays so every suite that
+     reaches for the conversations door keeps reading the same; only where
+     that door is has changed. */
+  const row = [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")]
+    /* "Chats" SINCE 2026-10-11 — founder: "change conversation to chat in
+       bottom navigation as well." The helper's NAME still says chat, which it
+       always did, so every suite reaching for this door is unchanged. */
+    .find((node) => node.textContent?.trim() === "Chats");
+  if (!row) {
+    const had = [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")]
+      .map((node) => node.textContent?.trim())
+      .join(" | ");
+    throw new Error(`no Chats row in the dock. The dock offers: ${had}`);
+  }
+  await act(async () => row.click());
+}
+
+/**
+ * Leaving a destination the way a person does, which stopped being an X.
+ *
+ * Founder, 2026-10-11: "how do we even need the close button for inspiration
+ * and chat? It's supposed to just be moving around. I mean for principles
+ * too. There's no reason for there to be an X button when we're just moving
+ * across the pages." The dock is visible the whole time a destination is
+ * open and its first row is called Now, so the X was a second control doing
+ * what a permanent one already did.
+ *
+ * The point of Law 2 is unchanged and so is this helper's: the way out it
+ * presses is one a person can SEE. It is simply the bar now, which is the
+ * same control on every surface instead of one per sheet.
+ */
+export async function closeOverlay(container: HTMLElement): Promise<void> {
+  const now = container.querySelector<HTMLButtonElement>(".waka-dock .waka-dock-item");
+  if (!now) throw new Error("no visible way out: the dock is not on screen");
+  await act(async () => now.click());
+}
+
+/** The capture entry is a field now, not a button that opens one. */
+export function keepBox(container: HTMLElement): HTMLTextAreaElement {
+  const box = container.querySelector<HTMLTextAreaElement>("textarea.jar-keep-box");
+  if (!box) throw new Error("the keep box is not on this screen");
+  return box;
+}
+
+/** Open the menu and leave it open, for assertions about a row's own state. */
+export async function openMenu(container: HTMLElement): Promise<void> {
+  const opener = container.querySelector<HTMLButtonElement>(".waka-corners button[aria-controls]");
+  if (!opener) throw new Error("the menu button is not on this screen");
+  if (!container.querySelector(".waka-menu")) await act(async () => opener.click());
+}
+
+/**
+ * Open the archive's own page.
+ *
+ * Facts about the archive live on the archive now — its size, its search —
+ * rather than on whichever control happens to point at it. Three of those
+ * controls have been removed in turn, so a suite about what the archive SAYS
+ * should go to it rather than chase the door.
+ */
+export async function goToInspirations(container: HTMLElement): Promise<void> {
+  await chooseFromMenu(container, "Your inspirations");
 }

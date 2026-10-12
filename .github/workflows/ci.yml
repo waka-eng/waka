@@ -148,6 +148,16 @@ jobs:
       - name: Web tests
         run: pnpm --filter @waka/web test
 
+      # THESE TWO RAN NOWHERE. `packages/mobile/test` was in no pipeline at
+      # all and `packages/admin/test` only in a local `pnpm test` nobody runs
+      # on a branch — so twelve green tests were guarding nothing. A test that
+      # cannot fail the build is documentation with a `expect` in it.
+      - name: Admin tests
+        run: pnpm --filter @waka/admin test
+
+      - name: Mobile tests
+        run: pnpm --filter @waka/mobile test
+
   avatar-quality:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_avatar_evaluation == true }}
     runs-on: ubuntu-latest

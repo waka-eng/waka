@@ -61,6 +61,7 @@ import type { Page } from "playwright";
 import { launchChromium } from "./browser";
 import { settleAfterArrival } from "./arrival";
 import { aimAt, readOrbs, type Orb } from "./orbs";
+import { saveAnInspiration } from "./keep";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
 const MEMORY = ".jar-panel-text";
@@ -170,10 +171,7 @@ const signUp = async (page: Page, base: string, kept: string[]): Promise<void> =
   await page.click("button[type=submit]");
   await page.waitForTimeout(9_000);
   for (const t of kept) {
-    await page.locator(".jar-mouth-rest").first().click();
-    await page.waitForTimeout(450);
-    await page.fill('textarea[aria-label="Capture inspiration"]', t);
-    await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
+    await saveAnInspiration(page, t);
     await page.waitForTimeout(2_800);
   }
 };

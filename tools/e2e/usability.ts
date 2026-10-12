@@ -46,6 +46,7 @@
  */
 import { type Browser, type Page } from "playwright";
 import { launchChromium } from "./browser";
+import { openTheNotepad } from "./keep";
 interface Finding {
   check: string;
   surface: string;
@@ -67,12 +68,32 @@ const PROBE = `(() => {
     const cls = typeof e.className === "string" ? e.className.trim().split(/\\s+/).slice(0, 2).join(".") : "";
     return e.tagName.toLowerCase() + (cls ? "." + cls : "");
   };
-  const skip = (e) => e.closest("canvas") || e.closest("[aria-hidden=true]") || e.getAttribute("aria-hidden") === "true";
+  /* INERT IS A STATEMENT THAT A THING IS NOT OFFERED, and it is respected
+     the same way aria-hidden is. A control inside an inert subtree cannot
+     be reached by pointer, keyboard or screen reader, so asking whether it
+     has a name, or a reason for being disabled, is asking about something
+     nobody can get to. */
+  const skip = (e) => e.closest("canvas") || e.closest("[aria-hidden=true]") || e.closest("[inert]") || e.getAttribute("aria-hidden") === "true";
+  /* VISIBILITY IS AN ANCESTOR QUESTION, which this asked of the element
+     alone — and so got wrong the first time it was pointed at the whole
+     product. The world's composer sits in a slot the destinations fade to
+     zero opacity; the buttons inside it keep an opacity of 1 of their own,
+     so a check on the element reported three invisible controls as visible
+     on every page in the product. Fifteen findings about things nobody can
+     see, and a gate that cries wolf gets an exemption added to shut it up
+     and then guards nothing.
+
+     display and visibility collapse or hide the subtree outright, so
+     walking for them is belt and braces; opacity is the one that genuinely
+     only ever exists on the ancestor. */
   const visible = (e) => {
     const r = e.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) return false;
-    const cs = getComputedStyle(e);
-    return cs.visibility !== "hidden" && cs.display !== "none" && Number(cs.opacity) > 0;
+    for (let at = e; at && at !== document.documentElement; at = at.parentElement) {
+      const cs = getComputedStyle(at);
+      if (cs.visibility === "hidden" || cs.display === "none" || Number(cs.opacity) === 0) return false;
+    }
+    return true;
   };
 
   for (const e of document.querySelectorAll("button, a[href], [role=button]")) {
@@ -210,9 +231,84 @@ async function walk(browser: Browser, negative: boolean): Promise<Finding[]> {
   await page.waitForTimeout(9_000);
   found.push(...(await audit(page, "the world")));
 
-  await page.locator(".jar-mouth-rest").first().click();
+  /* ═══ AND THE PLACES THE PRODUCT ACTUALLY HAS ═════════════════════════
+   *
+   * This walked three surfaces — the door, the world, and the composer —
+   * and had done since it was written. In the meantime the product grew a
+   * bar with four destinations, a notepad, an opened note and a
+   * conversation, and NONE of them was ever audited: every finding this
+   * gate has ever reported came from a third of the product.
+   *
+   * That blindness is not a gap in coverage, it is the MECHANISM. On
+   * 2026-10-11 a founder session turned up, in one sitting, a list the gate
+   * should have caught and could not have: three tab stops that were
+   * invisible, a destination list with `outline: none` on every row, a bar
+   * whose focus state was a colour change that did nothing on the row you
+   * were standing on, and an open conversation with no way back to its own
+   * list. Each one is an H3 or an H1 — exactly what the probe below asks —
+   * on a surface the probe had never been pointed at.
+   *
+   * So the walk follows the dock. Every destination, the two things the
+   * plus makes, one of each opened, and the account page. A surface that
+   * cannot be reached is reported by name rather than skipped silently,
+   * because "the gate did not visit it" and "the gate found nothing" have
+   * looked identical here for too long.
+   */
+  await openTheNotepad(page);
   await page.waitForTimeout(900);
-  found.push(...(await audit(page, "the mouth open")));
+  found.push(...(await audit(page, "the notepad")));
+
+  /** Press a row in the dock by its own words, and say so if it is not there. */
+  const toDock = async (label: string): Promise<boolean> => {
+    const row = page.locator(".waka-dock-item", { hasText: new RegExp(`^${label}$`) }).first();
+    if ((await row.count()) === 0) {
+      found.push({ check: "the dock does not offer this place", surface: label, detail: "no row with this name" });
+      return false;
+    }
+    await row.click();
+    await page.waitForTimeout(1_800);
+    return true;
+  };
+
+  /* Something to open, so the archive and a note are audited with content
+     in them rather than as empty states — an empty list has no rows, and a
+     row is where the unnamed controls live. */
+  await page.fill(".jar-composer-text", "A thought kept so the archive has something in it.");
+  await page.waitForTimeout(400);
+  await page.locator(".jar-note-save").click();
+  await page.waitForTimeout(4_500);
+
+  if (await toDock("Inspirations")) {
+    found.push(...(await audit(page, "your inspirations")));
+    const row = page.locator(".waka-list-row").first();
+    if (await row.count()) {
+      await row.click();
+      await page.waitForTimeout(1_200);
+      found.push(...(await audit(page, "a note opened")));
+      await page.locator(".waka-over-back").first().click();
+      await page.waitForTimeout(1_200);
+    }
+  }
+
+  if (await toDock("Chats")) {
+    found.push(...(await audit(page, "your chats")));
+  }
+
+  /* A conversation, from the door the product offers rather than an address:
+     the gate should break when the door breaks. */
+  await page.locator(".waka-dock-item--new").first().click();
+  await page.waitForTimeout(500);
+  await page.locator(".waka-new-one").last().click();
+  await page.waitForTimeout(2_500);
+  found.push(...(await audit(page, "a conversation")));
+
+  if (await toDock("Principles")) {
+    found.push(...(await audit(page, "your principles")));
+  }
+
+  await page.goto(`${BASE}/profile`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(3_000);
+  found.push(...(await audit(page, "your account")));
 
   await ctx.close();
   return found;

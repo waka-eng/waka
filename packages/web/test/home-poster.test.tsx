@@ -48,7 +48,7 @@
  *   measuring the fixture's rewrite of the fixture's own words.
  *
  *   `lib/api` — for the group reads, which have no loader, and for one write:
- *   `updateTopOfMindEntry`, the call behind "keep these words". Its reason is
+ *   `updateTopOfMindEntry`, the call behind "Keep these words". Its reason is
  *   given at the mock itself, and it is not decoration — left unmocked it
  *   reaches the network, fails, and the page recovers by reloading the board,
  *   which puts the OLD sentence back and turns every rewrite case here into a
@@ -280,7 +280,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     fetchTopOfMindRefresh: async () => ({ status: refreshState.status, runAfter: null,
       requestVersion: "1", completedVersion: refreshState.status === "succeeded" ? "1" : "0",
       result: refreshState.status === "succeeded" ? { kind: "top_of_mind", topOfMindId: "tom-self", version: 3, outcome: refreshState.empty ? "empty" : "changed" } : null }),
-    /* The write behind "keep these words". Its RESULT is discarded by the
+    /* The write behind "Keep these words". Its RESULT is discarded by the
        page — the new sentence is already in hand — so this only has to
        resolve. What matters is that it is mocked at all: unmocked it would
        reach the network, fail, and the page would answer by reloading the
@@ -401,8 +401,16 @@ async function askThePoster(): Promise<void> {
   });
 }
 
+/* THE ANSWERS AND THE ASIDE BOTH LIVE BEHIND THE POSTER'S PRESS, exactly as
+   the old verb row did — see `askThePoster`. What changed on 2026-10-11 is
+   what the press opens: three answers to "Is this you?" in the claim's own
+   register (`.jar-poster-answers`), with the maintenance verbs moved to a
+   quiet aside (`.jar-board-act`, still) because they were never answers.
+   Founder: "rethink the full interaction here... This is definitely not the
+   right way." The operations underneath are the same four, which is why these
+   cases needed new names and not new assertions. */
 async function press(selector: string, name: RegExp): Promise<void> {
-  if (selector === ".jar-board-act") await askThePoster();
+  if (selector === ".jar-board-act" || selector === ".jar-poster-answers button") await askThePoster();
   const el = [...layout.container.querySelectorAll(selector)].find((n) =>
     name.test((n.textContent ?? "").trim()),
   );
@@ -436,7 +444,7 @@ async function press(selector: string, name: RegExp): Promise<void> {
  */
 async function rewriteTo(next: string): Promise<void> {
   const was = posterText();
-  await press(".jar-board-act", /edit wording/i);
+  await press(".jar-board-act", /^edit$/i);
   const box = layout.container.querySelector<HTMLTextAreaElement>("textarea.jar-reflect-box");
   if (!box) throw new Error("the edit box never opened — 'Say it in my words' did nothing");
   const nativeValue = Object.getOwnPropertyDescriptor(
@@ -622,7 +630,7 @@ describe("what the poster is standing on", () => {
    *
    * Two hops: the statement cites signals, the signals cite memories, and the
    * row is the far end of that chain. Keyed by the wrong id at either hop the
-   * chain resolves to nothing and the page says "written by hand" — which is a
+   * chain resolves to nothing and the page says "Written by hand" — which is a
    * sentence it is supposed to say only about a sentence somebody typed, and
    * which is exactly what every group poster said while the bug was live. So
    * the absence of that phrase is asserted too, not just the presence of rows.
@@ -702,7 +710,11 @@ describe("board acts leave receipts", () => {
     expect(refreshState.requests).toBe(0);
   });
   it("does not call queued work a completed redraw", async () => {
-    await press(".jar-board-act", /refresh reading/i);
+    /* "Refresh reading" -> "Write a new one". Founder: "i dont get what
+       these 4 options mean." The verb is unchanged and so is everything these
+       three cases protect; "refresh" described the mechanism, and the new
+       name describes what happens to you. */
+    await press(".jar-board-act", /write a new one/i);
     await press(".jar-board-act", /^read again$/i);
     expect(refreshState.requests).toBe(1);
     expect(posterText()).toBe(FIRST);
@@ -712,7 +724,7 @@ describe("board acts leave receipts", () => {
   it("shows the completed current headline instead of the boot-time override", async () => {
     refreshState.body = "We now test assumptions with a small experiment";
     refreshState.status = "succeeded";
-    await press(".jar-board-act", /refresh reading/i);
+    await press(".jar-board-act", /write a new one/i);
     await press(".jar-board-act", /^read again$/i);
     await layout.step(20);
     expect(posterText()).toBe(refreshState.body);
@@ -720,7 +732,7 @@ describe("board acts leave receipts", () => {
 
   it("keeps an empty completion visible after the old headline disappears", async () => {
     refreshState.empty = true; refreshState.status = "succeeded";
-    await press(".jar-board-act", /refresh reading/i);
+    await press(".jar-board-act", /write a new one/i);
     await press(".jar-board-act", /^read again$/i);
     await layout.step(10);
     expect(layout.container.textContent).not.toContain(FIRST);
@@ -732,17 +744,22 @@ describe("board acts leave receipts", () => {
    * each claim to the API test that enforces it (`receipts.test.ts`), so
    * these two cases close the loop from press to law.
    */
-  it("pinning says it will be held through rewrites", async () => {
-    await press(".jar-board-act", /keep on top/i);
-    const toast = layout.container.querySelector('[role="status"]');
-    expect(
-      toast?.textContent,
-      "the pin left no receipt — the gesture taught silently",
-    ).toBe(RECEIPTS.pinned.text);
-  });
+  /* PINNING HAS NO CONTROL ANY MORE, so there is no press to make and no
+     receipt to assert. Founder, naming the verbs this block should carry:
+     "for now maybe just let user either edit it or remove it and ask it to
+     reread." Keeping on top was not among them, and it was the verb they had
+     already said they could not read: "i dont get what these 4 options mean
+     (held up isnt even clickable)."
+
+     WHAT IS GONE IS THE PRESS, NOT THE CAPABILITY. `holdTopOfMindEntry` is
+     still the client for a live endpoint, `verb-pairs.test.ts` still rules on
+     its missing inverse, and the server still honours a pinned entry — the
+     board reads `pinned` when it chooses which statement leads. If a control
+     comes back, this case comes back with it; a test that presses a button
+     nobody can reach is the shape the file next door spent a night deleting. */
 
   it("dismissing states the law beside its own undo", async () => {
-    await press(".jar-board-act", /not this/i);
+    await press(".jar-board-act", /^remove$/i);
     const row = layout.container.querySelector(".jar-receipt");
     expect(
       row?.textContent,
@@ -752,7 +769,7 @@ describe("board acts leave receipts", () => {
     expect(
       row?.parentElement?.textContent,
       "the receipt and the way back must share one breath",
-    ).toContain("put it back");
+    ).toContain("Put it back");
   });
 });
 
@@ -800,7 +817,7 @@ describe("ratified light: the poster's grounds are lit by who holds them", () =>
     /* the dim ground opens its own ask row — correction one gesture from
        the explanation, the same verbs the sky uses */
     await press(".jar-ground", /the code is read as the truth/);
-    await press(".jar-ask button", /^yes$/);
+    await press(".jar-ask button", /^Yes$/);
 
     const lit = [...layout.container.querySelectorAll<HTMLElement>(".jar-ground")].find((g) =>
       (g.textContent ?? "").includes("the code is read as the truth"),
@@ -839,8 +856,14 @@ describe("the weather is told on arrival, after the world has drawn", () => {
     window.localStorage.setItem("waka.seen", String(Date.UTC(2026, 7, 10)));
     try {
       layout = await mountWorld(FACTS);
+      /* WHAT THE CREATURE SAYS MOVED ABOVE ITS HEAD. It was a line under the
+         chin, in the same column as the claim, so one had to silence the
+         other; speech and a question are different acts and now have
+         different places. The fact under test — that the away-window's
+         sentence is whispered only after the glide returns — is unchanged,
+         so this reads the bubble instead of the line. */
       const said = () =>
-        layout.container.querySelector(".jar-home-narration")?.textContent ?? "";
+        layout.container.querySelector(".jar-char-bubble")?.textContent ?? "";
 
       /* the world has drawn, the glide has not begun: silence */
       expect(said()).not.toContain("refused a candidate");
@@ -860,7 +883,13 @@ describe("the weather is told on arrival, after the world has drawn", () => {
       });
       await layout.step(5);
       expect(said()).toContain(
-        "refused a candidate — too close to what you dismissed.",
+        /* CAPITALISED WHERE IT IS SPOKEN. The API writes this clause lower
+           case on purpose — the full record joins several into one line —
+           and the creature says one of them alone, which makes it a
+           sentence. `asSentence` capitalises at that point; see the note on
+           it in `lib/words`. What this case is about is unchanged: the
+           sentence arrives only AFTER the glide returns. */
+        "Refused a candidate — too close to what you dismissed.",
       );
       /* A count in the telling is now exact, not spelled (founder ruling,
          2026-08-24) — the fixture's sentence carries none either way, and

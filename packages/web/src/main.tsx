@@ -33,6 +33,7 @@ import { SurfaceBoundary } from "./components/SurfaceBoundary";
 import { AuthProvider } from "./lib/auth-context";
 import { installPreloadRecovery } from "./lib/preload-recovery";
 import LoginPage from "./pages/Login";
+import { Days } from "./pages/Days";
 import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
 import PublicProfilePage from "./pages/PublicProfile";
@@ -53,6 +54,8 @@ import "./styles/system.css";
 // are not flat screens in the sense that was retired. There is no memory to
 // stand in before you are authenticated.
 import "./styles/chrome.css";
+// The landing, the menu and the claim queue — the three-surface IA.
+import "./styles/claims.css";
 
 /*
   THE WORLD IS HOME.
@@ -71,7 +74,6 @@ import "./styles/chrome.css";
   down, and the next person reads it as the current shape of the product.
 */
 const HomePage = lazy(() => import("./pages/Home"));
-const ChatPage = lazy(() => import('./pages/Chat'));
 const MobileChecks = import.meta.env.VITE_BUILD_TARGET === 'mobile' && import.meta.env.VITE_MOBILE_DIAGNOSTICS === '1' ? lazy(() => import('./pages/MobileChecks')) : null;
 
 /**
@@ -144,6 +146,31 @@ ReactDOM.createRoot(root).render(
         <Routes>
           {MobileChecks && <Route path="/mobile-check" element={<Suspense fallback={null}><MobileChecks /></Suspense>} />}
           <Route path="/login" element={<LoginPage />} />
+          {/* THE ARCHIVE AND THE PRINCIPLES ARE NOT PAGES ANY MORE.
+              Founder: "for your inspirations, after I click on it, I feel
+              like I'm lost how to go back to the previous screen, and I
+              didn't realise clicking on top of mind would leave me there. So
+              maybe for your inspirations, this should just be a modal that
+              you can escape to go back to your top of mind."
+
+              They were places the camera travelled to, then they were pages
+              with their own addresses, and both were wrong in the same way:
+              reaching them UNMOUNTED THE WORLD. A page was given everything a
+              page can have — a URL, a working browser Back, a switcher naming
+              it — and still felt like a trap, because once the world is gone
+              there is nothing to go back to, only somewhere else to go. They
+              are overlays now, held up in front of a world that never left.
+              See `ViewOpen` in `lib/view-location`.
+
+              THE OLD ADDRESSES STILL ANSWER. Links were sent and bookmarks
+              were made while these were pages, and a 404 would be this
+              change breaking something for the sake of tidiness. They land on
+              the world with the overlay already up, which is what the address
+              always meant. `replace` so Back does not bounce through the
+              redirect. */}
+          <Route path="/inspirations" element={<Navigate to="/?open=saves" replace />} />
+          <Route path="/principles" element={<Navigate to="/?open=principles" replace />} />
+          <Route path="/days" element={<RequireAuth><Days /></RequireAuth>} />
           <Route path="/:handle" element={<PublicProfilePage />} />
           <Route
             path="/onboarding"
@@ -177,12 +204,32 @@ ReactDOM.createRoot(root).render(
               - authenticated    → render the underlying page.
           */}
           {/* Home is the layout. */}
-          <Route path="/chat/:conversationId" element={<RequireAuth><SurfaceBoundary surface="chat"><Suspense fallback={null}><ChatPage/></Suspense></SurfaceBoundary></RequireAuth>}/>
+          {/* TALKING IS NOT A PLACE YOU TRAVEL TO EITHER.
+              Founder: "also dont move talk to waka in a new page. find
+              better transition."
+
+              This was the last surface still doing the thing every other one
+              stopped doing. The archive and the principles became overlays
+              because reaching them UNMOUNTED THE WORLD — and a conversation
+              unmounted it hardest, since the chat page mounted its own
+              chrome, its own corners and its own idea of where you were. The
+              founder's judgement of that page, "the most confusing chat
+              experience ever", had two causes: the controls inside it (now
+              cut back to a transcript and a box) and the fact that opening it
+              threw the world away. The second one is this line.
+
+              So it joins the layout. `readViewLocation` already parsed
+              `/chat/:id` into `view.conversationId` and `viewHref` already
+              emitted it — the view model has always known a conversation is
+              a thing you can be looking at, and only the router disagreed.
+              The address is unchanged, so every link ever sent still opens
+              the same conversation; what changed is that the world is behind
+              it when it does. */}
           <Route element={<ProtectedHome />}>
             <Route path="/" element={<></>} />
+            <Route path="/chat/:conversationId" element={<></>} />
             <Route path="/w/:wall/:label?" element={<></>} />
             <Route path="/inspirations/:inspirationId" element={<></>} />
-            <Route path="/review/:reviewId" element={<></>} />
             <Route path="/principles/:principleId" element={<></>} />
             <Route path="/principles/:principleId/share" element={<></>} />
           </Route>

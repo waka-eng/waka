@@ -49,7 +49,7 @@ it("labels a reflected citation and opens that answer, not the parent capture", 
   const open = [...world.container.querySelectorAll<HTMLElement>(".jar-prov-open")].find((node) => node.textContent === "View inspirations")!;
   await act(async () => open.click());
   const row = world.container.querySelector<HTMLButtonElement>(".jar-prov-row")!;
-  expect(row.textContent).toContain("from your reflection");
+  expect(row.textContent).toContain("From your reflection");
   await act(async () => row.click());
   expect(world.container.querySelector(".jar-prov-room-full")?.textContent)
     .toContain("I can change course without losing the work already done.");

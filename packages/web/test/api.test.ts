@@ -27,7 +27,6 @@ import {
   createFeedback,
   disputePrinciple,
   createInspiration,
-  createReflection,
   deleteInspiration,
   fetchCurrentViewer,
   fetchInspiration,
@@ -245,11 +244,12 @@ it('preserves the processing receipt on a saved inspiration', async () => {
   await expect(createInspiration({ text: inspiration.text })).resolves.toMatchObject({ processing });
 });
 
-it('preserves the processing receipt on a saved reflection', async () => {
-  const processing = { id: 'receipt', profileId: 'profile-1', inspirationId: inspiration.id, materialRevision: '3', jobId: 'job', requestVersion: '4' };
-  stubFetch(Response.json({ reflection: inspiration.reflections[0], processing }));
-  await expect(createReflection(inspiration.id, { question: 'Why?', answer: 'An answer' })).resolves.toMatchObject({ processing });
-});
+/* THE SAVED-REFLECTION RECEIPT SUITE IS GONE (2026-10-10), with
+   `createReflection` itself. The property — a processing receipt survives the
+   client unwrapping the response — is asserted on either side of where this
+   stood, for `createInspiration` above and `updateInspiration` below. It was
+   never a property of answers; it is a property of how this module reads a
+   `{ thing, processing }` envelope. */
 
 it('preserves the processing receipt after editing saved material', async () => {
   const processing = { id: 'receipt', profileId: 'profile-1', inspirationId: inspiration.id, materialRevision: '4', jobId: 'job', requestVersion: '5' };
@@ -260,16 +260,17 @@ it('preserves the processing receipt after editing saved material', async () => 
   });
 });
 
-it('binds captures and answers to the profile that opened the composer', async () => {
+/* THE ANSWER HALF OF THIS WENT WITH `createReflection` (2026-10-10). A
+   capture is still bound to the profile that opened the composer, which is
+   the half that can still be got wrong — and an answer given at capture time
+   now travels INSIDE that same body as `input.reflections`, so it is bound by
+   this very assertion rather than by a second one. */
+it('binds a capture to the profile that opened the composer', async () => {
   stubFetch(Response.json({ inspiration }));
-  await createInspiration({ text: 'A thought' }, { profile: 'profile-1' });
+  await createInspiration({ text: 'A thought', reflections: [{ question: 'Why?', answer: 'An answer' }] }, { profile: 'profile-1' });
   expect(fetch).toHaveBeenCalledWith('/api/inspirations?profile=profile-1', {
-    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'A thought' }),
-  });
-  stubFetch(Response.json({ reflection: inspiration.reflections[0] }));
-  await createReflection(inspiration.id, { question: 'Why?', answer: 'An answer' }, { profile: 'profile-1' });
-  expect(fetch).toHaveBeenCalledWith('/api/inspirations/inspiration-1/reflections?profile=profile-1', {
-    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: 'Why?', answer: 'An answer' }),
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'A thought', reflections: [{ question: 'Why?', answer: 'An answer' }] }),
   });
 });
 
@@ -306,18 +307,25 @@ it('sends a stable save identity and preserves replay metadata for an inspiratio
   });
 });
 
-it('sends the answer intent unchanged on a replay, not a new identity for each call', async () => {
+/* SAME ASSERTION, MOVED OFF THE ANSWER VERB (2026-10-10). What it guards is
+   that a retry re-sends the SAME identity instead of minting a new one, which
+   is how a lost response turns into two copies of the same words. That lives
+   in `reconcileInspirationSave`, which both verbs went through and only one
+   of them still exists — so it is asserted on the one that does. The words
+   carried here include an answer, so the body under test is no smaller. */
+it('sends the save intent unchanged on a replay, not a new identity for each call', async () => {
   const requestId = '00000000-0000-4000-8000-000000000124';
   const saveRequest = { requestId, replayed: true };
   const options = { profile: 'profile-1', requestId };
-  stubFetch(Response.json({ reflection: inspiration.reflections[0], saveRequest }));
-  await expect(createReflection(inspiration.id, { question: 'Why?', answer: 'An answer' }, options)).resolves.toMatchObject({ saveRequest });
-  expect(fetch).toHaveBeenCalledWith('/api/inspirations/inspiration-1/reflections?profile=profile-1', {
+  const input = { text: 'A thought', reflections: [{ question: 'Why?', answer: 'An answer' }] };
+  stubFetch(Response.json({ inspiration: { ...inspiration, saveRequest } }));
+  await expect(createInspiration(input, options)).resolves.toMatchObject({ saveRequest });
+  expect(fetch).toHaveBeenCalledWith('/api/inspirations?profile=profile-1', {
     method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestId },
-    body: JSON.stringify({ question: 'Why?', answer: 'An answer' }),
+    body: JSON.stringify(input),
   });
-  stubFetch(Response.json({ reflection: inspiration.reflections[0], saveRequest }));
-  await createReflection(inspiration.id, { question: 'Why?', answer: 'An answer' }, options);
+  stubFetch(Response.json({ inspiration: { ...inspiration, saveRequest } }));
+  await createInspiration(input, options);
   expect(vi.mocked(fetch).mock.calls[0]?.[1]?.headers).toMatchObject({ 'Idempotency-Key': requestId });
 });
 
@@ -390,10 +398,16 @@ it('does not call an unrelated payload saved merely because its key exists', asy
   expect(fetch).toHaveBeenCalledTimes(3);
 });
 
+/* ALSO MOVED OFF THE ANSWER VERB, AND THIS ONE MATTERS MORE (2026-10-10).
+   A 410 from the save-request lookup is the ONE path by which this client can
+   still learn that the thing a journalled save points at is gone — and
+   `useAuthoredSave`'s `onRemoved` is still wired to it. Asserting it on
+   `createInspiration` is asserting it on the live path rather than the
+   deleted one: reconciliation must stop, not retry forever. */
 it('stops reconciliation when the saved item was deliberately removed', async () => {
   vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Response lost'))
     .mockResolvedValueOnce(Response.json({ error: 'Removed', code: 'saved_item_removed' }, { status: 410 })));
-  await expect(createReflection(inspiration.id, { question: 'Why?', answer: 'An answer' }, { profile: 'profile-1', requestId: 'request' }))
+  await expect(createInspiration({ text: 'A thought' }, { profile: 'profile-1', requestId: 'request' }))
     .rejects.toMatchObject({ status: 410, code: 'saved_item_removed' });
   expect(fetch).toHaveBeenCalledTimes(2);
 });

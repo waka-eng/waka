@@ -484,6 +484,13 @@
       "when": 1791369798790,
       "tag": "0068_mobile_login_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1791512364893,
+      "tag": "0069_inspiration_category",
+      "breakpoints": true
     }
   ]
 }

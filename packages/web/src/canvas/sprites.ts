@@ -119,7 +119,21 @@ export const SHEEN = 0.26;
 export const GRAIN_PX = 2;
 /** The tile is GRAIN_TILE cells square, in CSS pixels. */
 export const GRAIN_TILE = 64;
-export const GRAIN_AMP = 0.09;
+/**
+ * FULL RANGE, BECAUSE IT IS A DITHER NOW AND NOT A TEXTURE.
+ *
+ * 0.09 was tuned when the film layer blended with `overlay`, where the point
+ * was to lift midtones and leave the blacks alone. That is the opposite of
+ * what this screen needs: the banding lives IN the blacks — the companion's
+ * glow falls off across two hundred and fifty pixels of near-black, and an
+ * 8-bit ramp that shallow quantises into flat bands up to 26px wide.
+ *
+ * The amplitude has to clear one least-significant bit to dissolve a contour
+ * step. At 0.09 and the layer's opacity the perturbation was 0.23 LSB —
+ * a quarter of the way to doing anything. At full range it is 2.6 LSB, which
+ * dissolves the step without reading as grain.
+ */
+export const GRAIN_AMP = 1;
 /* The strength lives in jar.css with the layer that carries it: opacity on a
    real element, blended against an opaque backdrop. */
 /** The corners fall away. A photographic idea, so it is kept photographic. */

@@ -11,6 +11,44 @@ import { type Being } from "./body";
    like a hot little flame. Reach first, then the alpha it peaks at, then how
    fast it falls away. */
 
+/**
+ * ═══ THE CREATURE'S GEOMETRY, IN ONE PLACE ═════════════════════════════
+ *
+ * These five numbers used to live in `Home.tsx` beside the frame loop that
+ * draws with them, which was correct while the loop was the only thing that
+ * ever drew a creature. It is not any more — see `restPose` at the foot of
+ * this file — and two copies of "where the eyes sit" is how a product ends
+ * up with two creatures that are almost the same.
+ *
+ * The LOOP still owns the creature's BEHAVIOUR: yaw, pitch, blink, gaze, the
+ * machine-cell grid, the bob, the nubs swelling with the glow. None of that
+ * belongs here. What belongs here is the anatomy those behaviours are
+ * applied to, and it is imported by both.
+ */
+/** Where an eye sits, as a longitude on the turning form. The pair are ~1
+    radian apart, which is what puts them where they have always sat when the
+    companion is facing you. */
+export const EYE_LON = 0.5;
+/** The equator's radius as seen head-on, as a fraction of the body's width. */
+export const FACE_R = 0.34;
+/** An eye's radius, as a fraction of the body. */
+export const EYE_R = 0.038;
+/** The eyes' ink. Not `--ink`: it is a feature of the creature's own
+    illustration, not interface text, and it is the same brown-black at every
+    aliveness. */
+export const EYE_INK = "#2b2822";
+/** A nub's seat: a quarter turn either side, at this height on the body. */
+export const NUB_LON = Math.PI / 2;
+export const NUB_X = 0.42;
+export const NUB_Y = 0.24;
+/** How far a nub swells between a quiet archive and a full one. They are
+    anatomy, so they are never absent — the light decides the size only. */
+export const NUB_R_DIM = 0.062;
+export const NUB_R_LIT = 0.1;
+/** A nub's own colour at those two ends. */
+export const NUB_DIM: [number, number, number] = [166, 163, 156];
+export const NUB_LIT: [number, number, number] = [214, 209, 197];
+
 /** Dim tiers the character's body is baked at. */
 export const BODY_TIERS = 4;
 /** The character's baked sprite size in logical px; it is scaled at draw. */
@@ -160,3 +198,86 @@ export function rasterBody(
   return c;
 }
 
+
+/**
+ * ═══ THE REST POSE — the creature with nothing happening to it ══════════
+ *
+ * Founder: "do the rest pose so the creature can be on every screen."
+ *
+ * WHY THIS IS A SEPARATE FUNCTION AND NOT A CALL INTO THE LOOP. The world
+ * draws the companion sixty times a second from live simulation state — yaw,
+ * pitch, blink, gaze, bob, flare, the machine-cell grid, four drifting aura
+ * layers. A page has none of that and should pay for none of it. What a page
+ * needs is the creature as it looks when nothing is happening to it, which is
+ * that same drawing with every behaviour set to zero:
+ *
+ *   yaw 0      both eyes forward, both nubs at the silhouette's widest
+ *   pitch 0    the eyes on the equator
+ *   blink 0    open
+ *   bob 0      the body square, so bw and bh are both `size`
+ *
+ * SO THE ARITHMETIC BELOW IS THE LOOP'S ARITHMETIC WITH THE ZEROS SUBSTITUTED
+ * IN, not a second opinion about where a face goes. Every number it uses is
+ * imported from the block at the top of this file, which `Home.tsx` imports
+ * too — so a change to the anatomy moves both, and `rest-pose.test.ts` fails
+ * if `Home.tsx` grows its own copy of any of them back.
+ *
+ * WHAT IT DELIBERATELY DOES NOT DRAW: the aura. On the world that is four
+ * drifting layers composited with `lighter`, because it has to interact with
+ * what is alive in the field. On a page it is a fact rather than a reading,
+ * and `.waka-companion` states it in one CSS gradient built from the same
+ * `--jar-live` ivory — a radial gradient cannot be clipped out of step with
+ * a canvas that holds only the body.
+ *
+ * `lit` is the one thing a caller chooses, and on a page it should be 1: the
+ * world dims the creature to report how little is alive in your field, which
+ * is a reading of your material. A page is not a reading of anything, so a
+ * dimmed companion there would be saying something untrue about you.
+ */
+export function restPose(
+  g: CanvasRenderingContext2D,
+  size: number,
+  ramp: Ramp,
+  be: Being,
+  lit = 1,
+): void {
+  const body = rasterBody(Math.max(1, Math.round(size / BODY_PX * 4)), BODY_TIERS - 1, null, ramp, be);
+  const half = size / 2;
+
+  /* THE NUBS GO FIRST AND THEY ARE BOTH IN FRONT, which is the loop's
+     behaviour at yaw 0 rather than a simplification of it: its guard is
+     `cos(a) < 0 !== behind`, and `Math.cos(Math.PI / 2)` is 6.1e-17 — not
+     negative — so at rest the behind-pass draws neither and the front-pass
+     draws both. They are painted before the body here for the same reason
+     the loop paints the far one first: a nub protrudes, so the body's edge
+     has to land on top of it rather than meet it. */
+  const nubR = size * (NUB_R_DIM + (NUB_R_LIT - NUB_R_DIM) * lit);
+  const nubRgb = mix(NUB_DIM, NUB_LIT, lit);
+  g.fillStyle = rgbCss(nubRgb, 1);
+  for (const lon of [-NUB_LON, NUB_LON]) {
+    g.beginPath();
+    g.arc(half + Math.sin(lon) * size * NUB_X, half + size * NUB_Y, nubR, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  g.drawImage(body, 0, 0, size, size);
+
+  /* THE EYES, CLIPPED TO THE SILHOUETTE the same way the loop clips them —
+     `bodyPath` is the one tracer, so the bake and the clip cannot drift. */
+  g.save();
+  g.translate(half, half);
+  bodyPath(g, size, size, be);
+  g.clip();
+  g.fillStyle = EYE_INK;
+  const er = size * EYE_R;
+  /* `-size * 0.06` is the loop's `eyY` at latitude 0: the eyes sit a little
+     above the equator, which is what makes the dome read as a forehead. */
+  const eyY = -size * 0.06;
+  for (const lon of [-EYE_LON, EYE_LON]) {
+    const ca = Math.cos(lon);
+    g.beginPath();
+    g.ellipse(Math.sin(lon) * size * FACE_R, eyY, er * Math.max(ca, 0.2), er, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.restore();
+}

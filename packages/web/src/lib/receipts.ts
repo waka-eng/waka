@@ -27,34 +27,52 @@ export interface Receipt {
 }
 
 export const RECEIPTS = {
-  /** yes / partly on your own pattern: the record is the effect */
+  /**
+   * YES ON YOUR OWN PATTERN — and it may finally say what it does.
+   *
+   * This read "On the record", which claims almost nothing, and sat beside a
+   * rejection receipt reading "Steps far back in the choosing — never
+   * erased": vivid, mechanical, specific. The asymmetry was not a writing
+   * failure. It was this file's law working correctly — a receipt may claim
+   * only what a named test enforces, and what the pipeline enforced was
+   * barely worth saying. Affirming added `CONFIDENCE_AFFIRMED_BONUS` (8),
+   * which selection weights at 0.45: +3.6 of 100, against the -36 that
+   * rejecting the same claim produced. The copy could not be fixed before
+   * the mechanism was, and the law is what stopped anyone trying.
+   *
+   * The bonus is 30 now — the whole durability term, so your saying "this is
+   * me" is worth what a month of recurrence is worth — and it moves a thin
+   * claim's selection by +13.5 of 100, measured. So the sentence can name
+   * the effect, and `enforcedBy` points at the test that would go red if it
+   * stopped being true.
+   */
   verdictKept: {
     messageKey: "worldReceiptVerdictKept",
-    text: "on the record",
-    enforcedBy: "packages/api/src/routes/feedback.test.ts",
+    text: "This now carries weight in what reaches your top of mind",
+    enforcedBy: "packages/api/src/lib/top-of-mind-affirmation.test.ts",
   },
   /** not true: dampened in the choosing, never removed */
   verdictNo: {
     messageKey: "worldReceiptVerdictNo",
-    text: "steps far back in the choosing — never erased",
+    text: "Steps far back in the choosing — never erased",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /** an answer on a room's shared statement */
   verdictGroup: {
     messageKey: "worldReceiptVerdictGroup",
-    text: "answered — the room reads who stands where",
+    text: "Answered — the room reads who stands where",
     enforcedBy: "packages/api/src/routes/room-reactions.db.test.ts",
   },
   /** Keep this one up */
   pinned: {
     messageKey: "worldReceiptPinned",
-    text: "held at the front — rewrites keep it there",
+    text: "Held at the front — rewrites keep it there",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /** Not this — rides beside the undo, because reversible is part of the law */
   dismissed: {
     messageKey: "worldReceiptDismissed",
-    text: "set aside — it will not return to your top of mind",
+    text: "Set aside — it will not return to your top of mind",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /** "then let it go" on a pattern of your own — the ground-level law:
@@ -63,13 +81,13 @@ export const RECEIPTS = {
       claim would have been the advisory-button lie. */
   groundRefuses: {
     messageKey: "worldReceiptGroundRefuses",
-    text: "the ground will refuse anything this close from now on",
+    text: "The ground will refuse anything this close from now on",
     enforcedBy: "packages/api/src/lib/signal-suppression.db.test.ts",
   },
   /** the star's standing line, already on screen — documented here */
   starHeld: {
     messageKey: "worldReceiptStarHeld",
-    text: "your own words — WAKA will not rewrite them",
+    text: "Your own words — WAKA will not rewrite them",
     enforcedBy: "packages/api/src/lib/signal-lock-contract.db.test.ts",
   },
   /** the release confirm, already on screen — documented here */

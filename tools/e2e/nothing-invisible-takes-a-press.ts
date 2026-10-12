@@ -109,6 +109,7 @@ import postgres from "postgres";
 
 import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
+import { openTheNotepad } from "./keep";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
 const PASSWORD = "nothing-invisible-1";
@@ -466,7 +467,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
     "a press that lands on nothing is a press taken",
     "the ink is the promise that something is there",
   ]) {
-    await page.locator(".jar-mouth-rest").first().click();
+    await openTheNotepad(page);
     await page.waitForTimeout(700);
     await page.fill('textarea[aria-label="Capture inspiration"]', `${text} ${uniq()}`);
     await page.keyboard.press("Enter");
@@ -477,7 +478,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   await page.waitForTimeout(2_500);
   await take("the world");
 
-  await page.locator(".jar-mouth-rest").first().click();
+  await openTheNotepad(page);
   await page.waitForTimeout(1_200);
   await take("the mouth open");
   await page.keyboard.press("Escape");

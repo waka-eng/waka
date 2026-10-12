@@ -21,7 +21,7 @@
  */
 
 import { recordConsultation } from "../lib/consultations.js";
-import { and, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { buildLikePattern } from "./inspirations-recall.js";
 import { Hono, type MiddlewareHandler } from "hono";
@@ -155,6 +155,16 @@ export interface SignalSummary {
       suppression anchor — derivation refuses candidates near it, on the
       record. Dismissed rows also read `status: "retired"`. */
   dismissed: boolean;
+  /**
+   * WHICH WORDING A VERDICT WOULD BE ABOUT.
+   *
+   * A verdict is bound to the words it was given about, not to the id — see
+   * `feedbackWordingCurrent()`. A caller that answers without sending this
+   * writes `target_revision` null, which `coalesce(…, 1)` reads as revision
+   * one, so the answer counts as current only for a statement that was never
+   * rewritten and the claim returns to the queue forever otherwise.
+   */
+  statementRevision?: string;
   /** Standing in an unresolved contradicts pair — awaiting the owner's
       arbitration, which is the only kind there is. Computed from the pair
       rows at serve time, never stored on the signal. */
@@ -426,6 +436,90 @@ export async function listProfileSignals(
     includeOrigins=profile?.type==='human'||profile?.type==='agent';
   }
   return decorateSignals(db, input.profileId, rows,includeOrigins);
+}
+
+/**
+ * THE CLAIMS AWAITING YOUR WORD — layer 2 read as a queue, not as a detail
+ * hanging off something else.
+ *
+ * Until this existed a claim was reachable ONLY as a `ground` under a
+ * top-of-mind entry, and a top of mind cites only the strongest signals a
+ * profile has (`computeSelectionScore`, top-of-mind-synthesis.ts). That closed
+ * a loop on itself:
+ *
+ *   a claim is weak → never selected into a top of mind → never shown →
+ *   never affirmed → never gains CONFIDENCE_AFFIRMED_BONUS → still weak
+ *
+ * Affirmation is the one input that can lift a weak claim, and it was gated
+ * behind the claim already being strong, so the claims most in need of a
+ * human's word were the exact ones no human could reach. Reading the layer
+ * directly is what breaks that, and it is why this is a queue rather than
+ * another filter on the list route: the queue's whole job is to be reachable
+ * at a fixed address regardless of rank.
+ *
+ * "Awaiting" is a question about WORDING, not about the row. The predicate is
+ * `feedbackWordingCurrent()` — the same one synthesis reads — so a claim you
+ * answered keeps its answer, while a claim REWRITTEN since you answered comes
+ * back, because your verdict was about words no longer on the screen. "Is
+ * this still true?" therefore falls out of an invariant that already existed
+ * instead of needing a second mechanism to carry it.
+ *
+ * Emerging claims are included deliberately. The promotion bar is about what
+ * may represent you in an artifact; it was never meant to decide what you are
+ * allowed to have an opinion about.
+ */
+export async function listClaimsAwaitingVerdict(
+  db: WakaDb,
+  input: { profileId: string; limit: number },
+): Promise<SignalSummary[]> {
+  const rows = await db
+    .select({
+      id: signals.id,
+      statement: signals.statement,
+      status: signals.status,
+      confidence: signals.confidence,
+      lastEvidenceAt: signals.lastEvidenceAt,
+      lockedAt: signals.lockedAt,
+      unsupportedAt: signals.unsupportedAt,
+      dismissedAt: signals.dismissedAt,
+      createdAt: signals.createdAt,
+      statementRevision: signals.statementRevision,
+    })
+    .from(signals)
+    .where(
+      and(
+        eq(signals.profileId, input.profileId),
+        /* A claim thrown out is not a claim awaiting a word — its vector is
+           already a suppression anchor. `dismissedAt` and `status` are
+           checked separately because a dismissed row also reads
+           `status: "retired"`, and leaning on only one of the two would make
+           this query depend on that coupling holding. */
+        isNull(signals.dismissedAt),
+        inArray(signals.status, ["active", "emerging"] as const),
+        sql`NOT EXISTS (SELECT 1 FROM ${feedback} AS feedback
+          WHERE feedback.profile_id = ${input.profileId}
+            AND feedback.target_type::text = 'signal'
+            AND feedback.target_id = ${signals.id}
+            AND ${feedbackWordingCurrent()})`,
+      ),
+    )
+    /* MOST RECENTLY EVIDENCED FIRST, not strongest first. The question this
+       queue answers is "what did WAKA read in what I just saved" — so the
+       order follows the evidence, and confidence is deliberately not a term.
+       Ranking by confidence here would rebuild the bias the queue exists to
+       undo. */
+    .orderBy(desc(signals.lastEvidenceAt), desc(signals.createdAt))
+    .limit(input.limit);
+
+  /* The origins ride along: a claim shown with no sense of where it came from
+     is a horoscope, and "from 4 things you saved" is the cheapest honest
+     answer. Owner-scoped by construction — this read is never a group path. */
+  const decorated = await decorateSignals(db, input.profileId, rows, true);
+  /* And the WORDING a verdict would be about. Without it the answer binds to
+     revision one and a reworded claim can never be answered — see the field's
+     own note on `SignalSummary`. */
+  const revisions = new Map(rows.map((row) => [row.id, row.statementRevision.toString()]));
+  return decorated.map((row) => ({ ...row, statementRevision: revisions.get(row.id) }));
 }
 
 export async function getProfileSignal(

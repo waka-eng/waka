@@ -97,24 +97,42 @@ const REGISTER: Record<string, string> = {
   createInspiration: "deleteInspiration",
   deleteInspiration: "createInspiration",
   updateInspiration: "RULED: an edit is its own inverse — edit it again",
-  createReflection: "deleteReflection",
-  deleteReflection: "createReflection",
-  requestReflectionQuestion: "RULED: asking creates no authored content; a person can leave with Done or remove their saved answer",
+  /* THE REFLECTION PAIR IS GONE, AND THIS IS THE COMMIT IT GOES IN
+     (2026-10-10). `createReflection` / `deleteReflection` was a whole and
+     honest pair — write an answer, remove that answer — and
+     `requestReflectionQuestion` was ruled beside them. All three went with
+     `components/ReflectionFlow.tsx`, their only caller, when the founder
+     folded the writing-based review into one correction field: *"Typing
+     happens in one place only: when you correct."*
+     The entries could not outlive the verbs by even one commit. A register
+     naming a partner nobody wires is finding F6 in this file's own header,
+     and a register naming a verb that no longer exists is "a description of a
+     product that is gone" — the words of the third test below.
+     AN ANSWER IS STILL WRITTEN, by `createInspiration`: a photo moment's
+     "why" travels as `input.reflections` on the capture it belongs to. Its
+     way back is `deleteInspiration`, already on this register above, which
+     removes the capture and the answer together — which is right, because an
+     answer given at capture time is part of that capture rather than a second
+     thing the person has to find and undo. */
   retryInspirationProcessing: "RULED: resumes failed processing of already-kept material without creating another capture or answer; existing words remain editable or removable, and opening the resulting reading is a separate choice",
-  retryReviewProcessing: "RULED: resumes analysis of saved review answers; the answers remain editable or removable and the review can be closed while the reading finishes",
   presignAttachment: "RULED: one half of a single upload, not a state a person is left in",
   finalizeAttachment: "RULED: the other half of that upload",
   correctAttachmentTranscript: "RULED: edit again or use original wording (a null correction); neither operation changes the recording or the retained machine transcript",
   retryAttachmentTranscript: "RULED: resumes analysis of an existing recording without creating authored content; corrections stay authoritative and the recording remains removable",
   retryAttachmentAnalysis: "RULED: retries only failed attachment analysis, preserves the original, and never duplicates the capture; the original remains removable",
-  startReviewSession: "RULED: creates only private review metadata; closing preserves it, finishing ends it, and account erasure removes it without changing inspirations",
-  chooseReviewInspiration: "RULED: a choice is its own inverse — Reconsider last choice sends null to the same versioned item; skip never deletes or records disagreement",
-  finishReviewSession: "RULED: ends the session while preserving its record; a new review may revisit the same sources, and no source or principle is changed",
-  advanceReviewSession: "RULED: saves only private review progress and opens the next original; all inspirations and prior sessions remain, the person can close or revisit them, and no belief or model work is created",
-  requestReviewQuestion: "RULED: requests a metered question, not authored content; leaving preserves the review and does not require an answer",
-  saveReviewAnswer: "removeReviewAnswer",
-  removeReviewAnswer: "RULED: explicitly removes this authored answer after confirmation; the original inspirations remain and deletion receipts prevent retry resurrection",
-  editReviewAnswer: "RULED: an edit is its own inverse — saved thoughts remain editable with revision checks",
+  /* EIGHT REVIEW VERBS, ALL GONE IN THE SAME COMMIT (2026-10-10):
+     `startReviewSession`, `advanceReviewSession`, `chooseReviewInspiration`,
+     `finishReviewSession`, `requestReviewQuestion`, `saveReviewAnswer`,
+     `editReviewAnswer`, `removeReviewAnswer`, and `retryReviewProcessing`
+     above them. Eight doors into the fourth product — 84 of the app's 847
+     user-facing strings — which the founder's workflow design collapsed into
+     one text field behind "not quite".
+     Worth keeping from their rulings, because it is the argument that
+     survives them: a review session created only PRIVATE metadata and
+     deleting one never touched an inspiration. That is still true of what
+     replaced them. A correction rides `createFeedback`, whose own entry says
+     a verdict is answered by giving a different one — and the saves the
+     claim was read from are not touched by any of it. */
 
   // what the machine concluded, and what you may say back
   updateSignal: "releaseSignal",
@@ -151,13 +169,48 @@ const REGISTER: Record<string, string> = {
   reorderPrinciples: "RULED: an ordering is its own inverse — move it back",
 
   // rooms
-  createGroup: "deleteGroup",
+  /* `createGroup` IS GONE, AND SO IS THE SHEET THAT WAS ITS ONLY CALLER.
+     Founder: "get rid of the rooms and agent related stuff for now."
+
+     This entry is the reason that deletion had to be one commit rather than
+     two. The pair read as satisfied — create a room, delete a room — but the
+     create half was reachable only from a form NOTHING OPENED, so the
+     register was describing a verb the product does not offer and passing
+     because unreachable code referenced it. That is the exact shape this
+     gate exists to catch, and it was hiding inside the gate.
+
+     `deleteGroup` survives and is reachable from a room's own settings. Its
+     way back is not a verb: a room is joined, never made, and the link that
+     joins it still works. */
+  deleteGroup:
+    "RULED: a room is joined, never made — the way back into one you left is " +
+    "the invite link that put you in it, which `?join=<code>` still honours. " +
+    "There is no `createGroup` to pair with: it went with the sheet nobody " +
+    "could open.",
+  // TALKING, AFTER THE SURFACE WAS CUT BACK (2026-10-10). Founder: "So the
+  // talk with Waka experience is the most confusing chat experience ever with
+  // so many different buttons that I have no idea what its supposed to do."
+  // Three wrappers went with the controls that called them, so three entries
+  // changed shape here. This gate is why they could not go quietly: a
+  // register naming a partner nobody wires is the F6 shape all over again.
+  /* ERASING ONE IS BACK, AND IT IS BACK WHERE THE NOTE SAID TO PUT IT.
+     `deleteConversation` was removed with the `···` menu inside the
+     conversation you were reading — the only thing calling it, and a place
+     where "delete" sat one slip from "send". Its tombstone said it belonged
+     beside the row in the LIST of conversations, and that list now exists:
+     `components/ConversationsOverlay`, one of the three things the left
+     corner opens over the world. So the pair is whole again rather than
+     RULED, which is the outcome this gate was holding the question open
+     for. */
   createConversation: "deleteConversation",
-  requestConversationReply: "stopConversationReply",
-  stopConversationReply: "requestConversationReply",
-  deleteConversation: "RULED: confirmed erasure removes message content; a new conversation is the next entry, not restoration",
+  deleteConversation: "createConversation",
+  stopConversationReply:
+    "RULED: stopping is itself the way back from a reply being written. Its old " +
+    "partner `requestConversationReply` re-ran the generator behind three " +
+    "buttons — Retry reply, Get a reply, Check reply — and a reply is now " +
+    "requested once, by sending the message. Asking again is saying something " +
+    "again, which is the composer, not a verb of its own.",
   saveConversationMessage: "RULED: authored conversation messages are immutable; confirm deletion of the conversation to erase them, never automatically create a belief",
-  deleteGroup: "createGroup",
   joinGroup: "leaveGroup",
   leaveGroup: "joinGroup",
   removeGroupMember: "joinGroup",

@@ -41,6 +41,8 @@ import { createWeatherMarkdownRoute, createWeatherRoute } from "./routes/weather
 import { sessionsRoutes } from "./routes/sessions.js";
 import { publicProfileRoutes } from "./routes/public-profiles.js";
 import { signalsRoutes } from "./routes/signals.js";
+import { createClaimsRoutes } from "./routes/claims.js";
+import { createInspirationDaysRoutes } from "./routes/inspiration-days.js";
 import { topOfMindRoutes } from "./routes/top-of-mind.js";
 
 export const app = new Hono();
@@ -122,6 +124,10 @@ app.route("/api/attachments", attachmentsRoutes);
 app.route("/api/signals", signalsRoutes);
 app.route("/api/recall", createRecallRoutes());
 app.route("/api/signal-duplicates", createSignalDuplicatesRoutes());
+// The unanswered half of layer 2, at an address of its own — see routes/claims.ts.
+app.route("/api/claims", createClaimsRoutes());
+// How much was kept on each day — the calendar's one fact.
+app.route("/api/inspiration-days", createInspirationDaysRoutes());
 
 // Layer 3 — the one live artifact per profile, and its version chain.
 app.route("/api/top-of-mind", topOfMindRoutes);

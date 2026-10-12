@@ -65,6 +65,7 @@ import { fileURLToPath } from "node:url";
 
 import { type BrowserContext, type CDPSession, type Page } from "playwright";
 import { launchChromium } from "./browser";
+import { openTheNotepad, saveAnInspiration } from "./keep";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STYLES = resolve(HERE, "../../packages/web/src/styles");
 /** The sheets a rule can be attributed back to, in load order. */
@@ -514,15 +515,12 @@ async function surfaces(
     "the browser is the only thing that implements the cascade",
     "a rule can match and still lose every property it sets",
   ]) {
-    await page.locator(".jar-mouth-rest").first().click();
-    await page.waitForTimeout(700);
-    await page.fill('textarea[aria-label="Capture inspiration"]', text);
-    await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
+    await saveAnInspiration(page, text);
     await page.waitForTimeout(4_500);
   }
   await walkSurface(cdp, page, "the world", seen, ask);
 
-  await page.locator(".jar-mouth-rest").first().click();
+  await openTheNotepad(page);
   await page.waitForTimeout(1_000);
   await walkSurface(cdp, page, "the mouth open", seen, ask);
 

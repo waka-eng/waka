@@ -54,6 +54,7 @@
  */
 import { type BrowserContext, type Page, type Route } from "playwright";
 import { launchChromium } from "./browser";
+import { openTheNotepad, saveAnInspiration } from "./keep";
 /**
  * TWO EMPTIES, NOT ONE.
  *
@@ -274,12 +275,7 @@ async function keepOne(page: Page, base: string, text: string): Promise<void> {
     await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(6_000);
   }
-  await page.locator(".jar-mouth-rest").first().click({ timeout: 8_000 });
-  await page.waitForTimeout(800);
-  await page.fill('textarea[aria-label="Capture inspiration"]', text);
-  await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click({
-    timeout: 8_000,
-  });
+  await saveAnInspiration(page, text);
 }
 
 /**
@@ -330,7 +326,7 @@ const SURFACES: Surface[] = [
   {
     name: "the mouth, opened",
     open: async (page) => {
-      await page.locator(".jar-mouth-rest").first().click({ timeout: 8_000 });
+      await openTheNotepad(page);
       await page.waitForTimeout(1_000);
     },
   },

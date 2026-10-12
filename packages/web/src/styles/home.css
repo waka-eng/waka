@@ -55,8 +55,17 @@
      overshoot at either end of the descent */
   background: var(--jar-atmos);
   color: var(--jar-ink);
-  font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
-    "Segoe UI", Roboto, sans-serif;
+  /* THE PRODUCT'S FACE, NOT THE SYSTEM'S.
+     Founder: "can we make the font consistent across all the experience? I
+     don't know what the weird cursive thing is."
+
+     This was `Pretendard, -apple-system, …` — so the world, the biggest
+     surface in the product, defaulted to the system sans while the statement
+     above the creature was set in Jost. Anything here that did not name a
+     face explicitly inherited the wrong one, which is why "consistent" kept
+     being almost true. `--waka-face` keeps Pretendard as its second step, so
+     Korean still resolves to the face that was actually chosen for it. */
+  font-family: var(--waka-face);
   font-weight: 400;
   touch-action: none;
   user-select: none;
@@ -77,13 +86,46 @@
    hue that encodes a theme, a kind or a category anywhere on this page, and
    there must never be one again. */
 .jar {
-  --jar-deep: #06080d;
-  --jar-atmos: #06080d;
+  /**
+   * PRE-COMPENSATED FOR THE FILM ON TOP OF IT.
+   *
+   * The grain blends normally now, so it lifts whatever is under it by
+   * opacity x (128 - ground) — about 4 LSB. These two are the values that
+   * composite back to the ground this world is actually meant to be:
+   * 0.965 x #020409 + 0.035 x mid-grey = #06080d, and likewise for the sky.
+   *
+   * Only the world's own ground moves. `--moon-ground` is the page ground for
+   * surfaces that carry no film — the archive, the principles, a conversation
+   * — and compensating those would make them four points too dark.
+   */
+  /* ═══ THE GROUND IS A NIGHT, NOT AN ABSENCE ═════════════════════════
+     Founder, linking auwa.life: "this is the vibe I want." Measured, that
+     site's body is `rgb(15, 22, 35)` — a dark blue SLATE. It never reaches
+     black anywhere, and that is most of why it reads as a lit room at dusk
+     rather than as a screen that is off.
+
+     `#020409` and `#06080d` are, to an eye, black. Nothing can be dimmer
+     than them, so the vignette had no room to fall off into and the lamp
+     had almost nothing to lift; every soft effect in this product was
+     being spent climbing out of a hole. Lifted and turned blue, the same
+     effects have somewhere to go.
+
+     MEASURED, because the ink above sits on this: at `#0d131f` the ink
+     reads 15.81:1, muted 10.34:1 and faint 6.60:1 — every tier still far
+     over `contrast.test.ts`'s 4.5 floor, and the ratios the palette note
+     in `chrome.css` reasons about are unchanged in kind.
+
+     THE CANVAS COMES WITH IT. `buildPalette` reads these same properties
+     off the root, so the world's ground and the pages' ground are one
+     value and cannot drift — which is the whole reason they are declared
+     here rather than in each surface. */
+  --jar-deep: #05080f;
+  --jar-atmos: #0a0e18;
   /* the sky: the same ground, a few percent thinner */
-  --jar-sky: #0a0d14;
+  --jar-sky: #060910;
   --jar-ink: #e8edf4;
-  --jar-muted: rgba(232, 237, 244, 0.55);
-  --jar-faint: rgba(232, 237, 244, 0.3);
+  --jar-muted: rgba(242, 236, 225, 0.55);
+  --jar-faint: rgba(242, 236, 225, 0.3);
   /* the soft pills: the back link and "return to now" */
   --jar-card: rgba(255, 255, 255, 0.06);
   --jar-card-hover: rgba(255, 255, 255, 0.12);
@@ -96,8 +138,11 @@
      the poster's huge letters to ghost through a card someone is trying to
      read. A surface for reading is paper, not glass. */
   --jar-panel: rgb(11, 14, 20);
-  --jar-panel-edge: rgba(255, 255, 255, 0.08);
-  --jar-scroll: rgba(232, 237, 244, 0.16);
+  /* Warm, for the reason `--moon-edge` is: a hairline is the thinnest thing
+     on the screen and therefore the easiest place for a second light
+     temperature to hide. */
+  --jar-panel-edge: color-mix(in srgb, var(--jar-live) 8%, transparent);
+  --jar-scroll: rgba(242, 236, 225, 0.16);
   --jar-row: rgba(255, 255, 255, 0.045);
   --jar-row-hover: rgba(255, 255, 255, 0.1);
 
@@ -167,10 +212,8 @@
 .jar-account,
 .jar-here-row,
 .jar-dial-stop {
-  --t-label-size: var(--t-fine);
+  --t-label-size: var(--t-meta);
 }
-.jar-mouth-where,
-.jar-mouth-step,
 .jar-panel-vis,
 .jar-grounds,
 .jar-capture-shortcut {
@@ -178,7 +221,7 @@
 }
 .jar-mouth-rest,
 .jar-mouth-field {
-  --t-label-size: var(--t-note);
+  --t-label-size: var(--t-ui);
 }
 
 /* ---------- the volume: a quiet gradient the camera descends through ---------- */
@@ -202,6 +245,56 @@
   );
 }
 
+/**
+ * WHAT STEPS BACK WHEN AN ARCHIVE IS OPEN, AND WHAT DOES NOT.
+ *
+ * Named one by one rather than swept with `[data-jar-chrome]`, because the
+ * overlays carry that attribute too and a blanket rule would hide the thing
+ * being opened.
+ *
+ * THE CREATURE STAYS. It is not chrome, it is the place — and seeing it
+ * dimmed behind your own words is the entire reason the panel was dissolved.
+ * What goes is the furniture: the box you type into, the creature's voice,
+ * and the line reporting what the server is doing. None of them has anything
+ * to say while somebody is reading what they kept, and all three were being
+ * drawn straight through the sentences.
+ *
+ * Opacity rather than `display`, so nothing reflows underneath and the world
+ * is in exactly the same place when the archive closes.
+ */
+/* ═══ WHAT STEPS ASIDE IS THE WORLD'S CONTENT, NOT A LIST OF ITS PARTS ═══
+ *
+ * This named four classes — the mouth's slot, the companion's line, the
+ * source status and the bubble — which was a list of the things anybody had
+ * noticed showing through, and it held only while the pages painted an
+ * opaque ground over everything else.
+ *
+ * They do not any more. Founder: "I want the background for now to be the
+ * same background for inspiration, chat and principles... with the floating
+ * dots and stuff. Why does it have to be different?" So a destination and
+ * the notepad show the world's real ground — and the moment they did, every
+ * part of the world NOT on that list of four came through with it: two
+ * posters and a forming line, printed across a blank page somebody was
+ * writing on.
+ *
+ * The fix is to stop listing parts. The world has exactly two layers that
+ * carry CONTENT — `.jar-atmos`, which scrolls the posters, the field and the
+ * sky, and `.jar-hq`, which holds the companion's bubble and its claim — plus
+ * the mouth, which is the home screen's own box. Those three step aside. What
+ * is left is `.jar-canvas` and `.jar-grain`: the ground, the vignette and the
+ * dust, which are the whole reason a page stands on the world instead of
+ * painting over it.
+ *
+ * Child selectors on purpose. `.waka-page` is itself a child of `.jar`, so a
+ * wholesale `.jar--aside > *` would fade the page along with the world. */
+.jar--aside > .jar-atmos,
+.jar--aside > .jar-hq,
+.jar--aside > .jar-mouth {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
 /* ---------- section A: headquarters, rides the camera at 1x ---------- */
 .jar-hq {
   position: absolute;
@@ -215,6 +308,72 @@
 .jar-hq-inner {
   max-width: 680px;
   margin: 0 auto;
+  /**
+   * ═══ A FIXED BAND, AND THE STATEMENT STANDS AT ITS FOOT ═══════════════
+   *
+   * This was `min-height: calc(var(--t-reading) * 1.25 * 3)` — a floor that
+   * held three lines of reading type open whether or not there was a reading,
+   * installed so that the creature below would not move. The founder's rule
+   * it served is quoted in `Home.tsx` at the layout pass and is unchanged.
+   *
+   * WHAT CHANGED IS THAT NOTHING MEASURES THIS BLOCK ANY MORE. `companion.y`
+   * read `hqH` — this element's LIVE height — so the creature drifted up to
+   * 75px with the length of the statement, and the floor was a patch over
+   * that rather than a design. The position is now a function of the window
+   * alone, so the floor has no job and a blank reserve is the one thing every
+   * design system refuses: Carbon's rule is "empty states should REPLACE the
+   * element that would ordinarily show", and the layout-shift literature that
+   * justifies reserving space scopes it to "a network request that may take a
+   * while to complete" — milliseconds, not the ten days it takes a signal to
+   * reach three pieces of evidence.
+   *
+   * A FIXED BAND INSTEAD OF A FLOOR, AND THE CONTENT SITS AT THE BOTTOM OF
+   * IT. `justify-content: flex-end` is the whole trick, and it is Google's:
+   * a short statement leaves its air ABOVE itself, against the top edge,
+   * where air reads as margin; a long one grows UPWARD into that same air
+   * instead of downward into the creature. Either way the foot of the block
+   * is in the same place, which is what the creature's `Y_MIN` is measured
+   * against, and the statement and its verbs cluster just above the body
+   * rather than floating at the top of a tall void.
+   *
+   * `300px` IS `POSTER_SLOT` IN `Home.tsx` AND THE TWO MUST MATCH. It is the
+   * band's WHOLE height, the top padding included — that padding is what
+   * clears the switcher, and the creature's floor is measured from the foot
+   * of this band, so counting the bar separately would push it down by 56px
+   * of nothing. Inside: three lines of `--t-reading` at its desktop ceiling,
+   * the provenance band, and the verbs.
+   *
+   * MEASURED, not chosen. The founder's own statement — "You want the first
+   * move made for you — in tools, and possibly in more than tools." — needs
+   * 260px at 1512 and 275px at 390, where the type is smaller but the column
+   * is far narrower. 300 clears both with room. A genuinely long reading
+   * still overflows and still SCROLLS, which is reachable now and was not
+   * before: see the auto-margin note above. `overflow-y: auto` rather than a clip, because WCAG 1.4.10
+   * sets a 256px height floor for reflow and a hard-capped band with no
+   * scroll fails it at 400% zoom.
+   */
+  /* The band comes down with the creature so the group stays a group — see
+     `--jar-band-top` in the layout pass. Zero on short windows, where the
+     band already sits where it should. */
+  margin-block-start: var(--jar-band-top, 0px);
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+  /* AN AUTO MARGIN, NOT `justify-content: flex-end` — and this product has
+     paid for the difference once already. `justify-content` moves content off
+     the scroll container's ORIGIN rather than extending its scrollable area,
+     so overflow in the block-START direction is unreachable AND the scroller
+     reports no overflow at all. Measured here with a five-line statement
+     before this line was written: `scrollHeight === clientHeight` at every
+     width, with the top of the sentence silently gone. `chat.css` carries the
+     same note and the same fix, from the night a conversation's first
+     paragraph was found to be missing rather than clipped.
+
+     On the first child, because the band holds the statement, its provenance
+     and its verbs — the margin pushes the whole stack to the foot and yields
+     the moment the stack is taller than the band. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   /* THE COLUMN IS A CONTAINER, SO THE CLAIM CAN BE SET AGAINST IT. See
      `.jar-poster`'s size for why. Inline-size only: the column's width comes
      from the layer above it, never from its contents, so containing that axis
@@ -232,7 +391,66 @@
      every other signpost is given. 10.6vh reaches the full 72 at a 679px
      viewport — the same 680 the column caps at and the same 680 the claim's
      own height cap lands on, so all three stop growing together. */
-  padding: calc(clamp(48px, 10.6vh, 72px) + env(safe-area-inset-top)) 20px 0;
+  /* AND NOW THE FLOOR IS THE BAR, NOT A MEASURED GUESS.
+     The signposts that 48 was measured against are gone; what stands at the
+     top of the screen is the switcher, and the sentence has to clear THAT.
+     The bar is a 44px target with 12px of inset above it, so 64 is the
+     nearest step on the grid that clears it and still leaves the sentence
+     reading as the thing the switcher names. The ceiling and the curve are
+     untouched: the air above the claim is still the first thing to give way
+     on a short window, because it is still the only thing here that costs
+     nothing to lose. */
+  padding: calc(clamp(64px, 10.6vh, 72px) + env(safe-area-inset-top)) 20px 0;
+  /**
+   * CENTRED, BECAUSE ITS LABEL IS.
+   *
+   * Founder: "if we move the text like top of mind to the center, then the
+   * text below it should also be pretty close proximity to it in the center.
+   * So it's clear that this is the top of mind."
+   *
+   * That is proximity doing the work a repeated word used to do. The name
+   * moved to the middle of the top of the screen; a sentence still ranged
+   * left under a centred label reads as two unrelated things, and the only
+   * way to tie them back together would be to print the name again. Centre
+   * it and the grouping is free.
+   */
+  text-align: center;
+}
+
+/**
+ * THE BAND YIELDS WHILE THE CREATURE IS ASKING.
+ *
+ * See the note in `pages/Home.tsx` where this class is applied: six products
+ * torn down end to end, and every one puts exactly ONE derived object on its
+ * home screen. Your top of mind and WAKA's question are both sentences about
+ * you, in the same register — so they take turns instead of stacking.
+ *
+ * COLLAPSED, NOT HIDDEN. `visibility: hidden` or an opacity would leave a
+ * 190px hole where the statement was, which is the exact failure this pass
+ * exists to remove: a reserved blank slot has the cost of reserved space and
+ * the cost of adaptive layout and the benefit of neither. Carbon's rule is
+ * that an empty state REPLACES the element that would ordinarily show — and
+ * here the replacement is nothing, because the creature below is already
+ * saying the one thing this screen has to say.
+ *
+ * NOTHING MOVES WHEN IT COLLAPSES. `companion.y` stopped reading this block's
+ * height in the same commit; that is the only reason this rule can exist.
+ *
+ * DECLARED AFTER THE BASE RULE, not before it. A modifier written above the
+ * thing it modifies loses to it at equal specificity — which is how three
+ * pills and two lines ended up ragged left under a centred sentence last
+ * night. A modifier declared before the thing it modifies is not a modifier.
+ */
+/* The foot-anchor itself. See the note in `.jar-hq-inner` for why this is a
+   margin and not `justify-content`. */
+.jar-hq-inner > :first-child {
+  margin-block-start: auto;
+}
+
+.jar-hq-inner--yielded {
+  height: 0;
+  padding-block: 0;
+  overflow: hidden;
 }
 /* ═══ THE LAYER TAKES NO POINTER; ITS CONTROLS TAKE IT BACK, ALL OF THEM ═══
    `.jar-hq` is `pointer-events: none` so the world underneath stays draggable
@@ -279,35 +497,39 @@
    sentence just carries a little light while the hand is on it, which is the
    same physics as every other lit thing in this world. */
 .jar-poster[role="button"] {
+  /* `.jar-hq` is `pointer-events: none` so the world stays draggable through
+     it, and the property INHERITS — every control inside has to opt back in.
+     This one never did. It carried a pointer cursor and an `aria-expanded`
+     and could not be clicked at all, so "the sentence itself is the control"
+     (founder, 2026-08-24) was true of the markup and false on the screen, and
+     what the reading rests on has been unreachable by pointer ever since. */
+  pointer-events: auto;
   cursor: pointer;
   transition: text-shadow 0.2s ease;
 }
-.jar-reading-heading { display:flex; align-items:baseline; flex-wrap:wrap; gap:var(--sp-12); margin:0 0 var(--sp-8); color:var(--w-muted); font-size:var(--t-note); line-height:1.5; }
-.jar-reading-heading time { font-size:var(--t-label); }
-.jar-reading-actions { display:flex; flex-wrap:wrap; gap:var(--sp-4) var(--sp-12); margin-top:var(--sp-8); pointer-events:auto; }
+.jar-reading-heading { display:flex; align-items:baseline; flex-wrap:wrap; justify-content:center; gap:var(--sp-12); margin:0 0 var(--sp-8); color:var(--w-muted); font-size:var(--t-ui); line-height:1.5; }
+.jar-reading-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:var(--sp-4) var(--sp-12); margin-top:var(--sp-8); pointer-events:auto; }
 .jar-reading-actions button { min-height:var(--sp-44); padding:var(--sp-8) 0; border:0; background:none; color:var(--w-muted); font:inherit; font-size:var(--t-body); text-align:left; cursor:pointer; }
 .jar-forming.jar-forming--personal { font-size:var(--t-body); font-style:normal; color:var(--w-muted); line-height:1.6; }
-.jar-first-capture-hint { margin:var(--sp-8) 0; color:var(--w-muted); font-size:var(--t-note); line-height:1.6; }
-.jar-personal-navigation { position:absolute; z-index:6; bottom:calc(var(--sp-12) + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:grid; grid-template-columns:repeat(4,auto); gap:var(--sp-4); width:min(520px,calc(100vw - var(--sp-16))); padding:var(--sp-4); border-radius:var(--sp-16); background:color-mix(in srgb,var(--jar-atmos) 90%,transparent); pointer-events:auto; }
-.jar-personal-navigation[hidden] { display:none; }
-.jar-personal-navigation button { min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8) var(--sp-4); border:0; border-radius:var(--sp-8); background:none; color:var(--w-muted); font:inherit; font-size:var(--t-note); white-space:nowrap; cursor:pointer; }
-.jar-personal-navigation button[aria-current="page"],.jar-personal-navigation button:hover,.jar-personal-navigation button:focus-visible { color:var(--w-ink); background:color-mix(in srgb,var(--w-ink) 8%,transparent); }
-.jar-personal-navigation button:focus-visible { text-decoration:underline; text-underline-offset:var(--sp-4); }
-.jar-personal-navigation button:disabled { opacity:.5; cursor:progress; }
-.jar-navigation-status { grid-column:1 / -1; margin:0; padding:0 var(--sp-8); color:var(--w-muted); font-size:var(--t-note); line-height:1.5; text-align:center; }
-.jar-home-narration { margin:var(--sp-8) 0; color:var(--w-muted); font-size:var(--t-note); line-height:1.5; }
-.jar-capture-receipt { pointer-events:auto; display:flex; align-items:center; justify-content:center; gap:var(--sp-12); margin-top:var(--sp-8); color:var(--w-muted); font-size:var(--t-note); }
+.jar-first-capture-hint { margin:var(--sp-8) 0; color:var(--w-muted); font-size:var(--t-ui); line-height:1.6; }
+
+
+
+
+
+
+.jar-capture-receipt { pointer-events:auto; display:flex; align-items:center; justify-content:center; gap:var(--sp-12); margin-top:var(--sp-8); color:var(--w-muted); font-size:var(--t-ui); }
 .jar-capture-receipt button { min-height:var(--sp-44); padding:var(--sp-8); border:0; background:none; color:var(--w-ink); font:inherit; cursor:pointer; }
 .jar-capture-receipt button:hover,.jar-capture-receipt button:focus-visible { text-decoration:underline; text-underline-offset:var(--sp-4); }
 .jar-reading-actions button:hover,.jar-reading-actions button:focus-visible { color:var(--jar-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
 .jar-poster[role="button"]:hover,
 .jar-poster[role="button"]:focus-visible {
-  text-shadow: 0 0 22px rgba(232, 237, 244, 0.32);
+  text-shadow: 0 0 22px rgba(242, 236, 225, 0.32);
 }
 
 .jar-poster {
   margin: 0;
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   /* 300, never heavier: in a geometric the elegance is in the thin even stroke
      and the air around it, and weight is what killed the last attempt. */
   font-weight: 300;
@@ -398,10 +620,25 @@
   animation: none;
 }
 /* forming state speaks in the whisper register, never the poster */
+/**
+ * WHAT A WALL SAYS BEFORE IT HAS ANYTHING TO SAY.
+ *
+ * It stood in the poster's place in an italic SERIF, because it set no face
+ * and inherited the world's. That is the "weird cursive thing" the founder
+ * named when every other surface was moved onto one face, and it survived
+ * the sweep by being an empty state nobody was looking at — it only shows on
+ * a wall with nothing on it yet.
+ *
+ * Same face as the sentence it is standing in for, and upright. An italic
+ * here reads as a caption apologising for the missing thing; this is just
+ * the true thing a new wall has to say.
+ */
 .jar-forming {
   margin: 0;
-  font-size: var(--t-note);
-  font-style: italic;
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  font-weight: 300;
+  font-style: normal;
   color: var(--jar-muted);
 }
 .jar-forming--attention {
@@ -422,7 +659,7 @@
   border: 0;
   background: none;
   font: inherit;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   color: var(--jar-ink);
   text-decoration: underline;
   text-underline-offset: 4px;
@@ -432,44 +669,15 @@
 .jar-room-shape:hover,
 .jar-room-shape:focus-visible { text-shadow: 0 0 12px var(--jar-ink); }
 
-/* ---------- the forming line ----------
-   The ONLY thing under the ambition. The adopted ambition and the candidates
-   that might replace it are separate entities, so the candidates are not
-   shown here as peers — this line reports that they exist, in words, and is
-   underlined because underline is the page's single interactivity signal. */
-.jar-forming-line {
-  display: inline-block;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  margin: var(--sp-20) 0 0;
-  padding: 0;
-  background: none;
-  /* font-family only: the .jar-label register supplies the rest, and this
-     rule must not out-cascade it */
-  font-family: inherit;
-  pointer-events: auto;
-  cursor: pointer;
-  animation: jar-arrive 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-  transition: color 0.2s ease;
-}
-.jar-forming-line:hover {
-  color: var(--jar-ink);
-}
-
-/* THE SECOND QUIET LINE NEEDS ITS OWN ROW.
-   `.jar-forming-line` is `inline-block` because for most of its life there
-   was only ever one of them. A second sibling therefore set flush against
-   the first and rendered as `TWO PATTERNS ARE FORMINGHOW YOU CHOOSE` — two
-   separate ways in, read as one broken word.
-   It takes a row of its own rather than a separator: these are two different
-   layers (the sky above, and how you choose where you stand), and a middot
-   between them would imply they are the same kind of thing. The smaller top
-   margin keeps them a pair. */
-.jar-forming-line--choose {
-  display: block;
-  margin-top: var(--sp-8);
-}
+/* ---------- the forming line IS GONE ----------
+   Three rules and two paragraphs of argument about a control nothing renders.
+   The line reported that candidate ambitions existed; `Home.tsx` builds its
+   quiet line as `.jar-forming` with `--attention` and `--personal`
+   modifiers now, and `-line` is a name no element has carried since. Worth
+   naming what the argument was, because the next person to add a second
+   quiet line under the ambition will meet it again: two of them side by side
+   read as one broken word, they want a row each rather than a separator, and
+   a middot between them would claim they are the same kind of thing. */
 
 
 /* THE COMPANION'S WHISPER LINE IS GONE. It was a row of its own under the
@@ -520,7 +728,29 @@
 /* Offered only after "not true" — a sequence, never a menu, so the
    destructive answer is never sitting beside the harmless ones. */
 .jar-ask--after { margin-top: var(--sp-6); opacity: 1; }
-.jar-ask button:disabled { opacity: 0.45; cursor: default; }
+/* DISABLED DIMS THE AFFORDANCE, NEVER THE WORDS.
+   `opacity: 0.45` was the bug, and it is a bug this product has shipped
+   before and been shown by the founder, who pointed at a disabled control and
+   saw a blank rectangle. Opacity fades EVERYTHING, and these buttons are
+   transparent with `color: inherit` — so the only thing it had to fade was
+   the label, against a near-black ground. The word became unreadable at the
+   exact moment a person most needed to read it: when they had just pressed
+   something and nothing happened.
+   So the label holds at a legible muted ink and the cursor carries the state
+   instead. On a FILLED control the same rule says dim the fill and leave the
+   label alone — never the reverse.
+
+   `--jar-muted`, AND THE NUMBER IS WHY. Measured against `--jar-deep`:
+   `--jar-ink` 17.4:1, `--jar-muted` 5.5:1, `--jar-faint` 2.3:1. Faint was the
+   obvious reach for "disabled" and it is the bug wearing a token — 2.3:1 is
+   not dimmer text, it is text you cannot read. Muted clears 4.5:1 and still
+   reads as unavailable beside its enabled neighbour, because on this ground
+   the difference between 17 and 5 is plainly visible. The ratio is the test;
+   "looks disabled" is not. */
+.jar-ask button:disabled {
+  color: var(--jar-muted);
+  cursor: default;
+}
 
 /* WHAT YOU SAID, WORN BY THE STATEMENT.
    Agreed: unchanged, full weight. Half-agreed: lighter, the claim loosened.
@@ -549,6 +779,16 @@
 
    They rest quiet and brighten under the pointer, like every other word in
    this layout. */
+/* `.jar-poster-invite`, `.jar-poster-ask`, `.jar-poster-answers` and
+   `.jar-board-acts--answers` were here and went with the question they
+   dressed — see the block in `pages/Home.tsx`. They also carried a real
+   bug worth naming so it is not repeated: `--answers` was written ABOVE
+   `.jar-board-acts` at equal specificity, so the base rule's
+   `align-items: baseline` won and, in a column flex, laid the whole block
+   out like `flex-start`. The founder saw three pills and two lines ragged
+   left under a centred sentence. A modifier declared before the thing it
+   modifies is not a modifier. */
+
 .jar-board-acts {
   display: flex;
   flex-wrap: wrap;
@@ -568,6 +808,26 @@
 .jar-hq:focus-within .jar-board-acts {
   opacity: 1;
 }
+/**
+ * THE BOARD'S VERBS LEAVE THE EYEBROW REGISTER.
+ *
+ * Founder, on a screenshot of this row: "this is so ugly."
+ *
+ * They were `jar-board-act jar-label` — four pressables set in the uppercase,
+ * letterspaced register, in a row, directly under a quiet sentence. Four
+ * shouted words under one spoken one, which is the whole of the ugliness: not
+ * the colours and not the spacing, but a voice that did not belong to them.
+ *
+ * `system.css` already states the rule they were breaking, and even carries a
+ * precedent for the exception: the register "belongs to eyebrows, never to
+ * things you press", with `.profile-signout-button` deliberately kept out of
+ * the list for exactly this reason. These are things you press.
+ *
+ * So: sentence case at the fine step, quiet at rest and inked on approach,
+ * which is how every other secondary act in this product now reads. Light is
+ * the only meaning channel, and it does the work here without raising its
+ * voice.
+ */
 .jar-board-act {
   appearance: none;
   -webkit-appearance: none;
@@ -575,7 +835,10 @@
   margin: 0;
   padding: 0;
   background: none;
-  font-family: inherit;
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  letter-spacing: normal;
+  text-transform: none;
   color: var(--jar-muted);
   cursor: pointer;
   text-decoration: none;
@@ -595,7 +858,7 @@
   gap: var(--sp-12);
 }
 .jar-reading-status .jar-board-act {
-  --t-label-size: var(--t-note);
+  --t-label-size: var(--t-ui);
   min-height: 44px;
   padding: var(--sp-8) 0;
   color: var(--jar-ink);
@@ -607,7 +870,7 @@
   gap: var(--sp-12);
   margin-top: var(--sp-16);
   color: var(--jar-ink);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
   pointer-events: auto;
 }
@@ -625,24 +888,37 @@
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+/* ONE CENTRED LINE, NOT THREE THINGS ACROSS 680px. This was a three-column
+   grid — mark, copy at `1fr`, action — so the copy took every spare pixel and
+   shoved the little mark to the far left edge and "Details" to the far right,
+   with a void between each. Rendered under a centred statement and above a
+   centred creature it read as debris rather than as a line, which is Gestalt
+   proximity doing what it always does: things that far apart stop being one
+   thing. It hugs its own content now and centres with everything else in the
+   column. */
 .jar-source-status--quiet {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
   gap: var(--sp-8);
   margin-top: var(--sp-8);
   color: var(--w-muted);
 }
 .jar-source-copy { display: grid; gap: var(--sp-4); padding-top: 2px; }
-.jar-reading-help { margin-top: var(--sp-8); color: var(--w-muted); font-size: var(--t-note); line-height: 1.5; pointer-events: auto; touch-action: pan-y; }
-.jar-reading-help > summary { box-sizing: border-box; width: fit-content; min-height: 44px; padding: var(--sp-12) 0; cursor: pointer; }
-.jar-reading-help > summary:hover, .jar-reading-help > summary:focus-visible { color: var(--w-ink); text-decoration: underline; text-underline-offset: var(--sp-4); }
-.jar-reading-help-body { border-left: 1px solid var(--jar-panel-edge); padding-left: var(--sp-12); color: var(--w-ink); user-select: text; }
-.jar-reading-help-body section { margin-bottom: var(--sp-12); }
-.jar-reading-help-body h3 { margin: 0 0 var(--sp-4); font: inherit; font-weight: 600; }
-.jar-reading-help-body p { margin: 0; }
-.jar-reading-help-body .jar-reading-help-note { margin-top: var(--sp-16); color: var(--w-muted); }
-.jar-source-hint { font-size: var(--t-note); line-height: 1.5; }
+/* THE READING'S HELP DISCLOSURE IS GONE, and so are its seven rules. It was
+   a <details> under the reading holding sections, headings and a footnote —
+   founder, on exactly this shape: "also remove how this forms and why this
+   reading". What it explained is a hover card on the settings page now
+   (#36), which is the difference between an explanation you can open and a
+   specification printed under the thing you came to read. */
+.jar-source-hint { font-size: var(--t-ui); line-height: 1.5; }
+/* The mark sits with the words rather than in a column of its own. */
+.jar-source-status--quiet .jar-source-copy {
+  flex: 0 1 auto;
+  text-align: center;
+}
+
 .jar-source-mark { color: var(--jar-ink); margin-top: 2px; }
 .jar-source-mark circle { opacity: .55; }
 .jar-source-mark[data-processing] circle { animation: jar-source-glow 3s ease-in-out infinite; }
@@ -654,7 +930,7 @@
 }
 .jar-source-previous {
   margin: var(--sp-16) 0;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
   color: var(--jar-ink);
 }
@@ -662,54 +938,44 @@
 /* Throwing out the sentence you are standing on is one step quieter than
    keeping it, and it never wears a colour — this world spends temperature on
    aliveness alone. */
-.jar-board-act--quiet { opacity: 0.45; }
-.jar-board-act--quiet:hover { opacity: 0.85; }
+
+
 /* Held is a state, not an action: it does not offer to undo itself. */
-.jar-board-act--held { cursor: default; opacity: 0.5; }
+
 /* What a rewrite will do, said before it does it. */
+/* NO ITALIC, HERE OR ANYWHERE. Founder: "can we make the font consistent
+   across all the experience? I don't know what the weird cursive thing is."
+   That was this — five separate rules set small text in italic Jost, which at
+   `--t-ui` and below does not read as emphasis, it reads as a second
+   typeface. `claims.css` states the rule in its first paragraph: hierarchy
+   comes from SIZE and WEIGHT, never from a change of face. These five were
+   written before that sentence existed and were never swept with it. */
 .jar-board-warn {
   flex-basis: 100%;
   color: var(--jar-muted);
-  font-style: italic;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
 }
 
 
 /* ---------- rooms ----------
-   Saying a statement out loud, and the rooms it is out loud in. Rows, not
-   chips: a room has a name of arbitrary length and a chip would truncate it. */
-.jar-share {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-2);
-  margin-top: var(--sp-10);
-}
-.jar-share-row {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-10);
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  padding: var(--sp-4) 0;
-  background: none;
-  font: inherit;
-  font-size: var(--t-ui);
-  color: var(--jar-faint);
-  cursor: pointer;
-  text-align: left;
-  transition: color 0.2s ease;
-}
-.jar-share-row:hover { color: var(--jar-ink); }
+   `.jar-share` AND `.jar-share-row` WENT OUT HERE. They were the list of
+   rooms a statement is out loud in, as rows rather than chips because a room
+   has a name of arbitrary length. Founder: "We're going to get rid of the
+   rooms and agent related stuff for now" — the list went, the rules did not.
+   `.jar-share-hint` below is NOT part of that: `SpaceSettings.tsx` still
+   wears it, and the other `.jar-share-*` names belong to the principle-share
+   sheet in `chrome.css`, which is a different component with a shared stem. */
 /* out loud: the statement is on that wall, and the row wears the page's one
    light rather than a tick or a colour */
 .jar-share-hint { font-size: var(--t-meta); opacity: 0.55; }
 .jar-share-note {
   margin: var(--sp-8) 0 0;
-  font-size: var(--t-fine);
-  font-style: italic;
-  color: var(--jar-faint);
+  font-size: var(--t-meta);
+  /* READABLE, NOT DECORATIVE. `--jar-faint` measures 2.3:1 on this ground —
+     not dimmer prose, prose you cannot read. `--jar-muted` is 5.5:1 and still
+     plainly quieter than the ink beside it. Same correction as the disabled
+     controls: the ratio is the test, not "looks secondary". */
+  color: var(--jar-muted);
   max-width: 34ch;
 }
 
@@ -844,7 +1110,6 @@
    wearing it inside a signpost silently overrode the sign's ink — which is
    exactly how the four drifted to three different tiers. The label register's
    TYPE is what these want from it; the colour comes from the sign. */
-.jar-values-words,
 .jar-saved-count {
   display: block;
   color: inherit;
@@ -871,7 +1136,7 @@
 }
 .jar-values-lead {
   margin: 0;
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: clamp(19px, 2vw, 25px);
   line-height: 1.34;
@@ -958,8 +1223,7 @@
   border-radius: 3px;
 }
 .jar-principles-list .jar-values-sub,
-.jar-principles-list .jar-ask,
-.jar-principles-list .jar-was-roots { text-align: left; }
+.jar-principles-list .jar-ask { text-align: left; }
 .jar-principles-list .jar-values-sub { margin-top: var(--sp-12); }
 .jar-principles-list summary { cursor: pointer; padding: var(--sp-6) 0; }
 .jar-principle-actions {
@@ -968,10 +1232,9 @@
   flex-wrap: wrap;
   gap: var(--sp-8) var(--sp-20);
 }
-.jar-principle-actions > button { min-height: 44px; font-size:var(--t-note); color:var(--jar-ink); }
-.jar-values .jar-values-words { font-size:var(--t-note); font-weight:400; letter-spacing:normal; text-transform:none; }
-.jar-values-count { display:grid; place-items:center; min-width:var(--sp-20); min-height:var(--sp-20); border-radius:var(--sp-12); background:color-mix(in srgb,var(--jar-ink) 8%,transparent); font-size:var(--t-fine); }
-.jar-board-acts button.jar-board-act { font-size:var(--t-note); letter-spacing:normal; text-transform:none; }
+.jar-principle-actions > button { min-height: 44px; font-size:var(--t-ui); color:var(--jar-ink); }
+
+.jar-board-acts button.jar-board-act { font-size:var(--t-ui); letter-spacing:normal; text-transform:none; }
 .jar-principle-secondary {
   display: flex;
   align-items: center;
@@ -1062,10 +1325,8 @@
 .jar-review-evidence { margin:var(--sp-12) 0; padding-left:var(--sp-12); border-left:1px solid var(--jar-faint); color:var(--jar-ink); overflow-wrap:anywhere; }
 .jar-review-evidence p,.jar-principle-reference .jar-review-evidence p { margin:0; font-size:var(--t-body); line-height:1.6; white-space:pre-wrap; }
 .jar-review-evidence footer { margin-top:var(--sp-6); color:var(--jar-muted); font-size:var(--t-label); }
-.jar-review-evidence a { display:inline-flex; align-items:center; min-height:var(--sp-44); color:var(--jar-ink); font-size:var(--t-note); text-underline-offset:var(--sp-4); }
-.jar-review-evidence a:focus-visible,.jar-review-thought:focus-visible { outline:2px solid var(--jar-ink); outline-offset:var(--sp-4); }
-.jar-principles-list details[open] p,
-.jar-principles-list .jar-was-root {
+.jar-review-evidence a { display:inline-flex; align-items:center; min-height:var(--sp-44); color:var(--jar-ink); font-size:var(--t-ui); text-underline-offset:var(--sp-4); }.jar-review-evidence a:focus-visible { outline:2px solid var(--jar-ink); outline-offset:var(--sp-4); }
+.jar-principles-list details[open] p {
   padding: var(--sp-8) 0 var(--sp-8) var(--sp-12);
   border-left: 1px solid var(--jar-faint);
   line-height: 1.5;
@@ -1090,7 +1351,7 @@
 .jar-principles-empty { max-width: 430px; margin: 0 auto; text-align: center; }
 .jar-principles-empty-lead {
   margin: 0 0 var(--sp-24);
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   font-size: clamp(20px, 2.1vw, 28px);
   font-weight: 300;
   line-height: 1.3;
@@ -1136,11 +1397,6 @@
   font-size: clamp(22px, 2.4vw, 29px);
   text-shadow: 0 0 14px var(--jar-scroll);
 }
-/* The roots under a value, standing in the sky: centered like everything
-   here, no ledger indent. */
-.jar-values-room .jar-was-roots {
-  margin: var(--sp-8) 0 0;
-}
 /* A value's state — aspirational, written by hand — is a whisper under the
    sentence, never a rival to it: the statement is the thing, the state is
    the smallest true note about it. The voice comes from the label register
@@ -1175,7 +1431,7 @@
   background: none;
   cursor: pointer;
   text-align: center;
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: clamp(19px, 2vw, 25px);
   line-height: 1.34;
@@ -1187,16 +1443,9 @@
   outline: none;
   text-shadow: 0 0 12px var(--jar-scroll);
 }
-/* THE SIGNPOST CARRIES THE SKY'S STATE: lit words mean the sky above holds
-   your values; dim means still forming. Same recipe as every answered
-   light in this world. */
-.jar-values--held .jar-values-words {
-  color: var(--jar-ink);
-  text-shadow: 0 0 12px var(--jar-scroll);
-}
 .jar-values-sub {
   margin: var(--sp-14) 0 0;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.66;
   text-wrap: pretty;
   color: var(--jar-muted);
@@ -1267,16 +1516,7 @@
   text-align: left;
 }
 /* which memory this is about, in one line and never the whole thing */
-.jar-reflect-on {
-  margin: 0 0 var(--sp-14);
-  font-size: var(--t-note);
-  line-height: 1.5;
-  color: var(--jar-muted);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
+
 .jar-reflect-room .jar-reflect-box {
   width: 100%;
 }
@@ -1287,40 +1527,9 @@
    they also grew a second question INTO the one row that answers "where am I".
    Here each has a name and a sentence, which is what a person actually needs
    to choose between them. */
-.jar-seek.jar-newplace {
-  width: min(440px, calc(100vw - 48px));
-}
-.jar-newplace-row {
-  display: block;
-  width: 100%;
-  margin: var(--sp-12) 0 0;
-  padding: 0 0 0 var(--sp-12);
-  border: 0;
-  border-left: 1px solid var(--jar-edge, var(--jar-panel-edge));
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.2s ease;
-}
-.jar-newplace-row:hover,
-.jar-newplace-row:focus-visible {
-  border-left-color: var(--jar-ink);
-  outline: none;
-}
-.jar-newplace-name {
-  display: block;
-  font-size: var(--t-body);
-  color: var(--jar-ink);
-}
-.jar-newplace-what {
-  display: block;
-  margin-top: 3px;
-  font-size: var(--t-ui);
-  line-height: 1.55;
-  color: var(--jar-muted);
-}
+
+
+
 /* the way to make one, at the foot of the list of the ones you have */
 /* ---------- how much is down there, and the way to it ----------
    The ground is a whole section below headquarters and nothing on the resting
@@ -1385,11 +1594,6 @@
 .jar-saved:focus-visible {
   color: var(--jar-ink);
 }
-.jar-saved--retry {
-  max-width: calc(100% - var(--sp-32));
-  white-space: normal;
-  text-align: center;
-}
 
 /* The capture act remains available when its place under the companion has
    scrolled away or gone quiet in the past. It opens the same mouth, not a
@@ -1412,9 +1616,6 @@
   white-space: nowrap;
   cursor: pointer;
   pointer-events: auto;
-}
-.jar-capture-shortcut--above-count {
-  bottom: calc(47px + env(safe-area-inset-bottom));
 }
 .jar-capture-shortcut:hover,
 .jar-capture-shortcut:focus-visible {
@@ -1479,6 +1680,8 @@
   width: min(420px, calc(100vw - 48px));
   pointer-events: auto;
 }
+
+
 .jar-seek .jar-ask { margin-top: var(--sp-8); }
 
 /* A scrollable surface ends the world's gesture chain, on touch as on wheel. */
@@ -1523,25 +1726,15 @@
 }
 .jar-proposal-body {
   margin: 0;
-  font-family: Jost, Pretendard, sans-serif;
+  font-family: var(--waka-face);
   font-weight: 300;
-  font-size: 17px;
+  font-size: var(--t-lead);
   line-height: 1.4;
   color: var(--jar-ink);
   text-wrap: balance;
 }
 .jar-proposal-who { margin: var(--sp-8) 0 0; }
 
-/* THE PRESS THAT MEANS "NOT THIS". Invisible, over everything, under the
-   dialog it dismisses — so anywhere that is not the dialog is a way out. It
-   draws nothing: the world behind it is already the answer to what you get
-   back if you leave. */
-.jar-newplace-away {
-  position: fixed;
-  inset: 0;
-  z-index: 5;
-  pointer-events: auto;
-}
 
 .jar-roomform {
   /* FIXED, NOT ABSOLUTE (founder, 2026-08-27: "why does it open so weirdly").
@@ -1594,14 +1787,14 @@
 }
 .jar-roomform .jar-room-primary {
   color: var(--jar-ink);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 .jar-roomform--group .jar-ask button {
   min-height: 32px;
   padding: 6px var(--sp-4);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
 }
 .jar-roomform .jar-room-primary:disabled {
   color: var(--jar-faint);
@@ -1656,19 +1849,10 @@
   color: var(--jar-muted);
   font-size: var(--t-ui);
 }
-.jar-roomform-tabs { display: flex; gap: var(--sp-18); margin-bottom: var(--sp-16); }
-.jar-roomform-tabs button {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  padding: 0;
-  background: none;
-  font: inherit;
-  color: var(--jar-faint);
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-.jar-roomform-tabs button.is-on { color: var(--jar-ink); }
+/* `.jar-roomform-tabs` AND `.is-on` WENT OUT HERE, and `.is-on` is the only
+   reason to say so: it was the last `is-`-prefixed state class in the
+   stylesheets, a naming convention from before everything in this tree said
+   `--modifier`. One convention fewer for a reader to hold. */
 .jar-roomform-box {
   width: 100%;
   padding: 9px 0;
@@ -1677,14 +1861,8 @@
   border-bottom: 1px solid var(--jar-panel-edge);
   color: var(--jar-ink);
   font-family: inherit;
-  font-size: 16px;
+  font-size: var(--t-input);
   outline: none;
-}
-.jar-roomform-err {
-  margin: var(--sp-10) 0 0;
-  font-size: var(--t-ui);
-  font-style: italic;
-  color: var(--jar-muted);
 }
 
 /* A WALL THAT HAS NOTHING YET, AND THE LINE THAT SAYS SO.
@@ -1706,9 +1884,8 @@
 }
 /* Same register as `.jar-forming`, which is the line it stands in for. */
 .jar-wall-empty {
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
-  font-style: italic;
   color: var(--jar-muted);
 }
 
@@ -1788,9 +1965,7 @@
   transition: opacity 0.3s ease, color 0.2s ease;
 }
 /* placed by its wall's column, so the inline `left` is its RIGHT edge */
-.jar-way--r {
-  transform: translateX(-100%);
-}
+
 @media (max-width: 600px) {
   .jar-way { max-width: 28vw; }
 }
@@ -1835,7 +2010,43 @@
      measure landed (founder's recording: "shown at bottom then moves up").
      The companion rests near the middle at every viewport, so mid-viewport is
      a fallback the real number only nudges. */
-  top: var(--jar-mouth-top, 58%);
+  /* AT THE BOTTOM OF THE SPACE (founder, 2026-10-08: "place this text input
+     box at the bottom of the space. so i want equal space between the top of
+     mind, character, and input box").
+     It used to hang off the companion's chin — `--jar-mouth-top`, written by
+     the loop — under an earlier ruling that keeping should sit "right below
+     the character". That put the three things on the screen at uneven
+     intervals: a tight pair under a lot of air. Pinned to the bottom, the
+     reading, the companion and the box divide the height between them, and
+     the companion is placed at the midpoint of what is left so the two gaps
+     are equal by construction rather than by eye. */
+  /* `top: auto` lived here, from when the box was pinned to the bottom. It
+     is the cluster's last element now — see the note below. */
+  /* At least a thumb's clearance, and more where the device asks for it —
+     `max()` rather than the bare inset, which is 0 on most phones and left
+     the box flush against the bottom edge. */
+  /* ═══ THE BOX HANGS FROM THE CLUSTER, NOT FROM THE VIEWPORT FLOOR ═════
+     Founder, having looked at a night's work: "not much seemed to have
+     changed." Measured on a 1512x900 window: the creature floating with
+     ~380px of dead black beneath it — 42% of the screen — because the box
+     was `bottom: 0`-ish and the creature was not. The 1040px composition
+     ceiling tried earlier only engages above 1040px of viewport, so on the
+     window most people actually use it changed nothing.
+
+     The box is the last element of the creature's cluster — the statement,
+     the creature, its question, and the place you answer back. A cluster
+     whose last element is nailed to the bottom of whatever monitor somebody
+     owns is not a cluster: Gestalt proximity says elements separated by
+     whitespace read as less related, so the gap was dissolving the box's
+     relationship to the thing it belongs to.
+
+     `--jar-box-top` is written by the layout pass from the creature's chin
+     plus the voice block, and already clamped so it never travels off a
+     short window. See the note there for why reading the claim's height to
+     place the BOX is not the thing the previous commit forbade: the rule is
+     that the CREATURE does not move with content. */
+  top: var(--jar-box-top, var(--jar-mouth-top, 58%));
+  bottom: auto;
   /* the air between the last word and the field's top edge */
   padding: 0 var(--sp-20) var(--sp-14);
   text-align: center;
@@ -2048,18 +2259,15 @@
    whats behind doesnt show") and both stand: the card is a thing you READ,
    and text over noise is noise; the veil is a place you WRITE, over a world
    dark enough that what ghosts through is glow, not detail. */
-/* AND IT COVERS WHAT IT SLID IN FRONT OF. The mouth sits at z4, under the
-   ground's own chrome at z5-6, so the bottom edge printed straight THROUGH
-   the sheet's footer — which is the one thing an opaque object cannot do and
-   still be an object. A drawer is only in front of the world if it is in
-   front of all of it; the bottom edge comes back the moment the note shrinks.
-   The lift is on the container because `.jar-mouth` is itself a stacking
-   context, so no rule on the sheet inside it could ever have climbed out.
-   Seven, not six: the chrome that was printing through sat at six too, and
-   equal z-index is decided by document order — so six changed nothing. */
-.jar-mouth--note {
-  z-index: 7;
-}
+/* `.jar-mouth--note` IS GONE AND ITS ARGUMENT IS NOT, because the argument
+   is a trap anyone re-adding a drawer will fall into. The mouth sits at z4,
+   under the ground's own chrome at z5-6, so an opaque sheet inside it printed
+   the bottom edge straight THROUGH its own footer. The lift has to go on the
+   container: `.jar-mouth` is itself a stacking context, so no rule on the
+   sheet inside it can climb out. And it has to be seven, not six — the chrome
+   that was printing through sat at six, and equal z-index is settled by
+   document order, so six changed nothing. `Home.tsx` renders the mouth as a
+   bare `.jar-mouth` with no note modifier; the slot carries the state now. */
 .jar-mouth-slot--note {
   /* FIXED, AND IT ONLY WORKS BECAUSE OF WHERE THIS IS RENDERED. A transformed
      ancestor makes itself the containing block for a fixed descendant, so
@@ -2095,17 +2303,12 @@
      went through the drawer, and then it is not a drawer. */
   pointer-events: auto;
 }
-/* the way out that keeps the words, first in the foot's centred row */
-.jar-mouth-step {
-  all: unset;
-  cursor: pointer;
-  /* it sits in the foot's row with the verbs, at their resting tier */
-  color: var(--jar-muted);
-  transition: color 0.18s ease;
-}
-.jar-mouth-step:hover {
-  color: var(--jar-ink);
-}
+/* `.jar-mouth-step` WAS THE WAY OUT OF THE DRAWER THAT KEEPS THE WORDS, and
+   it is gone from all three places that named it: two rules here and a seat
+   in the `--t-label-size` list at the top of this file and in `system.css`'s
+   label register. Both of those were selector lists with live neighbours, so
+   the dead name was pruned and the rules kept — which is the whole reason a
+   dead-selector count is not a line count. */
 
 /* the cloud's arrival: nothing translates, the light just goes — the drawer's
    slide-from-below went with the drawer (a veil has no below to come from) */
@@ -2128,38 +2331,13 @@
    while, beside the minimize word; the founder moved everything — the minus
    included — into a single centred row at the foot, so the whole top edge of
    the drawer is clean and the writing starts where the paper does. */
-.jar-mouth-slot--note .jar-mouth-where--sheet {
-  justify-content: center;
-}
-
 /* The reserved row: present from the moment the mouth opens, visible once
    there are words. Reserving the height is what keeps the typing line from
    jumping when the choice appears; inert while invisible, so the empty mouth
    still offers no control. */
-.jar-mouth-where {
-  /* The same uppercase label voice as the card's privacy choice, now at the
-     readable control step: these are decisions, not metadata. */
-  gap: 5px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.18s ease;
-}
-.jar-mouth-where button {
-  font-size: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  font-weight: 500;
-  min-height: 30px;
-  padding: 5px var(--sp-4);
-}
-.jar-mouth-where .jar-where-off { color: var(--jar-muted); }
-.jar-mouth-where--armed {
-  opacity: 1;
-  pointer-events: auto;
-}
-.jar-mouth-slot--note .jar-mouth-note {
-  margin: var(--sp-10) var(--sp-20) 0;
-}
+
+
+
 
 .jar-mouth-field::-webkit-scrollbar {
   width: 6px;
@@ -2169,16 +2347,12 @@
   background: var(--jar-scroll);
 }
 
-/* It did not keep. PROSE, so it never enters the tracked uppercase register
-   — the same rule the skeleton lines obey. Said once, quietly, and it goes
-   the moment the person types again. */
-.jar-mouth-note {
-  margin: var(--sp-10) 0 0;
-  font-size: var(--t-ui);
-  line-height: 1.45;
-  color: var(--jar-faint);
-  animation: jar-arrive 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-}
+/* "IT DID NOT KEEP" HAD ITS OWN CLASS AND NO LONGER DOES. The failure line
+   under the box was `.jar-mouth-note` in three rules and one reduced-motion
+   list; the composer reports a failed save through `.waka-composer-status`
+   now, which is the one place in the product that says what happened to
+   something you tried to save. The rule it obeyed stands for its
+   replacement: PROSE, never the tracked uppercase register. */
 
 /* ---------- the emulsion ----------
    A single blended layer over the world AND the type, so the poster wears the
@@ -2201,11 +2375,27 @@
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  mix-blend-mode: overlay;
-  /* Judged against a real black in frame. Overlay leaves black black by
-     construction, so this reads on the midtones — the orbs, the companion and
-     the type — and never lifts the ground, which is the whole point. */
-  opacity: 0.09;
+  /**
+   * NORMAL, NOT OVERLAY — and that reverses this layer's old purpose.
+   *
+   * The note above said overlay "leaves black black by construction, so this
+   * reads on the midtones and never lifts the ground, which is the whole
+   * point." That was the whole point, and it is why the glow bands: overlay's
+   * multiply branch runs wherever the backdrop is below half, so on a ground
+   * this dark the noise contributes about two percent of its amplitude. The
+   * film was deliberately doing nothing in the one region that needs it.
+   *
+   * Banding is a near-black problem. The companion's glow falls off across
+   * ~250px of almost-black, which an 8-bit ramp quantises into flat bands up
+   * to 26px wide — 78 device pixels on a 3x phone, invisible on the desktop
+   * LCD this was judged on. A dither has to perturb the darks, so it blends
+   * normally and the ground is pre-compensated for the lift (see `--jar-deep`).
+   */
+  mix-blend-mode: normal;
+  /* 0.035 with full-range noise is 2.6 LSB of perturbation: enough to
+     dissolve a contour step, below the threshold where it reads as grain.
+     Under ~0.025 the banding survives; over ~0.05 it becomes texture. */
+  opacity: 0.035;
   background-repeat: repeat;
   will-change: opacity;
 }
@@ -2235,7 +2425,22 @@
      Sixteen pixels of inset plus each pill's own side padding read as a
      floating bar; the two permanent things at the top of the screen belong to
      the corners they name. */
-  padding: calc(14px + env(safe-area-inset-top)) 8px 0;
+  /**
+   * BELOW THE CORNERS, NOT IN THEM.
+   *
+   * This bar used to BE the top of the screen: it held the wall picker, the
+   * exits and the dial's handle. The picker moved into the corner row with
+   * the view switcher and the cog, and what is left here is the handle —
+   * which was still drawing at `top: 0`, straight through the picker it used
+   * to sit beside. Founder, on an agent's wall: "NOW" printed over
+   * "DEMO AGENT".
+   *
+   * "When you are" still belongs beside "where you are"; where-you-are simply
+   * moved up a row, so this sits directly under it. The reserve is the
+   * corner's own height plus its inset, named rather than guessed, for the
+   * same reason every other reserve in this file is.
+   */
+  padding: calc(var(--waka-corner) + var(--sp-20) + env(safe-area-inset-top)) var(--sp-16) 0;
   pointer-events: none;
 }
 /* The two exits sit together at the top-left, so the rest of the bar is still
@@ -2383,7 +2588,7 @@
   background: none;
   padding: 0;
   font: inherit;
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--jar-faint);
   cursor: pointer;
 }
@@ -2393,7 +2598,7 @@
 
 .jar-settings-name {
   margin: 0 0 var(--sp-14);
-  font-size: 17px;
+  font-size: var(--t-lead);
   line-height: 1.35;
   color: var(--jar-ink);
   display: flex;
@@ -2427,7 +2632,7 @@
   display: block;
   width: 100%;
   margin: 0 0 var(--sp-4);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   line-height: 1.5;
   color: var(--jar-muted);
 }
@@ -2437,7 +2642,7 @@
   background: none;
   padding: 0;
   font: inherit;
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--jar-faint);
   cursor: pointer;
   text-decoration: none;
@@ -2493,7 +2698,7 @@
   display: block;
   margin: var(--sp-8) 0;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   line-height: 1.5;
   color: var(--jar-ink);
   word-break: break-all;
@@ -2530,7 +2735,7 @@
   display: flex;
   align-items: baseline;
   gap: var(--sp-10);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   color: var(--jar-ink);
 }
 .jar-settings-member > span:first-child {
@@ -2685,7 +2890,7 @@
 .jar-panel-foot--reflected .jar-panel-foot-r { opacity: 1; }
 .jar-panel-foot button.jar-panel-reflection-link {
   color: var(--jar-ink);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
 }
 .jar-panel-foot-l {
   justify-self: start;
@@ -3005,7 +3210,7 @@
 }
 .jar-panel-reflected {
   color: var(--jar-ink);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   white-space: nowrap;
 }
 .jar-reflection-key {
@@ -3017,7 +3222,7 @@
   align-items: center;
   gap: var(--sp-8);
   color: var(--jar-muted);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   pointer-events: none;
 }
 .jar-reflection-key-dot {
@@ -3092,7 +3297,16 @@
    Not a highlighter and not a pull-quote: the way a person underlines their
    own book. Two tiers — the passage that fed a reading carries a wash as well
    as a line; a spark carries the line alone — and both wear the orb's own
-   colour, which is the only colour this page has. */
+   colour, which is the only colour this page has.
+
+   DO NOT DELETE THE TWO TIER RULES BELOW ON THE EVIDENCE OF A GREP. Neither
+   `jar-mark--spark` nor `jar-mark--source` appears anywhere in the tree as
+   those words: `Home.tsx` builds them from the tier itself, and the tier is
+   typed `"source" | "spark"` beside it. Every static dead-selector scan
+   reports both as dead, and the 2026-10-10 sweep had them on its deletion
+   list until the call site was read. The thing that saved them is the only
+   thing that can: a class name assembled from a value is only visible to a
+   reader who follows the value. */
 .jar-mark {
   color: inherit;
   background: none;
@@ -3109,26 +3323,12 @@
   box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--jar-mark, #f0eade) 60%, transparent);
 }
 
-/* ---------- the panel's one action ---------- */
-.jar-panel-act {
-  display: inline-block;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  margin: var(--sp-22) 0 0;
-  padding: 0;
-  background: none;
-  font-family: inherit;
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-.jar-panel-act:hover {
-  color: var(--jar-ink);
-}
-.jar-panel-act--waiting {
-  text-decoration: none;
-  cursor: default;
-}
+/* ---------- THE PANEL'S ONE ACTION HAD THREE RULES AND NO ELEMENT ----------
+   `.jar-panel-act` and its waiting state. The card's acts are
+   `.jar-panel-save`, `-foot-l` / `-c` / `-r` and the ask row now — a row of
+   named verbs rather than one generic "action", which is the direction every
+   control in this product has moved (founder: "so many different buttons that
+   I have no idea what its supposed to do"). */
 /* the question and the box arrive together, once, whole */
 .jar-reflect {
   margin-top: var(--sp-20);
@@ -3136,9 +3336,9 @@
 }
 .jar-reflect-q {
   margin: 0 0 var(--sp-10);
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   font-weight: 300;
-  font-size: 16px;
+  font-size: var(--t-input);
   line-height: 1.45;
   color: var(--jar-ink);
 }
@@ -3163,39 +3363,12 @@
 }
 .jar-reflection-flow {
   margin-top: var(--sp-16);
-}
-.jar-reflection-previous {
-  margin-bottom: var(--sp-18);
-  padding: var(--sp-12) var(--sp-14);
-  border-left: 1px solid color-mix(in srgb, var(--jar-ink) 25%, transparent);
-  background: color-mix(in srgb, var(--jar-row) 48%, transparent);
-  border-radius: 0 10px 10px 0;
-}
-.jar-reflection-previous .jar-label,
-.jar-reflection-current .jar-label {
-  display: block;
-  margin: 0 0 var(--sp-8);
-  color: var(--jar-muted);
-  letter-spacing: 0.12em;
-}
-.jar-reflection-previous p:not(.jar-label) {
-  margin: 0;
-  color: var(--jar-ink);
-  font-size: var(--t-note);
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-.jar-reflection-previous p.jar-reflection-previous-question {
-  color: var(--jar-muted);
-  margin-bottom: var(--sp-6);
-}
-.jar-reflection-previous button,
-.jar-reflection-turn button {
+}.jar-reflection-turn button {
   border: 0;
   background: none;
   color: var(--jar-muted);
   font: inherit;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   cursor: pointer;
   min-height: 32px;
   padding: var(--sp-6) 0;
@@ -3203,7 +3376,7 @@
 .jar-reflection-turns {
   margin-bottom: var(--sp-16);
   color: var(--jar-muted);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
 }
 .jar-reflection-turns summary {
   cursor: pointer;
@@ -3215,79 +3388,15 @@
 }
 .jar-reflection-turn p:not(.jar-reflect-q) {
   margin: 0;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
   color: var(--jar-ink);
 }
-.jar-reflection-current .jar-reflect-q {
-  font-size: var(--t-lead);
-  line-height: 1.4;
-  margin-bottom: var(--sp-14);
-}
-.jar-reflection-hint {
-  margin: var(--sp-10) 0 var(--sp-18);
-  color: var(--jar-muted);
-  font-size: var(--t-note);
-  line-height: 1.45;
-}
-.jar-reflection-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-8) var(--sp-14);
-  margin-top: var(--sp-18);
-}
-.jar-reflection-actions button,
-.jar-reflection-wait button {
-  appearance: none;
-  min-height: 42px;
-  padding: var(--sp-8) var(--sp-14);
-  border-radius: 999px;
-  font: inherit;
-  font-size: var(--t-note);
-  cursor: pointer;
-}
-.jar-reflection-primary {
-  border: 1px solid color-mix(in srgb, var(--jar-ink) 42%, transparent);
-  background: color-mix(in srgb, var(--jar-ink) 12%, transparent);
-  color: var(--jar-ink);
-}
-.jar-reflection-secondary {
-  border: 1px solid transparent;
-  background: none;
-  color: var(--jar-muted);
-}
-.jar-reflection-actions button:hover:not(:disabled),
-.jar-reflection-wait button:hover { color: var(--jar-ink); border-color: color-mix(in srgb, var(--jar-ink) 25%, transparent); }
-.jar-reflection-actions button:disabled { opacity: 0.4; cursor: default; }
-.jar-reflection-status,
-.jar-reflection-wait p { color: var(--jar-muted); font-size: var(--t-note); line-height: 1.5; }
-.jar-reflection-wait-line {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-10);
-}
-.jar-reflection-typing {
-  display: inline-flex;
-  gap: var(--sp-4);
-  align-items: center;
-}
-.jar-reflection-typing span {
-  display: block;
-  width: var(--sp-4);
-  height: var(--sp-4);
-  border-radius: 50%;
-  background: var(--jar-ink);
-  animation: jar-reflection-compose 1.2s ease-in-out infinite;
-}
-.jar-reflection-typing span:nth-child(2) { animation-delay: 0.16s; }
-.jar-reflection-typing span:nth-child(3) { animation-delay: 0.32s; }
 @keyframes jar-reflection-compose {
   0%, 60%, 100% { opacity: 0.28; transform: translateY(0); }
   30% { opacity: 0.9; transform: translateY(-3px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .jar-reflection-typing span { animation: none; opacity: 0.6; }
 }
 
 
@@ -3307,7 +3416,7 @@
    quiet weight the forming line speaks in. */
 .jar-skel-line {
   font-weight: 400;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   letter-spacing: 0;
   text-transform: none;
   color: var(--jar-muted);
@@ -3383,14 +3492,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   .jar-word,
-  .jar-asof,
-  .jar-forming-line,
-  .jar-mouth-note {
+  .jar-asof {
     animation: none;
     opacity: 1;
   }
   .jar-back,
-  .jar-forming-line,
   .jar-way,
   .jar-mouth-rest,
   .jar-mouth-slot {
@@ -3477,6 +3583,12 @@
 }
 /* pressable, but not a button: it is a quotation you can walk into */
 .jar-prov-row {
+  /* THE COLUMN CENTRES; A QUOTATION DOES NOT. The block above went centred
+     so the sentence would read as the thing the switcher names, and that
+     inherits. A quotation is marked by a rule down its left edge, and
+     centred text inside a left rule is a quotation that has come loose from
+     its own mark. */
+  text-align: left;
   display: block;
   width: 100%;
   margin: 0;
@@ -3547,7 +3659,7 @@
    whole room is accounting for, so it leads and nothing shares its line */
 .jar-prov-room-lead {
   margin: 0 0 var(--sp-18);
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: clamp(17px, 1.5vw, 21px);
   line-height: 1.38;
@@ -3609,11 +3721,10 @@
    label register, and never a spinner */
 .jar-prov-room-idle {
   margin: 0;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.6;
   color: var(--jar-faint);
-}
-.jar-prov-room-close {
+}.jar-prov-room-close {
   margin: var(--sp-16) 0 0;
   justify-content: flex-end;
 }
@@ -3693,7 +3804,6 @@
   /* the verbs under it: 11px -> 44px. The row grows, and on a phone that is
      the right trade — these decide who may read a memory and whether it is
      kept at all. */
-  .jar-mouth-where button,
   .jar-panel-vis button {
     /* 17, not 16: the words are 11px tall, so 16 each side lands on 43 and the
        gate reports it one pixel short — which is the gate doing its job */
@@ -4007,21 +4117,12 @@
 /* THE PATTERN'S SENTENCE, OPEN. Measured the same way the memory's editor is:
    every metric that decides where a glyph lands is the resting line's, so the
    words do not shift by a pixel when the caret arrives. */
-/* WHAT A PRINCIPLE GREW FROM. Indented, dimmer, and each on its own line —
-   the same three things `.jar-prov` already does to say "this is underneath
-   that". A reader who has followed a pattern down to its memories has already
-   learned to read this shape. */
-.jar-was-roots {
-  display: block;
-  margin: var(--sp-6) 0 0 var(--sp-14);
-}
-.jar-was-root {
-  display: block;
-  margin-bottom: var(--sp-4);
-  font-size: var(--t-fine);
-  line-height: 1.5;
-  color: var(--jar-faint);
-}
+/* WHAT A PRINCIPLE GREW FROM WAS `.jar-was-roots` / `.jar-was-root`, AND IT
+   IS NOT DRAWN ANY MORE — four rules across three places in this file, two of
+   them riding in selector lists whose other halves are still live, which is
+   why this took a sweep rather than a glance. The shape is worth keeping on
+   record: indented, dimmer, each root on its own line, the same three things
+   `.jar-prov` still does to say "this is underneath that". */
 
 /* THE VERBS ARE THEIR OWN LINE UNDER THE SENTENCE. `.jar-ask` is inline by
    default, so the row set itself down immediately after `aspirational` and the
@@ -4029,28 +4130,6 @@
 .jar-was .jar-ask {
   display: block;
   margin-top: var(--sp-6);
-}
-
-/* A PRINCIPLE IS NOW SOMETHING YOU PRESS. It was a `<p>`; it is a button
-   inside one, and it has to read as the same sentence it always was — no
-   pill, no underline, no colour of its own. The only thing that changes is
-   that the pointer says it can be asked. */
-.jar-was-open {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  margin: 0;
-  padding: 0;
-  background: none;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-.jar-was-open:hover,
-.jar-was-open:focus-visible {
-  color: var(--jar-ink);
 }
 
 .jar-ground-edit {
@@ -4120,7 +4199,7 @@
    never render alike. The hover line says whose it is. */
 .jar-prov-lit--page {
   color: var(--jar-faint);
-  text-shadow: 0 0 8px rgba(232, 237, 244, 0.1);
+  text-shadow: 0 0 8px rgba(242, 236, 225, 0.1);
   text-decoration: underline dotted;
   text-underline-offset: 3px;
 }
@@ -4185,11 +4264,14 @@
 .jar-prov-why {
   display: block;
   margin-top: 3px;
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   line-height: 1.5;
-  color: var(--jar-faint);
-  opacity: 0.72;
-  font-style: italic;
+  /* WAS THE LEAST READABLE TEXT IN THE PRODUCT: `--jar-faint` (2.3:1 on this
+     ground) multiplied by `opacity: 0.72`, so about 1.9:1 — prose set below
+     the threshold at which it is text at all. Three quiet-looking decisions,
+     each defensible alone, stacked into invisibility. The italic went with
+     them: hierarchy is size and weight here, never a change of face. */
+  color: var(--jar-muted);
 }
 
 /* the reason under the failure: quiet, small, and never the headline — it is
@@ -4197,7 +4279,7 @@
 .jar-skel-why {
   display: block;
   margin-top: var(--sp-10);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   color: var(--jar-faint);
   opacity: 0.75;
 }
@@ -4310,10 +4392,7 @@
 /* the capture's destination line: under the words, in the same quiet register
    as every other row of choices, and present only once there is something to
    send anywhere */
-.jar-mouth-where {
-  margin-top: var(--sp-8);
-  justify-content: center;
-}
+
 
 /* WHO HAS SAID YES, WHO HAS SAID NO, AND WHO HAS NOT — the room read as
    people rather than as a score. Agreed is full ink; not yet is the same
@@ -4352,19 +4431,10 @@
 .jar-where-off {
   color: var(--jar-faint);
 }
-/* a verb in the same row: quieter than the standing state, brighter than the
-   unchosen one, and it answers the hand */
-.jar-where-verb {
-  color: var(--jar-muted);
-}
-.jar-mouth-where .jar-where-verb {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.jar-where-verb:hover,
-.jar-where-verb:focus-visible {
-  color: var(--jar-ink);
-}
+/* `.jar-where-verb` WENT, IN FOUR RULES. It was a third thing in the
+   where-row, beside the two words light already distinguishes — and the row
+   reads as the pair it is without it. `.jar-where-on` / `-off` above are
+   live and stay: `Home.tsx` picks between exactly those two. */
 
 /* ================= the split button, top left =================
    One control, two questions: the name opens the wall you are standing on,
@@ -4448,25 +4518,13 @@
      as a smudge beside a name set at label size — it is the control that opens
      every other wall, and it was the smallest mark on the bar. */
   padding: var(--sp-6) var(--sp-18) var(--sp-6) var(--sp-16);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   box-shadow: inset 1px 0 0 0 var(--jar-panel-edge);
 }
-.jar-here-list {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 8;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  min-width: 100%;
-  padding: var(--sp-6);
-  border-radius: 14px;
-  background: var(--jar-panel);
-  box-shadow:
-    0 0 0 1px var(--jar-panel-edge),
-    0 18px 44px -26px rgba(0, 0, 0, 0.8);
-}
+/* `.jar-here-list` WAS THE SHEET THESE ROWS HUNG IN, and nothing renders it:
+   the rows are in the menu's own surface now. They keep their rules because
+   `.jar-here-row` is still worn — the container died and its contents did
+   not, which is the opposite of the usual way a component goes. */
 .jar-here-row {
   appearance: none;
   -webkit-appearance: none;
@@ -4487,10 +4545,6 @@
   color: var(--jar-ink);
   outline: none;
 }
-/* the wall you are already on, said in light like everything else */
-.jar-here-row.is-here {
-  color: var(--jar-ink);
-}
 /* AND `add new` IS QUIETER THAN A WALL THAT EXISTS — which it was not, for as
    long as this rule sat 2,560 lines ABOVE the base class it modifies. Same
    specificity, and `.jar-here-row` wrote `color` later, so the modifier lost
@@ -4509,7 +4563,7 @@
    point of an explicit order. Everything above in this file is in `product`.
    And `chrome.css` styles bare elements for the flat screens:
 
-       textarea { border-bottom: 1px solid var(--w-edge); font-size: 16px; }
+       textarea { border-bottom: 1px solid var(--w-edge); font-size: var(--t-input); }
        body textarea { font-size: var(--t-body); }
 
    The world's mouth is a `<textarea>`, so it was being given a form's
@@ -4525,6 +4579,351 @@
    belongs: it is not a form control on a page of forms, it is the one place
    the world listens. Nothing else in here reaches beyond the mouth. */
 @layer chrome {
+  /**
+   * ═══ THE NOTEPAD IS A PAGE, NOT A DIALOG ════════════════════════════════
+   *
+   * Founder: "it should be its dedicated full page. save should be a bottom bar
+   * navigation. so clicking on it just leads to that note pad."
+   *
+   * `.jar-seek` is a 420px floating card — right for the small asks it was
+   * built for, wrong for the one surface in this product whose whole job is to
+   * give somebody room to write. The reference's writing screen has no card and
+   * no input chrome at all: a prompt, a quiet line of meta, and then the page.
+   *
+   * So the composer stops being a dialog and becomes the screen. It keeps its
+   * own scroll and stops short of the dock, which is the one piece of chrome
+   * that stays — because the dock is how you leave.
+   *
+   * DECLARED AFTER `.jar-seek`, never before it. A modifier written above the
+   * thing it modifies loses at equal specificity, which is how a block ended up
+   * ragged left under a centred sentence earlier this week.
+   */
+  /* BOTH SELECTORS, AND THE TRANSFORM CLEARED. `.jar-seek` surfaces are
+     centred with `top: 50%` plus a translate, and `chrome.css` re-states that
+     at `.jar-seek.jar-inspiration-composer[data-visual-viewport]` — higher
+     specificity, same layer — which DialogSurface stamps on as soon as it
+     tracks the visual viewport. So the page kept being re-centred and
+     half-translated off the left edge. A page has no centre to be pulled to. */
+  .jar-seek.jar-inspiration-composer,
+  .jar-seek.jar-inspiration-composer[data-visual-viewport] {
+    position: fixed;
+    z-index: 58;
+    inset: 0;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    display: flex;
+    flex-direction: column;
+    padding: calc(var(--sp-24) + env(safe-area-inset-top)) clamp(20px, 6vw, 28px)
+      calc(var(--sp-20) + var(--waka-corner) + var(--sp-24) + env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: 0;
+    /* ═══ IT STANDS ON THE WORLD'S GROUND LIKE EVERY OTHER PLACE ═══════
+       Founder: "I want the background for now to be the same background
+       for inspiration, chat and principles... and when for new inspiration
+       and new chat, it's not even the same."
+
+       The four destinations stopped painting a ground two commits ago and
+       show the world's own — same navy, same vignette, same floating dots,
+       because it IS the world rather than a copy of it. This surface was
+       missed, and `var(--jar-atmos)` is exactly the trap that made the
+       destinations look wrong before them: the same TOKEN as the world, so
+       the colour matches and the vignette and the dust do not. A flat
+       value where there should be a falloff is what "not even the same"
+       looks like.
+
+       The companion steps aside for it the way it does for a destination —
+       `asideRef` in `Home.tsx` counts `compose` now, so the creature is
+       not drawn through a blank page somebody is writing on. */
+    background: transparent;
+    transform: none;
+  }
+
+  /**
+   * ═══ A BLANK PAGE, THE WAY NOTION OPENS ONE ═════════════════════════
+   *
+   * Founder, with a screenshot of Notion's new page: "notion style - just
+   * blank page."
+   *
+   * That screen is one faint enormous placeholder and nothing else — no
+   * title bar, no close button, no field with an edge around it. The page IS
+   * the field, and the only thing on it is the invitation to write. Every
+   * piece of furniture this composer inherited from being a dialog is the
+   * opposite of that, so it goes:
+   *
+   *   the heading row and its Close — the dock is how you leave, and a page
+   *   that announces itself in a bar at the top is a dialog wearing a page's
+   *   clothes
+   *
+   *   the field's underline — an edge on something that fills the screen is
+   *   a line drawn for no reason; there is nothing for it to separate
+   *
+   *   the footer, until there are words — where this goes and what happens
+   *   to it are questions about a thing that does not exist yet
+   *
+   * THE PLACEHOLDER BECOMES THE PAGE'S TITLE, at reading size and barely
+   * lit. Notion's is about 40px at roughly 10% ink; this uses the product's
+   * own reading step and `--jar-faint`, which is the tier reserved for text
+   * that is present without being read — exactly what a placeholder is.
+   */
+  /* The heading row is gone from the markup; this stays for the moment a
+     restored draft still carries one in a cached bundle. */
+  .jar-inspiration-composer .jar-composer-heading {
+    display: none;
+  }
+
+  /**
+   * ═══ THE TOP OF THE NOTE — three corners, no bar ═══════════════════════
+   *
+   * The way back, when it is, who may read it. A grid rather than a flex row
+   * so the stamp is centred on the PAGE and not on whatever is left between
+   * two controls of unequal width — a date that shifts when the audience
+   * label changes from "Only me" to "Share with rooms" is the kind of
+   * wrongness a reader feels without being able to name.
+   */
+  .jar-note-top {
+    display: grid;
+    /* THREE TRACKS FOR TWO THINGS, deliberately. The audience pair that used
+       to hold the right track is gone with the concept behind it (founder:
+       "we got rid of the concept for room"), and collapsing to two tracks
+       would hang the stamp off the chevron instead of centring it on the
+       page. An empty track keeps the date where the reference puts it. */
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: var(--sp-12);
+    /* AIR ABOVE THE WORDS. Founder: "not enough margin on top." The page's
+       own padding put the first line 24px from the chrome, which on a screen
+       with nothing else on it reads as the text being pinned to the ceiling.
+       The reference leaves roughly a thumb. */
+    margin-block: var(--sp-16) var(--sp-32);
+  }
+
+  /* THE SAME WAY BACK AS EVERYWHERE ELSE. Founder, with a screenshot of
+     just this control: "why is this still here?"
+
+     It was a filled rounded square holding a chevron — the only boxed back
+     button in the product, on the one surface that most wants to look like
+     a blank page. Every other surface's return is a plain chevron with the
+     name of the place it returns to beside it ("All inspirations", "All
+     chats"), and this one goes somewhere with a name too: the archive the
+     note is about to join. So it says so, in the register its three peers
+     already use, with no box around it. */
+  .jar-note-back {
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-8);
+    min-height: var(--waka-corner);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-family: var(--waka-face);
+    font-size: var(--t-body);
+    font-weight: 300;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+
+  .jar-note-back:hover,
+  .jar-note-back:focus-visible {
+    color: var(--ink);
+  }
+
+  /* WHEN THIS NOTE IS, and it is the only thing on the page until somebody
+     writes. Muted rather than faint: a placeholder is text you are meant to
+     look past, and this is a fact you are meant to be able to read. */
+  .jar-note-when {
+    justify-self: center;
+    font-family: var(--waka-face);
+    font-size: var(--t-meta);
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+    color: var(--jar-muted);
+  }
+
+  /**
+   * ═══ THE PILL, BOTTOM-LEFT ═════════════════════════════════════════════
+   *
+   * Founder: "maybe just a recording button at bottom left of canvas", then,
+   * on the reference's own toolbar: "2 icons: 1. record 2. image".
+   *
+   * It wears the dock's material — same raised tone, same radius, same height
+   * — because they are the same kind of object: something resting near the
+   * bottom of a world that has no edges. Sitting it beside the dock rather
+   * than inside it keeps the distinction that matters: the dock is places,
+   * this is what you can put in a note.
+   */
+  .jar-note-tools {
+    position: fixed;
+    z-index: 59;
+    left: calc(var(--sp-20) + env(safe-area-inset-left));
+    bottom: calc(var(--sp-20) + env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    /* NOT A PILL EITHER — same ruling as the chat's composer. Founder:
+       "this double layer is so weird." Two glyphs sitting on the page beside
+       the dock are two glyphs; two glyphs in their own capsule beside the
+       dock's capsule are a second bar, and the notepad is the one surface
+       whose whole specification is "the middle of the screen is yours,
+       nothing is in it". The dock stays the only drawn object down there. */
+    padding: 0;
+    background: none;
+  }
+
+  .jar-inspiration-composer .jar-note-tool {
+    display: grid;
+    place-items: center;
+    width: var(--waka-corner);
+    min-width: var(--waka-corner);
+    height: var(--waka-corner);
+    min-height: var(--waka-corner);
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: none;
+    color: var(--jar-muted);
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+
+  .jar-inspiration-composer .jar-note-tool:hover,
+  .jar-inspiration-composer .jar-note-tool:focus-visible {
+    color: var(--jar-ink);
+  }
+
+  /* A running recording says so in words and seconds. A red dot cannot tell
+     anybody how long they have been talking. */
+  .jar-inspiration-composer .jar-note-tool--wide {
+    width: auto;
+    padding-inline: var(--sp-16);
+    font-size: var(--t-meta);
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--jar-ink);
+  }
+
+  /* KEEPING IT, opposite the pill. */
+  .jar-inspiration-composer .jar-note-save {
+    position: fixed;
+    z-index: 59;
+    right: calc(var(--sp-20) + env(safe-area-inset-right));
+    /* ON THE DOCK'S LINE. The dock and the tool pill are `--waka-corner` tall
+       inside `--sp-6` of padding; a bare 44px button at the same bottom inset
+       hangs six pixels below both, which reads as a third row rather than a
+       third object on one. */
+    bottom: calc(var(--sp-20) + var(--sp-6) + env(safe-area-inset-bottom));
+    min-height: var(--waka-corner);
+    padding-inline: var(--sp-20);
+    border: 0;
+    border-radius: var(--r-pill);
+    background: var(--jar-ink);
+    color: var(--jar-atmos);
+    font-size: var(--t-meta);
+    letter-spacing: normal;
+    text-transform: none;
+    cursor: pointer;
+  }
+
+  /* `.jar-seek.` prefixed so this outranks `chrome.css`'s own
+     `.jar-inspiration-composer .jar-composer-text`, which sets the size and
+     the register this page is overriding. Equal specificity in the same
+     layer was leaving the winner to source order across two chunks — not
+     something to rely on. */
+  .jar-seek.jar-inspiration-composer .jar-composer-text {
+    min-height: 40vh;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    /* THE CARET IS AS TALL AS THE TYPE, AND THAT IS WHY IT WAS WRONG.
+       Founder, on the blank page: "cursor size too big."
+
+       A browser draws the caret at the FIELD's font size, so setting the
+       field at `--t-reading` (21–30px) to make the placeholder look like a
+       Notion title gave the empty page a 30px bar blinking beside 11px of
+       grey — the loudest thing on a screen whose whole argument is quiet.
+       The reference's note is body prose and its caret is a hairline.
+
+       So the words are body prose here too, and the invitation below stops
+       pretending to be a title. The page is not a document whose heading you
+       are typing; it is a page you are writing on. */
+    font-size: var(--t-body);
+    line-height: 1.7;
+    letter-spacing: normal;
+    text-transform: none;
+    text-align: left;
+    resize: none;
+  }
+
+  .jar-seek.jar-inspiration-composer .jar-composer-text::placeholder {
+    /* OUT OF THE LABEL REGISTER. `.jar-mouth-field` is the class this field
+       inherited from the days when capture was a labelled BUTTON, and the
+       uppercase, letterspaced voice came with it — so the invitation to
+       write a sentence was set in the register meant for a four-word
+       signpost. The reference's is a sentence in the page's own face. */
+    color: var(--jar-faint);
+    font-size: var(--t-body);
+    line-height: 1.7;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  /* THE TWO `:has(:placeholder-shown)` HIDES ARE GONE WITH WHAT THEY HID.
+     They kept the attach row and the footer off a blank page — the right
+     answer to the wrong question, because the founder's ruling on that block
+     was "remove all", not "remove it until there are words". Both are now
+     corners (`.jar-note-tools`, `.jar-note-save`) and the only thing still
+     conditional is Save, which is conditional in the MARKUP: a button for a
+     thing that does not exist should not be in the document either. */
+
+  /* One column down the middle of the page, at the measure the rest of the
+     product reads at. The fixed corners are excluded — they are positioned
+     against the viewport and a 34rem box centred in the page would drag them
+     inwards from the edges they are pinned to. */
+  /* THE TOP ROW IS THE PAGE'S, NOT THE COLUMN'S. The chevron belongs on the
+     screen's left margin where a thumb finds it — inside the 34rem reading
+     column it floated into the middle of the page beside the words, which is
+     nowhere a back button has ever been. */
+  .jar-inspiration-composer > .jar-note-top {
+    width: 100%;
+    max-width: none;
+  }
+
+  .jar-inspiration-composer > :not(.jar-note-tools):not(.jar-note-save):not(.jar-note-top) {
+    width: 100%;
+    max-width: 34rem;
+    margin-inline: auto;
+  }
+
+  /* IN THE CHROME LAYER, AND THAT IS THE WHOLE FIX. The first attempt put
+     this in `@layer product` and nothing happened: `.jar-inspiration-composer`
+     is declared in `chrome.css`, and `layers.css` orders the layers
+     `base, product, chrome, register` — so a later layer beats an earlier one
+     no matter how specific the earlier selector is. Specificity never enters
+     it. The composer stayed a 640px dialog, positioned off the left edge. */
+
+  /**
+   * THE FIXED BAND IS A DESKTOP SHAPE, AND COMPACT MODE IS NOT ONE.
+   *
+   * `.jar-hq-inner` is a 190px band so the creature's `Y_MIN` has something
+   * constant to measure against. On a short window that reasoning does not
+   * apply at all: `home-activity-layout.ts` takes the screen over, the
+   * creature is moved three viewports off-stage, and this block becomes a
+   * scroller holding the whole activity list. A 190px cap there would clip
+   * the list to a letterbox.
+   *
+   * In the chrome layer, which beats the product layer where the band is
+   * declared — the same route `.jar-hq-inner--compact` already takes for its
+   * margin and its scrolling.
+   */
+  .jar-hq-inner.jar-hq-inner--compact {
+    height: auto;
+    justify-content: flex-start;
+  }
+
   /* THE SIXTH FACE OF THE SAME COLLISION, found by the founder mid-edit
      (2026-08-27: "dont show this line when editing inspiration"). The card's
      editor is a bare textarea, so `chrome.css` dressed it in the form's
@@ -4682,10 +5081,197 @@
   }
 }
 
+
+/* ---------------------------------------------------------------------------
+ * WHAT MOVED, IN THE ONE CHANNEL THERE IS
+ *
+ * The reading printed once: carried words quiet, words this rewrite brought
+ * lit, and underneath — faded, never omitted — the words it dropped. The
+ * poster already says it this way about the same material; this is the same
+ * sentence asked a different question.
+ * ------------------------------------------------------------------------- */
+
+.jar-drift-reading {
+  margin: var(--sp-8) 0 0;
+  font-family: var(--waka-face);
+  font-weight: 300;
+  font-size: var(--t-lead);
+  line-height: 1.5;
+  /* The spine of the reading: what carried over, and therefore what this
+     rewrite is NOT about. */
+  color: var(--w-muted);
+}
+
+/* The drift. Nothing moves and no hue appears — it is simply the part of the
+   sentence that is awake. */
+.jar-drift-new {
+  color: var(--w-ink);
+}
+
+.jar-drift-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4) var(--sp-8);
+  align-items: baseline;
+  margin: var(--sp-20) 0 0;
+  padding-top: var(--sp-12);
+  border-top: 1px solid var(--w-edge);
+  font-size: var(--t-ui);
+  /* Faint, because it is gone — and present, because fading never deletes. */
+  color: var(--w-faint);
+}
+
+/* The label register is declared once, in system.css, and this wears it via
+   `.jar-label` on the element rather than re-stating its casing here — which
+   is what the gate caught, correctly. */
+.jar-drift-left-label {
+  color: var(--w-muted);
+}
+
+.jar-drift-note {
+  margin: 0;
+  font-size: var(--t-ui);
+  color: var(--w-muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * A CONVERSATION, HELD UP IN FRONT OF THE WORLD
+ *
+ * Founder: "also dont move talk to waka in a new page. find better
+ * transition."
+ *
+ * `chat.css` was written for a page that owned the screen: `.chat-page` is
+ * `position: fixed` at `height: 100dvh`, which is exactly right when it IS
+ * the screen and catastrophic inside an overlay — it escapes its container
+ * and covers the viewport, including the overlay's own close button. So the
+ * way out of the surface would have been painted over by the surface.
+ *
+ * These are tenancy rules, not design: they say what changes when the
+ * transcript is a guest rather than the host. Everything about how it LOOKS
+ * stays in `chat.css`.
+ *
+ * WHY THEY LIVE IN THIS FILE AND SHOULD NOT STAY. `.waka-over*` belongs to
+ * `claims.css`, and that is where this block belongs too. It is here because
+ * another session holds that file open; moving it is a two-line job once that
+ * lands, and leaving a note is better than losing somebody's work to a
+ * concurrent write.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * THE PANEL IS THE SIZE OF THE CONVERSATION IN IT, UP TO 88dvh.
+ *
+ * This was a fixed `height: 88dvh`, with the reasoning that "`max-height`
+ * alone leaves the column free to collapse to its content and the composer
+ * floats mid-air". Measured 2026-10-11, with the transcript now flowing from
+ * the top, that is not what happens — the composer sits 24px under the last
+ * turn, which is not floating, it is hugging:
+ *
+ *             fixed 88dvh                 auto up to 88dvh
+ *   1512x900, 2 turns   792px panel, 423px of air below the last turn
+ *                                       393px panel,  24px
+ *   1512x900, 12 turns  792px, scrolls   792px, scrolls   — IDENTICAL
+ *    390x844, 2 turns   743px, 196px     570px,  24px
+ *    390x844, 12 turns  743px, scrolls   743px, scrolls   — IDENTICAL
+ *
+ * So the cap changes nothing at all about a conversation long enough to fill
+ * the panel, and on a short one it is the difference between the founder's
+ * "roughly 500 vertical pixels of nothing" and no nothing. Top-aligning the
+ * transcript moved that hole from above the messages to below them; this is
+ * what closes it.
+ *
+ * AND THE RESIZE IS NOT A VIOLATION OF "the world never moves unless the user
+ * moved it". The panel grows when a turn arrives, which happens because
+ * somebody pressed Send — the growth is the consequence of their own act, in
+ * the same frame as the words that caused it. It is also bounded: it happens
+ * a handful of times at the start of a conversation and never again after the
+ * cap is reached. It is deliberately NOT transitioned; a height animation on
+ * a box containing a scroller fights the scroller, and new words appearing
+ * explain the new height by themselves.
+ */
+.waka-over--talk {
+  /* SIZED TO ITS COLUMN, NOT TO THE GRID OVERLAY'S. `.waka-over` is
+     `min(1040px, 100%)` because the saves overlay holds a card grid that
+     wants the width. A conversation holds ONE column, and at 1040 that left
+     about 180px of dead ground down each side — the "large empty area on the
+     right" in the screenshot this work started from.
+
+     THE ARITHMETIC, so the next person can check it rather than trust it:
+     `--chat-measure` is 545px (80 characters — see its note in `chat.css`),
+     `.chat-main` adds a 28px gutter each side at this width, and
+     `.waka-over` adds its own `--sp-24` of padding each side. 545 + 56 + 48
+     = 649. Rounded up to 650 so the gutter is never squeezed below its own
+     clamp by a rounding error.
+
+     What is left over is now the margin of a page rather than a vacancy, and
+     the fix is NOT to give the old gutter a job: the two side columns that
+     used to fill it were deleted on 2026-10-10 for a recorded reason — "so
+     many different buttons that I have no idea what its supposed to do". */
+  width: min(650px, 100%);
+  height: auto;
+  max-height: 88dvh;
+  /* The composer is the bottom edge of this surface, so the shell stops
+     reserving air under it. */
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+/* THE HEADER STANDS ON THE TRANSCRIPT'S OWN LEFT EDGE.
+   Measured at 1280: the chevron began at x=339, the reply at x=449 and the
+   composer at x=369 — three left edges on one surface, which is the
+   founder's "placement is all over the place" in its most literal form. The
+   cause is honest enough: `.waka-over` sets the sheet's padding and
+   `.chat-main` adds its own gutter inside it, so the header was measured
+   from the sheet and everything below it from the column.
+
+   The column wins, because `--chat-measure` is the one number here derived
+   from something — eighty characters — and the header is derived from
+   nothing. So the head takes the same measure and the same centring, and
+   the surface has one edge. */
+.waka-over--talk .waka-over-head {
+  width: 100%;
+  max-width: var(--chat-measure);
+  margin-inline: auto;
+}
+
+.waka-over--talk .chat-page {
+  position: static;
+  top: auto;
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* The overlay already painted a ground; a second opaque layer inside it
+     would hide the hairline that gives the sheet its edge. */
+  background: transparent;
+}
+
+/* ═══ GROUP NAVIGATION, FROM `origin/dev` 8b11c2f5 ═══════════════════════════
+   Merged in rather than reimplemented: these are the room's member list and
+   the status line under it, and nothing in the redesign replaced either.
+
+   THREE DELIBERATE DEPARTURES FROM THE COMMIT AS WRITTEN, all forced by this
+   branch rather than chosen:
+
+   `--t-note` IS GONE. `system.css` folded it into `--t-ui` (14px -> the ui
+   step, 58 call sites) during the type-scale pass, so the token dev wrote
+   here would resolve to nothing and the status line would inherit whatever
+   size it landed next to. `--t-ui` is the step `--t-note` became.
+
+   `.jar-saved--personal` IS DROPPED FROM THE PAIR. `.jar-saved` — the
+   "N inspirations" door — no longer renders on any wall here; see the note
+   at its old site in `Home.tsx`. A modifier for a control that is never
+   painted is dead rule, and this file is under a dead-CSS sweep.
+
+   THESE RULES ARE UNLAYERED, which in this stylesheet means they beat every
+   `@layer` rule above them regardless of specificity. That is how dev wrote
+   them and it is load-bearing for `.jar-grounds`: the layered block at the
+   top of this file gives the list its position, and these three properties
+   cap its height so a room with twenty members cannot run off the screen.
+   Nothing above sets `max-height` or `overflow` on that class, so the
+   override is additive rather than a fight. */
 /* Spatial shortcuts remain reachable above the stable personal navigation. */
-.jar-saved--personal, .jar-up--personal { bottom:calc(76px + env(safe-area-inset-bottom)); }
+.jar-up--personal { bottom:calc(76px + env(safe-area-inset-bottom)); }
 .jar-up { min-height:var(--sp-44); min-width:var(--sp-44); }
-.jar-group-ground-status { position:absolute; z-index:5; top:calc(64px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); width:min(440px,calc(100vw - var(--sp-44))); text-align:center; pointer-events:none; color:var(--jar-muted); font-size:var(--t-note); }
+.jar-group-ground-status { position:absolute; z-index:5; top:calc(64px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); width:min(440px,calc(100vw - var(--sp-44))); text-align:center; pointer-events:none; color:var(--jar-muted); font-size:var(--t-ui); }
 .jar-group-ground-status p { margin:0; }
 .jar-group-ground-status p:first-child { color:var(--jar-ink); }
 .jar-grounds { max-height:35vh; max-width:calc(100vw - var(--sp-44)); overflow:auto; }

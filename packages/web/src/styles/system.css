@@ -138,17 +138,51 @@
   /* Editing needs a readable minimum on desktop and avoids focus zoom on
      phones, without enlarging the surrounding reading/body scale. */
   --t-input: max(16px, var(--t-body));
-  /* TWO STEPS NAMED BECAUSE THE PRODUCT REALLY USES THEM (2026-08-25).
-     `14px` appears at twenty sites and `12px` at thirteen, across three
-     stylesheets, and neither had a name. Folding them into `--t-ui` or
-     `--t-body` would move thirty-three pieces of type on screen — a visual
-     redesign, and one for the founder's eye rather than a refactor's. So the
-     scale describes what this product IS, and collapsing six reading steps to
-     four stays an open decision rather than a silent one. */
-  --t-note: 14px;
+  /**
+   * ═══ SIX STEPS BECAME THREE, AND THE DECISION WAS THE FOUNDER'S ═══════
+   *
+   * What stood here named `--t-note` (14px) and `--t-fine` (12px) and said:
+   * "folding them into `--t-ui` or `--t-body` would move thirty-three pieces
+   * of type on screen — a visual redesign, and one for the founder's eye
+   * rather than a refactor's. So collapsing six reading steps to four stays
+   * an open decision rather than a silent one."
+   *
+   * The founder has now made it, looking at the inspirations list: "audit
+   * font size and type used across the entire experience. Keep consistent
+   * throughout without too many variations. This size is perfect (of course
+   * certain titles and header sections should be bigger, but)."
+   *
+   * WHAT WAS ACTUALLY WRONG, which is not that any one size was wrong: five
+   * steps lived inside four pixels — 15, 14, 13, 12, 11. Nobody can see a
+   * one-pixel difference, so the steps could not do the job a scale exists
+   * for, and every new rule picked whichever of the five its author happened
+   * to type. A scale that cannot be perceived is not a hierarchy, it is a
+   * lottery with five tickets.
+   *
+   * THREE STEPS, BY ROLE, AND THEY ARE TELLABLE APART:
+   *
+   *   --t-body  15  PROSE YOU READ. The notepad, a conversation, the words
+   *                 on a kept thing. The only step set for reading a
+   *                 paragraph in.
+   *   --t-ui    13  THE INTERFACE. List rows, controls, the dock, every
+   *                 sentence-case label. This is the size the founder pointed
+   *                 at: "this size is perfect."
+   *   --t-meta  12  THE QUIET SECOND LINE. Dates, counts, the line under a
+   *                 row that tells you whether this is the one.
+   *
+   * `--t-note` (14) folded into `--t-ui`: 58 call sites, all of them list
+   * text and quiet controls, down one pixel. `--t-fine` (12) and the old
+   * `--t-meta` (11) were the same role at two sizes and are now one at 12 —
+   * 45 sites unchanged in size, 14 up one pixel. Nothing else moved.
+   *
+   * BIGGER IS STILL AVAILABLE AND STILL MEANS SOMETHING, which is the
+   * founder's parenthesis: `--t-lead` for a section's head, `--t-reading`
+   * for a page's title and for the one sentence with weight, `--t-display`
+   * for a room's name. Those are steps you can SEE from across the room,
+   * which is what a step is for.
+   */
   --t-ui: 13px;
-  --t-fine: 12px;
-  --t-meta: 11px;
+  --t-meta: 12px;
   /* THE LABEL REGISTER, WHICH HAD NO NAME UNTIL NOW (2026-08-25). Ten pixels,
      tracked and uppercased, is what every signpost, eyebrow and quiet verb row
      in this product is set in — the four edges of the world, the card's date,
@@ -246,6 +280,7 @@
    product, and the one that made every screen read as an instrument panel.
    ======================================================================= */
 .login-eyebrow,
+.profile-eyebrow,
 .field-label {
   font-family: var(--voice-you);
   font-size: var(--t-meta);
@@ -267,8 +302,9 @@
 /* ==========================================================================
    2. THE ROOM'S NAME -- the display cluster, and the only thing in it
    ======================================================================= */
-.login-title,
-.nc-title {
+/* `.nc-title` is gone with the flat screens; the door's own title keeps
+   the display cluster. */
+.login-title {
   font-family: var(--voice-room);
   font-size: var(--t-display);
   font-weight: 400;
@@ -281,55 +317,6 @@
 /* Auth and onboarding are one screen with one word on them, so they get the
    same treatment -- capped lower, because they sit inside a card. */
 .login-title { font-size: clamp(46px, 8vw, 104px); }
-
-/*
-   `align-content: center` is what made a wall of two look broken -- two
-   readings floating mid-screen with equal emptiness above and below reads as
-   "still loading", not as "this is what held". Starting at the top makes two
-   readings a short page, which is what a finished wall of two should be.
-*/
-.nc-stage--top-of-mind-wall {
-  align-content: start;
-  justify-content: start;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
-  gap: clamp(30px, 5vh, 60px) clamp(24px, 4vw, 52px);
-  min-height: 0;
-  margin-top: clamp(20px, 4vh, 44px);
-  padding-inline: 0;
-}
-
-/* ==========================================================================
-   4. THE POST-IT
-
-   Keeps its paper, tilt and shadow. What changes is that the words on it are
-   finally sized like the most important thing on the screen.
-   ======================================================================= */
-
-.nc-note { border-radius: var(--r-paper); }
-
-/* ==========================================================================
-   5. CAPTURE
-
-   Three complaints, one cause: it is a box, a box is a form, and a form is
-   filing. Saving something that quickened your pulse is not data entry.
-   ======================================================================= */
-
-/* Your words, in your voice -- sans against the wall's serif, so yours and
-   the room's are distinguishable without anything having to say so. */
-
-/* ==========================================================================
-   6. A SAVE
-
-   The material itself, set as running text at a real reading size. It was
-   13-15px -- the same as the buttons around it.
-   ======================================================================= */
-
-/* Anything the machine claims about a person takes the room's face. */
-.nc-loading {
-  font-family: var(--voice-you);
-  font-size: var(--t-ui);
-  color: var(--ink-3);
-}
 
 /* ==========================================================================
    8. CONTROLS
@@ -358,7 +345,9 @@
   border-radius: var(--r-paper);
 }
 
-.login-subtitle {
+.login-subtitle,
+
+.profile-subtitle {
   font-family: var(--voice-you);
   font-size: var(--t-lead);
   line-height: 1.5;
@@ -367,7 +356,9 @@
 
 .field-hint,
 .login-footer,
+.profile-footer,
 .login-link,
+.profile-link,
 .login-divider__label,
 .login-tabs {
   font-family: var(--voice-you);
@@ -388,7 +379,8 @@
    Everything that moves resolves to `--ease`. Timing only -- this cannot
    affect layout, so it is safe to apply broadly.
    ======================================================================= */
-.nc-note,
+/* `.nc-note` led this list and is gone — the post-it was the flat
+   screens' object and nothing renders one. The four below are live. */
 .btn-primary,
 .btn-destructive,
 .btn-google,
@@ -397,10 +389,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-.nc-note {
-    transition-duration: 1ms;
-    animation-duration: 1ms;
-  }
 }
 
 /* ==========================================================================
@@ -427,58 +415,16 @@
    never from weather.
    ======================================================================= */
 
-.bg-field,
-.noise {
-  display: none;
-}
+/* `.bg-field` / `.noise` were hidden here rather than deleted, and that is
+   why they outlived three craft passes. They are gone now — rules and
+   component both. See the note in `global.css`. */
 
 body {
   background: var(--bg);
 }
 
-/* ==========================================================================
-   15. ONE SURFACE
-
-   The prototype's central idea: opening a save does not navigate. The wall
-   recedes in place and what you opened comes forward, in the same box.
-
-   Today that is five stacked overlays -- a 460px history panel, a draggable
-   memory window layer, the capture modal, the room panel and the drop
-   overlay -- across 26 `position: fixed` rules reaching z-index 1000. Each
-   was reasonable alone; together they are why the product feels like parts
-   rather than one place.
-
-   These rules take the first step: the drawer stops being a floating sheet
-   and becomes the same ground, and the wall behind it recedes rather than
-   being covered over.
-   ======================================================================= */
-
-/*
-   A save in the list is a piece of text, not a bordered tile.
-
-   Rows had a hairline border, a radius, a tinted fill and a hover fill --
-   four devices to say "this is a row", on a surface where the only thing that
-   matters is the words. The rule between them is enough.
-*/
-
-/* The floating draggable memory-window layer was a third way to look at a
-   save, stacked on top of two others. Deleted. */
-
-/*
-   The wall recedes while something is open in front of it.
-
-   and the readings are still there behind what you are reading. This is what
-   makes opening a save feel like moving within one place instead of being
-   taken somewhere else.
-*/
-.nc-stage--top-of-mind-wall {
-  transition: transform var(--dur-slow) var(--ease), opacity var(--dur) var(--ease);
-  transform-origin: center top;
-}
-
 
 @media (prefers-reduced-motion: reduce) {
-  .nc-stage--top-of-mind-wall { transition: none; }
 }
 
 
@@ -528,23 +474,33 @@ body {
  * WHY HERE. `home.css` is only loaded by the world, so a register that lives
  * there cannot dress the door. This sheet is loaded by every page, and it is
  * written LAST in it on purpose: the two voice rules above also name
- * `.login-eyebrow` and `.field-label`, and a register that lost to them
- * would be a twenty-sixth attempt rather than the end of them.
+ * `.login-eyebrow`, `.profile-eyebrow` and `.field-label`, and a register
+ * that lost to them would be a twenty-sixth attempt rather than the end of
+ * them.
  *
  * DECLARED ONCE MEANS LAYERS STOP MATTERING. There is no longer any rule in
  * any layer to out-rank; `type-scale.test.ts` holds it at one. */
 .jar-label,
 .jar-saved,
-.jar-mouth-field::placeholder,
-.jar-mouth-step,
-.jar-mouth-where,
+/* `.jar-mouth-field::placeholder` LEFT THIS REGISTER on 2026-10-11. It was
+   right while that field was a one-line box on the home screen: a short
+   signpost, in the voice signposts use. The field is now the whole notepad
+   page — founder, with a screenshot of Notion's new page: "notion style -
+   just blank page" — and its placeholder is the only thing on that page, a
+   sentence inviting somebody to write. Prose does not go in the eyebrow
+   register, which this file already rules "belongs to eyebrows, never to
+   things you press".
+
+   WORTH KNOWING WHY IT TOOK THREE TRIES TO OVERRIDE: `@layer register` is
+   declared LAST in `layers.css`, so it beats `chrome` and `product` outright
+   no matter how specific the challenger is. Raising specificity in a lower
+   layer can never win. The entry had to leave the register, not be
+   out-ranked. */
 .jar-panel-vis,
 .jar-grounds,
 .login-eyebrow,
+.profile-eyebrow,
 .field-label,
-.profile-public-heading > .login-eyebrow,
-.profile-danger-heading > .login-eyebrow,
-.profile-memories-heading > .login-eyebrow,
 .login-divider,
 .login-divider__label,
 .login-tab,
@@ -567,8 +523,7 @@ body {
    join the sign-out verb in lower case is a design question, and it is not
    this rule's to answer. */
 .btn-destructive,
-.btn-google,
-.nc-profile-link {
+.btn-google {
   /* The register's voice stays shared; an interactive label can opt into a
      larger named type step without losing its uppercase/tracking. Metadata
      keeps the original ten-pixel default. */

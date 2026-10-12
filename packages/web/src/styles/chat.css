@@ -1,106 +1,894 @@
 @layer chrome {
-.chat-page { --jar-panel:var(--w-ground); position:fixed; top:var(--chat-top,0px); inset-inline:0; height:var(--chat-height,100dvh); display:grid; grid-template-columns:240px minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); overflow:hidden; background:var(--w-ground); color:var(--w-ink); font-size:var(--t-body); text-align:left; }
-.chat-page[data-memory-open] { grid-template-columns:220px minmax(0,1fr) 300px; }
-.chat-page button,.chat-page summary { min-height:var(--sp-44); box-sizing:border-box; padding:var(--sp-8) var(--sp-12); border:1px solid transparent; border-radius:var(--sp-12); background:none; color:inherit; font:inherit; cursor:pointer; }
-.chat-page button:hover,.chat-page summary:hover { background:var(--w-raised); }
-.chat-page button:disabled { opacity:.45; cursor:default; }
-.chat-page button:focus-visible,.chat-page summary:focus-visible,.chat-page textarea:focus-visible { outline:2px solid var(--w-muted); outline-offset:2px; }
-.chat-header { grid-column:1 / -1; display:flex; align-items:center; gap:var(--sp-12); padding:var(--sp-12) var(--sp-20); border-bottom:1px solid var(--w-edge); }
-.chat-header h1 { flex:1; margin:0; font-size:var(--t-lead); font-weight:500; }
-.chat-header .chat-history-toggle { display:none; }
-.chat-options { position:relative; }
-.chat-options summary { list-style:none; display:flex; align-items:center; justify-content:center; min-width:var(--sp-44); }
-.chat-options summary::-webkit-details-marker { display:none; }
-.chat-options-menu { position:absolute; right:0; top:100%; width:260px; max-width:calc(100vw - var(--sp-24)); padding:var(--sp-8); box-sizing:border-box; z-index:5; background:var(--w-ground); border:1px solid var(--w-edge); border-radius:var(--sp-12); }
-.chat-options-menu > button { width:100%; text-align:left; }
-.chat-options-menu label { display:block; font-size:var(--t-note); padding:var(--sp-8); }
-.chat-sidebar { grid-column:1; min-height:0; padding:var(--sp-20) var(--sp-12); border-right:1px solid var(--w-edge); overflow-y:auto; }
-.chat-sidebar header,.chat-memory header { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-8); }
-.chat-sidebar h2,.chat-memory h2 { margin:0 0 var(--sp-12); font-size:var(--t-body); font-weight:500; }
-.chat-sidebar ul,.chat-memory ul,.chat-messages { list-style:none; margin:0; padding:0; }
-.chat-sidebar .chat-new { width:100%; border:1px solid var(--w-edge); margin-bottom:var(--sp-20); text-align:left; }
-.chat-sidebar nav button { display:block; width:100%; text-align:left; margin-bottom:var(--sp-4); }
-.chat-sidebar nav button[aria-current] { background:var(--w-raised); border-color:var(--w-edge); }
-.chat-sidebar nav span { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
-.chat-sidebar time { display:block; font-size:var(--t-note); color:var(--w-faint); margin-top:var(--sp-6); }
-.chat-main { grid-column:2; min-width:0; min-height:0; display:flex; flex-direction:column; }
-.chat-scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:var(--sp-24); scrollbar-gutter:stable; }
-.chat-transcript { max-width:720px; margin-inline:auto; }
-.chat-topic { border-left:2px solid var(--w-edge); padding:var(--sp-8) var(--sp-16); color:var(--w-muted); margin-bottom:var(--sp-24); }
-.chat-topic blockquote { margin:var(--sp-8) 0; color:var(--w-ink); }
-.chat-welcome { padding-block:clamp(24px,10vh,96px); }
-.chat-welcome h2 { font-size:calc(var(--t-lead) * 1.5); font-weight:400; line-height:1.4; margin-bottom:var(--sp-12); }
-.chat-welcome > p { color:var(--w-muted); }
-.chat-starters { display:flex; flex-wrap:wrap; gap:var(--sp-8); margin-top:var(--sp-24); }
-.chat-starters button { border:1px solid var(--w-edge); text-align:left; }
-.chat-messages > li { margin-block:var(--sp-24); min-width:0; overflow-wrap:anywhere; }
-.chat-messages > li[data-role="user"] { width:fit-content; max-width:88%; margin-left:auto; padding:var(--sp-12) var(--sp-16); border:1px solid var(--w-edge); border-radius:var(--sp-16); background:var(--w-raised); }
-.chat-message-heading { display:flex; align-items:center; gap:var(--sp-12); color:var(--w-muted); font-size:var(--t-note); margin-bottom:var(--sp-8); }
-.chat-message-heading time { color:var(--w-faint); font-size:var(--t-note); }
-.chat-message-text { line-height:1.7; }
-.chat-message-text p { white-space:pre-wrap; margin:var(--sp-8) 0; }
-.chat-message-text ul,.chat-message-text ol { padding-left:var(--sp-24); margin-block:var(--sp-12); }
-.chat-message-text code { background:var(--w-raised); padding:2px var(--sp-4); border-radius:var(--sp-4); }
-.chat-page .jar-conversation-actions { display:flex; flex-wrap:wrap; gap:var(--sp-12); }
-.chat-page .jar-conversation-actions button { margin:0; padding-inline:0; font-size:var(--t-note); color:var(--w-muted); }
-.chat-page .jar-item-actions { margin-left:0; }
-.chat-page .jar-item-actions > summary { padding-inline:0; }
-.chat-source-summary { margin-top:var(--sp-8); font-size:var(--t-note); color:var(--w-muted); }
-.chat-source-summary > summary { display:flex; align-items:center; min-height:var(--sp-44); cursor:pointer; }
-.chat-source-summary > summary:hover,.chat-source-summary > summary:focus-visible { color:var(--w-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
-.chat-page .jar-conversation-thought section { margin-block:var(--sp-12); }
-.chat-page .jar-conversation-adopt { display:flex; align-items:center; gap:var(--sp-8); min-height:var(--sp-44); }
-.chat-page .jar-conversation-adopt input { width:var(--sp-20); height:var(--sp-20); flex:none; }
-.chat-citations { display:flex; flex-wrap:wrap; gap:var(--sp-8); }
-.chat-citations button { max-width:100%; border:1px solid var(--w-edge); text-align:left; font-size:var(--t-note); }
-.chat-source-date { display:block; }
-.chat-reading-choices { display:grid; gap:var(--sp-8); margin-block:var(--sp-16); }
-.chat-reading-choices > p { margin:0; }
-.chat-page .chat-reading-choice { display:flex; flex-direction:column; gap:var(--sp-6); width:100%; text-align:left; border:1px solid var(--w-edge); padding:var(--sp-12); }
-.chat-reading-choice-heading { display:flex; justify-content:space-between; gap:var(--sp-12); width:100%; color:var(--w-muted); font-size:var(--t-note); }
-.chat-reading-choice-text { line-height:1.6; overflow-wrap:anywhere; }
-.chat-page .jar-conversation-reference { border:1px solid var(--w-edge); border-radius:var(--sp-12); padding:var(--sp-12); }
-.chat-page blockquote { margin-inline:0; line-height:1.6; }
-.chat-muted { color:var(--w-muted); font-size:var(--t-note); }
-.chat-notice { margin:var(--sp-8) var(--sp-24); font-size:var(--t-note); }
-.chat-thinking { display:flex; align-items:center; gap:var(--sp-12); color:var(--w-muted); min-height:var(--sp-44); }
-.chat-thinking-dots { display:flex; gap:var(--sp-4); align-items:center; }
-.chat-thinking-dots i { width:var(--sp-4); height:var(--sp-4); border-radius:50%; background:currentColor; animation:chat-thinking-pulse 1.2s ease-in-out infinite; }
-.chat-thinking-dots i:nth-child(2) { animation-delay:160ms; }
-.chat-thinking-dots i:nth-child(3) { animation-delay:320ms; }
-@keyframes chat-thinking-pulse { 0%,70%,100% { opacity:.3; transform:translateY(0); } 35% { opacity:1; transform:translateY(calc(-1 * var(--sp-2))); } }
-@media (prefers-reduced-motion:reduce) { .chat-thinking-dots i { animation:none; opacity:.6; } }
-.chat-composer { flex-shrink:0; width:100%; max-width:768px; box-sizing:border-box; margin-inline:auto; padding:var(--sp-12) var(--sp-24) calc(var(--sp-16) + env(safe-area-inset-bottom)); }
-.chat-input-row { display:flex; align-items:flex-end; gap:var(--sp-8); padding:var(--sp-8); border:1px solid var(--w-edge); border-radius:var(--sp-16); background:var(--w-raised); }
-.chat-input-label { flex:1; min-width:0; }
-.chat-input-label > span { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-.chat-page textarea,.chat-page select { display:block; width:100%; box-sizing:border-box; min-height:var(--sp-44); font:inherit; font-size:var(--t-lead); line-height:1.5; color:var(--w-ink); background:var(--w-ground); border:1px solid var(--w-edge); border-radius:var(--sp-8); padding:var(--sp-8); }
-.chat-input-row textarea { resize:none; border:0; background:none; max-height:180px; }
-.chat-composer .chat-send { background:var(--w-ink); color:var(--w-ground); flex-shrink:0; }
-.chat-reply-status,.chat-correction { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-8); font-size:var(--t-note); }
-.chat-reply-status p { flex:1; margin:var(--sp-8) 0; }
-.chat-correction { margin-bottom:var(--sp-8); border-left:2px solid var(--w-edge); padding-left:var(--sp-12); }
-.chat-memory { grid-column:3; min-height:0; overflow-y:auto; border-left:1px solid var(--w-edge); padding:var(--sp-20); background:var(--w-ground); }
-.chat-memory section { padding-block:var(--sp-12); border-bottom:1px solid var(--w-edge); }
-.chat-memory h3 { font-size:var(--t-body); font-weight:500; }
-.chat-memory p { line-height:1.6; overflow-wrap:anywhere; }
-.chat-memory small { display:block; color:var(--w-muted); }
-.chat-page .chat-drawer-backdrop,.chat-page .chat-drawer-backdrop:hover { position:absolute; inset:60px 0 0; z-index:3; margin:0; padding:0; border:0; border-radius:0; background:var(--w-ground); opacity:.5; }
-@media (max-width:1100px) {
-  .chat-page[data-memory-open] { grid-template-columns:220px minmax(0,1fr); }
-  .chat-memory { position:absolute; inset:68px 0 0 auto; width:min(340px,100%); box-sizing:border-box; z-index:4; box-shadow:0 0 0 100vmax var(--w-raised); }
+/**
+ * TALK — THE SAME ROOM, STOOD CLOSER.
+ *
+ * This surface used to be a different product. It had an app header with a
+ * back arrow and a title, a 240px history column pinned down its left side,
+ * and a 300px memory column pinned down its right — three pieces of chrome
+ * around a conversation, on a product whose every other screen is one column
+ * on a dark ground with two corner buttons. Founder: "the design language is
+ * so different from what we have in the top of mind page."
+ *
+ * It was different because it was built as a place you GO. It is not. The box
+ * on the home screen keeps, and what the companion says back is answerable —
+ * answering is how you arrive here. So this is the same room; you have simply
+ * stood closer to the one thing you answered. The ground, the face, the
+ * corners and the composer are the ones you were already looking at. What
+ * changes between there and here is which direction the box points: there it
+ * keeps, here it replies.
+ *
+ * WHAT YOU SAID IS DIM; WHAT IT SAID IS LIT. There are no bubbles in this
+ * transcript, no borders, no alternating backgrounds, no right-aligned
+ * column. The founder law is that light is the only meaning channel, and the
+ * transcript obeys it like everything else: your own turns sit in `--muted`
+ * and the reply sits in `--ink`. That is the whole distinction, and it needs
+ * no second one.
+ *
+ * NO NUMERALS. A clock beside every turn is a number printed where a sentence
+ * should be read, on a product whose rule is that states render and numerals
+ * never. The order of the transcript already says when.
+ *
+ * AND THEN THE SHEETS WENT TOO. History and memory were columns, then drawers
+ * at every width, and now neither is on this surface: the list of
+ * conversations belongs to the corner that owns it on every screen, and "what
+ * the reply was allowed to read" was the model's context window with a label
+ * on it. Founder, 2026-10-10: "so many different buttons that I have no idea
+ * what its supposed to do."
+ *
+ * SO THIS FILE DRESSES THREE THINGS AND NOTHING ELSE: the transcript, the box,
+ * and — only while a reply is being written — one quiet button beside the
+ * sentence saying it is being written. There is no row across the top, no
+ * footnote list under a reply, no editor inside a message, no `···`. Every
+ * rule for those was deleted rather than left to rot; `ConversationPanel`'s
+ * header says what each one was and why it went.
+ *
+ * EVERY SIZE COMES FROM THE SCALE IN global.css, and the face is the one
+ * `claims.css` names. This file introduces no token and no colour.
+ */
+
+/* ---------------------------------------------------------------------------
+ * The page: one column, like every other one
+ * ------------------------------------------------------------------------- */
+
+/* THE MEASURE REACHES THE SHEET'S HEADER TOO.
+   A conversation is rendered inside `.waka-over--talk`, and that sheet's
+   HEADER is a sibling of `.chat-page` rather than a descendant — so when the
+   header was told to stand on the transcript's own left edge,
+   `var(--chat-measure)` resolved to nothing there and the two edges stayed
+   28px apart. Custom properties inherit down and not sideways, so the token
+   now LIVES here, one level up, and `.chat-page` inherits it. Declaring it
+   in both places would be the drift this token exists to prevent — the
+   reasoning below is why the number is 545 and it travels with it. */
+.waka-over--talk {
+  /* ONE COLUMN WIDTH, NAMED ONCE — AND THE NUMBER CAME FROM THE FONT.
+     The transcript and the box you type into must stand on the same column.
+     They were "a few pixels apart, which reads as a mistake rather than a
+     choice" at the time that comment was written, and they were still 56px
+     apart after it (see `.chat-main`), because the number living in one
+     place is only half of the fix.
+
+     WHY 545 AND NOT A ROUND 600. Jost 300 is a narrow geometric face, so
+     character counts cannot be guessed from a width. Measured in Chromium
+     with the real webfont: the average advance for running English text is
+     6.388px at 15px — 0.426em — so the 680px column this surface shipped
+     with carried 106 characters per line, and the 620px it was first cut to
+     still carried 97. At the 16px this surface now sets (see `font-size`
+     below) one character is 6.814px, so 80 of them is 545px.
+
+     80 is WCAG 1.4.8's ceiling for a line of text, and the top of the 45–90
+     band Butterick gives — his reasoning being that a longer line makes the
+     eye travel farther to find the start of the next one. It is the widest
+     defensible column rather than the most comfortable one, which is the
+     right end of the band for a surface whose other half is a text box.
+
+     NOT `ch`. `1ch` is the advance of "0", which in this face is 0.580em —
+     39% wider than a character of real text. "60ch" would have given 83
+     characters, not 60. */
+  --chat-measure: 545px;
 }
-@media (max-width:760px) {
-  .chat-page,.chat-page[data-memory-open] { grid-template-columns:minmax(0,1fr); }
-  .chat-header { padding:var(--sp-8); gap:var(--sp-4); }
-  .chat-header .chat-history-toggle { display:block; }
-  .chat-home-label { display:none; }
-  .chat-main { grid-column:1; }
-  .chat-sidebar { position:absolute; inset:60px auto 0 0; width:min(320px,100%); z-index:4; box-sizing:border-box; background:var(--w-ground); box-shadow:0 0 0 100vmax var(--w-raised); }
-  .chat-memory { top:60px; width:100%; }
-  .chat-scroll { padding:var(--sp-16); }
-  .chat-composer { padding:var(--sp-8) var(--sp-12) calc(var(--sp-12) + env(safe-area-inset-bottom)); }
-  .chat-welcome { padding-block:var(--sp-24); }
-  .chat-welcome h2 { font-size:calc(var(--t-lead) * 1.25); }
+
+.chat-page {
+  /* The dialog surfaces this page opens composite over the page's own
+     ground rather than the canvas world's. */
+  --jar-panel: var(--bg);
+  position: fixed;
+  top: var(--chat-top, 0px);
+  inset-inline: 0;
+  height: var(--chat-height, 100dvh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-weight: 300;
+  /* THE SAME SIZE AS THE BOX. The transcript was `--t-body` (15px) and the
+     textarea `--t-input` (`max(16px, --t-body)` = 16px) — a one-pixel
+     difference between the words you read and the words you type, which is
+     too small to read as a decision and too large to read as nothing. This
+     takes the surface to the field's size rather than the other way around,
+     because `--t-input`'s floor is the guard against iOS Safari zooming on
+     focus, and that guard is not negotiable. */
+  font-size: var(--t-input);
+  line-height: 1.6;
+  text-align: left;
+}
+
+/* One quiet control register for the whole surface. The composer's send
+   button opts back out below — it is the only filled control here, exactly
+   as it is the only filled control on the home screen. */
+.chat-page button {
+  box-sizing: border-box;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  font-weight: 300;
+  cursor: pointer;
+}
+
+.chat-page button:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+/**
+ * A DISABLED CONTROL DIMS ITS FILL AND KEEPS ITS LABEL READABLE.
+ *
+ * This rule used to be `opacity: 0.45`, which fades the WORDS as well as
+ * whatever is behind them. On this ground that is how a control becomes a
+ * blank rectangle — a bug this repo has shipped before — and an unreadable
+ * label is worse than a bright one, because a person cannot even tell what it
+ * is they are not allowed to press. So the label stays at `--muted` (7:1) and
+ * the only filled control on the surface drops its fill instead; see
+ * `.chat-send:disabled` at the bottom of the file. What a disabled control
+ * loses here is its hover, and most of them say their state in the label
+ * anyway ("Loading earlier messages…", "Sending…").
+ */
+.chat-page button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.chat-page button:focus-visible,
+.chat-page textarea:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ---------------------------------------------------------------------------
+ * What this conversation is about
+ *
+ * The header is gone. The corners are the navigation, as they are on every
+ * page, and the room they need is reserved here — they are pinned to the
+ * viewport and are not in this flow.
+ * ------------------------------------------------------------------------- */
+
+/* NOTHING SITS ABOVE THE TRANSCRIPT ANY MORE. `.chat-top` was a row pinned
+ * under the corners holding "Your memory" and a `···` menu, with a comment
+ * insisting it was "not a second header" — which is what a second header
+ * always says. `.chat-options` and `.chat-options-menu` dressed the menu's
+ * popover: a draft picker and "Delete conversation". All three are gone with
+ * the controls they framed. */
+
+/* ---------------------------------------------------------------------------
+ * The transcript
+ * ------------------------------------------------------------------------- */
+
+/**
+ * THE GUTTERS ARE THE SURFACE'S, SO BOTH HALVES STAND ON ONE COLUMN.
+ *
+ * MEASURED 2026-10-11 at 1512, 1280 and 768: the composer's frame rendered
+ * 56px NARROWER than the transcript above it, inset 28px on each side, same
+ * centre. A box narrower than the words it belongs to does not read as a
+ * choice; it reads as a rendering accident, and it is the first thing the eye
+ * catches on this surface.
+ *
+ * The cause was that each half carried its own copy of the gutter and the two
+ * copies landed on different sides of the measure. `.chat-scroll` put
+ * `clamp(20px, 6vw, 28px)` on the SCROLLER and the 680px cap on the column
+ * inside it, so the column was a clean 680. `.chat-composer` put the same
+ * clamp and the same cap on the SAME element, with `box-sizing: border-box` —
+ * so its 680 was frame-plus-padding and the frame came out 624.
+ *
+ * Note what this means about the comment that used to sit on
+ * `.chat-transcript` claiming the two columns had been brought together "to
+ * the pixel": the number was shared and the geometry was not. One cap in one
+ * place is not enough if the thing being capped is not the same thing.
+ *
+ * So the gutter is declared ONCE, here, on the element that owns both halves,
+ * and neither half has one of its own to disagree with. They only align
+ * below 768px by coincidence, where the clamp and the available width happen
+ * to collide — which is why this survived a phone pass.
+ */
+.chat-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-inline: clamp(20px, 6vw, 28px);
+}
+
+/**
+ * THE TRANSCRIPT FLOWS FROM THE TOP, BECAUSE THIS IS NOT A MESSAGING APP.
+ *
+ * THE REVERSAL, STATED PLAINLY: this rule used to say `margin-block-start:
+ * auto` under the heading "THE TRANSCRIPT SITS ON THE BOTTOM", arguing that
+ * "messages grow upward from the box, the way they do in every conversation
+ * anyone has ever had on a screen." That sentence is true of one kind of
+ * chat and false of this one, and the founder saw the result: "so ugly."
+ *
+ * Chat interfaces are two families, not one.
+ *
+ *   MESSAGING — iMessage, WhatsApp, Slack, Discord. Many short turns, more
+ *   than one human, speakers alternating without warning. Bubbles and
+ *   side-alignment exist because a six-word turn needs its own silhouette.
+ *   Bottom-anchored, because the newest line is the whole unit of attention.
+ *
+ *   ASSISTANT TRANSCRIPTS — ChatGPT, Claude, Vercel's AI Elements, Notion
+ *   AI. Exactly two parties, strictly alternating, and one side's turn is
+ *   long-form prose with paragraphs and lists. These flow from the TOP: on
+ *   send, your line rises to near the top of the frame and the reply fills
+ *   in beneath it. A reply is read from its beginning, so its beginning is
+ *   what gets anchored.
+ *
+ * `ConversationText` emits `<p>`, `<ul>`, `<ol>` and `<code>`. WAKA's turn
+ * is a document, so this surface is the second family — and it had taken the
+ * first family's anchoring. That combination is what made the hole: assistant
+ * content density with messaging anchoring. Two short turns are ~200px of
+ * content in a ~720px track inside a panel fixed at `88dvh`, and an auto
+ * margin's job is to absorb the other ~500px. It did its job.
+ *
+ * TOP-ALIGNING ALSO RETIRES THE BUG THE OLD RULE WAS WRITTEN TO DODGE,
+ * rather than dodging it again. Measured 2026-10-10 in headless Chromium,
+ * nested in `.waka-over--talk` the way `Home.tsx` renders it, the earlier
+ * `justify-content: flex-end` lost the beginning of every conversation:
+ *
+ *   320×568   442px above the frame, scrollHeight == clientHeight: NOT
+ *             SCROLLABLE TO — gone, not clipped
+ *   360×640   316px above the frame, same
+ *   390×844   89px above the frame, same
+ *   414×896   fits    768×1024  fits
+ *
+ * The cause is a flexbox rule that has bitten every chat UI ever written:
+ * overflow in a scroller's block-START direction is unreachable, because the
+ * content is moved off the scrollable origin instead of the scrollable area
+ * being extended — and the scroller reports no overflow at all, which is why
+ * reading the rule could never have found it. An auto margin yielded to
+ * overflow and so was safe. Content that simply flows from the top is safe
+ * for a stronger reason: there is no block-start overflow to be unreachable.
+ *
+ * The empty space now sits BELOW the last turn, between it and the box,
+ * where it reads as the room the next turn will take.
+ */
+.chat-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* NO GUTTER OF ITS OWN — `.chat-main` holds it for both halves. */
+  /* AND `both-edges`, NOT BARE `stable`. Bare `stable` reserves the gutter on
+     ONE side, so anywhere classic scrollbars exist — Windows, Linux, macOS
+     set to always-show — the centred transcript shifts ~7-8px against the
+     composer and re-opens the misalignment this commit just closed. Headless
+     Chromium on macOS reserves 0px, which is exactly why a measurement pass
+     here would not have caught it. */
+  scrollbar-gutter: stable both-edges;
+}
+
+.chat-transcript {
+  /* The composer's column, to the pixel — they were a few apart, which reads
+     as a mistake rather than a choice. 620px rather than 680: at `--t-reading`
+     in Jost 300, 680 runs about 95 characters and 620 about 85. Butterick
+     puts the comfortable band at 45–90, reasoning that a longer line makes
+     the eye travel farther to find the start of the next one. Both columns
+     moved together; `--chat-measure` is why they cannot drift apart again. */
+  width: 100%;
+  max-width: var(--chat-measure);
+  margin-inline: auto;
+  /* NO `margin-block-start: auto`, NO `justify-content: flex-end`. See the
+     note above: this surface is an assistant transcript, and those flow from
+     the top. Nothing here may push the content off the scrollable origin. */
+  padding-block: var(--sp-32) var(--sp-24);
+}
+
+.chat-messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/**
+ * AN EXCHANGE, NOT A STACK — WHICH IS A SPACING FACT BEFORE ANYTHING ELSE.
+ *
+ * Every turn carried `margin-block: var(--sp-32)`, so a reply sat exactly as
+ * far from the question that prompted it as from an unrelated turn. The
+ * surface then reads as N identical blocks, because that is literally how it
+ * is spaced. This product has already learned the lesson twice and written
+ * it down: `.jar-panel-text` records that even spacing made a card "read as
+ * three things stacked rather than one thing with a middle", and
+ * `.profile-formation` fixed it the same way — tight inside the pair, air
+ * around the pair.
+ *
+ * So: a question opens a pair, and the reply closes it.
+ */
+.chat-messages > li {
+  margin-block: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Air before a new question — this is where one exchange ends. */
+.chat-messages > li[data-role="user"],
+.chat-sending {
+  margin-block-start: var(--sp-40);
+}
+
+/* And close to the question it answers. */
+.chat-messages > li[data-role="assistant"] {
+  margin-block-start: var(--sp-16);
+}
+
+.chat-messages > li:first-child {
+  margin-block-start: 0;
+}
+
+/**
+ * WHO IS SPEAKING, SAID BY GEOMETRY AND BY LIGHT THAT ACTUALLY MEASURES.
+ *
+ * What was here: "YOUR OWN TURN IS DIMMER. The entire speaker distinction,
+ * in one line. No bubble, no border, no background, no change of side." That
+ * claim was never measured. Measured now, on this palette:
+ *
+ *   `--ink` (#e8edf4) on `--moon-ground` (#06080d)   17.03:1
+ *   `--muted` (ink @ 0.8)        vs ground 10.87:1   vs `--ink`   1.57:1
+ *   `--jar-muted` (ink @ 0.55)   vs ground  5.48:1   vs `--ink`   3.11:1
+ *
+ * WCAG 1.4.1 names 3:1 as the point at which a difference in lightness
+ * counts as a distinguishing visual means at all. The shipped distinction
+ * was 1.57 — under half of it. That is the whole of "no visual distinction
+ * between speakers": the one channel the surface relied on was not carrying.
+ * `--jar-muted` clears 3:1 against the reply and still holds 5.48:1 against
+ * the ground, which is AA for body text. Solving for the alpha that yields
+ * exactly 3:1 gives 0.561; the token in this repo is 0.55. It was already
+ * the right value, and this surface was not using it.
+ *
+ * AND GEOMETRY, because light alone is doing less here than its ratio
+ * implies: Jost 300 at `--t-reading` is a thin stroke, and a contrast figure
+ * is computed from colour and knows nothing about stroke weight. Your turns
+ * sit short and set to the inline end; WAKA's runs the full measure. This is
+ * the asymmetry every assistant transcript settles on — Vercel's AI Elements
+ * ships it in source, giving the user's message `ml-auto` and a container
+ * and the assistant's message nothing but a text colour — and the reason is
+ * that a container implies an utterance and cannot hold a document.
+ *
+ * STILL NO BUBBLE, NO BORDER, NO FILL, NO COLOUR. Position and light only.
+ */
+.chat-messages > li[data-role="user"],
+.chat-sending {
+  max-width: 85%;
+  margin-inline-start: auto;
+}
+
+/**
+ * "YOU" IS STILL SAID, AND IS NO LONGER PRINTED ABOVE EVERY MESSAGE.
+ *
+ * An uppercase label over each turn cost about 26px per message and appeared
+ * twice in a row when you wrote twice in a row. No shipping product does
+ * this. Slack and Discord print the name once per consecutive run; Salesforce
+ * ships a component whose only purpose is suppressing the repeat — a spacer
+ * named `slds-chat-message_faux-avatar`, documented as being "for when
+ * customer avatars are used in consecutive inbound messages to align the
+ * message body with the previous message". Assistant transcripts print no
+ * speaker label at all, because the asymmetry above already says who.
+ *
+ * It had become load-bearing for a bad reason — at 1.57:1 it was the only
+ * speaker channel that worked. Now that light and position both carry, it
+ * goes to the people who cannot see either, which is the only audience it
+ * was ever really for. Same technique as `.chat-input-label > span`, which
+ * is directly below and does the same job for the box.
+ */
+.chat-said,
+.chat-sending > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.chat-message-text {
+  line-height: 1.6;
+}
+
+.chat-message-text p {
+  white-space: pre-wrap;
+  margin: var(--sp-12) 0;
+}
+
+.chat-message-text p:first-child {
+  margin-top: 0;
+}
+
+.chat-message-text p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message-text ul,
+.chat-message-text ol {
+  padding-left: var(--sp-20);
+  margin-block: var(--sp-12);
+}
+
+.chat-message-text li {
+  margin-block: var(--sp-4);
+}
+
+.chat-message-text code {
+  padding: 2px var(--sp-4);
+  border-radius: var(--radius-sm);
+  background: var(--waka-raised);
+  font-size: var(--t-meta);
+}
+
+/* The light half of it. See the note above for why this is `--jar-muted`
+   and not `--muted`: 3.11:1 against the reply instead of 1.57:1. */
+.chat-messages > li[data-role="user"] .chat-message-text,
+.chat-sending .chat-message-text {
+  color: var(--jar-muted);
+}
+
+/* THE OPENING IS NOW THE EMPTY TRANSCRIPT AND THE BOX'S OWN QUESTION.
+ * `.chat-welcome` and `.chat-starters` dressed a heading, a hint and three
+ * pills — and the pills SENT a message on one press, which is a surprising
+ * thing for the first screen a stranger sees to do. The placeholder in the
+ * field asks the same question and waits. */
+
+/* What the conversation started from — a principle, or a reading. */
+.chat-topic {
+  margin-bottom: var(--sp-32);
+  color: var(--muted);
+  font-size: var(--t-meta);
+  letter-spacing: 0.06em;
+}
+
+.chat-topic blockquote {
+  margin: var(--sp-8) 0 0;
+  font-size: var(--t-lead);
+  letter-spacing: normal;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.chat-earlier {
+  margin-bottom: var(--sp-24);
+}
+
+/* ---------------------------------------------------------------------------
+ * Notices
+ *
+ * WHAT WAS DELETED FROM THIS SECTION, so nobody looks for it: `.chat-source-
+ * summary`, `.chat-citations`, `.chat-source-date`, `.chat-reading-choices`,
+ * `.chat-reading-choice`, `.chat-reading-choice-heading`, `.chat-reading-
+ * choice-text` and `.jar-conversation-reference` dressed the footnotes under
+ * each reply — including a summary that printed a COUNT, against the law that
+ * states render and numerals never. `.jar-conversation-actions`,
+ * `.jar-conversation-thought`, `.jar-conversation-adopt` and `.jar-item-
+ * actions` dressed the save-a-thought editor and its adoption checkbox;
+ * `.chat-correction` dressed "Correct reply". The surface has no per-message
+ * control left to dress.
+ * ------------------------------------------------------------------------- */
+
+.chat-page blockquote {
+  margin-inline: 0;
+  line-height: 1.5;
+}
+
+.chat-muted {
+  margin: var(--sp-8) 0 0;
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+
+/* ORPHANS. `text-wrap: pretty` runs a slower line-breaker that MDN
+   describes as favouring layout over speed and minimising orphans — the
+   right tool for body text, where `balance` is heading-scoped and capped at
+   six lines in Chromium. It is insurance, not the fix: the notice above this
+   was 132 characters in a column that fits about 118, which is why the word
+   "is." sat alone on a line. The string was shortened to 69. */
+.chat-notice,
+.chat-opening,
+.chat-message-text p {
+  text-wrap: pretty;
+}
+
+/**
+ * THE OPENING LINE, IN THE FIRST REPLY'S SEAT.
+ *
+ * It sits where WAKA's first turn will sit and is set like it, so the first
+ * real turn replaces it in place and nothing moves. NN/g's empty-state
+ * guidance asks for a line saying why a space is empty and a cue about what
+ * fills it, and warns specifically against "totally empty spaces" that leave
+ * someone unsure whether a thing is loading, broken, or simply empty — which
+ * is exactly what an empty transcript was.
+ */
+/* IT IS A BLOCK NOW, BECAUSE THE COMPANION IS IN IT. The creature and its
+   line stack and centre, with the creature's own aura doing the lighting —
+   the same arrangement as the home screen, which is the arrangement the
+   founder calls their favourite. The negative margin pulls the line back up
+   through the aura's lower falloff: the glow box is three times the body, so
+   without it the sentence sits a creature's height below the creature. */
+.chat-opening {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  text-align: center;
+}
+
+.chat-opening p {
+  /* The glow box is four times the body, so without pulling the line back
+     up through its lower falloff the sentence sits a creature and a half
+     below the creature. */
+  margin: calc(var(--sp-20) - 96px) 0 0;
+  max-width: 44ch;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* A THIRD COPY OF THE GUTTER, AND A THIRD COPY OF THE MEASURE — both gone.
+   This carried `max-width: 680px` and its own `clamp(20px, 6vw, 28px)` while
+   sitting inside containers that already hold both, so it rendered wider than
+   the column it belonged to and indented 28px from its left edge. Everything
+   it needs it now inherits from the composer it sits in. */
+.chat-notice {
+  margin: 0;
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * Waiting
+ *
+ * The one motion on this surface, and it explains rather than decorates: it
+ * is the only thing on screen saying a reply is still being written.
+ * ------------------------------------------------------------------------- */
+
+.chat-thinking {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  margin-block: var(--sp-32);
+  font-size: var(--t-meta);
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.chat-thinking-dots {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+}
+
+.chat-thinking-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: chat-thinking-pulse 1.2s ease-in-out infinite;
+}
+
+.chat-thinking-dots i:nth-child(2) { animation-delay: 160ms; }
+.chat-thinking-dots i:nth-child(3) { animation-delay: 320ms; }
+
+@keyframes chat-thinking-pulse {
+  0%, 70%, 100% { opacity: 0.3; transform: translateY(0); }
+  35% { opacity: 1; transform: translateY(-2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-thinking-dots i { animation: none; opacity: 0.6; }
+}
+
+/* ---------------------------------------------------------------------------
+ * The box
+ *
+ * Same anatomy as the one on the home screen, down to the class names it
+ * borrows for its frame. There it keeps; here it replies.
+ * ------------------------------------------------------------------------- */
+
+.chat-composer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  width: 100%;
+  max-width: var(--chat-measure);
+  box-sizing: border-box;
+  margin-inline: auto;
+  /* THE GAP ABOVE IS THE ONLY THING SEPARATING THE BOX FROM WORDS THAT
+     SCROLL UNDER IT. At `--sp-12` the last visible line of a long
+     conversation ended one pixel above the notice and the two read as one
+     overlapping thing. It is air rather than a rule or a fade: a rule would
+     be a second meaning channel, and a fade is unavailable on this ground —
+     a gradient from #06080d has ten code values per channel to work with,
+     which bands once every ~100px. */
+  padding: var(--sp-24) 0 calc(var(--sp-20) + env(safe-area-inset-bottom));
+}
+
+/**
+ * ONE ROW, ~56px AT REST — IT WAS 134px TO HOLD ONE LINE OF TEXT.
+ *
+ * `flex-direction: column` gave Send its own line beneath the field, and
+ * that line held nothing else: a 61px button in a full-width row. So the box
+ * you type into was more than twice as tall as the text in it, on a surface
+ * whose transcript was meanwhile short of room.
+ *
+ * Send goes where every composer puts it — the trailing end of the field's
+ * own row, on its baseline. `align-items: flex-end` keeps it there as the
+ * field grows, so it rides the bottom edge rather than drifting to a middle.
+ *
+ * IT STAYS VISIBLE AND DISABLED rather than appearing when there are words.
+ * NN/g's chatbot work found people "expected to be able to click on almost
+ * any nontext element" and that affordances "worked best when they were
+ * clearly signaled" — and a control that appears on keystroke cannot be
+ * found before the keystroke. The disabled treatment below was already
+ * reasoned about and is unchanged.
+ */
+.chat-input-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: var(--sp-8);
+  /* ═══ A RULE, NOT A CAPSULE ═══════════════════════════════════════════
+     Founder, with the composer and the dock stacked at the bottom of a
+     chat: "this double layer is so weird."
+
+     It was. Two rounded bars, one directly above the other, both the width
+     of the column — the dock is a pill because it is an object you press,
+     and the composer had become a pill because a capsule is what a chat
+     input looks like in other products. Side by side they read as a
+     stutter rather than as two different kinds of thing.
+
+     One of them has to stop being a shape, and it is this one: the dock is
+     the product's one permanent object and the field is part of the page
+     it sits on. A single rule under the row is also the treatment the
+     archive's search field already wears, so what used to be two field
+     designs is now one.
+
+     THE CONTRAST ARGUMENT IS UNCHANGED, which is the part a later tidy-up
+     must not undo. `--field-edge` is still the token (3.48:1 against the
+     ground, where `--line` is 1.41:1 — see its note in `chrome.css`), and
+     focus is still the same 3:1 CHANGE in the same pixels. What went is
+     the radius and the fill, neither of which was carrying a ratio: the
+     fill measured 1.07:1 and was doing nothing but rounding a corner. */
+  border: 0;
+  border-bottom: 1px solid var(--field-edge);
+  background: none;
+}
+
+/**
+ * FOCUS IS THE BOX LIGHTING UP, NOT A SECOND SHAPE AROUND IT.
+ *
+ * The surface rule below gives every button and the textarea
+ * `outline: 2px solid var(--ink); outline-offset: 2px` — full #e8edf4 at
+ * 17:1, held two pixels off the edge. Beside a hairline that is now visible,
+ * that renders as two concentric rectangles, and dimming it does not help:
+ * it is still two rectangles. The box brightening its own edge is one shape,
+ * and it is the only version of this that obeys the house rule that light is
+ * the meaning channel — the light lands ON the thing that has focus.
+ *
+ * MEASURED against both criteria that apply:
+ *
+ *   focused edge vs ground (1.4.11, needs 3:1)            10.87:1
+ *   focused vs unfocused, same pixels (2.4.13, needs 3:1)  3.12:1
+ *   area: 1px border + 1px ring on a 545x58 box            2,406px²
+ *                                 against 4h+4w required   2,412px²
+ *
+ * The area lands 6px² short of SC 2.4.13's perimeter rule, which is AAA; the
+ * two contrast requirements are met with room. Taking the edge to full `--ink`
+ * would clear all three, and was declined for the reason the palette note in
+ * `chrome.css` gives: pure white is reserved for the two things that are
+ * actually light. The box is not one of them.
+ *
+ * THE TWO NUMBERS ARE A PAIR, which is the part a later tidy-up will not
+ * see. 2.4.13 asks for a 3:1 CHANGE between the focused and unfocused
+ * pixels, so the resting edge cannot be brightened on its own: at 40% rest
+ * this drops to 2.90 and fails. 38% rest with ink at 80% is the pairing that
+ * satisfies the resting edge's own 3:1 and the change at once. Move either
+ * and recompute both.
+ */
+.chat-input-row:focus-within {
+  /* The rule brightens and thickens — the same 3:1 change in the same
+     pixels the box used to make with its whole edge, now spent on the one
+     edge that is left. */
+  border-bottom-color: color-mix(in srgb, var(--ink) 80%, transparent);
+  box-shadow: 0 1px 0 0 color-mix(in srgb, var(--ink) 80%, transparent);
+}
+
+/* The field's own ring would be the second rectangle; the row above has it. */
+.chat-input-row textarea:focus-visible {
+  outline: none;
+}
+
+.chat-input-label {
+  display: block;
+  flex: 1;
+  min-width: 0;
+}
+
+/* The label is for anyone who cannot see where the cursor is. */
+.chat-input-label > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.chat-page textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  /* CAPPED IN LINES, AND IN SCREEN. `8rem` was 4.5 lines at this leading —
+     too few for a product whose whole subject is what somebody is thinking
+     about, where a paragraph is the normal unit. Eight lines is what Vercel's
+     published composer allows and is the ceiling that still leaves the
+     transcript the larger half of the surface.
+
+     `lh` rather than pixels so the cap stays eight LINES when the type scale
+     moves — a px cap silently becomes six lines or eleven.
+
+     The `30dvh` clause is load-bearing, not belt-and-braces: this surface's
+     own measurement note records the overlay being 221px tall at 320x568
+     after its header and composer, where an eight-line box would be taller
+     than the conversation it belongs to.
+
+     `field-sizing: content` below is what actually does the growing. MDN
+     records it as Baseline 2026, newly available June 2026 — so a browser a
+     few months older gets a fixed `min-height` box that scrolls internally,
+     which is why `max-height` and `overflow-y` stay on this element rather
+     than being left to the newer property. */
+  min-height: 56px;
+  max-height: min(8lh, 30dvh);
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--sp-16) 0 var(--sp-16) var(--sp-16);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-input);
+  font-weight: 300;
+  line-height: 1.45;
+  resize: none;
+  field-sizing: content;
+}
+
+.chat-page textarea:focus-visible {
+  outline: none;
+}
+
+/* `.chat-page select` went with the only two selects here: the draft picker
+   in the `···` menu and the one inside the save editor. */
+
+/* The primary action, and the only filled control on the surface — the same
+   one the home screen's box ends with. */
+.chat-page .chat-send {
+  flex: none;
+  /* 40, not 32. 32 clears WCAG 2.5.8's 24x24 (AA) and misses 2.5.5's 44x44
+     (AAA); 40 is the largest that fits inside the 56px row this composer now
+     rests at, with `--sp-8` above and below it. The coarse-pointer rule at
+     the foot of this file still takes it to the full 44 on a touch screen,
+     where the floor is not a recommendation. */
+  min-height: 40px;
+  margin: 0 var(--sp-8) var(--sp-8);
+  padding: 0 var(--sp-16);
+  border: 1px solid var(--ink);
+  border-radius: var(--waka-r-control);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: var(--t-ui);
+}
+
+.chat-page .chat-send:disabled {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+/* A SENTENCE, NOT A TOOLBAR. This was a flex row because three buttons —
+   stop, retry, check — stood in it beside the text. Two of the three were
+   regeneration and went; stopping moved up beside the "thinking" line it
+   interrupts. What is left is one plain sentence about a reply that failed,
+   stopped or is rate-limited. */
+.chat-reply-status {
+  margin: 0;
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * No sheets
+ *
+ * `.chat-sidebar` and `.chat-memory` — two 340px drawers with their own
+ * headers, lists, timestamps and a `.chat-drawer-backdrop` to dismiss them —
+ * are deleted. The sidebar's rules had already outlived the sidebar: the list
+ * of conversations moved to the corner and nothing in this package rendered
+ * `.chat-sidebar` any more, which is exactly how CSS rots unnoticed. The
+ * memory drawer went on 2026-10-10 with the control that opened it.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * THE ONE ACT ON THIS SURFACE GETS A THUMB'S TARGET.
+ *
+ * MEASURED 2026-10-10 at 320, 360, 390, 414 and 768: `.chat-send` came out
+ * 61×32 at every one of them. It is the only thing a person presses here —
+ * everything else on the surface is text — and 32px is under the 44 the
+ * founder set and under what Apple asks for a primary action.
+ *
+ * Coarse pointers only, which is the line `home.css` drew for this product
+ * in August and wrote down: the ACTS get 44 where there is no pointer to
+ * fall back on, everything else clears 24, and nothing moves a pixel on a
+ * desktop. The matching block for the newer surfaces is at the foot of
+ * `claims.css`; this is the same ruling reaching the one control that lives
+ * here. The selector carries `.chat-page` because the rule it is raising
+ * does, and a rule that loses a specificity race is a comment.
+ *
+ * NO WIDTH QUERY. Every number above is identical at 320 and at 768, so the
+ * thing that was wrong was never the width — it was the input device, and a
+ * `max-width` breakpoint would have left a 768-wide tablet short.
+ */
+/* MEASURED 2026-10-10 with a real touch device emulated (Playwright,
+   `hasTouch`, DPR 3) at 320x568, 360x640, 390x844, 414x896 and 768x1024, on a
+   transcript long enough to overflow. Two findings, and only one of them was
+   a bug:
+
+     - `.chat-send` came back 63x44 at every width. The rule below was
+       already doing its job, and an earlier pass that measured WITHOUT touch
+       emulation saw 63x32 and nearly "fixed" a control that was correct.
+       A coarse-pointer rule can only be measured with a coarse pointer.
+
+     - `Load earlier messages` came back 23px tall at every width — barely
+       half the minimum, and it is the control at the TOP edge of a scrolling
+       transcript, which is the worst place on a phone to ask for a precise
+       tap. It is also the only way to reach the beginning of a long
+       conversation, so missing it means the conversation simply appears to
+       start in the middle.
+
+   Both now take the corner's own target size, which is the one number this
+   product uses for "a thumb goes here". */
+/* THE COMPOSER DOES NOT WRAP TO TWO ROWS ON A NARROW PHONE, and the reason
+   is a measurement that came out the other way from the one that was
+   predicted. The research this surface was rebuilt from recommended wrapping
+   below ~400px, reasoning that an inline Send leaves only ~100px of typing
+   room at 320. The typing room is real; the cure costs more than the disease.
+   Measured, row height at rest:
+
+     414x896   wrapped  80px    inline  80px
+     390x844   wrapped 114px    inline  80px
+     360x640   wrapped 114px    inline  80px
+     320x568   wrapped 136px    inline  80px
+
+   Wrapping spends 34-56px of a 496px panel — permanently, on every screen,
+   whether or not anyone is typing — to buy width that the field recovers on
+   its own the moment there are words in it, because it grows. Spending a
+   ninth of the smallest surface to make an empty box bigger is the complaint
+   this whole commit exists to answer. One row at every width, and the row is
+   the same 80px everywhere, which is its own argument. */
+
+@media (pointer: coarse) {
+  .chat-page .chat-send,
+  .chat-page .chat-earlier button {
+    min-height: var(--waka-corner);
+  }
 }
 }

@@ -40,10 +40,37 @@
  * what failed, and the error state would then have no styling of its own —
  * a broken page apologising in unstyled stacked text.
  *
- * WHAT IT MAY NEVER BECOME. It must not retry on its own. A boundary that
+ * WHAT IT MAY NEVER BECOME. It must not RE-MOUNT on its own. A boundary that
  * silently re-mounts a failing chunk spins, and a chunk that fails because
- * the deploy moved will fail identically every time. The person presses the
- * button, or nothing happens.
+ * the deploy moved will fail identically every time.
+ *
+ * ── AND YET IT RELOADS ONCE, WHICH IS NOT THAT ────────────────────────────
+ *
+ * That rule said "retry" and meant re-mount, and the distinction turned out
+ * to be the whole thing. `retry` below has always reloaded the DOCUMENT, with
+ * a note saying why: re-mounting asks for the same missing chunk from the
+ * same stale `index.html` and fails identically, while going back to the
+ * server is what actually changes the inputs. So this file already held that
+ * reloading is the correct act for this failure. What it required was a
+ * person to press a button to perform it.
+ *
+ * On 2026-10-10 that cost a working product. A dev server that had been up
+ * for fifty-four days was still serving a dep hash from before the imports
+ * changed; `react-dom.js?v=8027d2fd` 504'd, `Home.tsx` could not be
+ * dynamically imported, and the founder got this screen instead of their
+ * world. Vite's own recovery for exactly this is to force a reload — and
+ * this boundary caught the rejection first and replaced a self-healing
+ * refresh with a dead end. The same shape is a normal Tuesday in production,
+ * and the header above names it: a visitor holding an `index.html` from
+ * before the last deploy.
+ *
+ * So a module-load failure reloads the document ONCE, and the guard is what
+ * keeps it honest: a `sessionStorage` key written before the reload and
+ * cleared only on a successful mount, so the second failure in a row shows
+ * the screen and the button. It cannot spin, because it cannot happen twice.
+ * Anything that is not a module-load failure — a render error in the world's
+ * own code — shows the screen immediately, since reloading would be a guess
+ * about a bug that is going to happen again.
  */
 
 import { Component } from "react";
@@ -63,8 +90,58 @@ interface SurfaceBoundaryState {
   message: string;
 }
 
+/** The one-shot guard. Session-scoped, so a new tab gets its own attempt and
+    nothing survives the browser being closed. */
+const RELOADED = "waka:surface-reloaded";
+
+/**
+ * THE FAILURES A RELOAD CAN ACTUALLY FIX, and no others.
+ *
+ * Every one of these means "the file I asked for is not the file the server
+ * has" — a stale document, a moved deploy, a re-optimised dependency. They
+ * are the failures where the inputs change if you ask again. A `TypeError`
+ * from inside the world's own render is not here on purpose: reloading would
+ * reproduce it, and the person would watch the screen flicker and come back.
+ */
+function looksLikeAStaleModule(message: string): boolean {
+  return /dynamically imported module|Importing a module script failed|error loading dynamically imported|Failed to fetch/i.test(
+    message,
+  );
+}
+
 export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundaryState> {
   state: SurfaceBoundaryState = { failed: false, message: "" };
+
+  componentDidMount(): void {
+    /**
+     * ONLY WHEN SOMETHING ACTUALLY RENDERED.
+     *
+     * `this.state.failed` is load-bearing and was missing for one commit,
+     * which a test caught. React runs the lifecycle in this order:
+     *
+     *   render (throws) -> getDerivedStateFromError -> render the error
+     *   screen -> componentDidMount -> componentDidCatch
+     *
+     * So the boundary DOES mount while showing the failure, before it is
+     * told what the failure was — and clearing unconditionally wiped the
+     * guard a moment before the next reload would read it. The protection
+     * against spinning would have been removed by the very failure it exists
+     * to bound.
+     *
+     * Reaching here with `failed` false means a screen is on the page, which
+     * is the only honest evidence that a reload worked. That keeps this one
+     * automatic reload per FAILURE rather than one per session.
+     */
+    if (this.state.failed) return;
+    try {
+      sessionStorage.removeItem(RELOADED);
+    } catch {
+      /* Private browsing refuses storage. Then the guard cannot be written
+         either, so the branch below never fires and the button still works —
+         the degradation is "no automatic reload", which is where this file
+         started. */
+    }
+  }
 
   static getDerivedStateFromError(error: unknown): SurfaceBoundaryState {
     return {
@@ -74,6 +151,23 @@ export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoun
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
+    /* ONCE, AND ONLY FOR A FAILURE A RELOAD CAN CHANGE. Written before the
+       reload so the attempt is recorded even though nothing after this line
+       survives. */
+    if (looksLikeAStaleModule(error instanceof Error ? error.message : String(error))) {
+      let already = true;
+      try {
+        already = sessionStorage.getItem(RELOADED) !== null;
+        if (!already) sessionStorage.setItem(RELOADED, "1");
+      } catch {
+        already = true;
+      }
+      if (!already) {
+        console.warn(`[waka] ${this.props.surface} could not load its code; reloading once`);
+        window.location.reload();
+        return;
+      }
+    }
     /* The console is the only reporting channel this app has. Keep the
        surface name in the line: "the world failed" and "the account screen
        failed" arrive here as the same stack otherwise. */

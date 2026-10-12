@@ -23,5 +23,5 @@ afterEach(async()=>{await world?.unmount();vi.useRealTimers();vi.clearAllMocks()
 it('does not warm all originals, unrelated signals or room contents just by opening Home',async()=>{
   world=await mountWorld(facts);await act(async()=>vi.advanceTimersByTimeAsync(5000));
   expect(detail).not.toHaveBeenCalled();expect(signalDetail).not.toHaveBeenCalled();expect(wall).not.toHaveBeenCalled();expect(proposals).not.toHaveBeenCalled();
-  expect(world.container.querySelector('.jar-home-activities')).not.toBeNull();
+  expect(world.container.querySelector('.waka-corners')).not.toBeNull();
 });

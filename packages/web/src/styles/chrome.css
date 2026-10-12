@@ -1,11 +1,56 @@
 /* assigned to the `chrome` layer — see styles/layers.css for the order */
 @layer chrome {
-.jar-conversation-thought { margin: var(--sp-8) 0; }
-.jar-conversation-thought section { padding: var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); }
-.jar-conversation-thought textarea { width: 100%; min-height: var(--sp-96); font-size: var(--t-lead); }
-.jar-conversation-thought button { min-height: var(--sp-44); margin: var(--sp-4) var(--sp-8) var(--sp-4) 0; }
-.jar-conversation .jar-conversation-adopt { display: flex; align-items: center; gap: var(--sp-8); min-height: var(--sp-44); }
-.jar-conversation-adopt input { width: var(--sp-20); height: var(--sp-20); flex: none; }
+/* ELEVEN RULES WENT OUT OF THIS FILE ON THE CHAT SWEEP, and the first six of
+   them were the first six lines in it.
+   `.jar-conversation-thought`, `-adopt`, `-citations`, `-reference`,
+   `-topic`, `-starters` and `-question` match nothing in the tree any more:
+   the console they dressed was cut, and its stylesheet was not. That is the
+   same failure `e2e:dead-css` found ninety-six selectors of, and it is worth
+   naming the cost rather than just deleting them — `COLOUR_CEILING` in
+   `test/type-scale.test.ts` carries a note about the day those ninety-six
+   were removed and took twenty-one colour literals with them, which the
+   ratchet had no way to notice. Dead rules are not inert. They are slack.
+   `.jar-conversation-body` stays: `ConversationPanel` still wears it.
+
+   FORTY MORE WENT OUT ON 2026-10-10, finishing the sweep that one started.
+   Founder, three separate times: "remove all unused and deadcode across the
+   codebase." Every name below was put to every .tsx file under src, to the
+   test suite, and to `tools/` first — and in both plain and template-literal
+   form. `.jar-mark` plus a double-dash and `spark` LOOKS dead to a plain grep
+   and is built at `Home.tsx:750` from the tier name, so a string search alone
+   would have deleted a live rule.
+
+   NEVER WRITE A FILE GLOB IN A CSS COMMENT. The line above used to say "every
+   .tsx under src" with the shell glob, and the star-slash inside the
+   extension pattern CLOSED THIS COMMENT seventeen lines in. Everything after
+   it parsed as CSS, PostCSS died on `Unknown word sp.tier`, and the founder's
+   page went blank — from a sentence in a comment. A brace-balance check sees
+   nothing wrong (376/376 while it was broken); the check that catches it is
+   fetching the sheet and expecting 200, or `vite build`. What went:
+
+     `.jar-find-shortcut` (4)   the find control moved onto the saves
+                                overlay's own search box — #53
+     `.jar-conversation` (19)   the console this dressed is `chat.css`'s now;
+                                only `-body` survived the first sweep because
+                                only `-body` is still worn
+     `.jar-review-choices`,     a two-button footer the review dialogue
+     `.jar-review-footer-
+       actions` (6)             stopped drawing
+     `.jar-activity-card`,      the home activities grid's rows
+       `-icon`, `-copy`,
+       `-arrow`, `-hint` (8)
+     `.jar-conversation-
+       actions`, `.jar-citation-preview` (3)
+
+   AND TWO ARE DELIBERATELY STILL HERE, which is the honest half of this.
+   `.jar-home-activities` and `.jar-activity-title` dress the grid whose five
+   row classes just went out, and no `.tsx` renders either — but
+   `tools/performance/run.ts` and `tools/e2e/web-quality.ts` still NAME them
+   in their own selectors, so deleting the rules would be deleting the only
+   remaining description of a surface two harnesses are still trying to click.
+   That is a `Home.tsx` decision (the grid was replaced by
+   `.jar-personal-shortcuts`), not a stylesheet one, and the rule for this
+   sweep was: a selector is dead only when NOTHING in the tree names it. */
 /*
  * THE FLAT SCREENS, WEARING THE WORLD'S SKIN.
  *
@@ -63,14 +108,116 @@ body {
    * vocabulary is an alias of one of them, so a colour changes in exactly
    * one place and the two vocabularies cannot drift apart.
    * ------------------------------------------------------------- */
-  --moon-ground: #06080d;
-  --moon-ink: #e8edf4;
+  /* The same night the world is made of — see `--jar-atmos` in `home.css`,
+     which carries the reasoning and the measurements. These two must be the
+     same value: a page one shade off the world it opens over is the "why is
+     this screen different" complaint in its purest form. */
+  /* DARKER THAN THE FIRST ATTEMPT AT THIS. Founder, with the archive beside
+     the world: "too bright. I prefer this darker navy." The world reads
+     darker than the pages at the SAME token value, because the canvas
+     composites its own vignette over it while a page gets the flat value
+     plus a lamp — so matching the numbers made the pages lighter than the
+     thing they are supposed to be part of. Matched by eye against the world
+     rather than by arithmetic against itself. */
+  --moon-ground: #0a0e18;
+  /**
+   * THE INK IS WARM NOW, AND THE CONTRAST IS THE SAME NUMBER.
+   *
+   * Founder: "no matter what part of the workflow I want the user to feel
+   * 몽글몽글 소중소중 dreamy dreamy" — soft, warm, cherished — and then,
+   * pointing at an empty chat page: "nothing here feels like that." They
+   * are right, and the largest single reason is this literal. `#e8edf4` is
+   * a BLUE white. Every page in the product read its text, its hairlines
+   * and its quiet tiers out of it, while the one warm thing on screen — the
+   * creature's bubble, `--moon-warm: #fff2dc` — sat in the middle of them.
+   * So the world was lamplight and the pages were a terminal, and no amount
+   * of spacing was going to close that.
+   *
+   * `#f2ece1` is the same white turned toward the lamp. MEASURED against
+   * `--moon-ground`: 17.04:1, where the blue one was 17.03:1 — so every
+   * ratio reasoned about below and in `contrast.test.ts` is unchanged to
+   * the second decimal, and nothing had to be traded for the warmth.
+   *
+   * IT IS STILL NOT `--moon-warm`. That token is the ivory of the bubble
+   * and the creature's own light; ink that matched it exactly would make
+   * every paragraph read as something the companion said. This is a quarter
+   * of the way there: enough that the page and the creature are lit by one
+   * lamp, not enough that text starts speaking.
+   *
+   * THE QUIET TIERS BELOW ARE ALPHAS OF THIS SAME RGB and were updated with
+   * it — a tier left on the old literal would have been a cold grey inside
+   * a warm page, which is the "why is this screen different" failure in
+   * miniature.
+   */
+  --moon-ink: #f2ece1;
   /* readable on this ground at body sizes — the world can afford dimmer
      because its faint type is ornament over light; a form cannot */
-  --moon-muted: rgba(232, 237, 244, 0.72);
-  --moon-faint: rgba(232, 237, 244, 0.52);
-  --moon-edge: rgba(255, 255, 255, 0.08);
-  --moon-raised: rgba(255, 255, 255, 0.035);
+  /**
+   * THE QUIET TIERS, RE-SPEC'D AGAINST THE GROUND THEY SIT ON.
+   *
+   * These were picked to look right, which on a near-black ground is the one
+   * method that does not work: WCAG's 4.5:1 is calibrated on light grounds
+   * and overstates legibility as a colour approaches black, so a grey that
+   * "passes" here can be a glance-only tier in practice. Measured against
+   * `#06080d`:
+   *
+   *   muted at .72  ->  8.9:1   under the floor for anything sentence-length
+   *   faint at .52  ->  5.0:1   under the floor for a readable label
+   *   edge  at .08  ->  1.17:1  a hairline nobody can see
+   *
+   * Raised to 10.9:1, 6.7:1 and 1.41:1. The ink above is deliberately NOT
+   * pure white and stays that way — at 17:1 it is already at the top of the
+   * usable range, and #ffffff on Jost 300 blooms on a dark ground, thinning
+   * the stems it is supposed to make legible. Pure white is reserved for the
+   * two things that are actually light: the creature's core, and the one
+   * filled control on the screen.
+   */
+  --moon-muted: rgba(242, 236, 225, 0.8);
+  --moon-faint: rgba(242, 236, 225, 0.62);
+  /* WARM, LIKE EVERYTHING ELSE ON THIS GROUND. A neutral white alpha put
+     the one cold line in the product around its warmest objects. Mixed from
+     `--moon-warm` at the same alpha, so the value the ratio above was
+     measured at is unchanged to two decimals and the line stops reading as
+     a different material from the text beside it. */
+  --moon-edge: color-mix(in srgb, var(--moon-warm) 14%, transparent);
+  /**
+   * THE EDGE OF A THING YOU TYPE INTO, WHICH IS NOT THE EDGE OF A CARD.
+   *
+   * MEASURED 2026-10-11 on this ground (#06080d), in WCAG 2 ratios:
+   *
+   *   `--moon-edge` hairline      1.41:1   below any visibility floor
+   *   `--moon-raised` fill        1.07:1   below Material's own 1dp step
+   *   `--waka-lift` shadow        1.03:1   there is no darkness left to spend
+   *
+   * So the two composers in this product — the save box on the home screen
+   * and the conversation's box — were each drawn with a fill that does
+   * nothing, a hairline under the floor, and a shadow that physically cannot
+   * darken a ground whose luminance is 0.0024. Rendered, that is a smudge
+   * rather than an object, and "ugly" is what a smudge looks like when
+   * nothing is technically broken.
+   *
+   * WHY A SECOND TOKEN RATHER THAN RAISING `--moon-edge`. WCAG 1.4.11 asks
+   * 3:1 of a CONTROL's boundary, and its stated reason is that the boundary
+   * is how you know the control is there — its own failure example is "a
+   * text input lacks any form of label to hint at its presence". A card is
+   * not a control and does not carry that duty; raising every border in the
+   * product to 3:1 would turn dozens of quiet panels into drawn boxes to buy
+   * one input an edge. So this is the field register, and it has exactly two
+   * users.
+   *
+   * WHY 38% AND NOT 35%. 35% gives 3.11:1 against the ground but 2.91:1
+   * against the fill, and both are "adjacent colours" under 1.4.11. 38%
+   * clears both — 3.48:1 and 3.26:1 — and still leaves room for focus to be
+   * a 3:1 CHANGE from it (SC 2.4.13), which `--ink` at 80% is: 3.12.
+   *
+   * WHITE, NOT `--moon-ink`. At this alpha ink lands at 3.13:1 against the
+   * ground, under the fill's 3:1 once composited. The note above reserves
+   * pure white for "the two things that are actually light" because white
+   * BLOOMS on Jost 300 and thins the stems — true of a glyph, and the reason
+   * is stroke rendering, which a one-pixel rule has no stems to lose.
+   */
+  --moon-field-edge: rgba(255, 255, 255, 0.38);
+  --moon-raised: color-mix(in srgb, var(--moon-warm) 3.5%, transparent);
   --moon-warm: #fff2dc;
 
   /* the flat screens' own vocabulary */
@@ -79,6 +226,7 @@ body {
   --w-muted: var(--moon-muted);
   --w-faint: var(--moon-faint);
   --w-edge: var(--moon-edge);
+  --w-field-edge: var(--moon-field-edge);
   --w-raised: var(--moon-raised);
   --w-warm: var(--moon-warm);
 
@@ -92,6 +240,9 @@ body {
   --accent: var(--moon-ink);
   --muted: var(--moon-muted);
   --line: var(--moon-edge);
+  /* The one border in this product that has to be seen rather than sensed.
+     See `--moon-field-edge`. */
+  --field-edge: var(--moon-field-edge);
   --rule: var(--moon-edge);
   --cell: var(--moon-raised);
   --error: var(--moon-muted);
@@ -104,9 +255,45 @@ body {
     "Segoe UI", Roboto, sans-serif;
 }
 
+/**
+ * ONE FACE, EVERYWHERE — and this is where "everywhere" stopped being true.
+ *
+ * Founder: "can we make the font consistent across all the experience?"
+ * `claims.css` opens with that ruling and answers it by naming `--waka-face`
+ * and asking for it on every element the WORLD draws. The rule above is this
+ * layer's answer to the same question, and it is a DIFFERENT face: Pretendard
+ * and the platform sans.
+ *
+ * Which would not matter if nothing inherited from it. Everything does. The
+ * fields on the door, the fields on the settings page and every submit in
+ * both say `font-family: inherit` — so every input a person has ever typed
+ * into in this product has been set in the system sans while the sentence
+ * they were typing about was set in Jost, three inches above it. Law 3: the
+ * ruling landed on the surfaces the founder was looking at, and `chrome.css`
+ * dresses the three that had never been looked at.
+ *
+ * STATED ON THE SHELLS, NOT ON `body`. `body` is shared with the world, whose
+ * own stylesheets name their face element by element — changing it there
+ * would be a change to screens this pass is not auditing, to no visible
+ * effect. These three shells are the ones wearing the wrong face, so these
+ * three ask for the right one, and everything inside them inherits it.
+ *
+ * Pretendard does not leave: it is the SECOND family in `--waka-face`, which
+ * is how Korean keeps a face that has the glyphs for it while Latin gets
+ * Jost. The stack was always built for both.
+ */
+.login-shell,
+.profile-page,
+.waka-public {
+  font-family: var(--waka-face);
+}
+
 .login-subtitle,
+
+.profile-subtitle,
 .field-hint,
-.login-footer {
+.login-footer,
+.profile-footer {
   color: var(--w-muted);
 }
 
@@ -127,7 +314,7 @@ select {
   border-radius: 0;
   color: var(--w-ink);
   font-family: inherit;
-  font-size: 16px;
+  font-size: var(--t-input);
   outline: none;
   transition: border-color 0.2s ease;
 }
@@ -171,14 +358,13 @@ select:focus {
 .profile-tab,
 .profile-tabs button,
 .login-tab,
-.profile-memory-action,
-.nc-profile-link {
-  --t-label-size: var(--t-fine);
+.profile-memory-action {
+  --t-label-size: var(--t-meta);
 }
 .btn-destructive {
-  --t-label-size: var(--t-note);
+  --t-label-size: var(--t-ui);
 }
-.btn-google { --t-label-size: var(--t-fine); }
+.btn-google { --t-label-size: var(--t-meta); }
 .btn-primary,
 .btn-destructive,
 button[type="submit"] {
@@ -190,7 +376,7 @@ button[type="submit"] {
   background: none;
   color: var(--w-ink);
   font-family: inherit;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 5px;
@@ -207,7 +393,7 @@ button[type="submit"] {
      So the light moves to the underline: dim at rest, full when the hand
      arrives. The word keeps its weight either way — what changes is the rule
      beneath it, which is this product's own way of marking a thing. */
-  text-decoration-color: rgba(232, 237, 244, 0.4);
+  text-decoration-color: rgba(242, 236, 225, 0.4);
   transition:
     color 0.2s ease,
     opacity 0.2s ease,
@@ -234,14 +420,17 @@ button:disabled {
   cursor: default;
 }
 .login-link,
+.profile-link,
 a {
   color: var(--w-muted);
   text-decoration: none;
   transition: color 0.2s ease;
 }
 .login-link:hover,
+.profile-link:hover,
 a:hover,
 .login-link:focus-visible,
+.profile-link:focus-visible,
 a:focus-visible {
   color: var(--w-ink);
 }
@@ -272,8 +461,8 @@ a:focus-visible {
   flex-direction: column;
   gap: var(--sp-6);
 }
-.profile-public-heading .login-subtitle,
-.profile-danger-heading .login-subtitle {
+.profile-public-heading .profile-subtitle,
+.profile-danger-heading .profile-subtitle {
   font-size: var(--t-ui);
   line-height: 1.6;
   text-transform: none;
@@ -327,8 +516,11 @@ a:focus-visible {
    A palette is only a palette if every surface in it is named. Each container
    that paints its own ground is listed here, so nothing is left inheriting a
    colour from the theme it is no longer in. */
-.login-shell,
-.profile-shell {
+/* `.profile-shell` is NOT in this list, and its absence is the finding.
+   Settings was rebuilt on `.waka-page .profile-page` and `claims.css` paints
+   that ground; every rule here still keyed to `.profile-shell` was dressing
+   an element that no longer exists. */
+.login-shell {
   background: var(--w-ground);
   color: var(--w-ink);
 }
@@ -368,16 +560,18 @@ a:focus-visible {
    occluded. A sign-in form occludes nothing, so it gets no boxes: a rule
    under each field, a rule under the selected tab, and words for actions. */
 .login-form,
+.profile-form,
 .field {
   background: none;
   border: 0;
   border-radius: 0;
   box-shadow: none;
 }
-/* `:not([hidden])` for the same reason as the panels below — the profile
-   page's "you" tab IS a .login-form, so an unconditional display here keeps
-   it on screen when the other tab is selected. */
-.login-form:not([hidden]) {
+/* `:not([hidden])` for the same reason as the panels below — the settings
+   page's "you" tab IS a `.profile-form`, so an unconditional display here
+   keeps it on screen when the other tab is selected. */
+.login-form:not([hidden]),
+.profile-form:not([hidden]) {
   display: flex;
   flex-direction: column;
   gap: var(--sp-18);
@@ -648,7 +842,7 @@ a:focus-visible {
   display: block;
   margin: var(--sp-8) 0;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--t-fine);
+  font-size: var(--t-meta);
   line-height: 1.5;
   color: var(--ink);
   word-break: break-all;
@@ -669,7 +863,7 @@ a:focus-visible {
   gap: var(--sp-12);
   margin: 0 0 var(--sp-14);
   color: var(--w-ink);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   line-height: 1.5;
   cursor: pointer;
 }
@@ -684,14 +878,28 @@ a:focus-visible {
   accent-color: var(--w-ink);
   cursor: pointer;
 }
-.profile-toggle-row input:disabled,
-.profile-toggle-row input:disabled + span {
+/* AND THE SAME MISTAKE THIS BLOCK WAS WRITTEN TO FIX, five rules below the
+   note describing it: "the words describing what you are about to make
+   public were not readable at all. On a privacy control that is the worst
+   possible bug." The fix above repaired the resting state and left the
+   disabled one dimming the sentence to 45% — which is where the second
+   checkbox SPENDS MOST OF ITS LIFE, because it is disabled until the first
+   one is on. So the label a person most needs while deciding whether to
+   share their top of mind was the one label never shown at full ink.
+   The BOX dims, because the box is what cannot be pressed. The words say
+   what the box would do either way. */
+.profile-toggle-row input:disabled {
   opacity: 0.45;
+  cursor: default;
+}
+.profile-toggle-row input:disabled + span {
+  color: var(--w-muted);
   cursor: default;
 }
 /* the save verb sits after the form, not across it — but the doorway's own
    submit is a full-width control, so it is not one of these */
 .login-form .btn-primary:not(.btn-doorway),
+.profile-form .btn-primary:not(.btn-doorway),
 .profile-card .btn-primary:not(.btn-doorway) {
   align-self: flex-start;
   margin-top: var(--sp-8);
@@ -742,8 +950,9 @@ a:focus-visible {
   margin: 0;
 }
 .profile-email,
-.login-subtitle {
-  font-size: var(--t-note);
+.login-subtitle,
+.profile-subtitle {
+  font-size: var(--t-ui);
   line-height: 1.6;
   letter-spacing: 0;
 }
@@ -754,10 +963,10 @@ a:focus-visible {
 }
 /* the long privacy paragraph: reading size, and a measure that does not run
    the full width of the column */
-.profile-public-panel > .login-subtitle,
-.profile-danger-panel > .login-subtitle {
+.profile-public-panel > .profile-subtitle,
+.profile-danger-panel > .profile-subtitle {
   max-width: 52ch;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
 }
 
 /* the header sits apart from the form rather than on top of it */
@@ -793,15 +1002,19 @@ a:focus-visible {
    hold an eyebrow AND a paragraph of explanation. Putting them in this group
    uppercased the prose too, so "this permanently deletes your account" was
    set as a 16px all-caps headline — the loudest text on a page whose job is
-   to be calm. The eyebrow inside them is the label; the paragraph is prose. */
+   to be calm. The eyebrow inside them is the label; the paragraph is prose.
+   It used to say that with three selectors — `.profile-public-heading >
+   .login-eyebrow` and its two siblings — sitting in this same list beside a
+   bare `.login-eyebrow` that already matched every one of them. They were
+   written to REPLACE wrapper entries and nobody noticed they added nothing.
+   The rename made that unmissable: a part reading "the settings heading's
+   settings eyebrow" is the same redundancy with the quiet name taken off. */
 .login-eyebrow,
+.profile-eyebrow,
 .field-label,
-.profile-public-heading > .login-eyebrow,
-.profile-danger-heading > .login-eyebrow,
 .profile-tabs button,
 .profile-row-tag,
-.profile-memory-badge,
-.profile-memories-heading > .login-eyebrow {
+.profile-memory-badge {
   color: var(--w-muted);
 }
 
@@ -831,12 +1044,11 @@ a:focus-visible {
 .login-title,
 .profile-header h1,
 .login-shell h1,
-.login-shell h2,
-.profile-shell h1,
-.profile-shell h2,
-.nc-canvas h1,
-.nc-canvas h2 {
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+.login-shell h2 {
+  /* The token, not its value. `--waka-face` IS this stack; writing it out
+     means the next person changes the token, watches the product follow, and
+     has no way to see the two headings that did not. */
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: clamp(28px, 3vw, 40px);
   letter-spacing: 0.012em;
@@ -850,9 +1062,86 @@ a:focus-visible {
    an overlay blend, so it leaves black black by construction and lives on the
    midtones — the type and the rules — without ever lifting the ground.
    Fixed to the frame, like film grain belongs to the lens rather than to what
-   is being filmed. */
+   is being filmed.
+
+   THREE SURFACES JOINED ON THE CRAFT PASS, and two of them had lost this
+   WITHOUT ANY RULE LOOKING WRONG. `.profile-shell` is dead: the settings page
+   was rebuilt on `.waka-page .profile-page` with its own note saying it now
+   "carries the same chrome as every other screen" — and the grain was keyed
+   to the class it had just stopped wearing, so the one surface this selector
+   was written to repair has been smooth ever since. `.waka-page` also dresses
+   `/days`, which never had it. `.waka-public` is the page a stranger lands
+   on, and it is the surface where "this is the same product as the thing it
+   is advertising" has to be legible before a single word is read.
+   Law 3 of `docs/six-laws.md`, three times in one selector list: a rename, a
+   new page, and a public surface, none of which could inherit a texture that
+   had to be opted into by class name.
+
+   AND IT IS THE SVG, NOT `--jar-grain`. The world publishes its baked tile as
+   a custom property from `pages/Home.tsx` at runtime — so a person who lands
+   DIRECTLY on `/days`, `/profile` or `/@handle` has never mounted the world
+   and the property does not exist. A grain that only appears if you arrived
+   the long way round is worse than none: it makes the same page two
+   different-looking pages depending on the route in. This tile is in the
+   stylesheet and therefore always there. */
+/* ═══ THE LAMP IS OUT, AND IT SHOULD NOT HAVE BEEN LIT ══════════════════
+ *
+ * A soft warm pool was added to every page ground here, against the reading
+ * that the pages were "flat" while the world is "dimly lit". Founder, twice,
+ * with the archive beside the home screen: "too bright. I prefer this darker
+ * navy" — and both screens are the same token, so what they were seeing was
+ * this.
+ *
+ * The diagnosis was right and the remedy was the wrong object. What makes
+ * the world dim-lit rather than flat is that the CREATURE is in it: the
+ * light has a body, and everything else sits on its falloff. A gradient
+ * behind an empty page is a lamp lighting an empty room — it raises the
+ * ground without giving the eye anything to be lit BY, which reads exactly
+ * as "brighter", because that is all it is.
+ *
+ * So the pages are the same flat night the world's ground is, and the thing
+ * that will light them is the companion standing on them — see
+ * `character/raster.ts`'s rest pose and `components/Companion.tsx`. The
+ * grain below stays: a texture is not a light source and was never the
+ * complaint. */
+
+/* ═══ A PAGE DOES NOT FADE IN, AND HERE IS WHAT THAT COST ══════════════
+ *
+ * Founder, with a screen recording: "stop blinking to show the now page
+ * every time I move tabs."
+ *
+ * `waka-settle` was added here on the reasoning that a destination should
+ * arrive rather than appear — 220ms, six pixels, answering the press that
+ * opened it. MEASURED on the move from Inspirations to Chats: the incoming
+ * page sits at opacity 0, 0.21, 0.48, 0.73 … reaching 1 at 225ms.
+ *
+ * A page at opacity 0 is a window onto whatever is behind it, and what is
+ * behind every destination is the WORLD. So the fade was not softening an
+ * arrival; it was showing the Now screen for a fifth of a second on every
+ * single move between tabs, which is a screen the person did not ask for,
+ * arriving twice per move. That is the founder's own law — nothing moves
+ * unless the user moved it — being broken by the thing that quoted it.
+ *
+ * There is no version of a fade-in here that does not do this, because the
+ * only thing to fade in FROM is the world. A destination is now simply
+ * there when you press its row, which is what a bottom bar has always
+ * promised. */
+
+/* `.waka-page` LEFT THIS SELECTOR, and the reason is the whole of the
+   founder's "it's a slightly different shade".
+
+   A destination does not paint a ground any more — it shows the world's,
+   which the canvas draws WITH ITS OWN GRAIN already on it. This tile then
+   went on top, so every page in the product wore the texture twice while
+   the world wore it once. Two grains at 9% is not 9%, and the difference
+   is small, uniform and exactly the kind of thing that reads as "a
+   slightly different shade" rather than as a bug.
+
+   The two that keep it have no canvas behind them: the door and the public
+   page are the only surfaces in this product that are genuinely flat, and
+   the tile is the one thing stopping them looking like a different app. */
 .login-shell::after,
-.profile-shell::after {
+.waka-public::after {
   content: "";
   position: fixed;
   inset: 0;
@@ -894,13 +1183,12 @@ a:focus-visible {
    file). Nothing new is being designed here; this is the same design, made
    order-independent. */
 
-body .profile-shell,
 body .login-shell {
   background:
     radial-gradient(
       120% 80% at 50% 12%,
-      rgba(232, 237, 244, 0.055) 0%,
-      rgba(232, 237, 244, 0.022) 34%,
+      rgba(242, 236, 225, 0.055) 0%,
+      rgba(242, 236, 225, 0.022) 34%,
       transparent 68%
     ),
     var(--w-ground);
@@ -921,7 +1209,10 @@ body .login-card {
 }
 body .profile-header h1,
 body .login-title {
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  /* The token, not its value. `--waka-face` IS this stack; writing it out
+     means the next person changes the token, watches the product follow, and
+     has no way to see the two headings that did not. */
+  font-family: var(--waka-face);
   font-weight: 300;
   font-size: clamp(28px, 3vw, 40px);
   letter-spacing: 0.012em;
@@ -1014,7 +1305,7 @@ body .field:last-of-type {
    arriving rather than the page rearranging around you. */
 body .profile-disclose {
   margin: var(--sp-26) 0 0;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
 }
 body .profile-disclose button {
   appearance: none;
@@ -1047,8 +1338,9 @@ body .profile-danger-panel:not([hidden]) {
 /* THE THIRD TIME THIS FILE HAS BROKEN `hidden` WITH `display`.
    Any rule that sets display on an element using the `hidden` attribute turns
    the attribute off — it is the weakest display declaration there is. This
-   file sets display on .profile-panel, on .login-form and on the two setting
-   sections, and each time the element it was hiding stayed on screen.
+   file sets display on .profile-panel, on .login-form, on .profile-form and
+   on the two setting sections, and each time the element it was hiding
+   stayed on screen.
 
    One rule, at the end, for every element on these screens that hides itself
    that way. Placed last and with `body` specificity so nothing later in any
@@ -1062,22 +1354,33 @@ body .profile-danger-panel:not([hidden]) {
 body .profile-panel[hidden],
 body .profile-room[hidden],
 body .login-form[hidden],
+body .profile-form[hidden],
 body .profile-public-panel[hidden],
 body .profile-danger-panel[hidden],
 body .profile-list[hidden] {
   display: none !important;
 }
 
-/* the save verb joins the row of words rather than shouting between them —
+/* THE SAVE VERB JOINS THE ROW OF WORDS rather than shouting between them —
    the world has one uppercase register and it belongs to eyebrows, never to
-   things you press */
+   things you press.
+
+   IT LEFT THE EYEBROW REGISTER AND LANDED PAST SENTENCE CASE. `lowercase`
+   rendered "sign in", "sign out" and "save profile" against the founder's
+   own ruling — "make sure that like everything has the first character of
+   the word capitalized" — and `capitalized.test.ts` could not see it,
+   because that gate reads the string catalogue and a stylesheet had changed
+   the string after the catalogue was done with it. A rule enforced on the
+   value and overridden on the render is not enforced. `none` is the whole
+   fix: the catalogue already says "Sign in". */
 body .login-form .btn-primary,
+body .profile-form .btn-primary,
 body .profile-card .btn-primary {
   margin-top: var(--sp-26);
   color: var(--w-ink);
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   letter-spacing: 0;
-  text-transform: lowercase;
+  text-transform: none;
 }
 /* ---------- THE DOORWAY'S OWN VERB ----------
 
@@ -1134,9 +1437,18 @@ body .login-card .btn-doorway:hover:not(:disabled),
 body .login-card .btn-doorway:focus-visible:not(:disabled) {
   opacity: 0.88;
 }
+/* DISABLED DIMS THE FILL, NEVER THE LABEL — and this is the one control in
+   the product where getting it wrong is worst. `opacity: 0.45` on a FILLED
+   pill dims the ground and the word together, so "Signing in…" — the one
+   sentence telling a person their password is being checked right now —
+   became a pale grey shape with nothing legible in it, at the exact second
+   they are waiting to find out whether they are locked out of everything
+   they kept. The founder has reported this bug's shape before.
+   So the fill drops toward the ground and the word stays a word. */
 body .login-card .btn-doorway:disabled {
-  opacity: 0.45;
-  cursor: default;
+  background: color-mix(in srgb, var(--w-ink) 45%, var(--w-ground));
+  color: var(--w-ground);
+  cursor: progress;
 }
 /* AND THE DIVIDER NEEDS ROOM NOW THAT SOMETHING SOLID IS ABOVE IT.
    It used to sit between a white pill and a row of text tabs, where the tabs'
@@ -1179,14 +1491,19 @@ body {
 /* help text is read once and must be readable that once */
 body .field-hint,
 body .login-subtitle,
+body .profile-subtitle,
 body .profile-email {
-  color: rgba(232, 237, 244, 0.62);
+  /* The token, not its value: this followed `--moon-faint` up to 6.7:1 the
+     moment the tier was re-spec'd, which is the whole reason the tier has a
+     name. The gate caught it written out by hand. */
+  color: var(--moon-faint);
   font-size: var(--t-ui);
 }
 /* labels name the thing under them: they may be quiet, not faint */
 body .field-label,
-body .login-eyebrow {
-  color: rgba(232, 237, 244, 0.66);
+body .login-eyebrow,
+body .profile-eyebrow {
+  color: rgba(242, 236, 225, 0.66);
 }
 /* what you typed is the loudest thing in the form, because it is yours */
 body .field-input,
@@ -1219,7 +1536,7 @@ body textarea {
   body input,
   body select,
   body textarea {
-    font-size: 16px;
+    font-size: var(--t-input);
   }
 }
 
@@ -1227,8 +1544,17 @@ body textarea {
    Leaving is harmless, so it reads normally. Destroying is last and quietest:
    what cannot be undone should be the hardest thing to hit by accident, and
    the confirmation carries the warning. */
-body .login-footer {
+body .login-footer,
+body .profile-footer {
   margin: 0;
+}
+/* EXCEPT ON THE DOOR, which has no `.profile-foot` to own the spacing. The
+   rule above was written for the settings page, where the foot row sets its
+   own margin — and it quietly flattened the only other user of this class.
+   Onboarding's way out is in this footer (Law 2), and a way out touching the
+   submit above it reads as part of the form. */
+body .login-shell .login-footer {
+  margin-top: var(--sp-28);
 }
 body .profile-foot {
   display: flex;
@@ -1238,7 +1564,7 @@ body .profile-foot {
   padding-top: var(--sp-20);
   border-top: 1px solid var(--w-edge);
 }
-body .profile-foot .login-footer {
+body .profile-foot .profile-footer {
   margin-right: auto;
 }
 
@@ -1251,7 +1577,7 @@ body .profile-disclose-inline {
   min-height: 32px;
   color: var(--w-faint);
   font: inherit;
-  font-size: var(--t-note);
+  font-size: var(--t-ui);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 5px;
@@ -1262,28 +1588,28 @@ body .profile-disclose-inline:hover,
 body .profile-disclose-inline:focus-visible {
   color: var(--w-muted);
 }
-/* sign out leaves the header and joins the foot, where leaving belongs */
+/* Sign out leaves the header and joins the foot, where leaving belongs. Its
+   `lowercase` went with the primary's, for the same reason. */
 body .profile-signout-button {
-  font-size: var(--t-note);
-  text-transform: lowercase;
+  font-size: var(--t-ui);
+  text-transform: none;
   letter-spacing: 0;
 }
 
-.jar-find-shortcut { position: absolute; z-index: 6; right: var(--sp-22); bottom: calc(var(--sp-12) + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: var(--sp-8); min-width: var(--sp-44); min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-22); background: var(--jar-panel); color: var(--w-ink); font: inherit; font-size: var(--t-note); cursor: pointer; }
 .jar-inspiration-search { width: min(560px, calc(100vw - var(--sp-44))); color: var(--w-ink); font-size: var(--t-body); }
 .jar-search-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
 .jar-search-heading p { margin: 0; }
-.jar-inspiration-search button, .jar-copy-link, .jar-navigation-notice button { min-width: var(--sp-44); min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 0; background: none; color: var(--w-ink); font: inherit; font-size: var(--t-note); cursor: pointer; }
+.jar-inspiration-search button, .jar-copy-link, .jar-navigation-notice button { min-width: var(--sp-44); min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 0; background: none; color: var(--w-ink); font: inherit; font-size: var(--t-ui); cursor: pointer; }
 .jar-inspiration-search button[aria-disabled="true"] { cursor: progress; }
 .jar-search-results { list-style: none; padding: 0; margin: var(--sp-12) 0; }
 .jar-search-results li { border-bottom: 1px solid var(--w-edge); }
 .jar-search-results button { display: block; width: 100%; text-align: left; border-radius: var(--sp-8); }
 .jar-search-results button:hover { background: var(--w-raised); }
 .jar-search-results span { display: block; line-height: 1.5; overflow-wrap: anywhere; }
-.jar-search-results small { display: block; margin-top: var(--sp-4); color: var(--w-muted); font-size: var(--t-note); }
+.jar-search-results small { display: block; margin-top: var(--sp-4); color: var(--w-muted); font-size: var(--t-ui); }
 .jar-panel-head { grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--sp-8); }
 .jar-panel-when { min-width:0; overflow-wrap:anywhere; }
-.jar-audience-note { color:var(--w-muted); font-size:var(--t-note); line-height:1.5; margin:var(--sp-8) 0; }
+.jar-audience-note { color:var(--w-muted); font-size:var(--t-ui); line-height:1.5; margin:var(--sp-8) 0; }
 .jar-composer-footer > .jar-audience-note { flex-basis:100%; margin-bottom:0; }
 @media (max-width:600px) {
   .jar-panel-head { grid-template-columns:minmax(0,1fr) auto; }
@@ -1292,11 +1618,10 @@ body .profile-signout-button {
   .jar-panel-head > .jar-copy-link { grid-column:2; }
 }
 .jar-copy-link { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
-.jar-find-shortcut:focus-visible, .jar-inspiration-search button:focus-visible, .jar-copy-link:focus-visible, .jar-navigation-notice button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
+.jar-inspiration-search button:focus-visible, .jar-copy-link:focus-visible, .jar-navigation-notice button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
 .jar-navigation-notice { position: absolute; z-index: 60; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(400px, calc(100vw - var(--sp-44))); padding: var(--sp-22); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: var(--jar-panel); color: var(--w-ink); font-size: var(--t-body); }
-@media (max-width: 600px) { .jar-find-shortcut { right: var(--sp-8); padding: var(--sp-8); } .jar-find-shortcut span { display: none; } }
 
-.jar-room-patterns { margin: var(--sp-12) 0 var(--sp-22); color: var(--w-ink); font-size: var(--t-note); line-height: 1.5; }
+.jar-room-patterns { margin: var(--sp-12) 0 var(--sp-22); color: var(--w-ink); font-size: var(--t-ui); line-height: 1.5; }
 .jar-room-patterns ul { list-style: none; padding: 0; margin: 0; }
 .jar-room-patterns li { padding: var(--sp-12) 0; border-bottom: 1px solid var(--w-edge); }
 .jar-room-patterns li > p { margin: 0 0 var(--sp-4); }
@@ -1313,7 +1638,6 @@ body .profile-signout-button {
 .jar-seek.jar-inspiration-search[data-visual-viewport],
 .jar-seek.jar-review[data-visual-viewport],
 .jar-seek.jar-principle-share[data-visual-viewport],
-.jar-seek.jar-conversation[data-visual-viewport],
 .jar-seek.jar-reflect-room[data-visual-viewport] {
   position: fixed;
   top: calc(var(--dialog-visible-top) + var(--dialog-visible-height) / 2);
@@ -1322,14 +1646,42 @@ body .profile-signout-button {
 }
 .jar-composer-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
 .jar-composer-heading h2 { margin: 0; font-size: var(--t-body); font-weight: 500; }
-.jar-inspiration-composer button { min-height: var(--sp-44); min-width: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: none; color: var(--w-ink); font: inherit; font-size: var(--t-note); cursor: pointer; }
+.jar-inspiration-composer button { min-height: var(--sp-44); min-width: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: none; color: var(--w-ink); font: inherit; font-size: var(--t-ui); cursor: pointer; }
 .jar-inspiration-composer button:disabled { opacity: .5; cursor: default; }
+/* THE WAY BACK IS NOT ONE OF THOSE BUTTONS, and this override is here rather
+   than in `home.css` because of where the cascade actually resolves.
+
+   Founder, twice, with a screenshot of a chevron in a rounded outlined box:
+   "why is this still here?" and then "아니 이거 별로라고 내가 몇번을 말해?"
+   — and they were right to ask twice, because the first fix did not render.
+   `.jar-note-back` was rewritten to be a plain chevron with a name, in
+   `home.css` inside `@layer chrome`; this file is UNLAYERED, and an
+   unlayered rule beats every layered one regardless of specificity. So the
+   generic composer-button box above went on winning and nothing on screen
+   changed. Two lessons, both recorded because both are cheap to repeat: a
+   change to a layered rule can be silently overruled from an unlayered
+   file, and a CSS edit that is never looked at in a browser is not a fix.
+
+   The notepad's own grammar is corners without boxes — the tools pill and
+   the save already opt out the same way. This is the third. */
+.jar-inspiration-composer .jar-note-back {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--w-muted);
+  font-size: var(--t-body);
+}
+.jar-inspiration-composer .jar-note-back:hover,
+.jar-inspiration-composer .jar-note-back:focus-visible {
+  color: var(--w-ink);
+}
 .jar-inspiration-composer button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
 .jar-inspiration-composer .jar-composer-text { position: static; display: block; width: 100%; max-width: none; min-height: calc(var(--sp-44) * 3); max-height: calc(var(--sp-44) * 6); margin: var(--sp-12) 0; padding: var(--sp-8) 0; background: none; border: 0; border-bottom: 1px solid var(--w-muted); border-radius: 0; color: var(--w-ink); font-size: var(--t-input); line-height: 1.6; letter-spacing: normal; text-transform: none; text-align: left; resize: vertical; }
 .jar-composer-tools, .jar-composer-actions, .jar-composer-visibility { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
 .jar-composer-tools { margin-bottom: var(--sp-12); }
 .jar-inspiration-composer .jar-composer-save { background:var(--w-ink); color:var(--w-ground); border-color:var(--w-ink); }
-.jar-composer-storage-note { color: var(--w-muted); font-size: var(--t-note); line-height: 1.5; }
+.jar-composer-storage-note { color: var(--w-muted); font-size: var(--t-ui); line-height: 1.5; }
 .jar-composer-link { display: flex; gap: var(--sp-8); margin: var(--sp-12) 0; }
 .jar-composer-link input { min-width: 0; flex: 1; min-height: var(--sp-44); padding: var(--sp-8); border: 1px solid var(--w-edge); border-radius: var(--sp-8); background: transparent; color: var(--w-ink); }
 @media (max-width: 480px) { .jar-composer-link { flex-wrap: wrap; } .jar-composer-link input { flex-basis: 100%; } }
@@ -1339,16 +1691,16 @@ body .profile-signout-button {
 .jar-composer-media audio { width: 100%; }
 .jar-recording-choice { padding-block: var(--sp-12); border-bottom: 1px solid var(--w-edge); }
 .jar-recording-choice audio { width: 100%; margin-bottom: var(--sp-12); }
-.jar-composer-media-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--t-note); }
+.jar-composer-media-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--t-ui); }
 .jar-composer-media-name a { color: inherit; }
-.jar-composer-media-name small { display: block; color: var(--w-muted); font-size: var(--t-note); }
+.jar-composer-media-name small { display: block; color: var(--w-muted); font-size: var(--t-ui); }
 .jar-composer-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--sp-12); margin-top: var(--sp-22); }
 .jar-composer-visibility button { border-color: transparent; }
 .jar-composer-visibility button[aria-pressed="true"] { background: var(--w-raised); border-color: var(--w-muted); }
-.jar-saved-attachment { margin: var(--sp-12) 0; font-size: var(--t-note); }
+.jar-saved-attachment { margin: var(--sp-12) 0; font-size: var(--t-ui); }
 .jar-saved-attachment img { display: block; max-width: 100%; max-height: 320px; object-fit: contain; border-radius: var(--sp-8); }
 .jar-saved-attachment audio { width: 100%; }
-.jar-attachment-preview { margin-block: var(--sp-12); font-size: var(--t-note); line-height: 1.6; }
+.jar-attachment-preview { margin-block: var(--sp-12); font-size: var(--t-ui); line-height: 1.6; }
 .jar-attachment-preview h3 { font-size: var(--t-lead); font-weight: 500; margin: 0; overflow-wrap: anywhere; }
 .jar-attachment-preview h3 a { display: block; min-height: var(--sp-44); }
 .jar-attachment-preview .jar-link-thumbnail { width: 100%; max-height: 200px; object-fit: cover; margin-bottom: var(--sp-12); }
@@ -1358,9 +1710,6 @@ body .profile-signout-button {
 .jar-attachment-excerpt { white-space: pre-wrap; overflow-wrap: anywhere; }
 .jar-saved-attachment img { image-orientation: from-image; }
 .jar-composer-media img { image-orientation: from-image; }
-.jar-reflection-source { margin-block: var(--sp-12); }
-.jar-review-shortcut { position:absolute; left:var(--sp-22); bottom:calc(var(--sp-12) + env(safe-area-inset-bottom)); z-index:6; min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); border:1px solid var(--w-edge); border-radius:var(--sp-22); background:var(--jar-panel); color:var(--w-ink); font:inherit; font-size:var(--t-note); cursor:pointer; }
-.jar-review-shortcut[hidden] { display:none; }
 .jar-review-backdrop { position:absolute; inset:0; z-index:7; border:0; background:rgba(0,0,0,.2); }
 .jar-seek.jar-review { box-sizing:border-box; z-index:8; width:min(640px,calc(100vw - var(--sp-44))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-44)); display:flex; flex-direction:column; color:var(--w-ink); font-size:var(--t-body); text-align:left; }
 .jar-review[aria-hidden="true"] { visibility:hidden; }
@@ -1368,53 +1717,26 @@ body .profile-signout-button {
 .jar-review header,.jar-review footer { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-12); flex-wrap:wrap; flex-shrink:0; }
 .jar-review h2 { margin:0; font-size:var(--t-lead); font-weight:500; }
 .jar-review h3 { font-size:var(--t-lead); font-weight:500; }
-.jar-review-body { overflow-y:auto; min-height:0; overscroll-behavior:contain; padding-block:var(--sp-16); }
-.jar-review button { min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8) var(--sp-12); margin:var(--sp-4); border:1px solid var(--w-edge); border-radius:var(--sp-12); background:none; color:var(--w-ink); font:inherit; font-size:var(--t-note); cursor:pointer; }
-.jar-review button:disabled { opacity:.45; cursor:default; }
+.jar-review button { min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8) var(--sp-12); margin:var(--sp-4); border:1px solid var(--w-edge); border-radius:var(--sp-12); background:none; color:var(--w-ink); font:inherit; font-size:var(--t-ui); cursor:pointer; }
+/* The label stays a label; see the doorway's note above for the bug this is
+   the same shape as. A sheet's verbs sit on no fill, so nothing needs dimming
+   but the ink, and `progress` is the honest cursor for a button that is busy
+   rather than forbidden. */
+.jar-review button:disabled { color:var(--w-muted); cursor:progress; }
 .jar-review button:hover:not(:disabled) { background:var(--w-raised); }
 .jar-review-card { outline:none; touch-action:pan-y pinch-zoom; }
 .jar-review-card:focus-visible { outline:1px solid var(--w-edge); outline-offset:var(--sp-4); }
-.jar-review-text { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.7; font-size:var(--t-lead); }
-.jar-review-context { color:var(--w-muted); font-size:var(--t-note); line-height:1.5; }
-.jar-review-card-heading { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-8); }
-.jar-review-card-heading p { margin:0; }
-.jar-review-single .jar-review-body { padding-bottom:0; }
-.jar-review-single .jar-review-text { font-size:var(--t-lead); margin-block:var(--sp-20); }
+.jar-review-context { color:var(--w-muted); font-size:var(--t-ui); line-height:1.5; }
 .jar-review-item-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-8); margin-top:var(--sp-22); padding-top:var(--sp-16); border-top:1px solid var(--w-edge); }
 .jar-review-item-actions button { margin:0; font-size:var(--t-body); }
-.jar-review button.jar-review-primary { background:var(--w-raised); }
-.jar-review-item-actions .jar-review-remove { margin-left:auto; border-color:transparent; color:var(--w-muted); }
-.jar-item-actions { position:relative; margin-left:auto; font-size:var(--t-note); }
+.jar-item-actions { position:relative; margin-left:auto; font-size:var(--t-ui); }
 .jar-item-actions > summary { display:flex; align-items:center; min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8); list-style:none; color:var(--w-muted); cursor:pointer; }
 .jar-item-actions > summary::-webkit-details-marker { display:none; }
 .jar-item-actions > summary:hover,.jar-item-actions > summary:focus-visible { color:var(--w-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
 .jar-item-actions-options { display:flex; flex-wrap:wrap; gap:var(--sp-8); padding:var(--sp-4) 0; }
-.jar-review-delete { margin-top:var(--sp-20); padding:var(--sp-16); border:1px solid var(--w-edge); border-radius:var(--sp-12); line-height:1.6; }
-.jar-review-delete h3 { margin-top:0; font-size:var(--t-body); }
-.jar-review-delete-actions { display:flex; flex-wrap:wrap; gap:var(--sp-8); }
-.jar-review-delete-actions button { margin:0; }
-.jar-review button.jar-review-destructive { color:var(--w-ink); border-color:var(--w-muted); }
-.jar-review-item-thoughts { margin-top:var(--sp-16); }
-/* The lead step has a 16px floor, avoiding iOS input zoom. */
-.jar-review-single .jar-reflect-box { font-size:var(--t-lead); }
 .jar-review summary { min-height:var(--sp-44); cursor:pointer; }
-.jar-review-choices { display:flex; gap:var(--sp-12); margin-top:var(--sp-16); }
-.jar-review-choices button { flex:1; }
 .jar-review footer { display:flex; flex-direction:column; align-items:stretch; gap:var(--sp-4); }
-.jar-review footer .jar-review-choices { margin-top:0; }
-.jar-review-choices button:last-child { background:var(--w-raised); }
-.jar-review-footer-actions { display:flex; justify-content:space-between; gap:var(--sp-4); flex-wrap:wrap; }
-.jar-review-footer-actions button { border-color:transparent; padding-inline:var(--sp-4); }
 .jar-review ul { padding-left:var(--sp-22); }
-.jar-review-dialogue { border-top:1px solid var(--w-edge); margin-top:var(--sp-16); padding-top:var(--sp-16); }
-.jar-review-dialogue p { line-height:1.6; overflow-wrap:anywhere; }
-.jar-review-question { line-height:1.6; }
-.jar-review-connection { color:var(--w-muted); }
-.jar-review-references { display:flex; flex-wrap:wrap; gap:var(--sp-4); }
-.jar-review-result { margin-top:var(--sp-20); padding-top:var(--sp-16); border-top:1px solid var(--w-edge); font-size:var(--t-body); line-height:1.6; }
-.jar-review-result h3 { font-size:var(--t-note); font-weight:normal; color:var(--w-muted); }
-.jar-review-latest-thought { margin:var(--sp-12) 0; padding-left:var(--sp-12); border-left:1px solid var(--w-edge); font-size:var(--t-body); line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; }
-.jar-review-reading { padding:var(--sp-12); border-left:1px solid var(--w-edge); overflow-wrap:anywhere; }
 .jar-seek.jar-reading-comparison { box-sizing:border-box; z-index:8; width:min(640px,calc(100vw - var(--sp-24))); max-height:calc(100dvh - var(--sp-24)); overflow-y:auto; overscroll-behavior:contain; padding:var(--sp-24); font-size:var(--t-body); line-height:1.6; color:var(--w-ink); text-align:left; user-select:text; touch-action:pan-y; }
 .jar-reading-comparison header { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-16); }
 .jar-reading-comparison h2,.jar-reading-comparison h3 { font:inherit; font-weight:500; }
@@ -1422,28 +1744,13 @@ body .profile-signout-button {
 .jar-reading-comparison button { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); color:var(--w-ink); background:none; border:1px solid var(--w-edge); border-radius:var(--sp-12); font:inherit; cursor:pointer; }
 .jar-seek.jar-principle-share { box-sizing:border-box; z-index:8; width:min(980px,calc(100vw - var(--sp-24))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-24)); display:flex; flex-direction:column; color:var(--w-ink); font-size:var(--t-body); line-height:1.5; text-align:left; user-select:text; touch-action:pan-y; }
 .jar-share-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; }
-.jar-seek.jar-conversation { z-index:8; width:min(680px,calc(100vw - var(--sp-24))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-24)); display:flex; flex-direction:column; box-sizing:border-box; color:var(--w-ink); font-size:var(--t-body); text-align:left; user-select:text; }
-.jar-conversation header { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-12); }
-.jar-conversation h2 { font-size:var(--t-lead); font-weight:500; }
-.jar-conversation-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; padding-inline-end:var(--sp-8); }
-.jar-conversation button,.jar-conversation summary { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); font:inherit; color:inherit; background:transparent; border:1px solid var(--w-edge); border-radius:var(--sp-8); cursor:pointer; }
-.jar-conversation button:disabled { opacity:.45; cursor:default; }
-.jar-conversation ul,.jar-conversation ol { list-style:none; padding:0; }
-.jar-conversation li { padding-block:var(--sp-12); border-bottom:1px solid var(--w-edge); overflow-wrap:anywhere; }
-.jar-conversation li p { white-space:pre-wrap; }
-.jar-conversation li[data-role="assistant"] { border-left:2px solid var(--w-edge); padding-left:var(--sp-12); }
-.jar-conversation-question { color:var(--w-ink); }
-.jar-conversation-citations,.jar-conversation-starters { display:flex; flex-wrap:wrap; gap:var(--sp-8); }
-.jar-conversation-reference,.jar-conversation-topic { margin-block:var(--sp-12); padding:var(--sp-12); border:1px solid var(--w-edge); border-radius:var(--sp-8); }
-.jar-conversation blockquote { margin:var(--sp-12) 0; white-space:pre-wrap; overflow-wrap:anywhere; }
-.jar-conversation-reply { display:flex; align-items:center; flex-wrap:wrap; gap:var(--sp-8); }
-.jar-conversation-reply p { flex:1 1 140px; margin:0; }
-.jar-conversation footer > .jar-review-context { margin-block:var(--sp-6); }
-.jar-conversation-options { margin-block:var(--sp-8); }
-.jar-conversation time { display:block; font-size:var(--t-body); opacity:.7; }
-.jar-conversation footer { flex-shrink:0; border-top:1px solid var(--w-edge); padding-top:var(--sp-12); }
-.jar-conversation label { display:block; }
-.jar-conversation textarea,.jar-conversation select { display:block; box-sizing:border-box; width:100%; min-height:var(--sp-44); max-height:25dvh; font:inherit; font-size:var(--t-lead); color:inherit; background:var(--jar-panel); border:1px solid var(--w-edge); padding:var(--sp-8); border-radius:var(--sp-8); }
+/* NO `padding-inline-end` HERE. It made the transcript's right gutter 8px
+   wider than its left and 8px wider than the composer's — which is the exact
+   defect `chat.css` opens by claiming it fixed: "the words and the box you
+   type them into stood on two columns a few pixels apart — close enough to
+   look like a mistake rather than a choice." It was still true, from this
+   file. The gutters are `.chat-scroll`'s to set, symmetrically. */
+.jar-conversation-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; }
 .jar-principle-share header,.jar-principle-share footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; flex-shrink:0; gap:var(--sp-12); }
 .jar-principle-share h2 { font-size:var(--t-lead); font-weight:500; }
 .jar-principle-share label { display:flex; flex-direction:column; gap:var(--sp-6); margin-block:var(--sp-12); font-size:var(--t-body); }
@@ -1463,23 +1770,8 @@ body .profile-signout-button {
 .jar-share-controls summary { min-height:var(--sp-44); padding-block:var(--sp-12); box-sizing:border-box; cursor:pointer; font-size:var(--t-lead); }
 .jar-share-preview img { display:block; width:100%; height:auto; border:1px solid var(--w-edge); }
 .jar-principle-share footer { border-top:1px solid var(--w-edge); padding-top:var(--sp-12); }
-@media (max-width:680px) { .jar-share-columns { grid-template-columns:minmax(0,1fr); } .jar-share-preview { grid-row:1; } .jar-share-controls { grid-column:1; grid-row:2; } }
-.jar-review .jar-review-reference { text-align:left; overflow-wrap:anywhere; max-width:100%; }
-.jar-review-reply { margin-top:var(--sp-16); }
-.jar-review-reply label { display:block; margin-bottom:var(--sp-8); }
-.jar-review-reply textarea,.jar-review select { box-sizing:border-box; width:100%; min-height:var(--sp-44); font:inherit; font-size:var(--t-lead); color:var(--w-ink); background:var(--w-raised); border:1px solid var(--w-edge); border-radius:var(--sp-12); padding:var(--sp-12); }
-.jar-review-reply textarea { min-height:120px; resize:vertical; line-height:1.6; }
-.jar-review-reply-actions { display:flex; flex-wrap:wrap; gap:var(--sp-4); }
-.jar-review-reply-actions button:first-child { background:var(--w-raised); }
-.jar-review-thought { padding-block:var(--sp-12); border-bottom:1px solid var(--w-edge); }
-.jar-review-answer { white-space:pre-wrap; }
-.jar-review-thought-actions { display:flex; justify-content:flex-end; }
-.jar-reflection-source summary { min-height: var(--sp-44); cursor: pointer; font-size: var(--t-note); }
-.jar-reflection-flow .jar-reflection-actions button,
-.jar-reflection-flow .jar-reflection-secondary,
-.jar-reflection-flow .jar-reflection-previous button,
-.jar-reflection-flow .jar-reflection-turn button { min-height: var(--sp-44); }
-.jar-attachment-transcript { margin-top: var(--sp-16); font-size: var(--t-note); line-height: 1.6; }
+@media (max-width:680px) { .jar-share-columns { grid-template-columns:minmax(0,1fr); } .jar-share-preview { grid-row:1; } .jar-share-controls { grid-column:1; grid-row:2; } }.jar-review select { box-sizing:border-box; width:100%; min-height:var(--sp-44); font:inherit; font-size:var(--t-lead); color:var(--w-ink); background:var(--w-raised); border:1px solid var(--w-edge); border-radius:var(--sp-12); padding:var(--sp-12); }.jar-reflection-flow .jar-reflection-turn button { min-height: var(--sp-44); }
+.jar-attachment-transcript { margin-top: var(--sp-16); font-size: var(--t-ui); line-height: 1.6; }
 .jar-attachment-transcript header { display: flex; align-items: baseline; gap: var(--sp-12); }
 .jar-attachment-transcript h3 { font-size: var(--t-body); font-weight: 500; margin: 0; }
 .jar-attachment-transcript small { color: var(--w-muted); }
@@ -1490,13 +1782,13 @@ body .profile-signout-button {
 @media (max-width: 600px) { .jar-attachment-transcript textarea { font-size: var(--t-lead); } }
 .jar-saved-attachment a { color: var(--w-ink); overflow-wrap: anywhere; }
 .jar-saved-attachment button { min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); color: var(--w-ink); background: none; border: 1px solid var(--w-edge); border-radius: var(--sp-8); font: inherit; cursor: pointer; }
-@media (max-width: 600px) { .jar-inspiration-composer { padding: var(--sp-16); } .jar-composer-footer { align-items: stretch; flex-direction: column; } .jar-composer-actions { justify-content: flex-end; } .jar-inspiration-composer .jar-composer-text { font-size: 16px; } }
+@media (max-width: 600px) { .jar-inspiration-composer { padding: var(--sp-16); } .jar-composer-footer { align-items: stretch; flex-direction: column; } .jar-composer-actions { justify-content: flex-end; } .jar-inspiration-composer .jar-composer-text { font-size: var(--t-input); } }
 
 /* Personal actions share a readable scale; the world and its artwork stay quiet. */
 .jar-mouth-rest:not(.jar-mouth-rest--said), .jar .jar-capture-shortcut {
   min-height:var(--sp-44); box-sizing:border-box; padding:var(--sp-8) var(--sp-12);
   border:1px solid var(--w-muted); border-radius:var(--sp-22); background:var(--w-raised);
-  color:var(--w-ink); --t-label-size:var(--t-note);
+  color:var(--w-ink); --t-label-size:var(--t-ui);
 }
 .jar-mouth .jar-mouth-rest:not(.jar-mouth-rest--said) { text-decoration:none; }
 .jar-mouth .jar-mouth-rest:not(.jar-mouth-rest--said), .jar .jar-capture-shortcut {
@@ -1553,43 +1845,20 @@ body .profile-signout-button {
 .jar-home-activities { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--sp-32); margin-top:var(--sp-32); pointer-events:auto; }
 .jar-hq-inner.jar-hq-inner--compact { margin-top:calc(clamp(48px,10.6vh,72px) + env(safe-area-inset-top)); padding-top:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; pointer-events:auto; touch-action:pan-y; }
 .jar-hq-inner--compact:focus-visible { outline:1px solid var(--w-muted); outline-offset:-2px; }
-.jar-activity-card { display:grid; grid-template-columns:var(--sp-24) minmax(0,1fr) var(--sp-16); align-items:center; gap:var(--sp-10); text-align:left; box-sizing:border-box; min-width:0; min-height:var(--sp-44); padding:var(--sp-8) var(--sp-4); border:0; border-radius:var(--sp-8); background:none; color:var(--w-ink); font:inherit; cursor:pointer; }
-.jar-activity-icon { display:grid; place-items:center; width:var(--sp-24); height:var(--sp-24); color:var(--w-muted); }
-.jar-activity-icon svg { width:var(--sp-20); height:var(--sp-20); }
-.jar-activity-copy { display:flex; flex-direction:column; gap:0; min-width:0; }
-.jar-activity-arrow { color:var(--w-muted); }
-.jar-activity-card:hover,.jar-activity-card:focus-visible { background:color-mix(in srgb,var(--w-ink) 4%,transparent); }
-.jar-activity-card:focus-visible { outline:2px solid var(--w-muted); outline-offset:2px; }
 .jar-activity-title { font-size:var(--t-body); line-height:1.5; font-weight:400; overflow-wrap:anywhere; }
-.jar-activity-hint { font-size:var(--t-note); line-height:1.5; color:var(--w-muted); }
 @media (max-width:560px) { .jar-hq-inner.jar-hq-inner--compact { margin-top:calc(118px + env(safe-area-inset-top)); } .jar-home-activities { grid-template-columns:minmax(0,1fr); gap:var(--sp-4); margin-top:var(--sp-24); } }
-.jar-review-steps { display:flex; gap:var(--sp-16); list-style:none; margin:var(--sp-8) 0 0; padding:0; font-size:var(--t-note); color:var(--w-muted); }
-.jar-review-steps li[aria-current] { color:var(--w-ink); border-bottom:1px solid currentColor; }
-.jar-source-details { font-size:var(--t-note); }
+.jar-source-details { font-size:var(--t-ui); }
 .jar-source-details summary { min-height:var(--sp-44); display:flex; align-items:center; cursor:pointer; color:var(--w-muted); }
-.jar-conversation-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-4) var(--sp-12); }
-.jar-conversation .jar-conversation-actions button { margin:0; padding-inline:0; border:0; border-radius:0; font-size:var(--t-note); text-decoration:underline; text-underline-offset:var(--sp-4); }
-.jar-conversation-citations button { text-align:left; max-width:100%; font-size:var(--t-note); }
-.jar-citation-preview { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; color:var(--w-muted); margin-top:var(--sp-4); }
-.jar-conversation .jar-conversation-thought section { margin-top:var(--sp-8); }
 .jar-panel .jar-panel-vis button,.jar-panel .jar-panel-foot button,.jar-panel .jar-panel-askrow button,.jar-reflection-flow button { min-height:var(--sp-44); }
-.jar-reflection-delete { margin-top:var(--sp-12); padding-top:var(--sp-8); border-top:1px solid var(--w-edge); }
-.jar-reflection-delete-actions { display:flex; flex-wrap:wrap; gap:var(--sp-12); }
-.jar-reflection-delete-actions button:first-child { color:var(--w-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
 .jar-personal-shortcuts { position:absolute; z-index:6; inset:auto var(--sp-12) calc(var(--sp-12) + env(safe-area-inset-bottom)); display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:end; gap:var(--sp-12); pointer-events:none; }
 .jar-personal-shortcuts--above-count { bottom:calc(64px + env(safe-area-inset-bottom)); }
 .jar-personal-shortcuts[hidden] { display:none; }
 .jar-personal-shortcuts--self { bottom:calc(76px + env(safe-area-inset-bottom)); }
 .jar-personal-shortcuts > button { position:static; transform:none; pointer-events:auto; min-width:0; max-width:100%; white-space:normal; }
-.jar-personal-shortcuts .jar-review-shortcut { grid-column:1; justify-self:start; }
 .jar-personal-shortcuts .jar-capture-shortcut { grid-column:2; justify-content:center; }
-.jar-personal-shortcuts .jar-find-shortcut { grid-column:3; justify-self:end; min-width:var(--sp-44); }
 @media (max-width:600px) {
   .jar-personal-shortcuts { grid-template-columns:minmax(0,1fr) var(--sp-44); }
-  .jar-personal-shortcuts .jar-review-shortcut { grid-row:1; grid-column:1 / -1; }
   .jar-personal-shortcuts .jar-capture-shortcut { grid-row:2; grid-column:1; }
-  .jar-personal-shortcuts .jar-find-shortcut { grid-row:2; grid-column:2; }
-  .jar-review-steps { gap:var(--sp-12); }
 }
 
 }

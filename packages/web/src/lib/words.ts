@@ -81,15 +81,7 @@ export function citedWords(titles: string[], locale: WordsLocale = "en-US"): str
  * numerals never"; see the note inside `dateWords` for why a date is not one
  * of the states that rule is about.
  */
-const ORD_ONES = [
-  "zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
-  "eighth", "ninth", "tenth", "eleventh", "twelfth", "thirteenth", "fourteenth",
-  "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth",
-];
-const ORD_TENS = [
-  "", "", "twentieth", "thirtieth", "fortieth", "fiftieth", "sixtieth",
-  "seventieth", "eightieth", "ninetieth",
-];
+/* The two ordinal tables went with `ordWords`, their only reader. */
 const TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
 const ONES = [
   "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
@@ -207,6 +199,75 @@ export function dialMonth(ms: number, T: number, locale: WordsLocale = "en-US"):
   return thisYear ? month : `${month} ${d.getFullYear()}`;
 }
 
+/**
+ * THE LINE AT THE TOP OF A NOTE — the day AND the minute it was begun.
+ *
+ * Founder, with a screenshot of Apple Notes open on a blank note: "copy this
+ * apple note experience." The one thing on that screen besides the words is a
+ * grey line naming when the note was started — `October 11, 2026 at 11:07 AM`.
+ *
+ * It is the right line for this product too, and for a reason beyond the
+ * reference: a page with nothing on it needs to say WHEN it is, because that
+ * is the only fact about a note that exists before anybody writes in it.
+ *
+ * THE MONTH IS SPELLED IN FULL HERE, unlike `dateWords` one rung below. That
+ * function shortens because its output sits in lists beside dozens of others
+ * and has to stay scannable; this one is alone on a page and is being read
+ * rather than scanned, so it can be the sentence a person would say.
+ *
+ * NO SECONDS AND NO TIMEZONE. A note is not an event log.
+ */
+export function momentStamp(ms: number, locale: WordsLocale = "en-US"): string {
+  const d = new Date(ms);
+  if (locale === "ko-KR") {
+    const hour = d.getHours();
+    const half = hour < 12 ? "오전" : "오후";
+    const twelve = hour % 12 === 0 ? 12 : hour % 12;
+    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${half} ${twelve}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+  const month = d.toLocaleDateString("en-US", { month: "long" });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return `${month} ${d.getDate()}, ${d.getFullYear()} at ${time}`;
+}
+
+/**
+ * WHICH STRETCH OF TIME A SAVE FALLS IN — the archive's own chapter headings.
+ *
+ * Founder, with a screenshot of the Apple Notes list: "copy this for saved
+ * inspirations." That list is not a flat run of rows; it is broken into
+ * `Previous 7 Days`, `Previous 30 Days`, then a heading per month. The break
+ * is what makes a long archive readable without a single date on a row having
+ * to be compared against its neighbour.
+ *
+ * WHY THESE FOUR RUNGS AND NOT A DATE PER DAY. A heading per day turns a week
+ * of saving into seven headings and seven lists of one. The reference's
+ * coarseness is the design: recent things are remembered by how long ago, and
+ * older things by which month — which is exactly how a person asks for them.
+ *
+ * RETURNS A KEY AND ITS WORDS, because the caller groups by the key and prints
+ * the words. Deriving the key from the words would make two saves in the same
+ * month in different years collapse into one heading.
+ */
+export function archiveChapter(
+  ms: number,
+  T: number,
+  locale: WordsLocale = "en-US",
+): { key: string; words: string } {
+  const day = 86_400_000;
+  const age = T - ms;
+  if (age < 7 * day) return { key: "d7", words: locale === "ko-KR" ? "지난 7일" : "Previous 7 Days" };
+  if (age < 30 * day) return { key: "d30", words: locale === "ko-KR" ? "지난 30일" : "Previous 30 Days" };
+  const d = new Date(ms);
+  const key = `${d.getFullYear()}-${d.getMonth()}`;
+  const thisYear = d.getFullYear() === new Date(T).getFullYear();
+  if (locale === "ko-KR") {
+    const m = `${d.getMonth() + 1}월`;
+    return { key, words: thisYear ? m : `${d.getFullYear()}년 ${m}` };
+  }
+  const month = d.toLocaleDateString("en-US", { month: "long" });
+  return { key, words: thisYear ? month : `${month} ${d.getFullYear()}` };
+}
+
 /** The coarsest rung the dial rolls up to. `2025` — `2025년`. */
 export function dialYear(ms: number, locale: WordsLocale = "en-US"): string {
   const y = new Date(ms).getFullYear();
@@ -234,17 +295,13 @@ export function givenName(full: string): string {
  * if the drawing ever needs words back.
  */
 
-/** Ordinals as words — "twenty-fifth" / "스물다섯 번째", never "25th". */
-export function ordWords(n: number, locale: WordsLocale = "en-US"): string {
-  if (locale === "ko-KR") {
-    if (n < 1 || n > 99) return String(n);
-    return n === 1 ? "첫 번째" : `${koNativeCount(n)} 번째`;
-  }
-  if (n < 20) return ORD_ONES[n] ?? String(n);
-  if (n > 99) return String(n);
-  const o = n % 10;
-  return o === 0 ? ORD_TENS[Math.floor(n / 10)] : `${TENS[Math.floor(n / 10)]}-${ORD_ONES[o]}`;
-}
+/* `ordWords` IS GONE — ordinals as words, "twenty-fifth" rather than "25th",
+   called by nothing. The one ordinal this product still prints is the
+   archive's row number, and the founder's ruling put that in DIGITS on
+   purpose: "it's like your fifth inspiration, your 100th inspiration", set
+   as an italic accent numeral (`.waka-list-index`). A spelled-out ordinal
+   would make a person do arithmetic to find out which save they are looking
+   at, which is the same argument `dateWords` makes about dates. */
 /**
  * A year the way it is spoken — "twenty twenty-six", never "2026". The
  * two-thousands take the other form ("two thousand seven") until the tens
@@ -266,4 +323,33 @@ export function numWords(n: number, locale: WordsLocale = "en-US"): string {
   const t = TENS[Math.floor(n / 10)];
   const o = n % 10;
   return o === 0 ? t : `${t}-${ONES[o]}`;
+}
+
+/**
+ * ═══ A CLAUSE BECOMING A SENTENCE TAKES A CAPITAL ══════════════════════
+ *
+ * The weather's clauses are written to be joined — "you kept a memory",
+ * "your memory was consulted 170 times" — so the API composes them lower
+ * case on purpose, and that is right for a clause. The moment one is spoken
+ * ALONE, by the creature or on its own line, it stops being a clause and
+ * becomes a sentence, and the founder's ruling covers every sentence a
+ * person reads: *"make sure that like everything has the first character of
+ * the word capitalized."*
+ *
+ * `capitalized.test.ts` could not see these. It reads the web's own
+ * catalogue, and these strings are assembled on the server out of row
+ * counts — so "you kept a memory." has been in the creature's mouth, lower
+ * case, for as long as the weather has existed. Same shape as the
+ * `text-transform: lowercase` found earlier the same day: a rule enforced
+ * on one layer and undone on another.
+ *
+ * HANGUL IS LEFT ALONE, because it has no case to change — the same reason
+ * `capitalized.test.ts` is silent on the Korean catalogue. `toLocaleUpperCase`
+ * on a Hangul syllable returns the syllable, so this is a no-op there rather
+ * than a special case, but it is written down so nobody "fixes" it later.
+ */
+export function asSentence(clause: string, locale: WordsLocale = "en-US"): string {
+  const words = clause.trimStart();
+  if (!words) return clause;
+  return words[0]!.toLocaleUpperCase(locale) + words.slice(1);
 }

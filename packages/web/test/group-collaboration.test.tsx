@@ -246,7 +246,7 @@ it("keeps a newly proposed thought visible while the room waits for others", asy
   await open();
   await act(async () => {
     [...layout.container.querySelectorAll<HTMLElement>(".jar-roomform--group button")]
-      .find((button) => button.textContent === "put something to this room")!.click();
+      .find((button) => button.textContent === "Put something to this room")!.click();
   });
   const editor = find(".jar-reflect-box") as HTMLTextAreaElement;
   const nativeValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
@@ -257,11 +257,11 @@ it("keeps a newly proposed thought visible while the room waits for others", asy
   });
   await act(async () => {
     [...layout.container.querySelectorAll<HTMLElement>(".jar-roomform--group button")]
-      .find((button) => button.textContent === "put it to them")!.click();
+      .find((button) => button.textContent === "Put it to them")!.click();
   });
   expect(find(".jar-roomform--group").textContent).toContain("We make experiments small enough to share.");
   expect(find(".jar-roomform--group").textContent).toContain("Members can answer it now");
-  expect(find(".jar-roomform--group").textContent).toContain("you agreed");
+  expect(find(".jar-roomform--group").textContent).toContain("You agreed");
 });
 
 it("keeps an accepted answer visible until the next version reaches the room", async () => {
@@ -271,7 +271,7 @@ it("keeps an accepted answer visible until the next version reaches the room", a
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   await act(async () => {
     [...layout.container.querySelectorAll<HTMLElement>(".jar-roomform--group button")]
-      .find((button) => button.textContent === "yes, that is us")!.click();
+      .find((button) => button.textContent === "Yes, that is us")!.click();
   });
   expect(find(".jar-roomform--group").textContent).toContain("next reading is taking shape");
   await act(async () => vi.advanceTimersByTimeAsync(2_000));
@@ -291,7 +291,7 @@ it("does not claim the new reading has arrived before its wall finishes loading"
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   await act(async () => {
     [...layout.container.querySelectorAll<HTMLElement>(".jar-roomform--group button")]
-      .find((button) => button.textContent === "yes, that is us")!.click();
+      .find((button) => button.textContent === "Yes, that is us")!.click();
   });
   await act(async () => vi.advanceTimersByTimeAsync(2_000));
   expect(find(".jar-roomform--group").textContent).toContain("next reading is taking shape");
@@ -309,7 +309,7 @@ it("follows an immediately carried proposal into its new version", async () => {
   await open();
   await act(async () => {
     [...layout.container.querySelectorAll<HTMLElement>(".jar-roomform--group button")]
-      .find((button) => button.textContent === "put something to this room")!.click();
+      .find((button) => button.textContent === "Put something to this room")!.click();
   });
   const editor = find(".jar-reflect-box") as HTMLTextAreaElement;
   const nativeValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
@@ -321,7 +321,7 @@ it("follows an immediately carried proposal into its new version", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   await act(async () => {
     [...layout.container.querySelectorAll<HTMLElement>(".jar-roomform--group button")]
-      .find((button) => button.textContent === "put it to them")!.click();
+      .find((button) => button.textContent === "Put it to them")!.click();
   });
   expect(find(".jar-roomform--group").textContent).toContain("next reading is taking shape");
   await act(async () => vi.advanceTimersByTimeAsync(2_000));
@@ -336,7 +336,7 @@ it("keeps an open question visible when an answer fails to save", async () => {
   await open();
   await act(async () => {
     [...layout.container.querySelectorAll<HTMLElement>(".jar-roomform--group button")]
-      .find((button) => button.textContent === "yes, that is us")!.click();
+      .find((button) => button.textContent === "Yes, that is us")!.click();
   });
   expect(find(".jar-roomform--group").textContent).toContain("We share what we learn.");
   expect(find('.jar-roomform--group [role="alert"]').textContent).toContain("temporarily unavailable");

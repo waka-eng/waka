@@ -32,7 +32,7 @@ it('opens an archive result directly, with a recognizable preview, date and refl
   expect(host.querySelector('[role="status"]')?.textContent).toContain('Searching');
   await tick();
   expect(fetchInspirationPage).toHaveBeenCalledWith({ profile: 'profile-1', q: 'garden', limit: 50 }, expect.any(AbortSignal));
-  expect(host.textContent).toContain('Jan 4, 2026'); expect(host.textContent).toContain('reflected');
+  expect(host.textContent).toContain('Jan 4, 2026'); expect(host.textContent).toContain('Reflected');
   await act(async () => button('Thought older-than-field').click());
   expect(pick).toHaveBeenCalledWith(row('older-than-field'));
 });

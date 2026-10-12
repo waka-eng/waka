@@ -66,6 +66,17 @@ export interface SignalCandidateExtractionInput {
   reflections: Array<{ question: string; answer: string }>;
   attachments: AttachmentEnrichmentContext[];
   /**
+   * Categories this profile has already used.
+   *
+   * THE WHOLE DIFFERENCE BETWEEN A USEFUL ROW OF TABS AND A USELESS ONE.
+   * Asked cold, a model names each capture with a fresh phrase, and fifty
+   * saves become fifty categories of one — a filter where every option shows
+   * you one thing, which is worse than no filter. Shown what already exists,
+   * it reuses, and the vocabulary converges on the handful of things a person
+   * actually keeps about.
+   */
+  existingCategories: string[];
+  /**
    * Statements the profile already holds. Passed so the model can phrase a
    * candidate the same way it phrased the pattern before; the actual
    * match-or-mint decision is made by cosine distance, not by the model.
@@ -92,6 +103,20 @@ export interface SignalCandidate {
 
 export interface SignalCandidateExtractionResult {
   statements: SignalCandidate[];
+  /**
+   * WHAT THIS CAPTURE IS ABOUT, in a word or two — or null when nothing fits.
+   *
+   * It rides on this call rather than getting one of its own because this
+   * call already reads the whole capture, its reflections and its
+   * attachments. A second model round-trip per save, to answer a smaller
+   * question about material already in front of a model, would be paid on
+   * the one act the product promises costs nothing.
+   *
+   * It is a fact about the CAPTURE (layer 1), not about the statements
+   * (layer 2), which is why it sits beside `statements` rather than inside
+   * one — a capture that yields no statement still has a subject.
+   */
+  category: string | null;
 }
 
 /** A separate, exhaustive question about existing links, not new discovery.

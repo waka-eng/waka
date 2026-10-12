@@ -40,6 +40,7 @@ export type InspirationRow = Pick<
   | "profileId"
   | "text"
   | "kind"
+  | "category"
   | "source"
   | "visibility"
   | "createdAt"
@@ -51,6 +52,7 @@ export const inspirationSelection = {
   profileId: inspirations.profileId,
   text: inspirations.text,
   kind: inspirations.kind,
+  category: inspirations.category,
   source: inspirations.source,
   visibility: inspirations.visibility,
   createdAt: inspirations.createdAt,
@@ -90,6 +92,7 @@ export function serializeInspirationDetail(
     profileId: row.profileId,
     text: row.text,
     kind: row.kind,
+    category: row.category,
     source: row.source,
     visibility: row.visibility,
     createdAt: row.createdAt.toISOString(),
@@ -117,7 +120,7 @@ export function buildTextPreview(previewSource: string, textLength: number): str
  */
 export type InspirationSummaryRow = Pick<
   Inspiration,
-  "id" | "kind" | "source" | "visibility" | "createdAt" | "updatedAt"
+  "id" | "kind" | "category" | "source" | "visibility" | "createdAt" | "updatedAt"
 > & {
   previewSource: string;
   textLength: number;
@@ -143,6 +146,7 @@ export function serializeInspirationSummary(
     textPreview: buildTextPreview(row.previewSource, Number(row.textLength)),
     ...(row.materialRevision?{materialRevision:row.materialRevision}:{}),
     kind: row.kind,
+    category: row.category,
     source: row.source,
     visibility: row.visibility,
     createdAt: row.createdAt.toISOString(),

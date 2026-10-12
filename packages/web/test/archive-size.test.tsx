@@ -56,7 +56,12 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
-import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
+import { createElement } from "react";
+
+import { apiMockFrom, dataMockFrom, VIEWER_ID } from "./helpers/render-home";
 
 /** Nine kept, and — as far as this world is concerned — nine held. */
 const FACTS = {
@@ -111,7 +116,6 @@ vi.mock("../src/lib/auth-context", async (importOriginal) => {
   return { ...actual, useOptionalAuth: () => session, useAuth: () => session };
 });
 
-let layout: MountedWorld;
 
 beforeAll(() => {
   installCanvasStub();
@@ -120,30 +124,84 @@ beforeAll(() => {
 });
 
 afterEach(() => {
-  layout?.unmount();
+  if (root) act(() => root!.unmount());
+  host?.remove();
+  root = null;
+  host = null;
 });
 
-/** The door into the ground, printed with how much is behind it. */
-function doorText(): string {
-  const door = layout.container.querySelector(".jar-saved-count");
+/**
+ * THE COUNT IS ON THE SURFACE IT COUNTS.
+ *
+ * It rode the bottom bar's Inspirations button, then the menu row that
+ * replaced that, then the archive's own page — and all three are gone. A fact
+ * about the archive belongs on the archive rather than on whatever happens to
+ * point at it, which has been true through every move and is why only the
+ * mount below changed each time.
+ *
+ * THE ARCHIVE IS AN OVERLAY NOW. Founder: "for your inspirations, after I
+ * click on it, I feel like I'm lost how to go back to the previous screen."
+ * Being a page is what made it a trap — reaching it unmounted the world, so
+ * there was nothing to return to. So this mounts `SavesOverlay` instead of a
+ * page. Same span, same words, same `loadInspirations` behind it, which is
+ * where the "never smaller than what arrived" invariant actually lives.
+ *
+ * It takes its profile and its title from whoever opens it rather than
+ * working them out itself, so the mount supplies both — that is the whole
+ * reason the overlay cannot disagree with the world behind it about whose
+ * archive is on screen.
+ */
+let root: Root | null = null;
+let host: HTMLElement | null = null;
+
+async function doorText(): Promise<string> {
+  const { SavesOverlay } = await import("../src/components/SavesOverlay");
+  const { AuthProvider } = await import("../src/lib/auth-context");
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(
+          AuthProvider,
+          null,
+          createElement(SavesOverlay, {
+            locale: "en-US",
+            /* `undefined` is "mine", which is what every case here is about.
+               The profile is the caller's to supply precisely so that an
+               agent's archive and your own cannot be confused. */
+            profileId: undefined,
+            title: "Your inspirations",
+            onClose: () => undefined,
+          }),
+        ),
+      ),
+    );
+  });
+  /* The page fetches its own archive; the count cannot be read before it has. */
+  for (let turn = 0; turn < 12 && !host.querySelector(".jar-saved-count"); turn += 1) {
+    await act(async () => { await Promise.resolve(); });
+  }
+  const door = host.querySelector(".jar-saved-count");
   return (door?.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
 describe("the count under the door", () => {
   it("is one number when the walk reached the end of the archive", async () => {
     heldTotal = 9;
-    layout = await mountWorld(FACTS);
     /* The ordinary case, and the one every account lives in for a long time:
        nine kept, nine held, and nothing said about a ceiling nobody met. */
-    expect(doorText()).toBe("9 inspirations");
+    expect(await doorText()).toBe("9 inspirations");
   });
 
   it("says both when the archive holds more than the walk reached", async () => {
     heldTotal = 2500;
-    layout = await mountWorld(FACTS);
     /* The first number is still the orbs in the ground the caret takes you
        into (founder, 2026-08-25). The second is what is actually kept. */
-    expect(doorText()).toBe("9 of 2500 inspirations");
+    expect(await doorText()).toBe("9 of 2500 inspirations");
   });
 
   it("never states a size smaller than what it is standing on", async () => {
@@ -162,7 +220,6 @@ describe("the count under the door", () => {
      * ordinary case rather than printed.
      */
     heldTotal = 2;
-    layout = await mountWorld(FACTS);
-    expect(doorText()).toBe("9 inspirations");
+    expect(await doorText()).toBe("9 inspirations");
   });
 });

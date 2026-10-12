@@ -55,7 +55,7 @@ import {
   type RefreshGroupTopOfMindPayload,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
-import { requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { validationDetails } from "../lib/validation.js";
 import { loadGroupField, loadGroupInspiration } from "./groups-field.js";
 import {
@@ -130,22 +130,6 @@ const listProposalsQuerySchema = z
   })
   .strict();
 
-/**
- * Groups are between people.
- *
- * An agent profile owns its own three-layer stack; it does not take a seat at
- * a human's table. Enforced once, in front of every handler, because the rule
- * is about the caller rather than about any particular group — and a rule
- * re-implemented per route is a rule that will be missing from one of them.
- */
-export const humanProfilesOnly: MiddlewareHandler<AuthEnv> = async (c, next) => {
-  const session = c.get("session");
-  if (session.profile.type !== "human") {
-    return c.json({ error: "Groups are between people, not agent profiles" }, 403);
-  }
-  await next();
-};
-
 export interface GroupsRouteDependencies {
   getDatabase?: typeof getDb;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
@@ -192,7 +176,24 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
   const declineProposal = deps.declineProposal ?? declineGroupProposal;
 
   routes.use("*", deps.authMiddleware ?? requireAuth);
-  routes.use("*", humanProfilesOnly);
+  /*
+   * GROUPS ARE BETWEEN PEOPLE. An agent profile owns its own three-layer
+   * stack; it does not take a seat at a human's table. Enforced once, in
+   * front of every handler, because the rule is about the caller rather than
+   * about any particular group — a rule re-implemented per route is a rule
+   * that will be missing from one of them.
+   *
+   * This was its own `humanProfilesOnly` middleware with the same body as the
+   * shared one minus `keyScoped`, which is the whole lesson: two spellings of
+   * one rule, written months apart for reasons that read differently
+   * ("groups are between people" vs. "this is the account holder's
+   * decision"), drifted to different answers for the same session. A keeper
+   * key passed the local copy, so a config file on disk could join a room,
+   * leave one, rename it, remove another member, and endorse on the board —
+   * all of which rooms cannot unhear. The reasons were two; the predicate was
+   * always one, and it now has one home (lib/middleware.ts).
+   */
+  routes.use("*", humanSessionsOnly);
 
   /** A membership change is new material for the group's next synthesis. */
   const requestRefresh = async (

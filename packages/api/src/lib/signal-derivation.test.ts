@@ -244,7 +244,11 @@ describe("parseSignalCandidates — related-citation shape discipline", () => {
   const earlier='a3689f1e-0000-4000-8000-000000000001';
   const input={profileId:'profile',preferredLocale:'en-US' as const,
     inspiration:{id:'00000000-0000-4000-8000-000000000002',text:'I keep commitments small enough to honor existing promises.',source:'app' as const,createdAt:new Date()},
-    reflections:[],attachments:[],existingStatements:[],relatedInspirations:[{id:earlier,text:'An earlier promise.',createdAt:new Date()}]};
+    /* `existingCategories` is this branch's, and it is REQUIRED on the input
+       type — the shelf labels already in use, so the prompt can reuse a name
+       rather than inventing a synonym of it. dev's cases (#366) predate it;
+       empty is the honest value here, since none of them are about the shelf. */
+    reflections:[],attachments:[],existingStatements:[],existingCategories:[],relatedInspirations:[{id:earlier,text:'An earlier promise.',createdAt:new Date()}]};
   it.each([earlier,earlier.slice(0,8)])('refuses internal context IDs in visible pattern text: %s',id=>{
     expect(()=>parseSignalCandidates({statements:[{statement:`I keep commitments small. The earlier capture ${id} shows the same.`}]},input)).toThrow('signal extraction');
     expect(()=>parseSignalCandidates({statements:[{statement:'I keep commitments small.',reason:`Earlier capture ${id} supports this.`}]},input)).toThrow('signal extraction');

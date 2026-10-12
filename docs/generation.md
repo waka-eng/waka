@@ -226,6 +226,29 @@ The extraction call (`extractSignalCandidates` — interface in
   (`resolveRelatedEvidence`). A citation whose quote fails is dropped whole:
   "these two share a theme" is not "this capture witnesses this pattern",
   and the verbatim quote is the difference.
+- **The capture's own subject rides on the same call.** The pass also names
+  what the capture is ABOUT, in one or two plain words, as the archive's
+  shelves. It is a fact about the capture (layer 1), not about any statement
+  drawn from it, so a capture that yields zero statements still has one. It
+  rides here rather than taking a call of its own because this call already
+  reads the whole capture, its reflections and its attachments — and a second
+  round-trip per save would be charged against the one act the product
+  promises costs nothing.
+  - The reading is shown the shelves this archive already uses, busiest
+    first, at most `MAX_EXISTING_CATEGORIES` (24), and told to reuse before
+    it coins. Without that, a model names each capture with a fresh phrase
+    and fifty saves become fifty categories of one — a filter where every
+    option holds one thing, which is worse than no filter.
+  - At most `MAX_CATEGORY_CHARS` (32) characters. Longer than that is a
+    sentence, not a shelf, and it has to fit in a tab.
+  - Free text rather than an enum, deliberately: an enum would be a taxonomy
+    decided once for everybody, and the claim this product makes is that what
+    a person keeps about is particular to them. The vocabulary converges per
+    archive instead of being constrained across all of them.
+  - `null` is a real answer and the default. A capture the reading cannot
+    place stays unplaced; nothing downstream may read null as a category
+    named "null". A pass that returns null also leaves an existing shelf
+    alone — "could not place it this time" is not "it belongs nowhere".
 - Temperature 0, JSON schema-constrained, caps re-enforced in code
   regardless of what the model returns.
 
@@ -332,7 +355,7 @@ recency = 2^(−quiet_days / 45)          quiet = days since newest; 45 = CONFID
 confidence = round( 55·support + 30·spread + 15·recency + diversity + affirmed )
              where diversity = CONFIDENCE_SOURCE_DIVERSITY_BONUS (8)
              when evidence spans app AND agent capture, else 0
-             and affirmed = CONFIDENCE_AFFIRMED_BONUS (8)
+             and affirmed = CONFIDENCE_AFFIRMED_BONUS (30)
              when the owner's LATEST verdict on the signal is "true", else 0
              — clamped to 0..100
 ```
@@ -1059,7 +1082,7 @@ The authoritative values. Machine-checked against code — see
 | `CONFIDENCE_SATURATION_SPREAD_DAYS` | 30 | Spread saturates at this many days |
 | `CONFIDENCE_RECENCY_HALF_LIFE_DAYS` | 45 | Recency half-life |
 | `CONFIDENCE_SOURCE_DIVERSITY_BONUS` | 8 | Added when app and agent evidence corroborate |
-| `CONFIDENCE_AFFIRMED_BONUS` | 8 | Added when the owner's latest verdict on the signal is "true" |
+| `CONFIDENCE_AFFIRMED_BONUS` | 30 | Added when the owner's latest verdict on the signal is "true". Borrowed from `CONFIDENCE_SPREAD_WEIGHT`: saying "this is me" is worth what a month of recurrence is worth. Was 8 — the same as the source-diversity bonus — which reached selection as +3.6 of 100 against the -36 that rejecting the same claim produced |
 | `MATCH_CANDIDATE_SCAN_LIMIT` | 500 | Most-recently-evidenced signals scanned per match |
 | `RELATED_INSPIRATION_SCAN_LIMIT` | 500 | Most recent capture vectors scanned for relatedness |
 | `RELATED_INSPIRATION_MIN_COSINE` | 0.6 | Floor below which an earlier capture is not offered as context |
@@ -1172,6 +1195,8 @@ is not part of this text-generation switch.
 | `MAX_GEMINI_EMBEDDING_VALUES` | 4096 | Sanity ceiling on values accepted back per vector |
 | `MAX_SIGNAL_CANDIDATES` | 3 | Statements one extraction may propose |
 | `MAX_RELATED_INSPIRATION_CITATIONS` | 2 | Earlier captures one statement may cite as co-witnesses |
+| `MAX_CATEGORY_CHARS` | 32 | A capture's own subject, in words — longer is a sentence, not a shelf |
+| `MAX_EXISTING_CATEGORIES` | 24 | Shelves the reading is shown before it names a new one, busiest first |
 | `MAX_TOP_OF_MIND_ENTRIES` | 7 | Entries one artifact may hold |
 
 All generation calls run at temperature 0 with schema-constrained JSON
@@ -1246,6 +1271,7 @@ Source: `packages/web/src/lib/aliveness.ts`.
 | `FIELD_FLOOR_ANSWERED` | 0.18 | Nor one you answered in your own words |
 | `FIELD_FLOOR_IN_GROUP` | 0.1 | Nor one that is out loud in a group |
 | `FIELD_FRONTIER_DAYS` | 3 | Untouched longer than this and cited by nothing = a frontier |
+| `BULB_FLOOR` | 0.12 | The dimmest the character burns — lit, never dark |
 | `FIELD_CARRY_ROOT_SATURATION` | 3 | Roots stop adding carry past this many citing patterns |
 | `FIELD_CARRY_ROOTS_SHARE` | 0.1 | Carry: the share held by how many patterns cite it |
 | `FIELD_CARRY_PROMOTED_SHARE` | 0.45 | Carry: the share held by how far the pattern above it has got |

@@ -26,8 +26,8 @@ describe("room history captions", () => {
     const events = groupHistoryEvents(timeline, "en-US");
     expect(events).toHaveLength(4);
     expect(events.map((event) => event.line)).toContain("Sora arrived");
-    expect(events.map((event) => event.line)).toContain("someone left");
-    expect(events.map((event) => event.line)).not.toContain("the room re-read itself");
+    expect(events.map((event) => event.line)).toContain("Someone left");
+    expect(events.map((event) => event.line)).not.toContain("The room re-read itself");
   });
 
   it("groups events by the date menu's day, month, or year stop", () => {
@@ -35,11 +35,11 @@ describe("room history captions", () => {
     const september = new Date(2026, 8, 30, 23, 59, 59, 999).getTime();
     const twelfth = new Date(2026, 8, 12, 23, 59, 59, 999).getTime();
     expect(eventsAtStop(events, twelfth, "day").map((event) => event.line))
-      .toEqual(["a proposal carried", "Sora arrived"]);
+      .toEqual(["A proposal carried", "Sora arrived"]);
     expect(eventsAtStop(events, september, "month")).toHaveLength(2);
     expect(eventsAtStop(events, september, "year")).toHaveLength(4);
     expect(groupHistoryCaption(eventsAtStop(events, twelfth, "day"), "en-US", 1))
-      .toBe("a proposal carried · 1 more");
+      .toBe("A proposal carried · 1 more");
   });
 
   it("finds the readings before and after a selected period, without treating a no-change pass as a turn", () => {

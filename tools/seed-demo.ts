@@ -482,10 +482,17 @@ export async function seedDemoRows(
         );
       }
       await sql`
-        insert into signal_evidence (id, profile_id, signal_id, inspiration_id, reason, quote, created_at)
+        insert into signal_evidence (id, profile_id, owner_profile_id, signal_id, inspiration_id, reason, quote, created_at, material_revision)
         values (
-          ${randomUUID()}, ${profileId}, ${id}, ${inspirationId}, ${evidence.reason},
-          ${evidence.quote ?? null}, ${inspirationTimes.get(evidence.inspirationSlug)!}
+          ${randomUUID()}, ${profileId}, ${profileId}, ${id}, ${inspirationId}, ${evidence.reason},
+          ${evidence.quote ?? null}, ${inspirationTimes.get(evidence.inspirationSlug)!},
+          /* Pin support at the material the inspiration is actually AT, not 1.
+             track_inspiration_material() bumps personal_revision on every
+             update the seed makes after the insert, and signal_support_edges
+             only counts an edge whose material_revision matches — so a
+             hardcoded 1 silently drops the row from the promotion count. */
+          (select v.personal_revision from inspiration_revisions v
+            where v.profile_id = ${profileId} and v.inspiration_id = ${inspirationId})
         )
       `;
     }

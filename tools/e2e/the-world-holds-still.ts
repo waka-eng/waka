@@ -145,6 +145,7 @@ import { type Browser, type Page } from "playwright";
 
 import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
+import { openTheNotepad } from "./keep";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
 const PASSWORD = "holds-still-1";
@@ -289,7 +290,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   /* THE WORLD NEEDS A GROUND TO HOLD STILL. An empty account has no orbs at
      all, and "nothing moved" over an empty field is a sentence about nothing. */
   for (const text of ["the ground stays where it was put", "nobody is touching this"]) {
-    await page.locator(".jar-mouth-rest").first().click();
+    await openTheNotepad(page);
     await page.waitForTimeout(700);
     await page.fill('textarea[aria-label="Capture inspiration"]', `${text} ${uniq()}`);
     await page.keyboard.press("Enter");
@@ -425,7 +426,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
      drops a ball into the field, so the loop must report one more than it
      did — the half of this walk that the chrome cannot speak for. */
   if (opened.ground !== null) {
-    await page.locator(".jar-mouth-rest").first().click();
+    await openTheNotepad(page);
     await page.waitForTimeout(700);
     await page.fill('textarea[aria-label="Capture inspiration"]', `on purpose ${uniq()}`);
     await page.keyboard.press("Enter");

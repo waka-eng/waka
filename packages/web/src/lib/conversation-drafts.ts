@@ -14,3 +14,15 @@ export function storeConversationDraft(scope:ProfileStorageScope,id:string,value
 }
 export function clearConversationDraft(row:StoredConversationDraft){if(localStorage.getItem(row.key)===row.raw)localStorage.removeItem(row.key);}
 export function clearConversationDrafts(scope:ProfileStorageScope,id:string){const start=prefix(scope,id);for(const key of Object.keys(localStorage).filter(key=>key.startsWith(start)))localStorage.removeItem(key);}
+/** EVERY COMPOSER THIS PROFILE LEFT HALF-TYPED, IN ONE SWEEP.
+ * `clearConversationDrafts` above needs the conversation id, and logout does
+ * not know which conversations the person had open — the ids live in the keys,
+ * which is exactly what makes a prefix sweep the right instrument here rather
+ * than a list we would have to keep somewhere. Scoped to `conversation:` under
+ * this profile and then to keys that actually carry `:draft:`, so a neighbour
+ * like `conversationScroll:` (where the person had got to in a thread, which a
+ * returning owner expects to find) is not swept up with the unsent words. */
+export function clearAllConversationDrafts(scope:ProfileStorageScope){
+  const base=profileStorageKey(scope,'conversation:');if(!base)return;
+  for(const key of Object.keys(localStorage))if(key.startsWith(base)&&key.slice(base.length).includes(':draft:'))localStorage.removeItem(key);
+}

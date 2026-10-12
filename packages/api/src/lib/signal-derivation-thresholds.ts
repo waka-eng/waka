@@ -147,8 +147,45 @@ export const CONFIDENCE_RECENCY_HALF_LIFE_DAYS = 45;
  * unanswered must not subtract, and disputed is deliberately NOT mirrored
  * here — "not_true" already moves selection through its own multiplier, and
  * cutting confidence too would count one answer twice.
+ *
+ * ── 8 -> 30 ON 2026-10-10, AND THE ARITHMETIC IS THE ARGUMENT ─────────────
+ *
+ * At 8 this was worth EXACTLY what `CONFIDENCE_SOURCE_DIVERSITY_BONUS` is
+ * worth. A person reading a sentence about themselves and saying "yes, that
+ * is me" counted for the same as that sentence happening to have been
+ * captured from two different apps.
+ *
+ * Downstream it was smaller still. Selection weights confidence at 0.45, so
+ * affirming moved the selection score by +3.6 of 100 — while "not true"
+ * multiplies the whole score by `SELECTION_DISPUTED_MULTIPLIER` (0.4), which
+ * on a score of 60 is -36. Ten times the effect for the opposite answer, on
+ * a loop whose entire thesis is that confirming is the central act.
+ *
+ * THE NUMBER IS NOT PICKED, IT IS BORROWED. 30 is `CONFIDENCE_SPREAD_WEIGHT`
+ * — the whole durability term, the one that asks whether a pattern recurred
+ * across a month rather than across an afternoon. So the principle is
+ * statable in one sentence, which is the test of whether a constant is
+ * reasoned: YOUR SAYING "THIS IS ME" IS WORTH WHAT A MONTH OF RECURRENCE IS
+ * WORTH. It is not worth more than the support term (55), because a single
+ * answer should not outrank everything a person actually did.
+ *
+ * ── WHY NOT A SELECTION MULTIPLIER, WHICH WOULD BE THE SYMMETRIC FIX ──────
+ *
+ * Mirroring `SELECTION_DISPUTED_MULTIPLIER` at 1/0.4 = 2.5 is the obvious
+ * move and it is wrong, because the two answers are not symmetric in their
+ * failure. Suppression is safe: a signal you called untrue staying down is
+ * the outcome you asked for. Amplification is not. An affirmed signal whose
+ * evidence went quiet years ago scores 0.45*confidence + 0.2*support*100
+ * with recency at 0 — about 47 — and 47 x 2.5 pins to the 100 cap forever.
+ * The person would have made one true statement about themselves and been
+ * unable to ever see anything else at the top of their own reading.
+ *
+ * A bounded bonus cannot do that: it rides through the 0.45 weight and still
+ * decays with everything else. `top-of-mind-affirmation.test.ts` holds both
+ * halves — that affirming lifts a claim, and that it does not make it
+ * immortal.
  */
-export const CONFIDENCE_AFFIRMED_BONUS = 8;
+export const CONFIDENCE_AFFIRMED_BONUS = 30;
 
 /** Weights of the three confidence terms; they sum to 100. */
 export const CONFIDENCE_SUPPORT_WEIGHT = 55;
@@ -173,6 +210,16 @@ export const CONFIDENCE_SOURCE_DIVERSITY_BONUS = 8;
  * likely to match are the ones that survive the cut.
  */
 export const MATCH_CANDIDATE_SCAN_LIMIT = 500;
+
+/**
+ * HOW MANY SHELVES THE READING IS SHOWN WHEN IT NAMES A CAPTURE'S CATEGORY.
+ *
+ * Enough that a capture nearly always finds a home among them, few enough
+ * that the list stays a list rather than becoming the prompt. They are shown
+ * busiest-first, so this cap drops the long tail of one-offs rather than the
+ * handful of shelves that actually organise the archive.
+ */
+export const MAX_EXISTING_CATEGORIES = 24;
 
 /*
  * -----------------------------------------------------------------------

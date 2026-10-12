@@ -19,7 +19,7 @@ import { z } from "zod";
 
 import { signalDuplicates, signals } from "../db/index.js";
 import { getDb } from "./../lib/db.js";
-import { requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { resolveSignalDuplicate } from "../lib/signal-gardener.js";
 import { validationDetails } from "../lib/validation.js";
 import { alias } from "drizzle-orm/pg-core";
@@ -38,13 +38,19 @@ export function createSignalDuplicatesRoutes(
 ): Hono<AuthEnv> {
   const routes = new Hono<AuthEnv>();
   const getDatabase = deps.getDatabase ?? getDb;
-  routes.use("*", deps.authMiddleware ?? requireAuth);
+  /*
+   * A MERGE REWRITES WHAT THE PERSON'S MEMORY SAYS ABOUT THEM, so both routes
+   * are the person's, and the shared gate says it once instead of twice. The
+   * two inline copies it replaces compared profile type only, which let a
+   * `keyScoped` keeper key through — and the keeper key's bargain is read and
+   * capture, never curation (lib/keeper-key-auth.ts). Answering a duplicate
+   * proposal is curation in its purest form: one of two statements about the
+   * person stops existing.
+   */
+  routes.use("*", deps.authMiddleware ?? requireAuth, humanSessionsOnly);
 
   routes.get("/", async (c) => {
     const session = c.get("session");
-    if (session.profile.type !== "human") {
-      return c.json({ error: "Only the person resolves their own duplicates" }, 403);
-    }
     const db = getDatabase();
     const aSignal = alias(signals, "a_signal");
     const bSignal = alias(signals, "b_signal");
@@ -81,9 +87,6 @@ export function createSignalDuplicatesRoutes(
 
   routes.post("/:id/resolve", async (c) => {
     const session = c.get("session");
-    if (session.profile.type !== "human") {
-      return c.json({ error: "Only the person resolves their own duplicates" }, 403);
-    }
     let rawBody: unknown;
     try {
       rawBody = await c.req.json();
