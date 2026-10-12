@@ -96,7 +96,7 @@ import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
 import { listClaims, type ApiClaim } from '../lib/api';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
-import { inspectInspirationPhoto } from '../lib/inspiration-photo';
+import { inspectInspirationPhoto, PHOTO_ACCEPT } from '../lib/inspiration-photo';
 import { uploadInspirationMedia } from '../lib/inspiration-media-upload';
 import { restoreInspirationDraft, settleInspirationDraft } from '../lib/authored-save-drafts';
 import { AuthoredSaveNotice } from '../components/AuthoredSaveNotice';
@@ -129,7 +129,7 @@ import {
 import { SavesOverlay } from "../components/SavesOverlay";
 import { DOCK_SLOT } from "../components/NoteTools";
 import { deleteAccount } from "../lib/api/auth";
-import { whyNotKept } from "../lib/keep-ready";
+import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { ClaimsOverlay } from "../components/ClaimsOverlay";
@@ -2880,7 +2880,93 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      writing state into a page that has gone. Awaiting would hold the bar
      unresponsive for the length of a round trip, which is the thing a
      bottom bar must never do. */
-  const commitOpenNote = useCallback(() => { closeSavedNote.current?.(); }, []);
+  /* ═══ AND IT IS FIXED ONCE, BECAUSE FIVE CALL SITES IS NOT A RULE ═════
+     Everything above counted the BAR'S presses and stopped there, and the
+     sentence at the top of this block — "every way out of a note commits it"
+     — was false the day it was written. It was true of the five it had
+     counted and false of the sixth, which nobody had to add a line of code
+     for: `onClose` on `SavesOverlay` was `viewNavigation.closeOpen` with
+     nothing in front of it, and `DialogSurface` answers Escape by calling
+     exactly that. Probed: open a saved row, retype the words, press Escape —
+     `updateInspiration` called zero times, and the edit gone.
+
+     That is the one failure this product cannot have. The archive's own
+     header already argues the point against a smaller version of it: it
+     hands up `leaveNote` rather than a boolean because handing up a boolean
+     "would have been the version of this that silently discards edits". The
+     discard happened anyway, one layer further out, through the exit nobody
+     wrote.
+
+     SO THE COMMIT MOVES INTO THE EXIT RATHER THAN IN FRONT OF IT. `leaveOpen`
+     is what every overlay and every key handler closes through now. A rule
+     enforced by remembering to call something at five sites is a rule that
+     will be broken at the sixth — it already was — and the seventh overlay
+     added to this file gets the commit without anybody noticing there was
+     something to get.
+
+     IT IS A NO-OP EVERYWHERE BUT ONE, which is why routing ALL of them
+     through it costs nothing. `closeSavedNote` is only ever registered by
+     `SavesOverlay`; the claims room, the principles room and the chats list
+     have no note to commit, so for them `leaveOpen` is `closeOpen` with a
+     dead call in front of it. Asking each caller whether it is the archive
+     would be the five-site rule again in a condition's clothing.
+
+     AT MOST ONCE PER CLOSER, and this is what makes the history listener
+     below safe rather than a second write. `leaveNote` is rebuilt on every
+     keystroke — the archive's own effect re-registers it for exactly that
+     reason — so a closer identity names one note at one set of words, and
+     committing the same one twice can only be a duplicate. A failed write
+     re-renders and hands up a fresh closer, so a retry is still possible;
+     that is the case this guard must not break and the reason it compares
+     identity rather than setting a flag.
+
+     AND IT IS NOT PROVEN BY A TEST, which is worth saying plainly rather
+     than leaving for someone to discover by deleting it. Escape commits and
+     then closes, and the close is `navigate(-1)`, so in a browser the pop
+     can land while the `updateInspiration` this function started is still
+     in flight — closer unchanged, `saving` still false in that closure, and
+     a second POST of the same words. `leaving-a-note.test.tsx` cannot
+     produce that ordering: `MemoryRouter` raises no pop at all, so the
+     event has to be dispatched by hand, and by then the awaited write has
+     resolved and the archive has re-registered `null`. Removing this guard
+     leaves that suite green. It stays because a duplicate write is exactly
+     the thing a surface whose whole claim is "we kept what you wrote"
+     cannot afford to do quietly, and because it costs one comparison. */
+  const committedNote = useRef<(() => void) | null>(null);
+  const commitOpenNote = useCallback(() => {
+    const close = closeSavedNote.current;
+    if (!close || close === committedNote.current) return;
+    committedNote.current = close;
+    close();
+  }, []);
+  /** Leaving whatever is held up over the world, committing it on the way. */
+  const leaveOpen = useCallback(() => {
+    commitOpenNote();
+    viewNavigationRef.current.closeOpen();
+  }, [commitOpenNote]);
+  /* ═══ AND THE BROWSER'S OWN BACK, WHICH NO HANDLER CAN SEE ════════════
+     `closeOpen` IS a history step — that is the property it was chosen for,
+     "the browser's own Back keeps agreeing with Escape and with the close" —
+     so Back out of an open note lands in the same place by the same route
+     and, before this, with the same loss. There is nothing to put `leaveOpen`
+     in front of: the pop arrives from outside React entirely, the address
+     changes, the archive unmounts, and the autosave that lives inside the
+     unmounting component never runs.
+
+     THE PRESS IS HEARD RATHER THAN INTERCEPTED. A `beforeunload`-style
+     confirm was rejected outright: it asks a person to approve keeping their
+     own words, on a product whose claim is that it keeps them. `popstate`
+     fires with the note still mounted and its closer still registered, so
+     the commit simply happens and the navigation proceeds — nothing to
+     dismiss, nothing to decide.
+
+     `closeOpen`'s own `navigate(-1)` raises this event too, which is the
+     duplicate the identity guard above exists for. */
+  useEffect(() => {
+    const popped = () => commitOpenNote();
+    window.addEventListener("popstate", popped);
+    return () => window.removeEventListener("popstate", popped);
+  }, [commitOpenNote]);
   const [settingsName, setSettingsName] = useState<string | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsFailed, setSettingsFailed] = useState(false);
@@ -4118,6 +4204,39 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     }
     const interactionAtGreeting = navigationInteraction.current;
     const greetingHref = viewNavigationRef.current.href;
+    /* ═══ AND WHOSE ARRIVAL THIS IS, WHICH IS THE THIRD RACE ═══════════
+       Founder, reporting the same thing for the second time after both of
+       the other two were fixed and shipped: "sometimes the speech bubble
+       stays on." Still true, and this is the writer that was missed.
+
+       `charSay` has THREE late writers, not two. `sayTheWeather` takes a
+       `speechEpoch` number on the press and drops a superseded answer; the
+       wall effect clears a sentence that had already landed. This greeting
+       is the third: it fetches the away-window line at mount, holds it in
+       `toldRef` and speaks it from a timer — 1400ms after the world is
+       drawn, 4000ms when there is something new to glide to first. It took
+       no number at all, so the guard built for exactly this shape of bug
+       could not see it, and a sentence about YOUR day landed on your
+       agent's wall whenever somebody switched form on the way in.
+
+       THE SEAL CANNOT COVER IT, and that is why this needs the epoch rather
+       than a longer hush. `speechSealed` lifts with the turn (650ms,
+       `FORM_HUSH_MS`) because words over the back of a turning creature is
+       the only thing it is for. The greeting speaks at 1400ms at the
+       earliest, so it lands after every seal has lifted, EVERY time —
+       "sometimes" only because switching form inside the first few seconds
+       of a visit is itself occasional. Widening the hush to four seconds was
+       the obvious alternative and is wrong twice over: it would hold a
+       sentence somebody ASKED for off the screen for four seconds, and it
+       would still be a race rather than an answer to one.
+
+       WHY IT WAS NEVER SEEN BY HAND. StrictMode double-mounts `Home` in
+       development, the first mount's cleanup clears these timers, and
+       `greetedRef` is already spent — so the greeting never speaks at all
+       under `pnpm dev`. It is only reachable in a real build, which is why
+       the founder is the only person who had seen it. Pinned by
+       `speech-on-switch.test.tsx` instead. */
+    const askedOnArrival = speechEpoch;
     /* fetched while the glide waits its beat; whichever timeout speaks reads
        the settled value from the ref. A failed fetch is a silent arrival —
        the weather is a courtesy, never a blocker. */
@@ -4135,6 +4254,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          away-window sentence comes off the same API as the day's clauses,
          lower case for the same reason, and lands straight in the bubble.
          `capitalized.test.ts` lists all three by name now. */
+      /* A GREETING IS ADDRESSED TO WHOEVER ARRIVED, and a press or a wall
+         change means that is no longer who is standing here. Same test the
+         press path makes (`mine()`), same reason: a late answer to a
+         question nobody is asking any more is not an answer. */
+      if (askedOnArrival !== speechEpoch) return;
       if (toldRef.current) setCharSay(asSentence(toldRef.current, localeRef.current));
     };
     const fresh = inspirations.filter((c) => c.capturedMs > since);
@@ -11069,7 +11193,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        separate closes because they have separate addresses. */
     if (what === null) {
       if (nav.view?.conversationId) nav.closeConversation();
-      else if (nav.view?.open) nav.closeOpen();
+      /* THROUGH `leaveOpen`, not through `closeOpen`: this is the same exit
+         the bar's Now row takes, and it is reachable with a saved note open
+         (the page menu's own top-of-mind row arrives here). */
+      else if (nav.view?.open) leaveOpen();
       return;
     }
     /* AND THE NOTEPAD IS PUT DOWN. Same rule in the other direction: a place
@@ -11080,7 +11207,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       { ...(nav.view ?? EMPTY_VIEW), open: what, compose: false, conversationId: null },
       standingAway(nav.view) ? { replace: true } : {},
     );
-  }, []);
+  }, [leaveOpen]);
 
   /**
    * AND A CONVERSATION IS A PLACE, ON THE SAME TERMS.
@@ -11575,7 +11702,70 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     locale,
   );
 
-  const whyNotKeeping = whyNotKept({
+  /* ═══ AND EVERY WAY OUT OF THE NOTEPAD RELEASES THE MICROPHONE ════════
+     `dictation.stop()` had exactly ONE call site — the Stop control in the
+     bar — so every other exit left the engine running. The page folds, the
+     Stop control folds with it, and the only remaining release was `Home`
+     unmounting: a tab left open on the world is a tab still transcribing
+     into a draft nobody is looking at, on the one feature in this product
+     whose own disclosure says the audio leaves the device.
+
+     `saveAsDraft` STOPS THE RECORDER AND NOT THIS, which is how the hole
+     stayed invisible. The two are the same kind of thing and only one of
+     them was wired, so the notepad looked like it cleaned up after itself.
+
+     SO IT IS THE SAME SHAPE THE RECORDER ALREADY HAS — see `if (!mouthOpen
+     && recording.phase !== 'idle') void recording.stop()` further up, which
+     was written for the same bug and is the precedent rather than a
+     coincidence. A release at each exit was the alternative and is the
+     five-call-sites rule again: `saveAsDraft`, the dock's Now row, a press
+     on another place, a conversation, the browser's Back, and whatever
+     opens the notepad's successor. The notepad being closed is the FACT; an
+     effect on that fact cannot be forgotten by the next exit added.
+
+     `stop` AND NOT `abort`: a person leaving mid-sentence still owns the
+     words they had said, and `stop` asks the engine for its last final
+     result, which lands in the draft they are leaving behind. `abort` is
+     for unmount, where there is nothing left to write into. */
+  useEffect(() => {
+    if (!mouthOpen && dictation.listening) dictation.stop();
+  }, [mouthOpen, dictation.listening, dictation.stop]);
+
+  /* ═══ THE SAVE RULE, SAID ONCE, AND NOW ACTUALLY ONCE ═════════════════
+     `lib/keep-ready.ts` was written so this condition exists in one place,
+     and its header spends thirty lines on the two copies that preceded it.
+     It then had THREE copies again, and the two new ones were both LOOSER
+     than this one:
+
+       `keepIt`'s own guard omitted `dictation.listening` and
+       `uploadingMediaId`. So the rule said one thing on the button and a
+       weaker thing at the moment of the press — which is the precise
+       failure `whyNoSend` was written for, inverted: not a control that
+       looks pressable and does nothing, but a control that looks BLOCKED
+       and saves anyway when reached by another route.
+
+       `Cmd+Enter` in the notepad and `Enter` in the link field reached
+       `keepIt` without consulting the rule at all. The second carried a
+       third hand-written copy of its own (`blocked` in
+       `InspirationComposer`), which is a DISABLING condition rather than
+       the save rule and is documented there as such now.
+
+     Consequence, measured: speak into the note, press `Cmd+Enter`, and a
+     save begins carrying only what the engine had already marked final.
+     Whatever was mid-utterance is gone. That is the loss the comment under
+     `recording` below says this rule exists to prevent, written while the
+     keyboard was walking straight past it.
+
+     ONE OBJECT, BUILT HERE, READ TWICE. The press cannot simply reuse the
+     rendered answer — it reads the draft store's CURRENT contents, which a
+     background flush or another tab may have moved underneath the last
+     render, and that is the whole reason `keepIt` asks again rather than
+     trusting a disabled attribute. What it must not do is ask a DIFFERENT
+     QUESTION. So the fields are enumerated once, in this literal, and the
+     press overrides only the ones it has a fresher reading of — a typed
+     `KeepReadiness` spread, so a condition added to that interface tomorrow
+     is asked at both sites or neither, and the compiler says which. */
+  const keepReadiness: KeepReadiness = {
     hasWords: composerHasWords,
     ready: composerDraft.ready,
     saving: Boolean(inspirationSave.pending) || inspirationSave.busy || preparingInspiration,
@@ -11588,22 +11778,83 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     undecidedRecording: Boolean(composerDraft.draft.recordingCandidate),
     invalidFiles: inputMedia.filter(item => item.validationError).length,
     files: inputMedia.length,
-  });
-  const composerCanKeep = composerHasWords && whyNotKeeping === null;
+  };
+  const keepReadinessRef = useRef(keepReadiness); keepReadinessRef.current = keepReadiness;
+  const whyNotKeeping = whyNotKept(keepReadiness);
+  /* THE BAR'S OWN PREDICATE, FROM THE FILE THAT OWNS THE RULE. This was
+     `composerHasWords && whyNotKeeping === null` written out here — which is
+     `canKeep`'s body, re-typed, in the one file that had just finished
+     arguing that the rule is written once. `canKeep` was exported for this
+     and reached by nothing but its own test, so the rule had a fourth copy
+     and a dead function stating it correctly. */
+  const composerCanKeep = canKeep(keepReadiness);
   /** The one transient line the bar shows while a note is open, in the order
       a person needs it: what went wrong first, then what is happening. The
       recorder's clock is not here — it is a control you press to stop, and
       it already stands in the bar as one. */
-  const composerState = mouthNote || composerDraft.error || recording.error
-    || (dictation.error === 'dictation-denied' ? say('worldComposerDictateDenied') : '')
-    || (dictation.error === 'dictation-failed' ? say('worldComposerDictateFailed') : '')
-    /* SAID ONCE, THE FIRST TIME. Chrome sends speech to its own servers to
+  const composerState = mouthNote
+    /* ═══ AND THE CLOUD LINE CANNOT BE OUTRANKED OUT OF EXISTENCE ══════
+       SAID ONCE, THE FIRST TIME. Chrome sends speech to its own servers to
        transcribe it, and a product whose claim is that your material is
        yours owes that sentence to anybody who presses the microphone. Once
-       per session, in the bar, where every other passing line goes — not a
-       dialog, because it is a fact rather than a decision, and the person
-       is already speaking by the time they can read it. */
+       per PAGE — not once per utterance and not once per press of the
+       microphone — in the bar, where every other passing line goes, and not
+       in a dialog, because it is a fact rather than a decision and the
+       person is already speaking by the time they can read it. It stands for
+       as long as that first microphone is open and then never again until
+       the page is loaded afresh; `dictation.firstTime` is the half of that
+       sentence this file does not own.
+
+       IT USED TO SIT BELOW `composerDraft.error` AND `recording.error`, in a
+       first-non-empty chain, which made the one line this product is
+       obliged to show the most easily suppressed line on the bar. Drop a
+       file the page cannot read, press the microphone, say nothing: audio
+       streams to a third party and the sentence that says so never appears.
+       There is no browser prompt to fall back on either — the permission
+       was granted on the first visit and is never asked for again — so the
+       disclosure was the ONLY signal, and it was outrankable by a passing
+       error about something else entirely.
+
+       SO IT MOVES ABOVE THE TWO LINES THIS FILE CANNOT CLEAR. Both belong
+       to other hooks: `composerDraft.error` is the draft store's and
+       `recording.error` is the recorder's, and neither has a reset this
+       file may call. A line Home cannot take down is a line that can hide
+       this one for a whole session, which is exactly what happened.
+
+       IT STAYS BELOW `mouthNote`, AND THAT IS NOT AN OVERSIGHT. The press
+       on the microphone clears `mouthNote` itself (see the control in the
+       dock), so nothing that was standing BEFORE the start can outrank the
+       disclosure. What can is a line written AFTER it — "Stop the recording
+       first." when somebody presses `Cmd+Enter` mid-utterance — and that
+       must win: it is the answer to an act taken a moment ago by a person
+       who has already had this sentence on their screen since they opened
+       the microphone.
+
+       AND IT IS GENUINELY ONCE NOW, which this comment used to say was
+       impossible. `firstTime` latched: it went true on the first dictation
+       and was never written false, so `firstTime && listening` was true for
+       EVERY dictation and this line — the one sentence this product is
+       obliged to show — was also the one it showed most often. The note that
+       stood here designed around that instead of fixing it, and said so.
+       `use-dictation.ts` now clears the flag on the second `start()`; its
+       doc comment carries what was weighed, including the real argument that
+       a disclosure about audio leaving the device SHOULD repeat. It loses to
+       Law 4: a notice on its fortieth showing is furniture.
+
+       WHAT WAS REJECTED: putting it first outright, above `mouthNote` as
+       well. The old reason for refusing it is gone — a line that is true for
+       one dictation can no longer swallow a whole session's answers — but
+       the better reason stands and always did: what can outrank the
+       disclosure is a line written AFTER it, "Stop the recording first."
+       when somebody presses `Cmd+Enter` mid-utterance, and that must win. It
+       is the answer to an act taken a moment ago by a person who has had
+       this sentence on their screen since they opened the microphone.
+       Nothing that was standing BEFORE the press can outrank it, because the
+       press on the microphone clears `mouthNote` itself. */
     || (dictation.firstTime && dictation.listening ? say('worldComposerDictateCloud') : '')
+    || composerDraft.error || recording.error
+    || (dictation.error === 'dictation-denied' ? say('worldComposerDictateDenied') : '')
+    || (dictation.error === 'dictation-failed' ? say('worldComposerDictateFailed') : '')
     || (!composerDraft.ready ? say('worldComposerOpening') : '')
     || (uploadingMediaId ? say('worldComposerUploading') : '')
     || (recording.phase === 'idle' ? recording.notice : '');
@@ -11630,12 +11881,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        does not exist, so a press cannot arrive from one, and a complaint
        about having written nothing is not worth saying. */
     const media = inspirationInputMedia(text, initialMedia);
+    const rendered = keepReadinessRef.current;
     const blocked = whyNotKept({
+      ...rendered,
+      /* THE FRESHER READINGS, AND ONLY THOSE. Each line below is the SAME
+         condition as the one it overrides, read from the ref the draft store
+         writes rather than from the last render's state — never a different
+         condition, and never one the rendered answer did not also ask.
+         `recording` and `ready` are deliberately absent: `dictation.listening`
+         and `composerDraft.ready` are state, so any change to either has
+         already produced the render this object was built in. */
       hasWords: Boolean(text || initialMedia.length),
-      ready: composerDraft.ready,
-      saving: Boolean(inspirationSave.pending) || inspirationSave.busy || preparingInspirationRef.current,
-      uploading: Boolean(checkingFilesCount.current),
-      recording: recording.phase !== 'idle',
+      saving: rendered.saving || preparingInspirationRef.current,
+      uploading: rendered.uploading || Boolean(checkingFilesCount.current),
       undecidedRecording: Boolean(composerDraft.current.current.recordingCandidate),
       invalidFiles: initialMedia.filter(item => item.validationError).length,
       files: media.length,
@@ -13028,34 +13286,108 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * Three steps and the middle one goes straight to storage: mint a URL, PUT
    * the bytes, then tell the server the file belongs to this memory. The
    * memory is created first so there is something to belong to.
+   *
+   * ── AND THE FIRST STEP IS THE ONE THIS PATH DID NOT HAVE ────────────────
+   *
+   * FOUR STEPS NOW, BECAUSE THE BYTES ARE READ BEFORE ANYTHING IS SENT.
+   * `lib/inspiration-photo.ts` opens with the whole rule in one sentence —
+   * "Inspect a small header, not the filename or the browser's MIME guess" —
+   * and until today this function did precisely the thing that sentence
+   * forbids. It classified what it was storing from `file.type`:
+   *
+   *     type: file.type.startsWith("image/") ? "image" : "file"
+   *
+   * `file.type` is NOT a fact about the bytes. It is the operating system's
+   * guess from the file's extension, which means the person choosing the file
+   * decides it — rename `payload.bin` to `photo.png` and every browser on
+   * every platform reports `image/png` for it. On the drag and the paste paths
+   * the value does not even come from a chooser the product drew. So the
+   * memory card accepted whatever it was handed, at whatever size, and wrote
+   * down the name the file gave for itself as if the product had checked.
+   *
+   * THE ACCEPT ATTRIBUTE WAS NOT THE MISSING CHECK EITHER, and it is worth
+   * saying plainly because this picker's `accept` was also wrong (it said
+   * `image/*`) and fixing only that would have looked like a fix. `accept`
+   * greys out rows in the operating system's file chooser. It is defeated by
+   * renaming, by a drag and by a paste; it is a courtesy to somebody picking
+   * honestly, and it is never a gate. The door is not the lock.
+   *
+   * SO IT IS THE SHAPE `addInspirationFiles` ALREADY HAD, twenty lines of code
+   * away: `const checked = await inspectInspirationPhoto(file)`, and then
+   * every later step reads `checked` rather than `file`. That call sniffs the
+   * first 64 bytes for the seven formats this product accepts, enforces
+   * `MAX_PHOTO_BYTES` (25 MB) and refuses an empty file — and it returns a
+   * `File` re-stamped with the type the BYTES say, so `contentType`,
+   * `filename`, `size` and the `"image"` classification below are now
+   * statements about what was actually read. The duplicated code was never the
+   * problem; one of the two copies silently not being the rule was.
+   *
+   * WHAT WAS REJECTED: sniffing inside `presignAttachment`, so that no caller
+   * could forget. It is the right instinct and the wrong layer — the same
+   * endpoint carries the recorder's `audio/webm`, which the photo sniffer
+   * refuses by design, so the check would have had to learn which kind of
+   * upload it was looking at and would have become a second copy of that
+   * decision. The caller knows; `SavesOverlay`'s `attach` is the one that
+   * genuinely needs the discrimination, and it is still unfixed (its `onFile`
+   * takes both a photo and a clip — see `NoteTools.tsx`'s note on that prop).
+   *
+   * AND A REFUSAL IS NOW SAID OUT LOUD. The old `catch` was empty under the
+   * comment "the memory is already kept; only the picture failed to land",
+   * which was true of a network failure and is not true of a refusal: a
+   * sniffer rejection is a sentence the person needs — "Use a JPEG, PNG,
+   * WebP, GIF, AVIF or HEIC photo." — and swallowing it would mean pressing
+   * the control, watching the word change to "adding…" and back, and being
+   * told nothing. `whyFailed` is the product's one translation of a failure
+   * into words, and it already prefers a thrown `Error`'s own message over
+   * the fallback, so the sniffer's sentences arrive intact while a server
+   * fault still reads as `worldComposerUploadFailed`.
    */
   const [attaching, setAttaching] = useState(false);
+  /** Which memory the refusal belongs to, carried with the words — the same
+      shape `proposalTrouble` uses above, for the same reason: a message about
+      one card must not appear under another one. */
+  const [attachTrouble, setAttachTrouble] = useState<{ id: string; text: string } | null>(null);
   const attachTo = useCallback(async (inspirationId: string, file: File) => {
     setAttaching(true);
+    setAttachTrouble(null);
     try {
+      /* THE LOCK, BEFORE THE DOOR IS EVEN DISCUSSED. Throws on an empty file,
+         on anything over `MAX_PHOTO_BYTES`, and on bytes that are not one of
+         the seven formats — whatever the name or the browser's guess claimed.
+         Everything below reads `checked`, which carries the type the header
+         actually says. */
+      const checked = await inspectInspirationPhoto(file);
       const pre = await presignAttachment({
-        filename: file.name,
-        contentType: file.type || "application/octet-stream",
-        size: file.size,
+        filename: checked.name,
+        contentType: checked.type,
+        size: checked.size,
       }, undefined, { profile: atWallRef.current.kind === 'agent' ? atWallRef.current.id : storageScope?.profileId });
-      await uploadToPresignedUrl(pre.uploadUrl, file, pre.headers);
+      await uploadToPresignedUrl(pre.uploadUrl, checked, pre.headers);
       await finalizeAttachment({
-        type: file.type.startsWith("image/") ? "image" : "file",
+        /* NOT A GUESS ANY MORE. The sniffer only ever returns one of the seven
+           image types, so there is no second branch left to take: the old
+           ternary's `"file"` arm existed solely to carry whatever `file.type`
+           failed to look like an image. */
+        type: "image",
         inspirationId,
         key: pre.key,
-        name: file.name,
-        contentType: file.type || undefined,
+        name: checked.name,
+        contentType: checked.type,
       });
       /* the detail is re-read so the OPEN memory shows its new attachment;
          nothing on the field waits for it any more — an orb is a disc */
       detailsRef.current.delete(inspirationId);
       void loadDetailRef.current(inspirationId);
-    } catch {
-      /* the memory is already kept; only the picture failed to land */
+    } catch (reason) {
+      /* the memory is already kept; only the picture failed to land — and
+         WHY it failed to land is now on the card, because the commonest
+         reason is a file this product will not take and that is something a
+         person can act on. */
+      setAttachTrouble({ id: inspirationId, text: whyFailed(reason, say("worldComposerUploadFailed")) });
     } finally {
       setAttaching(false);
     }
-  }, []);
+  }, [say, whyFailed]);
 
   /** Search reads the whole archive; opening a result does not depend on the
       bounded field already containing its orb. Queries stay out of the URL. */
@@ -13211,6 +13543,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       void loadPersonalReading().then((tom) => absorbBoard(tom)).catch(() => setReadingCheckFailed(true));
     },
   });
+  /* A REFUSED PICTURE IS NEWS FOR AS LONG AS THE EDIT IS OPEN, AND NOT ONE
+     MOMENT AFTER. `attachTrouble` is written by `attachTo` and shown under the
+     editing foot; closing the edit and opening it again is somebody starting
+     over, so the sentence about the file they chose a minute ago would arrive
+     as an accusation with no act in front of it. Cleared on the transition
+     rather than inside `editing.leave`, which belongs to `space/editing.ts`
+     and knows nothing about attachments — the same reason the recorder's
+     notice is cleared by the notepad and not by the recorder. The id is read
+     off `editing.open` rather than the object itself: the hook builds a fresh
+     object every render, and a dependency that changes every render is an
+     effect that runs every render. */
+  const editingOpenKey = editing.open ? `${editing.open.kind}:${editing.open.id}` : null;
+  useEffect(() => { setAttachTrouble(null); }, [editingOpenKey]);
   // Revalidate the version already on screen. This can withdraw stale support
   // without replacing it with a newly generated sentence while someone reads.
   useEffect(() => {
@@ -16002,14 +16347,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
           draftUpdatedMs={composerDraft.draft.updatedAt}
-          /* THE CHEVRON GOES TO THE ARCHIVE — in ONE write, not two.
-             `saveAsDraft` leaves through history (`closeComposer`) and
-             `openOverHome` writes the address, so calling them in sequence
-             raced: the pop landed last and the chevron put you on the world
-             with no archive in sight. The draft is kept by the store, not by
-             the navigation, so stopping any recording and writing the single
-             destination is the whole move. */
-          onPast={() => { void recording.stop(); setMouthNote(''); openOverHome('saves'); }}
+          /* `onPast` IS GONE WITH THE CHEVRON IT FED. It carried a real
+             lesson — leaving through history and writing an address in
+             sequence raced, and the pop landed last — but the control it
+             was wired to was removed by the founder ("I can just go to all
+             the inspirations using the bottom panel") and nothing has
+             called this since. The lesson lives where it still applies:
+             `openOverHome` writes ONE destination, which is why pressing a
+             place from inside the notepad does not need a close first. */
           onVisibility={setKeepPublic} onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void composerDraft.fork().catch(reason => setMouthNote(String(reason))); }} /> : null}
       </> : null}
@@ -16283,9 +16628,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               <span className="jar-panel-foot-l">
               <label className="jar-attach">
                 {attaching ? say("worldAddingAttachment") : say("worldAddAttachment")}
+                {/* THE COPY THAT DISAGREED. This offered `image/*` while the
+                    other three pickers in the product offered seven named
+                    types — so a TIFF, a BMP or an SVG was selectable HERE and
+                    refused with a sentence THERE, on the same product, for the
+                    same act. `image/*` is also the browser's own guess at a
+                    type, which is the one input the photo rule's first
+                    sentence says not to trust, offered as a filter.
+
+                    It now quotes `PHOTO_ACCEPT` like the rest, and `attachTo`
+                    below sniffs the bytes — the chooser and the check finally
+                    agree about what this path takes. */}
                 <input
                   type="file"
-                  accept="image/*"
+                  accept={PHOTO_ACCEPT}
                   disabled={attaching}
                   onChange={(e) => {
                     const f = e.target.files?.[0];
@@ -16341,6 +16697,28 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 </button>
               </span>
             </p>
+          ) : null}
+          {/* WHY THE PICTURE DID NOT GO ON, UNDER THE ROW THAT OFFERED IT.
+              The commonest reason is now a refusal rather than a fault:
+              `attachTo` sniffs the bytes, so choosing a file this product does
+              not take ends here with the sniffer's own sentence instead of
+              with nothing at all. A press that visibly does something —
+              "add a picture" becomes "adding…" and then changes back — and
+              then says nothing is the failure this product has fixed in five
+              other corners under its own law.
+
+              A SIBLING AND NOT A CELL IN THE FOOT, because the foot is a `<p>`
+              with three spans in it and a paragraph cannot hold a paragraph;
+              and `jar-panel-warn` because that is already the card's voice for
+              a quiet fact about this memory (it dresses the delete and
+              unpublish warnings two blocks down). No new class, no new colour.
+
+              IT IS CARRIED WITH AN ID so that stepping to the next memory with
+              a refusal on screen does not re-point the sentence at a card it
+              was never about. */}
+          {editing.open?.kind === "memory" && editing.open.id === panelId
+            && attachTrouble?.id === (panelBall?.sigId ?? panelId) ? (
+            <p className="jar-panel-warn" role="status">{attachTrouble.text}</p>
           ) : null}
           {/* THE FOOT OF THE CARD, IN THREE PARTS (founder's sketch,
               2026-08-25): what you can DO at the ends, and the way to read on
@@ -17407,7 +17785,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     <button type="button" className="waka-dock-tool"
                       aria-label={say('worldComposerDictate')}
                       disabled={!composerDraft.available}
-                      onClick={() => dictation.start()}><HomeActionIcon kind="record"/></button>
+                      /* THE PRESS CLEARS THE ANSWER TO THE LAST ACT, which
+                         is what every other act on this page does —
+                         typing, opening the notepad and saving all call
+                         `setMouthNote('')`. It matters more here than
+                         anywhere else: the line it clears would otherwise
+                         outrank the cloud disclosure (see `composerState`),
+                         so a stale complaint about a file was enough to
+                         open the microphone with nothing said about where
+                         the audio goes. Nothing true is lost — the marked
+                         file is still marked on screen, and the next press
+                         of Save says so again. */
+                      onClick={() => { setMouthNote(''); dictation.start(); }}><HomeActionIcon kind="record"/></button>
                   )
                 ) : supportedRecordingType() ? (
                   recording.phase === 'idle' ? (
@@ -17439,8 +17828,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 <button type="button" className="waka-dock-tool" aria-label={say('worldComposerPhoto')}
                   disabled={!composerDraft.available || recording.phase !== 'idle'}
                   onClick={() => dockFileInput.current?.click()}><HomeActionIcon kind="photo"/></button>
+                {/* THE OFFERED SET IS QUOTED, NOT RETYPED. This string was
+                    byte-identical to `lib/inspiration-photo.ts`'s by hand,
+                    which is how four copies of one list came to exist and how
+                    the fourth (the memory card's picker, which said
+                    `image/*`) came to disagree with the other three. The
+                    accepted set is a property of the sniffer's rule, so it is
+                    stated where the sniffer is. `one-photo-accept-list.test.ts`
+                    now fails on any `accept="…"` written out by hand.
+
+                    AND THIS PATH DOES HAVE THE LOCK: every file here goes
+                    through `addInspirationFiles`, which calls
+                    `inspectInspirationPhoto` on each one — as do the drop and
+                    the paste handlers on the note, which is the point, since a
+                    drag and a paste never pass a chooser and so never see an
+                    `accept` at all. */}
                 <input ref={dockFileInput} type="file" multiple hidden
-                  accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif"
+                  accept={PHOTO_ACCEPT}
                   onChange={event => { const files = [...event.target.files ?? []]; event.target.value = '';
                     if (files.length) void addInspirationFiles(files); }} />
 
@@ -17746,8 +18150,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           than resolving to a blank world.
 
           WHAT WENT WITH IT: `ReadingPage`, its provenance list, and the
-          copy that only it printed. `ReadingPanel` is untouched — it is a
-          different component and `/profile` still renders it. */}
+          copy that only it printed. `ReadingPanel` outlived it by a few
+          weeks and is gone too, along with `AntechamberPanel` and
+          `DuplicatesPanel` and their API clients — see
+          `HowItWorksPanel.tsx`, which names all three. Nothing in this file
+          reaches any of them; this paragraph is the pointer for anyone
+          following an old reference here. */}
       {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
         onNoteOpen={savedNoteChanged}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
@@ -17762,7 +18170,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            buttons saying the same two words, which stood here while the
            corner's pair stood behind this sheet's own left edge, clipped to
            "MY AGE". The act survives; the duplicate does not. */
-        onClose={viewNavigation.closeOpen}/>:null}
+        onClose={leaveOpen}/>:null}
       {/* THE QUEUE, where answering eight in a row is a different activity
           from being asked one. The creature keeps asking its single claim on
           the home screen — that is the product's character and it stays — and
@@ -17775,7 +18183,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {storageScope&&viewNavigation.view?.open==='claims'?<ClaimsOverlay
         key={`${storageScope.accountId}:${storageScope.profileId}:claims`}
         locale={locale}
-        onClose={viewNavigation.closeOpen}
+        onClose={leaveOpen}
         answered={verdicts}
         /* THE ROOM HANDS A CLAIM TO THE CREATURE; IT NEVER ANSWERS ONE.
            Founder: "your claims are duplicated so that's like even bad." The
@@ -17791,14 +18199,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             const picked=queue.find(claim=>claim.id===id);
             return picked?[picked,...queue.filter(claim=>claim.id!==id)]:queue;
           });
-          viewNavigation.closeOpen();
+          leaveOpen();
         }}/>:null}
       {storageScope&&viewNavigation.view?.open==='principles'?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         name={atWall.kind==='agent'?atWall.name:auth?.profile?.name??''}
         title={say(atWall.kind==='agent'?'worldAgentPrinciples':'worldPrinciplesShortcut')}
-        onClose={viewNavigation.closeOpen}
+        onClose={leaveOpen}
         /* Opening one REPLACES the overlay rather than stacking on it: the
            principle's own surface is the next thing to read, not a sheet on
            top of a sheet, and `closeOpen` would otherwise have to know which
@@ -17831,7 +18239,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         key={`${storageScope.accountId}:${storageScope.profileId}:talks`}
         locale={locale} profileId={storageScope.profileId}
         title={say('worldOpenConversations')}
-        onClose={viewNavigation.closeOpen}
+        onClose={leaveOpen}
         onOpen={id=>openTalk(id)}/>:null}
 
       {/* THE CONVERSATION ITSELF, ALSO OVER THE WORLD.

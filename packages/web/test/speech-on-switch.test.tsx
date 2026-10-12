@@ -179,3 +179,77 @@ it('still answers a press made after the switch', async () => {
      `capitalized.test.ts` — so the assertion is on the words, not the case. */
   expect(speech()).toBe('You kept one memory today.');
 });
+
+/**
+ * ═══ AND THE THIRD SPEAKER, WHICH NEITHER GUARD WAS WIRED TO ══════════════
+ *
+ * Founder, for the second time, after both cases above were shipped green:
+ * "sometimes the speech bubble stays on." Still true, and this is why.
+ *
+ * `charSay` has THREE writers that arrive late, not two. The press path
+ * (`sayTheWeather`) takes a `speechEpoch` number and drops a superseded
+ * answer. The already-landed sentence is cleared by the wall effect. The
+ * third is the ARRIVAL GREETING: it fetches the away-window line at mount,
+ * holds it in a ref, and speaks it from a `setTimeout` — 1400ms after the
+ * world is drawn, or 4000ms when there is something new to glide to. It
+ * captured no epoch at all, so it was the one writer the press's guard could
+ * not see.
+ *
+ * AND THE SEAL CANNOT COVER IT, which is the whole reason this needs the
+ * epoch rather than a longer hush. `speechSealed` lifts with the turn —
+ * `FORM_HUSH_MS`, 650ms — because words over the back of a turning creature
+ * is what the seal is for. The greeting speaks at 1400ms at the earliest, so
+ * it lands after every seal has already lifted, every time. Widening the
+ * hush to four seconds was the obvious alternative and is wrong twice: it
+ * would hold a sentence somebody ASKED for off the screen for four seconds,
+ * and it would still be a race rather than an answer to one.
+ *
+ * WHY THIS DOES NOT REPRODUCE BY HAND IN `pnpm dev`. StrictMode mounts
+ * `Home` twice; the first mount's cleanup clears the greeting's timers and
+ * `greetedRef` has already been set, so the greeting never speaks at all in
+ * development. The founder's build has no StrictMode, which is exactly why
+ * they are the only one who has seen it.
+ */
+/** An away-window line, which is the `told` field rather than a day clause. */
+const TOLD: ApiWeather = { told: 'you kept a memory while you were gone', antechamber: [], days: [] };
+/** The helper's own midday, which every fixture moment is measured off. */
+const BASE = Date.UTC(2026, 7, 16, 12);
+/** A previous visit an hour ago: there IS an away window, and nothing new in
+    it — so the greeting has nothing to glide to and only a line to say. */
+const camePastAnHourAgo = () => window.localStorage.setItem('waka.seen', String(BASE - 3_600_000));
+/** Long enough for the seal to lift (650ms) AND the greeting to speak. */
+async function pastTheGreeting() {
+  for (let turn = 0; turn < 20; turn += 1) {
+    await world.step(10);
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+  }
+}
+
+it('speaks the away-window line on the wall you arrived at', async () => {
+  camePastAnHourAgo();
+  vi.mocked(fetchTheWeather).mockResolvedValue(TOLD);
+  world = await mountWorld(FACTS);
+  await pastTheGreeting();
+  /* THE COUNTERWEIGHT FIRST, for the same reason the press case has one: a
+     fix that simply stopped the greeting speaking would pass the next case
+     and silently delete the feature. */
+  expect(speech()).toBe('You kept a memory while you were gone');
+});
+
+it('drops the away-window line when the form changed before it spoke', async () => {
+  camePastAnHourAgo();
+  vi.mocked(fetchTheWeather).mockResolvedValue(TOLD);
+  world = await mountWorld(FACTS);
+
+  /* SWITCH FORM INSIDE THE GREETING'S OWN BEAT. No held promise is needed
+     here, which is the difference from the press race above: the delay is a
+     timer this product set itself, so the window is open on every run. */
+  const toAgent = face('My agent');
+  expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
+  await act(async () => { toAgent!.click(); });
+  await world.step(0);
+  expect(world.audit().wallKind).toBe('agent');
+
+  await pastTheGreeting();
+  expect(speech(), 'a sentence about YOUR day is being said on your agent\'s wall').toBeNull();
+});

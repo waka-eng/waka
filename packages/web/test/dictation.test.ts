@@ -198,18 +198,62 @@ describe("speaking into a note", () => {
     expect(d.read()).toBe("a whole thought");
   });
 
-  /* THE CLOUD LINE IS SAID ONCE. Chrome sends speech to its own servers;
-     saying so every time would be a notice nobody reads, and saying it
-     never would be hiding it. The caller shows it only while `listening`,
-     so a session fact that stays true is a one-time line on screen — what
-     must not happen is it resetting and firing again. */
-  it("flags the first dictation of the session and never a second time", () => {
+  /**
+   * THE CLOUD LINE IS SAID ONCE, AND THIS CASE USED TO PIN THE OPPOSITE.
+   *
+   * Chrome sends speech to its own servers to transcribe it. Saying so never
+   * would be hiding it; saying it on every dictation makes it furniture, and
+   * furniture is not a disclosure — the founder's Law 4 is *"remove things
+   * not 100% necessary"*, and a sentence somebody has already read forty
+   * times is the clearest case of it.
+   *
+   * WHAT WAS HERE, AND WHY IT READ AS CORRECT. The old case was called
+   * "flags the first dictation of the session and never a second time" and
+   * its body started a second dictation and asserted `firstTime` was STILL
+   * `true`. The name describes the product rule; the assertion describes a
+   * latch that never clears, and the two are opposites. It passed because
+   * "never a second time" was read as "the flag never fires again" when the
+   * flag had never stopped being on — and `Home` shows the notice while
+   * `firstTime && listening`, so a flag that never clears is a notice on
+   * every single dictation. A test can pin a defect by agreeing with it;
+   * this one did, for as long as nobody read the name beside the body.
+   *
+   * SO THE SECOND SESSION IS THE ASSERTION NOW, both halves of it: the flag
+   * is true for the first and false for the second, and `listening` is true
+   * for both — because if the second dictation did not listen, this case
+   * would pass for the wrong reason and the microphone would be broken.
+   */
+  it("flags the first dictation of the page and clears for every one after it", () => {
     const d = dictate();
     act(() => d.now.start());
     expect(d.now.firstTime).toBe(true);
+    expect(d.now.listening).toBe(true);
+
     act(() => d.now.stop());
     act(() => d.now.start());
-    expect(d.now.firstTime).toBe(true);
+    expect(d.now.firstTime).toBe(false);
+    expect(d.now.listening).toBe(true);
+
+    /* And a third, because a flag that merely alternated would survive the
+       two assertions above. */
+    act(() => d.now.stop());
+    act(() => d.now.start());
+    expect(d.now.firstTime).toBe(false);
+  });
+
+  /* AND A FRESH PAGE SAYS IT AGAIN. "Once" is scoped to the page and
+     deliberately not to the person: `localStorage` would make the sentence
+     depend on storage that can be cleared, carried between accounts on a
+     shared machine, or absent in a private window, which is the one thing a
+     disclosure must not do. A second mount is a second page load. */
+  it("says it again on a new page, because once is scoped to the page", () => {
+    const first = dictate();
+    act(() => first.now.start());
+    expect(first.now.firstTime).toBe(true);
+
+    const second = dictate();
+    act(() => second.now.start());
+    expect(second.now.firstTime).toBe(true);
   });
 
   /* ABORT, NOT STOP, ON UNMOUNT: stopping asks for one more final result,
