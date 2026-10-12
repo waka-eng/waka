@@ -5149,6 +5149,20 @@
   line-height: 1.5;
 }
 
+/* ═══ THE PUBLIC GROUP'S DRESS GOES WITH THE GROUP ════════════════════
+   Founder: "everything regarding public and private should also not be a
+   thing in this new experience." The settings panel's public group — the
+   handle field and its two switches — is gone, and these rules dressed
+   nothing else: `.waka-settings-toggle`, its `input`, and `.waka-settings-keep`,
+   which was DECLARED TWICE (two identical blocks, ~16 lines apart) and had
+   been for long enough that nobody noticed.
+
+   NO GATE WOULD HAVE SAID SO. `dead-css.ts` is report-only — it prints
+   "EVIDENCE, NOT A DELETION LIST" and returns 0 — and the vitest suite does
+   not walk stylesheets for unworn rules at all. Four dead rules, one of them
+   a duplicate, would have stayed indefinitely with every gate green. That is
+   the third time tonight a stylesheet outlived its markup in silence. */
+
 .waka-settings-rows {
   display: flex;
   flex-direction: column;
@@ -5191,9 +5205,9 @@
    third orphaned modifier of the session, after `.jar-char-bubble--aside`
    and `.jar-keep-via:hover`. It looked harmless because one of its two
    instances is dressed by accident: the agent row's erase sits inside
-   `.waka-settings-rows` (`SettingsPanel.tsx:203`) and so matches the
+   `.waka-settings-rows` (`SettingsPanel.tsx:214`) and so matches the
    descendant selector above. The ACCOUNT-DELETION instance
-   (`SettingsPanel.tsx:266`) is a direct child of the danger group's body
+   (`SettingsPanel.tsx:249`) is a direct child of the danger group's body
    and matched nothing.
 
    MEASURED, signed in, Chromium at 1200x900, the two instances of one
@@ -5222,28 +5236,9 @@
 .waka-settings-rows button,
 .waka-settings-add button,
 .waka-settings-erase,
-.waka-settings-keep {
-  flex: 0 0 auto;
-  min-height: var(--waka-corner);
-  padding: 0 var(--sp-14);
-  border: 0;
-  border-radius: var(--r-pill);
-  background: none;
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  cursor: pointer;
-}
-
 /* THE ONE FILLED CONTROL IN THE PANEL, matching the bar's keep and the
    chat's send: a product with one primary action per surface draws it the
    same way everywhere. */
-.waka-settings-keep {
-  align-self: flex-start;
-  background: var(--ink);
-  color: var(--bg);
-}
-
 /* NO RED. "Colour temperature means aliveness and is not spent on
    warnings" — this file's own rule. What marks the destructive pair is
    that each asks twice, which is a behaviour rather than a hue. */
@@ -5251,21 +5246,6 @@
 .waka-settings-erase:focus-visible {
   color: var(--ink);
   outline: none;
-}
-
-.waka-settings-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  font-size: var(--t-ui);
-  cursor: pointer;
-}
-
-.waka-settings-toggle input {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  accent-color: var(--ink);
 }
 
 /* ═══ HOW WAKA WORKS — THE OTHER CARD ON THE SAME SURFACE ═══════════════

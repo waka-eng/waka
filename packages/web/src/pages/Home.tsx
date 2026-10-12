@@ -1670,10 +1670,18 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * selection" means. Private mode, or storage that throws, falls back to the
    * same private default rather than to whatever the tab happened to hold.
    */
-  const [keepPublic, setKeepPublic] = useState(() => readProfileText(storageScope, "keepPublic") === "1");
-  useEffect(() => {
-    writeProfileText(storageScope, "keepPublic", keepPublic ? "1" : "");
-  }, [keepPublic, storageScope]);
+  /* ═══ A KEPT THING IS NOT PUBLISHED FROM THE COMPOSER ══════════════
+     Founder: "everything regarding public and private should also not be a
+     thing in this new experience."
+
+     AND IT HAD ALREADY STOPPED WORKING, which is why this is a deletion
+     rather than a decision. `keepPublic` was handed to the composer as
+     `public` and `setKeepPublic` as `onVisibility`, and
+     `InspirationComposer` declares both props and READS NEITHER. So the
+     setter had no caller anywhere in the product and the value was frozen
+     at whatever a legacy storage key held — the same shape as the `onPast`
+     prop that file's own header records. A control nobody can reach,
+     deciding something on every save. */
   const [mouthOpen, setMouthOpen] = useState(() => readProfileText(storageScope, "draft") !== "");
   /* The attachment drawer's disclosure. Open on arrival of a file — you just
      dropped it and the one thing you want is to see that it landed — and
@@ -2313,29 +2321,24 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
         .catch(() => setSettingsFailed(true))
         .finally(() => setSettingsBusy(false));
     },
-    /* ═══ THE PUBLIC PAGE, FROM THE SESSION THAT ALREADY HOLDS IT ═══════
-       `auth.profile` carries the handle and the two switches, so the panel
-       reads them rather than fetching a second copy — the settings page it
-       replaces loaded its own and could disagree with the session for as
-       long as a request takes. The write is `updateProfile`, which is a
-       REPLACE: the name and locale ride along or the server resets them. */
-    publicPage: {
-      handle: auth.profile?.publicHandle ?? '',
-      profileEnabled: Boolean(auth.profile?.publicProfileEnabled),
-      topOfMindEnabled: Boolean(auth.profile?.publicTopOfMindEnabled),
-      save: async (next: { handle: string; profileEnabled: boolean; topOfMindEnabled: boolean }) => {
-        setSettingsFailed(false);
-        try {
-          await auth.updateProfile({
-            name: (settingsName ?? accountName).trim() || accountName,
-            preferredLocale: locale,
-            publicHandle: next.handle || null,
-            publicProfileEnabled: next.profileEnabled,
-            publicTopOfMindEnabled: next.topOfMindEnabled,
-          });
-        } catch { setSettingsFailed(true); }
-      },
-    },
+    /* ═══ THE PUBLIC PAGE IS NO LONGER OFFERED ════════════════════════
+       Founder: "everything regarding public and private should also not be
+       a thing in this new experience."
+
+       WHAT WAS HERE: the handle and the two switches the settings panel's
+       public group read and wrote, lifted from the session so the panel did
+       not fetch a second copy of something `auth.profile` already carried.
+       That group is gone, and this object had exactly one consumer.
+
+       THE DATA IS NOT GONE AND THAT IS DELIBERATE. `profiles.public_handle`
+       and the two flags are untouched, as is the merge in
+       `PATCH /auth/me/profile` that stops a rename clearing them — a
+       security review tested that merge specifically and those tests stand.
+       A handle is a name somebody chose and may have shared; it exists in
+       one column and nowhere else. Closing the door is reversible in one
+       file, dropping the column is not, and with no writer left nothing new
+       can accumulate. Deleting the columns is a separate, explicit
+       instruction nobody has given. */
     onDeleteAccount: async () => {
       /* THE ONE IRREVERSIBLE ACT. The panel asks twice before it reaches
          here; this does not ask again, and it does not catch — a failed
@@ -5679,13 +5682,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         : undefined;
       inspirationSave.start({ operation: 'inspiration', input: { text, kind, source: 'app',
         ...(attachments.length ? { attachments } : {}), ...(reflections ? { reflections } : {}),
-        ...(keepPublic ? { visibility: 'public' as const } : {}) },
+      },
         ...(reference ? { draft: reference } : {}) });
       setMomentWhy('');
       setCharSay('');
     } catch (reason) { if (composerEpoch.current === epoch) setMouthNote(reason instanceof ApiError ? say('worldComposerUploadFailed') : reason instanceof Error ? reason.message : 'Could not save this inspiration. Your draft is here.'); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
-  }, [keepPublic, inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
+  }, [inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
 
   const addInspirationFiles = async (files: File[], audio = false) => {
     const epoch = fileOwnerEpoch.current;
@@ -10082,7 +10085,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           linkText={composerDraft.draft.linkText ?? ''} onLinkText={composerDraft.setLinkText}
           recordingCandidate={composerDraft.draft.recordingCandidate}
           onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => setMouthNote(String(reason))); }}
-          locale={locale} public={keepPublic} ready={composerDraft.ready} fileDraftsAvailable={composerDraft.available} busy={preparingInspiration || checkingFiles}
+          locale={locale} ready={composerDraft.ready} fileDraftsAvailable={composerDraft.available} busy={preparingInspiration || checkingFiles}
           uploadingId={uploadingMediaId} error={mouthNote || composerDraft.error}
           save={inspirationSave} recording={recording} inputRef={mouthFieldRef}
           onText={(text, caret) => { mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
@@ -10099,7 +10102,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              called this since. The lesson lives where it still applies:
              `openOverHome` writes ONE destination, which is why pressing a
              place from inside the notepad does not need a close first. */
-          onVisibility={setKeepPublic} onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
+          onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void composerDraft.fork().catch(reason => setMouthNote(String(reason))); }} /> : null}
       </> : null}
 
