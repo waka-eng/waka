@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler } from "./background-worker.js";
-import { runBackgroundJobWorker,readBackgroundJobRecoveryState,hasNearTermBackgroundJobRetry,type BackgroundJobRetryWake } from "./lib/queue.js";
+import { runBackgroundJobWorker,readBackgroundJobRecoveryState,hasNearTermBackgroundJobRetry,hasNearTermRequestedReading,type BackgroundJobRetryWake } from "./lib/queue.js";
 
 /** WHAT THIS MOCKS, AND WHY: `runBackgroundJobWorker` supplies completed pass
  * counts; `readBackgroundJobRecoveryState` supplies eligibility counts. SQL
@@ -10,10 +10,12 @@ import { runBackgroundJobWorker,readBackgroundJobRecoveryState,hasNearTermBackgr
 /** A pass over an empty queue: nothing taken, nothing pushed out of the way. */
 const IDLE_PASS = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
 
-vi.mock("./lib/queue.js", () => ({
+vi.mock("./lib/queue.js", async original => ({
+  ...await original<typeof import('./lib/queue.js')>(),
   runBackgroundJobWorker: vi.fn(),
   readBackgroundJobRecoveryState:vi.fn(),
   hasNearTermBackgroundJobRetry:vi.fn(),
+  hasNearTermRequestedReading:vi.fn(),
 }));
 
 beforeEach(() => {
@@ -25,6 +27,7 @@ beforeEach(() => {
   vi.mocked(runBackgroundJobWorker).mockReset().mockResolvedValue(IDLE_PASS);
   vi.mocked(readBackgroundJobRecoveryState).mockReset().mockResolvedValue({overdue:0,oldestOverdueMs:0,exhaustedLeases:0});
   vi.mocked(hasNearTermBackgroundJobRetry).mockReset().mockResolvedValue(false);
+  vi.mocked(hasNearTermRequestedReading).mockReset().mockResolvedValue(false);
 });
 
 afterEach(() => {
@@ -32,6 +35,27 @@ afterEach(() => {
 });
 
 describe("background worker cron handler", () => {
+  const wake={id:'00000000-0000-4000-8000-000000000001',profileId:'00000000-0000-4000-8000-000000000002',requestVersion:'1'};
+  it('retains a requested reading wake when debounce leaves an otherwise idle asynchronous drain',async()=>{
+    vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME','test-worker');vi.mocked(hasNearTermRequestedReading).mockResolvedValue(true);
+    await expect(handler({mode:'enqueue',wakes:[wake]})).rejects.toThrow('BackgroundJobWakeScheduled');
+    expect(hasNearTermRequestedReading).toHaveBeenCalledExactlyOnceWith([wake]);
+    expect(runBackgroundJobWorker).toHaveBeenCalledOnce();
+  });
+  it('does not redeliver completed, long-held or malformed reading requests',async()=>{
+    vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME','test-worker');
+    expect(await handler({mode:'enqueue',wakes:[wake]})).toMatchObject({claimed:0});
+    vi.mocked(hasNearTermRequestedReading).mockClear();
+    expect(await handler({mode:'enqueue',wakes:[{...wake,id:'--profile=PRIVATE'}]})).toMatchObject({claimed:0});
+    expect(hasNearTermRequestedReading).not.toHaveBeenCalled();
+  });
+  it('does not opt local calls or recovery into reading-wake redelivery',async()=>{
+    vi.mocked(hasNearTermRequestedReading).mockResolvedValue(true);
+    expect(await handler({mode:'enqueue',wakes:[wake]})).toMatchObject({claimed:0});
+    vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME','test-worker');
+    expect(await handler({mode:'recovery',wakes:[wake]})).toMatchObject({claimed:0});
+    expect(hasNearTermRequestedReading).not.toHaveBeenCalled();
+  });
   const retry:BackgroundJobRetryWake={id:'synthetic-job',profileId:'synthetic-profile',attempts:1,updatedAt:new Date('2026-10-06T12:00:00Z'),runAfter:new Date('2026-10-06T12:00:30Z')};
   function transientPass(){
     vi.mocked(runBackgroundJobWorker).mockImplementationOnce(async options=>{
