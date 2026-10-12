@@ -75,17 +75,23 @@ it('opens straight into the words, under the moment and the way back',async()=>{
      a box and the one naming its destination invisibly. It is the same
      chevron-and-name the archive, the chats and an open note all use, and
      `worldBackToAll` is the archive's own words. */
-  const back=host.querySelector<HTMLButtonElement>('.jar-note-back')!;
-  /* THE NAME IS ON THE LABEL, NOT IN INK — which reverses what this line
-     used to assert, and the reversal is the founder's: "remove the all
-     inspirations thing here — actually, maybe just have a back button."
-     Asserted BOTH ways round, because the thing that would be wrong is a
-     chevron with no accessible name at all, and an empty-text assertion
-     alone would pass for that. */
-  expect(back.textContent?.trim()).toBe('');
-  expect(back.getAttribute('aria-label')).toBe('All inspirations');
-  await act(async()=>back.click());
-  expect(props.onPast).toHaveBeenCalledOnce();
+  /* ═══ AND THERE IS NO WAY BACK ON THE PAGE AT ALL ═══════════════════
+     Founder: "I still don't get why you have this carrot button when I do
+     new inspiration, because I can just go to all the inspirations using
+     the bottom panel. So don't do that."
+
+     THIS LINE HAS NOW ASSERTED THREE THINGS IN A WEEK — a boxed chevron
+     with a name, then a bare chevron with the name on its label, now
+     nothing — and the sequence is the point rather than churn: each round
+     made the control quieter, and the finding at the end was that it was a
+     second door onto a room the dock already opens in a word.
+
+     ASSERTED AS ABSENCE, because the regression is it coming back. The
+     visible way out is the bar, which `way-out.test.ts` holds to that
+     promise structurally: the notepad is in `LEFT_BY_THE_DOCK` and the
+     dock's render condition is checked for not excluding `view.compose`. */
+  expect(host.querySelector('.jar-note-back')).toBeNull();
+  expect(host.textContent).not.toContain('All inspirations');
   /* The one fact a blank page can state. Not asserted to an exact string —
      it is the clock — but it must be a real stamp rather than an empty node,
      which is what a missing `momentStamp` would leave behind. */
@@ -227,7 +233,7 @@ it('refuses unsafe link schemes without submitting or discarding the draft',asyn
 it('renders exactly one of each corner, never two', async () => {
   props.text = ''; props.media = []; await mount();
   const count = (selector: string) => host.querySelectorAll(selector).length;
-  expect(count('.jar-note-back'), 'the way back is doubled').toBe(1);
+  expect(count('.jar-note-back'), 'the chevron came back').toBe(0);
   expect(count('.jar-note-when'), 'the moment is doubled').toBe(1);
   /* AND THE ATTACH CORNER IS NOT HERE AT ALL ANY MORE. Record and photo
      moved into the dock's making-slot — founder, of this corner, "I don't

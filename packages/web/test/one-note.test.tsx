@@ -115,19 +115,20 @@ async function savedNote(onNoteOpen = vi.fn()): Promise<void> {
 
 /** What the page puts where, read through the shared chrome's classes. */
 function shape() {
-  const back = host.querySelector(".jar-note-back");
   const top = host.querySelector(".jar-note-top");
   return {
-    /* ONE way back, and it is the shared one rather than the archive's
-       header button — `.waka-over-back` reappearing at this depth is the
-       "two ways out of one page" the header deletion removed. */
+    /* NO WAY BACK ON EITHER PAGE. Founder: "I can just go to all the
+       inspirations using the bottom panel. So don't do that." Counted on
+       both so that one page growing a chevron the other does not have
+       fails here — which is the whole subject of this file. */
     backs: host.querySelectorAll(".jar-note-back").length,
     headerBacks: host.querySelectorAll(".waka-over-back").length,
-    /* The destination lives on the label now, not in ink beside the glyph.
-       Founder: "remove the all inspirations thing here." */
-    backLabel: back?.getAttribute("aria-label") ?? null,
-    backText: back?.textContent?.trim() ?? null,
-    /* The moment is the row's middle child, which is what centres it. */
+    /* WHERE IN THE ROW THE MOMENT IS — the same place on both pages,
+       which is all jsdom can be asked. It is centred on the PAGE by an
+       explicit `grid-column: 2` rather than by being the second child; the
+       chevron that used to hold the first track is gone, and a filler
+       element whose only job is to be nothing was the alternative. The
+       browser walk in `tools/e2e` is what measured the centring. */
     whens: host.querySelectorAll(".jar-note-when").length,
     whenIndex: top ? [...top.children].findIndex((n) => n.classList.contains("jar-note-when")) : -1,
     /* The attach corner is in the bar on both; neither page may grow one. */
@@ -145,12 +146,10 @@ it("gives a new note and a saved one the same chrome in the same order", async (
   /* Spelled out as well as compared, so a regression that breaks BOTH pages
      identically still fails. `toEqual` alone would pass for two pages that
      had each lost their chevron. */
-  expect(fresh.backs).toBe(1);
+  expect(fresh.backs).toBe(0);
   expect(fresh.headerBacks).toBe(0);
-  expect(fresh.backText).toBe("");
-  expect(fresh.backLabel).toBe("All inspirations");
   expect(fresh.whens).toBe(1);
-  expect(fresh.whenIndex).toBe(1);
+  expect(fresh.whenIndex).toBe(0);
   expect(fresh.corners).toBe(0);
 });
 
@@ -177,22 +176,30 @@ it("puts the one destructive verb in the top row, and only on a saved note", asy
 });
 
 /**
- * THE BAR IS TOLD, WHICH IS HOW IT TRANSFORMS.
+ * THE BAR IS TOLD, WHICH IS HOW IT TRANSFORMS — AND HOW IT LEAVES.
  *
  * Founder: "the bottom bar should also change." The archive cannot reach
- * the dock — `Home` renders it — so it reports one boolean and `Home` swaps
+ * the dock — `Home` renders it — so it hands up a closer and `Home` swaps
  * the plus for a slot that `NoteTools` portals into.
  *
+ * A FUNCTION RATHER THAN A FLAG, and that is not incidental. Since the
+ * chevron went ("I can just go to all the inspirations using the bottom
+ * panel"), pressing Inspirations IS the way out of an open note — so the
+ * bar has to be able to CLOSE one, and closing commits what was typed.
+ * Handing up a boolean and letting the world clear its own flag would be
+ * the version of this that silently discards an edit.
+ *
  * THE CLEANUP IS THE HALF WORTH TESTING. An archive unmounted with a note
- * open would otherwise leave the dock holding a mic for a page that is no
- * longer on screen.
+ * open would otherwise leave the dock holding a mic — and a stale way out —
+ * for a page that is no longer on screen.
  */
-it("tells the world when a note opens, and untells it on the way out", async () => {
+it("hands the world a way to close an open note, and takes it back on the way out", async () => {
   const told = vi.fn();
   await savedNote(told);
-  expect(told).toHaveBeenLastCalledWith(true);
+  const handed = told.mock.lastCall?.[0];
+  expect(typeof handed).toBe("function");
   await act(async () => root.unmount());
-  expect(told).toHaveBeenLastCalledWith(false);
+  expect(told).toHaveBeenLastCalledWith(null);
   /* Re-created so `afterEach` has something to unmount. */
   root = createRoot(host);
 });

@@ -52,18 +52,12 @@
 import type { ReactNode } from "react";
 
 import { momentStamp } from "../lib/words";
-import { t, type SupportedLocale } from "../lib/locales";
+import type { SupportedLocale } from "../lib/locales";
 
 export interface NotePageProps {
   locale: SupportedLocale;
   /** When this note is, in milliseconds. */
   whenMs: number;
-  /** The way back, which is a bare chevron — see `aboutBack`. */
-  onBack: () => void;
-  /** Where the chevron goes, for the label a screen reader reads. */
-  backTo: "worldBackToAll";
-  /** Disabled while a write is in flight, so leaving cannot race it. */
-  backBusy?: boolean;
   /** One verb ABOUT this note — Delete on a saved one, nothing on a new. */
   trailing?: ReactNode;
   children: ReactNode;
@@ -72,48 +66,38 @@ export interface NotePageProps {
 export function NotePage({
   locale,
   whenMs,
-  onBack,
-  backTo,
-  backBusy,
   trailing,
   children,
 }: NotePageProps): JSX.Element {
   return (
     <>
       <div className="jar-note-top">
-        {/* A CHEVRON, AND NOT ITS NAME. Founder, with "‹ All inspirations"
-            at the top of a note: "remove", and then "maybe just have a back
-            button."
+        {/* ═══ AND THE WAY BACK IS THE BAR ═══════════════════════════
+            Founder: "I still don't get why you have this carrot button
+            when I do new inspiration, because I can just go to all the
+            inspirations using the bottom panel. So don't do that."
 
-            THIS REVERSED "NAMED, LIKE EVERY OTHER WAY BACK", and the old
-            argument is worth keeping because it was right about a different
-            screen: it came from a bare chevron IN A BOX floating on the
-            world, where nothing said where it went. On a note that fills the
-            page, having arrived from the list one press ago, the chevron at
-            the top-left is the most over-learned control on a phone — and
-            the words beside it were the only thing on the page that was not
-            the note.
+            Correct, and the chevron had already been losing arguments on
+            its way to this one. It was a boxed button with a destination
+            printed beside it; the box went ("why is this still here?"),
+            then the words went ("remove the all inspirations thing"), and
+            what was left was a glyph in the corner pointing at a place the
+            dock already names in words and reaches in one press. Three
+            rounds of making a control quieter, when the answer was that it
+            was a second door onto one room.
 
-            STILL NAMED WHERE IT COUNTS: the destination is on `aria-label`,
-            so nothing is lost to anybody arriving by keyboard or by ear. */}
-        <button
-          type="button"
-          className="jar-note-back"
-          aria-label={t(locale, backTo)}
-          disabled={backBusy}
-          onClick={onBack}
-        >
-          <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
-            <path
-              d="M6.5 1.5 2.5 5.5l4 4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
+            LAW 2 IS SATISFIED BY THE BAR, NOT BY NOTHING. "Every surface
+            you can enter has a visible way out and it costs one press" —
+            the dock is on screen on both of these pages, always, and
+            "Inspirations" is the way out, in a word rather than a glyph.
+            It is also the way out that was there the whole time: the
+            founder found it before we removed the chevron.
+
+            THE EMPTY TRACK STAYS. `.jar-note-top` is `1fr auto 1fr` so the
+            date sits in the middle of the PAGE; collapsing the first track
+            now would hang the date off the left margin. Nothing is a
+            perfectly good tenant for a track whose job is to be half the
+            page. */}
         {/* THE ONE FACT A PAGE LIKE THIS CAN STATE, in the middle, where it
             was on the page the founder said they preferred. On an empty new
             note it is the only thing that exists yet; on a saved one it is

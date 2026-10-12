@@ -193,8 +193,14 @@ async function worldWithTheMouthOpen(): Promise<MountedWorld> {
    nothing else in this world says "Save". Each `press` below is still an
    unambiguous target. */
 async function press(word: RegExp): Promise<void> {
+  /* BY ACCESSIBLE NAME, NOT BY INK. Save is a check in the bar now —
+     founder: "let's just have a save icon. There's no save as draft.
+     There's just a save icon" — so it has no text content at all. The
+     `aria-label` is what it is called, which is also what a person using
+     this product by ear hears, so matching on it tests the name that
+     actually has to be right. */
   const button = Array.from(layout?.container.querySelectorAll("button") ?? []).find((b) =>
-    word.test(b.textContent ?? ""),
+    word.test(b.textContent ?? "") || word.test(b.getAttribute("aria-label") ?? ""),
   );
   if (!button) throw new Error(`no ${word} on the row`);
   await act(async () => {
@@ -205,7 +211,7 @@ async function press(word: RegExp): Promise<void> {
 describe("the capture remembers where it last went", () => {
   it('retries an uncertain keep with the original request identity', async () => {
     saveControl.loseNext = true;
-    await worldWithTheMouthOpen(); await press(/^save$/i);
+    await worldWithTheMouthOpen(); await press(/^save inspiration$/i);
     expect(saveCalls).toHaveLength(1);
     expect(saveCalls[0]?.requestId).toMatch(/^[0-9a-f-]{36}$/);
     await act(async () => layout!.container.querySelector<HTMLButtonElement>('.jar-source-status button')!.click());
@@ -216,7 +222,7 @@ describe("the capture remembers where it last went", () => {
 
   it('does not replace a newer draft when an earlier keep finishes', async () => {
     saveControl.holdNext = true;
-    await worldWithTheMouthOpen(); await press(/^save$/i);
+    await worldWithTheMouthOpen(); await press(/^save inspiration$/i);
     /* `.jar-mouth-rest` is the keep box now, and a field reopens the composer
        by taking focus rather than by being pressed. */
     await act(async () => layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-rest')!.dispatchEvent(new FocusEvent('focusin',{bubbles:true})));
@@ -233,7 +239,7 @@ describe("the capture remembers where it last went", () => {
 
   it('Escape keeps a newer short draft while an earlier save is uncertain', async () => {
     saveControl.loseNext = true;
-    await worldWithTheMouthOpen(); await press(/^save$/i);
+    await worldWithTheMouthOpen(); await press(/^save inspiration$/i);
     await act(async () => layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-rest')!.dispatchEvent(new FocusEvent('focusin',{bubbles:true})));
     const field = layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-field')!;
     await act(async () => {
@@ -295,7 +301,7 @@ describe("the capture remembers where it last went", () => {
        capture — which is the founder's report word for word. */
     window.localStorage.setItem(KEY, "1");
     await worldWithTheMouthOpen();
-    await press(/^save$/i);
+    await press(/^save inspiration$/i);
     await act(async () => {
       await Promise.resolve();
     });
