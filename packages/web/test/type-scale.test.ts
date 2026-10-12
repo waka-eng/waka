@@ -37,12 +37,18 @@
  *
  * ── WHAT IS NOT COVERED, AND WHY ───────────────────────────────────────────
  *
- * `surface.css` is exempt. It is the flat screens' stylesheet and it is slated
- * for deletion by `one-product-one-system.md` Phase 6 — converting 2,093 lines
- * on their way to being removed is work spent twice. The exemption is written
- * here rather than assumed, so that when the file is deleted this line is what
- * tells the next person the exemption can go too. If the flat screens are ever
- * kept instead, this exemption becomes a bug.
+ * NOTHING IS EXEMPT ANY MORE, and the exemption that used to sit here is
+ * worth recording rather than simply deleting. `surface.css` was exempt: the
+ * flat screens' stylesheet, slated for deletion, and converting 2,093 lines
+ * on their way out is work spent twice. It said of itself that "when the file
+ * is deleted this line is what tells the next person the exemption can go
+ * too." The file was deleted on 2026-08-26. The line did its job; it goes now.
+ *
+ * `one-class-one-thing.test.ts` had COPIED this exemption and caught its own
+ * copy first, recording that it "described a file that is not there, in a list
+ * it was not in". This is the other half of that correction. A ruling applies
+ * to the class, and an exemption left standing in one gate is how it gets
+ * copied into the next.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6). Nothing. It reads stylesheets off disk
  * and counts, exactly as `contrast.test.ts` and `hq-pointer.test.ts` do.
@@ -58,7 +64,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const STYLES = resolve(HERE, "../src/styles");
 
 /**
- * The stylesheets the product is keeping. `surface.css` is exempt — see above.
+ * The stylesheets the product is keeping. Nothing is exempt — see above.
  *
  * `claims.css` and `chat.css` JOINED ON 2026-10-08, and the fact that they
  * could be written and grow without ever being listed here is the whole
@@ -250,7 +256,39 @@ describe("the spacing grid is one grid", () => {
    is a token reference and therefore not a literal. Warming the material
    drained six of these by writing the colour the way it should have been
    written anyway. */
-const COLOUR_CEILING = 79;
+/* 79 -> 72 on 2026-10-12, and this is the FOURTH time this number has fallen
+   because dead rules went out rather than because anybody drained a call
+   site — which is now the only way it has ever moved. The cleanliness review
+   predicted this one to the literal: it measured the ceiling at 79 against 76
+   actual, called the slack-of-3 "tight, and it will fail the moment H4's
+   rules go out, which is the behaviour wanted", and it did.
+
+   TWO DELETIONS, IN TWO SESSIONS, SEVEN LITERALS. The machinery doors took
+   `home.css`'s `.jar-ante-*` / `.jar-duplicates` block with them (79 -> 75,
+   and the gate went red on that alone before this sweep began). Then the
+   stranded-CSS sweep took `global.css`'s `.form-success` and
+   `.btn-destructive` blocks — `Profile.tsx`'s vocabulary, dead since the
+   `/profile` route went — and with them `rgba(15, 15, 14, 0.04)`,
+   `rgba(179, 38, 30, 0.45)` and `rgba(179, 38, 30, 0.08)`: the only red FILL
+   and the only red BORDER in the product, kept alive by a page nobody could
+   reach while `chrome.css`'s actions note said in capitals "There is no red
+   anywhere in Waka". Three literals that contradicted a stated rule, held up
+   by a dead renderer, and no gate could see either fact.
+
+   SET AT THE COUNT, WITH ZERO SLACK, which is a choice and not a default.
+   The companion case below caps slack at 3, so 75 would have passed. 72 is
+   chosen for the same reason `SPACE_CEILING` sits at 19 against 19: this file
+   has now been caught four times by a ceiling that had room in it, and three
+   permitted literals is three one-off shadows nobody has to justify. The
+   tail is still being "counted rather than forced" — what is refused is
+   quietly growing it. A real new one-off raises this line by one, in a commit
+   that says what the colour is for.
+
+   The other two scales were re-measured in the same pass and neither moved:
+   off-grid spacing is 19 against `SPACE_CEILING` 19, and off-scale font sizes
+   are 2 (`44px` and `0.64em`, the landing page's display one-offs) against
+   `CEILING` 2. Both are already at zero slack. */
+const COLOUR_CEILING = 72;
 /* 84 -> 79 on 2026-10-11, and nobody drained five colours by hand — the
    door's craft pass did it as a side effect, which is the behaviour this
    ratchet exists to notice. Founder, of `/login`: the first screen anybody

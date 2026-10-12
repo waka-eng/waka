@@ -322,8 +322,14 @@
 
    One shape for a real action, one for a quiet one, on every surface.
    ======================================================================= */
+/* `.btn-destructive` WAS THE SECOND OF THESE THREE and is gone with
+   `Profile.tsx` (2026-10-11). The quiet shape this section's heading
+   promises — "one shape for a real action, one for a quiet one" — is now
+   `.btn-google`'s alone, which is worth noticing rather than papering
+   over: the product has no quiet DESTRUCTIVE control on a flat screen any
+   more, because the one irreversible act moved into the world's own
+   settings panel and wears `.waka-settings-erase` there. */
 .btn-primary,
-.btn-destructive,
 .btn-google {
   font-family: var(--voice-you);
   font-size: var(--t-ui);
@@ -347,7 +353,9 @@
   font-size: var(--t-lead);
   line-height: 1.5;
   color: var(--ink-2);
-}.field-hint,
+}
+/* `.field-hint` LED THIS GROUP UNTIL 2026-10-11; it was `Profile.tsx`'s and
+   went with it. The four below are live on the door. */
 .login-footer,
 .login-link,
 .login-divider__label,
@@ -371,9 +379,9 @@
    affect layout, so it is safe to apply broadly.
    ======================================================================= */
 /* `.nc-note` led this list and is gone — the post-it was the flat
-   screens' object and nothing renders one. The four below are live. */
+   screens' object and nothing renders one. `.btn-destructive` followed it
+   on 2026-10-11 with `Profile.tsx`. The three below are live. */
 .btn-primary,
-.btn-destructive,
 .btn-google,
 .field-input {
   transition-timing-function: var(--ease);
@@ -464,7 +472,8 @@ body {
  * WHY HERE. `home.css` is only loaded by the world, so a register that lives
  * there cannot dress the door. This sheet is loaded by every page, and it is
  * written LAST in it on purpose: the two voice rules above also name
- * `.login-eyebrow`, `.profile-eyebrow` and `.field-label`, and a register
+ * `.login-eyebrow` and `.field-label` (`.profile-eyebrow` was the third
+ * until 2026-10-11 — see the tombstone below the list), and a register
  * that lost to them would be a twenty-sixth attempt rather than the end of
  * them.
  *
@@ -489,30 +498,43 @@ body {
 .jar-panel-vis,
 .jar-grounds,
 .login-eyebrow,
-.profile-eyebrow,
 .field-label,
 .login-divider,
 .login-divider__label,
 .login-tab,
-.profile-tab,
-.profile-tabs button,
-.profile-row-tag,
-.profile-memory-badge,
-.profile-memory-action,
-/* `.profile-signout-button` IS DELIBERATELY NOT HERE. It had an uppercase
-   declaration in `global.css` and rendered LOWERCASE, because `chrome.css`
-   already rules that the register "belongs to eyebrows, never to things you
-   press" and sets the sign-out verb accordingly. Consolidating a dead
-   declaration into a live one would have turned it uppercase — a redesign
-   smuggled in on a tidy-up. Caught by diffing computed styles, where it was
-   the single `text-transform` change in the whole walk.
+/* ═══ SIX `.profile-*` NAMES AND `.btn-destructive` LEFT THIS REGISTER ══
+   Not because the register changed its mind — because `Profile.tsx` was
+   deleted on 2026-10-11 with the `/profile` route and nothing renders any
+   of them. Gone from the list above: `.profile-eyebrow`, `.profile-tab`,
+   `.profile-tabs button`, `.profile-row-tag`, `.profile-memory-badge`,
+   `.profile-memory-action`. Gone from the pair below: `.btn-destructive`.
 
-   `.btn-destructive` and `.profile-memory-action` below ARE here, and they
-   are things you press too. They were already rendering uppercase, so listing
-   them changes their numbers and not their voice. Whether those two should
-   join the sign-out verb in lower case is a design question, and it is not
-   this rule's to answer. */
-.btn-destructive,
+   THIS WAS THE CLEAREST CASE IN THE WHOLE SWEEP, and the review said so
+   (H4, `docs/reviews/cleanliness-2026-10-11.md`): this stylesheet is the
+   register nothing else reads, so six of its nine `.profile-` lines were
+   register for nothing — a one-place declaration whose whole value is that
+   it is the one place, holding names for a page that is not there.
+
+   THE ARGUMENT THAT STOOD HERE IS KEPT, because its subject is still
+   live. It was about `.profile-signout-button` being DELIBERATELY absent:
+   it had an uppercase declaration in `global.css` and rendered LOWERCASE,
+   because `chrome.css` already rules that the register "belongs to
+   eyebrows, never to things you press" and sets the sign-out verb
+   accordingly — so consolidating a dead declaration into a live one would
+   have turned it uppercase, a redesign smuggled in on a tidy-up. Caught by
+   diffing computed styles, where it was the single `text-transform` change
+   in the whole walk. That reasoning now applies to `.waka-account-out` in
+   `claims.css`, which is the sign-out verb's class today, and it is why
+   that class is not in this list either.
+
+   THE OPEN DESIGN QUESTION DIED WITH ITS SUBJECTS. The old note ended by
+   asking whether `.btn-destructive` and `.profile-memory-action` — things
+   you press, listed here, already rendering uppercase — should join the
+   sign-out verb in lower case. Both are gone, so the register no longer
+   contains a single thing you press, and the question is closed by
+   deletion rather than by answer. `.btn-google` is the last entry below;
+   it is a thing you press, and it is still here, so the question is only
+   mostly closed. */
 .btn-google {
   /* The register's voice stays shared; an interactive label can opt into a
      larger named type step without losing its uppercase/tracking. Metadata

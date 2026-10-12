@@ -119,15 +119,35 @@ describe("the ink ramp is measured, and the reading inks clear AA", () => {
   });
 
   it("every class a person must READ is set at muted or brighter, never faint", () => {
-    // The reading surfaces this and the sibling goals shipped: receipts,
-    // the provenance rows and their surround, the grounds band, the
-    // antechamber's candidates and anchors, the reading's own lines.
+    /* The reading surfaces this and the sibling goals shipped: receipts, the
+       provenance rows and their surround, and the grounds band.
+
+       TWO WENT OUT WITH THE MACHINERY DOORS, 2026-10-12. This list also
+       named `.jar-ante-candidate` — the antechamber's refused sentences —
+       and `.jar-reading-line`, and both rules were deleted from `home.css`
+       in the same pass as this edit: the three components that rendered them
+       were removed at the founder's request, so neither class has had a
+       renderer anywhere in `src` since.
+
+       AND THEY HAD TO LEAVE TOGETHER, which is the point of this note. The
+       loop below asserts that each selector HAS a rule in `home.css` and
+       that the rule declares a colour — `${selector} has no rule in
+       home.css`. That is deliberate and it is the right shape: a reading
+       class whose rule quietly vanished would otherwise inherit whatever is
+       above it and pass. It also means a deletion in the stylesheet turns
+       this red, so the two cannot drift apart in either direction. If
+       anything ever reads like the antechamber again, it goes back in this
+       list on the day its rule is written.
+
+       WHAT THE DELETED RULES WERE MEASURED AT, so the standard is not
+       re-derived: `.jar-ante-candidate` was `--jar-muted` (NOT `--jar-faint`,
+       and the rule carried its own argument for that — "the dim place stays
+       dim by standing, not by being unreadable") and `.jar-reading-line` was
+       full `--jar-ink`. Both cleared this case for their whole life. */
     const READING_CLASSES = [
       ".jar-receipt",
       ".jar-prov-text",
       ".jar-ground",
-      ".jar-ante-candidate",
-      ".jar-reading-line",
     ];
     for (const selector of READING_CLASSES) {
       const block = CSS.match(

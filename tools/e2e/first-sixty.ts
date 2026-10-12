@@ -316,6 +316,41 @@ async function openTheMemory(page: Page): Promise<boolean> {
  * an empty account. Their absence from this list is itself part of the
  * reading — see what the run prints about `.jar-saved`.
  */
+/* ═══ FIVE MORE OPENERS IN THIS LIST NAME CLASSES NOTHING RENDERS ════════
+   SAID HERE RATHER THAN QUIETLY DELETED, because a walk that stops measuring
+   a surface and prints nothing about having stopped is worse than one that
+   fails. `your settings` was repointed at the cog in this pass (see its own
+   note). These five were measured the same way on 2026-10-12 — every
+   `.ts`/`.tsx` under `packages/web/src` outside `src/styles` — and each has
+   ZERO renderers, so each costs eight seconds and files its surface as
+   `NOT THERE`, which reads as a statement about the product:
+
+     .jar-here           your own wall's panel — the wall chip in `.jar-topbar`
+                         renders `null` now, under `Home.tsx`'s own heading
+                         "THE WALL PICKER MOVED TO THE TOP-LEFT CORNER".
+                         (No line numbers into `Home.tsx` on purpose: it is
+                         seventeen thousand lines and everything in it moves.
+                         The headings do not.)
+     .jar-here-more      the walls list, twice — the `▾` beside the wall's name
+     .jar-here-row--make make another place. `dead-css.ts:700` already carries
+                         the founder's ruling for this one in full — "get rid
+                         of the rooms and agent related stuff for now" — and
+                         says making a place from the world is not something
+                         the product offers any more.
+     .jar-values         philosophies & values — the up-signpost that is drawn
+                         wears `.jar-up` / `.jar-up--down`.
+     .jar-saved          the archive door — the only two mentions left in
+                         `Home.tsx` pass the string to `querySelector`;
+                         nothing renders it.
+
+   WHY THEY ARE NOT REPOINTED IN THE SAME EDIT. `.jar-account` had an obvious
+   successor on the same corner doing the same job. These do not: three of
+   them belonged to the rooms vocabulary the founder asked to be removed, and
+   the other two are destinations that live in the dock now — which changes
+   what "a surface an empty account can reach" means, because the dock is on
+   screen from the first second and these were reaches into the chrome. That
+   is a reading of the product, not a token swap, and it is the same call
+   `by-keyboard.ts:402` defers for the same two classes. */
 const SURFACES: Surface[] = [
   {
     name: "the world, just arrived",
@@ -369,8 +404,28 @@ const SURFACES: Surface[] = [
   },
   {
     name: "your settings",
+    /* ═══ THE COG, NOT THE ACCOUNT PILL ══════════════════════════════════
+       THIS PRESSED `.jar-account`, WHICH HAS NO RENDERER. The pill in
+       `.jar-topbar` went when settings stopped being a page — founder: "I
+       want all setting-related stuff to be only accessible through the drop
+       down and not be its own thing", `main.tsx:186`. The step therefore
+       spent eight seconds timing out and filed the surface as `NOT THERE`,
+       which reads as a finding about the product: an account with nothing in
+       it cannot reach its settings. It can. It presses the cog.
+
+       BY THE MODIFIER, copying `tools/e2e/dead-css.ts:780`: the right corner
+       has held two buttons since 2026-10-11 — an "i" beside the cog — and the
+       left corner has worn `.waka-corner` since there was a corner, so
+       `.first()` is a bet on document order that would now lose.
+
+       WHAT THIS SURFACE IS FOR, UNCHANGED: whether a brand-new account's
+       settings SAY anything or are a bare grid of controls. The card's three
+       groups are folded when it opens and this reads the card, not each
+       group — the same reading the page gave, since the page's panels were
+       `hidden` one at a time too. `dead-css.ts` is the walk that opens each
+       group, because it is the walk that needs every rule on screen. */
     open: async (page) => {
-      await page.locator(".jar-account").first().click({ timeout: 8_000 });
+      await page.locator("button.waka-corner--settings").first().click({ timeout: 8_000 });
       await page.waitForTimeout(1_600);
     },
   },

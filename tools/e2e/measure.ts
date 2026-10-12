@@ -230,7 +230,14 @@ const FIXTURE = `<!doctype html>
       <span class="jar-here-split"><button class="jar-here jar-back jar-label">ME</button></span>
       <button class="jar-when jar-label">now</button>
     </div>
-    <button class="jar-account jar-back jar-label">Your account</button>
+    <!-- THE ACCOUNT PILL IS GONE FROM THIS ROW AND FROM THE PRODUCT.
+         It was \`<button class="jar-account jar-back jar-label">Your account</button>\`,
+         and it stood here only to be the thing \`.jar-settings--at-right\`
+         hangs off in \`every-modal-is-one-modal\`. Both went on 2026-10-11 when
+         settings stopped being a page — founder: "I want all setting-related
+         stuff to be only accessible through the drop down and not be its own
+         thing". See that case's own tombstone for what the measurement was
+         and what replaced it. -->
   </div>
   <!-- THE DATES, which are only ever on screen while they are open — so the
        fixture holds them open, the way it holds every other sheet open. -->
@@ -250,9 +257,6 @@ const FIXTURE = `<!doctype html>
   </div>
   <div class="jar-settings jar-settings--at-left" data-jar-chrome="1" role="dialog">
     <div class="jar-settings-head"><span class="jar-label">this wall</span></div>
-  </div>
-  <div class="jar-settings jar-settings--at-right" data-jar-chrome="1" role="dialog">
-    <div class="jar-settings-head"><span class="jar-label">your account</span></div>
   </div>
   <div class="jar-prov-room" data-jar-chrome="1" role="dialog">
     <p class="jar-prov-room-lead">Where this came from.</p>
@@ -755,10 +759,74 @@ const CASES: Case[] = [
     },
   },
 
+  /* ═══ COVERAGE THIS CASE NO LONGER HAS, SAID AT THE TOP OF IT ═══════════
+     THE RIGHT-HAND ANCHORED SHEET IS NOT MEASURED ANY MORE. It was
+     `atRight: anchored(".jar-settings--at-right", ".jar-account", "right")`,
+     and BOTH of those classes have zero renderers in `packages/web/src`
+     outside `src/styles` — measured 2026-10-12. The sheet and the button it
+     hung off went together on 2026-10-11, when settings stopped being a
+     page: founder, "I want all setting-related stuff to be only accessible
+     through the drop down and not be its own thing" (`main.tsx` carries the
+     route's own tombstone). So four of the six things this case compared
+     were about the product and the fifth was about the fixture agreeing with
+     itself.
+
+     WHY IT IS NOT REPOINTED AT WHAT REPLACED IT, which is the question to
+     answer rather than to skip. Your account opens in `.waka-account` now —
+     the cog's popover, `claims.css` — and it IS anchored under its button,
+     by `position: absolute; top: calc(100% + var(--sp-8)); right: 0` inside
+     `.waka-corner-place`. Two reasons that does not belong here:
+
+       1. IT WOULD FAIL THE HALF OF THE CASE THAT MATTERS. This case's
+          backbone is the 2026-08-25 ruling that every modal wears the CARD's
+          surface, read off `.jar-panel` at runtime rather than written down.
+          `.waka-account` deliberately does not: `--sp-12` of padding against
+          the card's `--sp-24`, `--waka-r-surface` against the card's 18px,
+          `--waka-raised` against `--jar-panel`, a hairline border against
+          the card's triple shadow. It is a POPOVER, which is a different
+          object with a different specification, and asserting it is a modal
+          would be the gate telling a lie about the design rather than the
+          design drifting.
+       2. ITS ANCHORING IS STRUCTURAL, NOT MEASURED. The sheet this case
+          watched was absolutely positioned against the VIEWPORT with a
+          hand-written `right: 8px` "measured off the account pill itself" —
+          a number that can drift from the button by exactly the pixels this
+          case counted. `.waka-account` is positioned against a wrapper that
+          contains the button, so "under its own handle" is true by
+          construction and there is no gap for a measurement to catch.
+
+     WHAT WOULD RESTORE REAL COVERAGE: a case of its own, measuring the
+     popover against the popover's own specification (bound by
+     `100dvh - the corner - the gap`, scrolls inside itself, opens leftward on
+     a phone) rather than against the memory card's. That is a new case with
+     its own fixture markup, not a selector swap, and it should be written
+     when somebody is measuring that card rather than smuggled in here.
+
+     AND ITS SIBLING IS IN THE SAME STATE — NOT FIXED HERE, AND NOT HIDDEN.
+     `atLeft` survives because `.jar-settings--at-left` is still rendered
+     (`space/settings/SpaceSettings.tsx`), but the button it is anchored to,
+     `.jar-here`, has no renderer either: the wall chip in `.jar-topbar`
+     returns `null` under `Home.tsx`'s heading "THE WALL PICKER MOVED TO THE
+     TOP-LEFT CORNER". So that arm measures a live sheet against a dead
+     handle, which is a weaker version of the same defect and a question
+     about the product — what opens the wall's settings now — rather than
+     about this file.
+
+     AND WHY NEITHER WAS CAUGHT BY THE DRIFT CHECK ABOVE. `needs` is
+     documented as "Class names this case measures. Each must really be
+     rendered by Home", and the case that enforces it reads exactly that
+     list. The three ANCHORS were never in it — only the surfaces were — so
+     the one gate built to notice a fixture standing on a class the world no
+     longer renders could not see the three classes doing it. `jar-when` is
+     added below because it is an anchor this case reads and the world really
+     renders; `jar-here` is deliberately NOT added, because adding it would
+     turn the drift check red on a product decision that is not this file's
+     to make, and a red gate pointing at the wrong owner is how a ratchet
+     gets its ceiling raised. */
   {
     id: "every-modal-is-one-modal",
     name: "every modal wears one surface, and each is placed where it belongs",
-    needs: ["jar-panel", "jar-seek", "jar-settings", "jar-prov-room", "jar-dial"],
+    needs: ["jar-panel", "jar-seek", "jar-settings", "jar-prov-room", "jar-dial", "jar-when"],
     /* one of the four given its old surface back — the exact drift this
        case exists to notice */
     sabotage:
@@ -802,7 +870,6 @@ const CASES: Case[] = [
         return { card: one(".jar-panel"), seek: one(".jar-seek"),
                  settings: one(".jar-settings"), prov: one(".jar-prov-room"),
                  atLeft: anchored(".jar-settings--at-left", ".jar-here", "left"),
-                 atRight: anchored(".jar-settings--at-right", ".jar-account", "right"),
                  dates: anchored(".jar-dial", ".jar-when", "left") };
       })()`;
       type M = { skin: string; offX: number; offY: number; below?: number; edge?: number };
@@ -810,7 +877,7 @@ const CASES: Case[] = [
       const missing = Object.entries(m).filter(([, v]) => !v).map(([k]) => k);
       if (missing.length) return { ok: false, detail: `not in the fixture at all: ${missing.join(", ")}` };
       const card = m.card as M;
-      const others = ["seek", "settings", "prov", "atLeft", "atRight", "dates"] as const;
+      const others = ["seek", "settings", "prov", "atLeft", "dates"] as const;
 
       /* AND THE PLACEMENT RULING NARROWED, 2026-08-28: "when clicking on the
          top left and top right button, those cards should just appear right
@@ -834,14 +901,18 @@ const CASES: Case[] = [
               .join("; "),
         };
       }
-      /* AND THE THIRD SHEET IS THE DATES (founder, 2026-08-30: "instead of
-         this draggable line, when clicking on now, just show the major dates
-         to make them clickable"). It belongs to the word that says `now`, so
-         it is the same case as the other two: a menu that opened across the
-         room from its own handle would make you re-find the thread every
-         time. Its left edge is written inline by the world, from the word's
-         own box — see the fixture's script, which is the product's line. */
-      const adrift = (["atLeft", "atRight", "dates"] as const).filter((k) => {
+      /* AND THE DATES ARE THE OTHER ANCHORED SHEET (founder, 2026-08-30:
+         "instead of this draggable line, when clicking on now, just show the
+         major dates to make them clickable"). It belongs to the word that
+         says `now`, so it is the same case as the sheet above it: a menu that
+         opened across the room from its own handle would make you re-find the
+         thread every time. Its left edge is written inline by the world, from
+         the word's own box — see the fixture's script, which is the product's
+         line.
+         IT SAID "THE THIRD SHEET" AND THERE WERE THREE. The right-hand one
+         went on 2026-10-11 with the account pill it hung off; this case's own
+         tombstone, above `id`, says what is no longer measured and why. */
+      const adrift = (["atLeft", "dates"] as const).filter((k) => {
         const v = m[k] as M;
         return !(v.below! > 0 && v.below! < 24 && near(v.edge!, 0, 2));
       });
