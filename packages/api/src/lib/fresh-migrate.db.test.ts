@@ -37,7 +37,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -208,8 +209,190 @@ describe("the first migration on an empty database", () => {
           `${entry.tag} is stamped no later than the migration before it`,
         ).toBeGreaterThan(journal.entries[at - 1]!.when);
       }
+      /* ═══ AND THE FILENAME AGREES WITH THE INDEX ═══════════════════════
+         ADDED 2026-10-11 by security review finding 2. The three checks
+         above were all true of the BROKEN journal this gate was written
+         for: `0070_conversation_inspiration_start` sat at `idx` 69, dense
+         and rising, because 0069 had no entry and 0070 was authored into
+         the free slot. The folder-vs-journal comparison caught that one by
+         noticing the orphaned 0069 file — but only because a file existed.
+         The renumbering itself went unremarked, and renumbering is what
+         made the damage permanent: a stage that migrated while 0070 was
+         idx 69 recorded 0070's TIMESTAMP, and timestamps are what drizzle
+         compares, so 0069 could never arrive afterwards however the
+         indices were later repaired (see `0071_inspiration_category_converge.sql`).
+
+         Every migration's number is in its own name. Asserting the two
+         agree makes "I renumbered a file" a failure at the commit rather
+         than a discovery three days and one unreachable column later. It
+         costs the freedom to name a migration anything, which nobody
+         wants: `drizzle-kit generate` numbers them this way itself. */
+      const numbered = /^(\d{4})_/.exec(entry.tag);
+      expect(
+        numbered,
+        `${entry.tag} is not named <4 digits>_<name>, so its number cannot be ` +
+          "checked against its index",
+      ).not.toBeNull();
+      expect(
+        Number(numbered![1]),
+        `${entry.tag} is filed at idx ${entry.idx}. A migration whose name ` +
+          "and index disagree has been renumbered, and renumbering is how " +
+          "0069 became unreachable: drizzle applies by `when`, so an index " +
+          "repair does not bring back a migration a database has already " +
+          "walked past.",
+      ).toBe(entry.idx);
     });
   });
+});
+
+/**
+ * ═══ A DATABASE STUCK BEHIND A TIMESTAMP IS CAUGHT UP ════════════════════
+ *
+ * SECURITY REVIEW 2026-10-11, FINDING 2. This is the case the structural
+ * gate above cannot see and the fresh-database run above cannot reproduce,
+ * because both look at the repository as it is now. The fault is about a
+ * database that recorded something while the repository was briefly wrong.
+ *
+ * THE MECHANISM, because it is the part that surprises people. drizzle does
+ * not apply by `idx`. `pg-core/dialect.js:62` asks, for each journal entry,
+ * `Number(lastDbMigration.created_at) < migration.folderMillis` — where
+ * `lastDbMigration` is the NEWEST row in `drizzle.__drizzle_migrations` and
+ * `folderMillis` is the entry's `when`. So a migration whose timestamp is
+ * below the ledger's high-water mark is not "pending"; it is finished, as
+ * far as the migrator is concerned, forever, with no error.
+ *
+ * 0069 was merged with no journal entry and 0070 was authored into the
+ * `idx` it left free, carrying `when` 1791745200000. 0069's `when` is
+ * 1791512364893 — earlier. 6be2f854 repaired the journal, which fixed every
+ * database that had not yet migrated and fixed NOTHING for a database that
+ * had: 0070's stamp was already the high-water mark there, so 0069 is
+ * behind it and stays behind it. `inspirations.category` never arrives,
+ * `schema-inspirations.ts` declares it, and the archive's category tabs
+ * query a column that is not there.
+ *
+ * WHAT THIS CASE DOES. It manufactures that database — stages the corpus
+ * through the real migrator against a journal pruned back to the broken
+ * shape — then asserts the hole is really there, then runs the CURRENT
+ * corpus over it and asserts the column arrives anyway. The second half is
+ * the only proof that `0071_inspiration_category_converge.sql` does its
+ * job; without the first half it would pass against a corpus with no 0071
+ * in it at all, which is the vacuous-gate failure this file keeps catching.
+ *
+ * WHY THE JOURNAL IS REWRITTEN INTO A TEMPORARY FOLDER rather than the
+ * fault being asserted from the SQL by reading. The claim is about what
+ * drizzle's migrator decides, and two previous attempts in this file to
+ * gate a migrator behaviour by reading failed for exactly that reason (see
+ * "the enum rule" below). The migrator is cheap to run and is the authority.
+ *
+ * WHAT THIS MOCKS, AND WHY: nothing. A real temporary database, drizzle's
+ * own migrator, and a copy of the real SQL corpus with one file's journal
+ * entry removed. The removal is the only fiction and it is a faithful one —
+ * it is literally the state of `meta/_journal.json` at commit a063bd1b.
+ */
+describe("a database that migrated during the broken journal window", () => {
+  const STUCK = `waka_stuckmig_${Math.random().toString(36).slice(2, 10)}`;
+  let stuckAdmin: postgres.Sql | undefined;
+  let stuckUrl = "";
+  let staged = "";
+
+  beforeAll(async () => {
+    stuckAdmin = postgres(url, { max: 1, onnotice: () => {} });
+    await stuckAdmin.unsafe(`CREATE DATABASE "${STUCK}"`);
+    stuckUrl = url.replace(/\/[^/?]+(\?|$)/, `/${STUCK}$1`);
+    staged = mkdtempSync(join(tmpdir(), "waka-prefix-journal-"));
+  }, 60_000);
+
+  afterAll(async () => {
+    if (stuckAdmin) {
+      await stuckAdmin.unsafe(`DROP DATABASE IF EXISTS "${STUCK}" WITH (FORCE)`).catch(() => {});
+      await stuckAdmin.end();
+    }
+    if (staged) rmSync(staged, { recursive: true, force: true });
+  });
+
+  it("receives `inspirations.category` anyway, through 0071", async () => {
+    const folder = migrationsFolder();
+    cpSync(folder, staged, { recursive: true });
+
+    /* THE BROKEN SHAPE, rebuilt. Drop 0069's entry — and anything after
+       0070, so the staged corpus is exactly what existed in the window —
+       then slide the tail down so `idx` stays dense, which is what the
+       original mistake did and why it was invisible. `when` is untouched,
+       because `when` is the thing that was never wrong. */
+    const journalPath = resolve(staged, "meta", "_journal.json");
+    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
+      entries: Array<{ idx: number; tag: string; when: number }>;
+    };
+    const broken = journal.entries.filter(
+      (entry) =>
+        !entry.tag.startsWith("0069_") &&
+        entry.when <= 1791745200000,
+    );
+    broken.forEach((entry, at) => {
+      entry.idx = at;
+    });
+    expect(
+      broken.at(-1)!.tag,
+      "the staged corpus must end at 0070 — that is the window's edge",
+    ).toBe("0070_conversation_inspiration_start");
+    writeFileSync(journalPath, JSON.stringify({ ...journal, entries: broken }, null, 2));
+
+    const sql = postgres(stuckUrl, { max: 1, onnotice: () => {} });
+    try {
+      await migrate(drizzle(sql), { migrationsFolder: staged });
+
+      /* ── HALF ONE: the hole is real, not hypothetical ──────────────── */
+      const [{ mark }] = await sql<{ mark: string }[]>`
+        SELECT max(created_at)::text AS mark FROM drizzle.__drizzle_migrations`;
+      expect(
+        Number(mark),
+        "the staged ledger should sit at 0070's stamp — this is the " +
+          "high-water mark 0069 can never clear",
+      ).toBe(1791745200000);
+      const missing = await sql<{ column_name: string }[]>`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'inspirations' AND column_name = 'category'`;
+      expect(
+        missing,
+        "the reproduction did not reproduce: `category` is present before " +
+          "the convergence migration ran, so this case proves nothing",
+      ).toHaveLength(0);
+
+      /* ── HALF TWO: the current corpus converges it ─────────────────── */
+      await migrate(drizzle(sql), { migrationsFolder: folder });
+
+      const arrived = await sql<{ column_name: string }[]>`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'inspirations' AND column_name = 'category'`;
+      expect(
+        arrived,
+        "a database that migrated inside the broken-journal window still " +
+          "has no `inspirations.category`. 0069 cannot reach it — its `when` " +
+          "is below the ledger's mark — so a migration stamped ABOVE 0070 " +
+          "has to repeat 0069's statements. That is " +
+          "`0071_inspiration_category_converge.sql`; if it was deleted, " +
+          "renamed, or stamped below 1791745200000, this is what that looks like.",
+      ).toHaveLength(1);
+
+      /* And the index 0069 also creates, which the archive's per-profile
+         category count reads. A convergence that brought the column and
+         left the index behind would still cost a sequential scan. */
+      const indexes = await sql<{ indexname: string }[]>`
+        SELECT indexname FROM pg_indexes
+        WHERE tablename = 'inspirations'
+          AND indexname = 'inspirations_profile_category_idx'`;
+      expect(indexes, "the partial index converged too").toHaveLength(1);
+
+      /* THE REPEAT IS A NO-OP. Both of 0071's statements are IF NOT EXISTS,
+         and the claim "safe wherever 0069 already landed" is only worth
+         making if something checks it. Running the corpus a third time
+         exercises nothing new on this database — nothing is pending — so
+         the statements are replayed directly instead. */
+      await sql.unsafe(readFileSync(resolve(folder, "0071_inspiration_category_converge.sql"), "utf8"));
+    } finally {
+      await sql.end();
+    }
+  }, 180_000);
 });
 
 describe("the enum rule, read straight off the corpus", () => {
