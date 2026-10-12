@@ -176,7 +176,17 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
 
   return (
     <div className="waka-page">
-      <DialogSurface className="waka-over" aria-label={title} onClose={onClose}>
+      {/* A PAGE, NOT A DIALOG — `modal={false}`. The bar's "Chats" row is
+          what this list is reached by and what it is left by; it was
+          declaring `aria-modal` over that row, so a screen reader was told
+          the row did not exist and Tab wrapped back into the list rather
+          than walking out to it. See `DialogSurface`'s header: the exemption
+          in `test/way-out.test.ts` rests on the bar being reachable, and
+          until this prop it was not. Nothing else about this surface
+          changes — Escape still leaves, and there is no scrim to press
+          away on, because `.waka-page` is the ground rather than a film
+          over one. */}
+      <DialogSurface className="waka-over" aria-label={title} modal={false} onClose={onClose}>
         <header className="waka-over-head">
           <h2 className="waka-over-title">{title}</h2>
         </header>

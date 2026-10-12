@@ -2959,7 +2959,24 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const say = useCallback((key: MessageKey) => t(localeRef.current, key), []);
-  /* AND IT IS THE WALL'S OWN SENTENCE, not one sentence for both. Your wall
+  /* ═══ IT STATES THE FACT; THE ACTION CARRIES THE VERB ═════════════════
+     Founder, with "No top of mind formed yet. Add more inspirations." sitting
+     above a button reading "Add an inspiration": "it's duplicative."
+
+     It was, and the duplication arrived honestly: the second sentence is
+     the founder's own earlier wording — "this should say no top of mind
+     formed yet, add more inspirations" — written when the bubble had no
+     action and the sentence had to carry the instruction itself. Giving
+     every bubble a named act made the instruction the button's job and
+     left the sentence saying it twice.
+
+     SO THE DIVISION IS NOW EXPLICIT, and it is the one to keep: what the
+     creature SAYS is a fact about where you are, and what it OFFERS is the
+     verb. The empty line went the same way for the same reason — "Keep
+     something you want to come back to" is an instruction, and "Add an
+     inspiration" was sitting underneath it.
+
+     AND IT IS THE WALL'S OWN SENTENCE, not one sentence for both. Your wall
      says what it is waiting for — something kept, or a pattern to recur in
      what you have kept — and an agent says it has formed nothing. The poster
      chose between exactly these; the bubble is the poster's new seat, so it
@@ -17851,8 +17868,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               word rather than a glyph. The attribute is on the surface and
               not in a list keyed by file, because `Home.tsx` renders five
               surfaces and four of them must stay answerable to the law. */}
+          {/* AND SO IT IS NOT A DIALOG EITHER — `modal={false}`.
+              `data-way-out="talk"` above is a CLAIM that the bar is this
+              surface's exit, and a Tab trap made the claim false for anybody
+              working from the keyboard: Tab wrapped back into the transcript
+              instead of reaching the "Chats" row the attribute points at, and
+              `aria-modal` told a reader that row was not on the screen. The
+              attribute and the prop are the same statement said twice, once
+              for the gate and once for the browser; they have to agree.
+
+              It is the fifth of the five and the one the founder reported
+              being trapped in — "I find it so annoying that from talk with
+              Waka, there's no one click to go back to top of mind" — so it is
+              the last surface that should have been holding focus.
+
+              IT IS ALSO WHY THE PAGE IS A `<section>` AND NOT A `<main>`:
+              `ConversationPanel` renders its own `<main className="chat-page">`
+              inside this, and a `<main>` in a `<main>` is two primary
+              landmarks. See `DialogSurface`'s header. */}
           <DialogSurface className="waka-over waka-over--talk" aria-label={say('worldMenuTalk')}
             data-way-out="talk"
+            modal={false}
             onClose={viewNavigation.closeConversation}>
             {/* ═══ THE WAY BACK TO THE LIST, which this surface was the one
                 place in the product not to have ═══════════════════════════

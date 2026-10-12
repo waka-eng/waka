@@ -397,6 +397,23 @@
   transition: color 0.2s ease;
 }
 
+/* ═══ BASE FIRST, MODIFIERS AFTER — AND HERE THAT IS LOAD-BEARING ════════
+   This block used to sit at the BOTTOM of the dock's rules, below
+   `.waka-dock-tool--keep:disabled`. Both selectors are (0,2,0), so
+   specificity does not separate them and source order decides — which meant
+   the base quietly won `color` from the modifier that was written to
+   override it. Nothing in the diff showed it; a browser read of the
+   computed style did, after the modifier's new `color: var(--ink)` landed
+   and the glyph came out `--muted` anyway.
+
+   Moved up beside the rule it modifies, the file reads in cascade order and
+   a modifier below can do what a modifier is for. Anything added here has
+   to stay above the `--` blocks for the same reason. */
+.waka-dock-tool:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
 /* Wide enough for the running clock, which is the one state that is words
    rather than a glyph — a red dot cannot say how long you have been
    talking. */
@@ -458,17 +475,29 @@
    first going to put the archive's copy — it cannot sprout the edge the
    founder has now twice asked not to see.
 
-   ONE DIMMING CHANNEL, NOT TWO. This used to read `color: var(--muted)` and
-   lean on `button:disabled { opacity: .4 }` over in `chrome.css` for the
-   rest, which is dimming applied twice from two files: `--muted` is already
-   ink at 80%, so the glyph landed at 32% and 2.55:1 on the ground. Ink at a
-   stated 0.4 is 3.44:1 — still obviously off, and findable on a blank page,
-   which it now has to be: the button is PRESENT and dim before there is
-   anything to keep rather than absent. The opacity is stated here rather
-   than inherited because this file is unlayered and that one is not, so
-   borrowing it meant the number could move from a sheet this rule cannot
-   see. `color` has to be re-stated regardless — the enabled state paints
-   `--bg` for legibility on the fill, and the fill is gone. */
+   ONE DIMMING CHANNEL, NOT TWO, and it is the one the founder named. The
+   dim used to be assembled from two sheets: `color: var(--muted)`, which is
+   ink at 80%, times `button:disabled { opacity: .4 }` over in `chrome.css`.
+   Multiplied, the glyph landed at 32% of ink, 2.55:1 against the ground.
+   That was fine while the button only existed once there was something to
+   keep — it was a transient blocked state, seen by somebody who had already
+   found the control. It is not fine now: this button is PRESENT and dim on
+   a blank page, so the resting state has to be findable by somebody who has
+   never seen it. Full ink at a stated 0.4 is 3.44:1 — unmistakably off
+   beside the enabled fill, and still clearly there.
+
+   WHICH MEANS THIS RULE HAS TO ACTUALLY WIN `color`, and it did not at
+   first. `.waka-dock-tool:disabled` is also (0,2,0) and was sitting BELOW
+   this block, so the base took the modifier's colour back by source order
+   alone. See the note up at that rule for the reorder. The lesson is the
+   one this codebase keeps relearning: a CSS change read only in the diff is
+   not a change.
+
+   The opacity is stated here rather than inherited from `chrome.css`
+   because this file is unlayered and that one is not — borrowing it meant
+   the number governing a founder instruction could move from a sheet this
+   rule cannot see. `color` has to be re-stated regardless: the enabled
+   state paints `--bg` for legibility on the fill, and the fill is gone. */
 .waka-dock-tool--keep:disabled {
   border: 0;
   background: none;
@@ -499,11 +528,6 @@
   font-size: var(--t-meta);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.waka-dock-tool:disabled {
-  color: var(--muted);
-  cursor: default;
 }
 
 .waka-dock-tool:focus-visible {
@@ -5260,6 +5284,60 @@
   font-size: var(--t-meta);
   line-height: 1.5;
   color: var(--muted);
+}
+
+/* ═══ THE THREE MACHINERY DOORS, AT THE FOOT OF THE EXPLANATION ═════════
+   The paragraphs above say what the loop does; these three open it. They
+   take the hairline seam the caveat already uses, because the subject
+   changes again — from the product telling you about itself to the product
+   showing you its working — and a person who has read five paragraphs is
+   owed a visible edge before the thing they can press.
+
+   THE ROW IS THE PRESS, full width and 44px tall, which is the register
+   `.waka-settings-row` already set for "a row in this corner that opens
+   something". Same face, same step, same ink; what differs is the mark,
+   and the mark is the whole reason the rows are distinguishable from the
+   `dt`s above them — see `HowItWorksPanel`'s header. No border, no fill, no
+   second colour: light is the only channel, and these sit at `--ink`
+   against the muted prose, which is already the strongest thing on the
+   card. */
+.waka-about-doors {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding-top: var(--sp-12);
+  border-top: 1px solid var(--line);
+}
+
+.waka-about-door {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  width: 100%;
+  min-height: var(--waka-corner);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* THE CHEVRON LEANS IN RATHER THAN THE WORD MOVING. A row that shifts under
+   the cursor is motion nobody asked for; the mark brightening is the same
+   thing the corner's own triggers do, and it is the only state this row has
+   to report. */
+.waka-about-door svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.waka-about-door:hover svg,
+.waka-about-door:focus-visible svg {
+  color: var(--ink);
 }
 
 .waka-account-failed {

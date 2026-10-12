@@ -140,9 +140,19 @@ export function ClaimsOverlay({ locale, onClose, onAsk, answered }: ClaimsOverla
 
   return (
     <div className="waka-page">
+      {/* A PAGE, NOT A DIALOG — `modal={false}`. The queue is the one of the
+          four with no row of its own in the bar: it is reached from the home
+          screen, and `test/way-out.test.ts` allows that ("`claims` is
+          reached from the home screen rather than from a row of its own").
+          It still leaves by the bar — "Now" is the first row and that is
+          where it came from — so the trap cost it the same exit as the other
+          three, and cost it on the surface where a person is most likely to
+          be part-way through answering something and want out. See
+          `DialogSurface`'s header. */}
       <DialogSurface
         className="waka-over"
         aria-label={title}
+        modal={false}
         onClose={onClose}
         >
         <header className="waka-over-head">

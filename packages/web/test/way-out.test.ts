@@ -150,7 +150,32 @@ function closedByAVisibleButton(span: string): boolean {
  * one press, which is the whole of the law; it simply is not INSIDE the
  * span this file reads.
  *
- * SO THE GATE IS TAUGHT, NOT EXEMPTED, and the difference is the two things
+ * ── THAT PARAGRAPH WAS FALSE FOR EVERYONE WORKING FROM A KEYBOARD, AND IT
+ *    IS TRUE NOW (2026-10-11) ───────────────────────────────────────────────
+ *
+ * It is left standing word for word above, because it is the right argument
+ * and because what went wrong is worth having in one place: the sentence
+ * "these four stopped being modals when they became the dock's destinations"
+ * was a statement about the DESIGN that nobody had made true of the MARKUP.
+ * All four still rendered through `DialogSurface` with `role="dialog"`,
+ * `aria-modal` and a Tab trap — so Tab wrapped back to the first control
+ * inside the page, `aria-modal` deleted the bar from the accessibility tree,
+ * and the dock this exemption rests on could not be reached at all. Measured
+ * in a browser before the fix, on each of the three destinations the bar has
+ * a row for: sixty presses of Tab and sixty of Shift+Tab, and the bar was
+ * never once reached.
+ *
+ * So for a keyboard user these four surfaces had NO way out — and THIS FILE,
+ * the gate whose only job is to catch that, was the thing excusing it. That
+ * is the worst failure available to a gate, worse than being absent: an
+ * exemption reads as a decision somebody made, so the next person checks it
+ * off rather than checking it.
+ *
+ * `DialogSurface` takes `modal={false}` now and the four pass it. Tab walks
+ * out of a destination into the bar, forwards and backwards, and the bar is
+ * `region`-shaped content rather than a dialog over a blocked screen.
+ *
+ * SO THE GATE IS TAUGHT, NOT EXEMPTED, and the difference is the three things
  * it checks below. An entry here is a claim with a mechanism behind it:
  *
  *   1. the dock really offers this destination — the id is in its own list
@@ -158,7 +183,19 @@ function closedByAVisibleButton(span: string): boolean {
  *      silently leaving a surface with no exit at all;
  *   2. the dock really renders while this destination is open — its render
  *      condition does not exclude `view.open`, which is the bug this product
- *      shipped for a conversation and the founder reported as being trapped.
+ *      shipped for a conversation and the founder reported as being trapped;
+ *   3. THE NEW ONE, AND THE ONE WHOSE ABSENCE COST THREE MONTHS: the surface
+ *      does not fence the dock off. A destination declares `modal={false}`,
+ *      which is the one textual fact that decides whether focus can leave it.
+ *
+ * WHAT CHECK 3 CAN AND CANNOT DO, said plainly so nobody trusts it further
+ * than it goes. It reads source text, so it proves the prop is passed and
+ * nothing more; it cannot see a focus order. The press itself is held in a
+ * browser, by `tools/e2e/by-keyboard.ts`, which opens each destination from
+ * the bar with keys alone and then counts the presses back to it in both
+ * directions. That walk is where this exemption is actually earned. Check 3
+ * is the cheap half that runs on every commit and would have failed on the
+ * day the bug was introduced.
  *
  * `home-navigation.test.tsx` presses the thing; this proves the claim made
  * here is still the shape of the product. A surface added to this map that
@@ -192,6 +229,53 @@ const LEFT_BY_THE_DOCK: Record<string, string> = {
   "components/PrinciplesOverlay.tsx": "principles",
   "components/ClaimsOverlay.tsx": "claims",
 };
+
+/**
+ * THE ONE ENTRY ABOVE THAT LEANS ON THE BAR AND IS STILL A SHEET.
+ *
+ * Check 3 asks every destination for `modal={false}`, and the notepad does
+ * not pass it, on purpose and for a reason that is about the material rather
+ * than about navigation: IT HOLDS WORDS NOBODY HAS SAVED YET. The audit's
+ * §2.1(d) wants it harder to leave by accident, not easier — quoting the
+ * reference library's `Dialog` page, *"so the user can't accidentally lose
+ * data by clicking the backdrop"* — and a half-written note is the one thing
+ * on any of these five surfaces that a stray press can destroy.
+ *
+ * SO WHY IS IT NOT THE SAME BUG? Because the thing a person needs to reach
+ * from inside the notepad is in the bar and IS REACHED. Measured in a
+ * browser: from the note's field, one press of Tab lands on the dock. The
+ * walk in `tools/e2e/by-keyboard.ts` has depended on this since it was
+ * written — "the keep is the button in the corner, which is what a person
+ * tabs to" — and it tabs out of the notepad into `waka-dock-tool--keep` to
+ * save without a mouse. The route exists because the notepad is rendered
+ * ABOVE the bar in `Home.tsx`'s source, so the trap's wrap-around sits past
+ * the dock rather than before it.
+ *
+ * THAT IS LUCK, AND IT IS RECORDED HERE AS LUCK. It depends on source order
+ * in a 18,000-line file and on which of the surface's children the trap's own
+ * walk happens to call last; move the composer below the dock and the keep
+ * button becomes unreachable with the keyboard, which is the save gesture
+ * gone rather than a way out gone. The browser walk is what would catch that,
+ * and it is the reason this entry is an exemption with a measurement behind
+ * it rather than a hole.
+ */
+const A_SHEET_ON_PURPOSE: Record<string, string> = {
+  "components/InspirationComposer.tsx":
+    "the notepad holds unsaved words, so it stays a sheet (audit §2.1(d)); its " +
+    "route to the bar is proved by by-keyboard's keeping walk, which tabs from " +
+    "the note's field into the dock's keep tool",
+};
+
+/** A span with its comments taken off, so a prop QUOTED in an argument about
+    the prop is not mistaken for the prop. Three of the four destinations
+    explain `modal={false}` in a comment sitting in the attribute position —
+    read naively, the explanation would satisfy the check that the explanation
+    is about, which is the most embarrassing way for a gate to pass. */
+function code(span: string): string {
+  return span.replace(/\{\/\*[\s\S]*?\*\/\}/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ");
+}
+
+const DECLARES_A_PAGE = /modal=\{false\}/;
 
 /**
  * ═══ AND ONE SURFACE AT A TIME, WHERE A WHOLE FILE IS TOO BLUNT ═════════
@@ -371,6 +455,81 @@ describe("every surface has a way out you can see", () => {
       orphans.map(([file]) => file),
       "these surfaces say the dock is their way out, and the dock does not " +
         "offer them. Either restore the row or give the surface its own exit.",
+    ).toEqual([]);
+  });
+
+  it("leaves the dock reachable from inside every destination that leans on it", () => {
+    /* ═══ CHECK 3 — THE ONE THAT WAS MISSING ═══════════════════════════════
+       The two checks above prove the bar EXISTS while a destination is open.
+       Neither of them, and nothing else in this repository, asked whether a
+       person standing in the destination can GET to it — and for three months
+       they could not: all four rendered `role="dialog"`, `aria-modal` and a
+       Tab trap while this file excused them on the strength of the bar being
+       their way out.
+
+       A source-reading gate cannot walk a focus order, so it holds the one
+       textual fact the focus order follows: a destination says
+       `modal={false}`. That is what `DialogSurface` reads to decide whether
+       to swallow Tab, and it is what would have gone red on the day the bug
+       was written. The press itself belongs to `tools/e2e/by-keyboard.ts`,
+       which opens each destination from the bar with keys alone and counts
+       the presses back — and that walk is named in the failure below, because
+       a gate that reports half a fact should say where the other half is. */
+    const fenced: string[] = [];
+    const fence = (where: string): void => {
+      fenced.push(
+        `${where}: this surface says the dock is its way out and renders as a MODAL.\n` +
+          "    A modal traps Tab and declares aria-modal, so the dock cannot be reached " +
+          "and is not in the accessibility tree — the exemption in LEFT_BY_THE_DOCK is " +
+          "false and this destination has no way out at all.\n" +
+          "    Pass modal={false} to DialogSurface, or give the surface a visible exit of " +
+          "its own. Then prove it with `pnpm e2e:by-keyboard`.",
+      );
+    };
+
+    for (const [file] of Object.entries(LEFT_BY_THE_DOCK)) {
+      if (A_SHEET_ON_PURPOSE[file]) continue;
+      const spans = surfacesIn(readFileSync(join("src", file), "utf8"));
+      /* Every surface in the file, not the first: the archive opens a card
+         sheet inside itself, and a file-keyed exemption that only looked at
+         one span would stop checking the moment a second arrived. */
+      for (const span of spans) {
+        if (!DECLARES_A_PAGE.test(code(span))) fence(file);
+      }
+    }
+
+    /* AND THE PER-SURFACE CLAIMS, where `Home.tsx` makes one. `data-way-out`
+       and `modal={false}` are the same statement said twice — once to this
+       gate and once to the browser — so a surface that says one without the
+       other is telling two different stories about the same exit. */
+    const home = readFileSync(join("src", "pages", "Home.tsx"), "utf8");
+    for (const span of surfacesIn(home)) {
+      const claim = SURFACE_LEFT_BY_DOCK.exec(span);
+      if (!claim) continue;
+      if (!DECLARES_A_PAGE.test(code(span))) fence(`pages/Home.tsx (data-way-out="${claim[1]}")`);
+    }
+
+    expect(fenced, `\n${fenced.join("\n")}\n`).toEqual([]);
+  });
+
+  it("keeps no excuse for being a sheet that no longer leans on the dock", () => {
+    /* THE RATCHET ON CHECK 3'S OWN EXEMPTION, same argument as the two below
+       it: an exemption that outlives its reason excuses nothing while reading
+       as if it does. If the notepad ever stops claiming the dock as its way
+       out, or stops being a surface at all, this entry has to go with it
+       rather than sit here looking considered. */
+    const stale = Object.keys(A_SHEET_ON_PURPOSE).filter((key) => {
+      if (!LEFT_BY_THE_DOCK[key]) return true;
+      try {
+        return !readFileSync(join("src", key), "utf8").includes("<DialogSurface");
+      } catch {
+        return true;
+      }
+    });
+    expect(
+      stale,
+      "these files are excused from declaring themselves pages, and they no " +
+        "longer lean on the dock (or no longer exist). Drop the entry.",
     ).toEqual([]);
   });
 
