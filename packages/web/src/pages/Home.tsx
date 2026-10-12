@@ -10055,44 +10055,38 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     can reach — the dead-press shape this codebase gates
                     against. Edit, Remove, and ask for a new one: the three the
                     founder named. */}
-                {/* ═══ THE VERBS ROW WEARS THE CLASS THAT LAYS IT OUT ══════════
-                    Founder, reading it on dev: the three verbs printed as
-                    "EditRemoveWrite a new one" — one run of text, no gaps.
+                {/* ═══ THE TOP OF MIND IS NOT EDITED FROM UNDER ITSELF ════════
+                    Founder, asked whether Edit / Remove / Write a new one
+                    belong under the reading: "NO."
 
-                    `jar-poster-aside` HAS NO RULE IN ANY STYLESHEET. It was
-                    used exactly once, here, and nothing ever declared it, so
-                    these buttons had no layout: three inline `<button>`s with
-                    `.jar-board-act`'s text styling and nothing to space them.
-                    They were also outside `.jar-board-acts button.jar-board-act`
-                    (`home.css:1239`), so they were in the wrong type register
-                    as well — two faults from one missing class.
+                    WHAT STOOD HERE. Three verbs in a row beneath the
+                    statement — rewrite its wording, drop it, ask for a new
+                    one — on the world's own screen, under the one sentence
+                    this product exists to show you.
 
-                    A CLASS IN THE MARKUP WITH NO RULE IS THE INVERSE OF DEAD
-                    CSS, and nothing looks for it: `dead-css` walks rules and
-                    asks whether anything wears them. This went the other way
-                    and no gate could see it. `one-class-one-thing.test.ts`
-                    now checks both directions — see the case added with this
-                    change. */}
-                <p className="jar-board-acts">
-                  <button
-                    type="button"
-                    className="jar-board-act"
-                    onClick={() => editing.begin("entry", lead.id, lead.body)}
-                  >
-                    {say("worldEditWording")}
-                  </button>
-                  <button type="button" className="jar-board-act" onClick={() => dropLead(lead)}>
-                    {say("worldRemoveLower")}
-                  </button>
-                  <button
-                    type="button"
-                    className="jar-board-act"
-                    disabled={readingChecking}
-                    onClick={() => setBoard({ step: "asking" })}
-                  >
-                    {say("worldWriteANewOne")}
-                  </button>
-                </p>
+                    THEY WERE ALSO BROKEN, WHICH IS HOW THEY WERE FOUND. The
+                    row wore `jar-poster-aside`, a class no stylesheet ever
+                    declared, so the three printed as "EditRemoveWrite a new
+                    one" — one run of text, no gaps, wrong type size. Fixing
+                    the layout is what put them in front of the founder, and
+                    the answer was that they should not be there at all. The
+                    gate from that fix stays: `every-class-is-dressed.test.ts`
+                    catches the next class nothing dresses.
+
+                    WHY THEY DO NOT BELONG. The reading is a thing the product
+                    says TO you, and a row of maintenance verbs under it turns
+                    a statement about your life into a record with an edit
+                    mode. The founder's own ruling on the sibling case says
+                    the same: controls under a statement about you must ANSWER
+                    it, not administer it. Rewriting and discarding are
+                    administration.
+
+                    THE CAPABILITIES ARE NOT DELETED, only this doorway. The
+                    reading is still answered where answering is the subject,
+                    and regeneration still happens where a reading is asked
+                    for. If any of the three turns out to have had no other
+                    door, that is a missing door to put somewhere it reads as
+                    an answer — not a reason to put this row back. */}
               </div>
             ) : null}
             {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
