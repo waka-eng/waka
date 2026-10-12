@@ -97,7 +97,7 @@ try{
     assert.ok((await page.locator('.jar-panel').textContent())?.includes(words));
     await page.screenshot({path:resolve(output,`saved-${size.width}.png`)});
     await page.keyboard.press('Escape');await nav.getByRole('button',{name:'Home',exact:true}).click();
-    await page.locator('.jar-home-activities button').filter({hasText:/Resume review|Review your inspirations/}).click();
+    await page.locator('.jar-home-activities button').filter({hasText:/Revisit your inspirations/}).click();
     const review=page.locator('.jar-review');await review.locator('.jar-review-card').waitFor({state:'visible'});
     const actions=review.locator('.jar-item-actions');assert.equal(await actions.evaluate((node:HTMLDetailsElement)=>node.open),false);
     await actions.locator('summary').press('Enter');assert.equal(await actions.getByRole('button',{name:'Remove',exact:true}).isVisible(),true);

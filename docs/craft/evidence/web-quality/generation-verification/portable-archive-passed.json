@@ -1,0 +1,1170 @@
+{
+  "origin": "https://dev.waka.im",
+  "scenario": "portable",
+  "observedAt": "2026-10-08T21:42:40.919Z",
+  "synthetic": true,
+  "qualificationOverrides": false,
+  "declarationCalls": 0,
+  "corpusDigest": "23d0478acf4eb0f1e37c6f214fd5398dbd0306488eda06aee2c9b2bf97b1a38a",
+  "evaluation": {
+    "allowanceUsd": 5,
+    "priorUsedOrHeldUsd": 4.8576657326,
+    "reservedUsd": 0.14,
+    "newUsedOrHeldUsd": 4.9976657326,
+    "actualDeployedCostUsd": null
+  },
+  "requests": [
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 2044
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1330
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1402
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1296
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1398
+    },
+    {
+      "path": "/api/principles",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 819
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1943
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1916
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1847
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1901
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1839
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1908
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1842
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1841
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1312
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1348
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1331
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1331
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1332
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1313
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1305
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1300
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1327
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1376
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1321
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1339
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1322
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1272
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1271
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1525
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1326
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1436
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1331
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1331
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1401
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1332
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1327
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1401
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1330
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1327
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1300
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1320
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1276
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1275
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1276
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1330
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1340
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1399
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1268
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1325
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1327
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1369
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1398
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1272
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1270
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1348
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1323
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1248
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1422
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1300
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1295
+    },
+    {
+      "path": "/api/signals",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1383
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1772
+    },
+    {
+      "path": "/api/top-of-mind/refresh",
+      "method": "POST",
+      "status": 202,
+      "durationMs": 836
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 605
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 537
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 525
+    },
+    {
+      "path": "/api/top-of-mind",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1737
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1947
+    },
+    {
+      "path": "/api/principles/refresh",
+      "method": "POST",
+      "status": 202,
+      "durationMs": 3610
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1800
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1815
+    },
+    {
+      "path": "/api/principles",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 769
+    },
+    {
+      "path": "/api/principles/:id",
+      "method": "PATCH",
+      "status": 200,
+      "durationMs": 1515
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1816
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1326
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1402
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1304
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1255
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1793
+    },
+    {
+      "path": "/api/top-of-mind/refresh",
+      "method": "POST",
+      "status": 202,
+      "durationMs": 896
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 525
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 534
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 511
+    },
+    {
+      "path": "/api/top-of-mind",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1300
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 2888
+    },
+    {
+      "path": "/api/principles/refresh",
+      "method": "POST",
+      "status": 202,
+      "durationMs": 3503
+    },
+    {
+      "path": "/api/principles/status",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1796
+    },
+    {
+      "path": "/api/principles",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 947
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1025
+    },
+    {
+      "path": "/api/principles/:id/statements",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1014
+    }
+  ],
+  "captures": [
+    {
+      "id": "9314ec2d-7755-4952-9e01-a96005ae2d63",
+      "text": "For freelance notes, I chose plain-text files with an export path. I choose data I can export and keep.",
+      "processing": {
+        "id": "094ed6e2-f860-4eda-a282-dc563b0e5d6c",
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "9314ec2d-7755-4952-9e01-a96005ae2d63",
+        "materialRevision": "1",
+        "jobId": "fa42f1bb-2165-4b0c-a70d-459cea07e165",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "9314ec2d-7755-4952-9e01-a96005ae2d63",
+        "receipt": {
+          "id": "094ed6e2-f860-4eda-a282-dc563b0e5d6c",
+          "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+          "inspirationId": "9314ec2d-7755-4952-9e01-a96005ae2d63",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "processing",
+        "stage": "reading",
+        "runAfter": null,
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "c9a07c53-9c14-4986-a8df-3621948126bd",
+      "text": "For family photos, I chose a service that lets me download the originals. I choose data I can export and keep.",
+      "processing": {
+        "id": "b150d1a8-7795-4fa0-a51f-db1db9ba0b36",
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "c9a07c53-9c14-4986-a8df-3621948126bd",
+        "materialRevision": "1",
+        "jobId": "1f9a637d-d31c-4d7e-8f28-09d99d27ac6d",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "c9a07c53-9c14-4986-a8df-3621948126bd",
+        "receipt": {
+          "id": "b150d1a8-7795-4fa0-a51f-db1db9ba0b36",
+          "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+          "inspirationId": "c9a07c53-9c14-4986-a8df-3621948126bd",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T21:43:00.662Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "47091f07-6a28-4780-973d-9d3abbf54334",
+      "text": "For my budget records, I chose a spreadsheet I can save and move between services. I choose data I can export and keep.",
+      "processing": {
+        "id": "93d6ff97-c56d-4b10-9283-8f31d1f3f384",
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "47091f07-6a28-4780-973d-9d3abbf54334",
+        "materialRevision": "1",
+        "jobId": "a0ef97c0-abb0-46d7-88a9-84ed91e9a4ea",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "47091f07-6a28-4780-973d-9d3abbf54334",
+        "receipt": {
+          "id": "93d6ff97-c56d-4b10-9283-8f31d1f3f384",
+          "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+          "inspirationId": "47091f07-6a28-4780-973d-9d3abbf54334",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T21:43:00.662Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "72a25647-21fd-40dc-8049-e6ef921c2de0",
+      "text": "For a work schedule, I chose a simple calendar I can inspect instead of an opaque platform. I prefer small tools I can understand over complex platforms.",
+      "processing": {
+        "id": "957f8f99-e0a7-481f-ba26-11b64f7505dc",
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "72a25647-21fd-40dc-8049-e6ef921c2de0",
+        "materialRevision": "1",
+        "jobId": "caa9b4ac-b7d9-4ec0-a2c3-decc9f7f20d0",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "72a25647-21fd-40dc-8049-e6ef921c2de0",
+        "receipt": {
+          "id": "957f8f99-e0a7-481f-ba26-11b64f7505dc",
+          "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+          "inspirationId": "72a25647-21fd-40dc-8049-e6ef921c2de0",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T21:43:00.662Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "a39cec41-8099-402e-8781-07beb495cf81",
+      "text": "For a community event, I chose a small spreadsheet with visible formulas instead of a large management suite. I prefer small tools I can understand over complex platforms.",
+      "processing": {
+        "id": "65b2909c-a6f9-41d9-b5e4-ae22b8f84fc6",
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "a39cec41-8099-402e-8781-07beb495cf81",
+        "materialRevision": "1",
+        "jobId": "77983ed7-9fbd-4ebc-a49e-4a9e1405622f",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "a39cec41-8099-402e-8781-07beb495cf81",
+        "receipt": {
+          "id": "65b2909c-a6f9-41d9-b5e4-ae22b8f84fc6",
+          "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+          "inspirationId": "a39cec41-8099-402e-8781-07beb495cf81",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T21:43:00.662Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "ee92b3b5-d796-4a63-a779-df6ba7269be4",
+      "text": "For household planning, I chose a short checklist instead of an automation system I cannot explain. I prefer small tools I can understand over complex platforms.",
+      "processing": {
+        "id": "f9abe2d3-13f1-4587-a57c-d192ff507781",
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "ee92b3b5-d796-4a63-a779-df6ba7269be4",
+        "materialRevision": "1",
+        "jobId": "be6e1b7d-bb72-485a-a516-d314023e80db",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "ee92b3b5-d796-4a63-a779-df6ba7269be4",
+        "receipt": {
+          "id": "f9abe2d3-13f1-4587-a57c-d192ff507781",
+          "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+          "inspirationId": "ee92b3b5-d796-4a63-a779-df6ba7269be4",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T21:43:00.662Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "ca86d5b1-fa69-4134-b816-bcff9eb0e703",
+      "text": "For a subscription, I chose monthly cancellation over extra features tied to an annual contract. I choose an easy exit over extra features that lock me in.",
+      "processing": {
+        "id": "6c526f2c-faba-4c03-8a3a-715c41ffaa91",
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "ca86d5b1-fa69-4134-b816-bcff9eb0e703",
+        "materialRevision": "1",
+        "jobId": "5a915723-9d06-40be-9558-981ddcbeeebe",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "ca86d5b1-fa69-4134-b816-bcff9eb0e703",
+        "receipt": {
+          "id": "6c526f2c-faba-4c03-8a3a-715c41ffaa91",
+          "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+          "inspirationId": "ca86d5b1-fa69-4134-b816-bcff9eb0e703",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T21:43:00.662Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "c957121d-bc9a-499c-8743-0eb01ba2ff99",
+      "text": "For a coworking plan, I chose month-to-month access over amenities tied to a long contract. I choose an easy exit over extra features that lock me in.",
+      "processing": {
+        "id": "48568144-745b-495e-846a-2fde50ca4414",
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "c957121d-bc9a-499c-8743-0eb01ba2ff99",
+        "materialRevision": "1",
+        "jobId": "553f553f-c4bc-483d-a5c8-879dce8e5a84",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "c957121d-bc9a-499c-8743-0eb01ba2ff99",
+        "receipt": {
+          "id": "48568144-745b-495e-846a-2fde50ca4414",
+          "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+          "inspirationId": "c957121d-bc9a-499c-8743-0eb01ba2ff99",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T21:43:00.662Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "3443a996-0c98-47ad-9b7a-54f9e88ce119",
+      "text": "For a newsletter service, I chose clean cancellation over features requiring a long commitment. I choose an easy exit over extra features that lock me in.",
+      "processing": {
+        "id": "7e8f808c-0674-4192-85c5-e00f7e3160ee",
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "3443a996-0c98-47ad-9b7a-54f9e88ce119",
+        "materialRevision": "1",
+        "jobId": "c16a651d-8e06-4387-be92-041b19256b11",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "3443a996-0c98-47ad-9b7a-54f9e88ce119",
+        "receipt": {
+          "id": "7e8f808c-0674-4192-85c5-e00f7e3160ee",
+          "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+          "inspirationId": "3443a996-0c98-47ad-9b7a-54f9e88ce119",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T21:43:00.662Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "2deeb76c-8df7-43de-a797-ae1ba1a477d2",
+      "text": "For a new writing app, I chose an exportable folder I can keep without the subscription. I choose data I can export and keep.",
+      "processing": {
+        "id": "7e3cceba-c699-4e75-82c2-bb4d9873acd0",
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "2deeb76c-8df7-43de-a797-ae1ba1a477d2",
+        "materialRevision": "1",
+        "jobId": "ff8e8209-895d-41f9-abd5-64783c9472f8",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+        "inspirationId": "2deeb76c-8df7-43de-a797-ae1ba1a477d2",
+        "receipt": {
+          "id": "7e3cceba-c699-4e75-82c2-bb4d9873acd0",
+          "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+          "inspirationId": "2deeb76c-8df7-43de-a797-ae1ba1a477d2",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T21:45:39.579Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "first inspiration derived",
+      "attempts": 4,
+      "at": "2026-10-08T21:43:01.367Z"
+    },
+    {
+      "label": "all nine inspirations derived",
+      "attempts": 25,
+      "at": "2026-10-08T21:45:31.900Z"
+    },
+    {
+      "label": "evidence checks settled before current reading completed",
+      "attempts": 1,
+      "at": "2026-10-08T21:45:35.060Z"
+    },
+    {
+      "label": "current reading completed",
+      "attempts": 3,
+      "at": "2026-10-08T21:45:43.572Z"
+    },
+    {
+      "label": "eligible Principle completed",
+      "attempts": 2,
+      "at": "2026-10-08T21:45:57.490Z"
+    },
+    {
+      "label": "additional evidence derived",
+      "attempts": 4,
+      "at": "2026-10-08T21:46:15.898Z"
+    },
+    {
+      "label": "evidence checks settled before reading after additional evidence completed",
+      "attempts": 1,
+      "at": "2026-10-08T21:46:17.694Z"
+    },
+    {
+      "label": "reading after additional evidence completed",
+      "attempts": 3,
+      "at": "2026-10-08T21:46:26.172Z"
+    },
+    {
+      "label": "Principles after additional evidence completed",
+      "attempts": 1,
+      "at": "2026-10-08T21:46:35.665Z"
+    }
+  ],
+  "signals": [
+    {
+      "id": "e06df4d3-148b-42ba-9e45-60ee05e1d675",
+      "inspirationIds": [
+        "ca86d5b1-fa69-4134-b816-bcff9eb0e703",
+        "c957121d-bc9a-499c-8743-0eb01ba2ff99",
+        "3443a996-0c98-47ad-9b7a-54f9e88ce119"
+      ],
+      "statement": "I choose an easy exit over extra features that lock me in.",
+      "status": "active",
+      "confidence": 42,
+      "evidenceCount": 3,
+      "lastEvidenceAt": "2026-10-08T21:43:15.626Z",
+      "locked": false,
+      "unsupported": false,
+      "dismissed": false,
+      "contested": false,
+      "yielded": false,
+      "sharedGroupIds": [],
+      "createdAt": "2026-10-08T21:42:53.536Z"
+    },
+    {
+      "id": "bbe95500-87f8-4b0d-ba3f-e57b456750bd",
+      "inspirationIds": [
+        "72a25647-21fd-40dc-8049-e6ef921c2de0",
+        "a39cec41-8099-402e-8781-07beb495cf81",
+        "ee92b3b5-d796-4a63-a779-df6ba7269be4"
+      ],
+      "statement": "I prefer small tools I can understand over complex platforms.",
+      "status": "active",
+      "confidence": 42,
+      "evidenceCount": 3,
+      "lastEvidenceAt": "2026-10-08T21:43:10.031Z",
+      "locked": false,
+      "unsupported": false,
+      "dismissed": false,
+      "contested": false,
+      "yielded": false,
+      "sharedGroupIds": [],
+      "createdAt": "2026-10-08T21:43:20.835Z"
+    },
+    {
+      "id": "74ece578-1156-439a-8dbf-14b8a524c063",
+      "inspirationIds": [
+        "9314ec2d-7755-4952-9e01-a96005ae2d63",
+        "c9a07c53-9c14-4986-a8df-3621948126bd",
+        "47091f07-6a28-4780-973d-9d3abbf54334"
+      ],
+      "statement": "I choose data I can export and keep.",
+      "status": "active",
+      "confidence": 42,
+      "evidenceCount": 3,
+      "lastEvidenceAt": "2026-10-08T21:43:04.369Z",
+      "locked": false,
+      "unsupported": false,
+      "dismissed": false,
+      "contested": false,
+      "yielded": false,
+      "sharedGroupIds": [],
+      "createdAt": "2026-10-08T21:43:51.759Z"
+    }
+  ],
+  "reading": {
+    "id": "471428ac-02a8-4b77-9c38-997f3d309026",
+    "version": 3,
+    "reason": "regenerated",
+    "createdAt": "2026-10-08T21:46:21.887Z",
+    "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+    "generationRevision": "61",
+    "supportChanged": false,
+    "entries": [
+      {
+        "id": "924e9094-49fd-40b9-97b5-5ad359b7a458",
+        "type": "pattern",
+        "body": "You choose data you can export and keep.",
+        "belief": null,
+        "prompt": null,
+        "locked": false,
+        "pinned": false,
+        "dismissed": false,
+        "sortOrder": 0,
+        "citedSignals": [
+          {
+            "id": "74ece578-1156-439a-8dbf-14b8a524c063",
+            "statement": "I choose data I can export and keep.",
+            "statementRevision": "1",
+            "answered": false,
+            "locked": false,
+            "contested": false
+          }
+        ],
+        "createdAt": "2026-10-08T21:46:21.887Z",
+        "supportChanged": false
+      }
+    ]
+  },
+  "principles": [
+    {
+      "id": "d3064358-9a9d-4fb3-8f2e-80005cb9dd78",
+      "statement": "Choose tools I can understand, export from, and leave when my needs change.",
+      "statementRevision": "2",
+      "type": "stance",
+      "state": "held",
+      "origin": "minted",
+      "rank": 1,
+      "locked": true,
+      "unsupported": false,
+      "supportChanged": true,
+      "heldSince": "2026-10-08T21:45:43.182Z",
+      "conflictsWithId": null,
+      "citedSignals": [],
+      "createdAt": "2026-10-08T21:45:51.688Z",
+      "disputeId": null
+    }
+  ],
+  "failure": null,
+  "cleanup": true,
+  "profileId": "7c0c0a34-e448-4b1d-b778-6ca551a81b81",
+  "startedAt": "2026-10-08T21:42:44.879Z",
+  "singleSourceControl": {
+    "principles": 0
+  },
+  "principleState": {
+    "phase": "ready",
+    "eligible": true,
+    "supportPending": false,
+    "restricted": false,
+    "signalCount": 3,
+    "topOfMindCount": 2
+  },
+  "readingState": {
+    "requestVersion": "2",
+    "completedVersion": "2",
+    "status": "succeeded",
+    "runAfter": null,
+    "result": {
+      "kind": "top_of_mind",
+      "topOfMindId": "471428ac-02a8-4b77-9c38-997f3d309026",
+      "version": 3,
+      "outcome": "changed"
+    }
+  },
+  "generatedPrinciples": [
+    {
+      "id": "d3064358-9a9d-4fb3-8f2e-80005cb9dd78",
+      "statement": "Before committing to a tool or platform, prefer the option you can leave and take your data with you over one that adds features by holding you in.",
+      "statementRevision": "1",
+      "type": "stance",
+      "state": "held",
+      "origin": "minted",
+      "rank": 1,
+      "locked": false,
+      "unsupported": false,
+      "supportChanged": false,
+      "heldSince": "2026-10-08T21:45:43.182Z",
+      "conflictsWithId": null,
+      "citedSignals": [
+        {
+          "id": "e06df4d3-148b-42ba-9e45-60ee05e1d675",
+          "statement": "I choose an easy exit over extra features that lock me in.",
+          "examples": [
+            {
+              "text": "For a newsletter service, I chose clean cancellation over features requiring a long commitment. I choose an easy exit over extra features that lock me in.",
+              "createdAt": "2026-10-08T21:43:15.626Z"
+            },
+            {
+              "text": "For a coworking plan, I chose month-to-month access over amenities tied to a long contract. I choose an easy exit over extra features that lock me in.",
+              "createdAt": "2026-10-08T21:43:13.727Z"
+            }
+          ],
+          "reviewExamples": []
+        },
+        {
+          "id": "bbe95500-87f8-4b0d-ba3f-e57b456750bd",
+          "statement": "I prefer small tools I can understand over complex platforms.",
+          "examples": [
+            {
+              "text": "For household planning, I chose a short checklist instead of an automation system I cannot explain. I prefer small tools I can understand over complex platforms.",
+              "createdAt": "2026-10-08T21:43:10.031Z"
+            },
+            {
+              "text": "For a community event, I chose a small spreadsheet with visible formulas instead of a large management suite. I prefer small tools I can understand over complex platforms.",
+              "createdAt": "2026-10-08T21:43:08.141Z"
+            }
+          ],
+          "reviewExamples": []
+        },
+        {
+          "id": "74ece578-1156-439a-8dbf-14b8a524c063",
+          "statement": "I choose data I can export and keep.",
+          "examples": [
+            {
+              "text": "For my budget records, I chose a spreadsheet I can save and move between services. I choose data I can export and keep.",
+              "createdAt": "2026-10-08T21:43:04.369Z"
+            },
+            {
+              "text": "For family photos, I chose a service that lets me download the originals. I choose data I can export and keep.",
+              "createdAt": "2026-10-08T21:43:02.420Z"
+            }
+          ],
+          "reviewExamples": []
+        }
+      ],
+      "createdAt": "2026-10-08T21:45:51.688Z",
+      "disputeId": null
+    }
+  ],
+  "humanEdit": {
+    "id": "d3064358-9a9d-4fb3-8f2e-80005cb9dd78",
+    "statement": "Choose tools I can understand, export from, and leave when my needs change.",
+    "locked": true,
+    "regenerationPreserved": true
+  },
+  "rawWordsPreserved": true,
+  "wordingHistoryPreserved": true,
+  "deployedPrincipleVisible": true,
+  "finishedAt": "2026-10-08T21:46:46.722Z"
+}
