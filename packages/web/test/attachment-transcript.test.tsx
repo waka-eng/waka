@@ -23,7 +23,7 @@ beforeEach(() => {
   });
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); });
-const mount = () => act(async () => root.render(<AttachmentTranscript id="audio" />));
+const mount = () => act(async () => root.render(<AttachmentTranscript id="audio" locale="en-US" />));
 const button = (text: string) => [...host.querySelectorAll('button')].find(item => item.textContent === text)!;
 const click = (text: string) => act(async () => button(text).click());
 async function write(value: string) {
@@ -76,7 +76,7 @@ it('does not offer editing to a read-only viewer', async () => {
 });
 it('can show an owned transcript in a read-only review without losing edits to card navigation',async()=>{
   current={...current,canRetry:true};
-  await act(async()=>root.render(<AttachmentTranscript id="audio" readOnly/>));
+  await act(async()=>root.render(<AttachmentTranscript id="audio" locale="en-US" readOnly/>));
   expect(host.textContent).toContain('Machine transcript');expect(button('Edit transcript')).toBeUndefined();expect(button('Retry transcription')).toBeUndefined();
   expect(correctAttachmentTranscript).not.toHaveBeenCalled();expect(retryAttachmentTranscript).not.toHaveBeenCalled();
 });

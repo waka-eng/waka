@@ -20,6 +20,34 @@
  * every other walk runs against a dev build where a fixture wins instead.
  *
  * One function now, two callers. The next divergence has to be deliberate.
+ *
+ * ── THE LOCALE IS NOT OPTIONAL, AND IT USED TO BE ─────────────────────────
+ *
+ * Both functions below took `locale: SupportedLocale = "en-US"`. That default
+ * is the whole of a localisation bug written as a convenience: omit the third
+ * argument and the function still compiles, still returns a sentence, still
+ * reads like working code — and a Korean reader gets
+ *
+ *     저장되지 않았어요 — The server could not be reached.
+ *
+ * half a sentence in each language, with `worldWhyUnreachable`'s Korean row
+ * sitting in the catalogue two inches away and unreachable. There is no
+ * caller for whom English-regardless is the right answer: every surface that
+ * speaks a failure already holds the reader's locale, because it needed one
+ * to write its own fallback clause.
+ *
+ * SO THE PARAMETER IS REQUIRED. This is deliberately not a test. A test can
+ * only fail on the call sites it thought to look at, and the failure mode here
+ * is a NEW call site written next year by someone who never read this file —
+ * exactly the shape a test cannot cover and a type can. `tsc --noEmit` now
+ * refuses the omission at the call site, in the editor, before the code runs:
+ * the strongest form of this guarantee available, and the reason no gate was
+ * added beside it.
+ *
+ * The default was also load-bearing in the wrong direction — it made the
+ * *absence* of a locale indistinguishable from a deliberate "say this in
+ * English", so no reader of a call site could tell which had been meant.
+ * Required means every call site states its answer.
  */
 import { ApiError } from "./api";
 import { formatMessage, t, type SupportedLocale } from "./locales";
@@ -29,8 +57,15 @@ import { formatMessage, t, type SupportedLocale } from "./locales";
  * discipline beyond what each case needs. Empty string when there is nothing
  * to add beyond the caller's own words. Speaks the caller's locale; the
  * server's own message stays as the server said it.
+ *
+ * ONE PART OF THIS STAYS ENGLISH AND HAS TO. `worldWhyServerSaidNo` embeds
+ * `{message}`, which is whatever the API client threw — written in English in
+ * `lib/api`, and deliberately so: `copy.test.ts` records that those strings
+ * are copy precisely because this function puts them on screen. Translating
+ * them is a separate job in a separate package. What this function owes the
+ * reader is that every word IT chooses is in their language.
  */
-export function whyOf(err: unknown, locale: SupportedLocale = "en-US"): string {
+export function whyOf(err: unknown, locale: SupportedLocale): string {
   if (err instanceof ApiError) {
     if (err.status === 0) return t(locale, "worldWhyUnreachable");
     if (err.status === 401) return t(locale, "worldWhySignedOut");
@@ -55,7 +90,7 @@ export function whyOf(err: unknown, locale: SupportedLocale = "en-US"): string {
 export function whyFailed(
   err: unknown,
   fallback: string,
-  locale: SupportedLocale = "en-US",
+  locale: SupportedLocale,
 ): string {
   const why = whyOf(err, locale);
   if (why === "") return fallback;
