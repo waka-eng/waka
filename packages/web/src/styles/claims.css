@@ -5233,12 +5233,44 @@
    happening to live inside the right list — and the review's own point
    stands: the pair's whole specification is "each asks twice", which is
    a behaviour, so both halves of the pair had better look the same. */
+/* ═══ RESTORED AFTER A BOTCHED DELETION (2026-10-12) ═══════════════════
+   `.waka-settings-keep` was the LAST SELECTOR OF THIS LIST as well as
+   having a block of its own further down. Removing it by searching for
+   `.waka-settings-keep {` found the list's closing selector, and
+   brace-matching from there swallowed this entire declaration block — so
+   the three selectors above lost their rule and were spliced onto the
+   `:hover, :focus-visible` rule below.
+
+   MEASURED DAMAGE, in a browser, before this was put back: the add button
+   went 94x44 -> 60x40 and the two row buttons 60x44 -> 47x21, radius
+   999px -> 0, padding 14px -> 6px. The 44px floor this product rules for
+   an act was gone from three live controls, and FOCUS SHOWED NOTHING —
+   `outline: none` with no brightening, which makes `layers.css`'s claim
+   that "0 of 224 stops went from having an indicator to having none" false
+   the moment it shipped.
+
+   THE SAME MISTAKE THREE OTHER AGENTS WERE WARNED ABOUT TONIGHT, made by
+   the one giving the warning: anchor a CSS deletion on a selector and you
+   anchor it on whichever occurrence the search finds first. The rule is to
+   anchor on the LAST thing you mean to remove and re-read around the cut.
+   Nothing caught it — `dead-css.ts` is report-only, the vitest suite does
+   not walk stylesheets, and `one-class-one-thing.test.ts` has no opinion
+   about a rule that is MISSING. */
 .waka-settings-rows button,
 .waka-settings-add button,
-.waka-settings-erase,
-/* THE ONE FILLED CONTROL IN THE PANEL, matching the bar's keep and the
-   chat's send: a product with one primary action per surface draws it the
-   same way everywhere. */
+.waka-settings-erase {
+  flex: 0 0 auto;
+  min-height: var(--waka-corner);
+  padding: 0 var(--sp-14);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  cursor: pointer;
+}
+
 /* NO RED. "Colour temperature means aliveness and is not spent on
    warnings" — this file's own rule. What marks the destructive pair is
    that each asks twice, which is a behaviour rather than a hue. */
