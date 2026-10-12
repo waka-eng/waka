@@ -1,0 +1,162 @@
+{
+  "reserveUsd": 0.02,
+  "priorUsedOrHeldUsd": 4.8443614706,
+  "requests": [
+    {
+      "phase": "received",
+      "costUsd": 0.00035155,
+      "status": 200,
+      "usage": {
+        "prompt_tokens": 1319,
+        "completion_tokens": 135,
+        "total_tokens": 1454,
+        "cost": 0.00035155,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.00035155,
+          "upstream_inference_prompt_cost": 0.0002638,
+          "upstream_inference_completions_cost": 0.00008775
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "output": "{\"statements\": [{\"statement\": \"I keep commitments small enough to honor existing promises.\", \"quote\": \"I keep commitments small enough to honor existing promises.\", \"relatedEvidence\": [{\"inspirationId\": \"a3689f1e-df42-4810-aedf-0fc635d5f89c\", \"quote\": \"I keep commitments small enough to honor existing promises.\"}, {\"inspirationId\": \"ba794cec-cd0c-4ead-83e7-5c7b44e476f4\", \"quote\": \"I keep commitments small enough to honor existing promises.\"} ]}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.0006333,
+      "status": 200,
+      "usage": {
+        "prompt_tokens": 1103,
+        "completion_tokens": 252,
+        "total_tokens": 1355,
+        "cost": 0.0006333,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0006333,
+          "upstream_inference_prompt_cost": 0.0003309,
+          "upstream_inference_completions_cost": 0.0003024
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "output": "{\n  \"statements\": [\n    {\n      \"statement\": \"저는 이미 한 약속을 지킬 수 있을 만큼 일을 작게 맡아요.\",\n      \"reason\": \"가족 일을 맡을 때 전체가 아니라 감당할 수 있는 한 부분만 맡았고, 이 원칙을 직접 말한다. 직장과 봉사활동에서도 같은 문장이 반복되어, 특정 상황이 아니라 되풀이되는 선택 규칙이다.\",\n      \"relatedEvidence\": [\n        {\n          \"inspirationId\": \"a3689f1e-df42-4810-aedf-0fc635d5f89c\",\n          \"quote\": \"저는 이미 한 약속을 지킬 수 있을 만큼 일을 작게 맡아요.\"\n        },\n        {\n          \"inspirationId\": \"ba794cec-cd0c-4ead-83e7-5c7b44e476f4\",\n          \"quote\": \"저는 이미 한 약속을 지킬 수 있을 만큼 일을 작게 맡아요.\"\n        }\n      ]\n    }\n  ]\n}"
+    }
+  ],
+  "results": [
+    {
+      "id": "commitments-en",
+      "input": {
+        "profileId": "synthetic-probe",
+        "preferredLocale": "en-US",
+        "inspiration": {
+          "id": "51223d23-4250-45bd-b4ff-37cac76efb4b",
+          "text": "For a family project, I accepted one manageable part rather than promising the whole job. I keep commitments small enough to honor existing promises.",
+          "source": "app",
+          "createdAt": "2026-10-08T19:44:00.000Z"
+        },
+        "reflections": [],
+        "attachments": [],
+        "existingStatements": [],
+        "relatedInspirations": [
+          {
+            "id": "a3689f1e-df42-4810-aedf-0fc635d5f89c",
+            "text": "At work, I declined an extra task until I could finish an existing promise. I keep commitments small enough to honor existing promises.",
+            "createdAt": "2026-10-08T19:43:00.000Z"
+          },
+          {
+            "id": "ba794cec-cd0c-4ead-83e7-5c7b44e476f4",
+            "text": "While volunteering, I offered one hour rather than a whole weekend so I could keep plans already made. I keep commitments small enough to honor existing promises.",
+            "createdAt": "2026-10-08T19:43:00.000Z"
+          }
+        ]
+      },
+      "output": {
+        "statements": [
+          {
+            "statement": "I keep commitments small enough to honor existing promises.",
+            "quote": "I keep commitments small enough to honor existing promises.",
+            "relatedEvidence": [
+              {
+                "inspirationId": "a3689f1e-df42-4810-aedf-0fc635d5f89c",
+                "quote": "I keep commitments small enough to honor existing promises."
+              },
+              {
+                "inspirationId": "ba794cec-cd0c-4ead-83e7-5c7b44e476f4",
+                "quote": "I keep commitments small enough to honor existing promises."
+              }
+            ]
+          }
+        ]
+      },
+      "semanticReview": "pending"
+    },
+    {
+      "id": "commitments-ko",
+      "input": {
+        "profileId": "synthetic-probe",
+        "preferredLocale": "ko-KR",
+        "inspiration": {
+          "id": "51223d23-4250-45bd-b4ff-37cac76efb4b",
+          "text": "가족 일을 맡을 때 전체를 약속하기보다 감당할 수 있는 한 부분만 맡았어요. 저는 이미 한 약속을 지킬 수 있을 만큼 일을 작게 맡아요.",
+          "source": "app",
+          "createdAt": "2026-10-08T19:44:00.000Z"
+        },
+        "reflections": [],
+        "attachments": [],
+        "existingStatements": [],
+        "relatedInspirations": [
+          {
+            "id": "a3689f1e-df42-4810-aedf-0fc635d5f89c",
+            "text": "직장에서 기존 약속을 마칠 때까지 새 일을 맡지 않았어요. 저는 이미 한 약속을 지킬 수 있을 만큼 일을 작게 맡아요.",
+            "createdAt": "2026-10-08T19:43:00.000Z"
+          },
+          {
+            "id": "ba794cec-cd0c-4ead-83e7-5c7b44e476f4",
+            "text": "봉사활동에서 주말 전체가 아니라 한 시간만 도와주기로 했어요. 저는 이미 한 약속을 지킬 수 있을 만큼 일을 작게 맡아요.",
+            "createdAt": "2026-10-08T19:43:00.000Z"
+          }
+        ]
+      },
+      "output": {
+        "statements": [
+          {
+            "statement": "저는 이미 한 약속을 지킬 수 있을 만큼 일을 작게 맡아요.",
+            "reason": "가족 일을 맡을 때 전체가 아니라 감당할 수 있는 한 부분만 맡았고, 이 원칙을 직접 말한다. 직장과 봉사활동에서도 같은 문장이 반복되어, 특정 상황이 아니라 되풀이되는 선택 규칙이다.",
+            "relatedEvidence": [
+              {
+                "inspirationId": "a3689f1e-df42-4810-aedf-0fc635d5f89c",
+                "quote": "저는 이미 한 약속을 지킬 수 있을 만큼 일을 작게 맡아요."
+              },
+              {
+                "inspirationId": "ba794cec-cd0c-4ead-83e7-5c7b44e476f4",
+                "quote": "저는 이미 한 약속을 지킬 수 있을 만큼 일을 작게 맡아요."
+              }
+            ]
+          }
+        ]
+      },
+      "semanticReview": "pending"
+    }
+  ],
+  "costUsd": 0.00098485,
+  "complete": true
+}

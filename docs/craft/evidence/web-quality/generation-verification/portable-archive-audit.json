@@ -1,0 +1,1956 @@
+{
+  "stage": "development",
+  "observedAt": "2026-10-08T21:50:34.253Z",
+  "failures": [],
+  "configurationReads": [
+    {
+      "role": "api",
+      "read": true
+    },
+    {
+      "role": "worker",
+      "read": true
+    }
+  ],
+  "configuration": {
+    "stage": "development",
+    "trustedOrigins": true,
+    "secureCookies": true,
+    "fixtureOverridesAbsent": true,
+    "approvedGenerationModel": true,
+    "proxyTopologyDeclared": false,
+    "proxyTopologyVerified": false,
+    "databaseIsolationVerified": false,
+    "providerPrivacyVerified": false,
+    "monetaryLimitsVerified": false,
+    "apiWorkerDatabaseIdentical": true,
+    "chatModelsMatch": true,
+    "restrictivePrivacyOverrides": false
+  },
+  "logs": [
+    {
+      "role": "api",
+      "kind": "timing",
+      "read": true,
+      "pagesRead": 1,
+      "partialPage": false,
+      "cursorRepeated": false,
+      "samples": 0,
+      "readings": []
+    },
+    {
+      "role": "api",
+      "kind": "recovery",
+      "read": true,
+      "pagesRead": 1,
+      "partialPage": false,
+      "cursorRepeated": false,
+      "samples": 0,
+      "readings": []
+    },
+    {
+      "role": "api",
+      "kind": "usage",
+      "read": true,
+      "pagesRead": 1,
+      "partialPage": false,
+      "cursorRepeated": false,
+      "samples": 0,
+      "readings": []
+    },
+    {
+      "role": "api",
+      "kind": "runtime",
+      "read": true,
+      "pagesRead": 3,
+      "partialPage": false,
+      "cursorRepeated": false,
+      "samples": 107,
+      "readings": [
+        {
+          "durationMs": 72.38,
+          "cold": true,
+          "initMs": 617.63
+        },
+        {
+          "durationMs": 1752.37,
+          "cold": false
+        },
+        {
+          "durationMs": 437.94,
+          "cold": false
+        },
+        {
+          "durationMs": 1929.27,
+          "cold": false
+        },
+        {
+          "durationMs": 1219.77,
+          "cold": false
+        },
+        {
+          "durationMs": 1216.09,
+          "cold": false
+        },
+        {
+          "durationMs": 1216.57,
+          "cold": false
+        },
+        {
+          "durationMs": 1220.89,
+          "cold": false
+        },
+        {
+          "durationMs": 663.55,
+          "cold": false
+        },
+        {
+          "durationMs": 1772.17,
+          "cold": false
+        },
+        {
+          "durationMs": 1751.92,
+          "cold": false
+        },
+        {
+          "durationMs": 1736.65,
+          "cold": false
+        },
+        {
+          "durationMs": 1791.22,
+          "cold": false
+        },
+        {
+          "durationMs": 1732.6,
+          "cold": false
+        },
+        {
+          "durationMs": 1730.73,
+          "cold": false
+        },
+        {
+          "durationMs": 1735.04,
+          "cold": false
+        },
+        {
+          "durationMs": 1733.98,
+          "cold": false
+        },
+        {
+          "durationMs": 1213.57,
+          "cold": false
+        },
+        {
+          "durationMs": 1214.32,
+          "cold": false
+        },
+        {
+          "durationMs": 1213.14,
+          "cold": false
+        },
+        {
+          "durationMs": 1216.53,
+          "cold": false
+        },
+        {
+          "durationMs": 1215.54,
+          "cold": false
+        },
+        {
+          "durationMs": 1217.13,
+          "cold": false
+        },
+        {
+          "durationMs": 1212.68,
+          "cold": false
+        },
+        {
+          "durationMs": 1226.8,
+          "cold": false
+        },
+        {
+          "durationMs": 1213.92,
+          "cold": false
+        },
+        {
+          "durationMs": 1213.92,
+          "cold": false
+        },
+        {
+          "durationMs": 1215.54,
+          "cold": false
+        },
+        {
+          "durationMs": 1215.19,
+          "cold": false
+        },
+        {
+          "durationMs": 1215.88,
+          "cold": false
+        },
+        {
+          "durationMs": 1215.96,
+          "cold": false
+        },
+        {
+          "durationMs": 1213.45,
+          "cold": false
+        },
+        {
+          "durationMs": 1215.76,
+          "cold": false
+        },
+        {
+          "durationMs": 1215.07,
+          "cold": false
+        },
+        {
+          "durationMs": 1214.3,
+          "cold": false
+        },
+        {
+          "durationMs": 1214.67,
+          "cold": false
+        },
+        {
+          "durationMs": 1218.43,
+          "cold": false
+        },
+        {
+          "durationMs": 1213.47,
+          "cold": false
+        },
+        {
+          "durationMs": 1216.72,
+          "cold": false
+        },
+        {
+          "durationMs": 1217.73,
+          "cold": false
+        },
+        {
+          "durationMs": 1215.53,
+          "cold": false
+        },
+        {
+          "durationMs": 1214.99,
+          "cold": false
+        },
+        {
+          "durationMs": 1217.54,
+          "cold": false
+        },
+        {
+          "durationMs": 1216.6,
+          "cold": false
+        },
+        {
+          "durationMs": 1215.07,
+          "cold": false
+        },
+        {
+          "durationMs": 1216.29,
+          "cold": false
+        },
+        {
+          "durationMs": 1214.9,
+          "cold": false
+        },
+        {
+          "durationMs": 1214.97,
+          "cold": false
+        },
+        {
+          "durationMs": 1213.84,
+          "cold": false
+        },
+        {
+          "durationMs": 1213.96,
+          "cold": false
+        },
+        {
+          "durationMs": 1215.78,
+          "cold": false
+        },
+        {
+          "durationMs": 1212.89,
+          "cold": false
+        },
+        {
+          "durationMs": 1215.29,
+          "cold": false
+        },
+        {
+          "durationMs": 1214.4,
+          "cold": false
+        },
+        {
+          "durationMs": 1213.18,
+          "cold": false
+        },
+        {
+          "durationMs": 1220.05,
+          "cold": false
+        },
+        {
+          "durationMs": 1213.7,
+          "cold": false
+        },
+        {
+          "durationMs": 1212.52,
+          "cold": false
+        },
+        {
+          "durationMs": 1213.29,
+          "cold": false
+        },
+        {
+          "durationMs": 1212.09,
+          "cold": false
+        },
+        {
+          "durationMs": 1189.79,
+          "cold": false
+        },
+        {
+          "durationMs": 1200.54,
+          "cold": false
+        },
+        {
+          "durationMs": 1190.63,
+          "cold": false
+        },
+        {
+          "durationMs": 1192.91,
+          "cold": false
+        },
+        {
+          "durationMs": 1267.01,
+          "cold": false
+        },
+        {
+          "durationMs": 1704.86,
+          "cold": false
+        },
+        {
+          "durationMs": 728.65,
+          "cold": false
+        },
+        {
+          "durationMs": 423.96,
+          "cold": false
+        },
+        {
+          "durationMs": 423.07,
+          "cold": false
+        },
+        {
+          "durationMs": 424.66,
+          "cold": false
+        },
+        {
+          "durationMs": 1610.83,
+          "cold": false
+        },
+        {
+          "durationMs": 1803.16,
+          "cold": false
+        },
+        {
+          "durationMs": 3495.06,
+          "cold": false
+        },
+        {
+          "durationMs": 1690.48,
+          "cold": false
+        },
+        {
+          "durationMs": 1688.13,
+          "cold": false
+        },
+        {
+          "durationMs": 647.96,
+          "cold": false
+        },
+        {
+          "durationMs": 1413.42,
+          "cold": false
+        },
+        {
+          "durationMs": 1701.64,
+          "cold": false
+        },
+        {
+          "durationMs": 1193.41,
+          "cold": false
+        },
+        {
+          "durationMs": 1190.81,
+          "cold": false
+        },
+        {
+          "durationMs": 1191.2,
+          "cold": false
+        },
+        {
+          "durationMs": 1193.85,
+          "cold": false
+        },
+        {
+          "durationMs": 1686.56,
+          "cold": false
+        },
+        {
+          "durationMs": 731.17,
+          "cold": false
+        },
+        {
+          "durationMs": 424.45,
+          "cold": false
+        },
+        {
+          "durationMs": 423.33,
+          "cold": false
+        },
+        {
+          "durationMs": 423.35,
+          "cold": false
+        },
+        {
+          "durationMs": 1193.72,
+          "cold": false
+        },
+        {
+          "durationMs": 2809.05,
+          "cold": false
+        },
+        {
+          "durationMs": 3396.24,
+          "cold": false
+        },
+        {
+          "durationMs": 1689.19,
+          "cold": false
+        },
+        {
+          "durationMs": 647.89,
+          "cold": false
+        },
+        {
+          "durationMs": 847.9,
+          "cold": false
+        },
+        {
+          "durationMs": 771.84,
+          "cold": false
+        },
+        {
+          "durationMs": 425.38,
+          "cold": false
+        },
+        {
+          "durationMs": 1261.52,
+          "cold": false
+        },
+        {
+          "durationMs": 1014.16,
+          "cold": true,
+          "initMs": 500.65
+        },
+        {
+          "durationMs": 1202.34,
+          "cold": true,
+          "initMs": 464.83
+        },
+        {
+          "durationMs": 1163.91,
+          "cold": true,
+          "initMs": 624.1
+        },
+        {
+          "durationMs": 1393.91,
+          "cold": true,
+          "initMs": 618.86
+        },
+        {
+          "durationMs": 1673.79,
+          "cold": true,
+          "initMs": 638.21
+        },
+        {
+          "durationMs": 628.47,
+          "cold": false
+        },
+        {
+          "durationMs": 1056.07,
+          "cold": false
+        },
+        {
+          "durationMs": 1410.56,
+          "cold": false
+        },
+        {
+          "durationMs": 351.24,
+          "cold": false
+        },
+        {
+          "durationMs": 1297.44,
+          "cold": false
+        },
+        {
+          "durationMs": 118.59,
+          "cold": false
+        }
+      ]
+    },
+    {
+      "role": "worker",
+      "kind": "timing",
+      "read": true,
+      "pagesRead": 3,
+      "partialPage": false,
+      "cursorRepeated": false,
+      "samples": 158,
+      "readings": [
+        {
+          "stage": "queue_wait",
+          "durationMs": 1686,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 578,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 263,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1250,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 203,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 578,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 693,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 3858,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1371,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 1499,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 578,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 578,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 1524,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 730,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 254,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 1471,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 713,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 635,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 711,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 699,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 211,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 631,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 227,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 630,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 922,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 2209,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 1700,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 240,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 636,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 634,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 712,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 1444,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 633,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 4248,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 713,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 654,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 712,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 1446,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 319,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 648,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 648,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 228,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 631,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 1461,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 811,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 630,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 183,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 364,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 632,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 601,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 208,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 575,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 633,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 175,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 1265,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 2477,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 188,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 219,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1177,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1241,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 222,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 923,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 648,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 178,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 1815,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 7627,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 721,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 718,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 1936,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 14669,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 714,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 630,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 307,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 2017,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 711,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 11418,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 650,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 1846,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 2830,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 711,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 578,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 2941,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 647,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 711,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 233,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 711,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 710,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 206,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1808,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 180,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 341,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 1872,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 2292,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 183,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 7743,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 578,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 712,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 2276,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1609,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 7371,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 849,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 692,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 13583,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1851,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 578,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 578,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 693,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 7628,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1288,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 578,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1086,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 234,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 577,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 1846,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 447,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1486,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 3251,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1544,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 392,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 1445,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 579,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 234,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1043,
+          "outcome": "ok"
+        },
+        {
+          "stage": "embedding",
+          "durationMs": 226,
+          "outcome": "ok"
+        },
+        {
+          "stage": "material_read",
+          "durationMs": 576,
+          "outcome": "ok"
+        },
+        {
+          "stage": "publication_validation",
+          "durationMs": 1844,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 5572,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 451,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 1158,
+          "outcome": "ok"
+        },
+        {
+          "stage": "queue_wait",
+          "durationMs": 3217,
+          "outcome": "ok"
+        },
+        {
+          "stage": "model",
+          "durationMs": 956,
+          "outcome": "ok"
+        }
+      ]
+    },
+    {
+      "role": "worker",
+      "kind": "recovery",
+      "read": true,
+      "pagesRead": 2,
+      "partialPage": false,
+      "cursorRepeated": false,
+      "samples": 1,
+      "readings": [
+        {
+          "OverdueJobs": 0,
+          "OldestOverdueMs": 0,
+          "ExhaustedLeases": 0,
+          "RecoveryChecks": 1
+        }
+      ]
+    },
+    {
+      "role": "worker",
+      "kind": "usage",
+      "read": true,
+      "pagesRead": 2,
+      "partialPage": false,
+      "cursorRepeated": false,
+      "samples": 50,
+      "readings": [
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 261.58462300000247
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_extraction",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0002613,
+          "inputTokens": 735,
+          "outputTokens": 34,
+          "durationMs": 1248.9360249999445
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 201.74428300000727
+        },
+        {
+          "provider": "openrouter",
+          "operation": "top_of_mind",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00015392,
+          "inputTokens": 1594,
+          "outputTokens": 66,
+          "durationMs": 1369.3858379999874
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 251.84828899998683
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_extraction",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000218208,
+          "inputTokens": 964,
+          "outputTokens": 129,
+          "durationMs": 698.3098849999951
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 209.9531460000435
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 224.99849399994127
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 236.999524999992
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 314.11340700000073
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 226.05356599995866
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_extraction",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00007427,
+          "inputTokens": 1334,
+          "outputTokens": 76,
+          "durationMs": 807.8836840000004
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 180.98248599999988
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 342.57513299999937
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_match",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00003738,
+          "inputTokens": 246,
+          "outputTokens": 7,
+          "durationMs": 599.5322459999988
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 205.83319199993275
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_extraction",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00016629,
+          "inputTokens": 1230,
+          "outputTokens": 33,
+          "durationMs": 572.2507269999996
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 174.017745000001
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_extraction",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0003557,
+          "inputTokens": 1421,
+          "outputTokens": 110,
+          "durationMs": 2473.946248000022
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 185.8217200000072
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 217.28653699997813
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_match",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0000160008,
+          "inputTokens": 428,
+          "outputTokens": 6,
+          "durationMs": 1176.3755949999995
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_extraction",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0004049,
+          "inputTokens": 1602,
+          "outputTokens": 130,
+          "durationMs": 1238.1608090000227
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 219.07299700006843
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_extraction",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000159858,
+          "inputTokens": 1326,
+          "outputTokens": 33,
+          "durationMs": 922.0276310000336
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 176.95091200002935
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_match",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00001725,
+          "inputTokens": 250,
+          "outputTokens": 10,
+          "durationMs": 575.7872190000489
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_support",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000126936,
+          "inputTokens": 398,
+          "outputTokens": 69,
+          "durationMs": 306.033812000067
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_support",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0002016,
+          "inputTokens": 396,
+          "outputTokens": 69,
+          "durationMs": 11416.035541000001
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 231.66723999998067
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 202.9265389998909
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_extraction",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0004632,
+          "inputTokens": 1614,
+          "outputTokens": 216,
+          "durationMs": 1807.5866709999973
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 179.45534700003918
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_match",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0000822,
+          "inputTokens": 246,
+          "outputTokens": 7,
+          "durationMs": 339.91074399999343
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_extraction",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000163125,
+          "inputTokens": 1345,
+          "outputTokens": 171,
+          "durationMs": 2291.2976400000043
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 181.29251200007275
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_support",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0001559,
+          "inputTokens": 565,
+          "outputTokens": 66,
+          "durationMs": 1607.6425499999896
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_support",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00012557,
+          "inputTokens": 613,
+          "outputTokens": 105,
+          "durationMs": 848.2350299999816
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_support",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0001064,
+          "inputTokens": 445,
+          "outputTokens": 105,
+          "durationMs": 1849.944327000063
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_support",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0001977,
+          "inputTokens": 399,
+          "outputTokens": 65,
+          "durationMs": 1287.144973999937
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_extraction",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000131835,
+          "inputTokens": 1639,
+          "outputTokens": 164,
+          "durationMs": 1084.9052149999188
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 231.40221500000916
+        },
+        {
+          "provider": "openrouter",
+          "operation": "top_of_mind",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0004965,
+          "inputTokens": 1351,
+          "outputTokens": 76,
+          "durationMs": 1485.709166000015
+        },
+        {
+          "provider": "openrouter",
+          "operation": "principles",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00011949,
+          "inputTokens": 1002,
+          "outputTokens": 124,
+          "durationMs": 1542.9675450000213
+        },
+        {
+          "provider": "openrouter",
+          "operation": "principle_grounding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0001602,
+          "inputTokens": 450,
+          "outputTokens": 21,
+          "durationMs": 390.815169999958
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 232.31555199995637
+        },
+        {
+          "provider": "openrouter",
+          "operation": "signal_extraction",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00040585,
+          "inputTokens": 1623,
+          "outputTokens": 125,
+          "durationMs": 1042.4346530000912
+        },
+        {
+          "provider": "gemini",
+          "operation": "embedding",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 1,
+          "durationMs": 225.08671100006904
+        },
+        {
+          "provider": "openrouter",
+          "operation": "top_of_mind",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0003689,
+          "inputTokens": 1604,
+          "outputTokens": 74,
+          "durationMs": 1157.1478999999817
+        },
+        {
+          "provider": "openrouter",
+          "operation": "principles",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0003201,
+          "inputTokens": 1035,
+          "outputTokens": 8,
+          "durationMs": 955.2106650000205
+        }
+      ]
+    },
+    {
+      "role": "worker",
+      "kind": "runtime",
+      "read": true,
+      "pagesRead": 2,
+      "partialPage": false,
+      "cursorRepeated": false,
+      "samples": 20,
+      "readings": [
+        {
+          "durationMs": 15859.25,
+          "cold": false
+        },
+        {
+          "durationMs": 776.36,
+          "cold": true,
+          "initMs": 469.28
+        },
+        {
+          "durationMs": 5624.35,
+          "cold": false
+        },
+        {
+          "durationMs": 11875,
+          "cold": false
+        },
+        {
+          "durationMs": 10520.47,
+          "cold": true,
+          "initMs": 555.46
+        },
+        {
+          "durationMs": 25247.09,
+          "cold": false
+        },
+        {
+          "durationMs": 34096.07,
+          "cold": false
+        },
+        {
+          "durationMs": 59268.77,
+          "cold": false
+        },
+        {
+          "durationMs": 49034.25,
+          "cold": false
+        },
+        {
+          "durationMs": 117.45,
+          "cold": false
+        },
+        {
+          "durationMs": 16222.93,
+          "cold": false
+        },
+        {
+          "durationMs": 118.7,
+          "cold": false
+        },
+        {
+          "durationMs": 117.98,
+          "cold": false
+        },
+        {
+          "durationMs": 14479.92,
+          "cold": false
+        },
+        {
+          "durationMs": 148.36,
+          "cold": false
+        },
+        {
+          "durationMs": 17727.17,
+          "cold": false
+        },
+        {
+          "durationMs": 13412.2,
+          "cold": false
+        },
+        {
+          "durationMs": 13319.86,
+          "cold": false
+        },
+        {
+          "durationMs": 118.07,
+          "cold": false
+        },
+        {
+          "durationMs": 119.12,
+          "cold": false
+        }
+      ]
+    }
+  ],
+  "queueMetrics": [
+    {
+      "metric": "RecoveryChecks",
+      "read": true,
+      "samples": 4,
+      "values": [
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "metric": "OverdueJobs",
+      "read": true,
+      "samples": 4,
+      "values": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "metric": "ExhaustedLeases",
+      "read": true,
+      "samples": 4,
+      "values": [
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "logWindow": {
+    "start": "2026-10-08T21:42:40.000Z",
+    "end": "2026-10-08T21:50:34.253Z",
+    "maxPagesPerRead": 5
+  },
+  "controlledConcurrentMeasurement": false,
+  "alertDeliveryVerified": false,
+  "providerPrivacyVerified": false,
+  "recurringMonetaryLimitsVerified": false,
+  "recoveryMetricExtractionVerified": true,
+  "logPagesComplete": true
+}

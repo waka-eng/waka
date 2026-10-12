@@ -220,25 +220,36 @@ describe.skipIf(!HAS_KEY)("extraction, on the bench", () => {
     async () => {
       const provider = await getDefaultModelProvider();
       const network=globalThis.fetch,guarded=process.env.WAKA_EVALUATION_REPORT==='1';
-      let calls=0,costUsd=0,stopped=false;const attempts:unknown[]=[];
+      let calls=0,costUsd=0,pendingUpperUsd=0,stopped=false,complete=false;
+      const attempts:Array<Record<string,unknown>>=[],results=[] as Array<{ c: Case; statements: string[]; problems: string[] }>;
+      let writes=Promise.resolve();
+      const persist=()=>writes=writes.then(async()=>{if(guarded){await mkdir('../../work/web-quality',{recursive:true});await writeFile('../../work/web-quality/extraction-bench.json',JSON.stringify({calls,costUsd,maxCostUsd:.1,attempts,results,complete,stopped},null,2));}});
+      await persist();
       if(guarded)globalThis.fetch=async(input,init)=>{
         const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
         expect(url.origin).toBe('https://openrouter.ai');expect(JSON.parse(String(init?.body)).model).toBe('deepseek/deepseek-v4.1-flash');
-        if(stopped||calls>=20||costUsd>=.1)throw new Error('Extraction evaluation bound reached');calls++;
-        const response=await network(input,init),body=await response.clone().json();
-        if(!response.ok||!Number.isFinite(body.usage?.cost)){stopped=true;attempts.push({status:response.status,costUsd:null});throw new Error('Unpriced or failed extraction evaluation');}
-        costUsd+=body.usage.cost;attempts.push({status:response.status,costUsd:body.usage.cost});
+        const request=JSON.parse(String(init?.body)),maximumCostUsd=(Buffer.byteLength(String(init?.body),'utf8')+256)*.3/1000000+request.max_tokens*1.2/1000000;
+        if(stopped||calls>=20||costUsd+pendingUpperUsd+maximumCostUsd>.1){stopped=true;throw new Error('Extraction evaluation bound reached');}calls++;pendingUpperUsd+=maximumCostUsd;
+        const row:Record<string,unknown>={phase:'dispatching',costUsd:null,maximumCostUsd};attempts.push(row);await persist();
+        let response,body;
+        try{response=await network(input,init);body=await response.clone().json();}
+        catch(error){stopped=true;row.phase='unknown';await persist();throw error;}
+        Object.assign(row,{phase:'received',status:response.status,costUsd:body.usage?.cost??null,output:body.choices?.[0]?.message?.content});
+        if(!response.ok||!Number.isFinite(body.usage?.cost)){stopped=true;await persist();throw new Error('Unpriced or failed extraction evaluation');}
+        pendingUpperUsd-=maximumCostUsd;costUsd+=body.usage.cost;await persist();
         if(costUsd>.1){stopped=true;throw new Error('Extraction evaluation cost exceeded');}return response;
       };
       try{
-      const results = [] as Array<{ c: Case; statements: string[]; problems: string[] }>;
       const queue = [...BENCH.entries()];
       const workers = Array.from({ length: 4 }, async () => {
         for (;;) {
+          if(stopped)return;
           const next = queue.shift();
           if (!next) return;
           const [i, c] = next;
-          const { statements } = await provider.extractSignalCandidates(inputFor(c, i));
+          let statements;
+          try{({statements}=await provider.extractSignalCandidates(inputFor(c,i)));}
+          catch(error){results.push({c,statements:[],problems:[`runtime: ${(error as Error).name}`]});await persist();continue;}
           const texts = statements.map((s) => s.statement);
           const problems: string[] = [];
           if (texts.length < c.min) problems.push(`deaf: ${texts.length} < ${c.min}`);
@@ -252,15 +263,19 @@ describe.skipIf(!HAS_KEY)("extraction, on the bench", () => {
             if (wantsHangul !== KO.test(t)) problems.push(`wrong language: "${t}"`);
           }
           results.push({ c, statements: texts, problems });
+          await persist();
         }
       });
       await Promise.all(workers);
+      complete=results.length===BENCH.length;
+      expect(complete,'all fixed cases must finish').toBe(true);
+      expect(stopped,'unknown billing stops calibration').toBe(false);
 
       const metaOffenders = results.flatMap((r) =>
         r.statements.filter((t) => META.test(t)).map((t) => `${r.c.note}: "${t}"`),
       );
       const failed = results.filter((r) => r.problems.length > 0);
-      const accuracy = (results.length - failed.length) / results.length;
+      const accuracy = (results.length - failed.length) / BENCH.length;
 
       for (const r of failed) {
         console.log(`[extraction-eval] MISS ${r.c.note} — ${r.problems.join("; ")}`);
@@ -273,8 +288,8 @@ describe.skipIf(!HAS_KEY)("extraction, on the bench", () => {
 
       expect(metaOffenders, "un-standalone statements — zero tolerance").toEqual([]);
       expect(accuracy, "the bench's accuracy floor").toBeGreaterThanOrEqual(0.8);
-      if(guarded){await mkdir('../../work/web-quality',{recursive:true});await writeFile('../../work/web-quality/extraction-bench.json',JSON.stringify({calls,costUsd,maxCostUsd:.1,attempts,results,accuracy,metaOffenders},null,2));}
-      }finally{globalThis.fetch=network;}
+      if(guarded){await persist();const path='../../work/web-quality/extraction-bench.json';await writeFile(path,JSON.stringify({calls,costUsd,maxCostUsd:.1,attempts,results,accuracy,metaOffenders,complete,stopped},null,2));}
+      }finally{globalThis.fetch=network;if(!complete||stopped)await persist();}
     },
   );
 });
