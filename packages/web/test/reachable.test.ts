@@ -1,12 +1,17 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): nothing. It reads the source tree off
  * disk and asks a question about references between files. No module is
  * imported for its behaviour and there is no DOM, clock, server or account
- * data involved. */
+ * data involved. `helpers/code-only` is imported for its behaviour and
+ * replaces nothing: it is a string transform over source text — the same
+ * comment-blanking `type-scale.test.ts` and `phone-breakpoints.test.ts` do
+ * inline — and it reaches no layer of this product. */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
+
+import { evidence } from "./helpers/code-only";
 
 /**
  * ═══ AN EXPORT NOBODY IMPORTS IS A SURFACE NOBODY ASKED FOR ════════════
@@ -44,9 +49,33 @@ const TOOLS = resolve(dirname(fileURLToPath(import.meta.url)), "../../../tools")
 /**
  * THE CEILING, AND IT IS A NUMBER TO BE LOWERED.
  *
- * 27 on 2026-10-11, measured right after the two genuinely dead ones went.
+ * 31 on 2026-10-11, re-measured after the gate stopped reading prose as
+ * evidence of a caller.
+ *
+ * IT SAID 27, AND 27 WAS A LIE THE GATE COULD NOT SEE. The match below used
+ * to run against the file exactly as it sits on disk, so a comment that
+ * NAMED a symbol counted as a caller, and so did a module path that happened
+ * to contain its name. In a codebase whose house style is to name symbols in
+ * prose — thousands of comment lines in `pages/Home.tsx` alone — that is not
+ * a corner case. Four exports were off the list only because another file
+ * spelled them in a sentence: `canvas/sprites.ts: rasterOrbPixel`,
+ * `lib/api/http.ts: writeJson`, `lib/words.ts: agoWords` and
+ * `space/inspiration/field.ts: ORB_R_MIN`. A fifth, `lib/data.ts: aliveness`,
+ * was held alive by the FILENAME of a different module: `field.ts` imports
+ * `../../lib/aliveness`, and `\baliveness\b` matched inside that string.
+ *
+ * So the ratchet read 27 against a ceiling of 27 with zero slack while the
+ * honest figure was 31 — already four over — and the next legitimate export
+ * would have failed the build for a budget four prose-propped symbols were
+ * occupying. A ratchet that cannot see its own breach is worse than no
+ * ratchet, because it reports work that was never done.
+ *
+ * The number is 31 and not 32 because the fifth one was DELETED rather than
+ * counted: `lib/data.ts`'s `aliveness` was five re-typed literals duplicating
+ * `lib/aliveness.ts`'s constants, which is the exact state that module was
+ * written to end. See the tombstone there.
  */
-const PRIVATE_ENOUGH = 27;
+const PRIVATE_ENOUGH = 31;
 
 function sources(dir: string, found: string[] = []): string[] {
   let entries: string[];
@@ -67,7 +96,7 @@ function inwardOnly(): string[] {
      to delete the gate instead. */
   const everywhere = new Map<string, string>();
   for (const path of [...src, ...sources(TEST), ...sources(TOOLS)]) {
-    everywhere.set(path, readFileSync(path, "utf8"));
+    everywhere.set(path, evidence(readFileSync(path, "utf8")));
   }
   const found: string[] = [];
   for (const path of src) {

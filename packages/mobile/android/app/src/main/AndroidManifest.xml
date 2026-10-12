@@ -33,14 +33,17 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <!-- `/review/` and `/profile` were claimed here until 2026-10-11.
+                     Neither is a route any more: the review folded into one field
+                     and the settings page became a corner panel. Android verified
+                     the domain and opened the app on a screen that does not exist,
+                     which lands on the world with no explanation. -->
                 <data android:scheme="https" android:host="${wakaLinkHost}" android:path="/" />
                 <data android:scheme="https" android:host="${wakaLinkHost}" android:pathPrefix="/@" />
                 <data android:scheme="https" android:host="${wakaLinkHost}" android:pathPrefix="/w/" />
                 <data android:scheme="https" android:host="${wakaLinkHost}" android:pathPrefix="/inspirations/" />
-                <data android:scheme="https" android:host="${wakaLinkHost}" android:pathPrefix="/review/" />
                 <data android:scheme="https" android:host="${wakaLinkHost}" android:pathPrefix="/principles/" />
                 <data android:scheme="https" android:host="${wakaLinkHost}" android:pathPrefix="/chat/" />
-                <data android:scheme="https" android:host="${wakaLinkHost}" android:path="/profile" />
                 <data android:scheme="https" android:host="${wakaLinkHost}" android:path="/onboarding" />
                 <data android:scheme="https" android:host="${wakaLinkHost}" android:path="/login" />
             </intent-filter>

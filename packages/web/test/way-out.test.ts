@@ -75,15 +75,20 @@ const WAY_OUT_WORDS = [
 /* A class named for leaving. The overlays' corner mark, and the footer rows
    that carry a single dismissing press on the surfaces built before it.
 
-   `-back` JOINED THE LIST 2026-10-11, with the notepad. That page's visible
-   exit is a chevron in its top-left corner — founder, annotating the
-   reference: "go back to list of past inspirations" — and it is wired to
-   `onPast` rather than to `onClose`, because it does not merely dismiss the
-   page, it goes somewhere: the archive this note is about to join. The
-   structural check above cannot see that, and it should not be taught to:
-   "any press that navigates counts as an exit" would pass a surface whose
-   only control went deeper. A control NAMED for going back is a narrower
-   claim, and it is the claim the law is actually about. */
+   `-back` JOINED THE LIST 2026-10-11 for the notepad's chevron, which is no
+   longer there: the founder removed it the same week ("I can just go to all
+   the inspirations using the bottom panel"), and the `onPast` prop it was
+   wired to outlived it as a documented prop nobody called until that was
+   removed too. `.jar-note-back` matches nothing in the tree today.
+
+   THE ALTERNATION STAYS, and the reason is the one that put it here rather
+   than inertia. The structural check above cannot see an exit that
+   NAVIGATES — it looks for a press that calls the surface's own `onClose` —
+   and it should not be taught to, because "any press that navigates counts
+   as an exit" would pass a surface whose only control went deeper. A
+   control NAMED for going back is the narrower claim, and it is the claim
+   the law is actually about, so the next page that has one is covered
+   without this argument being had again. */
 const WAY_OUT_CLASSES = /className="[^"]*(?:-close\b|-out\b|-back\b|waka-over-close|jar-x)\b/;
 
 /**

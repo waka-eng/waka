@@ -49,9 +49,13 @@ import "./styles/system.css";
 // `surface.css` was imported here, before chrome.css, because chrome.css
 // declared itself "the final word over surface.css". Both the stylesheet and
 // the screens it dressed were deleted on 2026-08-25 — see the note beside the
-// routes below. chrome.css stays: it dresses `/login` and `/profile`, which
-// are not flat screens in the sense that was retired. There is no memory to
-// stand in before you are authenticated.
+// routes below. chrome.css stays: it dresses `/login`, which is not a flat
+// screen in the sense that was retired. There is no memory to stand in
+// before you are authenticated.
+// IT USED TO SAY "`/login` and `/profile`". The settings page took `/profile`
+// with it on 2026-10-11, so half the reason this import survives was naming a
+// route that no longer answers — and a justification that cites a deleted
+// thing is how an import outlives its reason without anyone noticing.
 import "./styles/chrome.css";
 // The landing, the menu and the claim queue — the three-surface IA.
 import "./styles/claims.css";

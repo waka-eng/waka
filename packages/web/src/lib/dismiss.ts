@@ -1,34 +1,36 @@
 /**
- * EVERY SHEET CLOSES THE SAME TWO WAYS.
+ * THREE SHEETS OF TEN CLOSE BOTH WAYS, AND THIS IS THE HOOK THEY OPT INTO.
  *
- * The founder's ruling was made about one of them — the make-another-place
+ * ── WHAT THIS HEADER USED TO SAY, AND WHY IT HAD TO STOP ──────────────────
+ *
+ * It opened "EVERY SHEET CLOSES THE SAME TWO WAYS" and closed "one hook, so a
+ * sheet added later gets both without anyone remembering to." The second
+ * sentence describes a mechanism that does not exist here: nothing in this
+ * file reaches a sheet that has not called it, `grep -c useDismissAway` is
+ * zero in every component file, and a sheet added tomorrow gets Escape from
+ * `DialogSurface` and nothing else. Counted on 2026-10-11: ten modal
+ * `DialogSurface` call sites, three of them covered.
+ *
+ * That is worse than an uncovered sheet, because the file holding the rule
+ * was the one place anybody auditing dismissal would look, and it reported
+ * coverage it did not have — "a gate that reads its own documentation as
+ * evidence reports work that was never done", in prose rather than in a
+ * test. So the claim is now a count, and `dismissal-ledger.test.ts` fails
+ * when the count moves, which is what keeps this paragraph true after the
+ * next sheet lands.
+ *
+ * ── WHAT IS STILL TRUE, AND IT IS THE PART THAT MATTERS ───────────────────
+ *
+ * The founder's ruling was made about one sheet — the make-another-place
  * sheet, 2026-08-27: "if click outside modal, close it" — and the dial's rail
  * the same day: "timeline line should disappear if clicked outside of it".
  * Neither is a fact about those two surfaces. It is what a person expects of
  * anything that opens over the thing they were reading: press away, and it
- * goes; press Escape, and it goes.
+ * goes; press Escape, and it goes. And the way out of the LAST sheet is never
+ * where the way out of this one is, which is why each sheet inventing its own
+ * small word is fine the first time and a trap every time after.
  *
- * The rest of the sheets never learned it. A room's settings, the join sheet,
- * a statement's provenance room and two more besides each closed only by
- * finding their own small word — which is fine the first time and a trap
- * every time after, because the way out of the LAST sheet is never where the
- * way out of this one is. One hook, so a sheet added later gets both without
- * anyone remembering to.
- *
- * THAT LIST IS SHORTER THAN IT WAS, AND NOT BECAUSE THE RULE RELAXED. It used
- * to open with "the account sheet", which no longer exists in any form: the
- * account is a card under the settings cog in the top bar, and it closes
- * itself from inside `components/Menu.tsx`, because it belongs to that bar
- * rather than opening over the world. The antechamber left the other way —
- * it moved to the settings page, where it is a `DialogSurface` that owns its
- * own dismissal. Three callers remain, all of them in `pages/Home.tsx`: a
- * room's settings, the join sheet, a statement's provenance room.
- *
- * Two surfaces leaving without a line of this file changing is the argument
- * for it. Each took its way out with it, and the hook is where the rule lives
- * rather than something each sheet had to remember.
- *
- * WHAT THE REMAINING THREE ACTUALLY TAKE FROM HERE, since all three are
+ * WHAT THE THREE ACTUALLY TAKE FROM HERE, since all three are
  * `DialogSurface`s and that surface already answers Escape itself: the press
  * away, always — a surface has no way to hear a press that lands outside it —
  * and Escape in the one case the surface cannot hear, which is a press after
@@ -36,6 +38,73 @@
  * on the body; the surface's own `onKeyDown` never fires, and the listener
  * here does. So the two halves do not overlap, and the `[data-jar-surface]`
  * check below is this hook standing aside for the half that is not its own.
+ *
+ * ── THE THREE THAT TAKE IT ────────────────────────────────────────────────
+ *
+ * All three are driven from `pages/Home.tsx:13389-13391`: a room's settings
+ * (`space/settings/SpaceSettings.tsx`), the join sheet (`Home.tsx`'s
+ * `.jar-settings`), and a statement's provenance room (`.jar-prov-room`).
+ * The list was longer and got shorter without a line of this file changing,
+ * which is the argument for the hook: the account sheet became a card under
+ * the settings cog and closes itself from inside `components/Menu.tsx`,
+ * because it belongs to that bar rather than opening over the world; the
+ * antechamber moved to the settings page and owns its own dismissal there.
+ * Each took its way out with it.
+ *
+ * ── THE SEVEN THAT DO NOT, EACH FOR A STATED REASON ───────────────────────
+ *
+ * Grouped, because they are three different situations and only one of them
+ * is a decision:
+ *
+ *   REFUSED ON PURPOSE, AND MUST STAY REFUSED — the notepad and the
+ *   composer, `components/InspirationComposer.tsx`. `DialogSurface`'s own
+ *   header puts it in the list of what stays modal "(unsaved words, and the
+ *   audit's §2.1(d) wants them harder to leave by accident, not easier)".
+ *   A note is the one thing in this product a stray press must not end:
+ *   leaving it commits, every way out is wired to commit, and none of those
+ *   ways is a press on the dark behind the page. If press-away is ever
+ *   lifted into `DialogSurface` for every modal surface, this one needs an
+ *   opt-OUT in the same change.
+ *
+ *   HOLDING WORDS SOMEBODY IS PARTWAY THROUGH TYPING — the agent's name
+ *   sheet (`Home.tsx`, `.jar-seek` + `.jar-roomform-box`), the room form
+ *   (`space-kinds/GroupPanel.tsx`) and the archive's search
+ *   (`components/InspirationSearch.tsx`). Same class of harm as the notepad
+ *   and a smaller amount of it: a half-typed name or query is cheap to
+ *   retype and still annoying to lose. Unanswered rather than decided —
+ *   nobody has ruled on these three, and the honest state of the product is
+ *   that they were never wired rather than that they were argued about. The
+ *   field's own Escape is already protected either way: the key handler
+ *   below stands aside for anything editable, because leaving a half-typed
+ *   name is not the same act as leaving the sheet.
+ *
+ *   READ-ONLY SHEETS THAT SIMPLY NEVER OPTED IN, and which are the three a
+ *   reader of this file would most reasonably expect to be covered: the
+ *   memory card (`Home.tsx`, `.jar-panel`), the reading comparison
+ *   (`components/ReadingChanges.tsx`) and the principle's share sheet
+ *   (`components/PrincipleShare.tsx`). Nothing is lost by closing them, so
+ *   the founder's sentence applies to them as directly as it applied to the
+ *   sheet it was said about. The memory card is the one with a complication
+ *   worth naming before anybody wires it: it opens over the field, and a
+ *   press on the field behind it is how you select ANOTHER memory — so
+ *   "close this" and "open that" arrive as one press, and which should win
+ *   is a question for the founder rather than for this file. `KEEP_PROV` in
+ *   `Home.tsx` already records half of that thought by naming `.jar-panel`
+ *   as a place the provenance room must not read as "away".
+ *
+ * ── THE ALTERNATIVE, AND WHY IT WAS NOT TAKEN HERE ────────────────────────
+ *
+ * Lift press-away into `DialogSurface` behind `modal === true` — then the
+ * original sentence becomes true, and the two halves already do not overlap
+ * (see below). It is the better end state and it was deliberately not done
+ * in this pass, for one reason that is not scheduling: it would hand
+ * press-away to the notepad, against a decision written down in that
+ * component's own surface header, and a change that makes a rule universal
+ * by breaking the one case the rule was consciously excluded from is not an
+ * improvement. The order is: rule on the three read-only sheets, give
+ * `DialogSurface` the behaviour with an opt-out, then delete this section.
+ *
+ * ── AND THE MECHANICS, WHICH BELONG TO THE HOOK RATHER THAN TO THE LIST ───
  *
  * WHY POINTERDOWN AND NOT CLICK. The sheet should be gone before whatever the
  * press was actually for happens, and a click that lands on the world would
