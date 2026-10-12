@@ -28,13 +28,26 @@ import { describe, expect, it } from "vitest";
  * has to hold is that both read the ANATOMY from one place, so that moving an
  * eye moves it in both.
  *
- * So: the numbers live in `character/raster.ts`, and `Home.tsx` may not
+ * So: the numbers live in `character/raster.ts`, and the frame loop may not
  * declare its own. A `const FACE_R = 0.34` growing back there is exactly how
  * this decays — it would compile, it would render, the world would look
  * right, and a page's creature would quietly be a slightly different animal.
+ *
+ * WHERE THE FRAME LOOP IS. It was `pages/Home.tsx` until 2026-10-12, when the
+ * simulation came out of that file whole (`docs/reviews/
+ * code-quality-2026-10-11.md` finding 7) and took every reference to the
+ * creature's anatomy with it. `canvas/simulation.ts` is the loop now and is
+ * what the import-and-use half of this gate reads.
+ *
+ * THE NO-REDECLARATION HALF STILL READS BOTH FILES, and that is deliberately
+ * wider than it was. The reason a copy must not grow back has nothing to do
+ * with which file it grows in; checking only the new one would have left the
+ * page free to declare `const FACE_R` the day after the move, which is exactly
+ * the window a repointed gate opens if it is repointed carelessly.
  */
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RASTER = resolve(HERE, "../src/character/raster.ts");
+const LOOP = resolve(HERE, "../src/canvas/simulation.ts");
 const HOME = resolve(HERE, "../src/pages/Home.tsx");
 
 /** The anatomy, and where each number has to come from. */
@@ -64,9 +77,13 @@ describe("the creature is drawn from one anatomy", () => {
     ).toEqual([]);
   });
 
-  it("lets Home.tsx use them but never declare them", () => {
+  it("lets the frame loop use them but never declare them", () => {
+    const loop = readFileSync(LOOP, "utf8");
     const home = readFileSync(HOME, "utf8");
-    const redeclared = ANATOMY.filter((name) => new RegExp(`\\bconst ${name}\\s*[:=]`).test(home));
+    const redeclared = ANATOMY.filter((name) => {
+      const decl = new RegExp(`\\bconst ${name}\\s*[:=]`);
+      return decl.test(loop) || decl.test(home);
+    });
     expect(
       redeclared,
       "the frame loop has grown its own copy of part of the creature's " +
@@ -78,10 +95,10 @@ describe("the creature is drawn from one anatomy", () => {
        shared names at all would pass the check above by having no creature
        in it, which is the vacuous-green failure every gate here guards. */
     expect(
-      /from "\.\.\/character\/raster"/.test(home),
-      "Home.tsx no longer imports the creature's anatomy at all",
+      /from "\.\.\/character\/raster"/.test(loop),
+      "canvas/simulation.ts no longer imports the creature's anatomy at all",
     ).toBe(true);
-    const unused = ANATOMY.filter((name) => !new RegExp(`\\b${name}\\b`).test(home));
+    const unused = ANATOMY.filter((name) => !new RegExp(`\\b${name}\\b`).test(loop));
     expect(
       unused,
       "these are exported for two callers and the frame loop is not one of " +

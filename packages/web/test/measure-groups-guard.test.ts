@@ -190,10 +190,18 @@ function withAFailingFixture(source: string): string {
 }
 
 /**
- * The script resolves the file it checks from its OWN location — `../src/pages/
- * Home.tsx` — so a copy of it in a tree we control checks a file we control.
- * `node_modules` is linked in because the script requires `typescript`; nothing
- * else about the copy differs from the original.
+ * The script resolves the file it checks from its OWN location — `../src/canvas/
+ * simulation.ts` since 2026-10-12, `../src/pages/Home.tsx` before it — so a copy
+ * of it in a tree we control checks a file we control. `node_modules` is linked
+ * in because the script requires `typescript`; nothing else about the copy
+ * differs from the original.
+ *
+ * THE FIXTURES BELOW DID NOT HAVE TO CHANGE WITH THAT PATH, and that is the
+ * point of them: they are still written as components with a `useEffect`,
+ * because the script still finds the frame effect through an effect hook first
+ * and only falls back to the one function name the real loop now lives under.
+ * A fixture rewritten to match the new file would have stopped covering the
+ * old door while claiming to cover both.
  */
 function runAgainst(
   home: string | null,
@@ -203,10 +211,10 @@ function runAgainst(
   const dir = mkdtempSync(join(tmpdir(), "measure-groups-guard-"));
   try {
     mkdirSync(join(dir, "scripts"), { recursive: true });
-    mkdirSync(join(dir, "src", "pages"), { recursive: true });
+    mkdirSync(join(dir, "src", "canvas"), { recursive: true });
     symlinkSync(join(WEB_ROOT, "node_modules"), join(dir, "node_modules"), "dir");
     writeFileSync(join(dir, "scripts", "measure-groups.mjs"), transform(readFileSync(SCRIPT, "utf8")));
-    if (home !== null) writeFileSync(join(dir, "src", "pages", "Home.tsx"), home);
+    if (home !== null) writeFileSync(join(dir, "src", "canvas", "simulation.ts"), home);
 
     try {
       const out = execFileSync("node", [join(dir, "scripts", "measure-groups.mjs"), ...args], {
