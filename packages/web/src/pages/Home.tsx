@@ -127,6 +127,7 @@ import {
   type Palette,
 } from "../canvas/palette";
 import { SavesOverlay } from "../components/SavesOverlay";
+import { DOCK_SLOT } from "../components/NoteTools";
 import { whyNotKept } from "../lib/keep-ready";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { ClaimsOverlay } from "../components/ClaimsOverlay";
@@ -2713,6 +2714,17 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
 
      THE LANGUAGE WRITES IMMEDIATELY, because a `<select>` has no pause in it
      — the choice IS the commit. */
+  /* ═══ WHETHER THE ARCHIVE HAS A NOTE OPEN IN IT ═══════════════════════
+     Founder, of an opened saved inspiration: "the bottom bar should also
+     change." The bar transforms while a NEW note is being written, and an
+     opened saved note is the same page, so it transforms there too.
+
+     ONE BOOLEAN, AND THE WORLD HOLDS NOTHING ELSE ABOUT IT. Which note is
+     open is `SavesOverlay`'s business and stays there; what the dock needs
+     is only whether to swap its middle slot for one the overlay can fill.
+     See `NoteTools`, which fills it through a portal — ownership does not
+     move, only the DOM does. */
+  const [savedNoteOpen, setSavedNoteOpen] = useState(false);
   const [settingsName, setSettingsName] = useState<string | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsFailed, setSettingsFailed] = useState(false);
@@ -16973,7 +16985,26 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 the surface people have most often reported being stuck in.
                 Its field already sits on the ground as a rule rather than
                 a second pill, so there is no layer to remove there. */}
-            {item.id === 'new' && viewNavigation.view?.compose ? (
+            {/* ═══ AND THE ARCHIVE'S OPEN NOTE BORROWS THE SAME SLOT ═══
+                Founder: "the bottom bar should also change."
+
+                EMPTY HERE, FILLED FROM THERE. The dock lends an element and
+                `NoteTools` portals the recorder, the photo button and their
+                one state line into it. The alternative — lifting the
+                overlay's upload queue and open row into the world so this
+                file could render them — would put a second copy of "which
+                note is open" in the world, which is the duplicate-state
+                problem this whole pass is removing.
+
+                IT CANNOT COLLIDE WITH THE NOTEPAD'S. The composer is a
+                full-page surface and the archive is another; `view.compose`
+                and `view.open === 'saves'` are different addresses, so the
+                two are never on screen together. The order of the branches
+                says which wins if that ever stops being true. */}
+            {item.id === 'new' && !viewNavigation.view?.compose && savedNoteOpen ? (
+              <span className="waka-dock-making" role="group" id={DOCK_SLOT}
+                aria-label={say('worldCaptureInspiration')} />
+            ) : item.id === 'new' && viewNavigation.view?.compose ? (
               <span className="waka-dock-making" role="group" aria-label={say('worldCaptureInspiration')}>
                 {supportedRecordingType() ? (
                   recording.phase === 'idle' ? (
@@ -17187,7 +17218,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         account={auth?.account ? { name: auth.profile?.name, email: auth.account.email } : null}
         settings={settingsCard}
         onSignOut={auth ? () => { void auth.logout(); } : undefined}
-        hidden={Boolean(panelOpen||mouthOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
+        /* AND HIDDEN WHILE A SAVED NOTE IS OPEN, which `mouthOpen` already
+           does for a new one. Founder: "it should go to the same exact UI
+           as when I'm creating a new inspiration." A note is a page you are
+           writing on; the two corners are the world's furniture and the
+           notepad has never shown them. It also returns the 60px the
+           archive reserves for them — see `.waka-page--note`. */
+        hidden={Boolean(panelOpen||mouthOpen||savedNoteOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
           query={seek} locale={locale} label={atWall.kind === 'group' ? say('worldFindYourInspirations') : undefined}
@@ -17238,6 +17275,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           copy that only it printed. `ReadingPanel` is untouched — it is a
           different component and `/profile` still renders it. */}
       {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
+        onNoteOpen={setSavedNoteOpen}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         title={say(atWall.kind==='agent'?'worldAgentField':'worldMenuField')}

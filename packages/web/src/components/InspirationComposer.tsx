@@ -31,10 +31,10 @@
  */
 import { useEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import { DialogSurface } from './DialogSurface';
+import { NotePage } from './NotePage';
 import { AuthoredSaveNotice } from './AuthoredSaveNotice';
 import {inspirationWithPendingLink} from '../lib/inspiration-input';
 import { t, type SupportedLocale } from '../lib/locales';
-import { momentStamp } from '../lib/words';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { useAuthoredSave } from '../lib/use-authored-save';
 import type { useAudioRecording } from '../lib/use-audio-recording';
@@ -103,31 +103,21 @@ export function InspirationComposer(props: {
   return <DialogSurface className="jar-seek jar-inspiration-composer" aria-label={say('worldCaptureInspiration')} onClose={props.onClose} data-jar-chrome="1"
     onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
     onDrop={event => { if (event.dataTransfer.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.dataTransfer.files]); } }}>
-    {/* THE THREE CORNERS OF THE TOP, and the heading row they replaced. That
-        row was a title and a Close — a dialog announcing itself in a bar,
-        which is the one thing the reference's note page does not do. */}
-    <div className="jar-note-top">
-      {/* A CHEVRON, AND NOT ITS NAME — see the long note on the same
-          control in `SavesOverlay`, which is the page this one has to match
-          exactly. Founder: "remove the all inspirations thing here —
-          actually, maybe just have a back button." The destination stays on
-          the `aria-label`. */}
-      <button type="button" className="jar-note-back" aria-label={say('worldBackToAll')} onClick={props.onPast}>
-        <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
-          <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
-            strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </button>
-      <span className="jar-note-when">{momentStamp(when.current, props.locale)}</span>
-      {/* THE AUDIENCE PAIR IS GONE, AND SO IS WHAT IT CHOSE BETWEEN.
-          Founder: "I told you we got rid of the concept for room so there
-          shouldn't be only me and share with rooms."
-          A control offering two destinations when the product has one is
-          worse than clutter — it teaches a model of the thing that is no
-          longer true, and every person who presses it learns something they
-          will have to unlearn. `onVisibility` stays on the props so the
-          world keeps deciding what a save is; nothing on this page asks. */}
-    </div>
+    {/* ═══ THE TOP IS `NotePage`'S NOW, AND SO IS THE SAVED NOTE'S ═══════
+        Founder: "make sure that when I'm entering from create new
+        inspiration or my past inspiration, it's using the exact same
+        component, and I'm liking the new inspiration component a lot more."
+
+        The way back and the moment were written out here and again in
+        `SavesOverlay`, and the two copies had drifted apart in every
+        particular — see that component's header for the inventory. This
+        page is the one the founder prefers, so it is this page's chrome
+        that both now render.
+
+        NO TRAILING VERB HERE. A note that does not exist yet cannot be
+        deleted; the slot is for a verb ABOUT the note and a new one has
+        none. */}
+    <NotePage locale={props.locale} whenMs={when.current} onBack={props.onPast} backTo="worldBackToAll">
     <div className="jar-composer-body">
     <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={4} value={props.text} readOnly={props.busy || !props.ready || props.recording.phase !== 'idle'}
       aria-label={say('worldCaptureInspiration')} placeholder={say('worldCapturePrompt')}
@@ -175,6 +165,7 @@ export function InspirationComposer(props: {
         error, so it is absent from every normal note. */}
     {props.error.includes('another tab') ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
     </div>
+    </NotePage>
     {/* THE PILL IN THE BOTTOM-LEFT CORNER IS GONE, AND SO IS THE CORNER.
         Founder, twice, about that corner — "I don't like this thing on the
         left" — and about the shape of the bottom of the screen: "this
