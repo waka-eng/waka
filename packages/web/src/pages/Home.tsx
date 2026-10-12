@@ -17523,7 +17523,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         const owner=`${storageScope.accountId}:${storageScope.profileId}`;
         if(committedTalk.current&&(committedTalk.current.owner!==owner||committedTalk.current.row.id!==talkId))committedTalk.current=null;
         return <div className="waka-page">
+          {/* THE BAR IS THIS SURFACE'S WAY OUT, SAID IN THE MARKUP.
+              `way-out.test.ts` reads this attribute: a conversation has no
+              control of its own that leaves, and it does not need one —
+              the dock's "Chats" row goes to the list this came from, in a
+              word rather than a glyph. The attribute is on the surface and
+              not in a list keyed by file, because `Home.tsx` renders five
+              surfaces and four of them must stay answerable to the law. */}
           <DialogSurface className="waka-over waka-over--talk" aria-label={say('worldMenuTalk')}
+            data-way-out="talk"
             onClose={viewNavigation.closeConversation}>
             {/* ═══ THE WAY BACK TO THE LIST, which this surface was the one
                 place in the product not to have ═══════════════════════════
@@ -17544,24 +17552,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 before it is about verbs. The chevron names the place it
                 returns to, the way the archive's does, and nothing else on
                 the surface claims to name it. */}
-            <header className="waka-over-head">
-              {/* THROUGH THE SAME DOOR THE DOCK USES, so this cannot grow a
-                  second opinion about depth. Writing the address directly
-                  pushed an entry, which is how four presses became four
-                  closes; `openOverHome` is where that rule lives. */}
-              {/* A CHEVRON, AND NOT ITS NAME — see the long note on the
-                  same control in `SavesOverlay`. Founder, pointing at "‹ All
-                  chats": "remove". The destination stays on the label a
-                  screen reader reads. */}
-              <button type="button" className="waka-over-back"
-                aria-label={say('worldBackToChats')}
-                onClick={()=>openOverHome('conversations')}>
-                <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
-                  <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
-                    strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </header>
+              {/* ═══ AND THE CHAT'S CHEVRON GOES THE SAME WAY ═══════════
+                  Founder, of the notepad's: "I still don't get why you have
+                  this carrot button when I do new inspiration, because I
+                  can just go to all the inspirations using the bottom
+                  panel. So don't do that."
+
+                  LAW 7: a ruling applies to the class. That sentence is
+                  about a glyph pointing at a room the dock already names in
+                  a word, and this is the same glyph pointing at a different
+                  one — the bar's "Chats" row goes exactly where this went.
+                  Fixing it only on the reported screen is what made
+                  `six-laws.md` necessary; this is the second screen.
+
+                  THE HEADER GOES WITH IT, because the chevron was all it
+                  held. An empty header above a conversation would be a
+                  reserved row for nothing. */}
             <ConversationPanel key={`${owner}:${talkId??'new'}:${viewNavigation.view.principleId??''}`}
               scope={storageScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}

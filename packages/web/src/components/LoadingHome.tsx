@@ -45,12 +45,26 @@
  */
 
 import { Companion } from "./Companion";
+import { REST_BLEED } from "../character/raster";
 import { readStoredLocale, t } from "../lib/locales";
 
 /* `--jar-atmos`'s own value. One night across the world and the pages —
    founder: "I like the darker shade shown in Now" — and this is the first
    thing anybody sees of it, so it cannot be the old lighter literal. */
 const ground = "#05080f";
+
+/** How large the creature is drawn here. */
+const CREATURE = 190;
+/**
+ * THE DRAWN BOX, which is the creature plus the room its nubs need.
+ *
+ * `Companion` pads by `REST_BLEED` on each side so the nubs are not clipped
+ * — see the constant in `character/raster.ts` — and that padded figure is
+ * what it sets as `--waka-companion-size`. The word below is placed from
+ * the body's own half-height, so it has to use the same number rather than
+ * `CREATURE`, or it would sit four pixels into the creature's chin.
+ */
+const BODY = CREATURE + Math.ceil(CREATURE * REST_BLEED) * 2;
 
 export function LoadingHome(): JSX.Element {
   return (
@@ -70,12 +84,48 @@ export function LoadingHome(): JSX.Element {
     >
       {/* THE SIZE THE OLD DRAWING OCCUPIED, so the screen it replaces does
           not jump in scale between a build and the next one. */}
-      <Companion size={190} />
+      <Companion size={CREATURE} />
       {/* the resting line's slot, wearing the label register's face; the word
           is the only honest one this early */}
       <div
         style={{
-          marginTop: 96,
+          /* ═══ OUT OF THE FLOW, SO THE CREATURE IS ACTUALLY CENTRED ══════
+              `.waka-companion` is four times the creature so its falloff is
+              not clipped, and it occupies that space — which is correct
+              everywhere and awkward here, on the one screen that is a short
+              centred column. At 190px the wrapper is 760 tall, so a word
+              96px under it landed off the bottom of the viewport and the
+              pair, centred together, put the creature well above the middle.
+
+              THE FIRST FIX WAS A NEGATIVE MARGIN ON THE COMPANION ITSELF,
+              and it was wrong in a way worth recording: shrinking that box's
+              footprint does not shrink what it PAINTS, so every other
+              caller's neighbour slid up underneath a creature still drawn at
+              full reach. Founder, with the empty chat: "character is
+              covering the text and then the glow is also cut off."
+
+              THE SECOND FIX WAS A NEGATIVE MARGIN ON THE WORD, which is
+              local and did stop it falling off the screen — and measured in
+              a browser it put the creature 93px BELOW the middle. A column
+              is centred by its own height, and a 792px box with a 201px
+              pull-up under it has its centre nowhere near the body's.
+              Founder, on exactly that: "I wanted the character to be at the
+              very very center."
+
+              So the word leaves the flow. The companion is then the only
+              thing being centred and lands dead centre by definition, and
+              the word hangs off the middle at a distance measured from the
+              BODY — half the padded box, then air — rather than from a lamp
+              three times its size. */
+          position: "absolute",
+          left: 0,
+          right: 0,
+          /* THE PARENT'S `alignItems` DOES NOT REACH IT ANY MORE. An
+             absolutely positioned child is out of the flex flow, so the
+             column's centring stopped applying and the word went to the
+             left edge. It spans the viewport and centres its own text. */
+          textAlign: "center",
+          top: `calc(50% + ${BODY / 2 + 96}px)`,
           fontFamily:
             'Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif',
           fontSize: 12,

@@ -432,8 +432,20 @@ it('steps back from a conversation to the list of them', async () => {
   await openANewChat(world.container);
   expect(location.pathname.startsWith('/chat/'), 'the conversation never opened').toBe(true);
 
-  const back = world.container.querySelector<HTMLButtonElement>('.waka-over--talk .waka-over-back');
-  expect(back, 'a conversation offers no way back to its own list').toBeTruthy();
+  /* ═══ THE WAY BACK IS THE BAR, AND IT IS STILL PRESSED ═══════════════
+     Founder, of the notepad's chevron: "I still don't get why you have
+     this carrot button ... I can just go to all the inspirations using the
+     bottom panel." Law 7 carried that to this surface: the glyph here
+     pointed at a room the dock's "Chats" row names in a word.
+
+     WHAT THIS CASE IS FOR DOES NOT CHANGE. Law 8 — "pressed, not counted"
+     — is why it exists: the previous one-press return in this product
+     rendered, read correctly, was enabled, and did nothing. A different
+     control is pressed; the assertion that you end up on the list is the
+     same, and it is now covering the control people will actually use. */
+  const back = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock-item')]
+    .find((row) => /^chats$/i.test(row.textContent ?? ''));
+  expect(back, 'the bar offers no way back to the list of chats').toBeTruthy();
   await act(async () => back!.click()); await settle();
   expect(location.pathname, 'it stayed in the conversation').not.toContain('/chat/');
   expect(
