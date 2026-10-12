@@ -29,7 +29,7 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 
-import { supportedLocales } from "../lib/i18n";
+import { SettingsPanel, type SettingsPanelProps } from "./SettingsPanel";
 import { t, type MessageKey, type SupportedLocale } from "../lib/locales";
 
 export interface MenuItem {
@@ -96,57 +96,37 @@ export interface MenuProps {
    */
   label?: MenuItem["label"];
   /** Everything about this account and its agents. */
-  /**
-   * THE FULL SETTINGS PAGE — reached FROM the card, not instead of it.
-   *
-   * Founder: "when I click on the settings button on the top right, can you
-   * make it so that it's more of a hover card that shows so that it's not
-   * moving the page to a new page?"
-   *
-   * Right, and for a reason worth naming: most of what a person wants from
-   * that corner is to CHECK something — who am I signed in as, how do I get
-   * out — and a whole page navigation to answer a check costs you the screen
-   * you were reading. The card answers the checks in place; the page is one
-   * press further for the things that genuinely need a page.
-   */
-  onSettings: () => void;
+  /* `onSettings` IS GONE WITH THE PAGE IT NAVIGATED TO. It was added when
+     the founder asked for "more of a hover card ... so that it's not
+     moving the page to a new page", which made the corner answer checks in
+     place and left the page one press further for everything else. The
+     founder has since closed that gap from the other end — "I want all
+     setting-related stuff to be only accessible through the drop down and
+     not be its own thing" — so there is no page to navigate to, and a prop
+     for reaching it would be a door onto nothing. */
+
   /** Who you are signed in as, for the card to say so. */
   account?: { name?: string | null; email?: string | null } | null;
   /**
-   * ═══ THE SETTINGS THEMSELVES, IN THE CARD ═════════════════════════════
+   * ═══ ALL OF SETTINGS, IN THE CARD ════════════════════════════════════
    *
-   * Founder, with `/profile` on screen: "this is so ugly too. How do we make
-   * it more better, and also how do I kind of make it more of a drop down
-   * when I click on this settings icon rather than a new page."
+   * Founder, twice. "How do I kind of make it more of a drop down when I
+   * click on this settings icon rather than a new page", and then, once
+   * the card held two of the controls and a link to the rest: "I want all
+   * setting-related stuff to be only accessible through the drop down and
+   * not be its own thing."
    *
-   * The card already existed for the half of that ask about navigation — see
-   * `onSettings` above, written when the founder asked for "more of a hover
-   * card ... so that it's not moving the page to a new page". What it held
-   * was a name, an address, and a LINK to the page. So the corner still
-   * answered "where is settings" with "somewhere else", and the two things
-   * anybody actually changes — what they are called and what language they
-   * are read in — were a navigation away.
+   * So the split by how-often is gone with the page. `SettingsPanel`
+   * renders everything that survived the prune and its header says what
+   * did not; this component contributes the anchoring, the scrim and the
+   * dismissal, which is what a corner owns.
    *
-   * THE SPLIT IS BY HOW OFTEN, NOT BY HOW IMPORTANT. Two controls here: the
-   * ones a person changes and then sees the result of immediately. Public
-   * pages, keeper keys, connections, deletion and the diagnostics stay on
-   * the page, because each needs room, a confirmation, or both — a focus
-   * trap in a corner card is a worse version of a page.
-   *
-   * ABSENT RATHER THAN DISABLED where the surface cannot offer them: a flat
-   * screen has no `useAuth` wiring into this component, and a card with two
-   * dead fields in it is worse than a card with none.
+   * ABSENT RATHER THAN DISABLED where a surface cannot offer them: a flat
+   * screen has no session wiring into this component, and a card of dead
+   * fields is worse than a card with none. The name and address still show
+   * in that case, because a check is the other thing this corner is for.
    */
-  settings?: {
-    name: string;
-    onName: (value: string) => void;
-    locale: SupportedLocale;
-    onLocale: (value: SupportedLocale) => void;
-    /** True while either is in flight, so the pair cannot be raced. */
-    busy?: boolean;
-    /** Said only when a write failed; silence is the success state. */
-    failed?: boolean;
-  } | null;
+  settings?: Omit<SettingsPanelProps, "locale" | "email" | "onSignOut" | "onClose"> | null;
   /** Leaving. Absent on a surface that cannot sign out. */
   onSignOut?: () => void;
   /**
@@ -168,7 +148,7 @@ export interface MenuProps {
   hidden?: boolean;
 }
 
-export function Menu({ locale, items, current, label, left, onSettings, account, settings, onSignOut, hidden }: MenuProps): JSX.Element | null {
+export function Menu({ locale, items, current, label, left, account, settings, onSignOut, hidden }: MenuProps): JSX.Element | null {
   /* THE SWITCHER'S OWN OPEN STATE IS GONE WITH THE SHEET IT OPENED. The
      three rungs are laid out rather than listed (see `.waka-rungs`), so there
      is nothing to expand, nothing to focus into, nothing to close on Escape
@@ -365,75 +345,27 @@ export function Menu({ locale, items, current, label, left, onSettings, account,
               tabIndex={-1}
               onClick={() => setAccountOpen(false)}
             />
+          {/* ═══ THE PANEL IS THE WHOLE OF SETTINGS NOW ═══════════════
+              Founder: "I want all setting-related stuff to be only
+              accessible through the drop down and not be its own thing."
+
+              What stood here was a name, an address, a language and a LINK
+              to `/profile`. The page is gone; `SettingsPanel` holds what
+              survived the prune, and its header lists what did not and
+              why. This component keeps only the anchoring and the
+              dismissal, which is what a corner owns. */}
           <span className="waka-account" role="note">
-            {/* THE NAME IS THE FIELD NOW, where it used to be printed above
-                a link to the page that could change it. One line instead of
-                two, and the thing you came to do is the thing in front of
-                you. The address stays as text: it identifies the account and
-                is not editable here or anywhere. */}
             {settings ? (
-              <label className="waka-account-field">
-                <span>{t(locale, "profileNickname")}</span>
-                <input
-                  type="text"
-                  value={settings.name}
-                  disabled={settings.busy}
-                  autoComplete="name"
-                  onChange={(event) => settings.onName(event.currentTarget.value)}
-                />
-              </label>
-            ) : account?.name ? (
-              <span className="waka-account-name">{account.name}</span>
-            ) : null}
-            {account?.email ? <span className="waka-account-email">{account.email}</span> : null}
-            {settings ? (
-              <label className="waka-account-field">
-                <span>{t(locale, "profileLanguageLabel")}</span>
-                <select
-                  value={settings.locale}
-                  disabled={settings.busy}
-                  onChange={(event) =>
-                    settings.onLocale(event.currentTarget.value as SupportedLocale)
-                  }
-                >
-                  {supportedLocales.map((option) => (
-                    <option key={option.code} value={option.code}>
-                      {option.nativeLabel}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            {/* SILENCE IS THE SUCCESS STATE. A name that saved needs no
-                sentence — the field holds what you typed and the world
-                behind it is already using it. Only a refusal is news. */}
-            {settings?.failed ? (
-              <span className="waka-account-failed" role="alert">
-                {t(locale, "profileSaveError")}
-              </span>
-            ) : null}
-            <button
-              type="button"
-              className="waka-account-go"
-              onClick={() => {
-                setAccountOpen(false);
-                onSettings();
-              }}
-            >
-              {t(locale, "worldAllSettings")}
-            </button>
-            {onSignOut ? (
-              <button
-                type="button"
-                className="waka-account-out"
-                onClick={() => {
-                  setAccountOpen(false);
-                  onSignOut();
-                }}
-              >
-                {t(locale, "worldSignOutLower")}
-              </button>
-            ) : null}
+              <SettingsPanel {...settings} locale={locale}
+                email={account?.email ?? null}
+                onSignOut={onSignOut ?? (() => undefined)}
+                onClose={() => setAccountOpen(false)} />
+            ) : (
+              <>
+                {account?.name ? <span className="waka-account-name">{account.name}</span> : null}
+                {account?.email ? <span className="waka-account-email">{account.email}</span> : null}
+              </>
+            )}
           </span>
           </>
         ) : null}

@@ -60,7 +60,6 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Days } from "../src/pages/Days";
-import ProfilePage from "../src/pages/Profile";
 
 const session = vi.hoisted(() => {
   const account = {
@@ -174,12 +173,16 @@ describe("a surface you can enter has a visible way out, and it costs one press"
     expect(here).toBe("/");
   });
 
-  it("returns from the settings page to the world", async () => {
-    await open("/profile", <ProfilePage />);
-    expect(here).toBe("/profile");
-    await act(async () => exit().click());
-    expect(here).toBe("/");
-  });
+  /* ═══ THE SETTINGS PAGE HAS NO EXIT BECAUSE IT HAS NO EXISTENCE ══════
+     Founder: "I want all setting-related stuff to be only accessible
+     through the drop down and not be its own thing." `/profile` is gone,
+     so the case that pressed its way out is too.
+
+     WHAT THAT CASE PROTECTED SURVIVES ON `/days`, which is the other page
+     this exit serves and is asserted above and below — including the half
+     that matters most, that the exit means YOUR world even when standing
+     as an agent. One page exercising it is enough to hold the rule; two
+     were exercising it only because two pages existed. */
 
   /**
    * THE SECOND HALF OF THE COMPLAINT, AND IT IS A REAL TRAP, NOT A TIDINESS
@@ -213,11 +216,6 @@ describe("a surface you can enter has a visible way out, and it costs one press"
     await act(async () => exit().click());
     expect(here).toBe("/");
 
-    await act(async () => root.unmount());
-    root = createRoot(host);
-    await open("/profile", <ProfilePage />);
-    await act(async () => exit().click());
-    expect(here).toBe("/");
   });
 
   /**

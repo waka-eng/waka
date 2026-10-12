@@ -136,7 +136,7 @@ export function Days(): JSX.Element {
           So the header is gone, because an element whose only contents are
           two comments is 40px of margin pretending to be a heading, and the
           exit is where every other page keeps it. */}
-      <Menu locale={locale} items={menu.items} current={menu.current} left={<ChatCorner locale={locale} onOpen={() => navigate("/?open=conversations")} />} label="worldDaysTitle" onSettings={menu.onSettings}
+      <Menu locale={locale} items={menu.items} current={menu.current} left={<ChatCorner locale={locale} onOpen={() => navigate("/?open=conversations")} />} label="worldDaysTitle"
         account={auth?.account ? { name: auth?.profile?.name, email: auth?.account.email } : null} />
 
       {phase === "loading" ? (

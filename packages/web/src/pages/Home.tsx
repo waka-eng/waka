@@ -128,6 +128,7 @@ import {
 } from "../canvas/palette";
 import { SavesOverlay } from "../components/SavesOverlay";
 import { DOCK_SLOT } from "../components/NoteTools";
+import { deleteAccount } from "../lib/api/auth";
 import { whyNotKept } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
@@ -2790,12 +2791,42 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           .finally(() => setSettingsBusy(false));
       }, NAME_SETTLE_MS);
     },
-    locale,
     onLocale: (next: SupportedLocale) => {
       setSettingsBusy(true); setSettingsFailed(false);
       void auth.updatePreferredLocale(next)
         .catch(() => setSettingsFailed(true))
         .finally(() => setSettingsBusy(false));
+    },
+    /* ═══ THE PUBLIC PAGE, FROM THE SESSION THAT ALREADY HOLDS IT ═══════
+       `auth.profile` carries the handle and the two switches, so the panel
+       reads them rather than fetching a second copy — the settings page it
+       replaces loaded its own and could disagree with the session for as
+       long as a request takes. The write is `updateProfile`, which is a
+       REPLACE: the name and locale ride along or the server resets them. */
+    publicPage: {
+      handle: auth.profile?.publicHandle ?? '',
+      profileEnabled: Boolean(auth.profile?.publicProfileEnabled),
+      topOfMindEnabled: Boolean(auth.profile?.publicTopOfMindEnabled),
+      save: async (next: { handle: string; profileEnabled: boolean; topOfMindEnabled: boolean }) => {
+        setSettingsFailed(false);
+        try {
+          await auth.updateProfile({
+            name: (settingsName ?? accountName).trim() || accountName,
+            preferredLocale: locale,
+            publicHandle: next.handle || null,
+            publicProfileEnabled: next.profileEnabled,
+            publicTopOfMindEnabled: next.topOfMindEnabled,
+          });
+        } catch { setSettingsFailed(true); }
+      },
+    },
+    onDeleteAccount: async () => {
+      /* THE ONE IRREVERSIBLE ACT. The panel asks twice before it reaches
+         here; this does not ask again, and it does not catch — a failed
+         delete must surface rather than look like a quiet success. */
+      await deleteAccount();
+      await auth.logout().catch(() => undefined);
+      navigate('/login', { replace: true });
     },
   } : null;
 
@@ -17350,7 +17381,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 })}
               </span>
             ) : null}
-        onSettings={()=>navigate('/profile')}
         account={auth?.account ? { name: auth.profile?.name, email: auth.account.email } : null}
         settings={settingsCard}
         onSignOut={auth ? () => { void auth.logout(); } : undefined}

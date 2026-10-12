@@ -35,7 +35,6 @@ import { installPreloadRecovery } from "./lib/preload-recovery";
 import LoginPage from "./pages/Login";
 import { Days } from "./pages/Days";
 import OnboardingPage from "./pages/Onboarding";
-import ProfilePage from "./pages/Profile";
 import PublicProfilePage from "./pages/PublicProfile";
 import { MobileShell } from './components/MobileShell';
 if (import.meta.env.VITE_BUILD_TARGET === 'mobile') void import('./styles/mobile-fonts.css');
@@ -180,23 +179,22 @@ ReactDOM.createRoot(root).render(
               </RequireAuth>
             }
           />
-          {/* The account screen is checkable in dev for the same reason the
-              layout is: its look could otherwise only be verified by whoever
-              holds the password, which is how several things shipped here
-              unobserved. `import.meta.env.DEV` is compiled out of production,
-              so RequireAuth remains the only path in a real deployment. */}
-          <Route
-            path="/profile"
-            element={
-              import.meta.env.DEV ? (
-                <ProfilePage />
-              ) : (
-                <RequireAuth>
-                  <ProfilePage />
-                </RequireAuth>
-              )
-            }
-          />
+          {/* ═══ `/profile` IS GONE, AND SO IS THE IDEA OF IT ═══════════
+              Founder: "I want all setting-related stuff to be only
+              accessible through the drop down and not be its own thing."
+
+              The page rendered inside the world's layout, so it wore the
+              corner switcher and a chevron saying "YOUR TOP OF MIND" — a
+              screen about your account dressed as a screen about your
+              material, with its own column against the left edge while the
+              thing it was nested in centres. Both symptoms were read in one
+              glance and neither is a layout bug: a settings page is not a
+              destination in a product whose destinations are what you kept,
+              what it is thinking, and what has endured.
+
+              `SettingsPanel`, in the gear's own card, is where all of this
+              lives now; its header lists the five sections that did not
+              survive the prune and the reasoning for each. */}
           {/*
             The home route is protected. <RequireAuth> handles three cases:
               - still hydrating  → render a neutral loading state,

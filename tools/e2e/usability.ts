@@ -275,7 +275,7 @@ async function walk(browser: Browser, negative: boolean): Promise<Finding[]> {
      row is where the unnamed controls live. */
   await page.fill(".jar-composer-text", "A thought kept so the archive has something in it.");
   await page.waitForTimeout(400);
-  await page.locator(".jar-note-save").click();
+  await page.locator(".waka-dock-tool--keep").click();
   await page.waitForTimeout(4_500);
 
   if (await toDock("Inspirations")) {

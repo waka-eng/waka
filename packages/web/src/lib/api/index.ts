@@ -46,7 +46,6 @@ export type { ApiFieldErrors, ApiProfileType, ProfileScoped } from "./http";
 
 export * from "./auth";
 export * from "./profiles";
-export * from "./sessions";
 export * from "./inspirations";
 export * from "./inspiration-processing";
 /* `review-sessions`, `review-dialogue` and `review-processing` are GONE
@@ -66,11 +65,6 @@ export * from "./principles";
 export * from "./top-of-mind";
 export * from "./groups";
 export * from "./agents";
-export * from "./keeper-keys";
-export * from "./agent-grants";
-export * from "./consultations";
-export * from "./signal-duplicates";
 export * from "./feedback";
 export * from "./public-profiles";
-export * from "./reading";
 export * from "./weather";

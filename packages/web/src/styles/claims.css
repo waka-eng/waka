@@ -647,11 +647,8 @@
 }
 
 
-
-
 /* The caret, the list and its rows all went with the dropdown — the corner
    shows both of its two sides at once and has nothing to open. */
-
 
 
 /* An empty corner still holds the row's shape open, so the switcher stays
@@ -3982,81 +3979,15 @@
  * The sections keep their internal layout; only the frame changes.
  * ------------------------------------------------------------------------- */
 
-.profile-page {
-  max-width: 44rem;
-}
-
 /* No card: the page IS the surface. A panel inside a panel on a page that
    holds nothing else is a frame drawn around the whole window. */
-.profile-page .profile-card {
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.profile-page .profile-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-12) var(--sp-20);
-  margin-bottom: var(--sp-32);
-}
 
 /* The address you are signed in as — the one fact a settings page owes you
    on arrival, and the only thing left in the header now the title moved to
    the switcher. */
-.profile-page .profile-email {
-  margin: 0;
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  color: var(--muted);
-}
-
-.profile-page .profile-signout-button {
-  min-height: var(--sp-32);
-  padding: 0 var(--sp-16);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-control);
-  background: transparent;
-  color: var(--ink);
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  cursor: pointer;
-}
-
-.profile-page .profile-signout-button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
-}
 
 /* Each group is a section on a page, separated by a rule rather than by a
    raised panel — one surface, as everywhere else in the product. */
-.profile-page .profile-memories-panel,
-.profile-page .profile-public-panel,
-.profile-page .profile-danger-panel {
-  padding-top: var(--sp-24);
-  margin-top: var(--sp-24);
-  border-top: 1px solid var(--line);
-}
-
-.profile-page .profile-eyebrow {
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-}
-
-.profile-page .profile-subtitle {
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  color: var(--muted);
-}
 
 
 /* ---------------------------------------------------------------------------
@@ -4577,7 +4508,6 @@
 }
 
 
-
 /* ---------------------------------------------------------------------------
  * A SHEET UNDER A CORNER
  *
@@ -4606,7 +4536,14 @@
   top: calc(100% + var(--sp-8));
   z-index: 60;
   width: max-content;
-  max-width: min(22rem, calc(100vw - var(--sp-32)));
+  /* 26rem, NOT 22. The card used to hold a name and an address and sized
+     to them; it holds the whole of settings now, and the panel inside it
+     is 26rem — so at 22 the panel overflowed its own parent and the
+     agent-roster's Add button hung off the right of the screen. Measured
+     in a browser: the card ended at 1264 on a 1280 viewport with content
+     past it. The two numbers have to be one number, so the panel takes
+     `width: 100%` and this is where the measure is decided. */
+  max-width: min(26rem, calc(100vw - var(--sp-32)));
   padding: var(--sp-12);
   border: 1px solid var(--line);
   border-radius: var(--waka-r-surface);
@@ -4713,6 +4650,162 @@
 .waka-account-field select option {
   background: var(--waka-raised);
   color: var(--ink);
+}
+
+/* ═══ THE SETTINGS PANEL ════════════════════════════════════════════════
+   Founder: "I want all setting-related stuff to be only accessible through
+   the drop down and not be its own thing."
+
+   IT IS A PANEL, NOT A PAGE IN A CORNER, and the difference is enforced by
+   two things rather than by restraint. The groups are DISCLOSURES with one
+   open at a time, so the tallest state is one group plus five rows; and the
+   whole thing caps at the viewport and scrolls inside itself, so a long
+   agent roster cannot push the sign-out off the bottom of the screen.
+
+   WIDER THAN THE CARD IT REPLACES. 22rem held a name and an address; it
+   does not hold a handle field with two switches under it. 26rem is the
+   door's measure, which is this product's existing answer to "a column of
+   controls and nothing else". */
+.waka-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  /* THE CARD DECIDES THE MEASURE — see `.waka-account` above, where 26rem
+     is set and why. A second width here is the thing that overflowed. */
+  width: 100%;
+  max-height: calc(100dvh - var(--waka-corner) - var(--sp-40));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.waka-settings-who {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-meta);
+  overflow-wrap: anywhere;
+}
+
+/* A GROUP'S ROW IS ITS CONTROL. Full width, so the whole line is the press
+   — a disclosure whose target is only its own text is the "aim at it"
+   failure the scrim note already names one surface along. */
+.waka-settings-group {
+  border-top: 1px solid var(--line);
+  margin-top: var(--sp-8);
+}
+
+.waka-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: var(--waka-corner);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.waka-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding-bottom: var(--sp-16);
+}
+
+.waka-settings-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-meta);
+  line-height: 1.5;
+}
+
+.waka-settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.waka-settings-rows li,
+.waka-settings-add {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+.waka-settings-rows input,
+.waka-settings-add input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--waka-corner);
+  box-sizing: border-box;
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--field-edge);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+}
+
+.waka-settings-rows input:focus-visible,
+.waka-settings-add input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--ink) 80%, transparent);
+}
+
+.waka-settings-rows button,
+.waka-settings-add button,
+.waka-settings-keep {
+  flex: 0 0 auto;
+  min-height: var(--waka-corner);
+  padding: 0 var(--sp-14);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  cursor: pointer;
+}
+
+/* THE ONE FILLED CONTROL IN THE PANEL, matching the bar's keep and the
+   chat's send: a product with one primary action per surface draws it the
+   same way everywhere. */
+.waka-settings-keep {
+  align-self: flex-start;
+  background: var(--ink);
+  color: var(--bg);
+}
+
+/* NO RED. "Colour temperature means aliveness and is not spent on
+   warnings" — this file's own rule. What marks the destructive pair is
+   that each asks twice, which is a behaviour rather than a hue. */
+.waka-settings-erase:hover,
+.waka-settings-erase:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+.waka-settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: var(--t-ui);
+  cursor: pointer;
+}
+
+.waka-settings-toggle input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--ink);
 }
 
 .waka-account-failed {
