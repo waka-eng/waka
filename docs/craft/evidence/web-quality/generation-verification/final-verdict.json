@@ -1,0 +1,20 @@
+{
+  "deploymentRun": 37847188378,
+  "mergeSha": "f10b31196d15c909cba6beca8be5e12cc104ad3d",
+  "scenario": "portable",
+  "sourceCount": 10,
+  "activeSignals": 3,
+  "generatedPrinciples": 1,
+  "declared": false,
+  "qualificationOverrides": false,
+  "citationsOwned": true,
+  "rawWordsPreserved": true,
+  "wordingHistoryPreserved": true,
+  "humanWordingSurvivedRegeneration": true,
+  "editedSupportConfirmed": false,
+  "visibleInDeployedPhoneView": true,
+  "accountErased": true,
+  "singleSourceProducedNoPrinciple": true,
+  "review": "Generated stance is supported by data ownership and easy-exit preferences; understandable tools is a weaker part of the cited support. Human rewording includes all three themes, stays locked and is visibly marked as unconfirmed support.",
+  "limits": "Normal manual rereads were used after evidence checks settled. Automatic daily cadence, qualifications, budgets and model choices were not overridden. This is one coherent positive case, not universal generation reliability or human usability acceptance."
+}

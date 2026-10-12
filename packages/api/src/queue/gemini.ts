@@ -533,6 +533,10 @@ const extractedStatementsSchema = z.object({
 function buildSignalExtractionPrompt(input: SignalCandidateExtractionInput): string {
   const sections: string[] = [];
 
+  if(input.relatedInspirations.length)sections.push(
+    'Earlier captures below provide evidence, not wording to report. For each distinct pattern, prefer an explicit author-written preference or choice rule from the current capture; put its particular event in quote/reason. Preserve time and context limits. If that rule is repeated verbatim in the earlier captures, return the shared sentence alone for that pattern, without prepending the current event or appending earlier situations. Other independent patterns still need separate statements. Explain support in reason using ordinary words; internal reference IDs belong only in relatedEvidence, never statement or reason. Keep each statement under 500 characters, preferably much shorter.',
+  );
+
   sections.push(
     `Locale: ${input.preferredLocale}. Captured: ${input.inspiration.createdAt.toISOString()}.`,
   );
@@ -616,7 +620,7 @@ export function buildSignalExtractionRequest(
 }
 
 /** Drop blanks and enforce the cap the schema only advertises. */
-export function parseSignalCandidates(payload: unknown): SignalCandidateExtractionResult {
+export function parseSignalCandidates(payload: unknown, input?: SignalCandidateExtractionInput): SignalCandidateExtractionResult {
   const parsed = extractedStatementsSchema.safeParse(payload);
   if (!parsed.success) {
     console.warn("[gemini] signal extraction payload failed validation", {
@@ -651,6 +655,22 @@ export function parseSignalCandidates(payload: unknown): SignalCandidateExtracti
     .filter((candidate) => candidate.statement.length > 0)
     .slice(0, MAX_SIGNAL_CANDIDATES);
 
+  /* BOTH SIDES SURVIVE HERE, and they are answering different questions.
+     dev (#366 "Keep generated patterns clean…") added the integrity guard
+     below: a statement that leaks a retrieval id, or runs past the length the
+     prompt asked for, is a model that did not answer the question — fail the
+     attempt and let the queue retry, rather than storing the leak forever.
+     The redesign added the shelf label (`category`). Neither replaces the
+     other, so the guard runs first — there is no point naming a shelf for a
+     reading we are about to throw away — and the return keeps `category`. */
+  if(input){
+    const authored=[input.inspiration.text,...input.reflections.flatMap(row=>[row.question,row.answer]),...input.attachments.map(row=>row.text)].join('\n').toLowerCase();
+    const ids=[input.inspiration.id,...input.relatedInspirations.map(row=>row.id)]
+      .filter(id=>/^[a-f0-9]{8}-[a-f0-9-]{27}$/i.test(id)).flatMap(id=>[id.toLowerCase(),id.slice(0,8).toLowerCase()]);
+    if(statements.some(row=>row.statement.length>500||ids.some(id=>!authored.includes(id)&&[row.statement,row.reason??''].some(text=>text.toLowerCase().includes(id)))))
+      throw new ModelDidNotAnswerError('signal extraction');
+  }
+
   /* A shelf label, held to being one: trimmed, bounded, and never the empty
      string wearing a category's clothes. The length cap is the tab row's —
      a phrase that cannot be read in a tab is not a category, whatever the
@@ -681,7 +701,7 @@ export async function extractSignalCandidates(
      the capture as derived-with-nothing forever; throwing fails the attempt
      and the queue retries. */
   if (payload === null) throw new ModelDidNotAnswerError("signal extraction");
-  return parseSignalCandidates(payload);
+  return parseSignalCandidates(payload, input);
 }
 
 
