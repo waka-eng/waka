@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 /** WHAT THIS MOCKS, AND WHY (gate G6): `URL` supplies `URL.createObjectURL` and
  * `URL.revokeObjectURL` for jsdom's missing blob transport. Hook results
- * are passed as props; the composer, event handling and controls run unchanged. */
+ * are passed as props; the composer, event handling and controls run unchanged.
+ * `helpers/note-top-row` replaces nothing: it is a DOM query over the tree
+ * this suite rendered itself, shared with `one-note.test.tsx` so the two ask
+ * the top row the same question. */
 import { act, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { pressesInTopRow } from './helpers/note-top-row';
 import { InspirationComposer } from '../src/components/InspirationComposer';
 
 let host: HTMLDivElement, root: Root, props: ComponentProps<typeof InspirationComposer>;
@@ -16,7 +20,7 @@ beforeEach(() => {
     locale: 'en-US', public: false, ready: true, fileDraftsAvailable: true, busy: false, error: '', uploadingId: null, inputRef: null,
     save: { phase: 'idle', pending: null, busy: false, start: vi.fn(), retry: vi.fn(), check: vi.fn(), dismiss: vi.fn(), resetInvalid: vi.fn(), editRejected: vi.fn() },
     recording: { phase: 'idle', seconds: 0, error: '', notice: '', start: vi.fn(), stop: vi.fn(), cancel: vi.fn() },
-    onText: vi.fn(), onFiles: vi.fn(), onRetryFile: vi.fn(), onChooseRecording: vi.fn(), onRemove: vi.fn(), onVisibility: vi.fn(), onPast: vi.fn(), onClose: vi.fn(), onSubmit: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(),
+    onText: vi.fn(), onFiles: vi.fn(), onRetryFile: vi.fn(), onChooseRecording: vi.fn(), onRemove: vi.fn(), onVisibility: vi.fn(), onClose: vi.fn(), onSubmit: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(),
   };
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
@@ -52,7 +56,16 @@ const enterLink = () => host.querySelector<HTMLInputElement>('input[type=url]')!
    same; `keep-ready.test.ts` enumerates the one list both now read. */
 it('commits nothing itself, because keeping it is the bar\'s job',async()=>{
   props.text='A thought to come back to.';props.media=[];await mount();
-  expect(host.querySelectorAll('.jar-note-save')).toHaveLength(0);
+  /* ASKED OF THE CONTROL THAT EXISTS, NOT THE ONE THAT WAS DELETED. This
+     line read `.jar-note-save` for months after the class was renamed out of
+     the product — counted on 2026-10-11, that string appears nowhere in this
+     repository except the tests asserting it is absent, so the line could
+     not have failed for any reason. Save's class today is
+     `.waka-dock-tool--keep`, worn by both note pages' Save (`NoteTools` and
+     `Home.tsx`'s notepad slot), and its accessible name is the i18n string
+     below. A Save growing back on this PAGE would wear one or the other,
+     because those are the two ways this product spells that control. */
+  expect(host.querySelectorAll('.waka-dock-tool--keep'), 'a Save grew back on the page').toHaveLength(0);
   expect(host.querySelector('[aria-label="Save inspiration"]')).toBeNull();
   expect(props.onSubmit).not.toHaveBeenCalled();
 });
@@ -89,8 +102,13 @@ it('opens straight into the words, under the moment and the way back',async()=>{
      ASSERTED AS ABSENCE, because the regression is it coming back. The
      visible way out is the bar, which `way-out.test.ts` holds to that
      promise structurally: the notepad is in `LEFT_BY_THE_DOCK` and the
-     dock's render condition is checked for not excluding `view.compose`. */
-  expect(host.querySelector('.jar-note-back')).toBeNull();
+     dock's render condition is checked for not excluding `view.compose`.
+
+     AND ASKED ABOUT THE SLOT RATHER THAN THE SPELLING. It used to read
+     `.jar-note-back`, a class that no longer exists in `src`, so the
+     assertion had become a sentence about nothing; `pressesInTopRow` sees a
+     way back under any name. See that helper for the whole argument. */
+  expect(pressesInTopRow(host), 'something pressable appeared beside the date').toEqual([]);
   expect(host.textContent).not.toContain('All inspirations');
   /* The one fact a blank page can state. Not asserted to an exact string —
      it is the clock — but it must be a real stamp rather than an empty node,
@@ -233,7 +251,7 @@ it('refuses unsafe link schemes without submitting or discarding the draft',asyn
 it('renders exactly one of each corner, never two', async () => {
   props.text = ''; props.media = []; await mount();
   const count = (selector: string) => host.querySelectorAll(selector).length;
-  expect(count('.jar-note-back'), 'the chevron came back').toBe(0);
+  expect(pressesInTopRow(host), 'the chevron came back, or something else did').toEqual([]);
   expect(count('.jar-note-when'), 'the moment is doubled').toBe(1);
   /* AND THE ATTACH CORNER IS NOT HERE AT ALL ANY MORE. Record and photo
      moved into the dock's making-slot — founder, of this corner, "I don't
@@ -241,6 +259,16 @@ it('renders exactly one of each corner, never two', async () => {
      screen, "this double layer is so weird". Two glyphs floating beside a
      bar are a second bar with two buttons in it. Asserted as ZERO rather
      than deleted, because the corner reappearing is the regression this
-     case now exists to catch. */
-  expect(count('.jar-note-tools'), 'the attach corner came back beside the bar').toBe(0);
+     case now exists to catch.
+
+     AND IT IS ASKED ABOUT `.waka-dock-tool`, WHICH IS WHAT THEY WEAR NOW.
+     This line read `.jar-note-tools` — a class with no renderer left in
+     `src` — so it had stopped being about the pair it names. The pair lives
+     in the bar as two `.waka-dock-tool` buttons, and the page is not the
+     bar: a tool with that class appearing INSIDE this surface is the
+     corner's return, whatever its own element is called. The dock's own
+     copies are out of reach from here, which is the point — this suite
+     mounts the page alone, and `one-dock-two-notes.test.tsx` is where the
+     bar's two implementations are compared to each other. */
+  expect(count('.waka-dock-tool'), 'the attach corner came back beside the bar').toBe(0);
 });

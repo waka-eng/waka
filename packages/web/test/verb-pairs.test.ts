@@ -137,13 +137,11 @@ const REGISTER: Record<string, string> = {
   // what the machine concluded, and what you may say back
   updateSignal: "releaseSignal",
   releaseSignal: "updateSignal",
-  /* `restoreSignal` IS BACK WITH THE ANTECHAMBER (2026-10-11, same day it
-     left). The antechamber now hangs off the "i" in the top corner rather
-     than off a gear — `SettingsPanel`'s header asked for that home — and
-     the ruling it had is the ruling it keeps: a refusal you can see and
-     not answer is the product talking about you with no way to reply, so
-     the dismissal's undo stands beside every row that still refuses. */
-  restoreSignal: "createFeedback",
+  /* `restoreSignal` LEFT THE REGISTER with its client wrapper (2026-10-11).
+     It was a dismissal's undo, and the only surface listing dismissed
+     signals was the antechamber — one of three machinery doors on the
+     settings page the founder folded into the gear's dropdown. The ROUTE
+     stands; what is gone is the verb this product offers. */
   createFeedback: "RULED: a verdict is answered by giving a different one, not by withdrawing it",
   updateTopOfMindEntry: "releaseTopOfMindEntry",
   releaseTopOfMindEntry: "updateTopOfMindEntry",
@@ -268,18 +266,11 @@ const REGISTER: Record<string, string> = {
      client wrappers that only that UI called. */
 
 
-  // the gardener's asks (2026-08-31, waka#294; back from the dead
-  // 2026-10-11, behind the "i" in the top corner): answering is
-  // deliberately standing. keep_apart is a permanent answer the gardener
-  // respects — the way to change your mind is that both signals still
-  // exist. A merge keeps every exit open by construction: the retired
-  // signal keeps its statement, its history, and its own evidence links,
-  // and the proposal row names the survivor — nothing is deleted, so there
-  // is nothing an un-merge verb would restore that the record does not
-  // already hold.
-  resolveSignalDuplicate:
-    "RULED: both answers are standing by design; a merge retires without deleting, " +
-    "so the record itself is the way back",
+  /* THE GARDENER'S ASKS went with the third machinery door (2026-10-11).
+     `resolveSignalDuplicate`'s ruling is kept here in spirit because it is
+     the best of the three and would be true again if the surface returns:
+     both answers are standing by design, a merge retires without deleting,
+     and the record itself is the way back. */
 };
 
 describe("every verb has a way back, or a reason it does not", () => {
