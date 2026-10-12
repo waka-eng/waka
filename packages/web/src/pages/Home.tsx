@@ -10029,7 +10029,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     can reach — the dead-press shape this codebase gates
                     against. Edit, Remove, and ask for a new one: the three the
                     founder named. */}
-                <p className="jar-poster-aside">
+                {/* ═══ THE VERBS ROW WEARS THE CLASS THAT LAYS IT OUT ══════════
+                    Founder, reading it on dev: the three verbs printed as
+                    "EditRemoveWrite a new one" — one run of text, no gaps.
+
+                    `jar-poster-aside` HAS NO RULE IN ANY STYLESHEET. It was
+                    used exactly once, here, and nothing ever declared it, so
+                    these buttons had no layout: three inline `<button>`s with
+                    `.jar-board-act`'s text styling and nothing to space them.
+                    They were also outside `.jar-board-acts button.jar-board-act`
+                    (`home.css:1239`), so they were in the wrong type register
+                    as well — two faults from one missing class.
+
+                    A CLASS IN THE MARKUP WITH NO RULE IS THE INVERSE OF DEAD
+                    CSS, and nothing looks for it: `dead-css` walks rules and
+                    asks whether anything wears them. This went the other way
+                    and no gate could see it. `one-class-one-thing.test.ts`
+                    now checks both directions — see the case added with this
+                    change. */}
+                <p className="jar-board-acts">
                   <button
                     type="button"
                     className="jar-board-act"
