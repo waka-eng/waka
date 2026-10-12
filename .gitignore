@@ -71,3 +71,5 @@ snap.json
 # are not artefacts anybody should review or ship.
 scratch/
 packages/*/scratch/
+scratch2/
+packages/*/scratch2/

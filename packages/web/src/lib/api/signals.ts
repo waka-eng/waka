@@ -157,9 +157,25 @@ export async function releaseSignal(id: string): Promise<ApiSignal> {
 }
 
 
-/* `restoreSignal` WENT WITH THE ANTECHAMBER. It was the undo for a
-   dismissal, and the only surface that listed dismissed signals was one of
-   the three machinery doors on the settings page — see `SettingsPanel`'s
-   header for why those went. The ROUTE is untouched; what is deleted is a
-   client wrapper nothing calls, which `orphans.test.ts` reads as live code
-   and which holds its own imports up with it. */
+/**
+ * POST /signals/:id/restore
+ *
+ * The dismissal's undo: the refusals stop and the pattern returns to the
+ * loop's sight, standing wherever its evidence puts it.
+ *
+ * IT CAME BACK WITH THE ANTECHAMBER (2026-10-11). It was deleted the same
+ * day, as a client wrapper nothing called once the only surface listing
+ * dismissed signals went off the settings page; the route was never
+ * touched. The antechamber now hangs off the "i" in the top corner rather
+ * than off a gear, which is the home `SettingsPanel`'s header asked for,
+ * and this is the verb that makes a refusal answerable rather than merely
+ * visible.
+ */
+export async function restoreSignal(id: string): Promise<ApiSignal> {
+  const body = await postJson<{ signal: ApiSignal }>(
+    apiPath(`/signals/${encodeURIComponent(id)}/restore`),
+    {},
+    "Failed to put this signal back",
+  );
+  return body.signal;
+}

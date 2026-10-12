@@ -68,3 +68,9 @@ export * from "./agents";
 export * from "./feedback";
 export * from "./public-profiles";
 export * from "./weather";
+/* `reading` AND `signal-duplicates` CAME BACK (2026-10-11), with the two
+   machinery doors they answer. Both were deleted as clients nothing called
+   once the settings page went; both routes stood the whole time. They are
+   reached from the "i" in the top corner now — see `HowItWorksPanel`. */
+export * from "./reading";
+export * from "./signal-duplicates";
