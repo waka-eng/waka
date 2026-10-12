@@ -1,0 +1,82 @@
+-- 0069 AGAIN, FOR THE DATABASES THAT CAN NEVER RECEIVE IT.
+--
+-- This file adds nothing new. It repeats 0069's two statements verbatim and
+-- exists only because of HOW drizzle decides what is pending.
+--
+-- ── WHAT 6be2f854 FIXED, AND WHAT IT COULD NOT REACH ────────────────────
+--
+-- `0069_inspiration_category.sql` was written, reviewed and merged with no
+-- journal entry, so `drizzle-kit migrate` — which applies the JOURNAL, not
+-- the folder — never ran it. The next migration was then authored as 0070
+-- and took the free `idx` 69. 6be2f854 repaired the journal: 0069 got an
+-- entry stamped with the file's own mtime (1791512364893), 0070 was moved
+-- back to idx 70, and `fresh-migrate.db.test.ts` gained a structural gate so
+-- the next omission fails on the commit that makes it.
+--
+-- That fix is correct for a FRESH database and wrong for an EXISTING one,
+-- and the reason is that drizzle does not apply by `idx`. From
+-- drizzle-orm@0.45.2/pg-core/dialect.js:62 —
+--
+--   if (!lastDbMigration || Number(lastDbMigration.created_at) < migration.folderMillis)
+--
+-- `lastDbMigration` is the newest row in `drizzle.__drizzle_migrations`, and
+-- `folderMillis` is the journal's `when`. So the question asked of every
+-- migration is "is your TIMESTAMP later than the latest timestamp this
+-- database has already recorded", and `idx` decides only the order of the
+-- walk.
+--
+-- 0070 carried `when` 1791745200000 before the renumbering and carries it
+-- still — the renumbering changed `idx`, not `when`. 0069's `when` is
+-- 1791512364893, which is EARLIER. Therefore on any database that ran the
+-- migrator while the broken journal was in place, 0070 was recorded at
+-- 1791745200000, and 0069 is now permanently behind the high-water mark:
+-- skipped, silently, on this run and every future run. `inspirations`
+-- never gets `category`, `schema-inspirations.ts` goes on declaring it, and
+-- the archive's category tabs query a column that is not there.
+--
+-- The window is commits a063bd1b..6be2f854 — about three days. Whether any
+-- deployed stage ran `pnpm db:migrate` inside it is not knowable from here.
+-- The local ledger's newest `created_at` was 1791369798790 (= 0068) when the
+-- security review checked it, so the founder's machine is unaffected; the
+-- dev and production stages are the unknown, and this file is what makes
+-- the answer not matter.
+--
+-- ── WHY A NEW MIGRATION AND NOT A RE-STAMP ──────────────────────────────
+--
+-- REJECTED: raising 0069's `when` above 0070's. It would make 0069 pending
+-- again on the stuck databases, and it is the smaller diff. It is also
+-- wrong twice over. First, `when` is what gets written into
+-- `__drizzle_migrations` as `created_at`, so on every database where 0069
+-- DID apply — a fresh clone, CI, anyone who migrated after 6be2f854 — the
+-- recorded stamp no longer matches the journal, and the ledger stops being
+-- a record of what happened. Second, it inverts `idx` against `when`, which
+-- is exactly the invariant the new gate in `fresh-migrate.db.test.ts`
+-- exists to hold: a journal whose indices and timestamps disagree is a
+-- journal where a replay cannot be told from a new migration.
+--
+-- REJECTED: a one-off hand-run of the SQL against each stage. It fixes
+-- today's stages and leaves the hole open for the next environment created
+-- from this corpus — a new reviewer's database, a new region, a restore from
+-- a snapshot taken inside the window. A migration converges all of them,
+-- including the ones that do not exist yet.
+--
+-- ── WHY REPEATING IT IS SAFE ────────────────────────────────────────────
+--
+-- Both statements are `IF NOT EXISTS`, so wherever 0069 did land this file
+-- is a no-op: Postgres emits a notice and changes nothing. It is not merely
+-- "probably idempotent" — there is no `DROP`, no `ALTER ... TYPE`, no data
+-- movement and no default, so the second application cannot differ from the
+-- first. The index is the same name and the same partial predicate, so a
+-- second `CREATE INDEX IF NOT EXISTS` matches the existing one by name and
+-- stops.
+--
+-- The comments in 0069 are the ones that explain the COLUMN — why free text
+-- rather than an enum, why nullable, why the index is partial. They are not
+-- duplicated here on purpose: there is one place that argument lives, and
+-- two copies would drift. Read 0069 for the design; this file is only about
+-- delivery.
+ALTER TABLE inspirations ADD COLUMN IF NOT EXISTS category text;--> statement-breakpoint
+
+CREATE INDEX IF NOT EXISTS inspirations_profile_category_idx
+  ON inspirations (profile_id, category)
+  WHERE category IS NOT NULL;

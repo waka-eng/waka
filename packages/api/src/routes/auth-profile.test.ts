@@ -276,6 +276,133 @@ describe("PATCH /api/auth/me/profile", () => {
     });
   });
 
+  /**
+   * ═══ A RENAME DOES NOT TOUCH THE PUBLIC PAGE ═══════════════════════════
+   *
+   * SECURITY REVIEW 2026-10-11, FINDING 4. This endpoint is deliberately two
+   * different things at once, and the asymmetry is the whole safety argument
+   * for moving the public-page controls into the settings panel:
+   *
+   *   - `name` and `preferredLocale` are a REPLACE. `profileSchema` requires
+   *     both, so a caller always states them and the stated value wins.
+   *   - `publicHandle`, `publicProfileEnabled` and `publicTopOfMindEnabled`
+   *     are a MERGE — `parsed.data.x ?? current.profile.x` in
+   *     `auth-me.ts:211-232`. Omitting them means "leave them", not "clear
+   *     them".
+   *
+   * The merge is what makes `SettingsPanel`'s rename path safe. That path
+   * sends `{ name, preferredLocale }` and nothing else, and the `set()` call
+   * below it writes all five columns unconditionally — so if the three
+   * public fields were read from `parsed.data` directly instead of through
+   * `??`, every rename would write `publicHandle: null,
+   * publicProfileEnabled: false, publicTopOfMindEnabled: false` and silently
+   * take somebody's public page down. Not fail. Take it down, and return 200.
+   *
+   * WHY THIS TEST EXISTS WHEN THE BEHAVIOUR IS ALREADY CORRECT. Nothing held
+   * it in place. Every other case in this describe that touches the public
+   * fields SUPPLIES them, so the merge branch is never exercised; and the one
+   * rename-only case — "persists display names containing spaces" above —
+   * asserts `toMatchObject({ name: "Mina Park" })`, which by construction
+   * passes while `publicHandle: null` sits in the same `values` object. The
+   * review's words: "a future editor 'simplifying' `profileHandler` to plain
+   * assignment would turn every rename into a silent public-page shutdown
+   * and the suite would stay green." Verified by doing exactly that — see the
+   * before/after in the finding's report; replacing the three `??` with
+   * `parsed.data.*` fails this case and nothing else in the file.
+   *
+   * WHY `toMatchObject` IS RIGHT HERE and wrong above. The assertion now
+   * NAMES the fields that have to survive, so extra keys in `values` are
+   * genuinely irrelevant rather than conveniently ignored. The exact-equality
+   * alternative would couple this case to `updatedAt` and to every column
+   * added to the profile row later, and would start failing for reasons that
+   * have nothing to do with the public page.
+   *
+   * WHAT THIS MOCKS, AND WHY (gate G6): the database, through `makeDb` — the
+   * subject is the VALUES this handler hands to `set()`, and a fake db is the
+   * only way to read them. The route, the schema, the merge and the
+   * transaction are all real. A db test would assert the round-trip instead
+   * and would not notice a handler that writes the right row for the wrong
+   * reason.
+   */
+  it("leaves the public page alone when a rename does not mention it", async () => {
+    const live = {
+      publicHandle: "mina",
+      publicProfileEnabled: true,
+      publicTopOfMindEnabled: true,
+    };
+    const db = makeDb({
+      selects: [identity({ profile: live })],
+      updatedProfile: { ...PROFILE_ROW, ...live, name: "Mina Park" },
+    });
+    dbState.db = db;
+
+    const response = await app().request(
+      "/api/auth/me/profile",
+      /* EXACTLY WHAT THE PANEL'S RENAME SENDS. No public fields, not even
+         as nulls — `SettingsPanel` posts these two keys and stops. */
+      authorized({ name: "Mina Park", preferredLocale: "ko-KR" }, "PATCH"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(db.setCalls).toHaveLength(1);
+    expect(db.setCalls[0]!.table).toBe(profiles);
+    /* THE THREE THAT MUST SURVIVE, named one by one. */
+    expect(db.setCalls[0]!.values).toMatchObject({
+      name: "Mina Park",
+      preferredLocale: "ko-KR",
+      publicHandle: "mina",
+      publicProfileEnabled: true,
+      publicTopOfMindEnabled: true,
+    });
+    /* And the response the client writes back into its session agrees, so a
+       correct write cannot be followed by a stale panel that shows the page
+       as off. */
+    await expect(response.json()).resolves.toMatchObject({
+      profile: {
+        name: "Mina Park",
+        publicHandle: "mina",
+        publicProfileEnabled: true,
+        publicTopOfMindEnabled: true,
+      },
+    });
+  });
+
+  /**
+   * THE OTHER HALF OF THE MERGE, which is just as load-bearing and is the
+   * reason `publicHandle` is read with an `=== undefined` check rather than
+   * `??`: an EXPLICIT `null` must clear the handle. "Leave it alone" and
+   * "take it down" have to be distinguishable, and `??` alone cannot tell
+   * `null` from absent — so a `??` on the handle would make the public page
+   * impossible to retract, which is the privacy failure in the opposite
+   * direction. Asserted here so a later tidy-up that unifies the three reads
+   * into one `??` fails on this case instead of only on the one above.
+   */
+  it("clears the public page when the caller explicitly says null", async () => {
+    const db = makeDb({
+      selects: [
+        identity({
+          profile: {
+            publicHandle: "mina",
+            publicProfileEnabled: false,
+            publicTopOfMindEnabled: false,
+          },
+        }),
+      ],
+    });
+    dbState.db = db;
+
+    const response = await app().request(
+      "/api/auth/me/profile",
+      authorized(
+        { name: "Mina Park", preferredLocale: "en-US", publicHandle: null },
+        "PATCH",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(db.setCalls[0]!.values).toMatchObject({ publicHandle: null });
+  });
+
   it("stamps onboarding on the account while the display identity stays on the profile", async () => {
     const completedAt = new Date("2026-06-20T10:15:30.000Z");
     const db = makeDb({
