@@ -61,12 +61,20 @@
  *
  * Flags: `--negative`, `--only <id>`.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, type Page } from "playwright";
-import ts from "typescript";
+/* `import ts from "typescript"` STOOD HERE AND NOTHING USED IT. It is
+   unused at HEAD too, so it is residue from a check that was rewritten rather
+   than anything this file needs — and `existsSync` beside it was in the same
+   state. Both out 2026-10-12: a tools-wide typecheck names them, and an
+   import that decides nothing is the same shape as the dead classes this
+   file has just finished removing. The one source check left here reads text
+   and counts brackets by hand, on purpose, because what it is looking for is
+   a comment inside a template literal — which a parser sees as string
+   content and has no opinion about. */
 import { launchChromium } from "./browser";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "../..");
@@ -120,16 +128,169 @@ const LAYERS = resolve(REPO, "packages/web/src/styles/layers.css");
  * passing, because the sheet doing it was not in the room.
  */
 const CHROME = resolve(REPO, "packages/web/src/styles/chrome.css");
-const HOME = resolve(REPO, "packages/web/src/pages/Home.tsx");
+/**
+ * ═══ WHEREVER A CLASS CAN BE RENDERED, AND NOT ONE FILE OF IT ════════════
+ *
+ * THIS WAS `const HOME = …/pages/Home.tsx`, AND THE DRIFT CHECK READ THAT
+ * ONE FILE AS PLAIN TEXT. Both halves of that were wrong, and they were
+ * wrong in opposite directions, which is why the gate was simultaneously
+ * red about live classes and green about dead ones.
+ *
+ *   TOO NARROW. The world is not one file any more. `jar-saved-count` is
+ *   rendered by `Menu.tsx` and `SavesOverlay.tsx`, `jar-settings--at-left`
+ *   by `space/settings/SpaceSettings.tsx`, `jar-seek` by four components,
+ *   `jar-reflect-box` by `GroupPanel.tsx` — every one of them really on
+ *   screen, every one of them reported MISSING by a check that only ever
+ *   looked at `Home.tsx`. A gate that goes red because the product was
+ *   refactored into components is a gate that gets switched off.
+ *
+ *   TOO LOOSE. A text match says yes to a class name written in a COMMENT
+ *   and to one passed to `querySelector`. Three of the names below were
+ *   passing on exactly that: `jar-saved` survives in `Home.tsx` only as a
+ *   `querySelector` argument, `jar-way` only inside a paragraph about where
+ *   the rail used to stand, and `jar-reflect-room` only inside its own
+ *   TOMBSTONE — a comment that says, in so many words, that it is gone. So
+ *   the one case built to notice a fixture standing on a class the world no
+ *   longer renders was being reassured by the sentence announcing the
+ *   removal.
+ *
+ * WHAT IS READ INSTEAD: every `.ts`/`.tsx` under `packages/web/src` except
+ * `src/styles`, which is where a class is DECLARED and never where one is
+ * rendered — and within each file only the value of a `className=` /
+ * `class=` attribute. A token is present when something really puts it on an
+ * element.
+ *
+ * READING THE TREE RATHER THAN A PATH IS ALSO WHAT MAKES THIS SURVIVE A
+ * REFACTOR, which it had to the same day it was written: the world
+ * simulation came out of `Home.tsx` into `canvas/simulation.ts` and
+ * `Home.tsx` lost six thousand lines. A check pointed at one file would have
+ * needed repointing — four source-text gates elsewhere in the repo did —
+ * and this one needed nothing, because it asks the question of wherever the
+ * answer is.
+ */
+const WEB_SRC = resolve(REPO, "packages/web/src");
+const WEB_SRC_LABEL = "packages/web/src";
+/**
+ * Not a renderer: `styles` is where a class is declared, never where one is
+ * put on an element.
+ *
+ * `__probe` WAS IN HERE AND CAME OUT ON 2026-10-12. It was a scratch copy of
+ * `Home.tsx` left behind while the world simulation was being extracted, and
+ * the directory is gone for good. An exemption for a path that cannot exist
+ * is the same shape as the dead classes this file has just finished removing:
+ * it reads like a rule and decides nothing, and the next person to see it has
+ * to go and find out that the thing it names never comes back.
+ */
+const NOT_A_RENDERER = new Set(["styles", "node_modules"]);
+
+function sourceFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (!NOT_A_RENDERER.has(entry.name)) sourceFiles(full, out);
+    } else if (/\.tsx?$/.test(entry.name)) {
+      out.push(full);
+    }
+  }
+  return out;
+}
 
 /**
- * THE INSET EVERY SIGNPOST KEEPS FROM THE EDGE IT IS NEAREST.
+ * Every class token the product really puts on an element.
  *
- * Founder ruling, 2026-08-25: "make margin 10px for all 4". It is one number
- * here rather than four literals below, so moving it is one edit and the
- * suite cannot end up asserting two different answers in two cases.
+ * WHOLE TOKENS, NOT SUBSTRINGS, and that is not a refinement — it is the
+ * drift this case exists for. `includes` said yes to `jar-panel-head` while
+ * the product had renamed it to `jar-panel-headline`, because one name is a
+ * prefix of the other. Splitting the attribute into tokens makes the
+ * question "is this class on something" rather than "do these letters
+ * appear", and a prefix can no longer answer it.
+ *
+ * Comments are stripped first, for the reason in the note above `WEB_SRC`:
+ * a name inside a tombstone is evidence of the opposite of presence.
  */
-const INSET = 10;
+function renderedClasses(): Set<string> {
+  const found = new Set<string>();
+  for (const file of sourceFiles(WEB_SRC)) {
+    /* Comments out first — that is half the point of this function, see the
+       note above `WEB_SRC`. Newlines are kept so nothing joins up across a
+       line that was not joined before. */
+    const code = readFileSync(file, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+      .replace(/(^|[^:"'`\\])\/\/[^\n]*/g, (m, keep: string) => keep + " ".repeat(m.length - keep.length));
+    for (const piece of literals(code)) {
+      /* A SELECTOR IS NOT A RENDER, and this is the other half of the point.
+         `Home.tsx` keeps `jar-saved` alive only by handing ".jar-saved" to
+         `querySelector`, and a check that counts that is a check that says a
+         class is on the page because somebody is looking for it. A literal
+         that opens with a selector's own punctuation is a selector. */
+      const head = piece.trimStart()[0];
+      if (head === "." || head === "#" || head === "[") continue;
+      for (const token of piece.split(/\s+/)) {
+        if (/^[A-Za-z][\w-]*$/.test(token)) found.add(token);
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * Every string literal in a file, as separate pieces of text.
+ *
+ * ── WHY THIS IS THREE LOCAL REGULAR EXPRESSIONS AND NOT A SCANNER ─────────
+ *
+ * Two earlier versions of this were wrong in opposite directions and both of
+ * them are worth writing down, because each produced a confident wrong
+ * answer about a class that was in front of me on the screen.
+ *
+ *   A REGEX OVER THE `className=` ATTRIBUTE, matching `["'`][^"'`]*["'`]`,
+ *   reported `jar-dial`, `jar-panel`, `jar-panel-vis` and `jar-hq-inner`
+ *   missing. All four are written the way most conditional classes in this
+ *   product are — ``className={`jar-dial${away ? " jar-dial--away" : ""}`}``
+ *   — and a character class that stops at a quote stops INSIDE the hole, on
+ *   the quote opening `" jar-dial--away"`. The capture is `jar-dial${away ? `
+ *   and the base name goes with the modifier.
+ *
+ *   A CHARACTER-BY-CHARACTER SCANNER over the whole file reported fifteen
+ *   missing, which is most of what this fixture stands on. The cause is that
+ *   a `.tsx` file is full of PROSE: an apostrophe in a sentence of copy or a
+ *   JSX text node opens a single-quoted string as far as the scanner is
+ *   concerned, and everything after it is "inside a string" until the next
+ *   apostrophe — so one `What's` desynchronises the rest of the file.
+ *
+ * The fix for both is the same and it is the ordinary rule of the language:
+ * a `'` or `"` string CANNOT CONTAIN A RAW NEWLINE. Matching those two
+ * locally and line-bounded means a stray apostrophe can corrupt one line and
+ * no more. Template literals may span lines, so they are matched greedily and
+ * then split on their own `${` and `}` — the text chunks come out whole, and
+ * any quoted string inside a hole is found by the first two passes anyway,
+ * since those run over the entire file rather than inside this match.
+ *
+ * It is deliberately loose about WHERE a literal is: tracking the end of a
+ * JSX attribute expression needs most of a parser, and the two ways this
+ * check was actually being lied to are comments and selector strings, which
+ * `renderedClasses` deals with directly and which need no attribute
+ * boundary. What is left over is a literal carrying a class name for some
+ * other reason; the cost of one of those is a drift unnoticed for a release,
+ * against a gate that is wrong every single run.
+ */
+function literals(code: string): string[] {
+  const out: string[] = [];
+  for (const m of code.matchAll(/"(?:[^"\\\n]|\\.)*"/g)) out.push(m[0].slice(1, -1));
+  for (const m of code.matchAll(/'(?:[^'\\\n]|\\.)*'/g)) out.push(m[0].slice(1, -1));
+  for (const m of code.matchAll(/`(?:[^`\\]|\\.)*`/g)) {
+    for (const chunk of m[0].slice(1, -1).split(/\$\{|\}/)) out.push(chunk);
+  }
+  return out;
+}
+
+/* THE INSET EVERY SIGNPOST KEPT FROM THE EDGE IT WAS NEAREST WAS `10`, and
+   the founder's ruling behind it — 2026-08-25, "make margin 10px for all 4" —
+   is recorded here rather than dropped with the constant. It was one number
+   in one place so that moving it was one edit and the suite could not assert
+   two different answers in two cases. Nothing reads it since the two
+   signpost cases went on 2026-10-12 (see their tombstone below): there are no
+   four margins left to keep an inset from. If the bar is ever measured for
+   its distance from the glass, that number belongs here under this ruling. */
 
 /** How far a measured centre may sit from another and still be "aligned". */
 const CENTRE_SLOP = 0.75;
@@ -145,10 +306,18 @@ interface Case {
 }
 
 /* ── the fixture ───────────────────────────────────────────────────────────
-   Markup mirroring what `Home.tsx` renders, against the product's own
-   stylesheet. The two positioned families are laid out as the world lays
-   them out: the ways sideways are placed from their wall's column, which in
-   a single-column fixture is the viewport's own edges. */
+   Markup mirroring what the world renders, against the product's own
+   stylesheet.
+
+   THE SIGNPOST FAMILY IS NOT IN HERE ANY MORE (2026-10-12). It was six
+   elements — the way up, the two ways sideways, the archive door and the
+   count on it, the wall chip in the top bar — and five of the six have no
+   renderer in `packages/web/src` outside `src/styles`. Fixture markup for a
+   class nobody draws is the one thing this fixture must not have: the whole
+   trade it makes is speed in exchange for the risk of drift, and markup that
+   drifts in the fixture's favour means every number taken from it is about a
+   page nobody has. See the two tombstones below for the cases that stood on
+   them and what measuring the bar instead would cost. */
 const FIXTURE = `<!doctype html>
 <meta charset="utf-8">
 <link rel="stylesheet" href="/layers.css">
@@ -169,9 +338,6 @@ const FIXTURE = `<!doctype html>
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: #0a0d14; }
   .jar { position: fixed; inset: 0; }
-  /* the world writes these two as inline \`left\` from the wall's column */
-  .jar-way { left: ${INSET}px; }
-  .jar-way--r { left: auto; right: ${INSET}px; transform: none; }
   /* THE CARD IS NO LONGER PINNED. It was forced to 'position: static' with a
      margin, because its place used to be solved by the frame loop — and that
      pin would now hide the very thing the founder asked for, since the
@@ -211,23 +377,18 @@ const FIXTURE = `<!doctype html>
   <div class="jar-hq-inner">
     <h1 class="jar-poster">a sentence the world is holding up</h1>
   </div>
-  <button class="jar-values" data-jar-chrome="1">
-    <span class="jar-values-words jar-label">philosophies &amp; values</span>
-    <span class="jar-caret jar-caret--up" aria-hidden="true"></span>
-  </button>
-  <button class="jar-way jar-label" data-jar-chrome="1">
-    <span class="jar-caret jar-caret--left" aria-hidden="true"></span><span>AGENT1</span>
-  </button>
-  <button class="jar-way jar-way--r jar-label" data-jar-chrome="1">
-    <span>ROOM1</span><span class="jar-caret jar-caret--right" aria-hidden="true"></span>
-  </button>
-  <button class="jar-saved" data-jar-chrome="1">
-    <span class="jar-saved-count">30 inspirations</span>
-    <span class="jar-caret" aria-hidden="true"></span>
-  </button>
   <div class="jar-topbar" data-jar-chrome="1">
     <div class="jar-exits">
-      <span class="jar-here-split"><button class="jar-here jar-back jar-label">ME</button></span>
+      <!-- THE WALL CHIP IS GONE FROM THIS ROW AND FROM THE PRODUCT.
+           It was \`<span class="jar-here-split"><button class="jar-here jar-back
+           jar-label">ME</button></span>\`, and it stood here only to be the
+           thing \`.jar-settings--at-left\` hangs off. \`Home.tsx\` returns
+           \`null\` in its place under the heading "THE WALL PICKER MOVED TO
+           THE TOP-LEFT CORNER" — the name of the ground and the list of the
+           others render into the corner row now. See the tombstone above
+           \`every-modal-is-one-modal\` for what that arm measured, why the
+           sheet it measured cannot be opened at all, and what would bring
+           the measurement back. -->
       <button class="jar-when jar-label">now</button>
     </div>
     <!-- THE ACCOUNT PILL IS GONE FROM THIS ROW AND FROM THE PRODUCT.
@@ -253,9 +414,6 @@ const FIXTURE = `<!doctype html>
   </div>
 
   <div class="jar-settings" data-jar-chrome="1" role="dialog">
-    <div class="jar-settings-head"><span class="jar-label">this wall</span></div>
-  </div>
-  <div class="jar-settings jar-settings--at-left" data-jar-chrome="1" role="dialog">
     <div class="jar-settings-head"><span class="jar-label">this wall</span></div>
   </div>
   <div class="jar-prov-room" data-jar-chrome="1" role="dialog">
@@ -291,20 +449,49 @@ const FIXTURE = `<!doctype html>
       <span class="jar-panel-foot-c"><button type="button" class="jar-panel-save">save</button></span>
       <span class="jar-panel-foot-r"><button type="button">leave it</button></span>
     </p>
+    <!-- THE SECOND ROW OF QUIET VERBS, AND IT IS IN HERE BECAUSE A CASE WAS
+         READING ONE THAT WAS NOT. The case below named
+         verb-rows-one-register compares three rows and asked the probe for
+         typeMouth, which the probe has never produced: the mouth's own verb
+         row left this fixture and the read was not taken out with it. So the
+         third register came back as the empty string, three registers were
+         always counted where two were measured, and the case was PERMANENTLY
+         RED on a correct page. That is a false report, which is the one thing
+         worse than a gap. Found and fixed 2026-10-12.
+
+         This is the row that replaces it, and it is the product's own: the
+         card's confirmation strip, jar-panel-askrow holding jar-ask with
+         jar-ask--row and the two quiet verbs in it, rendered three times over
+         in the memory card (publish, un-publish, forget). The claim is
+         unchanged — every row of quiet verbs is set in one register — and it
+         is now asked of three rows that exist.
+         (No backticks in this comment: the whole fixture is one template
+         literal and a quoted identifier would end it mid-sentence. The case
+         named no-backtick-inside-a-probe is in this file because that has
+         cost the project four gates.) -->
+    <div class="jar-panel-askrow" role="group">
+      <p class="jar-panel-warn">this will be visible to everyone</p>
+      <p class="jar-ask jar-ask--row" id="ask-row">
+        <button type="button" class="jar-where-on">keep it private</button>
+        <span aria-hidden="true"> &middot; </span>
+        <button type="button" class="jar-where-off">make it public</button>
+      </p>
+    </div>
   </div>
 
-  <!-- the sheet the world puts up after a keep, so a variant that is meant to
-       sit at the bottom can be caught being stretched from the top -->
-  <div class="jar-seek jar-reflect-room" data-jar-chrome="1" role="dialog">
+  <!-- A \`.jar-seek\` SHEET, WHICH IS STILL A SHAPE THE WORLD USES, AND NO
+       LONGER THE REFLECT ONE. This was \`.jar-seek.jar-reflect-room\` — the
+       sheet the world put up after a keep — kept here so a variant meant to
+       sit at the bottom could be caught being stretched from the top. That
+       surface was deleted on 2026-10-10 and the case that measured it went on
+       2026-10-12; the tombstone above \`verb-rows-one-register\` says what the
+       measurement was. What stays is a bare \`.jar-seek\`, because
+       \`every-modal-is-one-modal\` reads one and \`.jar-seek\` itself is still
+       rendered by four components. It carries no variant: a variant in here
+       is a claim about a component, and this fixture has no markup for any
+       of them. -->
+  <div class="jar-seek" data-jar-chrome="1" role="dialog">
     <p class="jar-prov-lead jar-label">saved</p>
-    <p class="jar-reflect-on">the mouth's foot is one row now</p>
-    <p class="jar-reflect-q">What made you want to keep this?</p>
-    <textarea class="jar-reflect-box" rows="3" placeholder="In your own words"></textarea>
-    <p class="jar-ask jar-ask--row" id="reflect-foot">
-      <button type="button">keep</button>
-      <span aria-hidden="true"> &middot; </span>
-      <button type="button">not now</button>
-    </p>
   </div>
 </div>`;
 
@@ -329,19 +516,19 @@ const BOXES = `(() => {
   };
   return {
     vw: window.innerWidth, vh: window.innerHeight,
-    values: box(".jar-values"), wayL: box(".jar-way"), wayR: box(".jar-way--r"),
-    saved: box(".jar-saved"), dial: box(".jar-dial"), nowWord: box(".jar-when"),
+    dial: box(".jar-dial"), nowWord: box(".jar-when"),
     when: box(".jar-panel-when"), vis: box(".jar-panel-vis"),
     text: box(".jar-panel-text"),
     footL: box(".jar-panel-foot-l"), footC: box(".jar-panel-foot-c"), footR: box(".jar-panel-foot-r"),
     footVerb: box(".jar-panel-foot-l button"), footCaret: box(".jar-panel-foot-c .jar-caret"),
-    inkValues: ink(".jar-values-words"), inkWayL: ink(".jar-way"),
-    inkWayR: ink(".jar-way--r"), inkSaved: ink(".jar-saved-count"),
-    inkCaretUp: ink(".jar-caret--up"), inkCaretLeft: ink(".jar-caret--left"),
-    inkCaretRight: ink(".jar-caret--right"),
-    /* the two rows of quiet verbs: the card's head and the mouth's foot */
+    /* THE FOUR SIGNPOSTS AND THEIR CARETS WENT WITH THE TWO CASES THAT READ
+       THEM (2026-10-12) — see the tombstone above \`verb-rows-one-register\`.
+       \`.jar-caret\` is still read, down in the card's foot, by
+       \`the-edit-offers-one-act\`. */
+    /* the three rows of quiet verbs the card really has */
     typeVis: ink(".jar-panel-vis button"),
     typeWhen: ink(".jar-panel-when"),
+    typeAsk: ink(".jar-panel-askrow .jar-ask--row button"),
   };
 })()`;
 
@@ -361,7 +548,6 @@ const CASES: Case[] = [
     /* Sabotage: pretend the product renamed one. The check must notice. */
     sabotage: "",
     run: async () => {
-      const home = readFileSync(HOME, "utf8");
       /* DERIVED, NEVER RESTATED. This was a hand-kept list beside the cases'
          own `needs`, so a case added later declared five classes and this
          one went on checking the same fourteen — a drift check that had
@@ -371,23 +557,23 @@ const CASES: Case[] = [
         ...new Set([
           ...CASES.flatMap((c) => c.needs),
           /* the fixture's own scaffolding, measured by no single case but
-             stood on by all of them */
-          "jar-values-words", "jar-saved-count", "jar-caret", "jar-way--r",
+             stood on by all of them. `jar-saved-count` was here until
+             2026-10-12 and came out with the archive door it was printed on:
+             it is still rendered — by `Menu.tsx` and `SavesOverlay.tsx`, as
+             the number beside the archive's name in the bar — but this
+             fixture no longer stands on it, and a drift list that names
+             classes the fixture does not use is a list that will one day go
+             red about something this suite does not measure. */
+          "jar-caret",
         ]),
       ].sort();
-      /* WHOLE CLASS NAMES, NOT SUBSTRINGS. `includes` said yes to
-         `jar-panel-head` while the product had renamed it to
-         `jar-panel-headline` — the exact drift this case exists to catch,
-         waved through because one name is a prefix of the other. A class is
-         only really there if what follows it is not more class. */
-      const missing = wanted.filter(
-        (c) => !new RegExp(`(?<![\\w-])${c}(?![\\w-])`).test(home),
-      );
+      const rendered = renderedClasses();
+      const missing = wanted.filter((c) => !rendered.has(c));
       return {
         ok: missing.length === 0,
         detail:
           missing.length === 0
-            ? `${wanted.length} classes, all present in Home.tsx`
+            ? `${wanted.length} classes, every one of them really rendered somewhere in ${WEB_SRC_LABEL}`
             : `the fixture stands on classes the world no longer renders: ${missing.join(", ")}` +
               " — every measurement below would be about a page nobody has",
       };
@@ -550,83 +736,64 @@ const CASES: Case[] = [
     },
   },
 
-  {
-    id: "signposts-one-voice",
-    name: "the four signposts are set in one voice",
-    needs: ["jar-values-words", "jar-way", "jar-saved-count"],
-    sabotage: ".jar-saved-count { color: #fff; }",
-    run: async (page) => {
-      const b = (await page.evaluate(BOXES)) as Boxes;
-      const inks = {
-        "philosophies & values": b.inkValues as string,
-        "the way left": b.inkWayL as string,
-        "the way right": b.inkWayR as string,
-        "the count": b.inkSaved as string,
-      };
-      const distinct = [...new Set(Object.values(inks))];
-      return {
-        ok: distinct.length === 1,
-        detail:
-          distinct.length === 1
-            ? `all four: ${distinct[0]}`
-            : `${distinct.length} different registers — ` +
-              Object.entries(inks).map(([k, v]) => `${k}: ${v}`).join(" / "),
-      };
-    },
-  },
+  /* ═══ THE FOUR SIGNPOSTS ARE NOT MEASURED ANY MORE, BECAUSE THERE ARE NO
+     LONGER FOUR SIGNPOSTS ══════════════════════════════════════════════════
+     TWO CASES STOOD HERE AND BOTH WENT ON 2026-10-12. They were
+     `signposts-one-voice` ("the four signposts are set in one voice") and
+     `signposts-one-inset` ("every signpost keeps the same air from the edge
+     it is nearest"), and between them they named six classes:
 
-  {
-    id: "signposts-one-inset",
-    name: "every signpost keeps the same air from the edge it is nearest",
-    needs: ["jar-values", "jar-way", "jar-saved"],
-    sabotage: ".jar-values { top: 40px; }",
-    run: async (page) => {
-      const b = (await page.evaluate(BOXES)) as Boxes;
-      const box = (k: string) => b[k] as { top: number; bottom: number; left: number; right: number };
-      /* THE COUNT HAS THE EDGE, AND THE RAIL STANDS OFF IT BY THE SAME AIR.
-         The rail lives down here too — it is a horizontal instrument and this
-         is the only clear full-width band on the page — but it is the count
-         that touches the glass, and the gap between them is the same 10px
-         every signpost keeps. It used to be the other way round, which cost
-         the count its own inset: it kept 10px from the RAIL while the rail
-         kept 6px from the screen, so the sign a person reads most sat
-         furthest from an edge of the four. */
-      /* THE DATES ARE NOT MEASURED HERE ANY MORE, and that is a claim moving
-         house rather than a claim being dropped. This case is about the four
-         SIGNPOSTS and the one air they all keep from the edge they are
-         nearest. The rail's gap was grafted on when the instrument moved up
-         here from the bottom band; the instrument is now the third of the
-         sheets that hang off the button that opened them, so how it stands
-         under `.jar-when` is asked by `every-modal-is-one-modal`, beside the
-         same question about the other two. One question, one place. */
-      const got = {
-        top: box("values").top,
-        left: box("wayL").left,
-        right: b.vw - box("wayR").right,
-        /* THE COUNT HAS THE BOTTOM EDGE ENTIRELY, since 2026-08-27. First the
-           rail was under it, which cost the count its own inset — it kept 10px
-           from the RAIL while the rail kept 6px from the screen, so the sign a
-           person reads most sat furthest from an edge of the four. Then the
-           rail moved above it. Now the rail has left this edge altogether and
-           gone to hang under its own word, and the count is the only thing
-           down here. */
-        bottom: b.vh - box("saved").bottom,
-      };
-      const wrong = Object.entries(got).filter(([, v]) => !near(v, INSET, 1));
-      return {
-        ok: wrong.length === 0,
-        detail:
-          wrong.length === 0
-            ? `${INSET}px on all four`
-            : `wanted ${INSET}px, got ` + Object.entries(got).map(([k, v]) => `${k} ${r1(v)}`).join(", "),
-      };
-    },
-  },
+       .jar-values        the way up, `philosophies & values`
+       .jar-values-words  the words inside it
+       .jar-way           the neighbouring wall's name in the left margin
+       .jar-way--r        and in the right margin
+       .jar-saved         the archive door at the bottom edge
+       .jar-saved-count   the count printed on it
+
+     FIVE OF THE SIX HAVE NO RENDERER. Measured 2026-10-12 against the value
+     of every `className=` in every `.ts`/`.tsx` under `packages/web/src`
+     outside `src/styles`: `jar-values`, `jar-values-words` and `jar-way--r`
+     appear nowhere at all; `jar-way` survives only inside a paragraph in
+     `Home.tsx` about where the rail used to stand; `jar-saved` survives only
+     as a `querySelector` argument. `jar-saved-count` is the one that is still
+     drawn, and it has moved into `Menu.tsx` and `SavesOverlay.tsx` — it is
+     the number beside the archive's own name in the bar, not a word at the
+     bottom edge of the world.
+
+     AND THE GRAMMAR WENT, NOT JUST THE NAMES. `Home.tsx` carries the ruling
+     under its own heading "THE STRIP OF WALL NAMES IS GONE" and again under
+     "THE `N INSPIRATIONS` DOOR IS GONE FROM HERE TOO": up, down, left and
+     right as four words in four margins is not how this product navigates.
+     Four nouns in a bar are — Now, Inspirations, Chats, Principles — and that
+     bar never leaves the screen. So "the four signposts share one voice and
+     one inset" is not a claim with a drifted selector in it; it is a claim
+     about a screen that no longer exists.
+
+     WHY THEY ARE NOT REPOINTED AT THE BAR. The thing these two cases
+     measured is the property of a MARGIN: four separate absolutely-positioned
+     elements, each with its own edge to keep its distance from, each at risk
+     of being set in a different register because nothing lays them out
+     together. The dock is one flex row of four buttons in one rule. Its rows
+     cannot disagree about their inset — there is no inset, there is a gap —
+     and they cannot disagree about their voice without the rule that sets all
+     four changing. Asserting it here would be a case that cannot fail, which
+     this file calls decoration and deletes.
+
+     WHAT COVERAGE WENT, SAID RATHER THAN ABSORBED: nothing now measures the
+     type register of the navigation, or its distance from the edge of the
+     glass. WHAT WOULD RESTORE IT: a case against `.waka-dock` itself —
+     whether its row sits clear of the safe-area inset, whether its label
+     register is the one `--t-label` sets — with fixture markup for the bar.
+     That is a new case with its own markup, not a selector swap, and it
+     belongs to whoever is measuring the bar.
+
+     The two sabotages went with them: `.jar-saved-count { color: #fff }` and
+     `.jar-values { top: 40px }`. */
 
   {
     id: "verb-rows-one-register",
     name: "every row of quiet verbs is set in the label register",
-    needs: ["jar-panel-vis"],
+    needs: ["jar-panel-vis", "jar-panel-askrow", "jar-ask--row", "jar-where-on"],
     sabotage: ".jar-panel-vis button { font-size: 13px; text-transform: none; }",
     run: async (page) => {
       /* THE MISS THIS CASE EXISTS FOR. `private/public` was brought to the
@@ -634,13 +801,20 @@ const CASES: Case[] = [
          MOUTH — the same four words, two registers, depending which surface
          you were on, and nothing in the repo could tell. What is compared is
          type only, not colour: these rows sit on different grounds and are
-         allowed different ink. */
+         allowed different ink.
+
+         AND THE THIRD ROW IS THE CARD'S ASK STRIP NOW, NOT THE MOUTH'S.
+         The read was `b.typeMouth`, which the probe stopped producing when
+         the mouth's verb row left the fixture and nobody took the read out
+         with it — so for as long as that was true this case compared two
+         real registers against the empty string and failed on a correct
+         page. See the fixture note at `.jar-panel-askrow`. */
       const b = (await page.evaluate(BOXES)) as Boxes;
       const typeOf = (s: string) => (s ?? "").split(" | ").slice(0, 4).join(" | ");
       const rows = {
         "the card's date": typeOf(b.typeWhen as string),
         "the card's private/public": typeOf(b.typeVis as string),
-        "the mouth's row": typeOf(b.typeMouth as string),
+        "the card's ask row": typeOf(b.typeAsk as string),
       };
       const distinct = [...new Set(Object.values(rows))];
       return {
@@ -716,48 +890,48 @@ const CASES: Case[] = [
     },
   },
 
-  {
-    id: "a-sheet-is-its-contents-tall",
-    name: "a modal is only as tall as what is in it",
-    needs: ["jar-seek", "jar-reflect-room", "jar-reflect-on", "jar-reflect-q", "jar-reflect-box"],
-    /* THE SABOTAGE HAD TO BE REWRITTEN, and the reason is worth keeping. It
-       was `top: 58px` alone, which was enough while the variant answered
-       `bottom: 16vh` — the two together are what pinned both edges and
-       stretched the box. Once every modal became one centred surface nothing
-       set `bottom` any more, so forcing `top` merely MOVED the sheet and this
-       case survived its own sabotage: decoration, reported as such by
-       `--negative`. Both edges are pinned here explicitly, so the case still
-       measures the thing it was written for. */
-    sabotage:
-      ".jar-seek.jar-reflect-room { top: 58px !important; bottom: 16vh !important;" +
-      " transform: translateX(-50%) !important; }",
-    run: async (page) => {
-      /* THE THIRD TIME THIS CASCADE BUG SHIPPED. `.jar-reflect-room` was
-         written a hundred and eighty lines ABOVE `.jar-seek`, so its
-         `top: auto` lost to the base's `top: 58px` — same specificity, later
-         wins — and the sheet stretched from the top edge down to its own
-         `bottom: 16vh`: six hundred pixels tall with four hundred of nothing
-         under the verbs. Nobody reading either rule would see it. A box is
-         honest when its floor is one padding below its last child. */
-      const read = `(() => {
-        const s = document.querySelector(".jar-reflect-room");
-        const last = s && s.lastElementChild;
-        if (!s || !last) return null;
-        const a = s.getBoundingClientRect(), b = last.getBoundingClientRect();
-        return { height: a.height, slack: a.bottom - b.bottom,
-                 pad: parseFloat(getComputedStyle(s).paddingBottom) };
-      })()`;
-      const m = (await page.evaluate(read)) as { height: number; slack: number; pad: number } | null;
-      if (!m) return { ok: false, detail: "the sheet is not in the fixture at all" };
-      const ok = Math.abs(m.slack - m.pad) <= 1;
-      return {
-        ok,
-        detail: ok
-          ? `${r1(m.height)}px tall, with its ${r1(m.pad)}px of padding under the last thing in it and nothing else`
-          : `${r1(m.slack - m.pad)}px of dead space under the sheet's last row — it is ${r1(m.height)}px tall and its contents do not fill it`,
-      };
-    },
-  },
+  /* ═══ THE SHEET THAT WAS ONLY AS TALL AS ITS CONTENTS IS GONE WITH THE
+     SHEET ═══════════════════════════════════════════════════════════════════
+     `a-sheet-is-its-contents-tall` STOOD HERE and went on 2026-10-12. It
+     measured `.jar-seek.jar-reflect-room` — the sheet the world put up after
+     a keep to ask what made you want to keep it — and asserted that its floor
+     was one padding below its last child.
+
+     THE SURFACE WAS DELETED ON 2026-10-10, AND THIS DID NOT GO RED, which is
+     the part worth recording. `Home.tsx`'s own tombstone says it in full:
+     "THE STANDALONE REFLECT SHEET IS GONE, AND IT WAS ALREADY UNREACHABLE
+     BEFORE IT WAS DELETED… `worldReflectOnKept` and `jar-reflect-room` went
+     with it." Of the five classes this case declared, `jar-reflect-on` is
+     nowhere in `packages/web/src` at all and `jar-reflect-room` survives only
+     inside that sentence — so the drift check two cases up was being
+     reassured, by a text match, by the very comment announcing the removal.
+     Meanwhile `home.css` still carries `.jar-seek.jar-reflect-room`, so the
+     measurement went on PASSING: a case standing on fixture markup of its
+     own, measuring a live rule, about a surface no person can open. That is
+     worse than a red gate. A red gate gets fixed.
+
+     (`jar-seek`, `jar-reflect-q` and `jar-reflect-box` are all still
+     rendered, and are not what went: the first by four components, the other
+     two by the read-only reflection list in a memory's card and by the room
+     board's propose box. Only the SHEET went.)
+
+     WHAT COVERAGE WENT: nothing now measures whether a sheet's box is filled
+     by what is in it — the cascade bug that stretched one from the top edge
+     to its own `bottom` and left four hundred pixels of nothing under the
+     verbs, three times.
+
+     WHY IT IS NOT REPOINTED AT A LIVE `.jar-seek`. The three that render
+     (`.jar-inspiration-composer`, `.jar-inspiration-search`,
+     `.jar-reading-comparison`) are declared in `chrome.css`, not `home.css`,
+     each with its own `max-height` and its own `overflow-y`, and each is a
+     different shape of contents. Pointing this case at one of them means new
+     fixture markup matching that component and a new judgement about what
+     "full" means for a scrolling box — which is a new case, exactly as the
+     tombstone below `every-modal-is-one-modal` says of the right-hand sheet.
+     It should be written by whoever is measuring that sheet.
+
+     The sabotage went with it: `.jar-seek.jar-reflect-room { top: 58px;
+     bottom: 16vh; transform: translateX(-50%) }`. */
 
   /* ═══ COVERAGE THIS CASE NO LONGER HAS, SAID AT THE TOP OF IT ═══════════
      THE RIGHT-HAND ANCHORED SHEET IS NOT MEASURED ANY MORE. It was
@@ -802,40 +976,64 @@ const CASES: Case[] = [
      its own fixture markup, not a selector swap, and it should be written
      when somebody is measuring that card rather than smuggled in here.
 
-     AND ITS SIBLING IS IN THE SAME STATE — NOT FIXED HERE, AND NOT HIDDEN.
-     `atLeft` survives because `.jar-settings--at-left` is still rendered
-     (`space/settings/SpaceSettings.tsx`), but the button it is anchored to,
-     `.jar-here`, has no renderer either: the wall chip in `.jar-topbar`
-     returns `null` under `Home.tsx`'s heading "THE WALL PICKER MOVED TO THE
-     TOP-LEFT CORNER". So that arm measures a live sheet against a dead
-     handle, which is a weaker version of the same defect and a question
-     about the product — what opens the wall's settings now — rather than
-     about this file.
+     AND ITS SIBLING WENT THE SAME WAY ON 2026-10-12, AND IT TOOK MORE WITH
+     IT THAN A DEAD HANDLE. `atLeft` was
+     `anchored(".jar-settings--at-left", ".jar-here", "left")`, and the
+     previous pass recorded one half of why it had to go: `.jar-here` has no
+     renderer — the wall chip in `.jar-topbar` returns `null`, under
+     `Home.tsx`'s own heading "THE WALL PICKER MOVED TO THE TOP-LEFT CORNER"
+     — so the arm measured a live sheet against a dead handle and deferred on
+     the question "what opens the wall's settings now".
 
-     AND WHY NEITHER WAS CAUGHT BY THE DRIFT CHECK ABOVE. `needs` is
-     documented as "Class names this case measures. Each must really be
-     rendered by Home", and the case that enforces it reads exactly that
-     list. The three ANCHORS were never in it — only the surfaces were — so
-     the one gate built to notice a fixture standing on a class the world no
-     longer renders could not see the three classes doing it. `jar-when` is
-     added below because it is an anchor this case reads and the world really
-     renders; `jar-here` is deliberately NOT added, because adding it would
-     turn the drift check red on a product decision that is not this file's
-     to make, and a red gate pointing at the wrong owner is how a ratchet
-     gets its ceiling raised. */
+     THE ANSWER TO THAT QUESTION IS NOTHING, which settles it. The sheet is
+     `SpaceSettings`, mounted only by `settingsFor === spaceKey(atWall)`, and
+     `settingsFor` is a `useState<string | null>(null)` whose setter is called
+     at three places in `Home.tsx` and passed `null` at every one of them.
+     Nothing in `packages/web/src` ever sets it to a space key. So
+     `.jar-settings--at-left` is a class with a renderer and no door: the
+     React that would draw it cannot run. An anchored-sheet measurement needs
+     a sheet somebody can open and a button it hangs off, and this had
+     neither.
+
+     That is a finding about the product rather than about this file, and it
+     is reported rather than fixed here: `space/settings/SpaceSettings.tsx`
+     renders `.jar-settings--at-left`, `Home.tsx` holds the `settingsFor`
+     state, and the opener is missing between them.
+
+     WHAT COVERAGE WENT: the anchored half of this case is now unmeasured on
+     the LEFT as well as the right. `dates` is the one anchored sheet left,
+     and it is a real one — `.jar-when` is rendered and `.jar-dial` hangs off
+     it — so the claim "a modal that belongs to a button hangs off that
+     button" is still held, by one example instead of three. WHAT WOULD
+     RESTORE IT: an opener for the wall's settings, after which this arm comes
+     back pointed at whatever button that is.
+
+     AND WHY NONE OF THE THREE WAS CAUGHT BY THE DRIFT CHECK ABOVE. `needs`
+     was documented as "Class names this case measures", and the case that
+     enforces it reads exactly that list. The three ANCHORS were never in it
+     — only the surfaces were — so the one gate built to notice a fixture
+     standing on a class the world no longer renders could not see the three
+     classes doing it. Every class this case now reads, surface AND anchor, is
+     in `needs` below, which is what closes that hole rather than patching one
+     instance of it. */
   {
     id: "every-modal-is-one-modal",
     name: "every modal wears one surface, and each is placed where it belongs",
+    /* SURFACES AND ANCHORS BOTH. `jar-when` is the handle `dates` hangs off,
+       and it is in this list for the same reason the surfaces are: it is a
+       class this case reads, so the drift check has to see it. That is the
+       hole the tombstone above this case describes, closed. */
     needs: ["jar-panel", "jar-seek", "jar-settings", "jar-prov-room", "jar-dial", "jar-when"],
     /* one of the four given its old surface back — the exact drift this
        case exists to notice */
     sabotage:
       ".jar-settings { top: 58px !important; left: 20px !important; transform: none !important;" +
       " border-radius: 14px !important; background: #0a0d14 !important; box-shadow: none !important; }" +
-      /* and the second half of the ruling: an anchored sheet sent back to the
-         middle, which is what this case used to REQUIRE */
-      " .jar-settings--at-left { left: 50% !important; top: 50% !important;" +
-      " transform: translate(-50%, -50%) !important; }" +
+      /* THE `--at-left` HALF OF THIS SABOTAGE WENT WITH THE ARM IT BROKE
+         (2026-10-12): it sent an anchored sheet back to the middle, which is
+         what this case used to REQUIRE of `.jar-settings--at-left`. The
+         `.jar-dial` half below is the surviving anchored sheet's sabotage and
+         is what `--negative` now rests on for that claim. */
       /* and the dates given a ground of their own, which is how the rail's
          bespoke scrim got there in the first place */
       " .jar-dial { background: #0a0d14 !important; box-shadow: none !important; }",
@@ -869,7 +1067,6 @@ const CASES: Case[] = [
         };
         return { card: one(".jar-panel"), seek: one(".jar-seek"),
                  settings: one(".jar-settings"), prov: one(".jar-prov-room"),
-                 atLeft: anchored(".jar-settings--at-left", ".jar-here", "left"),
                  dates: anchored(".jar-dial", ".jar-when", "left") };
       })()`;
       type M = { skin: string; offX: number; offY: number; below?: number; edge?: number };
@@ -877,7 +1074,7 @@ const CASES: Case[] = [
       const missing = Object.entries(m).filter(([, v]) => !v).map(([k]) => k);
       if (missing.length) return { ok: false, detail: `not in the fixture at all: ${missing.join(", ")}` };
       const card = m.card as M;
-      const others = ["seek", "settings", "prov", "atLeft", "dates"] as const;
+      const others = ["seek", "settings", "prov", "dates"] as const;
 
       /* AND THE PLACEMENT RULING NARROWED, 2026-08-28: "when clicking on the
          top left and top right button, those cards should just appear right
@@ -912,7 +1109,10 @@ const CASES: Case[] = [
          IT SAID "THE THIRD SHEET" AND THERE WERE THREE. The right-hand one
          went on 2026-10-11 with the account pill it hung off; this case's own
          tombstone, above `id`, says what is no longer measured and why. */
-      const adrift = (["atLeft", "dates"] as const).filter((k) => {
+      /* The anchored arms, named once: the `adrift` check, the sabotage and
+         the detail line all have to agree about which they are. */
+      const anchored = ["dates"] as const;
+      const adrift = anchored.filter((k) => {
         const v = m[k] as M;
         return !(v.below! > 0 && v.below! < 24 && near(v.edge!, 0, 2));
       });
@@ -931,9 +1131,17 @@ const CASES: Case[] = [
         ok: different.length === 0,
         detail:
           different.length === 0
-            ? `four centred, three hanging off their own button (${r1((m.atLeft as M).below!)}px, ` +
-              `${r1((m.atRight as M).below!)}px and ${r1((m.dates as M).below!)}px below it), ` +
-              `all wearing one surface — ${card.skin}`
+            /* IT SAID "THREE HANGING OFF THEIR OWN BUTTON" AND READ
+               `m.atRight` TO SAY SO, which the probe had already stopped
+               returning — so on the PASS path this line threw
+               `Cannot read properties of undefined` and the case reported a
+               harness error for being correct. Found 2026-10-12 while taking
+               `atLeft` out for the same reason. The count is derived from the
+               arms that exist rather than written as a numeral, so the next
+               arm to go cannot leave a lie or a crash behind it. */
+            ? `${centred.length} centred, ${anchored.length} hanging off its own button (` +
+              anchored.map((k) => `${k} ${r1((m[k] as M).below!)}px below it`).join(", ") +
+              `), all wearing one surface — ${card.skin}`
             : different
                 .map((k) => `${k} is a different object from the card:\n      card ${card.skin}\n      ${k.padEnd(4)} ${(m[k] as M).skin}`)
                 .join("\n    "),
@@ -1228,76 +1436,29 @@ const CASES: Case[] = [
     },
   },
 
-  {
-    id: "one-axis-on-a-phone",
-    name: "on a phone the way up and the count share one centre",
-    needs: ["jar-values", "jar-saved"],
-    /* pin the signpost back to the column's left edge, which is where it was
-       between 2026-08-28 and 2026-09-08 */
-    sabotage:
-      "@media (max-width: 560px) { .jar-values { left: 8px !important;" +
-      " transform: none !important; } }",
-    run: async (page) => {
-      /* THE FOUNDER, on a phone: "philosophies and value is not centered"
-         (2026-09-08).
+  /* ═══ THE ONE VERTICAL AXIS ON A PHONE WENT WITH BOTH OF ITS ENDS ════════
+     `one-axis-on-a-phone` STOOD HERE and went on 2026-10-12. The founder's
+     ruling it carried is unchanged and is worth keeping on the record:
+     2026-09-08, on a phone, "philosophies and value is not centered" —
+     reversing their own 2026-08-28 "so ugly" about the same signpost centred
+     over an empty wall. What the case measured was the PAIR: `.jar-values`
+     at the top of the screen and `.jar-saved` at the bottom are the two ends
+     of one vertical axis, so the claim was not "is it in the middle" but "do
+     the two ends agree".
 
-         THIS CASE HELD THE OPPOSITE RULING FOR ELEVEN DAYS, and the reversal
-         is written down rather than quietly swapped. On 2026-08-28, over two
-         screenshots of an EMPTY wall, the same founder said "so ugly" of a
-         centred signpost floating above one short italic line at the far
-         edge, and the answer was to line its words up with the claim's first
-         letter. On a wall that has a claim on it — three full lines of poster
-         directly under the signpost — that alignment stopped reading as a
-         label on the claim and started reading as the one piece of chrome on
-         the top half of the screen that had slipped off centre.
+     NEITHER END RENDERS. `jar-values` appears nowhere in `packages/web/src`
+     outside `src/styles`; `jar-saved` survives only as a `querySelector`
+     argument in `Home.tsx`. The axis itself is what went: up and down are
+     rows in the bar now, side by side, and two rows of one flex line cannot
+     disagree about a centre.
 
-         SO THE RULE IS THE PAIR, WHICH IS THE THING THE OLD ONE MISSED.
-         `.jar-values` and `.jar-saved` are one vertical axis — the way up and
-         the count, top and bottom of the same screen — and `home.css` already
-         sizes them as one thing. The count is centred at every width there has
-         ever been. Left-aligning only the top of that pair is the asymmetry
-         the founder's eye caught, so what is measured here is not "is it in
-         the middle" but "do the two ends of the axis agree", which is a claim
-         about the design rather than about a number.
+     WHAT COVERAGE WENT: nothing measures the narrow layout's chrome against
+     the centre of the glass. WHAT WOULD RESTORE IT: the same `.waka-dock`
+     case the signposts' tombstone above asks for, run at 390 — the bar is
+     where the phone's chrome lives now.
 
-         THE CASE RESIZES ITSELF, because the rule it measures lives behind
-         `max-width: 560px` and every other case here runs at 900. The harness
-         hands each case its own page, so this costs nothing but the reflow.
-
-         AND IT COMPARES CENTRES, NOT EDGES. Both are buttons carrying their
-         own side padding and their words are different lengths, so their left
-         edges have no reason to agree and their centres have every reason
-         to. */
-      await page.setViewportSize({ width: 390, height: 844 });
-      await page.waitForTimeout(200);
-      const read = `(() => {
-        const up = document.querySelector(".jar-values");
-        const count = document.querySelector(".jar-saved");
-        if (!up || !count) return null;
-        const u = up.getBoundingClientRect();
-        const c = count.getBoundingClientRect();
-        return JSON.stringify({
-          up: Math.round((u.left + u.right) / 2),
-          count: Math.round((c.left + c.right) / 2),
-          screen: Math.round(window.innerWidth / 2),
-        });
-      })()`;
-      const raw = (await page.evaluate(read)) as string | null;
-      if (!raw) return { ok: false, detail: "no signpost or no count on the fixture" };
-      const m = JSON.parse(raw) as { up: number; count: number; screen: number };
-      const offPair = m.up - m.count;
-      const offScreen = m.up - m.screen;
-      const ok = near(offPair, 0, 1) && near(offScreen, 0, 1);
-      return {
-        ok,
-        detail: ok
-          ? `both stand at x ${m.up}, which is the screen's own middle — one axis`
-          : `the way up is centred at x ${m.up}, the count at x ${m.count} ` +
-            `(${r1(offPair)}px apart) and the screen's middle is x ${m.screen} ` +
-            `(${r1(offScreen)}px off)`,
-      };
-    },
-  },
+     The sabotage went with it: `@media (max-width: 560px) { .jar-values
+     { left: 8px; transform: none } }`. */
 
   {
     id: "the-claim-keeps-its-measure",

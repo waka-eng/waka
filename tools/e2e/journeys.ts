@@ -144,18 +144,94 @@ async function signUp(page: Page, base: string): Promise<{ email: string; name: 
   return { email, name };
 }
 
-/** The flat surfaces navigate by a footer of text buttons. */
 /**
- * `/profile` IS NOT A FLAT SCREEN IN THE SENSE THAT WAS RETIRED, so this stays.
- * There is no memory to stand in before you are authenticated, and account
- * work wants focus traps and plain confirmations that in-layout UI cannot
- * give. The eleven routes this used to reach — `/capture`, `/inspirations`,
+ * ═══ `/profile` IS GONE, AND THIS NOTE USED TO SAY IT WAS STAYING ════════
+ *
+ * It read: "`/profile` IS NOT A FLAT SCREEN IN THE SENSE THAT WAS RETIRED, so
+ * this stays. There is no memory to stand in before you are authenticated,
+ * and account work wants focus traps and plain confirmations that in-layout
+ * UI cannot give." That argument lost on 2026-10-11 — founder: "I want all
+ * setting-related stuff to be only accessible through the drop down and not
+ * be its own thing" — and `main.tsx` carries the ruling under its own
+ * heading. Account work happens in the cog's card.
+ *
+ * EIGHT JOURNEYS IN THIS FILE NAVIGATED TO IT AND NONE OF THEM FAILED FOR
+ * THE RIGHT REASON. `/profile` does not 404: `main.tsx`'s `/:handle` route
+ * matches it, and `PublicProfile.tsx` sees a handle that does not start with
+ * `@` and answers `<Navigate to="/" replace />`. So `goSurface` — a `goto`
+ * plus a wait, with no assertion about where it landed — put every one of
+ * them on THE WORLD, and the symptom was a locator timing out several lines
+ * later on a page nobody meant to be on. Worse, any step whose assertion is
+ * "this control is absent" passed vacuously, on the world, forever.
+ *
+ * `goSurface` stays for the routes that are real (`/login`, `/days`, a
+ * public `/@handle`), and it now says where it landed so that a redirect is
+ * a finding instead of a silence.
+ *
+ * The eleven flat routes it used to reach — `/capture`, `/inspirations`,
  * `/signals`, `/principles`, `/top-of-mind`, `/rooms`, `/agents`, `/graph` —
- * were deleted on 2026-08-25 and their journeys now walk the world instead.
+ * were deleted on 2026-08-25 and their journeys walk the world instead.
  */
 async function goSurface(page: Page, base: string, path: string): Promise<void> {
   await page.goto(`${base}${path}`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(2_500);
+  /* A REDIRECT IS A FINDING, NOT A SILENCE. This is the whole of what was
+     missing: eight journeys asked for an address the router no longer knows,
+     were quietly moved to the world, and reported whatever they found there.
+     Throwing names the cause at the place it happened. */
+  const landed = new URL(page.url()).pathname;
+  if (landed !== path.split("?")[0]) {
+    throw new Error(`asked for ${path} and the router answered ${landed}`);
+  }
+}
+
+/**
+ * OPEN THE ACCOUNT CARD, WHICH IS WHERE `/profile` WENT.
+ *
+ * BY THE MODIFIER, NOT `.first()`, copying `tools/e2e/dead-css.ts`: the right
+ * corner has held two buttons since 2026-10-11 — an "i" for how the product
+ * works beside the cog — and the left corner has worn `.waka-corner` since
+ * there was a corner, so `.first()` is a bet on document order that would now
+ * lose.
+ */
+async function openSettings(page: Page, base: string): Promise<void> {
+  if (new URL(page.url()).pathname !== "/") {
+    await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(6_000);
+  }
+  /* ── A CARD CANNOT OPEN OVER A DESTINATION, SO THE DESTINATION GOES FIRST
+     A dock destination covers the world with `.waka-over` and does not close
+     on Escape — the bar's `Now` row is what closes it (measured with keys
+     only in `tools/e2e/by-keyboard.ts`). A caller that has just read the
+     archive's count is standing inside one, and the cog's click then landed
+     on the overlay: the card never opened, `.waka-settings-row` counted zero,
+     and the journey reported a settings group missing that is right there.
+     The click did not throw, which is why this needed a browser to find. */
+  if ((await page.locator(".waka-over").count()) > 0) {
+    await page
+      .locator(".waka-dock-item", { hasText: /^Now$/ })
+      .first()
+      .click({ timeout: 8_000 });
+    await page.waitForTimeout(1_200);
+  }
+  await page.locator("button.waka-corner--settings").click({ timeout: 10_000 });
+  await page.waitForTimeout(1_200);
+}
+
+/**
+ * Open one of the card's three disclosures by its own name.
+ *
+ * THEY UNMOUNT RATHER THAN HIDE, and only one is open at a time, so a step
+ * that reached for a control inside a folded group would find nothing in the
+ * document at all — not an invisible element, no element. Opened by NAME
+ * rather than by index because the order of the three is a design decision.
+ */
+async function openSettingsGroup(page: Page, name: RegExp): Promise<boolean> {
+  const row = page.locator(".waka-settings-row", { hasText: name }).first();
+  if ((await row.count()) === 0) return false;
+  await row.click({ timeout: 8_000 });
+  await page.waitForTimeout(600);
+  return true;
 }
 
 /**
@@ -166,17 +242,80 @@ async function goSurface(page: Page, base: string, path: string): Promise<void> 
  * happened for anyone who did not know the flat routes existed.
  */
 /**
- * WHAT THE BOTTOM EDGE SAYS IS BEHIND THE DOOR — the world's own count, as
- * words. `-1` when the door is not on screen, which is the case with nothing
- * kept yet.
+ * HOW MANY THE ARCHIVE SAYS IT HOLDS — in the place the archive actually is.
+ *
+ * THIS READ `.jar-saved-count` ON THE WORLD AND HAD TO RETURN `-1` FOREVER.
+ * That class was the count printed on the archive door at the bottom edge of
+ * the world, and the door is gone — `Home.tsx` says so under its own heading
+ * "THE `N INSPIRATIONS` DOOR IS GONE FROM HERE TOO", and adds the reason this
+ * reading moved rather than went: "the overlay says that in the place the
+ * archive actually is".
+ *
+ * WHAT THAT COST, BECAUSE IT WAS NOT A TIMEOUT. `-1` is this function's
+ * honest answer for "no door on screen", so nothing threw — and the `keep`
+ * journey's test is `after === before + 1 || (before === -1 && after === 1)`,
+ * which `-1` then `-1` fails. A journey called "something kept is
+ * acknowledged, and is there afterwards" went red on a product that
+ * acknowledges and keeps, and the detail line read "the count read -1 then
+ * -1", which names the instrument rather than the product.
+ *
+ * `.jar-saved-count` IS STILL RENDERED, which is what made it worth
+ * repointing rather than deleting: `SavesOverlay` prints it beside the
+ * archive's own name, as `(3)` or `(2/3)` under a filter. So the count is
+ * read where it is written, by opening the archive from the bar.
+ *
+ * `-1` still means "no count on screen", and it still legitimately happens:
+ * the overlay prints nothing until it knows the total.
  */
-async function countInWorld(page: Page): Promise<number> {
-  return (await page.evaluate(() => {
-    const el = document.querySelector(".jar-saved-count");
-    if (!el) return -1;
-    const m = /(\d+)/.exec(el.textContent ?? "");
-    return m ? Number(m[1]) : -1;
-  })) as number;
+async function countInArchive(page: Page, base: string): Promise<number> {
+  try {
+    /* ── IT GOES HOME ONLY IF THERE IS NO BAR, AND THAT MATTERS ───────────
+       The first version of this went home whenever the path was not `/`,
+       which is right for a caller standing on the door and WRONG for one
+       standing on somebody else's wall: `agent-ground` travels to the
+       agent, and a bar that reads the agent's archive was replaced by a
+       navigation back to your own. The journey then reported "the archive
+       says it holds 0, not 3" — about the agent's keeps, having walked away
+       from the agent. Caught by running it.
+       The bar is on every wall, so its presence is the real question: if it
+       is there, this is a surface the archive opens from and leaving it
+       would change which archive is being read. */
+    if ((await page.locator(".waka-dock-item").count()) === 0) {
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(6_000);
+    }
+    await page
+      .locator(".waka-dock-item", { hasText: /^Inspirations$/ })
+      .first()
+      .click({ timeout: 10_000 });
+    await page.waitForTimeout(3_000);
+    const read = (await page.evaluate(() => {
+      const el = document.querySelector(".jar-saved-count");
+      if (!el) return -1;
+      /* `(2/3)` under a filter, `(3)` without one. The TOTAL is the claim —
+         how much the archive holds — so the last number is the one read. */
+      const all = [...(el.textContent ?? "").matchAll(/(\d+)/g)].map((m) => Number(m[1]));
+      return all.length === 0 ? -1 : all[all.length - 1]!;
+    })) as number;
+    /* ── IT LEAVES BY THE ROW THAT LEAVES, NOT BY ESCAPE ──────────────────
+       Escape does NOT close a dock destination — measured with keys only in
+       `tools/e2e/by-keyboard.ts`, which also records why: the bar is the way
+       out, "the dock is visible the entire time one is open, it never moves,
+       and its first row is called Now". The first version of this pressed
+       Escape and returned with the archive still covering the world, and the
+       next step in two journeys then clicked the cog through an overlay: the
+       settings card never opened, `.waka-settings-row` counted zero, and
+       `public-page` reported "the account card has no Public profile group"
+       about a group that is there. Caught by running it. */
+    await page
+      .locator(".waka-dock-item", { hasText: /^Now$/ })
+      .first()
+      .click({ timeout: 8_000 });
+    await page.waitForTimeout(1_200);
+    return read;
+  } catch {
+    return -1;
+  }
 }
 
 async function keepInWorld(page: Page, base: string, text: string): Promise<number> {
@@ -190,7 +329,7 @@ async function keepInWorld(page: Page, base: string, text: string): Promise<numb
      settle and THEN reads the page finds the resting label and concludes
      nothing was acknowledged. Caught exactly that way. */
   await page.waitForTimeout(4_500);
-  return countInWorld(page);
+  return countInArchive(page, base);
 }
 
 /**
@@ -208,50 +347,96 @@ async function keepInWorld(page: Page, base: string, text: string): Promise<numb
  * asserts the orb arrives.
  */
 /**
- * OPENING A MEMORY, WHICH IN THE WORLD MEANS FINDING ITS ORB.
+ * OPENING A MEMORY, BY ASKING THE WORLD FOR IT.
  *
- * The flat list had rows to click. The field has orbs on a canvas, placed by
- * the frame loop, and nothing outside the page knows where they are — so this
- * descends through the count and sweeps until a card opens AND STAYS open.
+ * ── THIS CLICKED THREE HUNDRED COORDINATES AND COULD NOT GET IN ───────────
  *
- * The "stays" is load-bearing: a closing card lingers in the DOM for 200ms, so
- * a sweep that stops at the first `.jar-panel` it sees keeps catching the tail
- * of one an earlier click already dismissed, and then measures an empty field.
- * Learned by doing exactly that.
+ * It pressed `.jar-saved` to descend into the field and then swept a grid of
+ * `mouse.click` across the canvas looking for one painted orb. Both halves
+ * are gone. `.jar-saved` has no renderer — the only mentions left in
+ * `Home.tsx` hand the string to `querySelector` — so the descent could only
+ * time out, after which the sweep clicked three hundred times on the world's
+ * chrome and reported "no memory would open in the field".
+ *
+ * MEASURED 2026-10-12, LOOKING FOR THE DOOR RATHER THAN CONCLUDING FROM ITS
+ * ABSENCE, because the first conclusion was wrong:
+ *
+ *   `?view=field` DOES NOT WORK. `view-location.ts` parses the parameter, but
+ *   a cold load at that address lands on `/` with it dropped.
+ *   `standIn` CALLS `toGround()` and is group-only, so it went with rooms.
+ *   FIND DOES WORK. `/` opens the search — `Home.tsx` puts it there on
+ *   purpose, "find → the FIELD. It is a verb about memories, so it sits with
+ *   them and answers with `/`" — and `openSearchResult` navigates with
+ *   `section: 'field'` and the memory's own id, which lands in the ground with
+ *   `.jar-panel` already open on it.
+ *
+ * ── AND THE HARNESS GETS A CLAIM IT COULD NOT MAKE BEFORE ─────────────────
+ *
+ * The sweep could not aim: whichever orb it happened to hit was the memory
+ * that opened, so every caller's claim had to be weakened to "any of them"
+ * ("insisting on a particular one would only be insisting the harness can
+ * aim"). Asking for a memory BY ITS WORDS opens that one. `phrase` is
+ * optional so the old any-of-them callers are unchanged, and the ones that
+ * care can now say which.
+ *
+ * The viewport argument is gone with the sweep. It existed because the grid
+ * was in viewport pixels and `the-hand` walks at 390x844, where every x past
+ * 390 is off the glass — "a sweep that silently clicked into space for two
+ * thirds of its passes and then reported no memory opened as if the product
+ * had failed". A search field and a list of results need no coordinates at
+ * all, so the whole class of defect goes with the argument.
  */
-/**
- * THE SWEEP IS IN VIEWPORT PIXELS, SO THE VIEWPORT HAS TO BE SAID. The
- * defaults are the harness's own 1440x900 and every caller but one takes
- * them. `the-hand` walks at 390x844, where every x past 390 is off the glass
- * and `mouse.click` there reaches nothing at all — a sweep that silently
- * clicked into space for two thirds of its passes and then reported "no
- * memory opened" as if the product had failed.
- */
-async function openAMemory(
-  page: Page,
-  bounds: { xs: number[]; ys: number[] } = {
-    xs: Array.from({ length: 28 }, (_, i) => 160 + i * 28),
-    ys: [390, 350, 430, 310, 470, 270, 510, 230, 550],
-  },
-): Promise<boolean> {
+async function openAMemory(page: Page, phrase?: string): Promise<boolean> {
   const panels = async (): Promise<number> =>
     (await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) as number;
   try {
-    await page.locator(".jar-saved").first().click({ timeout: 20_000 });
+    /* ── A WORD THAT IS REALLY ON THIS WALL, ASKED OF THE WALL ────────────
+       With no phrase given, any memory will do — but the search ignores a
+       query shorter than two characters (`InspirationSearch`: `if
+       (query.length < 2) { setRead(null); … }`), and the first version of
+       this typed `a` and got nothing. It then reported "no memory would open
+       in the field", which is a statement about the product and was a
+       statement about the query. Caught by running it.
+       Guessing a longer word is the same bet one letter longer: the phrases
+       these journeys keep are ordinary English and share almost nothing. So
+       the word is taken FROM the wall — the longest in the newest memory's
+       own preview — which cannot miss unless the archive is empty, and an
+       empty archive is a different finding that the caller already makes. */
+    const want =
+      phrase ??
+      ((await page.evaluate(async () => {
+        const r = await fetch("/api/inspirations?limit=1", { credentials: "include" });
+        if (!r.ok) return "";
+        const body = (await r.json()) as { inspirations?: Array<{ textPreview: string }> };
+        const words = (body.inspirations?.[0]?.textPreview ?? "").split(/[^A-Za-z]+/);
+        let best = "";
+        for (const word of words) if (word.length > best.length) best = word;
+        return best;
+      })) as string);
+    if (want.trim().length < 2) return false;
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press("/");
+    await page.waitForTimeout(1_500);
+    if ((await page.locator(".jar-inspiration-search").count()) === 0) return false;
+    await page.keyboard.type(want);
+    await page.waitForTimeout(3_500);
+    const result = page
+      .locator(".jar-search-results button", {
+        hasText: new RegExp(want.slice(0, 24).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
+      })
+      .first();
+    if ((await result.count()) === 0) return false;
+    await result.click({ timeout: 8_000 });
+    await page.waitForTimeout(6_000);
+    if ((await panels()) === 0) return false;
+    /* THE "STAYS" IS LOAD-BEARING and is kept from the sweep: a closing card
+       lingers in the DOM for 200ms, so a check that stops at the first
+       `.jar-panel` it sees can catch the tail of one already dismissed. */
+    await page.waitForTimeout(1_200);
+    return (await panels()) > 0;
   } catch {
     return false;
   }
-  await page.waitForTimeout(4_000);
-  for (const y of bounds.ys) {
-    for (const x of bounds.xs) {
-      await page.mouse.click(x, y);
-      await page.waitForTimeout(500);
-      if ((await panels()) === 0) continue;
-      await page.waitForTimeout(1_200);
-      if ((await panels()) > 0) return true;
-    }
-  }
-  return false;
 }
 
 async function archiveHolds(page: Page, phrase: string): Promise<boolean> {
@@ -263,8 +448,10 @@ async function archiveHolds(page: Page, phrase: string): Promise<boolean> {
   }, phrase)) as boolean;
 }
 
-const bodyText = (page: Page): Promise<string> =>
-  page.evaluate(() => document.body.innerText.trim());
+/* `bodyText` STOOD HERE, UNUSED, AT HEAD AND BEFORE IT. The journeys that
+   read a whole page read it through `translatableText` below, which is the
+   same thing minus the contents of every `<select>` and is what the locale
+   claims actually want. Out 2026-10-12, named by a tools-wide typecheck. */
 
 /**
  * The page's words, MINUS anything inside a `<select>`.
@@ -361,7 +548,7 @@ const JOURNEYS: Journey[] = [
     run: async (page, base) => {
       await signUp(page, base);
       const phrase = `the funicular counts down in stops not minutes ${uniq()}`;
-      const before = await countInWorld(page);
+      const before = await countInArchive(page, base);
       const after = await keepInWorld(page, base, phrase);
 
       /* TWO CLAIMS, AND THE SECOND IS THE ONE THAT MATTERS. The world saying
@@ -375,10 +562,15 @@ const JOURNEYS: Journey[] = [
          `reflect` prints the word, because it is about to open a sheet over
          the keep and has to say the keep happened first.
          
-         So the acknowledgement asked for here is the one the world writes in
-         words: the count on the bottom edge, which is the door into what you
-         have kept and prints how much is behind it. It rising IS the product
-         saying so, in the only text the act produces. */
+         So the acknowledgement asked for here is the one the product writes
+         in words: the count the archive prints beside its own name, which is
+         how much is behind the bar's `Inspirations` row. It rising IS the
+         product saying so, in the only text the act produces.
+
+         IT USED TO BE READ ON THE WORLD, off the door at the bottom edge, and
+         that door is gone — see `countInArchive`, which also records what the
+         stale read cost this journey. The claim is unchanged; the place it is
+         read is the place the number is now written. */
       const acknowledged = after === before + 1 || (before === -1 && after === 1);
       const persisted = await archiveHolds(page, phrase);
       return {
@@ -470,88 +662,38 @@ const JOURNEYS: Journey[] = [
     },
   },
 
-  {
-    id: "keep-from-elsewhere",
-    name: "a memory kept from somebody else's wall says where it went",
-    /* The keep is what this rests on: with the POST failing the archive does
-       not hold it and the world says the failure instead, so both halves go
-       red — which is also what the bug looked like, minus the failure line. */
-    breaks: (ctx) => breakRoute(ctx, (p, m) => p === "/api/inspirations" && m === "POST"),
-    run: async (page, base) => {
-      await signUp(page, base);
+  /* ═══ `keep-from-elsewhere` STOOD HERE AND ITS WHOLE SUBJECT WAS ROOMS ══
+     "a memory kept from somebody else's wall says where it went", deleted
+     2026-10-12. To get somewhere that was not your own wall it made a room
+     through the world's own door: `.jar-here-more` for the `▾` beside the
+     wall's name, `add new` in the list it opened, `.jar-newplace-row` for
+     "a room", then `.jar-roomform-box` to name it and `make it` to confirm.
 
-      /* SOMEWHERE THAT IS NOT YOUR OWN WALL. A room is the reachable one — an
-         agent's wall needs an agent, a room needs only the person. Made
-         through the world's own door rather than the API, because the wall
-         this journey stands on has to be one the product actually built. */
-      await page.locator(".jar-here-more").first().click();
-      await page.waitForTimeout(800);
-      await page.getByText(/^add new$/i).first().click();
-      await page.waitForTimeout(1_200);
-      await page.locator(".jar-newplace-row", { hasText: /a room/i }).first().click();
-      await page.waitForTimeout(1_200);
-      /* `.jar-roomform` scopes it and `make it` confirms it: the agent form
-         shares the box class and says `give it a wall`. */
-      await page.fill(".jar-roomform .jar-roomform-box", "Studio");
-      await page.locator(".jar-roomform button", { hasText: /^make it$/i }).first().click();
-      await page.waitForTimeout(8_000);
+     FOUR OF THOSE FIVE HAVE NO RENDERER, AND THE FIFTH IS WORSE THAN DEAD.
+     `.jar-here-more`, `.jar-newplace-row` and the two `.jar-here*` family
+     members are absent from `packages/web/src` entirely; `.jar-roomform-box`
+     still EXISTS and is a DIFFERENT CONTROL — `dead-css.ts` records the same
+     finding about the same class, that it "is now the field that NAMES AN
+     AGENT. So this step was not merely timing out: had it succeeded it would
+     have walked the wrong surface and called it a room."
 
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(400);
-      await page.locator(".jar-here-more").first().click();
-      await page.waitForTimeout(900);
-      const studio = page.locator(".jar-hq button", { hasText: /^studio$/i });
-      if ((await studio.count()) === 0) {
-        return { ok: false, detail: "no room was made, so there was nowhere else to stand" };
-      }
-      await studio.last().click();
-      await page.waitForTimeout(4_000);
+     AND THE DELETION OF THE CONTROLS WAS A RULING. Founder: "get rid of the
+     rooms and agent related stuff for now", carried in full by `dead-css.ts`,
+     which also records that the make/join sheet "was unreachable" and "had
+     survived three cleanliness passes because it looks alive from the
+     inside". `Home.tsx` says it again under its own heading "MAKING A PLACE
+     WENT WITH THE LIST THAT OFFERED IT": "Rooms come back with their own
+     door; git holds this until they do."
 
-      const restSlot = (): Promise<string> =>
-        page.evaluate(() => {
-          const el = document.querySelector(".jar-mouth-rest");
-          return el ? (el.textContent ?? "").trim() : "";
-        });
+     WHAT COVERAGE WENT: nothing now checks that a keep made while standing on
+     somebody else's wall says which wall it landed on — which was a real bug
+     once and is a real claim. WHAT WOULD RESTORE IT: rooms coming back with a
+     door, or a `?join=<code>` address this harness can reach with a second
+     account. `dead-css.ts` asks for the same thing for the same reason, and
+     it is bigger than either file.
 
-      const resting = await restSlot();
-      if (resting === "") {
-        return { ok: false, detail: "the room's wall offers no mouth, so nothing could be kept" };
-      }
-
-      const phrase = `kept while standing somewhere else ${uniq()}`;
-      await openTheNotepad(page);
-      await page.waitForTimeout(700);
-      await page.fill('textarea[aria-label="Capture inspiration"]', phrase);
-      /* Enter rather than the `save` button `keepInWorld` presses: the same
-         act, and the one a person writing a sentence actually reaches for. */
-      await page.keyboard.press("Enter");
-
-      /* READ IT WHILE IT IS BEING SAID. The line is a whisper and clears
-         itself after four seconds — the same trap `keepInWorld` documents
-         from the other direction. */
-      await page.waitForTimeout(1_500);
-      const said = await restSlot();
-      const persisted = await archiveHolds(page, phrase);
-
-      /* WHY THIS IS A JOURNEY OF ITS OWN. On your own wall the receipt is the
-         orb: it drops into the ground in front of you and that IS the world
-         saying so. Standing in a room the ground is somebody else's, so no
-         orb drops — and measured on 2026-08-31 nothing else happened either:
-         no orb, no line, and no count, because the archive door is not on a
-         room's wall at all. The memory landed and the mouth just emptied. A
-         person who cannot tell whether it took writes it again.
-
-         So the claim is both halves together, and neither alone is worth
-         much: the world SAID something other than its resting phrase, and the
-         archive actually HOLDS it. */
-      const spoke = said !== "" && said !== resting;
-      return {
-        ok: spoke && persisted,
-        detail: `standing in a room, the mouth read ${JSON.stringify(said)} (at rest: ` +
-          `${JSON.stringify(resting)}); the archive holds it: ${persisted}`,
-      };
-    },
-  },
+     The sabotage went with it: a 500 on `POST /api/inspirations`, which is
+     still exercised by `keep` and `first-keep`. */
 
   {
     id: "seek",
@@ -636,53 +778,46 @@ const JOURNEYS: Journey[] = [
     },
   },
 
-  {
-    id: "reflect",
-    name: "a reflection answered on a memory is still there when you come back",
-    breaks: (ctx) => breakRoute(ctx, (p, m) => /reflection/.test(p) && m === "POST"),
-    run: async (page, base) => {
-      await signUp(page, base);
-      const phrase = `a bus map that admits which routes are slow ${uniq()}`;
+  /* ═══ `reflect` STOOD HERE AND THE SHEET IT ANSWERED WAS DELETED ════════
+     "a reflection answered on a memory is still there when you come back",
+     deleted 2026-10-12. It kept something, then filled
+     `.jar-reflect-room .jar-reflect-box` and pressed `keep` in
+     `.jar-reflect-room` — the sheet the world used to put up over a save to
+     ask what made you want to keep it.
 
-      /* ONE VERB, NOT A JOURNEY ACROSS TWO SCREENS. The flat walk kept on
-         `/capture`, went to `/inspirations`, found the row, and filled two
-         fields — a question the person wrote for themselves and then their
-         answer to it. In the world `reflect` in the mouth keeps the memory AND
-         opens the question over it in one press, with the question already
-         written. So the harness no longer has to know the shape of a
-         two-field form; it answers the question the world asked. */
-      await saveAnInspiration(page, phrase);
-      await page.waitForTimeout(5_000);
+     THE SHEET WENT ON 2026-10-10, AND `Home.tsx` RECORDS THAT IT WAS ALREADY
+     DEAD BEFORE IT WAS DELETED: "THE STANDALONE REFLECT SHEET IS GONE, AND IT
+     WAS ALREADY UNREACHABLE BEFORE IT WAS DELETED. It opened when a save was
+     made with `reflect: true`, and the only thing that could ask for that was
+     `InspirationComposer`, which calls `props.onSubmit(false)` and has done
+     for as long as the control has existed… `worldReflectOnKept` and
+     `jar-reflect-room` went with it." So this journey had been reaching for a
+     sheet nothing could open for longer than the sheet has been gone.
 
-      const box = await page.$(".jar-reflect-room .jar-reflect-box");
-      if (!box) return { ok: false, detail: "the reflection never opened over the keep" };
-      const answer = `because the admission is the useful part ${uniq()}`;
-      await box.fill(answer);
-      await page.locator(".jar-reflect-room button", { hasText: /^keep$/ }).first().click();
-      await page.waitForTimeout(4_000);
+     A REFLECTION IS STILL A THING, AND STILL WRITTEN — which is why this is
+     recorded this carefully rather than waved off. `lib/api/inspirations.ts`
+     says where it went: "`CreateInspirationRequest` carries `reflections`, so
+     a photo moment's 'why' rides the capture that prompted it in a single
+     POST". The field is `.waka-moment-why`, and it appears in the composer
+     only when a capture carries an IMAGE — "a picture gets asked about; a
+     link does not". Reading one back is `.jar-reflection-flow` on the
+     memory's own card, which is live and read-only ("No textarea, no draft,
+     no verbs").
 
-      /* Reload rather than trust the optimistic render, and ask the archive
-         rather than the canvas — the world draws a reflection as light on an
-         orb, and light is not a string. */
-      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
-      await page.waitForTimeout(6_000);
-      const survived = (await page.evaluate(async (needle: string) => {
-        const list = await fetch("/api/inspirations?limit=50", { credentials: "include" });
-        const body = (await list.json()) as { inspirations?: Array<{ id: string }> };
-        for (const row of body.inspirations ?? []) {
-          const one = await fetch(`/api/inspirations/${row.id}`, { credentials: "include" });
-          const got = (await one.json()) as {
-            inspiration?: { reflections?: Array<{ answer: string | null }> };
-          };
-          if ((got.inspiration?.reflections ?? []).some((r) => (r.answer ?? "").includes(needle))) {
-            return true;
-          }
-        }
-        return false;
-      }, answer)) as boolean;
-      return { ok: survived, detail: `survivedReload=${survived}` };
-    },
-  },
+     WHY IT IS NOT REPOINTED THERE. The surviving write path needs an image
+     attached to the capture, which needs a real upload — `tools/e2e/s3-stub.ts`
+     is the harness for that and this file does not stand one up. Pointing
+     this journey at it means adding an upload stub to `journeys.ts`, which is
+     a different journey ("a photo kept with a why") rather than this one with
+     a swapped selector.
+
+     WHAT COVERAGE WENT: nothing in a browser now writes a reflection and
+     checks it survives a reload. WHAT WOULD RESTORE IT: a `photo-moment`
+     journey, behind the S3 stub, filling `.waka-moment-why` beside an image
+     and reading it back from `.jar-reflection-flow`.
+
+     The sabotage went with it: a 500 on any POST matching `/reflection/`,
+     which nothing in this file now exercises. */
 
   {
     id: "let-go",
@@ -712,7 +847,13 @@ const JOURNEYS: Journey[] = [
       )) as string;
       if (!doomed) return { ok: false, detail: "the card opened with no words in it" };
 
-      const del = page.locator(".jar-panel button", { hasText: /^delete$/ });
+      /* CASE-INSENSITIVELY, AND THAT IS NOT PEDANTRY. The verb is
+         `worldDelete`, which is "Delete" — a capital D — and `/^delete$/`
+         cannot match it. The step had been unreachable behind a sweep that
+         could not open a card at all, so repointing `openAMemory` at Find is
+         what exposed it: the walk got in, found the card, and then waited
+         thirty seconds for a lower-case word. */
+      const del = page.locator(".jar-panel button", { hasText: /^delete$/i });
       await del.first().click();
       await page.waitForTimeout(2_000);
       /* THE ASK, AND ITS WORDS ARE NOT A GUESS. Deleting asks only when a
@@ -743,121 +884,81 @@ const JOURNEYS: Journey[] = [
     name: "a new display name survives a reload",
     breaks: (ctx) => breakRoute(ctx, (p, m) => /\/api\/(profiles|auth\/me)/.test(p) && m === "PATCH"),
     run: async (page, base) => {
+      /* ═══ THE NAME LIVES IN THE COG'S CARD, AND IT SAVES ITSELF ══════════
+         THIS WENT TO `/profile`, FILLED A FIELD AND PRESSED `save profile`.
+         All three are gone: the route redirects to the world (see the note
+         above `goSurface`), the field is in `SettingsPanel`'s first
+         `.waka-account-field`, and there is no save button — `onName`
+         debounces and PATCHes on its own, which is why the wait below is a
+         wait rather than a click. `NAME_SETTLE_MS` in `Home.tsx` is the
+         number; four seconds is comfortably over it.
+
+         AND AN EMPTY FIELD IS NOT A RENAME, which the product is explicit
+         about ("writing that would blank the account between two
+         keystrokes") — so the fill has to leave a non-empty value, which
+         `fill` does in one step. */
       await signUp(page, base);
       const renamed = `Renamed ${uniq()}`;
-      await goSurface(page, base, "/profile");
-      const field = await page.$('input[name=name], input[autocomplete=name]');
-      if (!field) return { ok: false, detail: "no display-name field on /profile" };
+      await openSettings(page, base);
+      const field = page.locator(".waka-account-field input[type=text]").first();
+      if ((await field.count()) === 0) {
+        return { ok: false, detail: "no display-name field in the account card" };
+      }
       await field.fill(renamed);
-      await page.click('button:has-text("save profile")');
-      await page.waitForTimeout(3_500);
+      await page.waitForTimeout(4_000);
 
-      await goSurface(page, base, "/profile");
+      /* READ BACK FROM A FRESH LOAD, which is the whole claim: the card is
+         fed from the session, so reading the field without reloading would
+         only prove React kept what was typed. */
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(6_000);
+      await openSettings(page, base);
       const value = await page.evaluate(() => {
-        const el = document.querySelector<HTMLInputElement>(
-          'input[name=name], input[autocomplete=name]',
-        );
+        const el = document.querySelector<HTMLInputElement>(".waka-account-field input[type=text]");
         return el?.value ?? "";
       });
       return { ok: value === renamed, detail: `readBack=${JSON.stringify(value)}` };
     },
   },
 
-  {
-    id: "keeper-key",
-    name: "a keeper key is minted once, shown once, and revocable",
-    breaks: (ctx) => breakRoute(ctx, (p, m) => p === "/api/keeper-keys" && m === "POST"),
-    run: async (page, base) => {
-      await signUp(page, base);
-      await goSurface(page, base, "/profile");
-      await page.click('button[role=tab]:has-text("Memories & connections")');
-      await page.waitForTimeout(600);
+  /* ═══ TWO JOURNEYS STOOD HERE AND THE SCREENS THEY DROVE WERE DELETED
+     ON PURPOSE ════════════════════════════════════════════════════════════
+     `keeper-key` ("a keeper key is minted once, shown once, and revocable")
+     and `agent-grants` ("the sibling door opens by the owner's hand, and
+     closes by it") both went on 2026-10-12. Between them they drove
+     `/profile`, `button[role=tab]:has-text("Memories & connections")`,
+     `.profile-secret`, `.profile-minted`, `.profile-row-title` and
+     `.profile-disclose` — a route that redirects to the world and five class
+     families with no renderer anywhere in `packages/web/src`.
 
-      await page.fill('input[placeholder="what machine is this for"]', "journey laptop");
-      await page.click('button:has-text("mint a key")');
-      await page.waitForTimeout(2_500);
+     AND THE REASON IS A RULING, WHICH IS WHY THIS IS DELETION AND NOT A
+     REPOINT. `SettingsPanel.tsx`'s own header lists the five sections that
+     did not survive the prune, in the founder's words — "look at what's
+     under You and what's under Memories & connections and remove anything
+     that is not absolutely necessary" — and names these two first:
 
-      // The secret's one appearance: a waka_keeper_ credential on screen,
-      // beside the words that say it will never be shown again.
-      const secret = await page.evaluate(
-        () => document.querySelector(".profile-secret")?.textContent ?? "",
-      );
-      if (!secret.startsWith("waka_keeper_")) {
-        return { ok: false, detail: `no minted secret on screen (${JSON.stringify(secret.slice(0, 24))})` };
-      }
-      await page.click('button:has-text("I have it")');
-      await page.waitForTimeout(600);
-      const secretGone =
-        (await page.evaluate(() => document.querySelectorAll(".profile-secret").length)) === 0;
-      const rowShows = await page
-        .locator(".profile-row-title", { hasText: "journey laptop" })
-        .isVisible();
+       "KEYS and AGENT KEYS — tables of API credentials with mint, copy and
+        revoke. A developer surface on a consumer product's settings screen.
+        `createAgentKey` STAYS and is still called when an agent is made;
+        what went is the UI for reading and revoking them by hand."
 
-      // Revocation asks its question through window.confirm; answer yes.
-      page.once("dialog", (dialog) => void dialog.accept());
-      await page.click('li:has-text("journey laptop") button:has-text("revoke")');
-      await page.waitForTimeout(2_500);
-      const rowGone =
-        (await page.locator(".profile-row-title", { hasText: "journey laptop" }).count()) === 0;
+       "WHAT AGENTS MAY READ — grants, which govern the keys above. With no
+        key listing there is nothing to grant against."
 
-      return {
-        ok: secretGone && rowShows && rowGone,
-        detail: `secret=${secret.slice(0, 16)}… shownOnce=${secretGone} listed=${rowShows} revoked=${rowGone}`,
-      };
-    },
-  },
+     A journey is this file's record of an act A PERSON PERFORMS. Neither act
+     is performable any more, by anybody, through any door. Repointing them at
+     the API would turn two browser journeys into two HTTP calls, which is
+     what the six API harnesses named in this file's header already are.
 
-  {
-    id: "agent-grants",
-    name: "the sibling door opens by the owner's hand, and closes by it",
-    breaks: (ctx) => breakRoute(ctx, (p, m) => p === "/api/agent-grants" && m === "POST"),
-    run: async (page, base) => {
-      await signUp(page, base);
-      await goSurface(page, base, "/profile");
-      await page.click('button[role=tab]:has-text("Memories & connections")');
-      await page.waitForTimeout(600);
-      // The audit surfaces are folded by default; the journey opens the door.
-      await page.click('.profile-disclose button:has-text("grants")');
-      await page.waitForTimeout(400);
-
-      // Two agents, made through the same screen that will pair them. Each
-      // creation now hands over the machine key — the box must show a real
-      // agent secret, and pressing "I have it" returns the create row.
-      for (const name of ["Scout", "Courier"]) {
-        await page.fill('input[placeholder="Add an agent memory"]', name);
-        await page.click('button:has-text("Add memory")');
-        await page.waitForTimeout(1_500);
-        const secret = await page.evaluate(
-          () => document.querySelector(".profile-minted .profile-secret")?.textContent ?? "",
-        );
-        if (!secret.startsWith("waka_agent_")) {
-          return { ok: false, detail: `no machine key handed over for ${name}` };
-        }
-        await page.click('.profile-minted button:has-text("I have it")');
-        await page.waitForTimeout(400);
-      }
-
-      const pick = async (label: string, name: string) =>
-        page.selectOption(`select[aria-label="${label}"]`, { label: name });
-      await pick("which agent", "Scout");
-      await pick("may read which", "Courier");
-      await page.click('button:has-text("grant")');
-      await page.waitForTimeout(2_000);
-
-      const rowShows = await page
-        .locator(".profile-row-title", { hasText: "Scout reads Courier" })
-        .isVisible();
-      if (!rowShows) return { ok: false, detail: "the grant row never appeared" };
-
-      await page.click('li:has-text("Scout reads Courier") button:has-text("revoke")');
-      await page.waitForTimeout(2_000);
-      const rowGone =
-        (await page.locator(".profile-row-title", { hasText: "Scout reads Courier" }).count()) ===
-        0;
-
-      return { ok: rowGone, detail: `granted=true revoked=${rowGone}` };
-    },
-  },
+     WHAT COVERAGE WENT: nothing in a browser now exercises minting a keeper
+     key, showing a secret exactly once, revoking it, or granting one agent
+     read of another. THE SERVER KEEPS ALL OF IT — `lib/api/inspirations.ts`
+     says so of the reflection routes and the same is true here: the routes
+     are live and `createAgentKey` is still called when an agent is made.
+     WHAT WOULD RESTORE IT: a key surface coming back, or these two claims
+     moving to `tools/e2e/organic.ts`, which is the harness for things only a
+     machine does. The second is the better home and is somebody's call, not
+     this file's. */
 
   {
     id: "agent-ground",
@@ -870,49 +971,106 @@ const JOURNEYS: Journey[] = [
          screen to the right of its camera for as long as the walls have
          existed — data-level assertions all passed; only light would have
          caught it. */
+      /* ═══ EVERY DOOR IN THIS WALK HAD MOVED, AND NONE OF THEM TIMED OUT
+         LOUDLY ═══════════════════════════════════════════════════════════════
+         It went to `/profile` (redirects to the world — see `goSurface`),
+         pressed a tab called "Memories & connections" (no `role="tab"` on any
+         settings surface), read a machine key out of
+         `.jar-minted .profile-secret` (neither class has a renderer; the key
+         UI was pruned by ruling — `SettingsPanel.tsx` lists it), kept three
+         things over HTTP with that key, read the count off `.jar-saved-count`
+         ON THE WORLD (the archive door is gone) and pressed `.jar-saved` to
+         descend into the agent's ground (same door).
+
+         WHAT THE CLAIM IS, UNCHANGED, and it is the reason this is repointed
+         rather than deleted: "the 2026-08-30 family in one walk: the count,
+         the reach, and the PIXELS must agree. The count said six while the
+         ground stood one screen to the right of its camera for as long as the
+         walls have existed — data-level assertions all passed; only light
+         would have caught it."
+
+         THE DOORS IT USES NOW, each the one a person uses:
+           making the agent   the cog's card, its `Memories` group
+           giving it keeps     the same API a click would call, through the
+                               page's own session — no machine key, because
+                               the UI that handed one over is gone by ruling
+                               and a journey should not need a credential a
+                               person cannot get
+           standing on it      `.jar-char-face`, the creature's form switch —
+                               `Home.tsx`: "rather than my agent like moving
+                               rooms it kind of like switching itself up to
+                               its agent form"
+           the count           the archive's own, via `countInArchive`
+           the ground          `/` and a word, via `openAMemory`, which is the
+                               door into the field now */
       await signUp(page, base);
-      await goSurface(page, base, "/profile");
-      await page.click('button[role=tab]:has-text("Memories & connections")');
-      await page.fill('input[placeholder="Add an agent memory"]', "GroundScout");
-      await page.click('button:has-text("Add memory")');
-      await page.waitForTimeout(1_500);
-      const key = await page.evaluate(
-        () => document.querySelector(".profile-minted .profile-secret")?.textContent ?? "",
-      );
-      if (!key.startsWith("waka_agent_")) {
-        return { ok: false, detail: "creation handed over no machine key" };
+      await openSettings(page, base);
+      if (!(await openSettingsGroup(page, /^Memories/i))) {
+        return { ok: false, detail: "the account card has no Memories group to make an agent in" };
       }
-      await page.click('.profile-minted button:has-text("I have it")');
+      await page.fill(".waka-settings-add input[type=text]", "GroundScout");
+      await page.locator(".waka-settings-add button").first().click({ timeout: 8_000 });
+      await page.waitForTimeout(3_000);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(600);
 
       const texts = [
         "Ground keep one, by the machine.",
         "Ground keep two, by the machine.",
         "Ground keep three, by the machine.",
       ];
-      for (const text of texts) {
-        const res = await fetch(`${base}/api/inspirations`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-        if (res.status !== 201) return { ok: false, detail: `keep via key → ${res.status}` };
+      /* THE AGENT'S OWN CAPTURES, NEVER ITS OWNER'S. An agent's wall is built
+         from what the agent kept, so the keeps are addressed to its profile
+         — which is exactly what the machine key used to buy and what
+         `?profile=` buys without one. */
+      const seeded = (await page.evaluate(async (rows: string[]) => {
+        const listed = await fetch("/api/profiles", { credentials: "include" });
+        const body = (await listed.json()) as { profiles?: Array<{ id: string; name: string }> };
+        const agent = (body.profiles ?? []).find((row) => row.name === "GroundScout");
+        if (!agent) return 0;
+        let made = 0;
+        for (const text of rows) {
+          const res = await fetch(`/api/inspirations?profile=${agent.id}`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          if (res.ok) made += 1;
+        }
+        return made;
+      }, texts)) as number;
+      if (seeded !== texts.length) {
+        return { ok: false, detail: `the agent was given ${seeded} of ${texts.length} keeps` };
       }
 
-      await goSurface(page, base, "/");
-      await page.waitForTimeout(6_000);
-      await page.keyboard.press("ArrowLeft");
+      /* STAND IN THE AGENT'S FORM. Pressing the face you are already on is
+         specified to do nothing, so the one that is NOT standing is pressed. */
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(7_000);
+      const other = page.locator(".jar-char-face:not(.jar-char-face--standing)").first();
+      if ((await other.count()) === 0) {
+        return { ok: false, detail: "the creature offers no second form, so there is no agent wall" };
+      }
+      await other.click({ timeout: 8_000 });
       await page.waitForTimeout(9_000);
+      const standing = (await page.evaluate(
+        () => (document.querySelector(".jar-char-face--standing") as HTMLElement | null)?.innerText?.trim() ?? "",
+      )) as string;
 
-      const foot = await page.evaluate(
-        () => document.querySelector(".jar-saved-count")?.textContent ?? "",
-      );
-      if (!foot.startsWith("3")) return { ok: false, detail: `foot says ${JSON.stringify(foot)}` };
+      const held = await countInArchive(page, base);
+      if (held !== texts.length) {
+        return { ok: false, detail: `standing in "${standing}", the archive says it holds ${held}, not ${texts.length}` };
+      }
 
-      await page.click(".jar-saved");
-      await page.waitForTimeout(6_000);
-
+      /* AND THE REACH, down in the agent's own ground. Find searches the wall
+         you are standing on — `InspirationSearch` is handed `atWall.id` on an
+         agent's wall — so one of the agent's own phrases is the query. */
+      if (!(await openAMemory(page, "by the machine"))) {
+        return { ok: false, detail: `standing in "${standing}", no keep of the agent's would open` };
+      }
       const reach = await page.evaluate(() =>
-        [...document.querySelectorAll(".jar-reach [role=option]")].map(
+        [...document.querySelectorAll('.jar-reach [role=option]')].map(
           (o) => o.textContent ?? "",
         ),
       );
@@ -935,7 +1093,7 @@ const JOURNEYS: Journey[] = [
       });
       return {
         ok: lit > 200,
-        detail: `foot=3 reach=${reach.length} litSamples=${lit}`,
+        detail: `standing in "${standing}", the archive holds ${held}, the reach holds ${reach.length}, litSamples=${lit}`,
       };
     },
   },
@@ -1039,8 +1197,15 @@ const JOURNEYS: Journey[] = [
         window.addEventListener("load", () => {
           const style = document.createElement("style");
           style.setAttribute("data-sabotage", "ways-out-hidden");
+          /* THE SABOTAGE IS THE ORIGINAL BUG, AIMED AT THE CHROME THAT
+             EXISTS. It was `.jar-edge, .jar-way, .jar-here-more, .jar-values,
+             .jar-up`, and four of those five have no renderer — see the note
+             in `run` for what that did to this journey. The bug was "every
+             way out of a wall sat at opacity 0 on every desktop there has
+             ever been", and the ways out are the bar and the two corners, so
+             that is what is hidden. */
           style.textContent =
-            ".jar-edge, .jar-way, .jar-here-more, .jar-values, .jar-up { opacity: 0 !important; }";
+            ".waka-dock-item, .waka-corner, .jar-up { opacity: 0 !important; }";
           document.head.appendChild(style);
         });
       });
@@ -1048,34 +1213,46 @@ const JOURNEYS: Journey[] = [
     run: async (page, base) => {
       await signUp(page, base);
       const seen = await page.evaluate(() => {
-        /* EVERY WAY THIS LAYOUT ACTUALLY HAS, not only the two in the margins.
-           A person's FIRST account has exactly one wall, so there is no
-           neighbour to point at and `.jar-way` renders nothing at all — this
-           journey was asserting a promise that cannot hold on the very run it
-           is most often executed on, and reporting "no way out is on screen"
-           about a world that has three.
+        /* ═══ EVERY WAY THIS LAYOUT ACTUALLY HAS, AND THE LIST HAD GONE
+           STALE A THIRD TIME ═══════════════════════════════════════════════
+           It said `.jar-edge, .jar-way, .jar-here-more, .jar-values, .jar-up`
+           and FOUR OF THOSE FIVE HAVE NO RENDERER — measured 2026-10-12
+           against the value of every `className=` under `packages/web/src`
+           outside `src/styles`. The fifth, `.jar-up`, is real and renders
+           only down in the field, and this journey stands at headquarters.
+           So the set was empty, `inView.length === 0`, and the journey
+           reported "no way out is on screen at all" about a world whose
+           bottom edge is a bar of four destinations that never leaves.
 
-           Sideways is one of five: the caret beside the name in the top-left
-           corner opens every wall AND the offer to make another (it replaced
-           a strip of wall names along the bottom edge on 2026-08-24), and the
-           way up is `.jar-values` standing at headquarters or `.jar-up`
-           standing down in the ground — never both at once, because one of
-           the two is always the wrong direction.
+           A FALSE FAILURE, AND THE FILE HAD ALREADY WRITTEN DOWN THE LESSON.
+           The note this replaces says it exactly: "A way-out check that names
+           no element on the screen it runs on does not fail — it counts the
+           margins, finds them empty on a first account, and reports that a
+           world with two exits has none." That was about `.jar-overhead` and
+           then about `.jar-way`. Same sentence, third set of names.
 
-           BOTH OF THOSE HAVE TO BE NAMED, and for a while neither was. The
-           selector said `.jar-overhead`, which was the way up until it was
-           rebuilt and renamed; then it said `.jar-up`, which is real but only
-           renders in the field, and this journey stands at headquarters. A
-           way-out check that names no element on the screen it runs on does
-           not fail — it counts the margins, finds them empty on a first
-           account, and reports that a world with two exits has none.
+           WHAT THE WAYS OUT ARE NOW, and they are better than what they
+           replaced for exactly the reason this journey exists — they are
+           visible at rest, with words on them, on every screen:
+
+             `.waka-dock-item`  the bar. Now, Inspirations, the plus, Chats,
+                                Principles. `Home.tsx`: "What is left at the
+                                top of the screen is the way out… One verb for
+                                making things, in the one place every phone
+                                puts it, and the nouns mean what they say."
+             `.waka-corner`     the two corners — how the product works, and
+                                settings.
+             `.jar-up`          the caret back up out of the ground, which is
+                                the one of these that is state-dependent and
+                                is kept in the list for the run that stands
+                                down there.
 
            The claim is unchanged — standing here, you can SEE that this goes
            somewhere — and the sabotage hides all of them, so hiding any one
            still fails it. */
         const marks = Array.from(
           document.querySelectorAll<HTMLElement>(
-            ".jar-edge, .jar-way, .jar-here-more, .jar-values, .jar-up",
+            ".waka-dock-item, .waka-corner, .jar-up",
           ),
         );
         const inView = marks
@@ -1083,8 +1260,18 @@ const JOURNEYS: Journey[] = [
             const r = el.getBoundingClientRect();
             const cs = getComputedStyle(el);
             return {
-              text: (el.innerText || "").trim(),
-              margin: el.classList.contains("jar-way") || el.classList.contains("jar-edge"),
+              /* a glyph-only control says its name on `aria-label`, which is
+                 what a person is told and what a reader reads out */
+              text: (el.innerText || "").trim() || el.getAttribute("aria-label") || "",
+              /* THE MARGIN PAIR IS GONE WITH THE MARGINS. `.jar-way` and
+                 `.jar-edge` were two signposts sharing each edge, and the bug
+                 was that they printed through each other. The bar is one flex
+                 row and the corners are one wrapper each; neither can collide
+                 with itself, so nothing is in the overlap set and the check
+                 below correctly finds nothing to check. It is left standing
+                 rather than deleted because the moment a second mark joins a
+                 margin, the bug can come back. */
+              margin: false,
               opacity: Number(cs.opacity),
               x: Math.round(r.left),
               y: Math.round(r.top),
@@ -1396,11 +1583,14 @@ const JOURNEYS: Journey[] = [
         await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
         await page.waitForTimeout(6_000);
       };
-      /* the same sweep `openAMemory` does, in pixels that exist at 390px */
-      const PHONE_SWEEP = {
-        xs: Array.from({ length: 12 }, (_, i) => 40 + i * 26),
-        ys: [420, 380, 460, 340, 500, 300, 540, 260, 580],
-      };
+      /* THE PHONE'S OWN SWEEP IS GONE AND NEEDED NO REPLACEMENT.
+         It was `openAMemory`'s coordinate grid, re-cut to pixels that exist
+         at 390px, because the desktop grid clicked off the glass for two
+         thirds of its passes and reported "no memory opened" as if the
+         product had failed. `openAMemory` asks for a memory by its words now
+         — `/`, a query, a result — and a search field has no coordinates, so
+         the whole class of defect goes with the grid rather than being
+         re-aimed at a second screen size. */
 
       /* WCAG 1.4.3: 4.5:1 for body text, 3:1 once the type is large. */
       const AA_TEXT = 4.5;
@@ -1433,7 +1623,7 @@ const JOURNEYS: Journey[] = [
           family: "card",
           open: async () => {
             await goHome();
-            await openAMemory(page, PHONE_SWEEP);
+            await openAMemory(page);
             await page.waitForTimeout(900);
           },
         },
@@ -1848,25 +2038,52 @@ const JOURNEYS: Journey[] = [
       const secret = `the porcelain kestrel ${uniq()}`;
       await keepInWorld(page, base, `I keep thinking about ${secret}.`);
 
-      const handle = `e2e${Date.now().toString(36)}`;
-      await goSurface(page, base, "/profile");
-      const opener = await page.$('button:has-text("make a public page")');
-      if (!opener) return { ok: false, detail: "no way to make a public page on /profile" };
-      await opener.click();
-      await page.waitForTimeout(600);
+      /* ═══ PUBLISHING IS THE CARD'S `Public profile` GROUP NOW ════════════
+         THIS WENT TO `/profile` AND REACHED FOR FOUR THINGS THAT ARE GONE:
+         the route (it redirects to the world — see `goSurface`), a
+         `make a public page` button, `input[name=publicHandle]`, and
+         `.profile-toggle-row`. None of the last three has a renderer.
 
-      const handleField = await page.$('input[name=publicHandle]');
-      if (!handleField) return { ok: false, detail: "the public-page form has no handle field" };
-      await handleField.fill(handle);
-      /* the first toggle is the page itself; the second is the top of mind,
-         and it is disabled until the first is on */
-      const toggles = await page.$$('.profile-toggle-row input[type=checkbox]');
-      if (toggles.length < 2) {
-        return { ok: false, detail: `expected two publish toggles, saw ${toggles.length}` };
-      }
-      await toggles[0]!.check();
-      await page.click('button:has-text("save profile")');
-      await page.waitForTimeout(3_000);
+         THE CAPABILITY SURVIVED THE PRUNE AND IS NAMED IN THE RULING.
+         `SettingsPanel.tsx`'s header lists what stayed: "what they are called,
+         what language they are read in, the agents they keep, WHETHER THERE
+         IS A PUBLIC PAGE, how to leave, and how to erase the account." So
+         this is a repoint. The group is opened by its own name rather than by
+         index, because the order of the three disclosures is a design
+         decision — and it has to be OPENED at all: they unmount rather than
+         hide, so every control below is absent from the document until it is.
+
+         AND THE SAVE IS A BUTTON AGAIN, unlike the display name two journeys
+         up, which debounces. `publicPage.save` is wired to
+         `.waka-settings-keep`, and the panel disables it while the write is
+         in flight. */
+      const handle = `e2e${Date.now().toString(36)}`;
+      const publish = async (on: boolean): Promise<string | null> => {
+        await openSettings(page, base);
+        /* NOT ANCHORED AT BOTH ENDS. The row is `{label}<span
+           aria-hidden>+</span>`, so its text is `Public profile+` while it is
+           folded and `Public profile–` while it is open — an `$` anchor
+           matched neither, and the first run of this reported "the account
+           card has no Public profile group" about a group that was there. */
+        if (!(await openSettingsGroup(page, /^Public profile/i))) {
+          return "the account card has no Public profile group";
+        }
+        const handleField = page.locator(".waka-account-field input[type=text]").last();
+        if ((await handleField.count()) === 0) return "the public group has no handle field";
+        await handleField.fill(handle);
+        /* the first toggle is the page itself; the second is the top of mind */
+        const toggles = page.locator(".waka-settings-toggle input[type=checkbox]");
+        if ((await toggles.count()) < 2) {
+          return `expected two publish toggles, saw ${await toggles.count()}`;
+        }
+        if (on) await toggles.first().check();
+        else await toggles.first().uncheck();
+        await page.locator(".waka-settings-keep").first().click({ timeout: 8_000 });
+        await page.waitForTimeout(3_500);
+        return null;
+      };
+      const trouble = await publish(true);
+      if (trouble) return { ok: false, detail: trouble };
 
       /** Look at the page the way anybody on the internet would. */
       const asStranger = async (): Promise<{ status: number; text: string }> => {
@@ -1900,17 +2117,29 @@ const JOURNEYS: Journey[] = [
       await page.click(".btn-doorway");
       await page.waitForTimeout(4_000);
 
-      await goSurface(page, base, "/profile");
-      const reopen = await page.$('button:has-text("your page is public")');
-      if (!reopen) {
-        problems.push("after publishing, /profile does not say the page is public");
+      /* AND THE CARD REMEMBERS, which is the half of the old step that said
+         "your page is public". The card reads the handle and the two switches
+         off the session rather than fetching its own copy, so re-opening it
+         after a sign-in is a real check that the write landed — and it is
+         where the un-publish has to happen anyway. */
+      await openSettings(page, base);
+      if (!(await openSettingsGroup(page, /^Public profile/i))) {
+        problems.push("after publishing, the account card has no Public profile group");
       } else {
-        await reopen.click();
-        await page.waitForTimeout(600);
-        const again = await page.$$('.profile-toggle-row input[type=checkbox]');
-        await again[0]!.uncheck();
-        await page.click('button:has-text("save profile")');
-        await page.waitForTimeout(3_000);
+        const remembered = await page.evaluate(() => {
+          const box = document.querySelector<HTMLInputElement>(
+            ".waka-settings-toggle input[type=checkbox]",
+          );
+          const field = [...document.querySelectorAll<HTMLInputElement>(".waka-account-field input[type=text]")].pop();
+          return { on: Boolean(box?.checked), handle: field?.value ?? "" };
+        });
+        if (!remembered.on || remembered.handle !== handle) {
+          problems.push(
+            `after publishing, the card says on=${remembered.on} handle=${JSON.stringify(remembered.handle)}`,
+          );
+        }
+        const stillTrouble = await publish(false);
+        if (stillTrouble) problems.push(stillTrouble);
 
         const withdrawn = await asStranger();
         if (withdrawn.text.includes(secret)) {
@@ -1993,28 +2222,54 @@ const JOURNEYS: Journey[] = [
       await signUp(page, base);
 
       const problems: string[] = [];
-      /* THE RULING REVERSED (founder, 2026-08-31): the person chooses English
-         or Korean, so the picker's ABSENCE is now the failure — the exact
-         inversion of the guard that held the 2026-08-24 ruling. */
-      await goSurface(page, base, "/profile");
-      if ((await page.locator('select[name="preferredLocale"]').count()) === 0) {
+      /* ═══ THE PICKER IS IN THE COG'S CARD, AND SIX OF THE SEVEN SURFACES
+         BELOW WERE DELETED IN 2026-08-25 ══════════════════════════════════════
+         THE RULING IS UNCHANGED (founder, 2026-08-31): the person chooses
+         English or Korean, so the picker's ABSENCE is the failure — the exact
+         inversion of the guard that held the 2026-08-24 English-only ruling.
+
+         WHAT WAS BROKEN. The picker was reached as
+         `select[name="preferredLocale"]` on `/profile`. There is no control
+         with that name anywhere in `packages/web/src`: the picker is a bare
+         `<select>` inside `SettingsPanel.tsx`'s first `.waka-account-field`.
+         And `/profile` redirects to the world, so the absence was asserted
+         about a page that was never opened — the guard fired, correctly in
+         form and about nothing in substance.
+
+         THE SURFACE LIST WAS WORSE, BECAUSE IT PASSED. Seven routes, and six
+         of them — `/capture`, `/inspirations`, `/signals`, `/top-of-mind`,
+         `/rooms`, `/principles` — were deleted on 2026-08-25 by this file's
+         own account of it. `/inspirations` and `/principles` are `<Navigate>`
+         redirects to `/?open=…`; the rest fall to the catch-all and land on
+         `/`. So "English on 7 surfaces" was the world, read seven times, and
+         every one of this journey's four checks passed on it. A locale bug on
+         any real destination was invisible.
+
+         THE SURFACES NOW ARE THE ONES THAT EXIST, and the reasoning the old
+         note gave holds exactly: "a provider missed on a single route would
+         leave that surface rendering something else entirely" while the world
+         looked perfectly correct. The destinations are query views on `/`
+         rather than paths, which is what `main.tsx` turned them into — "the
+         archive and the principles became overlays because reaching them
+         UNMOUNTED THE WORLD" — so they are addressed the way the router
+         addresses them. `goSurface` compares pathnames and now THROWS on a
+         redirect, so a route quietly leaving the list cannot be silent again. */
+      await openSettings(page, base);
+      if ((await page.locator(".waka-account-field select").count()) === 0) {
         problems.push(
-          "the language picker is missing from /profile — the person chooses " +
-            "their language (founder, 2026-08-31)",
+          "the language picker is missing from the account card — the person " +
+            "chooses their language (founder, 2026-08-31)",
         );
       }
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(400);
 
-      /* Every flat surface, not just one: a provider missed on a single route
-         would leave that surface rendering something else entirely while
-         /profile looked perfectly correct. */
       const surfaces = [
-        "/profile",
-        "/capture",
-        "/inspirations",
-        "/signals",
-        "/top-of-mind",
-        "/rooms",
-        "/principles",
+        "/",
+        "/?open=saves",
+        "/?open=conversations",
+        "/?open=principles",
+        "/days",
       ];
       /* Hangul, Kana, and the CJK block — the second language this product
          used to carry, and any other that might arrive the same way. */
@@ -2060,12 +2315,19 @@ const JOURNEYS: Journey[] = [
          picker and the chrome must actually speak it — a picker wired to
          nothing is the advisory-button lie in a dropdown. Same defect checks
          hold in the other language. */
-      await goSurface(page, base, "/profile");
-      await page.selectOption('select[name="preferredLocale"]', "ko-KR");
-      await page.waitForTimeout(800);
+      await openSettings(page, base);
+      await page.locator(".waka-account-field select").selectOption("ko-KR");
+      /* AND THE WORLD BEHIND THE CARD HAS TO SPEAK IT, not only the card.
+         Reading the card alone would pass on a picker that re-renders its own
+         three labels and leaves every other surface in English — which is the
+         advisory-button lie one dropdown along. The card is closed and the
+         world read. */
+      await page.waitForTimeout(1_500);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(1_200);
       const koText = await translatableText(page);
       if (!otherScript.test(koText)) {
-        problems.push("chose Korean and /profile still speaks only English");
+        problems.push("chose Korean and the world still speaks only English");
       }
       if (/\{\s*\w+\s*,/.test(koText)) problems.push("unformatted ICU on the Korean screen");
 
@@ -2074,7 +2336,8 @@ const JOURNEYS: Journey[] = [
         detail:
           problems.length === 0
             ? `English on ${surfaces.length} surfaces for an English account, the picker ` +
-              "stands on /profile, choosing Korean re-speaks the chrome, no raw ICU, no bare keys"
+              "stands in the account card, choosing Korean re-speaks the world, no raw ICU, " +
+              "no bare keys"
             : problems.join("; "),
       };
     },
