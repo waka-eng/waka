@@ -787,8 +787,18 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
 
                                 FROM THE WHOLE ARCHIVE, NOT THE VISIBLE LIST,
                                 so a search never renames anything. */}
+                            {/* WITH A HASH. Founder, pointing at the bare
+                                "36" beside a date: "add # in front."
+
+                                It is the mark that turns a figure into a
+                                NAME, which is the whole argument for this
+                                number surviving "states render, numerals
+                                never" — see the note above. Beside "Oct 8",
+                                a bare 36 reads as another measurement of
+                                the same kind; "#36" reads as which one this
+                                is. */}
                             <span className="waka-list-index" aria-hidden="true">
-                              {ordinals.get(row.id)}
+                              #{ordinals.get(row.id)}
                             </span>
                             <span className="waka-list-date">{dateWords(row.capturedMs, now, locale)}</span>
                             {rest ? <span className="waka-list-rest">{rest}</span> : null}
