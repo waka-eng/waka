@@ -129,6 +129,7 @@ import {
 import { SavesOverlay } from "../components/SavesOverlay";
 import { DOCK_SLOT } from "../components/NoteTools";
 import { whyNotKept } from "../lib/keep-ready";
+import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { ClaimsOverlay } from "../components/ClaimsOverlay";
 import { ConversationsOverlay } from "../components/ConversationsOverlay";
@@ -11336,12 +11337,37 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      nothing on press. The failure a disabled state prevents is a control
      that absorbs a press silently; the failure TWO copies of the condition
      cause is the same thing wearing a different hat. */
+  /* ═══ SPEAKING INTO THE NOTE ══════════════════════════════════════════
+     Founder: "is it not possible to do speech to text easily, or is audio
+     the only easy way to record?"
+
+     It is, and `lib/use-dictation.ts` carries the full argument for why it
+     is the better default here rather than an extra: signals are derived
+     from the WORDS of an inspiration, so a spoken thought that lands as
+     text feeds the top of mind and is searchable, while the same thought as
+     a `.webm` is opaque to every layer above storage.
+
+     THE ANCHOR IS A REF, NOT THE RENDERED VALUE. The hook asks for the
+     note's current words at the moment the microphone opens; reading
+     `draft` from this closure would hand it whatever was on screen when
+     this callback was last built. `draftRef` is the same seam every other
+     handler in this file reaches through. */
+  const dictation = useDictation(
+    () => draftRef.current,
+    (text) => { draftRef.current = text; setDraft(text); setMouthNote(''); },
+    locale,
+  );
+
   const whyNotKeeping = whyNotKept({
     hasWords: composerHasWords,
     ready: composerDraft.ready,
     saving: Boolean(inspirationSave.pending) || inspirationSave.busy || preparingInspiration,
     uploading: checkingFiles || Boolean(uploadingMediaId),
-    recording: recording.phase !== 'idle',
+    /* DICTATING COUNTS AS RECORDING for the purpose of keeping: a sentence
+       half-spoken is the same unfinished state as a clip half-recorded, and
+       saving mid-utterance would drop whatever the engine had not yet
+       marked final. */
+    recording: recording.phase !== 'idle' || dictation.listening,
     undecidedRecording: Boolean(composerDraft.draft.recordingCandidate),
     invalidFiles: inputMedia.filter(item => item.validationError).length,
     files: inputMedia.length,
@@ -11352,6 +11378,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       recorder's clock is not here — it is a control you press to stop, and
       it already stands in the bar as one. */
   const composerState = mouthNote || composerDraft.error || recording.error
+    || (dictation.error === 'dictation-denied' ? say('worldComposerDictateDenied') : '')
+    || (dictation.error === 'dictation-failed' ? say('worldComposerDictateFailed') : '')
+    /* SAID ONCE, THE FIRST TIME. Chrome sends speech to its own servers to
+       transcribe it, and a product whose claim is that your material is
+       yours owes that sentence to anybody who presses the microphone. Once
+       per session, in the bar, where every other passing line goes — not a
+       dialog, because it is a fact rather than a decision, and the person
+       is already speaking by the time they can read it. */
+    || (dictation.firstTime && dictation.listening ? say('worldComposerDictateCloud') : '')
     || (!composerDraft.ready ? say('worldComposerOpening') : '')
     || (uploadingMediaId ? say('worldComposerUploading') : '')
     || (recording.phase === 'idle' ? recording.notice : '');
@@ -17019,7 +17054,40 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 aria-label={say('worldCaptureInspiration')} />
             ) : item.id === 'new' && viewNavigation.view?.compose ? (
               <span className="waka-dock-making" role="group" aria-label={say('worldCaptureInspiration')}>
-                {supportedRecordingType() ? (
+                {/* ═══ THE MICROPHONE SPEAKS INTO THE NOTE WHERE IT CAN ════
+                    Founder: "is it not possible to do speech to text
+                    easily, or is audio the only easy way to record?"
+
+                    Easily, and it is the better default — `use-dictation.ts`
+                    carries the reasoning, which comes down to this: a
+                    spoken thought that lands as TEXT feeds the top of mind,
+                    shows as a lead line in the archive and can be searched;
+                    the same thought as a file does none of those things.
+
+                    RECORDING IS NOT GONE AND IS NOT HIDDEN. Where the
+                    browser cannot transcribe — Firefox — this slot is the
+                    recorder, with no mention anywhere of a feature that
+                    does not exist here. Where it can, the recorder is still
+                    the right tool when the SOUND is the point (a melody,
+                    somebody else talking) and it is one press away behind
+                    the camera's own menu rather than a second glyph in a
+                    slot that holds three things already. That is a trade
+                    and it is the founder's to revisit; what is not a trade
+                    is which one the bare microphone should do. */}
+                {dictationAvailable() ? (
+                  dictation.listening ? (
+                    /* THE SAME SHAPE THE RECORDER'S STOP HAS: a word, not a
+                       second glyph. "Speaking" with a press on it says both
+                       what is happening and how to end it. */
+                    <button type="button" className="waka-dock-tool waka-dock-tool--wide"
+                      onClick={() => dictation.stop()}>{say('worldComposerDictateStop')}</button>
+                  ) : (
+                    <button type="button" className="waka-dock-tool"
+                      aria-label={say('worldComposerDictate')}
+                      disabled={!composerDraft.available}
+                      onClick={() => dictation.start()}><HomeActionIcon kind="record"/></button>
+                  )
+                ) : supportedRecordingType() ? (
                   recording.phase === 'idle' ? (
                     <button type="button" className="waka-dock-tool"
                       aria-label={say(inputMedia.some(m => m.type === 'audio') ? 'worldComposerRecordAgain' : 'worldComposerRecord')}
