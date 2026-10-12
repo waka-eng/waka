@@ -46,6 +46,7 @@
  * catalogue files all run.
  */
 import { act } from 'react';
+import { inspectInspirationPhoto } from '../src/lib/inspiration-photo';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -220,5 +221,47 @@ describe('an attachment speaks the reader’s language', () => {
     expect(host.textContent).toContain('too long to transcribe');
     expect(host.textContent).toContain('Retry transcription');
     expect(/[가-힣]/.test(host.textContent ?? ''), host.textContent ?? '').toBe(false);
+  });
+});
+
+/**
+ * ═══ AND A REFUSED PHOTO SAYS WHY, IN KOREAN ══════════════════════════════
+ *
+ * The three refusals in `lib/inspiration-photo.ts` were finished English
+ * sentences thrown from a lib — `throw new Error('Use a JPEG, PNG, WebP,
+ * GIF, AVIF or HEIC photo.')` and its two neighbours — printed verbatim to
+ * whoever was reading. They are the last English the sniffer could put on a
+ * Korean screen, and they reach it on the one path a person is most likely
+ * to hit by accident: dropping the wrong file.
+ *
+ * READ THROUGH `whyOf`, NOT THE ERROR, because that is the contract. The
+ * refusal carries a `MessageKey`; the function that knows the reader's
+ * locale resolves it. Asserting on `err.message` would pass while the screen
+ * stayed English.
+ *
+ * NO LATIN PHRASE, rather than no Latin character: the sibling cases above
+ * explain why — a Korean screen legitimately carries `WAKA`, hostnames and
+ * file names. Two Latin words in a row is the thing that cannot be innocent.
+ */
+describe('a photo the sniffer refuses', () => {
+  const LATIN_PHRASE = /[A-Za-z]{2,}\s+[A-Za-z]{2,}/;
+  const refusalFor = async (file: File, locale: 'en-US' | 'ko-KR') => {
+    try { await inspectInspirationPhoto(file); } catch (err) { return whyOf(err, locale); }
+    throw new Error('the sniffer accepted a file it should have refused');
+  };
+  const cases: Array<[string, File]> = [
+    ['an empty file', new File([], 'nothing.png', { type: 'image/png' })],
+    ['bytes that are not an image', new File([new Uint8Array([0x4d, 0x5a, 0x90, 0x00])], 'renamed.png', { type: 'image/png' })],
+  ];
+  it.each(cases)('says why in Korean, for %s', async (_what, file) => {
+    const ko = await refusalFor(file, 'ko-KR');
+    expect(ko).not.toBe('');
+    expect(/[가-힣]/.test(ko), ko).toBe(true);
+    expect(LATIN_PHRASE.test(ko), ko).toBe(false);
+  });
+  it.each(cases)('still says why in English, for %s', async (_what, file) => {
+    const en = await refusalFor(file, 'en-US');
+    expect(/[가-힣]/.test(en), en).toBe(false);
+    expect(en.length).toBeGreaterThan(8);
   });
 });

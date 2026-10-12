@@ -1,6 +1,37 @@
+import type { MessageKey } from "./i18n";
 /** Inspect a small header, not the filename or the browser's MIME guess.
  * Keep original bytes (including EXIF orientation); never re-encode a capture. */
 export const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
+
+/**
+ * ═══ A REFUSAL CARRIES A KEY, NOT A SENTENCE ══════════════════════════════
+ *
+ * These three refusals were `throw new Error('Use a JPEG, PNG, WebP, GIF,
+ * AVIF or HEIC photo.')` and the two beside it — finished English sentences,
+ * thrown from a lib, printed verbatim to whoever was reading. A Korean
+ * reader dropping the wrong file got their own language for the frame and
+ * English for the reason, which is the same half-translated shape
+ * `whyFailed` was fixed for on the same day.
+ *
+ * WHY A CLASS AND NOT A LOCALE ARGUMENT. This function is called from four
+ * upload paths, and three of them are inside `Home.tsx`, which is being
+ * restructured — threading a locale through each would put the decision at
+ * every call site and get it wrong at the fifth. The error says WHICH
+ * refusal it is; `whyOf` in `lib/why-failed.ts` already takes the reader's
+ * locale and already dispatches on error type, so it is the one place that
+ * has both facts. Call sites are untouched and cannot forget.
+ *
+ * The sentence is NOT kept as a fallback `message`. A fallback that is never
+ * read is a second copy of the string that drifts from the catalogue — and
+ * if `whyOf` ever stops handling this class, an empty message is a visible
+ * bug while a stale English one is an invisible regression.
+ */
+export class PhotoRefused extends Error {
+  constructor(readonly reason: MessageKey) {
+    super(reason);
+    this.name = "PhotoRefused";
+  }
+}
 
 /**
  * WHAT A PICKER MAY OFFER — the same set the sniffer below accepts, stated
@@ -35,8 +66,8 @@ export const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
 export const PHOTO_ACCEPT =
   "image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif";
 export async function inspectInspirationPhoto(file: File): Promise<File> {
-  if (!file.size) throw new Error('This file is empty.');
-  if (file.size > MAX_PHOTO_BYTES) throw new Error('This photo is over 25 MB. Choose a smaller copy.');
+  if (!file.size) throw new PhotoRefused("worldPhotoEmpty");
+  if (file.size > MAX_PHOTO_BYTES) throw new PhotoRefused("worldPhotoTooLarge");
   const bytes = new Uint8Array(await file.slice(0, 64).arrayBuffer());
   const ascii = (start: number, end: number) => String.fromCharCode(...bytes.slice(start, end));
   let type = '';
@@ -52,6 +83,6 @@ export async function inspectInspirationPhoto(file: File): Promise<File> {
     else if (brands.some(brand => ['heic', 'heix', 'hevc', 'hevx'].includes(brand))) type = 'image/heic';
     else if (brands.some(brand => ['mif1', 'msf1'].includes(brand))) type = 'image/heif';
   }
-  if (!type) throw new Error('Use a JPEG, PNG, WebP, GIF, AVIF or HEIC photo.');
+  if (!type) throw new PhotoRefused("worldPhotoWrongKind");
   return file.type === type ? file : new File([file], file.name, { type, lastModified: file.lastModified });
 }
