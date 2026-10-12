@@ -36,6 +36,7 @@ import { useEffect, useRef, useState } from "react";
 import { deleteConversation, listConversations, type ConversationSummary } from "../lib/api/conversations";
 import { DialogSurface } from "./DialogSurface";
 import { t, type SupportedLocale } from "../lib/locales";
+import { dateWords, timeOf } from "../lib/words";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -67,13 +68,26 @@ function rest(row: ConversationSummary): string {
   return plain(row).slice(1).join(" ");
 }
 
-/** The hour, which is the only thing that tells two chats on one day apart —
-    the heading above them has already said which day it was. */
+/**
+ * THE HOUR, which is the only thing that tells two chats on one day apart —
+ * the heading above them has already said which day it was.
+ *
+ * `timeOf` RATHER THAN THIS FILE'S OWN `toLocaleTimeString`. The two agreed,
+ * character for character, in both languages on the day this was changed —
+ * which is exactly why it was worth changing. `timeOf` delegates to `Intl`
+ * for English and hand-builds the Korean (`오전 7:05`), and the hand-built
+ * string happening to match the platform's is a coincidence of today's ICU,
+ * not a property this project holds. The transcript's own timestamps already
+ * come from `timeOf`; a chat row and a chat message printing the same minute
+ * two different ways is the drift this import makes impossible.
+ *
+ * WHAT STAYS LOCAL: that an unparseable `updatedAt` yields an empty string
+ * rather than a phrase. That is a decision about a broken row on this list,
+ * not about how this world says a time.
+ */
 function clock(row: ConversationSummary, locale: SupportedLocale): string {
   const when = new Date(row.updatedAt);
-  return Number.isNaN(when.getTime())
-    ? ""
-    : when.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+  return Number.isNaN(when.getTime()) ? "" : timeOf(when.getTime(), locale);
 }
 
 export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen }: {
@@ -165,7 +179,25 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
           : daysAgo === 1
             ? say("worldChatsYesterday")
             : daysAgo <= 7
-              ? when.toLocaleDateString(locale, { month: "short", day: "numeric" })
+              /* `dateWords` RATHER THAN A FOURTH OPTION BAG. This heading
+                 printed `Oct 11` / `10월 11일` out of its own
+                 `toLocaleDateString`, which is the same string `dateWords`
+                 returns — so nothing a person sees moves, and the phrasing
+                 stops being this file's to get wrong.
+
+                 AND NOT `dateStamp`, WHICH WAS THE SUGGESTION. That one
+                 always carries its year ("Oct 11, 2026") because a memory
+                 product's dates are read across years. A heading over chats
+                 from inside the last week is the one place that argument does
+                 not reach: the year is never in doubt there, every heading on
+                 screen would wear the same one, and the paragraph above this
+                 block is about headings a person can USE — "past a week 'the
+                 14th' stops being a memory and starts being a lookup". A
+                 year printed four times down a list nobody needs it in is
+                 the same noise, one rung smaller. `dateWords` is the
+                 function whose stated rule is "the year is only there when it
+                 is not this one", which is this heading's rule exactly. */
+              ? dateWords(when.getTime(), today, locale)
               : say("worldChatsOlder");
       const last = out[out.length - 1];
       if (last && last.label === label) last.rows.push(row);

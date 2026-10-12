@@ -51,8 +51,31 @@ export function agoWords(ms: number, T: number, locale: WordsLocale = "en-US"): 
   return months < 2 ? "A few months ago" : `${cap(numWords(months))} months ago`;
 }
 
-/** The month a scrub is standing in, spoken — "June twenty twenty-six",
-    "이천이십육년 유월". Korean says the year first, because Korean does. */
+/**
+ * THE MONTH SOMETHING IS DATED TO, SPOKEN — "June twenty twenty-six",
+ * "이천이십육년 유월". Korean says the year first, because Korean does.
+ *
+ * TWO READERS NOW, AND THE SECOND ONE IS WHY THIS COMMENT GREW. The dial's
+ * scrub label was the first. The second is the proof line under a principle
+ * card — "Held since October twenty twenty-six, drawn from fourteen things
+ * you kept" — which carried its OWN
+ * `toLocaleDateString(locale, { month: "long", year: "numeric" })` and
+ * therefore printed `October 2026` and `2026년 10월`: this module's year rule
+ * broken in English and its "counts are prose here, never digits" law broken
+ * in Korean, on the one surface in the product whose entire value is that a
+ * stranger can read the line and believe it.
+ *
+ * A reader moving between the dial and the principles page saw one fact in
+ * two registers, and no gate could see it because neither string ever enters
+ * the catalogue. `test/one-date-vocabulary.test.tsx` can see it now.
+ *
+ * WHY THE YEAR IS ALWAYS HERE, unlike `dialMonth` one rung down. `dialMonth`
+ * labels rows in a list, where a year on one row and not its neighbour is a
+ * visible inconsistency, so it drops the year when it is this one. This
+ * phrase is spoken alone, inside a sentence about how long something has been
+ * true — and "held since October" is a sentence that quietly means a
+ * different thing every January.
+ */
 export function monthTag(ms: number, locale: WordsLocale = "en-US"): string {
   const d = new Date(ms);
   if (locale === "ko-KR") {
@@ -228,6 +251,41 @@ export function momentStamp(ms: number, locale: WordsLocale = "en-US"): string {
   const month = d.toLocaleDateString("en-US", { month: "long" });
   const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   return `${month} ${d.getDate()}, ${d.getFullYear()} at ${time}`;
+}
+
+/**
+ * THE DAY AND THE MINUTE, COMPACT — a moment named inside a sentence.
+ *
+ * `momentStamp` is the line standing alone at the top of a note, and it
+ * spells its month in full because it is being read rather than scanned.
+ * This is the same fact when it has to fit INSIDE a sentence somebody reads
+ * once and moves on from: "Saved. The next reading is scheduled for Oct 11
+ * at 7:05 AM." Exactly the relationship `dateWords` has to `dateStamp` one
+ * rung up — short because it is surrounded by other words, not because it
+ * matters less.
+ *
+ * COMPOSED FROM THE TWO FUNCTIONS THAT ALREADY SAY ITS HALVES, which is the
+ * whole reason it is in this file rather than at its call site.
+ * `InspirationProcessingNotice` carried
+ * `new Intl.DateTimeFormat(locale, { month, day, hour, minute })` and printed
+ * `Oct 11, 7:05 AM` — a comma where English says "at" — while the clock in
+ * `AttachmentPreview` two inches away came out of a different option bag.
+ * Two `Intl` calls agreeing is not a property anybody is holding: `Intl`
+ * output moves with ICU versions and platforms, so the agreement was a
+ * coincidence of today's Node and today's browser. Built out of `dateWords`
+ * and `timeOf`, it cannot drift from the surfaces that print either half.
+ *
+ * THE YEAR FOLLOWS `dateWords`: present only when it is not this one. A
+ * scheduled reading is usually minutes away, so in practice the year never
+ * shows — but a queue that has been stuck since December must not tell
+ * somebody in January that it will be read "Dec 3".
+ */
+export function momentTag(ms: number, T: number, locale: WordsLocale = "en-US"): string {
+  const day = dateWords(ms, T, locale);
+  const clock = timeOf(ms, locale);
+  /* Korean needs no joiner — 날짜 다음에 시각이 바로 온다 — and inserting one
+     would be an English habit wearing Hangul. */
+  return locale === "ko-KR" ? `${day} ${clock}` : `${day} at ${clock}`;
 }
 
 /**

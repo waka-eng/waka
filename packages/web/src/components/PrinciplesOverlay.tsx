@@ -47,6 +47,7 @@ import { DialogSurface } from "./DialogSurface";
 import { useFirstVisit } from "../lib/first-visit";
 import { fetchPrinciples, type ApiPrinciple } from "../lib/api";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
+import { monthTag, numWords } from "../lib/words";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -65,14 +66,36 @@ function evidenceCount(row: ApiPrinciple): number {
   return saves || row.citedSignals.length;
 }
 
-/** The month a principle started being true, which is as precise as anyone
-    needs. A day would imply the statement arrived at 14:32 on a Tuesday. */
+/**
+ * THE MONTH A PRINCIPLE STARTED BEING TRUE, which is as precise as anyone
+ * needs. A day would imply the statement arrived at 14:32 on a Tuesday.
+ *
+ * THE WORDS ARE `words.ts`'S, NOT THIS FILE'S — the same correction
+ * `Home.tsx` records against the dial's own label, for the same reason, one
+ * surface later. This function carried
+ * `toLocaleDateString(locale, { month: "long", year: "numeric" })` and so
+ * printed `October 2026` in English and `2026년 10월` in Korean, while
+ * `monthTag` — the module function whose doc comment answers this exact
+ * question — says `October twenty twenty-six` and `이천이십육년 시월`.
+ *
+ * Both of those are wrong in a way worth naming rather than just fixing. The
+ * English broke this module's year rule; the Korean broke its own stated law,
+ * "counts are prose here, never digits". And it broke them on the PROOF
+ * LINE — the half of the card a stranger cannot fake, which is the whole
+ * reason the card is shareable (see this file's header). A person reading the
+ * dial and then this page saw one fact in two registers.
+ *
+ * WHAT IS LEFT HERE is the part that is genuinely this surface's decision:
+ * which GRAIN of date to ask for (a month, not a day) and what an unreadable
+ * timestamp means (no line at all, rather than a line that says "Invalid
+ * Date"). The phrasing belongs to the module. `monthTag` is called rather
+ * than copied so that the next change to how this world speaks a month
+ * reaches this card without anybody remembering it exists.
+ */
 function heldSince(row: ApiPrinciple, locale: SupportedLocale): string | null {
   if (!row.heldSince) return null;
   const when = new Date(row.heldSince);
-  return Number.isNaN(when.getTime())
-    ? null
-    : when.toLocaleDateString(locale, { month: "long", year: "numeric" });
+  return Number.isNaN(when.getTime()) ? null : monthTag(when.getTime(), locale);
 }
 
 export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onOpen, onShare }: {
@@ -189,12 +212,25 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
                           "from 14 things you kept" alone reads as a statistic.
                           Together they say the only thing worth saying: this
                           took a while and it came from somewhere real. */}
+                      {/* THE COUNT IS SPOKEN, THE NUMBER IS ONLY FOR THE PLURAL.
+                          "states render, numerals never" — and this line read
+                          "drawn from 14 things you kept" in English and
+                          "저장한 14개에서" in Korean, which is the law broken in
+                          both languages on a surface whose whole job is to say
+                          a principle was earned rather than counted. `words.ts`
+                          already held `numWords`; nothing routed through it.
+
+                          BOTH ARGUMENTS ARE PASSED ON PURPOSE. ICU selects the
+                          plural branch from a NUMBER, so `count` has to stay —
+                          it is never printed. `countWords` is what the reader
+                          sees. Giving the selector words would silently pick
+                          "other" for every value including one. */}
                       {since && from
-                        ? formatMessage(locale, "worldPrincipleEarned", { since, count: from })
+                        ? formatMessage(locale, "worldPrincipleEarned", { since, count: from, countWords: numWords(from, locale) })
                         : since
                           ? formatMessage(locale, "worldPrincipleSince", { since })
                           : from
-                            ? formatMessage(locale, "worldPrincipleFrom", { count: from })
+                            ? formatMessage(locale, "worldPrincipleFrom", { count: from, countWords: numWords(from, locale) })
                             : null}
                     </span>
                     {/* ONE PRESS FROM SEEING IT TO SHARING IT.

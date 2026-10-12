@@ -1,5 +1,6 @@
 import type {ApiSignalReviewEvidence} from '../lib/api/signals';
 import {t,type SupportedLocale} from '../lib/locales';
+import {dateWords} from '../lib/words';
 
 /**
  * A literal excerpt of human words, never cleaned as generated reasoning.
@@ -21,6 +22,22 @@ import {t,type SupportedLocale} from '../lib/locales';
  * replacement destination to point it at, and inventing one would rebuild the
  * surface this change removed. The quote carries its own date instead, which
  * is what the link was mostly being pressed for.
+ *
+ * AND THE DATE IS `words.ts`'S WORD FOR A DATE. It was
+ * `toLocaleDateString(locale, { month: 'short', day: 'numeric' })` written
+ * here — the same option bag `dateWords` holds, minus the one rule
+ * `dateWords` adds: the year appears when it is not this one. A quote under a
+ * principle is EVIDENCE, and evidence dated "Oct 11" with no year is the one
+ * kind of imprecision this surface cannot afford, on a product built for
+ * somebody reading their own material back across years. Fixing it by adding
+ * `year: 'numeric'` here would have been the fourth file to decide that
+ * question for itself; calling the module is how it gets decided once.
+ *
+ * `Number.isFinite` GUARDS THE PARSE, which the `Intl` call did not need to —
+ * it prints "Invalid Date" for a bad timestamp and `dateWords` would print
+ * "Invalid Date NaN". A row whose `createdAt` the server mangled drops its
+ * date and keeps its quote: the words are the evidence, the date is the
+ * provenance, and losing the second is not a reason to hide the first.
  */
 export function ReviewEvidence({rows,locale}:{rows:ApiSignalReviewEvidence[];locale:SupportedLocale}){
   const seen=new Set<string>();
@@ -28,7 +45,7 @@ export function ReviewEvidence({rows,locale}:{rows:ApiSignalReviewEvidence[];loc
     const text=row.preview.trim(),excerpt=text.length>240?`${text.slice(0,237)}…`:text;
     return <blockquote className="jar-review-evidence" key={row.answerId}>
       <p>{excerpt}</p>
-      <footer>{t(locale,'worldReviewEvidence')} · {new Date(row.createdAt).toLocaleDateString(locale,{month:'short',day:'numeric'})}</footer>
+      <footer>{t(locale,'worldReviewEvidence')} · {Number.isFinite(Date.parse(row.createdAt))?dateWords(Date.parse(row.createdAt),Date.now(),locale):''}</footer>
     </blockquote>;
   })}</>;
 }
