@@ -35,6 +35,7 @@ import { HomeActionIcon } from './HomeActionIcon';
 import { NotePage } from './NotePage';
 import { AuthoredSaveNotice } from './AuthoredSaveNotice';
 import {inspirationWithPendingLink} from '../lib/inspiration-input';
+import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
 import { formatMessage, t, type SupportedLocale } from '../lib/locales';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { useAuthoredSave } from '../lib/use-authored-save';
@@ -214,8 +215,20 @@ export function InspirationComposer(props: {
   onText: (text: string, caret: number) => void; onFiles: (files: File[]) => void;
   onRetryFile: (id: string) => void;
   onRemove: (id: string) => void; onVisibility: (value: boolean) => void;
-  /** The chevron: the archive this note is about to join. */
-  onPast: () => void;
+  /* `onPast` IS GONE, AND IT WAS NEVER CALLED. It was the chevron's — "the
+     archive this note is about to join" — and the chevron went three
+     rounds of being made quieter before the founder removed it outright:
+     "I still don't get why you have this carrot button when I do new
+     inspiration, because I can just go to all the inspirations using the
+     bottom panel." `NotePage` carries that whole argument.
+
+     What survived the removal was the PROP: declared here, documented here,
+     passed from `Home` with a three-line comment about a navigation race,
+     stubbed in two suites — and reached by nothing. That is worse than dead
+     code, because every part of it reads as live: a prop with a doc comment
+     is a contract, and the next person to open this file would have gone
+     looking for the control that honours it. The way out of this page is
+     the dock, which `way-out.test.ts` is the gate for. */
   onClose: () => void; onSubmit: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
 }) {
@@ -231,6 +244,24 @@ export function InspirationComposer(props: {
   const when = useRef<number | null>(null);
   if (when.current === null) when.current = (props.text.trim() && props.draftUpdatedMs) ? props.draftUpdatedMs : Date.now();
   useEffect(()=>{if (props.linkText) setAddingLink(true);},[props.linkText]);
+  /* ═══ `blocked` IS A DISABLING CONDITION, NOT THE SAVE RULE ══════════
+     It asks whether this page can take INPUT right now — a file, a typed
+     url, a press on Cancel — and it is the right question for all three.
+     It is not the save rule, and it used to be read as one: `Enter` in the
+     link field below called `submit()` only `if (!blocked)`, which made
+     this the THIRD hand-written copy of a condition `lib/keep-ready.ts`
+     exists to state once. It disagreed with the other two in both
+     directions: it has no idea whether a file is marked or whether the
+     microphone is open, and it refuses a save during an upload the rule
+     would also refuse but for reasons it words differently.
+
+     THE GATE IS `keepIt`, which asks `whyNotKept` at the moment of the
+     press and reads the draft store's current contents to do it. So the
+     field hands the press up and lets the rule answer — and when the rule
+     refuses, the bar says WHY, which the silent `if (!blocked)` could not.
+     The check was also already redundant for most of what it covered: the
+     input is `disabled={blocked}`, and a disabled input has no keydown to
+     gate. */
   const blocked = props.busy || Boolean(props.save.pending) || !props.ready || props.recording.phase !== 'idle';
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   /* `invalidFiles` AND `empty` WENT WITH THE SAVE BUTTON. Both existed only
@@ -306,13 +337,20 @@ export function InspirationComposer(props: {
       aria-label={say('worldCaptureInspiration')} placeholder={say('worldCapturePrompt')}
       onChange={event => props.onText(event.target.value, event.target.selectionStart ?? event.target.value.length)} onKeyDown={props.onKeyDown}
       onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.clipboardData.files]); } }} />
-    <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif" multiple hidden onChange={event => {
+    {/* THE ACCEPTED SET COMES FROM THE RULE, NOT FROM HERE. It was this
+        string, typed out, in the third of four places that had their own
+        copy — and the fourth copy (the memory card's picker in `Home.tsx`)
+        said `image/*`, so one of the product's four pickers offered files
+        the sniffer refuses. See `PHOTO_ACCEPT` for why the list belongs
+        beside `inspectInspirationPhoto` and why the picker is the door
+        rather than the lock. */}
+    <input ref={fileInput} type="file" accept={PHOTO_ACCEPT} multiple hidden onChange={event => {
       const files = [...event.target.files ?? []]; if (files.length) props.onFiles(files); event.target.value = '';
     }} />
     {props.ready && !props.fileDraftsAvailable ? <p className="jar-composer-storage-note">{say('worldComposerFilesUnavailable')}</p> : null}
     {addingLink ? <div className="jar-composer-link">
       <input ref={linkInput} type="url" value={link} disabled={blocked} aria-label={say('worldPasteTheLink')} placeholder="https://" onChange={event => { event.target.setCustomValidity(''); props.onLinkText(event.target.value); }}
-        onKeyDown={event=>{if(event.key==='Enter'&&!event.nativeEvent.isComposing&&!event.repeat){event.preventDefault();event.stopPropagation();if(!blocked)submit();}}} />
+        onKeyDown={event=>{if(event.key==='Enter'&&!event.nativeEvent.isComposing&&!event.repeat){event.preventDefault();event.stopPropagation();submit();}}} />
       <button type="button" disabled={blocked} onClick={()=>{props.onLinkText('');setAddingLink(false);}}>{say('worldComposerCancelLink')}</button>
     </div> : null}
     {link.trim() ? <p className="jar-composer-storage-note">{say('worldComposerLinkReady')}</p> : null}

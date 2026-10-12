@@ -82,7 +82,17 @@ export function whyNotKept(state: KeepReadiness): WhyNotKept | null {
   return null;
 }
 
-/** Whether the bar's Save may be pressed. */
+/**
+ * Whether the bar's Save may be pressed.
+ *
+ * `Home` CALLS THIS NOW, which it did not for a while: `composerCanKeep` was
+ * `composerHasWords && whyNotKept(...) === null` written out at the call
+ * site, so this function was exported, correct, covered by its own test, and
+ * reached by nothing — while the condition it states lived a second time in
+ * the one file that had just argued the rule is written once. The lesson is
+ * the file header's, one level down: a helper nobody calls does not stop a
+ * copy being made, it only makes the copy harder to notice.
+ */
 export function canKeep(state: KeepReadiness): boolean {
   return state.hasWords && whyNotKept(state) === null;
 }
