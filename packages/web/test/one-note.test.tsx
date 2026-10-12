@@ -18,11 +18,24 @@
  * the first line. A shared component is not a shared page.
  *
  * So what is asserted here is the thing that was actually wrong: that both
- * pages put the same parts in the same places, and that the archive's note
- * has no second attach corner. The geometry is measured through classes
- * rather than pixels — jsdom has no layout — so this catches a page losing
- * the shared chrome, and the browser gate catches a page keeping it at the
- * wrong coordinates.
+ * pages put the same parts in the same places, and that nothing but the date
+ * and the one verb about the note stands in the top row. The geometry is
+ * measured through classes rather than pixels — jsdom has no layout — so
+ * this catches a page losing the shared chrome, and the browser gate catches
+ * a page keeping it at the wrong coordinates.
+ *
+ * AND WHAT THIS FILE CANNOT SEE, SAID PLAINLY RATHER THAN LEFT TO BE
+ * DISCOVERED. Every difference that still exists between these two pages is
+ * in the BAR, and the bar is not reachable from here: the notepad's tools are
+ * rendered by `Home.tsx` and the saved note's by `NoteTools`, which portals
+ * into a slot the dock lends it and renders `null` when there is none. So
+ * mounting these two components side by side — which is what this file does,
+ * because it is cheap and the top row is all it needs — shows two empty bars
+ * and would agree about anything. `one-dock-two-notes.test.tsx` mounts the
+ * real world through both doors and compares the two rows of presses; the
+ * Speak-versus-Record difference and the two Save predicates live there.
+ * Nothing about the dock should be added here: a comparison that renders
+ * neither implementation would pass for every possible divergence.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6). Two seams.
  *
@@ -39,11 +52,15 @@
  *   reason a canvas is.
  *
  * The composer takes everything as props, so it needs no seam of its own.
+ * `helpers/note-top-row` is not a seam either: it is a DOM query over the
+ * tree this suite rendered itself, shared with `inspiration-composer.test.tsx`
+ * so the two ask the top row the same question.
  */
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { pressesInTopRow } from "./helpers/note-top-row";
 import { InspirationComposer } from "../src/components/InspirationComposer";
 import { DOCK_SLOT } from "../src/components/NoteTools";
 import { SavesOverlay } from "../src/components/SavesOverlay";
@@ -110,7 +127,7 @@ function composerProps(): ComponentProps<typeof InspirationComposer> {
     recording: { phase: "idle", seconds: 0, error: "", notice: "",
       start: vi.fn(), stop: vi.fn(), cancel: vi.fn() },
     onText: vi.fn(), onFiles: vi.fn(), onRetryFile: vi.fn(), onChooseRecording: vi.fn(),
-    onRemove: vi.fn(), onVisibility: vi.fn(), onPast: vi.fn(), onClose: vi.fn(),
+    onRemove: vi.fn(), onVisibility: vi.fn(), onClose: vi.fn(),
     onSubmit: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(),
   };
 }
@@ -138,11 +155,10 @@ function shape() {
   const top = host.querySelector(".jar-note-top");
   return {
     /* NO WAY BACK ON EITHER PAGE. Founder: "I can just go to all the
-       inspirations using the bottom panel. So don't do that." Counted on
-       both so that one page growing a chevron the other does not have
-       fails here — which is the whole subject of this file. */
-    backs: host.querySelectorAll(".jar-note-back").length,
-    headerBacks: host.querySelectorAll(".waka-over-back").length,
+       inspirations using the bottom panel. So don't do that." Read on both
+       so that one page growing a control the other does not have fails
+       here — which is the whole subject of this file. */
+    topPresses: pressesInTopRow(host),
     /* WHERE IN THE ROW THE MOMENT IS — the same place on both pages,
        which is all jsdom can be asked. It is centred on the PAGE by an
        explicit `grid-column: 2` rather than by being the second child; the
@@ -151,8 +167,6 @@ function shape() {
        browser walk in `tools/e2e` is what measured the centring. */
     whens: host.querySelectorAll(".jar-note-when").length,
     whenIndex: top ? [...top.children].findIndex((n) => n.classList.contains("jar-note-when")) : -1,
-    /* The attach corner is in the bar on both; neither page may grow one. */
-    corners: host.querySelectorAll(".jar-note-tools").length,
   };
 }
 
@@ -165,34 +179,50 @@ it("gives a new note and a saved one the same chrome in the same order", async (
   expect(fresh).toEqual(kept);
   /* Spelled out as well as compared, so a regression that breaks BOTH pages
      identically still fails. `toEqual` alone would pass for two pages that
-     had each lost their chevron. */
-  expect(fresh.backs).toBe(0);
-  expect(fresh.headerBacks).toBe(0);
+     had each lost their date. */
+  expect(fresh.topPresses, "something pressable appeared beside the date").toEqual([]);
   expect(fresh.whens).toBe(1);
   expect(fresh.whenIndex).toBe(0);
-  expect(fresh.corners).toBe(0);
 });
 
-/* THE DELETE IS THE ONE THING A SAVED NOTE HAS AND A NEW ONE DOES NOT, and
-   it is in the slot `NotePage` reserves for a verb about the note — not in
-   the bottom-left corner, which is where it was when the founder said
-   "delete being at bottom left like this is weird", and not in a row of its
-   own. A new note has nothing there: a thing that does not exist yet cannot
-   be destroyed. */
-it("puts the one destructive verb in the top row, and only on a saved note", async () => {
+/* ═══ THE DESTRUCTIVE VERB LEFT THE TOP ROW FOR THE BAR (2026-10-12) ══════
+ *
+ * Founder: "let's just add delete icon next to the save icon."
+ *
+ * THIS CASE USED TO ASSERT THE OPPOSITE, and the reversal is worth keeping
+ * rather than overwriting, because the old arrangement was not merely a
+ * different taste — it was broken, and in a way this suite could not see.
+ * Delete sat in `.jar-note-verb`, the slot `NotePage` reserves for a verb
+ * about the note. That slot is layout only: `display: inline-flex` and a
+ * gap, no rule for its children. So the one irreversible act a note has
+ * measured 59x32 in Chromium against this product's 44px floor for an act,
+ * with its confirm sibling unstyled too.
+ *
+ * It got there tonight. The control used to live inside `.waka-note-foot`,
+ * which carried `min-height: 44px`; the commit that merged the two note
+ * pages into one `NotePage` moved the markup and left the rule behind, and
+ * the rule was later swept as dead — correctly, since nothing wore the
+ * class by then. The floor had been gone for hours and every gate was
+ * green, including this one, which asserted only WHERE the verb was.
+ *
+ * WHAT THIS CASE CAN STILL PROVE, and it is the half that belongs here:
+ * the top row holds no press at all now, on either page. This harness
+ * renders `InspirationComposer` and `SavesOverlay` directly, with no dock
+ * slot for `NoteTools` to portal into, so the bar is out of reach by
+ * construction — which is exactly why the bar's own comparison needed a
+ * suite that mounts the real world. See `one-dock-two-notes.test.tsx`,
+ * where Delete's presence, its 44px floor and its absence on a new note
+ * are the assertions. Two halves, each held where it is reachable. */
+it("leaves no press in the top row of either note page", async () => {
   await newNote();
   expect(host.querySelectorAll(".jar-note-verb")).toHaveLength(0);
   expect(host.textContent).not.toContain("Delete");
 
   await savedNote();
-  const verb = host.querySelector(".jar-note-verb");
-  expect(verb).not.toBeNull();
-  expect(verb!.textContent).toContain("Delete");
-  /* Last in the row, so it is as far from the way back as the row has
-     room for — the two are the only presses up there and one of them
-     cannot be undone. */
-  const top = host.querySelector(".jar-note-top")!;
-  expect(top.lastElementChild).toBe(verb);
+  /* The slot renders only when something is passed to it, and nothing is
+     any more — so its absence is the assertion, not an empty element. */
+  expect(host.querySelector(".jar-note-verb")).toBeNull();
+  expect(host.textContent).not.toContain("Delete");
 });
 
 /**

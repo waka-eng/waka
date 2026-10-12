@@ -36,6 +36,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { HomeActionIcon } from "./HomeActionIcon";
+import { PHOTO_ACCEPT } from "../lib/inspiration-photo";
 import { supportedRecordingType, type useAudioRecording } from "../lib/use-audio-recording";
 
 /** The id `Home` gives the dock slot this renders into. */
@@ -53,9 +54,49 @@ export function NoteTools(props: {
   photoLabel: string;
   /** Named for the act, not the page: it is the notepad's word, on purpose. */
   keepLabel: string;
-  /** Whether the words on the note differ from the ones that are stored. */
+  /**
+   * `canKeep(state)` FROM `lib/keep-ready.ts`, AND NOTHING ELSE.
+   *
+   * This prop said "whether the words on the note differ from the ones that
+   * are stored" and was filled by a four-term expression `SavesOverlay` wrote
+   * by hand — so one identifier, `canKeep`, meant the rule's enablement
+   * predicate in one file and a dirty check in another, on one control. Both
+   * callers ask the one function now. Named for it on purpose: the name was
+   * already right, it was the meaning behind it that was missing.
+   *
+   * WHY THIS IS A BOOLEAN AND NOT A `KeepReadiness`. Letting the bar build
+   * its own answer would be the tidier type and the wrong seam — the notepad
+   * does not render this component (`Home` draws its own dock) and the press
+   * has to re-ask with fresher fields at one of the two sites. The field list
+   * stays with the page that knows its own state; what travels is the rule's
+   * verdict. See `keepState` in `SavesOverlay` for which inputs a saved note
+   * answers differently, each with its argument written beside it.
+   */
   canKeep: boolean;
   onKeep: () => void;
+  /** The trash beside Save. Founder: "let's just add delete icon next to the
+      save icon." Absent on the notepad, because a note that was never kept
+      has nothing to erase — see `one-dock-two-notes.test.tsx`'s ledger. */
+  eraseLabel: string;
+  eraseConfirmLabel: string;
+  cancelEraseLabel: string;
+  eraseQuestion: string;
+  /** Armed, not yet committed. */
+  erasePending: boolean;
+  erasing: boolean;
+  onErase: () => void;
+  onCancelErase: () => void;
+  /** A chosen photo, OR a finished recording — `SavesOverlay` hands the same
+      callback to the recorder, so one destination takes both kinds. That is
+      why this component does not sniff the bytes before calling it even
+      though its own picker offers `PHOTO_ACCEPT`: a check that refused
+      everything the photo rule does not name would refuse the overlay's own
+      `audio/webm` clip. Whoever owns the destination owns the check, and
+      `SavesOverlay`'s `attach` is the one place that knows which of the two
+      arrived. (As of this writing that function still classifies what it
+      stored from `file.type` and never calls `inspectInspirationPhoto` —
+      `Home`'s `attachTo`, the same shape, was fixed; this one is reported
+      rather than edited because the file is under other hands.) */
   onFile: (file: File) => void;
 }): JSX.Element | null {
   const file = useRef<HTMLInputElement>(null);
@@ -95,8 +136,23 @@ export function NoteTools(props: {
         disabled={busy || props.recording.phase !== "idle"}
         aria-label={props.photoLabel}
         onClick={() => file.current?.click()}><HomeActionIcon kind="photo" /></button>
+      {/* WHAT THE CHOOSER MAY OFFER IS THE PHOTO RULE'S OWN BUSINESS, so it
+          is quoted from where that rule lives rather than typed out here.
+          This list was identical to `lib/inspiration-photo.ts`'s by hand, and
+          identical-by-hand is the state a list is in just before it stops
+          being identical: the same string existed at four file inputs and the
+          fourth said `image/*`, so a TIFF was selectable from one picker in
+          this product and refused with a sentence at the other three.
+
+          AND IT IS STILL ONLY THE DOOR. `accept` greys out what the operating
+          system's file chooser will not hand over; it is defeated by a
+          rename, by a drag and by a paste, so nothing here is a check. The
+          lock is `inspectInspirationPhoto`, which reads the first 64 bytes —
+          and on THIS path that call belongs to the overlay's `attach`, not to
+          this component, because the same `onFile` also carries the
+          recorder's audio. See the note on `onFile` above. */}
       <input ref={file} type="file" hidden
-        accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif"
+        accept={PHOTO_ACCEPT}
         onChange={(event) => {
           const picked = event.target.files?.[0];
           event.target.value = "";
@@ -133,14 +189,50 @@ export function NoteTools(props: {
           omission. `busy` disables the mic and the camera because a second
           upload while one is in flight is a real conflict; a text write is
           not in that queue — `attach` says so explicitly, "the write is
-          independent of the note's words". The caller's own `canKeep`
-          already folds in `saving`, which is the conflict that does exist. */}
+          independent of the note's words".
+
+          THE CONFLICTS THAT DO EXIST ARE THE RULE'S, not this component's.
+          `canKeep` is `lib/keep-ready.ts`'s verdict — `saving` among its
+          eight inputs, and a running recorder ahead of it in the order. That
+          sentence used to read "the caller's own `canKeep` already folds in
+          `saving`", which was a statement about a contract that did not
+          exist: the prop was a hand-written dirty check and the claim was
+          true of it only by luck. It is a contract now. */}
       <button type="button" className="waka-dock-tool waka-dock-tool--keep"
         aria-label={props.keepLabel} disabled={!props.canKeep}
         onClick={props.onKeep}><HomeActionIcon kind="keep" /></button>
+      {/* ═══ AND THE WAY TO UNDO KEEPING IT, IN THE SAME BAR ══════════════
+          Founder: "let's just add delete icon next to the save icon."
+
+          IT CAME FROM THE NOTE'S TRAILING SLOT, which is where it had been
+          since the two note pages were merged — and that slot styled
+          nothing, so this control measured 59x32 against a product floor of
+          44 for an act, on the one irreversible thing a note can do. The
+          dock gives it the floor every other tool has, and puts the two
+          halves of a destructive act in the place the founder already
+          ruled states belong: "states should show and disappear in the
+          bottom bar only."
+
+          ARMED IS A VISIBLE QUESTION, NOT A SILENT MODE. Pressing once asks
+          in the bar's own state slot and offers the way out beside it;
+          pressing the trash again commits. A security review found the
+          sibling of this control in settings staying armed after its
+          section was collapsed, so arming here is cleared by the caller
+          whenever the note changes or closes. */}
+      <button type="button" className="waka-dock-tool waka-dock-tool--erase"
+        aria-label={props.erasePending ? props.eraseConfirmLabel : props.eraseLabel}
+        disabled={props.erasing}
+        onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
       {/* ONE LINE, THE SAME SLOT THE NOTEPAD'S STATE USES. Founder: "states
           should show and disappear in the bottom bar only." */}
-      {props.failed || props.recording.error ? (
+      {props.erasePending ? (
+        <span className="waka-dock-state" role="status">
+          {props.eraseQuestion}
+          <button type="button" className="waka-dock-undo" onClick={props.onCancelErase}>
+            {props.cancelEraseLabel}
+          </button>
+        </span>
+      ) : props.failed || props.recording.error ? (
         <span className="waka-dock-state" role="alert">{props.failed || props.recording.error}</span>
       ) : props.attaching ? (
         <span className="waka-dock-state" role="status">{props.uploading}</span>

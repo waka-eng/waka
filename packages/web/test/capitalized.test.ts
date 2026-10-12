@@ -273,17 +273,17 @@ describe("every string a person reads begins with a capital", () => {
        "you kept a memory." in the bubble, and was caught by a probe
        printing what the creature actually said rather than by this. A file
        that speaks two clauses needs two calls. */
-    /* `ReadingPanel.tsx` IS BACK ON THIS LIST, as the note that replaced it
-       said it would be (2026-10-11). It left with the settings page in the
-       morning and returned behind the "i" in the top corner the same day —
-       see `HowItWorksPanel`'s header. The entry is the reason it came back
-       intact: the panel prints the loop's rules one clause per line, the
-       API writes those clauses lower case because they are built to be
-       joined, and a surface that speaks one alone without `asSentence`
-       prints a sentence starting in lower case. */
+    /* `ReadingPanel.tsx` LEFT THIS LIST WITH THE SURFACE (2026-10-11). It
+       printed the loop's rules one clause per line and was one of three
+       machinery doors on the settings page; founder: "I want all
+       setting-related stuff to be only accessible through the drop down."
+       See `SettingsPanel`'s header, which argues that those three are the
+       removal most worth disagreeing with. If they come back, the entry
+       comes back with them — a surface that speaks a server clause alone
+       and does not pass it through `asSentence` prints a sentence starting
+       in lower case. */
     const SPEAKS_A_CLAUSE_ALONE = [
       ["pages/Home.tsx", 2, "the creature asked what has been happening, and the away-window sentence"],
-      ["components/ReadingPanel.tsx", 1, "the record, one clause per line"],
     ] as const;
     const bare: string[] = [];
     for (const [file, wanted, why] of SPEAKS_A_CLAUSE_ALONE) {
