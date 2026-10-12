@@ -3253,6 +3253,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     return true;
   }, [storageScope?.profileId]);
 
+/* How long the creature will wait for the weather before saying its own
+   line. Short enough that a press never feels unanswered, long enough that
+   a healthy request answers first and nothing flickers. */
+const SPEAK_GRACE_MS = 220;
 const AWAY_LONG_ENOUGH_MS = 30_000;
   useEffect(() => {
     let hiddenAt: number | null = null;
@@ -3353,6 +3357,34 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setCharSay(fallback());
       return;
     }
+    /* ═══ A PRESS ALWAYS SAYS SOMETHING, AND IT SAYS IT NOW ════════════
+       Founder: "sometimes clicking on the character doesn't do anything for
+       a while. It feels stuck."
+
+       IT WAS STUCK, AND PRESSING AGAIN MADE IT WORSE. The sentence came
+       only from `/weather`, so between the press and the response the
+       creature said nothing — just the glow. And the obvious human reaction
+       to that, pressing again, is the one thing that guaranteed silence:
+       the second press bumps `speechEpoch`, the first answer arrives, fails
+       `mine()`, and is DROPPED. Every impatient tap cancelled the reply it
+       was impatient for. On a slow link, or with the generation queue
+       failing, the creature could be mute indefinitely while looking alive.
+
+       THE SENTENCE WAS ALREADY THERE. `fallback()` is the loop's own line
+       about what is true right now — the frontier, the sky, the dial, the
+       season of the archive — and the offline branch above has always said
+       it immediately. Only the online path waited on the network for
+       permission to speak.
+
+       A GRACE PERIOD, NOT AN IMMEDIATE SWAP, because saying the local line
+       and then replacing it a moment later would be two sentences for one
+       press, against the whisper rule of one clause at a time. If the
+       weather answers within `SPEAK_GRACE_MS` nothing flickers and this
+       timer never fires; if it does not, the creature speaks for itself and
+       the weather refines it when it lands. The epoch check inside keeps a
+       stale press from speaking over a newer one. */
+    const graced = window.setTimeout(() => { if (mine()) setCharSay(fallback()); }, SPEAK_GRACE_MS);
+    const settle = () => window.clearTimeout(graced);
     /* The wall says whose day this is. `atWallRef` rather than `atWall`
        because this callback is built once and must read the CURRENT wall,
        not the one that existed when it was made — the same reason every
@@ -3430,6 +3462,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         const lines = spoken.map(
           (x) => asSentence(`${x.sentence.text} ${day?.label ?? "today"}.`, localeRef.current),
         );
+        settle();
         if (!mine()) return;
         if (lines.length > 0) {
           const key = lines.join("|");
@@ -3443,7 +3476,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           setCharSay(fallback());
         }
       })
-      .catch(() => { if (mine()) setCharSay(fallback()); });
+      .catch(() => { settle(); if (mine()) setCharSay(fallback()); });
   }, []);
   const sayTheWeatherRef = useRef(sayTheWeather);
   sayTheWeatherRef.current = sayTheWeather;

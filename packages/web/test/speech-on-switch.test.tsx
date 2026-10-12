@@ -253,3 +253,42 @@ it('drops the away-window line when the form changed before it spoke', async () 
   await pastTheGreeting();
   expect(speech(), 'a sentence about YOUR day is being said on your agent\'s wall').toBeNull();
 });
+
+/**
+ * ═══ A PRESS THAT IS NEVER ANSWERED STILL SAYS SOMETHING ══════════════════
+ *
+ * Founder: "sometimes clicking on the character doesn't do anything for a
+ * while. It feels stuck."
+ *
+ * It was stuck. The spoken sentence came only from `/weather`, so between
+ * the press and the response the creature said nothing but glow — and
+ * pressing again, which is what a person does when nothing happens, bumped
+ * `speechEpoch` and made the first answer fail `mine()` and be DROPPED.
+ * Every impatient tap cancelled the reply it was impatient for.
+ *
+ * HELD OPEN RATHER THAN MADE SLOW, the same trick the race cases above use:
+ * a deferred promise turns "sometimes, on a bad connection" into "every
+ * run". The weather here never resolves at all, which is the worst case and
+ * also a real one — the generation queue was returning 402 on this machine
+ * the day this was written.
+ *
+ * WHAT IT MUST NOT BECOME: a test that passes because the creature says the
+ * weather quickly. The promise is never resolved, so the only thing that can
+ * fill the bubble is the local line.
+ */
+it('speaks its own line when the weather does not come back', async () => {
+  vi.mocked(fetchTheWeather).mockImplementation(() => new Promise<ApiWeather>(() => {}));
+
+  world = await mountWorld(FACTS); await settle();
+  expect(press(), 'the creature has nothing to press').toBeTruthy();
+
+  await act(async () => { press()!.click(); });
+  await world.step(0);
+  /* Before the grace period, nothing — the product still prefers the real
+     answer and will wait a moment for it. */
+  expect(speech(), 'it spoke before giving the weather a chance').toBeNull();
+
+  await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+  await settle();
+  expect(speech(), 'the press went unanswered').toBeTruthy();
+});
