@@ -3,6 +3,7 @@ import { fetchInspirationPage, type ApiInspirationSummary } from '../lib/api';
 import { t, type SupportedLocale } from '../lib/locales';
 import { DialogSurface } from './DialogSurface';
 import { inspirationPreview } from '../lib/inspiration-preview';
+import { dateStamp } from '../lib/words';
 
 interface SearchRead {
   profileId: string; query: string; phase: 'loading' | 'ready' | 'failed';
@@ -65,7 +66,16 @@ export function InspirationSearch(props: InspirationSearchProps) {
     {current && current.rows.length ? <ul className="jar-search-results">
       {current.rows.map((row) => <li key={row.id}><button type="button" onClick={() => props.onPick(row)}>
         <span>{inspirationPreview(row.textPreview, row.attachmentSummary)}</span>
-        <small>{Number.isFinite(Date.parse(row.createdAt)) ? new Intl.DateTimeFormat(props.locale, { dateStyle: 'medium' }).format(new Date(row.createdAt)) : ''}
+        {/* WHEN IT WAS KEPT, IN THIS WORLD'S WORDS AND NOT `Intl`'S.
+            `dateStyle: 'medium'` reads `Oct 11, 2026` in English — which is
+            `dateStamp` to the character — and `2026. 10. 11.` in Korean,
+            which is a form nobody writes by hand and which the rest of the
+            product never shows. `dateStamp` says `2026년 10월 11일`, the
+            stamp a Korean hand actually writes, and it is the same function
+            the card you land on after picking a row wears at its head. A
+            search result and the thing it opens disagreeing about how to
+            write one date is the drift this removes. */}
+        <small>{Number.isFinite(Date.parse(row.createdAt)) ? dateStamp(Date.parse(row.createdAt), props.locale) : ''}
           {row.reflectionCount > 0 ? ` · ${t(props.locale, 'worldReflected')}` : ''}</small>
       </button></li>)}
     </ul> : null}

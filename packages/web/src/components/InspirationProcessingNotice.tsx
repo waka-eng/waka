@@ -1,5 +1,6 @@
 import type { useInspirationProcessing } from '../lib/use-inspiration-processing';
 import { t, type SupportedLocale } from '../lib/i18n';
+import { momentTag } from '../lib/words';
 
 export function InspirationProcessingNotice({ processing, locale, onView, displayedVersion = 0, quiet = false, introducePrinciples = false }: {
   processing: ReturnType<typeof useInspirationProcessing>; locale: SupportedLocale; onView: () => void; displayedVersion?: number;
@@ -10,7 +11,16 @@ export function InspirationProcessingNotice({ processing, locale, onView, displa
   const ready = phase === 'ready';
   const hasNewReading = ready && status?.result?.topOfMindId && status.result.version > displayedVersion;
   const due = status?.runAfter ? Date.parse(status.runAfter) : NaN;
-  const when = Number.isFinite(due) ? new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(due) : '';
+  /* WHEN THE NEXT READING IS DUE, IN `words.ts`'S WORDS. This was its own
+     `new Intl.DateTimeFormat(locale, { month, day, hour, minute })`, which
+     printed `Oct 11, 7:05 AM` — a comma where English says "at" — beside an
+     attachment notice on the same screen whose clock came out of a different
+     option bag. `momentTag` was added to the module for this line: it is
+     `dateWords` and `timeOf` joined, so the day here and the day on a card,
+     the minute here and the minute under a transcript, cannot drift. See its
+     header for why two `Intl` calls agreeing is not a property anybody is
+     holding. */
+  const when = Number.isFinite(due) ? momentTag(due, Date.now(), locale) : '';
   const scheduled = Boolean(when && status?.phase === 'waiting' && (phase === 'waiting' || phase === 'checking'));
   const text = phase === 'checking' ? t(locale, 'worldSourceChecking') : phase === 'error' ? t(locale, 'worldSourceCheckFailed')
     : phase === 'delayed' ? t(locale, 'worldSourceDelayed') : phase === 'waiting' && when ? t(locale, status?.stage === 'reading' ? 'worldSourceWaiting' : 'worldSourceScheduled').replace('{time}', when)

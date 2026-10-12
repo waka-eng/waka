@@ -4,6 +4,7 @@ import type {ProfileStorageScope} from '../lib/profile-storage';
 import {ArtifactLayoutError,renderPrincipleArtifact,type PrincipleArtifactContent} from '../lib/principle-artifact';
 import {readPrincipleArtifactDrafts,storePrincipleArtifactDraft,clearPrincipleArtifactDraft,recoverPrincipleArtifactDrafts,type PrincipleArtifactDraft,type StoredPrincipleArtifactDraft} from '../lib/principle-artifact-drafts';
 import {formatMessage,t,type SupportedLocale} from '../lib/locales';
+import {dateStamp} from '../lib/words';
 import {DialogSurface} from './DialogSurface';
 
 export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:ProfileStorageScope;id:string;name:string;locale:SupportedLocale;onClose:()=>void;onChoose:(id:string)=>void}){
@@ -103,9 +104,20 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   useEffect(()=>{
     if(change&&after&&draft&&draft.value.beforeStatementId==null&&earlier[0])update({...draft.value,beforeStatementId:statements?.previousStatementId??earlier[0].id});
   },[change,statements?.currentStatementId,draft?.value.beforeStatementId]);
+  /* ═══ THE TWO DATES ON THE EXPORTED IMAGE ═════════════════════════════
+     `dateStamp`, not `dateStyle:'medium'`. In English the two are the same
+     string — `Oct 1, 2026` — which is why this went unnoticed; in Korean
+     `Intl` gives `2026. 10. 11.` and this world says `2026년 10월 11일`.
+     That difference ships: these strings are DRAWN INTO A PNG a person
+     posts in public with their name on it, so a Korean card was carrying a
+     date format from nowhere in the product, baked in, unfixable after the
+     fact. The year stays — `dateStamp` always carries it — because the whole
+     subject of a change card is that a statement meant one thing then and
+     another thing now, and a before/after with no years is a before/after
+     with no distance in it. */
   const content:PrincipleArtifactContent|null=draft&&source&&change?(before&&after?{
-    items:[{text:before.statement,label:say('worldShareEarlier'),date:new Date(before.createdAt).toLocaleDateString(locale,{dateStyle:'medium'})},
-      {text:after.statement,label:say('worldShareCurrent'),date:new Date(after.createdAt).toLocaleDateString(locale,{dateStyle:'medium'})}],
+    items:[{text:before.statement,label:say('worldShareEarlier'),date:dateStamp(Date.parse(before.createdAt),locale)},
+      {text:after.statement,label:say('worldShareCurrent'),date:dateStamp(Date.parse(after.createdAt),locale)}],
     name:draft.value.showName?name:'',appearance:draft.value.appearance,format:draft.value.format,
   }:null):draft&&source&&draft.value.entries.every(entry=>rows?.some(row=>row.id===entry.principleId))?{
     items:draft.value.entries.map(entry=>({text:entry.text})),name:draft.value.showName?name:'',appearance:draft.value.appearance,format:draft.value.format,
@@ -174,7 +186,13 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
           {change?<>
             {historyFailed?<p role="alert">{say('worldShareHistoryFailed')} <button type="button" onClick={()=>setHistoryAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button></p>:
               !statements?<p role="status">{say('worldReviewChecking')}</p>:!after||!earlier.length?<p>{say('worldShareNoHistory')}</p>:<>
-                <label>{say('worldShareEarlier')}<select value={before?.id??''} disabled={busy} onChange={event=>update({...draft.value,beforeStatementId:event.target.value})}>{!before?<option value="">{say('worldShareChooseEarlier')}</option>:null}{earlier.map(row=><option key={row.id} value={row.id}>{new Date(row.createdAt).toLocaleDateString(locale)} · {row.statement}</option>)}</select></label>
+                <label>{say('worldShareEarlier')}<select value={before?.id??''} disabled={busy} onChange={event=>update({...draft.value,beforeStatementId:event.target.value})}>{!before?<option value="">{say('worldShareChooseEarlier')}</option>:null}{/* THE PICKER WORE THE BARE `toLocaleDateString(locale)` — `10/11/2026`
+                    in English, `2026. 10. 11.` in Korean — which is the one form
+                    this product never shows anywhere else, and it sat in the menu
+                    you choose the date on the card FROM. Same stamp as the card
+                    it is choosing for, so the option and the artifact read
+                    alike. */}
+                  {earlier.map(row=><option key={row.id} value={row.id}>{dateStamp(Date.parse(row.createdAt),locale)} · {row.statement}</option>)}</select></label>
                 <p className="jar-review-context">{say('worldShareRecordedWords')}</p>
                 {before?<blockquote>{before.statement}</blockquote>:null}<blockquote>{after.statement}</blockquote>
               </>}
