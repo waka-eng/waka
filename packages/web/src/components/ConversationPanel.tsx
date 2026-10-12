@@ -138,6 +138,17 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const reply=useConversationReply(scope.profileId,id,Boolean(conversation?.generationEnabled),conversation?.revision??0,observe,conversation?.messageWindowStart);
   const replyPending=reply.state?.phase==='pending'||reply.state?.phase==='running';
   const latestMessage=conversation?.messages.at(-1);
+  /* ═══ THE MESSAGE STILL IN FLIGHT IS PART OF THE TRANSCRIPT ══════════
+     Named here, beside `latestMessage`, because the two are read together:
+     the run arithmetic below asks what the last confirmed turn was AND
+     whether something of yours is sitting under it. It was previously asked
+     inline at the one place it was rendered, which is how it came to be
+     outside the arithmetic that needed it (see the grouping note below).
+
+     `pending` AND not already in `messages`, in that order: between the save
+     landing and `observe` clearing the draft there is a frame where both are
+     true, and rendering both would print your sentence twice. */
+  const sending=draft?.pending&&!conversation?.messages.some(message=>message.id===draft.id)?draft:null;
   const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&(!reply.state||reply.error));
   const awaitingReply=replyPending||replyUnconfirmed;
   useLayoutEffect(()=>{const node=body.current;if(!node||!conversation)return;const saved=restoredScroll.current;
@@ -354,7 +365,26 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               as two separate sayings. */}
           <div className="chat-messages" role="log" aria-label={say('worldConversationMessages')} aria-live="polite" aria-relevant="additions">
             {(conversation?.messages??[]).map((message,at,all)=>{
-              const before=all[at-1],after=all[at+1];
+              /* AND THE ONE BEING SENT IS A NEIGHBOUR LIKE ANY OTHER. The
+                 draft used to be rendered after this `map` with a fixed
+                 `data-run="fl"`, which made a question you had just pressed
+                 Send on into a run of its own: a confirmed question with
+                 `after === undefined` claimed to be the end of a run, the
+                 draft claimed to be the start AND end of another, and two
+                 of your own consecutive bubbles printed two metadata rows
+                 with a loosened corner between them — against the rule this
+                 file quotes and obeys everywhere else. A reviewer's probe,
+                 2026-10-11: `got ["user:fl","user:fl"], want ["user:fm",
+                 "user:ml"]`. Reachable with replies unconnected, or after a
+                 reply is stopped, because Send re-enables with a user
+                 message last.
+
+                 Standing it in as `after` rather than appending it to `all`
+                 is deliberate: an unconfirmed draft in the array that the
+                 keys, the metadata and the window arithmetic all read would
+                 be a second kind of message for every one of them to know
+                 about. One neighbour test is the whole of what it changes. */
+              const before=all[at-1],after=all[at+1]??(sending?{role:'user' as const}:undefined);
               const run=`${before?.role===message.role?'m':'f'}${after?.role===message.role?'m':'l'}`;
               return <article key={message.id} className="chat-message" data-role={message.role} data-run={run}>
                 <p className="chat-said">{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</p>
@@ -371,10 +401,18 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
                 {run.endsWith('l')&&message.createdAt?<p className="chat-meta">{timeOf(Date.parse(message.createdAt),locale)}</p>:null}
               </article>;
             })}
-            {draft?.pending&&!conversation?.messages.some(message=>message.id===draft.id)?
-              <article className="chat-message chat-sending" data-role="user" data-run="fl">
+            {/* AND IT IS THE END OF THE RUN, WHICH END BEING THE WHOLE
+                QUESTION. It is the last thing on screen, so it takes the
+                `l` and the confirmed message above it loses one; and the
+                metadata row it keeps is the live status rather than a
+                timestamp, which is the one of the two a person waiting on a
+                send actually needs. The timestamp is not lost — it returns
+                on the confirmed bubble the moment the save lands and this
+                row stops being rendered. */}
+            {sending?
+              <article className="chat-message chat-sending" data-role="user" data-run={`${latestMessage?.role==='user'?'m':'f'}l`}>
                 <p className="chat-said">{say('worldConversationYou')}</p>
-                <div className="chat-bubble"><ConversationText text={draft.content}/></div>
+                <div className="chat-bubble"><ConversationText text={sending.content}/></div>
                 <p className="chat-meta" role="status">{say(busy?'worldChatSending':'worldReviewPending')}</p>
               </article>:null}
           </div>
@@ -432,6 +470,22 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             the founder reported, and the reference happens to ship the
             variant that avoids it. */}
         {generationEnabled&&replyNotice?<p className="chat-reply-status" role="status">{say(replyNotice)}</p>:null}
+        {/* AND WHEN REPLIES ARE NOT CONNECTED AT ALL, THE SURFACE SAYS SO.
+            Every notice above is gated behind `generationEnabled`, correctly
+            — but that left the one case where nothing will ever come back as
+            the only case the composer was silent about. A person typed, sent,
+            and waited on a surface whose whole argument is that you type and
+            it answers. Found in a browser, not in the code: an agent probing
+            the run grouping could send twice in a row precisely because this
+            machine has replies switched off, and the panel never mentioned it.
+
+            A STATUS, NOT A REFUSAL. It deliberately does NOT go through
+            `whyNoSend`, which both titles and DISABLES the send button:
+            sending still works here and must (the save path permits it and
+            passes `requestReply:false`), so the message is kept. Saying "your
+            messages are still saved" is the whole point — the words are not
+            lost, they just will not be answered yet. */}
+        {!generationEnabled?<p className="chat-reply-status" role="status">{say('worldConversationRepliesUnavailable')}</p>:null}
         {storageFailed?<p className="chat-reply-status" role="alert">{say('worldConversationDraftFailed')}</p>:null}
         {full?<p className="chat-reply-status">{say('worldConversationFull')}</p>:null}
         <div className="chat-composer-body">
@@ -491,22 +545,6 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         {draft?.pending?<button type="button" className="chat-recheck" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldConversationCheck')}</button>:null}
       </footer>:null}
     </section>
-    {/* ═══ WHAT THIS CONVERSATION IS ABOUT, BESIDE IT ═══════════════════
-        Founder: "let's have the right panel to show the inspiration while
-        you're chatting about it, and then let the user switch inspirations
-        while chatting about it ... when the user specifically brings that
-        up then the agent can read it."
-
-        A SIBLING OF THE TRANSCRIPT, NOT A SHEET OVER IT. This product has
-        spent the week removing surfaces that open on top of other
-        surfaces; a panel you have to dismiss to read the reply it is about
-        would be the worst version of that. `.chat-page` becomes a row wide
-        enough to hold both and stays a column when it is not — see
-        `.chat-aside`, where the one breakpoint is reasoned about.
-
-        ONLY ON A REAL CONVERSATION. Pinning is a fact about a conversation
-        and there is nothing to pin it to until one exists; a picker on a
-        blank new chat would write to an id the server has never seen. */}
     {/* ═══ THE SIDE PANEL IS GONE, AND SO IS PINNING ══════════════════
         Founder, having used it: "actually for now, let's get rid of the
         side part and referencing inspiration. I'm sorry. Let's get rid of
