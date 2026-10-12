@@ -53,7 +53,17 @@ const QUIET_BY_DECISION: Record<string, string> = {
   '[aria-selected="true"]':
     "already chosen — its lit state IS its answer, and brightening the one " +
     "you are standing on says the hand did something when it did not",
+  '[aria-current="page"]':
+    "the row of the bar you are standing on. Same decision as " +
+    '[aria-selected="true"] — it is already lit, and brightening it says the ' +
+    "hand did something when it did not.",
   '[aria-disabled="true"]': "same as :disabled, said the accessible way",
+  '.waka-menu-scrim':
+    "a window-sized invisible button whose only job is to dismiss the card " +
+    "in front of it. Nothing is drawn on it — dimming the world to ask a " +
+    "two-word question is the modal weight this product spends its time " +
+    "removing — so there is nothing to brighten. `.waka-new-away`, the plus " +
+    "sheet's own version, is the same control and is exempt with it.",
 };
 
 interface Dead {
@@ -132,6 +142,35 @@ async function handsOn(page: Page): Promise<{ where: string; label: string; quie
       if (r.bottom < 0 || r.top > window.innerHeight) return false;
       /* and neither is anything the pointer passes straight through */
       if (s.pointerEvents === "none") return false;
+      /**
+       * ── NOR ANYTHING WITH SOMETHING ELSE ON TOP OF IT ──────────────────
+       *
+       * THE DEFECT THIS WAS WRITTEN FOR, FOUND BY THIS WALK BEING REPOINTED
+       * AT A MODAL. The account card is a card in the corner with a
+       * full-screen `.waka-menu-scrim` behind it, which is how it is
+       * dismissed. Every control in the world and in the bar is still in the
+       * document while it is open — and `askSurface` hovers each one by
+       * moving the pointer to its centre, where the SCRIM is. So the hover
+       * lands on the scrim, the control does not light, and the walk reported
+       * forty-four controls as "said nothing when the pointer arrived" on a
+       * product where none of them is reachable by a hand at that moment.
+       *
+       * A control the pointer cannot land on is not a quiet control. It is
+       * not a control, from a hand's point of view, which is the only point
+       * of view this file has. The information was already being collected —
+       * `askSurface` prints the intercepting element on every finding, which
+       * is how the pattern was visible — and this is the filter using it.
+       *
+       * ITSELF OR A DESCENDANT, not strict identity: a button with a span of
+       * text in it resolves to the span at its own centre, and that is the
+       * button answering, not something covering it.
+       *
+       * Measured at the centre, which is where `askSurface` moves the mouse.
+       * A control half-covered is still a control, and this walk does not
+       * have an opinion about where a person aims inside one.
+       */
+      const mid = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (mid !== null && mid !== el && !el.contains(mid)) return false;
       return true;
     });
     (window as unknown as { __hands: HTMLElement[] }).__hands = found;
@@ -140,8 +179,21 @@ async function handsOn(page: Page): Promise<{ where: string; label: string; quie
       const quiet =
         el.matches(":disabled") ? ":disabled"
         : el.getAttribute("aria-selected") === "true" ? '[aria-selected="true"]'
+        /* THE SAME DECISION, SAID A THIRD WAY. `aria-current="page"` is how
+           the bar marks the row you are standing on, and the reasoning for
+           exempting it is word-for-word the `aria-selected` entry's: its lit
+           state IS its answer. Without this the walk reported the bar's
+           current row on EVERY surface it is visible from — seven findings
+           for one ruling the file already encodes. */
+        : el.getAttribute("aria-current") === "page" ? '[aria-current="page"]'
         : el.getAttribute("aria-disabled") === "true" ? '[aria-disabled="true"]'
-        : null;
+        /* the window-sized invisible target that dismisses a card. It is the
+           top element at its own centre, so the occlusion filter above
+           correctly keeps it; it has nothing drawn on it to light, which is
+           the design — see the entry in QUIET_BY_DECISION. */
+        : el.classList.contains("waka-menu-scrim") || el.classList.contains("waka-new-away")
+          ? ".waka-menu-scrim"
+          : null;
       return {
         where: `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ""}`,
         label: (el.getAttribute("aria-label") || el.innerText || "").trim().slice(0, 40),
@@ -350,10 +402,58 @@ async function run(base: string): Promise<number> {
     await page.keyboard.press("Escape");
     await page.waitForTimeout(500);
 
-    await page.goto(`${base}/profile`, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(2_500);
-    asked += await askSurface(page, "your account", dead);
-    tabbed += await askByKeyboard(page, "your account", unlit);
+    /* ═══ YOUR ACCOUNT IS A CARD IN THE CORNER, NOT AN ADDRESS ═════════════
+       THIS WALKED TO `/profile`, WHICH STOPPED BEING A ROUTE on 2026-10-11 —
+       founder: "I want all setting-related stuff to be only accessible
+       through the drop down and not be its own thing." `main.tsx` carries the
+       ruling in full under its own heading, and `SettingsPanel.tsx` lists the
+       five sections that did not survive the prune.
+
+       IT DID NOT TIME OUT. IT DID SOMETHING WORSE. `/profile` neither 404s
+       nor hangs: `main.tsx` has a `/:handle` route, the address matches it,
+       and `PublicProfile.tsx` sees a handle that does not start with `@` and
+       answers `<Navigate to="/" replace />`. So this walk landed on THE
+       WORLD, asked every control in the world whether it answers the pointer
+       — which the step two above had already done — and filed the result
+       under the heading "your account". Every control passed, because they
+       are the world's controls and the world's controls answer the hand. A
+       clean hover report about a surface the walk never opened, printed
+       beside real findings, is the one failure mode a walk like this must not
+       have: it does not merely miss the account card, it ASSERTS the account
+       card is fine.
+
+       SO IT PRESSES THE COG, the same door `tools/e2e/dead-css.ts` and
+       `tools/e2e/usability.ts` were both rewritten to use, and BY THE
+       MODIFIER rather than by `.first()`: the right corner has held two
+       buttons since 2026-10-11 — an "i" for how the product works beside the
+       cog — and the left corner has worn `.waka-corner` since there was a
+       corner, so `.first()` is a bet on document order that would now lose.
+
+       AND THE THREE GROUPS ARE OPENED IN TURN, because the card is a card of
+       disclosures and only one is open at a time. Every act inside a folded
+       group is absent from the document, not merely invisible, so a walk that
+       asked the card with everything folded would ask three or four controls
+       and report that every control on your account answers the hand. */
+    await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    await settleAfterArrival(page);
+    const cog = page.locator("button.waka-corner--settings");
+    if ((await cog.count()) === 0) {
+      console.log("  your account            NOT WALKED — no button.waka-corner--settings in the corner");
+    } else {
+      await cog.click();
+      await page.waitForTimeout(900);
+      asked += await askSurface(page, "your account", dead);
+      tabbed += await askByKeyboard(page, "your account", unlit);
+      const groups = await page.locator(".waka-settings-row").count();
+      for (let i = 0; i < groups; i += 1) {
+        await page.locator(".waka-settings-row").nth(i).click({ timeout: 5_000 });
+        await page.waitForTimeout(600);
+        asked += await askSurface(page, `your account, group ${i + 1}`, dead);
+        tabbed += await askByKeyboard(page, `your account, group ${i + 1}`, unlit);
+        await page.locator(".waka-settings-row").nth(i).click({ timeout: 5_000 });
+        await page.waitForTimeout(300);
+      }
+    }
 
     await ctx.close();
   } finally {

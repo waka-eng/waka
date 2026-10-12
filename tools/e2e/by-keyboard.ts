@@ -28,10 +28,26 @@
  *   invisible    stops with no visible focus indicator, measured by asking
  *                the browser for the computed outline/box-shadow while focused
  *   the mouth    can a memory be kept without a pointer
- *   a memory     can one be opened and read without a pointer
- *   the reach    is the ground named, and does its cursor move
+ *   a memory     can one be opened and read without a pointer — through the
+ *                bar's `Inspirations` row and a row of the archive it opens
+ *   the reach    is the ground named, does its cursor move, and does a
+ *                memory open on it — reached with `/`, a word and Enter,
+ *                because no tab stop at headquarters goes into the field
  *   a sheet      does Escape hand focus back to what opened it
- *   a way        does arriving somewhere keep your place, or drop it
+ *   a bar's place does arriving in a destination keep your place, or drop it
+ *   the wall      can the creature's other form be reached and stood in
+ *
+ * AND TWO THINGS IT REPORTS WITHOUT BREAKING ON, each with its reason beside
+ * the measurement: that the field is not in the tab order at all (it is
+ * reached through Find, which is a door and not a tab stop), and that a
+ * room's wall is no longer walked because its door was removed. The rule both
+ * obey is this file's own, learned the hard way on 2026-08-27 and written
+ * down at the bottom: "a check which is always red is a check everyone learns
+ * to skip".
+ *
+ * `a way` USED TO BE IN THIS LIST and is not any more. It was the mechanism
+ * of a destination that unmounts the control you pressed to reach it, and the
+ * world has none left — see the tombstone where its two measurements stood.
  *
  * A canvas that cannot be tabbed into is not a bug in the canvas. It is a
  * question about whether the product has a keyboard path to its own content,
@@ -423,152 +439,275 @@ async function main(): Promise<void> {
     const sheetLandedOn = await focusAfterKey("waka-corner--settings", "Escape");
     const sheetReturns = sheetLandedOn.includes("waka-corner");
 
-    /* ═══ AND THE TWO WAYS OUT OF THE WALL, EACH OF WHICH UNMOUNTS BEHIND
-       YOU — AND BOTH NAMES BELOW ARE IN THE SAME STATE THE SHEET WAS, WHICH
-       IS SAID HERE RATHER THAN QUIETLY REPOINTED ══════════════════════════
-       Measured 2026-10-12 against every `.ts`/`.tsx` in `packages/web/src`
-       outside `src/styles`: `.jar-values` has no renderer (the up-signpost
-       that is drawn wears `.jar-up` / `.jar-up--down`) and `.jar-saved` has
-       none either — the two mentions left in `Home.tsx` both pass the string
-       to `querySelector`. Both still have rules in `home.css`. So these
-       two rows print `(never reached it)` and push `travelling through
-       .jar-values drops focus to the document` into `broke`, and the whole
-       "AND READING ONE BACK" section immediately below tabs for `jar-saved`
-       to find the archive's door and therefore reports `no keyboard route
-       opens a memory — the archive is write-only again` on a working
-       product. Three false findings from one cause, and the third of them is
-       this file's loudest line.
+    /* ═══ THE TWO "WAYS OUT OF THE WALL" ARE GONE, AND THE RULING THE LAST
+       PASS ASKED FOR IS MADE HERE ════════════════════════════════════════════
+       WHAT STOOD HERE. A loop over `["jar-values", "jar-saved"]` — the
+       up-signpost and the archive door — which opened each with keys and
+       asked where focus landed, under this file's WAY heading: a destination
+       that unmounts the control you pressed, so nothing can be returned to
+       and the place you arrive in has to take the focus its own arrival
+       dropped.
 
-       WHY THIS IS NOT FIXED IN THE SAME EDIT. It is not a repoint — it is the
-       sheet/way distinction above being re-argued. Both destinations open
-       from the dock now (`.waka-dock-item`, by the words Principles and
-       Inspirations), the dock stays on screen the whole time, and a thing you
+       IT WAS NOT FILING A FALSE FAILURE. IT WAS FILING A FALSE PASS, WHICH IS
+       WORSE, AND THE REPORT THAT SENT ME HERE HAD IT THE OTHER WAY ROUND.
+       Neither class has a renderer, so `focusAfterKey` pressed thirty Tabs
+       looking for a className that cannot appear and returned
+       `"(never reached it)"` — and `kept` is `landedOn !== "(the document)"`,
+       which that string satisfies. Run on 2026-10-12 before this edit, the
+       walk printed:
+
+           travelling with keys keeps your place:
+             yes   .jar-values   arrives with focus on (never reached it)
+             yes   .jar-saved    arrives with focus on (never reached it)
+
+       Two ticks for two journeys nobody took. A gate that says a thing works
+       because it could not find the thing is the exact failure this file's
+       header was written about one surface along.
+
+       ── THE RULING: THE DOCK IS NEITHER A SHEET NOR A WAY ──────────────────
+       The last pass declined to repoint these and said why: both destinations
+       open from the dock now, the dock does not unmount, "and a thing you
        reach from a bar that does not unmount is much closer to this file's
-       SHEET than to its WAY. Deciding that changes what `kept` means and what
-       `broke` should say, and this file's own header is explicit that "a
-       report that misnames the mechanism sends whoever reads it to the wrong
-       file". It wants the founder's reading of the dock, not a token swap.
-       Reported in full rather than absorbed. */
-    const ways: Array<{ way: string; landedOn: string; kept: boolean }> = [];
-    for (const way of ["jar-values", "jar-saved"]) {
-      const landedOn = await focusAfterKey(way, null);
-      ways.push({ way, landedOn, kept: landedOn !== "(the document)" });
-    }
+       SHEET than to its WAY". That is right about the dock and wrong about
+       what follows from it, because this file's two words are not two halves
+       of everything — they are two mechanisms it happened to meet, each
+       named for the QUESTION it makes answerable:
 
-    /* AND READING ONE BACK. The door is a real button, so it can be reached;
-       what matters is whether anything BEHIND it can be. */
+         a SHEET is identified by Escape handing focus back, because its
+         opener outlives it and is where the person was;
+         a WAY is identified by nothing to hand focus back TO, because its
+         opener died on arrival.
+
+       A dock destination has the sheet's first property and not its second
+       question. Measured, with keys only, on 2026-10-12: Escape does not
+       close `Inspirations`, `Chats` or `Principles` — the bar's `Now` row
+       does, and the row that opened it is still there, still lit, with
+       `aria-current="page"`. So "does Escape hand focus back" is not a
+       question about these surfaces at all; asking it would have reported a
+       focus bug against a control that is not the way out.
+
+       WHAT IS A QUESTION ABOUT THEM IS THE ONE THE WAYS LOOP WAS ASKING:
+       does arriving drop your place? It survives the dock intact — in fact it
+       matters more, because the row you pressed is still on screen, so focus
+       falling to the document means the person is at the top of the page
+       looking at a control they are no longer on. SO THE CLAIM MOVES HOUSE
+       RATHER THAN BEING DROPPED: `reachTheDockFrom` below already opens each
+       of the three destinations with keys alone, and it now records what
+       focus landed on when it got there. One journey, three claims, no second
+       set of page loads.
+
+       WHAT IS NOT MEASURED ANY MORE, SAID OUT LOUD: nothing in this repo now
+       exercises this file's WAY mechanism — a destination that unmounts its
+       own opener — because the world no longer has one. `philosophies &
+       values` was `toSky()` and is a row in a bar; the archive door was a
+       descent into the field and is a row in the same bar. If a travelling
+       destination ever comes back, the measurement is `focusAfterKey(opener,
+       null)` and the finding is `landedOn === "(the document)"` — and the
+       guard that was missing is that `"(never reached it)"` must count as a
+       failure to measure, never as a pass. */
+
+    /**
+     * ── AND READING ONE BACK, BY THE DOOR THE PRODUCT HAS ─────────────────
+     *
+     * THIS TABBED FOR `jar-saved` AND REPORTED `the archive is write-only
+     * again` ON A PRODUCT WHOSE ARCHIVE READS FINE. That line is this file's
+     * loudest, it went into `broke`, and it was false. The run on 2026-10-12
+     * before this edit ended:
+     *
+     *     opening one to read it:          DID NOT WORK
+     *     [by-keyboard] the keyboard path got WORSE:
+     *                     no keyboard route opens a memory — the archive is
+     *                     write-only again
+     *
+     * `.jar-saved` has no renderer — the only mentions left in `Home.tsx`
+     * hand the string to `querySelector` — so the thirty Tabs below it were
+     * looking for a class that cannot appear, and the conclusion drawn from
+     * not finding it was a statement about the product.
+     *
+     * WHAT THE DOOR IS NOW, AND IT IS ONE PRESS FROM EVERY SCREEN: the bar's
+     * `Inspirations` row opens `SavesOverlay`, which draws the archive as a
+     * LIST OF BUTTONS — one `.waka-list-row` per memory, each carrying its
+     * own preview and date as its text. Walked with keys only on 2026-10-12:
+     * Tab reaches the row immediately after the surface opens, Enter opens
+     * the note, and `.waka-note-page` is standing there with the words in it.
+     *
+     * ── AND THE CLAIM IS NARROWER THAN IT WAS, DELIBERATELY ───────────────
+     *
+     * The old walk descended into the FIELD and measured the roving cursor
+     * there: `.jar-reach`, a `listbox` with one tab stop and an
+     * `aria-activedescendant` the arrows move. Those three facts were
+     * ratcheted on 2026-08-27 and they are not what this section can hold any
+     * more, because the field has no keyboard door at all — see
+     * the ground section below, which reaches the field the way the product
+     * offers — `/`, a word, Enter on a result — and holds all three. What is
+     * held HERE is the other half, and it is the half a person meets first:
+     * the archive as a list of words, opened from the bar, read without a
+     * pointer, by a control that said what it was.
+     *
+     * Nothing here is reached by selector except as a name for whatever is
+     * focused — every move is Tab or Enter, which is the only way this walk
+     * can claim what it claims.
+     */
     let memoryOpened = false;
-    let openedTheAnnouncedWay = false;
-    let reachName = "";
-    let reachRole = "";
-    let reachMoves = false;
+    let rowName = "";
+    let rowsOffered = 0;
     try {
       await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(7_000);
       await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-      for (let i = 0; i < 30; i += 1) {
-        await page.keyboard.press("Tab");
-        await page.waitForTimeout(100);
-        const onDoor = (await page.evaluate(() =>
-          String((document.activeElement as HTMLElement | null)?.className ?? "").includes(
-            "jar-saved",
-          ),
-        )) as boolean;
-        if (!onDoor) continue;
+      /* THE BAR'S ROW, NOT ANY WORD THAT HAPPENS TO SAY `Inspirations`.
+         `focused()` hands back the className, the text and the aria-label of
+         whatever is focused, all in one string, and the archive's own surface
+         is labelled "Your Inspirations" — so a bare /Inspirations/ would be a
+         bet on which of them Tab met first. Both halves are required, over
+         newlines, because the className comes first. */
+      if (await tabTo(/waka-dock-item[\s\S]*Inspirations/)) {
         await page.keyboard.press("Enter");
         await page.waitForTimeout(3_500);
-        /**
-         * TWO WAYS IN, AND BOTH ARE ASKED.
-         *
-         * The announced one first: whatever the ground says it answers to is
-         * pressed, exactly as somebody who heard its label read out would
-         * press it. A route only a blind walk can find is a route nobody is
-         * told about, and this half is what says the label is true.
-         *
-         * Then the blind one — keep tabbing and pressing Enter, so any route
-         * at all is found even if it is undocumented. It needs a leash:
-         * pressing Enter on everything eventually presses Enter on the way
-         * back UP, and the rest of the walk then hunts for a memory on a wall
-         * that has none. That is exactly how this reported "the archive is
-         * write-only" against a working ground, the first time the ground took
-         * focus on arrival — the instrument left the room it was searching and
-         * never noticed it had gone. So each round checks it is still standing
-         * in the ground, and walks back down if it is not.
-         */
-        const inTheGround = async (): Promise<boolean> =>
-          (await page.locator(".jar-reach").count()) > 0;
-
-        await page.keyboard.press("ArrowLeft");
-        await page.waitForTimeout(1_200);
-        if ((await page.locator(".jar-panel").count()) > 0) {
-          memoryOpened = true;
-          openedTheAnnouncedWay = true;
-        }
-
-        for (let j = 0; j < 25 && !memoryOpened; j += 1) {
-          if (!(await inTheGround())) {
-            for (let k = 0; k < 20; k += 1) {
-              await page.keyboard.press("Tab");
-              await page.waitForTimeout(100);
-              const backOnDoor = (await page.evaluate(() =>
-                String((document.activeElement as HTMLElement | null)?.className ?? "").includes(
-                  "jar-saved",
-                ),
-              )) as boolean;
-              if (!backOnDoor) continue;
-              await page.keyboard.press("Enter");
-              await page.waitForTimeout(3_000);
-              break;
-            }
-            if (!(await inTheGround())) break;
-          }
+        rowsOffered = await page.locator(".waka-list-row").count();
+        /* THE ROW IS FOUND BY ASKING WHAT FOCUS IS STANDING IN, not by a
+           class on the focused element itself: a row may be a button that
+           CONTAINS the preview, or a button inside one, and which of those it
+           is should not be this walk's business. */
+        const onARow = async (): Promise<boolean> =>
+          (await page.evaluate(() => {
+            const at = document.activeElement as HTMLElement | null;
+            return Boolean(at && at.closest(".waka-list-row"));
+          })) as boolean;
+        for (let i = 0; i < 20; i += 1) {
           await page.keyboard.press("Tab");
-          await page.waitForTimeout(100);
+          await page.waitForTimeout(120);
+          if (!(await onARow())) continue;
+          /* WHAT IT SAYS BEFORE IT IS PRESSED. A route only counts if a
+             listener is told where it goes, and the row carries its own
+             preview and date as text rather than an `aria-label` — which is
+             a name, read out as it stands. */
+          rowName = (await page.evaluate(() => {
+            const at = document.activeElement as HTMLElement | null;
+            const row = at?.closest(".waka-list-row") as HTMLElement | null;
+            return ((row?.getAttribute("aria-label") ?? row?.innerText ?? "") as string)
+              .trim()
+              .replace(/\s+/g, " ")
+              .slice(0, 48);
+          })) as string;
           await page.keyboard.press("Enter");
-          await page.waitForTimeout(400);
-          if ((await page.locator(".jar-panel").count()) > 0) memoryOpened = true;
+          await page.waitForTimeout(2_500);
+          memoryOpened = (await page.locator(".waka-note-page").count()) > 0;
+          break;
         }
-
-        if (memoryOpened) {
-          {
-            /**
-             * AND WHAT IT WAS THAT OPENED IT.
-             *
-             * "A memory opened" is satisfied by one lucky Enter on anything.
-             * The route is only a route if it can be described: something
-             * focused, named for a listener, holding a cursor that moves. So
-             * the element that did it is asked what it is, moved once, and
-             * asked again.
-             */
-            const before = (await page.evaluate(() => {
-              const el = document.activeElement as HTMLElement | null;
-              if (!el) return null;
-              return {
-                cls: el.className,
-                role: el.getAttribute("role") ?? "",
-                name: (el.getAttribute("aria-label") ?? "").trim(),
-                at: el.getAttribute("aria-activedescendant") ?? "",
-              };
-            })) as { cls: string; role: string; name: string; at: string } | null;
-            reachName = before?.name ?? "";
-            reachRole = before?.role ?? "";
-            await page.keyboard.press("ArrowLeft");
-            await page.waitForTimeout(400);
-            const after = (await page.evaluate(
-              () =>
-                (document.activeElement as HTMLElement | null)?.getAttribute(
-                  "aria-activedescendant",
-                ) ?? "",
-            )) as string;
-            /* A cursor that does not move is a cursor that reaches exactly one
-               memory, which is a door with one thing behind it. */
-            reachMoves = before !== null && before.at !== "" && after !== "" && after !== before.at;
-          }
-        }
-        break;
       }
     } catch {
       memoryOpened = false;
+    }
+
+    /**
+     * ── THE FIELD'S OWN GROUND, THROUGH THE DOOR THAT IS NOT IN THE TAB
+     *    ORDER ─────────────────────────────────────────────────────────────
+     *
+     * `.jar-reach` is the ground made addressable without a pointer: a
+     * `sr-only` `listbox` with one tab stop over a canvas full of orbs, an
+     * `aria-activedescendant` the arrows move, and `.jar-panel` opening on
+     * the one the cursor is on. Three facts, ratcheted on 2026-08-27 after
+     * this walk had found the archive write-only and the fix was made.
+     *
+     * IT RENDERS ONLY WHILE YOU ARE IN THE FIELD, AND NO TAB STOP GOES THERE.
+     * Measured 2026-10-12: forty Tabs from the top of the world never make
+     * the listbox appear. Ten of the eleven stops are the bar and the two
+     * corners, and the descent `.jar-saved` used to be is gone.
+     *
+     * I ALMOST SHIPPED THAT AS THE FINDING, AND IT WOULD HAVE BEEN A NEW
+     * FALSE ONE — in the file I was sent to take three of them out of. The
+     * first version of this block printed "RENDERED BUT UNREACHABLE". Then I
+     * looked for the door instead of concluding from its absence:
+     *
+     *   `?view=field` DOES NOT WORK. `view-location.ts` parses the parameter,
+     *   but a cold load at that address lands on `/` with the parameter
+     *   dropped. Not a route in.
+     *   `standIn` CALLS `toGround()` and is group-only, so it is gone with
+     *   rooms.
+     *   FIND DOES WORK, AND IT IS ENTIRELY KEYS. `/` opens the search —
+     *   `Home.tsx` puts it there on purpose, "find → the FIELD. It is a verb
+     *   about memories, so it sits with them and answers with `/`" — typing
+     *   a word lists the matches as real buttons, and Enter on one navigates
+     *   with `section: 'field'`. Walked: `.jar-reach` present, three options
+     *   in it, `.jar-up` standing there as the way back, `.jar-panel` open on
+     *   the memory that was chosen.
+     *
+     * So the ground has a keyboard door, it is not in the tab order, and the
+     * three ratcheted claims can be measured again. They are measured here,
+     * through `/`, and they are back in `broke` where they were before —
+     * which is the ratchet being honoured rather than loosened, and the
+     * opposite of what reasoning from "no tab stop reaches it" would have
+     * done to this file.
+     *
+     * THE SEED IS WHAT MAKES FIND ANSWERABLE. Every keep this walk makes
+     * carries `worth finding again`, so the word typed below is one that is
+     * really on this wall and the search has something to list. A search for
+     * a word nobody kept would report the ground unreachable and mean only
+     * that the walk asked for the wrong thing.
+     */
+    let inTheGround = false;
+    let reachName = "";
+    let reachRole = "";
+    let reachOptions = 0;
+    let reachMoves = false;
+    let openedTheAnnouncedWay = false;
+    try {
+      await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(7_000);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await page.keyboard.press("/");
+      await page.waitForTimeout(1_500);
+      await page.keyboard.type("worth finding again");
+      await page.waitForTimeout(3_500);
+      for (let i = 0; i < 12; i += 1) {
+        await page.keyboard.press("Tab");
+        await page.waitForTimeout(140);
+        if (!/worth finding again/.test(await focused())) continue;
+        await page.keyboard.press("Enter");
+        await page.waitForTimeout(9_000);
+        break;
+      }
+      inTheGround = (await page.locator(".jar-reach").count()) > 0;
+      if (inTheGround) {
+        /* WHAT THE GROUND SAYS IT IS, asked of the live DOM — a `role` or a
+           label that a prop fails to reach is exactly the kind of thing a
+           source-reading gate agrees with and the browser does not. */
+        const says = (await page.evaluate(() => {
+          const el = document.querySelector(".jar-reach");
+          if (!el) return null;
+          return {
+            role: el.getAttribute("role") ?? "",
+            name: (el.getAttribute("aria-label") ?? "").trim(),
+            at: el.getAttribute("aria-activedescendant") ?? "",
+            options: el.querySelectorAll('[role="option"]').length,
+          };
+        })) as { role: string; name: string; at: string; options: number } | null;
+        reachRole = says?.role ?? "";
+        reachName = says?.name ?? "";
+        reachOptions = says?.options ?? 0;
+        /* THE CURSOR HAS TO MOVE. One that does not is a cursor that reaches
+           exactly one memory, which is a door with one thing behind it. The
+           listbox is focused first, because `aria-activedescendant` is only
+           a cursor while the element holding it has focus. */
+        await page.locator(".jar-reach").focus();
+        await page.waitForTimeout(400);
+        const before = (await page.evaluate(
+          () => document.querySelector(".jar-reach")?.getAttribute("aria-activedescendant") ?? "",
+        )) as string;
+        await page.keyboard.press("ArrowLeft");
+        await page.waitForTimeout(600);
+        const after = (await page.evaluate(
+          () => document.querySelector(".jar-reach")?.getAttribute("aria-activedescendant") ?? "",
+        )) as string;
+        reachMoves = before !== "" && after !== "" && after !== before;
+        /* AND THE KEY ITS OWN LABEL NAMES. A route only a blind walk can find
+           is a route nobody is told about; this half is what says the label
+           is true. */
+        openedTheAnnouncedWay = (await page.locator(".jar-panel").count()) > 0;
+      }
+    } catch {
+      /* left as whatever it reached — a throw here is a finding */
     }
 
     console.log(
@@ -577,23 +716,27 @@ async function main(): Promise<void> {
         `\n  the canvas ${canvasFocusable ? "can be focused" : "CANNOT be focused — no tabindex"}` +
         `\n  keeping a memory with keys alone: ${keptByKeyboard ? "works" : "DID NOT WORK"}` +
         `\n  opening one to read it:          ${memoryOpened ? "works" : "DID NOT WORK"}` +
-        `\n  the ground answers to:           ${
-          reachName === "" ? "NOTHING NAMED" : `${reachRole || "no role"} — "${reachName}"`
-        }` +
-        `\n  arrows move along it:            ${reachMoves ? "yes" : "NO"}` +
-        `\n  ...the way its own label says:   ${openedTheAnnouncedWay ? "yes" : "no — found by a blind walk"}`,
+        `\n  ...from a list of ${String(rowsOffered).padStart(3)} the keyboard reaches` +
+        `\n  ...and the row it pressed said:  ${rowName === "" ? "NOTHING NAMED" : `"${rowName}"`}`,
     );
     console.log(
       `\n  a sheet closed with Escape hands focus back: ${
         sheetReturns ? "yes" : `NO — lands on ${sheetLandedOn}`
       }`,
     );
-    console.log("\n  travelling with keys keeps your place:");
-    for (const w of ways) {
-      console.log(
-        `    ${w.kept ? "yes " : "NO  "}  .${w.way.padEnd(12)} arrives with focus on ${w.landedOn}`,
-      );
-    }
+    console.log(
+      `\n  the field's own ground, reached with "/" and a word:` +
+        `\n    in the field:                  ${inTheGround ? "yes" : "NO — the search's own result did not travel"}` +
+        `\n    it answers to:                 ${
+          reachName === "" ? "NOTHING NAMED" : `${reachRole || "no role"} — "${reachName}"`
+        }` +
+        `\n    memories the keyboard can see: ${String(reachOptions).padStart(3)}` +
+        `\n    arrows move along it:          ${reachMoves ? "yes" : "NO"}` +
+        `\n    ...and one is open:            ${openedTheAnnouncedWay ? "yes" : "NO"}` +
+        `\n    (no tab stop at headquarters goes here — the descent .jar-saved used to be` +
+        `\n     is gone, and Home.tsx's arrival handoff still names it. Reported, not broken` +
+        `\n     on: the ground IS reachable, through the door above.)`,
+    );
 
     /**
      * ── THE WAY OUT OF A DESTINATION, PRESSED WITH THE KEY IT COSTS ────────
@@ -648,6 +791,20 @@ async function main(): Promise<void> {
       /** presses to the nearest dock row, 0 meaning never reached */
       forward: number;
       backward: number;
+      /**
+       * AND WHAT FOCUS WAS ON WHEN IT GOT THERE — the claim that moved house
+       * from the deleted `ways` loop; see its tombstone for why. One journey
+       * answers it, because the Enter that opens the destination is already
+       * being pressed here with keys alone, so the question costs one read
+       * rather than three more page loads.
+       *
+       * `"(the document)"` is the finding. The dock row that was pressed is
+       * still on screen and still lit, so focus falling to the body puts the
+       * person at the top of the page looking at a control they are no longer
+       * standing on — which is the same defect the old loop was shaped
+       * against, on a surface that actually exists.
+       */
+      landedOn: string;
     }
 
     /** Tab (or Shift+Tab) until focus is on a row of the bar, or give up. */
@@ -669,7 +826,10 @@ async function main(): Promise<void> {
      * can claim what it claims.
      */
     const reachTheDockFrom = async (word: string): Promise<Reach> => {
-      const out: Reach = { word, opened: false, role: "", modal: false, forward: 0, backward: 0 };
+      const out: Reach = {
+        word, opened: false, role: "", modal: false, forward: 0, backward: 0,
+        landedOn: "(never opened)",
+      };
       for (const back of [false, true]) {
         try {
           await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
@@ -703,6 +863,18 @@ async function main(): Promise<void> {
           })) as { role: string; modal: boolean } | null;
           out.role = says?.role ?? "";
           out.modal = says?.modal ?? false;
+          /* READ ON THE FORWARD PASS ONLY, which is the pass that has not
+             moved focus yet. `pressesToTheDock` below walks focus away, and
+             the backward pass re-arrives from a fresh load — so taking this
+             on both and keeping the last would be reading the same fact
+             twice and reporting the second one. */
+          if (!back) {
+            out.landedOn = (await page.evaluate(() => {
+              const el = document.activeElement as HTMLElement | null;
+              if (!el || el === document.body) return "(the document)";
+              return String(el.className || el.tagName).split(" ")[0] ?? "(unnamed)";
+            })) as string;
+          }
           const presses = await pressesToTheDock(back);
           if (back) out.backward = presses;
           else out.forward = presses;
@@ -722,129 +894,118 @@ async function main(): Promise<void> {
       console.log(
         `    ${d.word.padEnd(13)} ${d.opened ? `a ${d.role || "(no role)"}${d.modal ? ", aria-modal" : ""}` : "NEVER OPENED"}` +
           `   Shift+Tab: ${d.backward ? `${d.backward} press(es)` : "UNREACHABLE"}` +
-          `   Tab: ${d.forward ? `${d.forward} press(es)` : "UNREACHABLE"}`,
+          `   Tab: ${d.forward ? `${d.forward} press(es)` : "UNREACHABLE"}` +
+          `   arrived with focus on ${d.landedOn}`,
       );
     }
 
     /**
-     * ── THE GROUND THAT IS NOT YOURS ───────────────────────────────────────
+     * ── THE WALL THAT IS NOT YOURS ─────────────────────────────────────────
      *
-     * Everything above stands on the viewer's own wall. A room's ground is a
-     * different source entirely — its members' public memories, arriving
-     * through a different fetch into a different ref — and an agent's is a
-     * third. The reach reads all three, and only one of them had ever been
-     * walked: the shape of a keyboard path that works in the demo.
+     * WHAT STOOD HERE AND WHY IT HAD TO CHANGE. Two walks, a room's wall and
+     * an agent's, both reached by tabbing for `.jar-here-more` — the `▾`
+     * beside the wall's name — then picking the neighbour out of the menu it
+     * opened, then tabbing for `.jar-saved` to descend into that wall's
+     * ground and counting what the listbox offered. `.jar-here-more` and
+     * `.jar-saved` both have no renderer, so neither walk ever left
+     * headquarters, and the run on 2026-10-12 before this edit ended:
      *
-     * Travelled to with keys only. The way to another wall is a real button
-     * that opens a real menu of real buttons, so the whole journey is
-     * tab-and-Enter and nothing here touches a pointer.
+     *     a room    reached: NO    memories the keyboard can see:   0
+     *     an agent  reached: NO    memories the keyboard can see:   0
+     *     [by-keyboard] the keyboard path got WORSE:
+     *                     a room's wall cannot be reached with the keyboard
+     *                     an agent's wall cannot be reached with the keyboard
+     *
+     * One of those two was a false finding and the other was true for a
+     * reason the line does not give, so they are split.
+     *
+     * THE ROOM'S WALL IS DELETED, NOT REPOINTED. Rooms went by a founder
+     * ruling — "get rid of the rooms and agent related stuff for now",
+     * carried in full at `tools/e2e/dead-css.ts` — and the only way into one
+     * that survives is a `?join=<code>` address, which is a pointer-free
+     * journey this walk cannot make without a second account to issue the
+     * code. WHAT COVERAGE WENT: a room's ground is a different source from
+     * your own (its members' public memories, through a different fetch into
+     * a different ref) and nothing now walks it with a keyboard. WHAT WOULD
+     * RESTORE IT: a seeded room and a `?join=` address, which is the same
+     * thing `dead-css.ts` asks for and bigger than this file.
+     *
+     * THE AGENT'S WALL IS REPOINTED, BECAUSE THE DOOR MOVED AND IS BETTER.
+     * The creature wears its own form switch now — two buttons, `ME` and
+     * `MY AGENT`, in the corner row, under `Home.tsx`'s heading about the
+     * character changing form where it stands rather than walking to another
+     * column. Both are real buttons with real words on them, so the journey
+     * is still tab-and-Enter and nothing here touches a pointer. Measured
+     * with keys only on 2026-10-12: Tab reaches both faces, Enter travels,
+     * and focus stays on the face you pressed (now `--standing`), which is
+     * the arrival behaving.
+     *
+     * AND WHAT IT CLAIMS THERE IS THE JOURNEY, NOT THE GROUND. The old walk
+     * counted `.jar-reach [role="option"]` on the neighbour's ground, which
+     * needed the descent `.jar-saved` used to be. The door into the field is
+     * Find now, and Find searches the wall you are standing on — so reaching
+     * the agent's ground through it is a second journey with a second seed,
+     * and the ground's own three claims are already held one section up on
+     * the viewer's own wall. What is held here is what was actually false:
+     * that the other wall can be reached at all without a pointer, and that
+     * it is the agent's form you end up standing in.
      */
-    const groundReach = (): { travelled: boolean; options: number; opened: boolean } => ({
-      travelled: false,
-      options: 0,
-      opened: false,
-    });
+    interface Neighbour {
+      travelled: boolean;
+      /** what the button said, so the route is one a listener can be told */
+      by: string;
+      /** the form the creature is standing in after the press */
+      standing: string;
+    }
 
-    /**
-     * The journey both neighbours share: to the way-to-another-wall, through
-     * the menu it opens, down through the door, and one press of the key the
-     * ground's own label names. `matches` picks the neighbour out of the menu
-     * by the words on its button, which is all a person has too.
-     */
-    const walkToNeighbour = async (
-      matches: (name: string) => boolean,
-    ): Promise<{ travelled: boolean; options: number; opened: boolean }> => {
-      const out = groundReach();
+    const walkToTheAgent = async (): Promise<Neighbour> => {
+      const out: Neighbour = { travelled: false, by: "", standing: "" };
       try {
         await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
         await page.waitForTimeout(7_000);
         await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-
-        for (let i = 0; i < 30; i += 1) {
+        for (let i = 0; i < 40; i += 1) {
           await page.keyboard.press("Tab");
-          await page.waitForTimeout(100);
-          const here = (await page.evaluate(
-            () => String((document.activeElement as HTMLElement | null)?.className ?? ""),
+          await page.waitForTimeout(110);
+          const here = await focused();
+          if (!/jar-char-face/.test(here)) continue;
+          /* THE FACE THAT IS NOT THE ONE YOU ARE STANDING IN. Pressing the
+             one you are already on is specified to do nothing, so a walk
+             that took the first face it met would press `ME` on `ME` and
+             report that travel is broken. */
+          if (/--standing/.test(here)) continue;
+          out.by = (await page.evaluate(
+            () => ((document.activeElement as HTMLElement | null)?.innerText ?? "").trim(),
           )) as string;
-          if (!here.includes("jar-here-more")) continue;
           await page.keyboard.press("Enter");
-          await page.waitForTimeout(800);
-          for (let j = 0; j < 12; j += 1) {
-            await page.keyboard.press("Tab");
-            await page.waitForTimeout(120);
-            const name = (await page.evaluate(
-              () => (document.activeElement as HTMLElement | null)?.textContent ?? "",
-            )) as string;
-            if (!matches(name)) continue;
-            await page.keyboard.press("Enter");
-            await page.waitForTimeout(6_000);
-            out.travelled = true;
-            break;
-          }
+          await page.waitForTimeout(8_000);
+          out.standing = (await page.evaluate(() => {
+            const lit = document.querySelector(".jar-char-face--standing") as HTMLElement | null;
+            return (lit?.innerText ?? "").trim();
+          })) as string;
+          out.travelled = out.standing !== "" && out.standing === out.by;
           break;
         }
-
-        if (!out.travelled) return out;
-
-        for (let i = 0; i < 30; i += 1) {
-          await page.keyboard.press("Tab");
-          await page.waitForTimeout(100);
-          const here = (await page.evaluate(
-            () => String((document.activeElement as HTMLElement | null)?.className ?? ""),
-          )) as string;
-          if (!here.includes("jar-saved")) continue;
-          await page.keyboard.press("Enter");
-          await page.waitForTimeout(4_000);
-          break;
-        }
-        out.options = (await page.evaluate(
-          () => document.querySelectorAll('.jar-reach [role="option"]').length,
-        )) as number;
-        await page.keyboard.press("ArrowLeft");
-        await page.waitForTimeout(1_500);
-        out.opened = (await page.locator(".jar-panel").count()) > 0;
       } catch {
         /* left as whatever it reached — a throw here is a finding, not a crash */
       }
       return out;
     };
 
-    let roomReach = groundReach();
-    let agentReach = groundReach();
+    let agent: Neighbour = { travelled: false, by: "", standing: "" };
     try {
-      /* Both neighbours need a ground before they have one to reach. A
-         person's memories are private by default and a room draws only what
-         its members marked public, so they are published first; the agent is
-         given memories of its own, because an agent's wall is built from the
-         agent's OWN captures and never from its owner's. Everything here goes
-         through the same API a click would call. */
-      const roomName = `Room ${uniq()}`;
-      await page.evaluate(async (name) => {
-        const listed = await fetch("/api/inspirations?limit=50", { credentials: "include" });
-        const body = (await listed.json()) as { inspirations?: Array<{ id: string }> };
-        for (const row of body.inspirations ?? []) {
-          await fetch(`/api/inspirations/${row.id}`, {
-            method: "PATCH",
-            credentials: "include",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ visibility: "public" }),
-          });
-        }
-        await fetch("/api/groups", {
-          method: "POST",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name }),
-        });
-
-        const madeAgent = await fetch("/api/profiles", {
+      /* The neighbour has to exist before it can be reached. Through the same
+         API a click would call, and with memories of its own, because an
+         agent's wall is built from the agent's OWN captures and never from
+         its owner's. */
+      await page.evaluate(async () => {
+        const made = await fetch("/api/profiles", {
           method: "POST",
           credentials: "include",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ name: "Scout" }),
         });
-        const agent = (await madeAgent.json()) as { profile?: { id: string } };
-        const agentId = agent.profile?.id;
+        const agentId = ((await made.json()) as { profile?: { id: string } }).profile?.id;
         if (agentId) {
           for (let i = 0; i < 3; i += 1) {
             await fetch(`/api/inspirations?profile=${agentId}`, {
@@ -855,24 +1016,17 @@ async function main(): Promise<void> {
             });
           }
         }
-      }, roomName);
-
-      roomReach = await walkToNeighbour((name) => name.toLowerCase().includes("room"));
-      agentReach = await walkToNeighbour((name) => name.toLowerCase().includes("scout"));
+      });
+      agent = await walkToTheAgent();
     } catch {
       /* left as whatever it reached — a throw here is a finding, not a crash */
     }
-    console.log("\n  the two grounds that are not your own, travelled to with keys only:");
-    for (const [what, r] of [
-      ["a room", roomReach],
-      ["an agent", agentReach],
-    ] as const) {
-      console.log(
-        `    ${what.padEnd(9)} reached: ${r.travelled ? "yes" : "NO "}   ` +
-          `memories the keyboard can see: ${String(r.options).padStart(3)}   ` +
-          `one opens: ${r.opened ? "yes" : "NO"}`,
-      );
-    }
+    console.log(
+      `\n  the wall that is not your own, travelled to with keys only:` +
+        `\n    ${agent.travelled ? "yes" : "NO "}  reached by pressing ` +
+        `${agent.by === "" ? "NOTHING NAMED" : `"${agent.by}"`}, and the creature now stands in ` +
+        `${agent.standing === "" ? "NO FORM AT ALL" : `"${agent.standing}"`}`,
+    );
 
     console.log(
       "\n[by-keyboard] The canvas still takes no focus of its own, and that is now the\n" +
@@ -907,15 +1061,56 @@ async function main(): Promise<void> {
       broke.push(`${dark.length} stop(s) show no visible focus: ${dark.map((s2) => s2.cls).join(", ")}`);
     }
     if (!keptByKeyboard) broke.push("a memory can no longer be kept with the keyboard alone");
-    if (!memoryOpened) broke.push("no keyboard route opens a memory — the archive is write-only again");
-    if (memoryOpened && reachName === "") {
+    if (!memoryOpened) {
+      broke.push(
+        "no keyboard route opens a memory — the bar's Inspirations row, a Tab to a row and " +
+          "Enter does not land on a note; the archive is write-only again",
+      );
+    }
+    /* NAMED, NOT MERELY OPENED: one lucky Enter on anything satisfies "a
+       memory opened", and a route nobody can be TOLD about is a route nobody
+       is told about. The row carries its own preview and date as text, which
+       is a name read out as it stands — so this asks the row what it says
+       before pressing it rather than looking for an `aria-label` the design
+       does not need. */
+    if (memoryOpened && rowName === "") {
+      broke.push("the archive opens to the keyboard but the row it pressed announces nothing");
+    }
+    if (memoryOpened && rowsOffered === 0) {
+      broke.push("a note opened but the archive offered the keyboard no rows — measured by luck");
+    }
+    /* ── THE GROUND'S THREE CLAIMS, STILL RATCHETED ────────────────────────
+       Ratcheted on 2026-08-27 — "the decision was made — roving focus in the
+       world rather than a list of saves beside it — so the ground now answers
+       to a `listbox` with one tab stop and a cursor the arrows move, and all
+       three facts are held here."
+
+       THEY NEARLY CAME OFF THE RATCHET IN THIS EDIT, ON A MISREADING. Forty
+       Tabs from the top of the world never reach the field, so the first
+       version of this pass concluded the ground was unreachable and moved all
+       three to a printed note. The conclusion was wrong: `/` opens Find, a
+       result is a real button, and Enter on one lands in the field with the
+       listbox standing there. A ratchet loosened because the walk could not
+       find the door is a ratchet loosened for the worst possible reason, and
+       it would have been the fourth false finding in a file I was sent to
+       remove three from. They stay. */
+    if (!inTheGround) {
+      broke.push(
+        "the field cannot be reached with the keyboard — \"/\", a word that is really on this " +
+          "wall, and Enter on a result does not land in the ground",
+      );
+    }
+    if (inTheGround && reachName === "") {
       broke.push("the ground opens to the keyboard but announces nothing to a reader");
     }
-    if (memoryOpened && !reachMoves) {
+    if (inTheGround && reachOptions === 0) {
+      broke.push("the ground offers the keyboard nothing — the listbox is there and empty");
+    }
+    if (inTheGround && !reachMoves) {
       broke.push("the ground's cursor does not move — the keyboard reaches one memory, not the ground");
     }
-    if (memoryOpened && !openedTheAnnouncedWay) {
-      broke.push("the ground's label promises keys that do not open a memory");
+    if (inTheGround && !openedTheAnnouncedWay) {
+      broke.push("arriving in the ground opens no memory — the route ends on an empty field");
     }
     if (!sheetReturns) broke.push(`a sheet closed with Escape drops focus to ${sheetLandedOn}`);
     /* ── THE BAR IS REACHABLE FROM INSIDE EVERY DESTINATION ────────────────
@@ -989,27 +1184,34 @@ async function main(): Promise<void> {
             "going forwards",
         );
       }
-    }
-    for (const w of ways) {
-      if (!w.kept) broke.push(`travelling through .${w.way} drops focus to the document`);
-    }
-    /* THE OTHER TWO GROUNDS, HELD AS TIGHTLY AS YOUR OWN.
-       The reach reads three sources and a fix that only lands on one of them
-       is the shape of a keyboard path that works in the demo. Both of these
-       were true the day they were first walked, on a fresh account seeded
-       through the same API a click would call, so losing either is somebody's
-       edit rather than an open question. */
-    for (const [what, r] of [
-      ["a room", roomReach],
-      ["an agent", agentReach],
-    ] as const) {
-      if (!r.travelled) {
-        broke.push(`${what}'s wall cannot be reached with the keyboard`);
-      } else if (r.options === 0) {
-        broke.push(`${what}'s ground offers the keyboard nothing`);
-      } else if (!r.opened) {
-        broke.push(`${what}'s ground can be moved along but nothing opens`);
+      /* THE CLAIM THE `ways` LOOP USED TO MAKE, ON A SURFACE THAT EXISTS.
+         `"(the document)"` is the finding and nothing else is: a destination
+         is allowed to put focus anywhere inside itself, or to leave it on the
+         row that opened it, because that row does not unmount. What it may
+         not do is drop it. */
+      if (d.landedOn === "(the document)") {
+        broke.push(
+          `arriving in "${d.word}" with the keyboard drops focus to the document — the row that ` +
+            "opened it is still on screen and still lit, so the person is now at the top of the " +
+            "page looking at a control they are not standing on",
+        );
       }
+    }
+    /* THE WALL THAT IS NOT YOUR OWN, HELD AS TIGHTLY AS YOURS.
+       A fix that only lands on your own wall is the shape of a keyboard path
+       that works in the demo. This was true the day it was first walked, on a
+       fresh account seeded through the same API a click would call, so losing
+       it is somebody's edit rather than an open question. The room's half of
+       this went with its door — see the note above `walkToTheAgent` for what
+       coverage that cost and what would bring it back. */
+    if (!agent.travelled) {
+      broke.push(
+        agent.by === ""
+          ? "the agent's wall cannot be reached with the keyboard — no tab stop in the world " +
+            "is one of the creature's two forms"
+          : `pressing "${agent.by}" with the keyboard did not change which form the creature ` +
+            `stands in — it is still "${agent.standing || "nothing at all"}"`,
+      );
     }
     if (broke.length > 0) {
       console.log(`\n[by-keyboard] the keyboard path got WORSE:\n${broke.map((b) => `                ${b}`).join("\n")}`);

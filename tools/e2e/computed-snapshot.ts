@@ -25,8 +25,13 @@
  * the element's own box, because a layout property going missing shows up as
  * geometry long before it shows up as a colour.
  *
- * It walks the door on both tabs, the account page, the welcome, the world
- * and the world with its mouth open.
+ * It walks the door on both tabs, the account card and each of its three
+ * groups, the welcome, the world and the world with its mouth open.
+ *
+ * (It said "the account page" and walked `/profile`, which has not been a
+ * route since 2026-10-11 and now redirects to the world — see the note at the
+ * call. One of the four surfaces this file promises zero differences on was a
+ * second copy of the world.)
  *
  * READ THE WORLD'S GEOMETRY WITH ONE EYE CLOSED. Each run signs up a NEW
  * account, and the world generates its poster from what that account has
@@ -80,9 +85,55 @@ async function main() {
   await p.fill("input[name=name]", "Snap");
   await p.click("button[type=submit]");
   await p.waitForTimeout(8000);
-  await p.goto(base + "/profile", { waitUntil: "domcontentloaded" });
-  await p.waitForTimeout(4000);
-  snap["profile"] = JSON.parse((await p.evaluate(PROBE)) as string);
+  /* ═══ THE ACCOUNT SURFACE IS THE COG'S CARD, NOT `/profile` ══════════════
+     THIS SNAPSHOTTED `/profile` AND CALLED THE RESULT `profile`, and the
+     route stopped existing on 2026-10-11 — founder: "I want all
+     setting-related stuff to be only accessible through the drop down and not
+     be its own thing", with `main.tsx` carrying the ruling.
+
+     WHY THAT IS PARTICULARLY BAD IN THIS FILE, AND IT IS NOT A TIMEOUT.
+     `/profile` does not 404 and does not hang. `main.tsx` has a `/:handle`
+     route, so the address matches it; `PublicProfile.tsx` sees a handle that
+     does not start with `@` and answers `<Navigate to="/" replace />`. The
+     walk lands on THE WORLD. So the snapshot under the key `profile` was a
+     second snapshot of the world — nearly a duplicate of the `world` key
+     taken two steps later, filed as a chrome surface.
+
+     This file's whole purpose is to let a stylesheet deletion be PROVED INERT
+     by diffing two snapshots, and the header promises "zero differences of
+     any kind" on its four chrome surfaces while warning that the world's
+     geometry legitimately moves between runs. One of those four WAS the
+     world. So the recipe would have shown differences on a chrome surface and
+     the reader would have gone looking for a deleted rule — and separately,
+     every rule that only ever renders on the account card was outside the
+     measurement entirely, so a deletion that broke one of them diffed clean.
+     Wrong in both directions at once, from one address.
+
+     The key is renamed with the surface, because a snapshot's key is how the
+     two runs are lined up: keeping `profile` would have diffed a card against
+     an error page the first time anyone ran this across the change. */
+  await p.goto(base + "/", { waitUntil: "domcontentloaded" });
+  await p.waitForTimeout(6000);
+  /* BY THE MODIFIER, NOT `.first()` — the right corner has held two buttons
+     since 2026-10-11, an "i" beside the cog, and the left corner has worn
+     `.waka-corner` the whole time. */
+  await p.locator("button.waka-corner--settings").click({ timeout: 8000 });
+  await p.waitForTimeout(1200);
+  snap["settings-card"] = JSON.parse((await p.evaluate(PROBE)) as string);
+  /* AND EACH GROUP OPEN, because the card's three disclosures UNMOUNT their
+     contents rather than hiding them — so a snapshot of the folded card holds
+     none of the rules inside them, which is the same blindness the walk to
+     `/profile` had and is worth not repeating one surface along. */
+  const groups = await p.locator(".waka-settings-row").count();
+  for (let i = 0; i < groups; i += 1) {
+    await p.locator(".waka-settings-row").nth(i).click({ timeout: 5000 });
+    await p.waitForTimeout(600);
+    snap[`settings-group-${i + 1}`] = JSON.parse((await p.evaluate(PROBE)) as string);
+    await p.locator(".waka-settings-row").nth(i).click({ timeout: 5000 });
+    await p.waitForTimeout(300);
+  }
+  await p.keyboard.press("Escape");
+  await p.waitForTimeout(400);
   await p.goto(base + "/onboarding", { waitUntil: "domcontentloaded" });
   await p.waitForTimeout(3000);
   snap["onboarding"] = JSON.parse((await p.evaluate(PROBE)) as string);

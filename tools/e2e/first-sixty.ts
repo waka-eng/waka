@@ -279,78 +279,133 @@ async function keepOne(page: Page, base: string, text: string): Promise<void> {
 }
 
 /**
- * OPEN THE ONE MEMORY THERE IS, BY FINDING ITS ORB.
+ * OPEN THE ONE MEMORY THERE IS, FROM THE LIST THAT HOLDS IT.
  *
- * `journeys.ts` keeps FIVE before it sweeps, and says why: one orb on a whole
- * field is a needle. This stage has exactly one on purpose, so the sweep may
- * legitimately fail to land — and if it does, that is the WALK missing, not
- * the product hiding anything. Reported as `NOT AIMED` rather than
- * `NOT THERE`, because the two mean opposite things and conflating them would
- * turn a limitation of this file into a finding about the product.
+ * ── THIS USED TO HUNT FOR ITS ORB, AND THE HUNT WAS THE PROBLEM ───────────
+ *
+ * It pressed `.jar-saved` to descend into the field and then clicked a grid
+ * of three hundred coordinates across the canvas looking for one painted orb.
+ * Both halves are gone: `.jar-saved` has no renderer (the only mentions left
+ * in `Home.tsx` hand the string to `querySelector`), so the descent could
+ * only time out, and the walk then reported `NOT AIMED` — "this file could
+ * not aim", which was true and was the wrong reason. Nothing it was aiming at
+ * was there.
+ *
+ * `Home.tsx` says where the memory is now, under its own heading "THE
+ * `N INSPIRATIONS` DOOR IS GONE FROM HERE TOO": "the archive is
+ * `SavesOverlay`, reached from the dock on every wall". It draws one
+ * `.waka-list-row` per memory, each carrying its own preview and date, and
+ * pressing one opens the note.
+ *
+ * AND THE `NOT AIMED` CAVEAT GOES WITH THE SWEEP, which is the real gain.
+ * That verdict existed because one orb on a whole field is a needle and this
+ * stage has exactly one on purpose, so a legitimate miss had to be told apart
+ * from a product that hides things. A list of one row is not a needle. If the
+ * row is not there now, that is a reading about the product and the walk
+ * should say so — which it does, as `NOT THERE`.
  */
 async function openTheMemory(page: Page): Promise<boolean> {
   try {
-    await page.locator(".jar-saved").first().click({ timeout: 10_000 });
+    await toDock(page, "Inspirations");
+    await page.waitForTimeout(3_000);
+    const row = page.locator(".waka-list-row").first();
+    if ((await row.count()) === 0) return false;
+    await row.click({ timeout: 8_000 });
+    await page.waitForTimeout(2_000);
+    return (await page.locator(".waka-note-page").count()) > 0;
   } catch {
     return false;
   }
-  await page.waitForTimeout(4_000);
-  for (const y of [390, 350, 430, 310, 470, 270, 510, 230, 550, 590]) {
-    for (let i = 0; i < 34; i += 1) {
-      await page.mouse.click(140 + i * 26, y);
-      await page.waitForTimeout(220);
-      if ((await page.locator(".jar-panel").count()) === 0) continue;
-      await page.waitForTimeout(1_000);
-      if ((await page.locator(".jar-panel").count()) > 0) return true;
-    }
-  }
-  return false;
 }
 
 /**
  * Every surface an account with nothing in it can reach.
  *
- * Deliberately NOT the full `dead-css` list: the room's own wall, the memory
- * panel and the board's poster cannot be reached without making something,
- * and a walk that made something to reach them would no longer be measuring
- * an empty account. Their absence from this list is itself part of the
- * reading — see what the run prints about `.jar-saved`.
+ * Deliberately NOT the full `dead-css` list: the memory's own note and the
+ * board's poster cannot be reached without making something, and a walk that
+ * made something to reach them would no longer be measuring an empty account.
+ * Their absence from this list is itself part of the reading — see what the
+ * run prints about `the archive door`, which opens on an empty list.
  */
-/* ═══ FIVE MORE OPENERS IN THIS LIST NAME CLASSES NOTHING RENDERS ════════
-   SAID HERE RATHER THAN QUIETLY DELETED, because a walk that stops measuring
-   a surface and prints nothing about having stopped is worse than one that
-   fails. `your settings` was repointed at the cog in this pass (see its own
-   note). These five were measured the same way on 2026-10-12 — every
-   `.ts`/`.tsx` under `packages/web/src` outside `src/styles` — and each has
-   ZERO renderers, so each costs eight seconds and files its surface as
-   `NOT THERE`, which reads as a statement about the product:
+/* ═══ THE FIVE OPENERS THAT NAMED CLASSES NOTHING RENDERS, RESOLVED ══════
+   The previous pass found them and said so rather than acting, which was the
+   right call to make visible and the wrong one to leave standing: each cost
+   eight seconds and filed its surface as `NOT THERE`, and `NOT THERE` reads
+   as a statement about the product — "this surface does not exist for this
+   account". For three of them that was a lie about the product and for two it
+   was the wrong sentence about a surface that had moved. Measured again on
+   2026-10-12, the same way: the value of every `className=` in every
+   `.ts`/`.tsx` under `packages/web/src` outside `src/styles`.
 
-     .jar-here           your own wall's panel — the wall chip in `.jar-topbar`
-                         renders `null` now, under `Home.tsx`'s own heading
-                         "THE WALL PICKER MOVED TO THE TOP-LEFT CORNER".
-                         (No line numbers into `Home.tsx` on purpose: it is
-                         seventeen thousand lines and everything in it moves.
-                         The headings do not.)
-     .jar-here-more      the walls list, twice — the `▾` beside the wall's name
-     .jar-here-row--make make another place. `dead-css.ts:700` already carries
-                         the founder's ruling for this one in full — "get rid
-                         of the rooms and agent related stuff for now" — and
-                         says making a place from the world is not something
-                         the product offers any more.
-     .jar-values         philosophies & values — the up-signpost that is drawn
-                         wears `.jar-up` / `.jar-up--down`.
-     .jar-saved          the archive door — the only two mentions left in
-                         `Home.tsx` pass the string to `querySelector`;
-                         nothing renders it.
+   TWO ARE REPOINTED, BECAUSE THE CAPABILITY MOVED AND DID NOT GO.
 
-   WHY THEY ARE NOT REPOINTED IN THE SAME EDIT. `.jar-account` had an obvious
-   successor on the same corner doing the same job. These do not: three of
-   them belonged to the rooms vocabulary the founder asked to be removed, and
-   the other two are destinations that live in the dock now — which changes
-   what "a surface an empty account can reach" means, because the dock is on
-   screen from the first second and these were reaches into the chrome. That
-   is a reading of the product, not a token swap, and it is the same call
-   `by-keyboard.ts:402` defers for the same two classes. */
+     .jar-values  →  the dock's `Principles` row. The up-signpost at
+                     headquarters is gone; what it opened is a destination in
+                     the bar on every wall.
+     .jar-saved   →  the dock's `Inspirations` row. Same: `Home.tsx` says it
+                     under its own heading "THE `N INSPIRATIONS` DOOR IS GONE
+                     FROM HERE TOO" — "the archive is `SavesOverlay`, reached
+                     from the dock on every wall".
+
+   AND THE DOCK IS NOT A WEAKER DOOR FOR THIS WALK, WHICH IS THE OBJECTION
+   THE PREVIOUS PASS RAISED AND IS ANSWERED HERE. It worried that the dock is
+   on screen from the first second while these were reaches into the chrome,
+   so repointing changes what "a surface an empty account can reach" means.
+   It does — in this walk's favour. The question this file asks is "does this
+   surface say anything to a person who has never been here", and the bar
+   being visible from the first second makes these two the surfaces a new
+   person is MOST likely to open, not least. A reach into chrome nobody could
+   find was the weaker reading.
+
+   THREE ARE DELETED, WITH WHAT WENT WITH THEM.
+
+     .jar-here            `your own wall's panel`. The wall chip in
+                          `.jar-topbar` renders `null`, under `Home.tsx`'s
+                          heading "THE WALL PICKER MOVED TO THE TOP-LEFT
+                          CORNER" — and the panel it opened cannot be opened
+                          at all: `SpaceSettings` mounts only on
+                          `settingsFor === spaceKey(atWall)`, and every call
+                          to `setSettingsFor` in `packages/web/src` passes
+                          `null`. There is no door, so there is no surface.
+                          Reported as a product finding rather than fixed
+                          here — see the same note in `tools/e2e/measure.ts`
+                          above `every-modal-is-one-modal`.
+     .jar-here-more       `the walls list`, which this opened twice. The list
+                          renders into the corner row now, and on THIS
+                          account it renders nothing at all: the corner's
+                          left slot is the agent switch, and an empty account
+                          has no agent. A list of one wall is not a surface.
+     .jar-here-row--make  `make another place`. `dead-css.ts` carries the
+                          founder's ruling in full — "get rid of the rooms and
+                          agent related stuff for now" — and records that
+                          making a place from the world is not something the
+                          product offers any more.
+
+   WHAT COVERAGE WENT, SAID OUT LOUD: nothing in this walk now reads a wall's
+   own settings panel, the list of walls, or the make-a-place sheet, on an
+   empty account or any other. The first of those needs an opener in the
+   product before any walk can reach it; the other two need rooms back. Their
+   `BARE_BY_DECISION` entries went with them, because an excuse for a surface
+   nobody walks is an excuse that cannot be checked.
+
+   (No line numbers into `Home.tsx`: it is thousands of lines, it is being
+   restructured as this is written, and everything in it moves. The headings
+   do not.) */
+/** Press a row in the dock by the words written on it. */
+async function toDock(page: Page, label: string): Promise<void> {
+  /* BY THE WORDS, NOT BY AN INDEX. The bar's order is a design decision —
+     the founder has already reordered it once ("home, inspirations,
+     conversations, and principles") — and a walk that pressed the fourth
+     button would quietly start measuring a different destination the next
+     time somebody moves one. A step named for the word on the control also
+     breaks when the word changes, which is the right thing for it to do.
+     Same pattern as `tools/e2e/usability.ts`'s own `toDock`. */
+  await page
+    .locator(".waka-dock-item", { hasText: new RegExp(`^${label}$`) })
+    .first()
+    .click({ timeout: 8_000 });
+}
+
 const SURFACES: Surface[] = [
   {
     name: "the world, just arrived",
@@ -366,29 +421,6 @@ const SURFACES: Surface[] = [
     },
   },
   {
-    name: "your own wall's panel",
-    open: async (page) => {
-      await page.locator(".jar-here").first().click({ timeout: 8_000 });
-      await page.waitForTimeout(1_200);
-    },
-  },
-  {
-    name: "the walls list",
-    open: async (page) => {
-      await page.locator(".jar-here-more").first().click({ timeout: 8_000 });
-      await page.waitForTimeout(1_000);
-    },
-  },
-  {
-    name: "make another place",
-    open: async (page) => {
-      await page.locator(".jar-here-more").first().click({ timeout: 8_000 });
-      await page.waitForTimeout(800);
-      await page.locator(".jar-here-row--make").first().click({ timeout: 8_000 });
-      await page.waitForTimeout(1_000);
-    },
-  },
-  {
     name: "the timeline",
     open: async (page) => {
       await page.locator(".jar-when").first().click({ timeout: 8_000 });
@@ -396,10 +428,13 @@ const SURFACES: Surface[] = [
     },
   },
   {
+    /* The surface keeps the name of what is behind the door rather than the
+       name of the door: this walk's readings are about surfaces, and the
+       surface is the same one it always was. */
     name: "philosophies & values",
     open: async (page) => {
-      await page.locator(".jar-values").first().click({ timeout: 8_000 });
-      await page.waitForTimeout(1_400);
+      await toDock(page, "Principles");
+      await page.waitForTimeout(1_600);
     },
   },
   {
@@ -432,7 +467,7 @@ const SURFACES: Surface[] = [
   {
     name: "the archive door",
     open: async (page) => {
-      await page.locator(".jar-saved").first().click({ timeout: 6_000 });
+      await toDock(page, "Inspirations");
       await page.waitForTimeout(2_500);
     },
   },
@@ -476,17 +511,32 @@ const SURFACES: Surface[] = [
  * wrong is a gate lying in the reassuring direction.
  */
 const BARE_BY_DECISION: Record<string, string> = {
-  "the mouth, opened":
-    "RULED (founder, 2026-08-24): 'the resting phrase, kept — opening the mouth " +
-    "changes nothing about it'. The placeholder repeats the button by decision; " +
-    "docs/audits/first-run-2026-08-26.md records what that buys and costs.",
+  /* `the mouth, opened`'s ENTRY IS GONE, AND THE RATCHET IS WHAT TOOK IT.
+     It read: "RULED (founder, 2026-08-24): 'the resting phrase, kept —
+     opening the mouth changes nothing about it'. The placeholder repeats the
+     button by decision; docs/audits/first-run-2026-08-26.md records what that
+     buys and costs."
+
+     THE SURFACE SPEAKS NOW, so this file's own second ratchet fired on it:
+     "a listed one that starts speaking fails too, because an excuse that has
+     quietly become wrong is a gate lying in the reassuring direction." It
+     fired correctly. The notepad prints the day you are writing on — "October
+     12, 2026 at 1:18 PM" — above a placeholder that names four things you can
+     put in it. The 2026-08-24 ruling was about one line repeating the button
+     it opened from; there are two lines now and the first of them is not the
+     button's. The decision this entry carried does not describe the screen any
+     more, so the screen is held to the same standard as every other one here
+     and passes on its own merits. */
   "your settings":
     "A settings sheet: a name, an address and a row of places to go. Furniture " +
     "is what it is for, and prose there would be prose about prose.",
-  "the walls list":
-    "A list of walls plus `add new`. The walls name themselves; a sentence " +
-    "explaining a list of names is the same repetition the eyebrow ruling " +
-    "removed one surface over.",
+  /* `the walls list` HAD AN ENTRY HERE AND ITS SURFACE WENT ON 2026-10-12 —
+     see the note above `SURFACES`. The excuse read: "A list of walls plus
+     `add new`. The walls name themselves; a sentence explaining a list of
+     names is the same repetition the eyebrow ruling removed one surface
+     over." It is kept as a quotation rather than as a live entry, because an
+     excuse for a surface no walk visits is an excuse nobody can check — and
+     the ratchet below only tightens on names that really get walked. */
   "the timeline":
     "A list of the days this wall changed. Its whole content is a control for " +
     "choosing a moment — every row IS a date, read aloud as it stands — and " +
@@ -495,18 +545,21 @@ const BARE_BY_DECISION: Record<string, string> = {
     "was the same for the same reason. AND ON THIS ACCOUNT IT IS NOT THERE " +
     "AT ALL, which is the design rather than a gap: a wall whose whole life " +
     "is today has nowhere to wind back to, so the word that summons the dates " +
-    "is not rendered. An empty account is exactly that wall. The walk reports " +
-    "it beside the archive door, which is absent here for the same kind of " +
-    "reason — there is nothing behind it yet.",
-  "the archive door":
-    "OPEN, NOT SETTLED. Behind the door is the field, and the field is a " +
-    "CANVAS — its content is painted pixels, so there is no prose for this " +
-    "walk to find and nothing for a screen reader to read either. That is the " +
-    "same fact docs/audits/by-keyboard-2026-08-26.md found from the other " +
-    "side, where it is a live finding rather than a ruling: a keyboard user " +
-    "cannot reach a single memory. Listed here so this gate stays green on a " +
-    "known state rather than red on every commit — NOT because the question " +
-    "is closed. When the archive grows a text route, this entry goes.",
+    "is not rendered. An empty account is exactly that wall, which is why " +
+    "this one surface is legitimately filed `NOT THERE` by a walk that can " +
+    "reach everything else: the class is live, the state is not.",
+  /* `the archive door`'s ENTRY IS GONE, AND THAT IS THE QUESTION CLOSING
+     RATHER THAN THE NOTE ROTTING. It read: "OPEN, NOT SETTLED. Behind the
+     door is the field, and the field is a CANVAS — its content is painted
+     pixels, so there is no prose for this walk to find and nothing for a
+     screen reader to read either… When the archive grows a text route, this
+     entry goes."
+
+     The archive grew a text route. It is `SavesOverlay`, reached from the bar
+     on every wall, and it draws one row of words per memory — so the door now
+     opens on something a person and a screen reader can both read, and the
+     surface is held to the same standard as every other one in this file. If
+     it comes back bare, that is a finding and this gate will say so. */
 };
 
 interface Reading {

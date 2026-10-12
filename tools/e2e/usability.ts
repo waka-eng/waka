@@ -64,9 +64,37 @@ const BASE = process.env.WAKA_BASE_URL ?? "http://127.0.0.1:3010";
  */
 const PROBE = `(() => {
   const out = { unnamed: [], unlabelled: [], title: document.title, lang: document.documentElement.lang, disabled: [] };
+  /* ── A FINDING HAS TO BE FINDABLE, AND THIS PRINTED ONE WORD ──────────
+     This gave the tag and the first two classes, which for a control with NO
+     class is the single word button — and the surfaces this walk was
+     repointed at have several. Four H1 findings on the account card all read
+     "your account   H1 control has no name   button", which names nothing a
+     person can go and look at: there is no selector to try, no words to
+     search for, and no way to tell the four apart or to know whether they are
+     four controls or one seen from four states.
+
+     So the report carries whatever the element DOES have — its parent's
+     class, its own markup, its position — in that order of usefulness. A
+     check that finds a real defect and cannot say where it is gets treated as
+     noise, which is the same end as a false finding by a different road.
+
+     (No backticks in here: the whole probe is a template literal and a quoted
+     identifier would end it mid-sentence. measure.ts has a case named
+     no-backtick-inside-a-probe because that has cost this project four
+     gates, and it caught this one.) */
   const named = (e) => {
     const cls = typeof e.className === "string" ? e.className.trim().split(/\\s+/).slice(0, 2).join(".") : "";
-    return e.tagName.toLowerCase() + (cls ? "." + cls : "");
+    const self = e.tagName.toLowerCase() + (cls ? "." + cls : "");
+    if (cls) return self;
+    const parent = e.parentElement;
+    const pcls = parent && typeof parent.className === "string"
+      ? parent.className.trim().split(/\\s+/).slice(0, 2).join(".")
+      : "";
+    const r = e.getBoundingClientRect();
+    return self
+      + (pcls ? " in ." + pcls : "")
+      + " at " + Math.round(r.left) + "," + Math.round(r.top)
+      + " " + e.outerHTML.slice(0, 80).replace(/\\s+/g, " ");
   };
   /* INERT IS A STATEMENT THAT A THING IS NOT OFFERED, and it is respected
      the same way aria-hidden is. A control inside an inert subtree cannot
@@ -98,7 +126,23 @@ const PROBE = `(() => {
 
   for (const e of document.querySelectorAll("button, a[href], [role=button]")) {
     if (skip(e) || !visible(e)) continue;
-    const text = (e.innerText || "").trim();
+    /* ── innerText IS A LAYOUT QUESTION AND AN ACCESSIBLE NAME IS NOT ────
+       THIS REPORTED A BUTTON WITH THE WORDS "Check progress" ON IT AS HAVING
+       NO NAME, four times over, once per state of the account card. The
+       control sits inside a collapsed details element, and innerText is
+       defined in terms of RENDERED text — so it answers the empty string for
+       anything a browser is not currently laying out, while the element still
+       has a box and is therefore still "visible" to the check above. The
+       report said, four times, "H1 control has no name: button".
+
+       A name is computed from content, not from layout. textContent is the
+       content, so it is what is asked second, and innerText stays first
+       because it is the better answer when there IS layout: it collapses
+       whitespace and drops display-none children the way a reader does. The
+       difference between the two is exactly the set of controls this was
+       wrong about.
+       (No backticks in here — the whole probe is a template literal.) */
+    const text = ((e.innerText || "") || (e.textContent || "")).trim();
     const label = e.getAttribute("aria-label") || e.getAttribute("title") || "";
     const labelledBy = e.getAttribute("aria-labelledby");
     if (!text && !label && !labelledBy) out.unnamed.push(named(e));
