@@ -29,8 +29,9 @@
  *
  *   KEYS and AGENT KEYS — tables of API credentials with mint, copy and
  *   revoke. A developer surface on a consumer product's settings screen.
- *   `createAgentKey` STAYS and is still called when an agent is made; what
- *   went is the UI for reading and revoking them by hand.
+ *   `createAgentKey` NO LONGER RUNS either — see the note where it used to
+ *   be called. The UI for reading and revoking went first, which left a
+ *   credential nobody could hold, see or revoke; the minting followed.
  *
  *   WHAT AGENTS MAY READ — grants, which govern the keys above. With no
  *   key listing there is nothing to grant against.
@@ -79,7 +80,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../lib/api";
-import { createAgentKey } from "../lib/api/agents";
 import {
   createProfile,
   deleteProfile,
@@ -137,10 +137,33 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
     setBusyAgent("new"); setAgentTrouble("");
     try {
       const made = await createProfile(name);
-      /* AN AGENT WITHOUT A KEY CANNOT BE REACHED, so one is minted with it
-         — the same pairing the page it replaces made. The key listing is
-         gone; the key is not. */
-      await createAgentKey(made.id).catch(() => undefined);
+      /* ═══ NO KEY IS MINTED, AND THAT IS THE SECURE ANSWER ══════════════
+         This said "an agent without a key cannot be reached, so one is
+         minted with it — the key listing is gone; the key is not." The
+         reasoning was sound when the listing was the only thing that had
+         been removed. It is not sound now, and an audit worked out why.
+
+         THE KEY WAS A CREDENTIAL NOBODY COULD HOLD, SEE OR REVOKE. It is
+         minted here and the returned secret is thrown away by this very
+         line — `.catch(() => undefined)` and no use of the result — so it
+         was never shown to anyone. Listing and revoking live on
+         `SpaceSettings`, whose only opener was deleted on 2026-10-09, so
+         that panel can never mount: `setSettingsFor` has three call sites
+         and all three pass `null`. Meanwhile `lib/middleware.ts` really
+         does accept these keys, so each one is live API access.
+
+         A SECRET NOBODY HOLDS, NOBODY CAN LIST, AND NOBODY CAN REVOKE, that
+         grants real access, is liability with no function. Asked whether
+         keys should be revocable, the honest answer was to stop creating
+         the thing that needs revoking rather than build a panel onto a
+         feature with no floor.
+
+         THE API IS UNTOUCHED — `POST`, `GET` and `DELETE /agent-keys` all
+         stand, and `mintAgentKey` with them. If agents are reachable from
+         outside again, minting comes back WITH a surface that shows the
+         secret once and can take it away, on the same day. Rows already in
+         the table are not deleted here; their secrets were never displayed,
+         so nobody holds one. */
       if (!alive.current) return;
       setAgents((rows) => [...(rows ?? []), made]);
       setNewAgent("");
