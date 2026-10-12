@@ -246,6 +246,8 @@
   "worldComposerTooManyFiles": "첨부는 다섯 개까지예요.",
   "worldComposerOpening": "초안을 여는 중…",
   "worldComposerPhoto": "사진",
+  "worldComposerRemoveFile": "{name} 지우기",
+  "worldComposerRetryFile": "{name} 업로드 다시 시도",
   "worldComposerRecord": "녹음",
   "worldComposerRecordAgain": "다시 녹음",
   "worldComposerRecordingFor": "녹음 중 · {seconds}초",
