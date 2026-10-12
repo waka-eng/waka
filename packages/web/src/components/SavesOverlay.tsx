@@ -54,6 +54,7 @@ import {
 } from "../lib/api";
 import { useFirstVisit } from "../lib/first-visit";
 import { useAudioRecording } from "../lib/use-audio-recording";
+import { canKeep, type KeepReadiness } from "../lib/keep-ready";
 import { archiveChapter, dateWords } from "../lib/words";
 /* THE SAME DOOR THE WORLD USES. `loadInspirations` is the archive's own
    reader — it pages, it carries the total the server reports, and it holds
@@ -62,6 +63,7 @@ import { archiveChapter, dateWords } from "../lib/words";
    with its own pagination and its own idea of what the archive holds. */
 import { loadInspirations, type Inspiration } from "../lib/data";
 import { t, type SupportedLocale } from "../lib/locales";
+import { inspectInspirationPhoto } from "../lib/inspiration-photo";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -200,8 +202,33 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const [asking, setAsking] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [open, setOpen] = useState<Inspiration | null>(null);
+  /* ARMING DOES NOT SURVIVE THE NOTE IT WAS ARMED ON. A security review
+     found this control's sibling in settings staying armed after its
+     section was collapsed — arm it, go and read something else, come back,
+     and one press erases. Here the equivalent is opening a different note,
+     or closing this one: both leave `asking` true and hand the next note a
+     dock that is already one press from deleting it. Opening a note is the
+     clearest possible "not this". */
+  useEffect(() => { setAsking(false); }, [open?.id]);
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
+  /**
+   * THE SAVE RULE'S ANSWER FOR THIS PAGE, HELD WHERE THE PRESS CAN REACH IT.
+   *
+   * `keepOpenNote` is declared above the recorder it has to ask about —
+   * `recording` cannot exist until `attach` does, and `attach` is the
+   * recorder's destination — so the readiness literal is built further down,
+   * during render, and parked here. Exactly the seam `Home` uses for the
+   * notepad (`keepReadinessRef`), for the same reason and with the same
+   * guarantee: a ref assigned during render is assigned before any event of
+   * that render can fire, so the press and the button read ONE object.
+   *
+   * `null` UNTIL THE FIRST RENDER FINISHES, rather than an eighth-field
+   * literal meaning "nothing to keep". A second `KeepReadiness` literal in
+   * this file — even a neutral one nobody reads — is the shape of the defect
+   * this change removes, and `keepOpenNote` has to check `open` anyway.
+   */
+  const keepReady = useRef<KeepReadiness | null>(null);
 
   useEffect(() => {
     mounted.current = true;
@@ -264,6 +291,15 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
    * round trip to write what is already there would make reading a note
    * cost the same as editing one.
    */
+  /* AND THE WAY OUT IS NOT THE SAVE RULE'S SUBJECT — said here because the
+     next reader will wonder why `keepOpenNote` below asks `canKeep` and this
+     does not. This is a DOOR that happens to commit on its way through, and
+     `keep-ready.ts` answers one question: may this press write. A door that
+     refused to open because a recording was running would trap somebody on a
+     note to make a point about tidiness, and the clip is attached by the
+     recorder itself either way. What the two DO share is the trimmed
+     comparison, for the same reason: unchanged words close the note instead
+     of writing it. */
   const leaveNote = useCallback(async () => {
     const note = open;
     const words = draft.trim();
@@ -315,14 +351,31 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
    * pair the founder already rejected once ("this is so confusing"); staying
    * put makes it a statement about the words instead of a door.
    *
-   * THE SAME PREDICATE THE WRITE USES, which the caller's `canKeepOpenNote`
-   * reads. The obvious enablement test is `draft !== open.preview`, and it
-   * is subtly wrong: trailing whitespace makes those differ while the write
-   * below trims and returns early, so a single typed space would light the
-   * button and pressing it would do nothing. That exact failure — a control
-   * that looks pressable and silently refuses — is the one `whyNoSend` was
-   * written for on the chat composer and `keep-ready.ts` for the notepad.
-   * One condition, read by both.
+   * THE SAME PREDICATE THE WRITE USES, and it is now `keep-ready.ts`'s. The
+   * obvious enablement test is `draft !== open.preview`, and it is subtly
+   * wrong: trailing whitespace makes those differ while the write below trims
+   * and returns early, so a single typed space would light the button and
+   * pressing it would do nothing. That exact failure — a control that looks
+   * pressable and silently refuses — is the one `whyNoSend` was written for
+   * on the chat composer and `keep-ready.ts` for the notepad.
+   *
+   * SO THIS GUARD IS `canKeep`, NOT A RE-TYPED COPY OF IT. It used to read
+   * `saving || !words || words === note.preview`, which is three of the
+   * eight fields that function asks about, written out here — the fourth
+   * copy of a rule whose own file header spends thirty lines on the three
+   * that came before it, and the one copy that sat on the page the founder
+   * said must be the same page: "make sure that when I'm entering from create
+   * new inspiration or my past inspiration, it's using the exact same
+   * component." See `keepReady` below for which inputs this page answers
+   * differently and why.
+   *
+   * IT DOES NOT RE-ASK WITH FRESHER FIELDS, which is the one way this
+   * differs from `keepIt` in `Home`. There the press re-reads the draft
+   * STORE, because a background flush or another tab can move it under the
+   * last render. Here the words are React state in this component and the
+   * ref was assigned in the same render that drew the button, so re-reading
+   * would re-read the same values. `words` is still taken from `draft` for
+   * the WRITE — the rule says whether, the draft says what.
    *
    * A FAILED WRITE KEEPS EVERYTHING, like `leaveNote`: the words stay, the
    * note stays open, the bar says what happened through `saveFailed`, and
@@ -332,7 +385,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const keepOpenNote = useCallback(async () => {
     const note = open;
     const words = draft.trim();
-    if (!note || saving || !words || words === note.preview) return;
+    const state = keepReady.current;
+    if (!note || !state || !canKeep(state)) return;
     setSaving(true);
     setSaveFailed(false);
     try {
@@ -351,9 +405,6 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     }
   }, [draft, open, saving]);
 
-  /** Whether the open note holds words that are not the stored ones yet. */
-  const canKeepOpenNote = Boolean(open) && !saving
-    && draft.trim().length > 0 && draft.trim() !== open?.preview;
 
   /**
    * ═══ A SAVED THOUGHT CAN STILL TAKE A RECORDING OR A PICTURE ═══════════
@@ -385,12 +436,40 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
      the button that opens it, and that button is in the bar now — see
      `NoteTools`, which owns both. */
-  const attach = useCallback(async (file: File) => {
+  const attach = useCallback(async (chosen: File, came: "photo" | "recording" = "photo") => {
     const note = open;
     if (!note) return;
     setAttaching(true);
     setAttachFailed(false);
     try {
+      /* ═══ A PHOTO IS READ BEFORE IT IS SENT; A RECORDING IS NOT A FILE ═══
+         This path used to classify from `file.type.startsWith("image/")` and
+         upload whatever arrived. `file.type` is the operating system's guess
+         from the extension — it is not read from the bytes, and in the drag
+         and paste paths the person handing it over chooses it. So a renamed
+         executable was trusted on its name, stored as an image, and sent
+         with no size bound at all.
+
+         WHY THE SNIFFER COULD NOT SIMPLY BE DROPPED IN HERE, which is why
+         this path outlived the three that were fixed first: `attach` has
+         two callers. One is the photo input in the bar; the other is
+         `useAudioRecording` below, handing over a clip this product just
+         made. Running `inspectInspirationPhoto` over both would refuse the
+         recorder's own `audio/webm` as "not a photo" — correctly, and
+         uselessly.
+
+         SO THE DOOR IS NAMED RATHER THAN GUESSED. The caller says which it
+         is, because the caller is the only thing that knows: a recording is
+         a `Blob` this code built from a `MediaRecorder` a moment ago and
+         never left the machine, while a photo is a file a person chose and
+         is therefore exactly as trustworthy as its bytes. `Home`'s notepad
+         already splits the two this way — see `onRecorded` there — so this
+         is the archive catching up to its twin rather than a new idea.
+
+         THE DEFAULT IS THE SAFE SIDE. `came` defaults to "photo", so a
+         future caller that forgets the argument gets sniffed and refused
+         rather than trusted. */
+      const file = came === "photo" ? await inspectInspirationPhoto(chosen) : chosen;
       const pre = await presignAttachment(
         { filename: file.name, contentType: file.type || "application/octet-stream", size: file.size },
         undefined,
@@ -398,7 +477,10 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       );
       await uploadToPresignedUrl(pre.uploadUrl, file, pre.headers);
       await finalizeAttachment({
-        type: file.type.startsWith("image/") ? "image" : "file",
+        /* A STATEMENT ABOUT BYTES THAT WERE READ, on the photo side: the
+           sniffer returns one of seven image types or throws, so there is
+           no third answer left to guess at. */
+        type: came === "photo" ? "image" : "file",
         inspirationId: note.id,
         key: pre.key,
         name: file.name,
@@ -417,8 +499,100 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       if (mounted.current) setAttaching(false);
     }
   }, [load, open, profileId]);
-  /* The same recorder the notepad uses, handed a different destination. */
-  const recording = useAudioRecording(attach);
+  /* The same recorder the notepad uses, handed a different destination —
+     and naming the door it comes through, so `attach` does not try to read
+     a sound file as a photograph. */
+  const recording = useAudioRecording((clip) => attach(clip, "recording"));
+
+  /**
+   * ═══ WHETHER THIS NOTE'S SAVE CAN BE PRESSED — ASKED, NOT RESTATED ══════
+   *
+   * Founder, of these two pages: "just make sure that when I'm entering from
+   * create new inspiration or my past inspiration, it's using the exact same
+   * component." `NoteTools` is that component for the bar, and until this
+   * change the two notes handed it two different questions. The notepad built
+   * a `KeepReadiness` and asked `canKeep` over eight fields; this page passed
+   * `canKeepOpenNote`, a four-term expression written here — same CSS class,
+   * same dock slot, same glyph, same prop name, different rule. `NoteTools`
+   * even reasoned about the prop as though it were this function's ("the
+   * caller's own `canKeep` already folds in `saving`"), which was true of the
+   * old expression by luck.
+   *
+   * THE DIVERGENCE WAS REACHABLE, NOT THEORETICAL. `NoteTools` renders Record
+   * on a saved note, so a recording can be running on this page — and the old
+   * predicate did not look at it, while `whyNotKept` returns
+   * `worldComposerFinishRecording` for it FIRST, before anything else,
+   * because "a recording that is still running is the thing to stop before
+   * thinking about anything else". Press Save mid-clip here and the write
+   * went through under a recorder that was about to attach to the same row.
+   *
+   * ── AND THE FIELDS THAT GENUINELY DIFFER, EACH WITH ITS REASON ──────────
+   *
+   * Some of the eight have no subject on a saved note. The defect the review
+   * named was not that they differ; it was that nothing said WHICH, or why.
+   * They are passed as their neutral value with the argument written beside
+   * them, so the next person reads a decision rather than guessing at an
+   * omission — and so that a field added to `KeepReadiness` tomorrow is a
+   * type error here rather than a second opinion.
+   */
+  const keepState: KeepReadiness = {
+    /* `hasWords` MEANS "THERE IS SOMETHING TO KEEP", and on a note that is
+       already stored that means the words have CHANGED. An unchanged note has
+       nothing to write, exactly as a blank notepad does — and `whyNotKept`
+       returns `null` rather than a complaint for both, which is right: there
+       is nothing wrong with a note you have not edited.
+
+       TRIMMED ON BOTH SIDES OF THE COMPARISON, which is the whole subject of
+       the comment above `keepOpenNote`: a typed trailing space must not light
+       a button whose write would then return early. */
+    hasWords: Boolean(open) && draft.trim().length > 0 && draft.trim() !== open?.preview,
+    /* `ready` IS THE DRAFT STORE HAVING OPENED — "before that there is
+       nowhere to write". This page has no draft store: the words live in
+       React state and the destination is a row that already exists, so there
+       is nowhere for this to be false. `open` carries the only readiness this
+       page has, and `hasWords` above already requires it. */
+    ready: true,
+    saving,
+    /* UPLOADING IS NOT A SAVE CONFLICT HERE, and this is the one field where
+       the two pages genuinely disagree rather than one of them simply not
+       having the subject. On the notepad an upload in flight IS the save —
+       the files and the words leave together. On a saved note `attach`
+       writes immediately and on its own: "the write is independent of the
+       note's words ... it is a file that has already been uploaded, there is
+       nothing to batch it with." Folding `attaching` in here would dim Save
+       while a photo goes up and silently discard an edit made during the
+       wait, for a conflict that does not exist. `NoteTools` says the same
+       thing from the other side: busy disables the mic and the camera and
+       deliberately not this. */
+    uploading: false,
+    /* THE REAL FIX. A recording is running on THIS page too, and a note saved
+       mid-clip is the unfinished state `keep-ready.ts` puts first in its
+       order. No `dictation.listening` term beside it: speech-to-text is wired
+       into the notepad only, so there is no second microphone on this page to
+       ask about. If dictation ever reaches a saved note, this is the line that
+       has to grow — and `whyNotKept`'s ordering already knows what to say. */
+    recording: recording.phase !== "idle",
+    /* TWO RECORDINGS AND NOBODY SAYING WHICH ONE TO KEEP is a notepad state:
+       its recorder hands the clip to a DRAFT, which can already hold one, so
+       the second arrival has to be chosen between. Here the recorder's
+       destination is `attach` — a clip becomes an attachment on the row the
+       moment it stops, so there is never an undecided pair. */
+    undecidedRecording: false,
+    /* NO DRAFT MEDIA LIST, SO NEITHER OF THESE HAS A SUBJECT. `invalidFiles`
+       counts attachments carrying a validation error of their own and `files`
+       feeds `KEEP_FILE_LIMIT`; both are about the pile a notepad is holding
+       before it leaves. An attachment on a saved note has already been
+       presigned, uploaded and finalized against the row — it is stored, not
+       pending, and the server has already accepted or refused it. Counting
+       the row's stored attachments here would mean the sixth photo on an old
+       inspiration blocked editing its SENTENCE, which is the limit enforced
+       against the wrong act. */
+    invalidFiles: 0,
+    files: 0,
+  };
+  keepReady.current = keepState;
+  /* ONE OBJECT, READ TWICE — the button here, the press through the ref. */
+  const canKeepOpenNote = canKeep(keepState);
 
   /* TELL THE BAR, AND UNTELL IT ON THE WAY OUT. The cleanup matters more
      than the call: an archive unmounted with a note open would leave the
@@ -837,6 +1011,28 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           keepLabel={say("worldSaveInspiration")}
           canKeep={canKeepOpenNote}
           onKeep={() => { void keepOpenNote(); }}
+          eraseLabel={say("worldDelete")}
+          eraseConfirmLabel={say("worldDeleteItAnyway")}
+          cancelEraseLabel={say("worldNotNow")}
+          eraseQuestion={say(saving ? "worldDeleting" : "worldDeleteThisNote")}
+          erasePending={asking}
+          erasing={saving}
+          /* ONE PRESS ARMS, THE SECOND ERASES. Split across two handlers so
+             the committing branch is the only place `deleteInspiration` is
+             named — the arming press cannot reach it by a missed guard. */
+          onErase={() => {
+            if (!asking) { setAsking(true); return; }
+            setSaving(true);
+            void deleteInspiration(open.id)
+              .then(() => {
+                setRows((all) => all.filter((row) => row.id !== open.id));
+                setAsking(false);
+                setOpen(null);
+              })
+              .catch(() => setSaveFailed(true))
+              .finally(() => setSaving(false));
+          }}
+          onCancelErase={() => setAsking(false)}
           onFile={(file) => void attach(file)}
         /> : null}
         {open ? (
@@ -911,29 +1107,6 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             <NotePage
               locale={locale}
               whenMs={open.capturedMs}
-              trailing={asking ? (
-                <>
-                  <button type="button" className="waka-note-erase" disabled={saving}
-                    onClick={() => {
-                      setSaving(true);
-                      void deleteInspiration(open.id)
-                        .then(() => {
-                          setRows((all) => all.filter((row) => row.id !== open.id));
-                          setAsking(false);
-                          setOpen(null);
-                        })
-                        .catch(() => setSaveFailed(true))
-                        .finally(() => setSaving(false));
-                    }}>
-                    {say(saving ? "worldDeleting" : "worldDeleteItAnyway")}
-                  </button>
-                  <button type="button" onClick={() => setAsking(false)}>{say("worldNotNow")}</button>
-                </>
-              ) : (
-                <button type="button" className="waka-note-erase" onClick={() => setAsking(true)}>
-                  {say("worldDelete")}
-                </button>
-              )}
             >
               {pictureOf(open) ? (
                 <img className="waka-sheet-picture" src={pictureOf(open)!} alt="" />
