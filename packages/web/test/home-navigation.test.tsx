@@ -10,15 +10,15 @@ import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressChatCorner, closeOverlay, keepBox, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { loadInspirations, loadInspiration, type InspirationDetail } from '../src/lib/data';
-import {fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
+import {fetchGroupMembers,fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [{ id: 'loaded', text: 'Current inspiration', daysAgo: 1 }],
-  groups: [{ id: 'group-id', name: 'Renamed room', field: [] }] }));
+  groups: [{ id: 'group-id', name: 'Renamed room', field: [{id:'viewer-public',ownerProfileId:'profile-viewer',ownerName:'You',daysAgo:1},{id:'peer-public',ownerProfileId:'peer',ownerName:'Bo',daysAgo:1}] }] }));
 const principleState=vi.hoisted(()=>({rows:[] as ApiPrinciple[]}));
 vi.mock('../src/lib/api/principles',async original=>({...await original<typeof import('../src/lib/api/principles')>(),fetchPrincipleRead:vi.fn(async()=>({principles:principleState.rows,status:{phase:'ready',eligible:false}}))}));
 vi.mock('../src/lib/data', async (original) => ({ ...await original<typeof import('../src/lib/data')>(),
   ...dataMockFrom(FACTS), loadInspirations: vi.fn(dataMockFrom(FACTS).loadInspirations), loadInspiration: vi.fn() }));
-vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),fetchPrinciples:vi.fn(async()=>principleState.rows),updatePrinciple:vi.fn(),updateInspiration:vi.fn() }));
+vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),fetchGroupMembers:vi.fn(apiMockFrom(FACTS).fetchGroupMembers),fetchPrinciples:vi.fn(async()=>principleState.rows),updatePrinciple:vi.fn(),updateInspiration:vi.fn() }));
 vi.mock('../src/lib/auth-context', async (original) => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
     profile: { id: VIEWER_ID, name: 'You', type: 'human' }, profiles: [], refresh: async () => undefined, signOut: async () => undefined };
@@ -33,7 +33,7 @@ const detail: InspirationDetail = { id: 'older', text: 'An older inspiration bey
     { id: 'answer-2', question: 'Next?', answer: 'My later words', skipped: false, createdMs: 1700000001000 },
   ] };
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
-beforeEach(() => { principleState.rows=[];vi.mocked(updatePrinciple).mockReset();vi.mocked(fetchPrinciples).mockClear();localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); vi.mocked(loadInspirations).mockClear(); vi.mocked(loadInspiration).mockReset().mockResolvedValue(detail); });
+beforeEach(() => { principleState.rows=[];vi.mocked(updatePrinciple).mockReset();vi.mocked(fetchPrinciples).mockClear();vi.mocked(fetchGroupMembers).mockReset().mockImplementation(apiMockFrom(FACTS).fetchGroupMembers);localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); vi.mocked(loadInspirations).mockClear(); vi.mocked(loadInspiration).mockReset().mockResolvedValue(detail); });
 afterEach(() => { world?.unmount(); vi.useRealTimers(); });
 async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
@@ -139,6 +139,99 @@ it('offers places in the dock, and nothing that is already on the screen',async(
    asserts the row's ABSENCE instead, which is the thing worth protecting.
    The room itself is still reachable at `?open=claims` and still tested. */
 
+/* ═══ MERGE NOTE, `origin/dev` 8b11c2f5 ════════════════════════════════════
+   Five of that commit's six new cases are kept verbatim below. THE SIXTH IS
+   DELETED AND REPLACED, and this is the one judgement call in this file.
+
+   It read:
+
+     it('allows moving above and below Home without using the tab bar, with
+         Back restoring each place')
+       expect(container.querySelector('.jar-values')).not.toBeNull();
+       expect(container.querySelector('.jar-saved--personal')).not.toBeNull();
+       await click('.jar-values');   -> view=sky
+       await click('.jar-saved--personal'); -> view=field
+
+   Both of those controls were deleted on this branch, with reasons recorded
+   at their old sites in `Home.tsx`: the Principles pill and the
+   "N inspirations" door were self-wall-only chrome, and the dock now carries
+   both destinations on every wall. A case that presses them is asserting
+   chrome, not behaviour.
+
+   What dev's case was PROTECTING, though, is real and this branch had broken
+   it: once you are above or below Home there must be a one-press way back,
+   and until 8b11c2f5 the carets were gated `atWall.kind!=="self"` — so on
+   your own wall the sky and the ground had no visible exit at all. Those
+   states are reachable here: a search result writes `section:'field'`, and
+   opening a principle from `PrinciplesOverlay` writes `section:'sky'`. The
+   replacement below enters each of them the way the product does and presses
+   the caret dev unlocked. Law 2, with the entrance updated. */
+it('keeps a one-press way out of the sky and of the ground on your own wall',async()=>{
+  world=await mountWorld(FACTS,{initialEntries:['/?view=sky'],routerTools:<RouterTools/>});await settle();
+  const caret=(selector:string)=>world.container.querySelector<HTMLButtonElement>(selector);
+  expect(caret('.jar-up--down.jar-up--personal'),'the sky on your own wall must offer the way down').not.toBeNull();
+  await act(async()=>caret('.jar-up--down')!.click());await settle();
+  expect(location.pathname+location.search).toBe('/');
+  await navigate(-1);expect(location.search).toContain('view=sky');
+  world.unmount();
+  world=await mountWorld(FACTS,{initialEntries:['/?view=field'],routerTools:<RouterTools/>});await settle();
+  expect(caret('.jar-up:not(.jar-up--down)'),'the ground must offer the way up').not.toBeNull();
+  await act(async()=>caret('.jar-up:not(.jar-up--down)')!.click());await settle();
+  expect(location.pathname+location.search).toBe('/');
+});
+it('makes a group avatar tap open that member’s public view and lets Back return to the room',async()=>{
+  world=await mountWorld(FACTS,{initialEntries:['/w/group-id/renamed-room'],routerTools:<RouterTools/>});await settle();
+  const peer=world.audit().company.find(seat=>seat.id==='peer')!;
+  expect(peer).toBeDefined();const {x,y}=peer;
+  const pointer={pointerId:1,pointerType:'mouse',bubbles:true,clientX:x,clientY:y};
+  await act(async()=>{
+    world.container.querySelector('canvas')!.dispatchEvent(new PointerEvent('pointerdown',{...pointer,cancelable:true}));
+    window.dispatchEvent(new PointerEvent('pointerup',pointer));
+  });
+  expect(location.search).toContain('member=peer');await settle();
+  expect(location.search).toContain('view=field');expect(world.audit().ground).toBe('peer');expect(world.audit().present).toBe(1);
+  await navigate(-1);expect(location.search).toBe('');expect(world.audit().ground).toBeNull();
+});
+it('opens the member on the painted room even before the room route observer catches up',async()=>{
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
+  await world.travelTo(/Renamed room/);expect(world.audit().wallId).toBe('group-id');
+  const member=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-grounds-row')].find(button=>button.textContent==='Bo')!;
+  await act(async()=>member.click());expect(location.pathname).toContain('/w/group-id/');
+  expect(location.search).toContain('member=peer');await settle();expect(world.audit().ground).toBe('peer');
+});
+it('gives a member with nothing public an explicit empty view',async()=>{
+  const base=await apiMockFrom(FACTS).fetchGroupMembers('group-id');
+  vi.mocked(fetchGroupMembers).mockResolvedValue([...base,{profileId:'empty-member',name:'Sora',type:'human',role:'member',joinedAt:'2026-10-01T12:00:00Z'}]);
+  world=await mountWorld(FACTS,{initialEntries:['/w/group-id/renamed-room'],routerTools:<RouterTools/>});await settle();
+  const member=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-grounds-row')].find(button=>button.textContent==='Sora')!;
+  await act(async()=>member.click());await settle();
+  expect(world.audit().ground).toBe('empty-member');expect(world.audit().present).toBe(0);
+  expect(world.container.querySelector('.jar-group-ground-status')?.textContent).toContain('SoraNo public inspirations');
+});
+it('keeps member-list scrolling and arrow selection inside the list',async()=>{
+  world=await mountWorld(FACTS,{initialEntries:['/w/group-id/renamed-room'],routerTools:<RouterTools/>});await settle();
+  const group=world.container.querySelector<HTMLElement>('[role="radiogroup"]')!;
+  const rows=[...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+  expect(rows[0].tabIndex).toBe(0);expect(rows[1].tabIndex).toBe(-1);
+  const wheel=new WheelEvent('wheel',{deltaY:300,bubbles:true,cancelable:true});
+  await act(async()=>group.dispatchEvent(wheel));await settle();
+  expect(wheel.defaultPrevented).toBe(false);expect(location.search).toBe('');
+  await act(async()=>rows[0].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true})));await settle();
+  expect(world.audit().ground).toBe('peer');expect(rows[1].tabIndex).toBe(0);expect(document.activeElement).toBe(rows[1]);
+  await act(async()=>rows[1].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowUp',bubbles:true,cancelable:true})));await settle();
+  expect(world.audit().ground).toBeNull();expect(rows[0].tabIndex).toBe(0);
+});
+it('opens a room member’s public view by name and keeps that selection across Back/Forward',async()=>{
+  world=await mountWorld(FACTS,{initialEntries:['/w/group-id/renamed-room'],routerTools:<RouterTools/>});await settle();
+  const member=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-grounds-row')].find(button=>button.textContent==='Bo')!;
+  await act(async()=>member.click());await settle();
+  expect(location.search).toContain('view=field');expect(location.search).toContain('member=peer');
+  expect(world.audit().ground).toBe('peer');expect(world.audit().present).toBe(1);
+  expect(world.container.querySelector('.jar-group-ground-status')?.textContent).toContain('BoPublic inspirations');
+  await navigate(-1);expect(location.search).toBe('');expect(world.audit().ground).toBeNull();
+  await navigate(1);expect(world.audit().ground).toBe('peer');
+});
+
 it('keeps the selected principle and its route after editing, so Back returns to the prior view',async()=>{
   principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'declared',rank:0,locked:true,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[]}];
   vi.mocked(updatePrinciple).mockImplementation(async(_id,text)=>{principleState.rows=[{...principleState.rows[0],statement:text}];return principleState.rows[0];});
@@ -186,6 +279,13 @@ it('starts a review beside the personal reading and restores home through Back',
      what went is the offer. */
   expect(world.container.querySelector('.jar-reading-actions')?.textContent).not.toContain('Review your inspirations');
   await navigate('/review/new');await settle();expect(location.pathname).toBe('/review/new');
+  /* `origin/dev` 8b11c2f5 renamed this button's label from "Review your
+     inspirations" to "Revisit your inspirations" and asserted it inside
+     `.jar-home-activities`. Both the component and the label are gone — the
+     fold took `HomeActivities`, `useReviewEntry` and the whole review
+     surface — so there is nothing left to relabel, and dev's wording change
+     to `worldReviewTitle` landed on a key this branch had already deleted.
+     The route is still reached below, which is the part that still exists. */
   await navigate(-1);expect(location.pathname).toBe('/');
 });
 it('requires a visible audience confirmation before publishing and leaves cancel private',async()=>{

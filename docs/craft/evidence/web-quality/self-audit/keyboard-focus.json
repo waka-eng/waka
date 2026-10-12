@@ -1,0 +1,114 @@
+[
+  {
+    "bottom": -608.734375,
+    "offscreen": true,
+    "tag": "BUTTON",
+    "text": "Leave room for an idea before deciding what it should become.",
+    "top": -659.921875
+  },
+  {
+    "bottom": -406.078125,
+    "offscreen": true,
+    "tag": "BUTTON",
+    "text": "작게 시작하고, 배운 것을 다음 선택에 반영한다.",
+    "top": -457.265625
+  },
+  {
+    "bottom": -269.078125,
+    "offscreen": true,
+    "tag": "BUTTON",
+    "text": "Protect time for the people who matter.",
+    "top": -313.078125
+  },
+  {
+    "bottom": 162,
+    "offscreen": false,
+    "tag": "BUTTON",
+    "text": "Changes",
+    "top": 118
+  },
+  {
+    "bottom": 230.890625,
+    "offscreen": false,
+    "tag": "H1",
+    "text": "Making room for ideas without turning each one into a task.",
+    "top": 170
+  },
+  {
+    "bottom": 283.890625,
+    "offscreen": false,
+    "tag": "SUMMARY",
+    "text": "How this forms",
+    "top": 238.890625
+  },
+  {
+    "bottom": 335.890625,
+    "offscreen": false,
+    "tag": "BUTTON",
+    "text": "Why this reading",
+    "top": 291.890625
+  },
+  {
+    "bottom": 403.890625,
+    "offscreen": false,
+    "tag": "BUTTON",
+    "text": "Revisit your inspirationsContinue where you left off.",
+    "top": 359.890625
+  },
+  {
+    "bottom": 451.890625,
+    "offscreen": false,
+    "tag": "BUTTON",
+    "text": "Talk with WAKAThink through a choice.",
+    "top": 407.890625
+  },
+  {
+    "bottom": 628,
+    "offscreen": false,
+    "tag": "BUTTON",
+    "text": "Capture inspiration",
+    "top": 584
+  },
+  {
+    "bottom": 58,
+    "offscreen": false,
+    "tag": "BUTTON",
+    "text": "Me",
+    "top": 14
+  },
+  {
+    "bottom": 58,
+    "offscreen": false,
+    "tag": "BUTTON",
+    "text": "go to another wall",
+    "top": 14
+  },
+  {
+    "bottom": 58,
+    "offscreen": false,
+    "tag": "BUTTON",
+    "text": "Your account",
+    "top": 14
+  },
+  {
+    "bottom": 100,
+    "offscreen": false,
+    "tag": "BUTTON",
+    "text": "Principles33 available",
+    "top": 56
+  },
+  {
+    "bottom": 768,
+    "offscreen": false,
+    "tag": "BUTTON",
+    "text": "4 inspirations",
+    "top": 724
+  },
+  {
+    "bottom": 828,
+    "offscreen": false,
+    "tag": "BUTTON",
+    "text": "Home",
+    "top": 784
+  }
+]
