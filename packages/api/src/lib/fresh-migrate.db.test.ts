@@ -37,7 +37,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -109,10 +109,96 @@ describe("the first migration on an empty database", () => {
       const verifier=resolve(migrationsFolder(),'../../scripts/verify-memory-schema.mjs');
       const output=execFileSync(process.execPath,[verifier],{env:{...process.env,DB_CONNECTION_URL:freshUrl},encoding:'utf8'});
       expect(output).toContain('0065/0066/0067');expect(output).toContain('search triggers');
+
+      /* ═══ AND THE COLUMN THIS MIGRATION'S JOURNAL ENTRY CREATES ═════════
+         `inspirations.category` is the archive's shelves.
+         `schema-inspirations.ts` declares it and the category tabs select
+         it, and it did not reach a fresh database for three days, because
+         `0069_inspiration_category.sql` was merged with no journal entry
+         and `drizzle-kit migrate` applies the journal, not the folder.
+         Checked here as well as structurally below, because this column is
+         what the omission actually cost. */
+      const shelves = await sql<{ column_name: string }[]>`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'inspirations' AND column_name = 'category'`;
+      expect(shelves, "the archive's shelves reached a fresh database").toHaveLength(1);
     } finally {
       await sql.end();
     }
   }, 180_000);
+
+  /**
+   * ═══ EVERY MIGRATION ON DISK IS IN THE JOURNAL ═══════════════════════
+   *
+   * THE FAILURE THIS IS FOR, found 2026-10-11 and silent for three days:
+   * `0069_inspiration_category.sql` was written, reviewed and merged, and
+   * its journal entry was never added. `drizzle-kit migrate` applies the
+   * JOURNAL, not the folder — so on a fresh or upgraded database that
+   * column simply never existed, while `schema-inspirations.ts` declared
+   * it and the archive's category tabs read it. The next migration was
+   * then numbered 0070 and took idx 69, closing the gap over the hole so
+   * that nothing in the file looked out of sequence.
+   *
+   * WHY THE RUN ABOVE DID NOT CATCH IT. It asserts the migrator throws on
+   * nothing and that more than twenty migrations are recorded — both true
+   * with a file quietly skipped. A test that checks the corpus APPLIES
+   * cannot see a file the corpus never mentions; only comparing the two
+   * lists can.
+   *
+   * IT IS A STRUCTURAL CHECK, DELIBERATELY. Asserting the one known column
+   * above would pass forever while the seventy-first migration went
+   * missing the same way. This compares the folder to the journal, so the
+   * next omission fails on the commit that makes it.
+   */
+  it("lists every migration file in the journal, in order and with no gaps", async () => {
+    const folder = migrationsFolder();
+    const files = readdirSync(folder)
+      .filter((name) => name.endsWith(".sql"))
+      .map((name) => name.replace(/\.sql$/, ""))
+      .sort();
+    const journal = JSON.parse(
+      readFileSync(resolve(folder, "meta", "_journal.json"), "utf8"),
+    ) as { entries: Array<{ idx: number; tag: string; when: number }> };
+    const tags = journal.entries.map((entry) => entry.tag);
+
+    expect(files.length, "no migrations were found — is the folder wrong?")
+      .toBeGreaterThan(20);
+    expect(
+      files.filter((name) => !tags.includes(name)),
+      "these migrations are on disk and not in the journal, so `drizzle-kit " +
+        "migrate` will never apply them",
+    ).toEqual([]);
+    expect(
+      tags.filter((tag) => !files.includes(tag)),
+      "the journal names migrations that do not exist",
+    ).toEqual([]);
+    expect(tags.length, "the journal lists a migration twice").toBe(new Set(tags).size);
+
+    /* `idx` IS THE ORDER THE MIGRATOR WALKS, so a repeat or a gap silently
+       reorders or skips. `when` is what the applied table records, so it
+       has to rise with it or a replay cannot be told from a new one. And
+       the four digits in the filename have to be that same number.
+
+       THE LAST ONE IS IMPLIED BY THE OTHER TWO, as long as the folder
+       happens to sort the way the journal is ordered, and it is asserted
+       anyway. An entry whose tag disagrees with its idx is the exact shape
+       of this bug — 0070 sitting at idx 69 — and a gate that leaves the
+       fact it cares about to be inferred is one refactor away from being
+       green and blind, which is how four of these were found this week. */
+    journal.entries.forEach((entry, at) => {
+      expect(entry.idx, `${entry.tag} is out of order in the journal`).toBe(at);
+      expect(
+        Number(entry.tag.slice(0, 4)),
+        `${entry.tag} sits at idx ${entry.idx}, which its own filename contradicts`,
+      ).toBe(entry.idx);
+      if (at > 0) {
+        expect(
+          entry.when,
+          `${entry.tag} is stamped no later than the migration before it`,
+        ).toBeGreaterThan(journal.entries[at - 1]!.when);
+      }
+    });
+  });
 });
 
 describe("the enum rule, read straight off the corpus", () => {
