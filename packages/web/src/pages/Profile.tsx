@@ -923,32 +923,31 @@ export default function ProfilePage(): JSX.Element {
             <p className="profile-subtitle">{t(locale, "profileMachineryHint")}</p>
           </div>
 
-          {/* HOW ONE LAYER BECOMES THE NEXT — re-homed, not restored.
-              This was "How this forms": a disclosure on the home screen
-              explaining the whole loop, and it went when the home screen was
-              cut to three things. Founder, looking at what is missing against
-              the deployed build: "most things I want to find a new home in
-              the experience rather than completely removed."
-              Its new home is here because of what it IS. The switcher's info
-              icons answer "what is this view" at the moment you are choosing
-              between views — the right answer in the right place. This
-              answers a different question: what is the product DOING with
-              what I give it, and in what order. That is read once, carefully,
-              by somebody who wants to know how the machine works — which is
-              the question every other thing in this section answers too. */}
-          <dl className="profile-formation">
-            <dt>{t(locale, "worldMenuField")}</dt>
-            <dd>{t(locale, "worldFormationInspirations")}</dd>
-            <dt>{t(locale, "worldMenuTopOfMind")}</dt>
-            <dd>{t(locale, "worldFormationReading")}</dd>
-            <dt>{t(locale, "worldPrinciplesShortcut")}</dt>
-            <dd>{t(locale, "worldFormationPrinciples")}</dd>
-          </dl>
-          {/* What the loop promises and what it does not. It sat at the foot
-              of the disclosure and it belongs at the foot of this: a person
-              reading how the machine works is owed the part where it says
-              what it cannot do. */}
-          <p className="profile-formation-note">{t(locale, "worldFormationKeep")}</p>
+          {/* ═══ THE FOUR PARAGRAPHS ARE GONE ════════════════════════
+              Founder, with this page on screen: "this is so ugly too."
+
+              What stood here was a definition list — inspirations, top of
+              mind, principles, each with a sentence — and a fifth paragraph
+              under it about what the loop promises. Four hundred-odd words
+              of prose explaining the data model, on the page somebody opens
+              to change their name.
+
+              IT WAS RE-HOMED HERE RATHER THAN DELETED once already, under
+              "most things I want to find a new home in the experience rather
+              than completely removed", and that was the right instinct
+              applied to the wrong content. Re-homing is for things a person
+              goes looking for. Nobody has ever gone looking for a
+              description of three layers; it is read once by whoever is new
+              and stepped over forever after by everybody — which is the rule
+              that cleared the permanent explainers off the archive, the
+              principles, the claims and the chat.
+
+              WHAT STAYS IS THE PART THAT IS CHECKABLE. The three doors below
+              do not describe the machinery, they SHOW it: what it reads you
+              by, what it set aside, what it thinks it is hearing twice. That
+              is this product's actual promise — that its account of you can
+              be inspected — and it is worth a section heading. A paragraph
+              saying "patterns shape a reading" is not. */}
           <p className="profile-machinery-row">
             <button
               type="button"
