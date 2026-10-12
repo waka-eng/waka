@@ -1,6 +1,39 @@
 /** Inspect a small header, not the filename or the browser's MIME guess.
  * Keep original bytes (including EXIF orientation); never re-encode a capture. */
 export const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
+
+/**
+ * WHAT A PICKER MAY OFFER — the same set the sniffer below accepts, stated
+ * once.
+ *
+ * THE RULE HAD FOUR COPIES AND THE FOURTH DISAGREED. This string was typed
+ * out at every file input in the product — `NoteTools.tsx`,
+ * `InspirationComposer.tsx` and the notepad's slot in `Home.tsx` — and the
+ * memory card's own picker (`Home.tsx`, the add-attachment label) offered
+ * `image/*` instead. Net effect, measured: a TIFF, a BMP or an SVG is
+ * selectable from one of the product's four pickers and refused with a
+ * sentence at the other three. The accepted set is a property of the rule
+ * this file states, not of whichever component happens to be drawing a
+ * button, so it lives beside the sniffer that enforces it.
+ *
+ * IT IS THE DOOR, NOT THE LOCK, and the distinction is the whole reason a
+ * picker is allowed to say anything at all. `accept` is a hint to the
+ * operating system's file chooser: it greys out what cannot be chosen, and
+ * it can be defeated by renaming a file, by a drag, or by a paste. So every
+ * byte still goes through `inspectInspirationPhoto` — "not the filename or
+ * the browser's MIME guess", one line above — and this constant exists only
+ * so the chooser shows the same set the sniffer will agree to. A picker
+ * offering MORE than this teaches somebody to pick a file that is then
+ * rejected after they chose it, which is the worst order to learn a rule in.
+ *
+ * THE EXTENSIONS ARE NOT REDUNDANT. `.heic` and `.heif` are repeated after
+ * the MIME types because that is the pair browsers most often have no type
+ * for — an iPhone photo arrives with an empty `file.type` on several
+ * versions of Safari and Windows, and a picker filtering on MIME alone then
+ * hides the one format this product was most often handed.
+ */
+export const PHOTO_ACCEPT =
+  "image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif";
 export async function inspectInspirationPhoto(file: File): Promise<File> {
   if (!file.size) throw new Error('This file is empty.');
   if (file.size > MAX_PHOTO_BYTES) throw new Error('This photo is over 25 MB. Choose a smaller copy.');
