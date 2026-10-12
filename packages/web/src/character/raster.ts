@@ -45,6 +45,26 @@ export const NUB_Y = 0.24;
     anatomy, so they are never absent — the light decides the size only. */
 export const NUB_R_DIM = 0.062;
 export const NUB_R_LIT = 0.1;
+/**
+ * HOW FAR THE CREATURE SPILLS PAST ITS OWN BOX, as a fraction of the size.
+ *
+ * Founder, of the companion standing over an empty chat: "the character is
+ * cut off on the left and right."
+ *
+ * It was, and the arithmetic is exactly this line. A nub is seated at
+ * `NUB_X` from the centre and swells to `NUB_R_LIT` at full light, so at
+ * rest its outer edge sits at 0.52 of the size from the middle — two percent
+ * beyond the half-box the body is drawn in. On the world that costs nothing,
+ * because the canvas is the whole window. On a page the canvas is the
+ * creature's own size, so the two percent is a flat edge on each side.
+ *
+ * DERIVED, NOT MEASURED. A caller that padded by an eyeballed "a couple of
+ * pixels" would be a second opinion about the anatomy, and the first retune
+ * of `NUB_R_LIT` would crop the creature again without failing anything.
+ * `rest-pose.test.ts` holds this to the constants above it.
+ */
+export const REST_BLEED = NUB_X + NUB_R_LIT - 0.5;
+
 /** A nub's own colour at those two ends. */
 export const NUB_DIM: [number, number, number] = [166, 163, 156];
 export const NUB_LIT: [number, number, number] = [214, 209, 197];

@@ -60,7 +60,7 @@ import { archiveChapter, dateStamp, dateWords } from "../lib/words";
    past it to the HTTP layer would have been a second way to read one thing,
    with its own pagination and its own idea of what the archive holds. */
 import { loadInspirations, type Inspiration } from "../lib/data";
-import { formatMessage, t, type SupportedLocale } from "../lib/locales";
+import { t, type SupportedLocale } from "../lib/locales";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -401,12 +401,30 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
               are not in — and two controls that both lead out is the stack
               this change exists to remove. */}
           {open ? (
-            <button type="button" className="waka-over-back" disabled={saving} onClick={() => void leaveNote()}>
+            /* ═══ A CHEVRON, AND NOT ITS NAME ════════════════════════════
+               Founder, with "‹ All inspirations" at the top of an open note
+               and again at the top of an open chat: "remove", and then, of
+               this page: "remove the all inspirations thing here — actually,
+               maybe just have a back button."
+
+               THIS REVERSES "NAMED, LIKE EVERY OTHER WAY BACK", and the old
+               argument is kept because it was right about a different
+               screen. It came from a bare chevron IN A BOX floating on the
+               world, where nothing said where it went. On a note that fills
+               the page, having arrived from the list one press ago, the
+               chevron at the top-left is the most over-learned control on a
+               phone — and the words beside it were the only thing on this
+               page that was not the note.
+
+               STILL NAMED WHERE IT COUNTS. `aria-label` carries the
+               destination, so the control a screen reader announces has not
+               lost anything; what went is ink. */
+            <button type="button" className="waka-over-back" disabled={saving}
+              aria-label={say("worldBackToAll")} onClick={() => void leaveNote()}>
               <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
                 <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
                   strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              {say("worldBackToAll")}
             </button>
           ) : (
           <span className="waka-over-name">
@@ -418,15 +436,27 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                 are. It takes the count's place rather than sitting beside
                 it, because while a subset is showing, how many the whole
                 archive holds is not the fact this line is for. */}
+            {/* ═══ THE COUNT IS PART OF THE NAME, NOT A LINE UNDER IT ══
+                Founder, with "Your inspirations" over a second line reading
+                "36 inspirations": "just say Your Inspirations (36)."
+
+                The second line said the noun twice and spent a whole row of
+                the page doing it. In parentheses after the title it is what
+                it always was — a fact about the thing just named — and the
+                archive starts one line higher.
+
+                A NUMERAL SURVIVES "STATES RENDER, NUMERALS NEVER" HERE for
+                the same reason the ordinal beside a row does: that ruling is
+                against METRICS, things a person can do better or worse at.
+                How many inspirations exist is the size of a list you are
+                about to scroll, which is navigation. */}
             {focus && onClearFocus ? (
               <button type="button" className="waka-over-count waka-over-unfocus" onClick={onClearFocus}>
                 {say("worldBackToAll")}
               </button>
             ) : total !== null ? (
               <span className="waka-over-count jar-saved-count">
-                {total > rows.length
-                  ? formatMessage(locale, "worldInspirationCountCapped", { shown: rows.length, total })
-                  : formatMessage(locale, "worldInspirationCount", { count: total })}
+                {total > rows.length ? `(${rows.length}/${total})` : `(${total})`}
               </span>
             ) : null}
           </span>

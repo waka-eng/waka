@@ -35,7 +35,7 @@
 import { useEffect, useRef } from "react";
 
 import { OWNER_BEING } from "../character/body";
-import { restPose } from "../character/raster";
+import { REST_BLEED, restPose } from "../character/raster";
 import { renderScale } from "../canvas/scale";
 import { parseColor } from "../canvas/sprites";
 import type { Ramp } from "../lib/appearance";
@@ -74,13 +74,22 @@ export function Companion({ size = 72 }: { size?: number }): JSX.Element {
        `render-scale.test.ts` holds that line and caught this on the way in:
        a second reader of the ratio is a second thing that can disagree with
        the world about how sharp the creature should be. */
-    const dpr = renderScale(size, size);
-    node.width = Math.ceil(size * dpr);
-    node.height = Math.ceil(size * dpr);
+    /* ROOM FOR THE PARTS THAT STICK OUT. Founder: "the character is cut off
+       on the left and right." A nub reaches `REST_BLEED` of the size past
+       the box the body is drawn in — see the constant, which derives it from
+       the anatomy rather than restating it — so the canvas is that much
+       larger on every side and the drawing is moved into the middle of it.
+       Rounded up to a whole pixel so the translate never lands on a half. */
+    const pad = Math.ceil(size * REST_BLEED);
+    const box = size + pad * 2;
+    const dpr = renderScale(box, box);
+    node.width = Math.ceil(box * dpr);
+    node.height = Math.ceil(box * dpr);
     const g = node.getContext("2d");
     if (!g) return;
     g.clearRect(0, 0, node.width, node.height);
     g.scale(dpr, dpr);
+    g.translate(pad, pad);
     /* FULLY LIT, ALWAYS. The world dims the creature to report how little is
        alive in your field — a reading of your material. A page is not a
        reading of anything, so a dim companion there would be saying
@@ -88,12 +97,16 @@ export function Companion({ size = 72 }: { size?: number }): JSX.Element {
     restPose(g, size, rampFromCss(document.documentElement), OWNER_BEING, 1);
   }, [size]);
 
+  /* The element is the padded box too, so the drawing is not squashed back
+     into `size` by CSS — which would reintroduce the crop as a scale. */
+  const pad = Math.ceil(size * REST_BLEED);
+  const box = size + pad * 2;
   return (
-    <span className="waka-companion" style={{ ["--waka-companion-size" as string]: `${size}px` }}>
+    <span className="waka-companion" style={{ ["--waka-companion-size" as string]: `${box}px` }}>
       <canvas
         ref={canvas}
         className="waka-companion-body"
-        style={{ width: size, height: size }}
+        style={{ width: box, height: box }}
         /* The world's canvas is unlabelled by a standing founder decision
            because it is a whole scene. This is one fixed illustration of one
            thing, so it can say what it is in a word, and does. */
