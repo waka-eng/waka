@@ -252,9 +252,31 @@ function measure(source, fileName) {
     return /^use[A-Za-z]*Effect$/.test(name);
   };
 
+  /**
+   * AND SINCE 2026-10-12 THE FRAME EFFECT IS NOT IN A HOOK AT ALL.
+   *
+   * `canvas/simulation.ts` is that effect's body, lifted whole out of
+   * `pages/Home.tsx` by the cut `docs/reviews/code-quality-2026-10-11.md`
+   * finding 7 asked for. The hook that remains in the page is four lines long
+   * and contains one call, so the size heuristic above would have measured the
+   * page's SECOND-largest effect and printed a full, plausible table about the
+   * wrong thing — which is the exact failure the block above spends twenty
+   * lines refusing to allow.
+   *
+   * ONE NAME, NOT A SECOND SIZE HEURISTIC. `startSimulation` is matched by
+   * name, so no function can win this by growing. If that export is renamed
+   * this tool finds nothing and says so in a sentence, which is the loud
+   * failure; it cannot quietly measure a neighbour.
+   */
+  const isTheLiftedFrameEffect = (node) =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "startSimulation";
+
   let effect = null;
   (function findEffect(node) {
-    if ((ts.isArrowFunction(node) || ts.isFunctionExpression(node)) && isEffectHookCall(node)) {
+    const candidate =
+      ((ts.isArrowFunction(node) || ts.isFunctionExpression(node)) && isEffectHookCall(node)) ||
+      isTheLiftedFrameEffect(node);
+    if (candidate) {
       const span = node.getEnd() - node.getStart(sf);
       if (!effect || span > effect.getEnd() - effect.getStart(sf)) effect = node;
     }
@@ -286,11 +308,26 @@ function measure(source, fileName) {
      would appear here first, and it is better read next to the numbers than
      discovered by an extraction that has to declare it. */
   const untracked = [];
+  /* A DESTRUCTURED DECLARATION DECLARES NAMES TOO, and skipping it stopped
+     being harmless the moment the frame effect became a function with an
+     options object. `const { measured, simApiRef, … } = o;` is the first
+     statement of `startSimulation` and binds 49 names; while only
+     `ts.isIdentifier` counted, every one of them was in NEITHER map, so the
+     walk dropped all 49 silently and every row's dependency columns came out
+     short. Under-reporting is the dangerous direction here — a unit measured
+     short looks cheap enough to extract — and it is the direction this file
+     already has four fixtures about. */
+  const declaredNames = (name, line) => {
+    if (ts.isIdentifier(name)) declaredInEffect.set(name.text, line);
+    else if (ts.isObjectBindingPattern(name) || ts.isArrayBindingPattern(name)) {
+      for (const el of name.elements) if (ts.isBindingElement(el)) declaredNames(el.name, line);
+    }
+  };
   for (const stmt of effect.body.statements ?? []) {
     if (ts.isVariableStatement(stmt)) {
       for (const d of stmt.declarationList.declarations) {
+        declaredNames(d.name, lineOf(d.name));
         if (!ts.isIdentifier(d.name)) continue;
-        declaredInEffect.set(d.name.text, lineOf(d.name));
         if (d.initializer && ts.isObjectLiteralExpression(d.initializer) && !GROUPS.has(d.name.text)) {
           untracked.push(d.name.text);
         }
@@ -2145,7 +2182,18 @@ function selftest() {
  * it mattered. If the file cannot be read, that is a failure and it says so
  * rather than passing quietly.
  */
-const REAL_HOME = resolve(dirname(fileURLToPath(import.meta.url)), "..", "src", "pages", "Home.tsx");
+/* IT WAS `src/pages/Home.tsx` UNTIL 2026-10-12 and is the same code: the frame
+   effect moved to `canvas/simulation.ts` whole, and the thirteen group names
+   below are still declared at its top level, which is the thing this constant
+   exists to be checked against. `--file` still aims the MEASUREMENT anywhere,
+   including at a pre-extraction `Home.tsx` out of git — see its note.
+
+   One number this changes honestly rather than by drift: the header's "names in
+   the component body around it" is now ZERO, because there is no component body
+   around it any more. That count WAS the cost of the seam. It is now paid, in
+   writing, as `SimulationOptions`, and a reader who wants it should read that
+   interface rather than this tool. */
+const REAL_HOME = resolve(dirname(fileURLToPath(import.meta.url)), "..", "src", "canvas", "simulation.ts");
 
 /**
  * AND IS THE ANSWER THE RIGHT SIZE? A smoke alarm, not a golden file.

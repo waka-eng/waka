@@ -66,8 +66,18 @@ describe("render scale", () => {
        canvas sites are now the palette bake and the resize. Lowered rather
        than loosened: the number is the count of places that ask the device
        how sharp it is, and it should be checked, not waved at. */
-    const home = readFileSync(resolve(SRC, "pages/Home.tsx"), "utf8");
-    expect(home.match(/renderScale\(/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    /* THE TWO SITES ARE IN TWO FILES SINCE 2026-10-12 and are the same two
+       calls: the frame effect left `pages/Home.tsx` for `canvas/simulation.ts`
+       (the review's finding 7 cut) and took the RESIZE site with it, leaving
+       the palette bake behind. Counted over both, because the claim is about
+       how many places ask the device how sharp it is — not about which file
+       they sit in. Pinning it to one file would have let the other grow a
+       `Math.min(window.devicePixelRatio, 2)` with this gate still green, which
+       is the whole defect it exists to stop. */
+    const sites = ["pages/Home.tsx", "canvas/simulation.ts"]
+      .map((f) => readFileSync(resolve(SRC, f), "utf8").match(/renderScale\(/g)?.length ?? 0)
+      .reduce((a, b) => a + b, 0);
+    expect(sites).toBeGreaterThanOrEqual(2);
   });
 
   it("gives a phone its own three, which is the bug that was reported", () => {
