@@ -4349,7 +4349,7 @@
   border: 0;
   background: none;
   padding: var(--sp-4) var(--sp-6);
-  min-height: 28px;
+  min-height: var(--sp-44);
   margin: 0 0 0 -var(--sp-6);
   font: inherit;
   letter-spacing: inherit;
@@ -5281,4 +5281,40 @@
   /* The overlay already painted a ground; a second opaque layer inside it
      would hide the hairline that gives the sheet its edge. */
   background: transparent;
+}
+
+/* ═══ GROUP NAVIGATION, FROM `origin/dev` 8b11c2f5 ═══════════════════════════
+   Merged in rather than reimplemented: these are the room's member list and
+   the status line under it, and nothing in the redesign replaced either.
+
+   THREE DELIBERATE DEPARTURES FROM THE COMMIT AS WRITTEN, all forced by this
+   branch rather than chosen:
+
+   `--t-note` IS GONE. `system.css` folded it into `--t-ui` (14px -> the ui
+   step, 58 call sites) during the type-scale pass, so the token dev wrote
+   here would resolve to nothing and the status line would inherit whatever
+   size it landed next to. `--t-ui` is the step `--t-note` became.
+
+   `.jar-saved--personal` IS DROPPED FROM THE PAIR. `.jar-saved` — the
+   "N inspirations" door — no longer renders on any wall here; see the note
+   at its old site in `Home.tsx`. A modifier for a control that is never
+   painted is dead rule, and this file is under a dead-CSS sweep.
+
+   THESE RULES ARE UNLAYERED, which in this stylesheet means they beat every
+   `@layer` rule above them regardless of specificity. That is how dev wrote
+   them and it is load-bearing for `.jar-grounds`: the layered block at the
+   top of this file gives the list its position, and these three properties
+   cap its height so a room with twenty members cannot run off the screen.
+   Nothing above sets `max-height` or `overflow` on that class, so the
+   override is additive rather than a fight. */
+/* Spatial shortcuts remain reachable above the stable personal navigation. */
+.jar-up--personal { bottom:calc(76px + env(safe-area-inset-bottom)); }
+.jar-up { min-height:var(--sp-44); min-width:var(--sp-44); }
+.jar-group-ground-status { position:absolute; z-index:5; top:calc(64px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); width:min(440px,calc(100vw - var(--sp-44))); text-align:center; pointer-events:none; color:var(--jar-muted); font-size:var(--t-ui); }
+.jar-group-ground-status p { margin:0; }
+.jar-group-ground-status p:first-child { color:var(--jar-ink); }
+.jar-grounds { max-height:35vh; max-width:calc(100vw - var(--sp-44)); overflow:auto; }
+@media (max-width:560px) {
+  .jar-up:not(.jar-up--down) { top:calc(56px + env(safe-area-inset-top)); }
+  .jar-group-ground-status { top:calc(112px + env(safe-area-inset-top)); }
 }

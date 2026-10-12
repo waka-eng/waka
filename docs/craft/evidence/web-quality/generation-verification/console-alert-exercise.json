@@ -1,0 +1,34 @@
+{
+  "stage": "development",
+  "readOnly": false,
+  "failures": [],
+  "alarms": [
+    {
+      "metric": "ExhaustedLeases",
+      "state": "OK",
+      "period": 900,
+      "evaluationPeriods": 2,
+      "actionCount": 0,
+      "actionsEnabled": true
+    },
+    {
+      "metric": "OverdueJobs",
+      "state": "OK",
+      "period": 900,
+      "evaluationPeriods": 2,
+      "actionCount": 0,
+      "actionsEnabled": true
+    },
+    {
+      "metric": "RecoveryChecks",
+      "state": "OK",
+      "period": 900,
+      "evaluationPeriods": 2,
+      "actionCount": 0,
+      "actionsEnabled": true
+    }
+  ],
+  "complete": true,
+  "consoleStatesVerified": true,
+  "externalDeliveryVerified": false
+}

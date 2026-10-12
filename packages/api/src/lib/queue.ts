@@ -126,6 +126,7 @@
  */
 
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import {AsyncLocalStorage} from 'node:async_hooks';
 
 import {
   type BackgroundJob,
@@ -613,7 +614,7 @@ export async function enqueueTopOfMindRefresh(
 ): Promise<EnqueueResult> {
   if (reason === 'manual' && !transaction) {
     const result = await getDb().transaction((tx) => enqueueTopOfMindRefresh(profileId, reason, tx));
-    await wakeCommittedBackgroundJobs(); return result;
+    await wakeCommittedBackgroundJobs([{id:result.jobId,profileId,requestVersion:result.requestVersion.toString()}]); return result;
   }
   if (reason === 'manual' && transaction) await recoverPendingSignalSupport(transaction, profileId);
   const payload: RefreshTopOfMindPayload = { reason };
@@ -647,10 +648,11 @@ export async function enqueueTopOfMindRefresh(
   `);
   const [job] = rows as unknown as Array<{ id: string; requestVersion: string; created: boolean }>;
   if (!job) throw new Error("Failed to enqueue refresh_top_of_mind job");
+  rememberReadingWake({id:job.id,profileId,requestVersion:job.requestVersion});
 
   if (!transaction) {
     if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
-    else await wakeBackgroundWorker();
+    else await wakeBackgroundWorker([{id:job.id,profileId,requestVersion:job.requestVersion}]);
   }
   return { jobId: job.id, requestVersion: job.requestVersion, created: job.created };
 }
@@ -769,9 +771,9 @@ function shouldAutoDrainBackgroundJobs(): boolean {
 
 /** Call only after the data/job transaction commits. Wake failure cannot
  * turn a successful save into a retry; the durable job remains recoverable. */
-export async function wakeCommittedBackgroundJobs(): Promise<void> {
+export async function wakeCommittedBackgroundJobs(wakes: BackgroundJobWakeReference[] = []): Promise<void> {
   if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
-  else await wakeBackgroundWorker();
+  else await wakeBackgroundWorker(wakes);
 }
 
 /**
@@ -798,7 +800,7 @@ function isBackgroundWorkerProcess(): boolean {
  * Postgres, so a wake-up that never lands costs latency (until the daily
  * sweep) and never work. That is why this can never throw into a user's write.
  */
-async function wakeBackgroundWorker(): Promise<void> {
+async function wakeBackgroundWorker(wakes: BackgroundJobWakeReference[] = []): Promise<void> {
   const functionName = process.env.WAKA_BACKGROUND_WORKER_FUNCTION;
   if (!functionName || isBackgroundWorkerProcess()) return;
 
@@ -806,7 +808,7 @@ async function wakeBackgroundWorker(): Promise<void> {
     const { InvokeCommand, LambdaClient } = await import("@aws-sdk/client-lambda");
     lambdaClient ??= new LambdaClient({});
     await lambdaClient.send(
-      new InvokeCommand({ FunctionName: functionName, InvocationType: "Event", Payload: new TextEncoder().encode(JSON.stringify({ mode: 'enqueue' })) }),
+      new InvokeCommand({ FunctionName: functionName, InvocationType: "Event", Payload: new TextEncoder().encode(JSON.stringify({ mode: 'enqueue', ...(wakes.length?{wakes}: {}) })) }),
     );
   } catch (err) {
     console.warn("[background-jobs] could not wake the worker; the sweep will catch it", {
@@ -1026,6 +1028,7 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
 }
 
 export async function processBackgroundJob(job: BackgroundJob): Promise<BackgroundJobResult | void> {
+  if(job.type==='refresh_top_of_mind'&&readingWakeContext.getStore())rememberReadingWake({id:job.id,profileId:job.profileId,requestVersion:job.requestVersion.toString()});
   const claimed=coerceNullableDate(job.lockedAt)?.getTime();
   if(claimed!==undefined)recordPerformanceStage('queue_wait',job.type,claimed-Math.max(coerceDate(job.runAfter).getTime(),coerceDate(job.createdAt).getTime()));
   const onReadingPublished: NonNullable<TopOfMindRefreshDependencies['onPublished']> = async (tx, publication) => {
@@ -1773,6 +1776,38 @@ export async function hasNearTermBackgroundJobRetry(
     ) AS pending
   `);
   return row?.pending === true;
+}
+
+export interface BackgroundJobWakeReference { id:string; profileId:string; requestVersion:string }
+const readingWakeContext=new AsyncLocalStorage<Map<string,BackgroundJobWakeReference>>();
+function rememberReadingWake(wake:BackgroundJobWakeReference){
+  const current=readingWakeContext.getStore();if(current&&(current.has(wake.id)||current.size<50))current.set(wake.id,wake);
+}
+export async function collectReadingWakeReferences<T>(work:()=>Promise<T>):Promise<{result:T;wakes:BackgroundJobWakeReference[]}>{
+  const current=new Map<string,BackgroundJobWakeReference>();const result=await readingWakeContext.run(current,work);
+  return {result,wakes:[...current.values()]};
+}
+/** Only a reading requested, claimed or enqueued in this drain can carry a wake beyond debounce.
+ * No broad queue scan, claim, model call or account-budget bypass. */
+export function readBackgroundJobWakeReferences(value:unknown):BackgroundJobWakeReference[]{
+  if(!Array.isArray(value)||value.length>50)return [];
+  const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  return value.filter((row):row is BackgroundJobWakeReference=>Boolean(row&&typeof row==='object'&&
+    typeof row.id==='string'&&uuid.test(row.id)&&typeof row.profileId==='string'&&uuid.test(row.profileId)&&
+    typeof row.requestVersion==='string'&&/^[1-9]\d{0,18}$/.test(row.requestVersion)&&BigInt(row.requestVersion)<=9223372036854775807n))
+    .map(row=>({id:row.id,profileId:row.profileId,requestVersion:row.requestVersion}));
+}
+export async function hasNearTermRequestedReading(wakes:BackgroundJobWakeReference[],db:Pick<ReturnType<typeof getDb>,'execute'>=getDb(),now=new Date()):Promise<boolean>{
+  const valid=readBackgroundJobWakeReferences(wakes);if(!valid.length)return false;
+  const hints=JSON.stringify(valid.map(row=>({id:row.id,profile_id:row.profileId,request_version:row.requestVersion})));
+  const [row]=await db.execute<{pending:boolean}>(sql`SELECT EXISTS(
+    SELECT 1 FROM background_jobs job JOIN jsonb_to_recordset(${hints}::jsonb)
+      AS hint(id uuid,profile_id uuid,request_version bigint) ON job.id=hint.id AND job.profile_id=hint.profile_id
+    WHERE job.type::text='refresh_top_of_mind' AND job.status='pending' AND job.locked_at IS NULL
+      AND job.attempts<job.max_attempts AND job.request_version>=hint.request_version AND job.completed_version<job.request_version
+      AND job.run_after<=${new Date(now.getTime()+120000).toISOString()}::timestamptz
+  ) AS pending`);
+  return row?.pending===true;
 }
 
 /**

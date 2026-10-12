@@ -2175,3 +2175,5 @@ button.jar-tile-face,
 }
 
 }
+
+.jar-personal-shortcuts--sky { bottom:calc(128px + env(safe-area-inset-bottom)); }

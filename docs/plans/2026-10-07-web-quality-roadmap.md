@@ -188,3 +188,47 @@ existing USD 5 evaluation authorization, including an unresolved USD 1.50 dev
 reservation. The monthly operating budget is a separate decision. Publishing,
 deployment, real-account mutations and provider administration retain their
 own authorization boundaries.
+
+## Observed usability follow-ups — 2026-10-08
+
+Status: recorded for a future implementation batch at the owner's request.
+The [self-audit receipt](../craft/evidence/web-quality/self-audit/findings.json)
+covers dev revision `d07ac1c3`, using empty, populated and 2,002-item synthetic
+accounts on desktop and phone. These observations supplement the still-open
+first-time human gate. Each item below remains open.
+
+1. **P1 — Visible keyboard focus.** The first three Tab stops on populated Home
+   reached offscreen Principle buttons. Make inactive sections inert and hidden
+   from assistive technology, retaining deliberate focus after navigation.
+   Acceptance: every Tab stop belongs to the active visible view; entering
+   Principles makes its controls available and Back restores useful focus.
+2. **P1 — Readable inspiration browsing.** The large archive displayed 2,000
+   unlabeled orbs. Add a readable browsing view with snippets and dates, with
+   spatial viewing available as another view. Acceptance: a person can recognize
+   and open a saved item without inspecting individual orbs or recalling exact
+   search words. Preserve pagination and the true archive count.
+3. **P1 — Empty Inspirations.** The empty field offered Revisit, which led to
+   “Nothing to review yet.” Give the screen a clear first-save invitation and
+   omit unavailable revisit actions. Acceptance: an empty account has one
+   useful Capture action and no dead-end revisit shortcut.
+4. **P2 — Search feedback and scope.** One-character input silently produced no
+   response. Search from Bo's public view searched the viewer's own archive and
+   could not find a word in Bo's visible item. Show recent items for an empty
+   query, explain any minimum query length, and expose an explicit search scope
+   matching the current collection. Acceptance: short input has clear feedback;
+   searching a member's view finds only that member's permitted public content.
+5. **P2 — Visible directional controls.** Return buttons had adequate hit areas,
+   but their visible chevrons measured about 8.5px and used very faint ink.
+   Increase the visible size and resting contrast, considering destination
+   labels. Acceptance: directions are recognizable on a phone without hover,
+   with no overlap with the header, Capture or the tab bar.
+6. **P2 — Explicit sharing audience.** “Share with rooms” does not identify the
+   rooms or explicitly say all rooms; it is also offered when there are none.
+   Use clear all-room wording, show audience names/count and explain the
+   no-room case. Acceptance: before saving publicly, a person can tell which
+   rooms can read it and what happens when they join another room.
+
+Recommended sequence: focus and empty-state repairs first; browsing and search
+next; directional visibility and audience clarity alongside the affected views.
+The screenshots and keyboard trace in the receipt preserve the observed state
+for comparison when implementation begins.
