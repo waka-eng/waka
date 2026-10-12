@@ -28,6 +28,38 @@
  * rather than a fact you have to reconstruct from four import lines and a
  * bundler's behaviour.
  *
+ * WHICH LAYER A SHEET GOES IN, AND THE ARGUMENT FOR THE LAST ONE MOVED.
+ *
+ * `claims.css` joined `chrome` on 2026-10-12. It had been in NO layer for its
+ * whole life, which by this file's own rule meant all 318 of its rules beat
+ * every rule in every other sheet at any specificity — the biggest sheet in
+ * the tree winning arguments it was not even having. The choice of layer was
+ * NOT obvious and the three candidates are worth keeping:
+ *
+ *   `product`  REJECTED. It would drop claims.css below the whole of
+ *              chrome.css, chat.css AND home.css's own chrome block. That is
+ *              the maximal move, and it is also wrong about what the sheet
+ *              is: `product` is the world — the field, the poster, the
+ *              creature — and claims.css dresses the things that sit ON TOP
+ *              of the world and over the flat pages both: the dock, the two
+ *              corners, the three overlays, the settings card, the composer.
+ *
+ *   a NEW layer after `chrome`  REJECTED, and it was tempting, because it
+ *              would have kept claims.css's existing precedence exactly and
+ *              changed nothing on screen while still dropping the unlayered
+ *              count by 318. That is its own argument against it: a layer
+ *              whose purpose is to preserve one file's blanket dominance is
+ *              a layer per FILE, and the three layers here are named for
+ *              ROLES. `register` is the precedent for how narrow a
+ *              post-`chrome` layer has to be — one rule, and a gate that
+ *              fails if a second appears.
+ *
+ *   `chrome`   CHOSEN. The role matches: claims.css is the chrome of this
+ *              product, the same job chrome.css and chat.css do, and the
+ *              three now sit at one level and argue by specificity like
+ *              neighbours instead of by whether somebody remembered a
+ *              wrapper. It is also the SMALLEST true move — measured below.
+ *
  * WHAT IS ASSIGNED — EVERY SHEET IN `src/styles`, MEASURED, as of
  * 2026-10-12. Counts are declaration blocks with `@keyframes` excluded, got
  * by brace-matching the comment-stripped files; `test/one-cascade.test.ts`
@@ -35,61 +67,151 @@
  * tree, because the last version of this table was stale for two sheets and
  * nothing could tell:
  *
- *   product   global.css:10 (58 rules), system.css:2 (13), home.css:10 (389)
- *   chrome    chrome.css:2 (258), chat.css:1 (65), home.css:4580 (inside the
- *             389 above — that file has a `product` block and a `chrome` block)
- *   register  system.css:424 (13 above includes it; one rule, see below)
+ *   product   global.css:10 (58 rules), system.css:2 (12), home.css:10 (358)
+ *   chrome    chrome.css:2 (260), chat.css:1 (65), claims.css:26 (318),
+ *             home.css:4584 (22)
+ *   register  system.css:432 (1 rule, see below)
  *   base      nothing yet — declared so resets and element defaults have a
  *             floor to land on when they are separated out
  *
- *   UNLAYERED, AND THEREFORE BEATING ALL OF THE ABOVE:
+ *   UNLAYERED, AND THEREFORE BEATING ALL OF THE ABOVE — 32 rules, down from
+ *   350:
  *
- *     claims.css        322 rules — THE WHOLE FILE. No `@layer` statement
- *                       anywhere in 5.6k lines. This is the largest sheet in
- *                       the tree and it out-ranks every other sheet at any
- *                       specificity.
- *     home.css           22 rules — lines 4424-4579 (`.jar-where-*`,
- *                       `.jar-when*`, `.jar-here*`) and 5154-5317
- *                       (`.jar-drift-*`, `.waka-over--talk*`). Not a decision
- *                       anybody made: an append past a closing brace.
- *     layers.css          1 rule — `.jar :focus-visible`, and it is
- *                       DELIBERATE. The argument is below and the unlayered
- *                       position IS the mechanism.
+ *     home.css           30 rules — lines 4431-4557 (`.jar-where-*`,
+ *                       `.jar-when*`, `.jar-here*`) and 5153-5339
+ *                       (`.jar-drift-*`, `.waka-over--talk*`, `.jar-up*`,
+ *                       `.jar-group-ground-status`). Not a decision anybody
+ *                       made: an append past a closing brace.
+ *     layers.css          2 rules — `:focus-visible` and `.jar
+ *                       :focus-visible`, and they are DELIBERATE. The
+ *                       argument is below and the unlayered position IS the
+ *                       mechanism.
  *
- * THOSE 344 RULES ARE A DEBT, NOT A DESIGN, and they are the reason this
- * table is now measured rather than asserted. Two consequences were found in
- * the browser on 2026-10-12 and are worth having before anyone moves them:
+ * ── WHAT MOVING `claims.css` ACTUALLY CHANGED, MEASURED IN CHROMIUM ───────
  *
- *   `.waka-composer-body .jar-keep-box` (claims.css, unlayered) decides the
- *   capture box's vertical air at `12px 16px 4px`, beating BOTH
- *   `chrome.css`'s `.jar-mouth-rest:not(--said) { padding: 8px 12px }` and
- *   `home.css`'s `@media (pointer: coarse) .jar-mouth-rest { 14px }`. Two
- *   sheets state a padding for that element and neither reaches it.
+ * Signed in, 28 surfaces — the world, the dock in both note states, all four
+ * dock destinations, the plus sheet, an open note, a chat, the settings card
+ * and its three groups, the how-it-works card — at 1440x900 with a fine
+ * pointer and at 393x852 DPR 3 with `matchMedia("(pointer: coarse)")` true,
+ * against the PRODUCTION bundle (`vite build --watch`), which is the only
+ * place the hazard this file exists for can be seen.
  *
- *   `home.css:5273` `.waka-over--talk .chat-page` is unlayered, so it
- *   out-ranks the whole of `chat.css`, which is `@layer chrome` end to end.
- *   Today it would win on specificity anyway; the day somebody writes
- *   `.chat-page` geometry in `chat.css` and it does not take, this is why.
+ * THE SCOPE WAS 63 CONTESTED DECLARATIONS, not 11 class families. A family
+ * sharing a selector is not a conflict; a family sharing a PROPERTY on an
+ * element both rules match is. Of the 63, 59 are decided in claims.css's
+ * favour inside `chrome` by specificity, or state the same value as the rule
+ * they were beating. Four were real, all on ONE element — the capture
+ * textarea — and all against one family, `chrome.css:1730-1762`'s
+ * `.jar-mouth-rest:not(.jar-mouth-rest--said)`, which chrome.css's own
+ * comment at :1721 already records as mis-aimed at that element. They are
+ * held by two strengthened selectors, tombstoned in `claims.css` at
+ * `.waka-composer-body textarea.jar-mouth-rest.jar-keep-box`.
  *
- * WHY THE DEBT IS NOT PAID IN THIS COMMIT. Read the next paragraph: moving a
- * sheet between precedence levels has to move every sheet at that level
- * together, and wrapping `claims.css` in `@layer chrome` would drop 322 rules
- * BELOW `chat.css` and below `home.css`'s own chrome block on every selector
- * they share — 11 class families do, measured. That is a restyling of the
- * corners, the overlays, the composer and the speech bubble, and it cannot be
- * signed off by reading. `test/one-cascade.test.ts` holds the count at 344 so
- * it can only fall.
+ * THE COMPUTED-STYLE DIFF OVER ALL 28 SURFACES IS ZERO. 2,078 elements,
+ * ~80 properties each: 34 differences, and every one is content rather than
+ * style — 28 are `div.jar-grain`'s procedurally regenerated noise tile, and
+ * 6 are the width of `span.jar-note-when`, whose date STRING differed between
+ * the two runs while every type and colour property on it stayed identical to
+ * the byte. The capture box still computes `padding: 12px 16px 4px 16px`,
+ * `min-height: 44px`, `background: rgba(0,0,0,0)`, `color: rgb(242,236,225)`,
+ * `line-height: 24px` and `display: block` at both widths.
  *
- * This block used to say, in capitals, that nothing was assigned yet. It had
- * been false since that commit, and it was not a harmless stale comment: the
- * rule it stated — unlayered beats ALL layers — is true, so anyone reasoning
- * from it got every duplicate definition BACKWARDS. Read it and you conclude
- * global.css's `--ink: #0f0f0e` wins over chrome.css's, and therefore
- * that the product is painted in the parchment theme. The opposite is the
- * case: `chrome` is the later layer, so chrome.css wins, `--ink` is
- * `#e8edf4`, and global.css's founding parchment palette is unreachable at
- * runtime. A token audit had to re-derive all of that against the tree
- * because this file asserted otherwise.
+ * TIES INSIDE `chrome` FALL TO `claims.css`, and that is the one order
+ * dependency left. `main.tsx` imports chrome.css and then claims.css, and the
+ * production bundle merges both `@layer chrome` blocks into ONE, with
+ * claims.css's content second. Read off the emitted bundle rather than
+ * assumed: a single `@layer chrome{` opens at byte 11312 and `@layer
+ * register{` at 83603, chrome.css's `.jar-mouth-rest:not(` sits at 34765 and
+ * claims.css's `.waka-dock-item` at 42274 — both inside that one block, in
+ * that order. Nine measured pairs are decided by it: the settings and account
+ * fields against `chrome.css:310`'s `input[type="text"]`, both (0,1,1). That
+ * is ordinary same-layer cascade rather than the cross-level accident this
+ * file was written about, but it is stated here rather than discovered.
+ *
+ * AND THE MINIFIER RESHAPES THE RULES WITHOUT CHANGING THEM, which is worth
+ * knowing before anybody reads the bundle to check this. It reorders
+ * declarations, merges the two layer blocks, writes `background: transparent`
+ * as `background:0 0` and `flex: 1 1 14rem` as `flex:14rem`, and drops a
+ * `currentColor` that is already the initial value. All 19 declarations of
+ * the strengthened rule are present in the output; they are simply not in
+ * source order.
+ *
+ * THE `button:disabled` FAMILY LOOKED LIKE FOURTEEN MORE LOSSES AND IS NONE.
+ * `chrome.css:451`'s `.btn-primary:disabled, button:disabled` is (0,1,1) and
+ * out-ranks fourteen of this sheet's (0,1,0) class rules that state a
+ * `cursor`. Every one is inert, for one of three reasons, and all three were
+ * checked rather than argued: the control is never `disabled` in any renderer
+ * (`.waka-dock-item`, `.waka-corner`, `.waka-new-one`, `.waka-list-row`,
+ * `.waka-menu-scrim`, `.waka-settings-row`, `.jar-char-press` — which is
+ * rendered or ABSENT, never inert); or claims.css has its own `:disabled`
+ * rule at (0,2,0) (`.waka-dock-tool`, `.waka-composer-mic/-ask/-send`,
+ * `.jar-char-bubble-act`); or the element also matches a (0,1,1) part of the
+ * SAME claims rule and ties (`.waka-settings-erase` and `-keep` are inside
+ * `.waka-settings-rows`, so `.waka-settings-rows button` reaches them). The
+ * last of those was confirmed by setting `disabled` on the real elements in
+ * the settings card and reading the cursor: `pointer` before and after.
+ *
+ * ── AND THE ONE THING THAT DID CHANGE ON SCREEN. READ THIS ONE ────────────
+ *
+ * 144 of 224 keyboard tab stops lost their focus RING, on 9 controls: both
+ * corners, the three dock items, the two dock tools, the archive's rows, and
+ * the creature's press. Nothing lost its focus INDICATOR — all nine are
+ * inside `.jar` and all nine keep `filter: brightness(1.75)` from the rule at
+ * the bottom of this file, and 0 of 224 stops went from having an indicator
+ * to having none. (Eight stops have none, all on `/login`; that is unchanged
+ * by this move and is not claims.css's territory.) The creature's press also
+ * keeps the bloom its own rule gives it — `opacity: 0` to `1`, which this
+ * file declares nothing about — and that was photographed rather than
+ * assumed: focusing it moves 15.5% of the pixels in its box, max Δ 138/255.
+ *
+ * THE RINGS WENT BECAUSE THIS FILE'S OWN RULE FINALLY REACHES THEM. 120 of
+ * the 144 were `2px solid var(--ink)` — `rgb(242, 236, 225)`, which is exactly
+ * the near-white rectangle the founder banned on 2026-08-27 ("never show this
+ * white border ANYWHERE") and which the block at the bottom of this file was
+ * written to replace. claims.css went on drawing it for six weeks because it
+ * was unlayered, and nothing could see that. So this is not a regression; it
+ * is a founder ruling arriving on the screen it was given for. The other 24
+ * are the creature's press at `2px solid var(--jar-muted)`, and that control
+ * keeps the bloom described above.
+ *
+ * ONE SURFACE GENUINELY NEEDED ITS RING AND NOW KEEPS IT BY `!important`.
+ * `.jar-char-bubble-act` — the offer inside the creature's speech — is dark
+ * ink on a LIGHT bubble that lives inside `.jar`, so it was getting the
+ * world's brightening on the one ground this file already says brightening
+ * is wrong for. Photographed and differenced: with its ring, focusing it
+ * moves 23.6% of the pixels in its box at mean |Δ| 24.97/255; without it,
+ * 8.9% at mean 1.62/255 and a maximum of 20/255, which is not a focus
+ * indicator. The `!important` and its reasoning are tombstoned at that rule.
+ * It is the ONLY one in this change, and it exists because from inside a
+ * layer no selector can beat an unlayered one — which is this file's whole
+ * thesis working correctly against a surface it had not been asked about.
+ *
+ * WHAT IS STILL OWED. `home.css`'s 30 unlayered rules, and the fifteen-rule
+ * `.jar-mouth-rest:not(--said)` family in `chrome.css` that chrome.css:1721
+ * asks to have narrowed to `.jar .jar-capture-shortcut` — not done here
+ * because that comment also says why it could not be: the shortcut renders on
+ * `.jar-personal-shortcuts`, which no browser walk in this repo can reach.
+ *
+ * AND THE 30 THAT ARE LEFT STILL COST SOMETHING, so the one that was
+ * measured stays written down: `home.css:5295`'s `.waka-over--talk
+ * .chat-page` sits OUTSIDE that file's layer blocks, so it out-ranks the
+ * whole of `chat.css`, which is `@layer chrome` end to end. It would win on
+ * specificity today; the day somebody writes `.chat-page` geometry in
+ * `chat.css` and it does not take, this is why.
+ *
+ * A STALE TABLE IS NOT A HARMLESS STALE COMMENT, and this file has been
+ * wrong twice. It once said, in capitals, that nothing was assigned yet; it
+ * had been false since that commit, and the rule it stated — unlayered beats
+ * ALL layers — is TRUE, so anyone reasoning from it got every duplicate
+ * definition BACKWARDS. Read it and you conclude global.css's
+ * `--ink: #0f0f0e` wins over chrome.css's, and therefore that the product is
+ * painted in the parchment theme. The opposite is the case: `chrome` is the
+ * later layer, so chrome.css wins, `--ink` is `#e8edf4`, and global.css's
+ * founding parchment palette is unreachable at runtime. A token audit had to
+ * re-derive all of that against the tree because this file asserted
+ * otherwise. The second time it was stale for two whole sheets, one of them
+ * `claims.css` — the biggest in the tree. That is why the table above is now
+ * re-measured by a gate on every run instead of being asserted here.
  *
  * WHY IT HAD TO BE ONE CHANGE, which is still worth knowing before touching
  * the assignment: unlayered rules beat all layers, so moving one file into a

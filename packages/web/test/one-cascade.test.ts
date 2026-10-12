@@ -11,59 +11,86 @@
  * READ `claims.css`, for type and for duplicate selectors, and neither had
  * any reason to notice that it carries no `@layer` statement at all.
  *
- * ── WHAT THAT COST, MEASURED RATHER THAN FEARED ───────────────────────────
+ * ── WHAT IT COST, AND WHAT PAYING IT COST ────────────────────────────────
  *
- * `claims.css` is the largest sheet in the tree and has 322 unlayered rules,
+ * `claims.css` was the largest sheet in the tree and had 318 unlayered rules,
  * so by `layers.css`'s own rule — stated there three times — every one of
- * them beats every rule in `global.css`, `system.css`, `home.css`,
+ * them beat every rule in `global.css`, `system.css`, `home.css`,
  * `chrome.css` and `chat.css`, REGARDLESS OF SPECIFICITY. Two consequences
- * were found in Chromium on 2026-10-12, and both are the shape the founder
- * has already reported once:
+ * were found in Chromium on 2026-10-12 and both were the shape the founder
+ * had already reported once:
  *
- *   THE CAPTURE BOX. `chrome.css` says `.jar-mouth-rest:not(--said) {
- *   padding: 8px 12px }` from `@layer chrome`; `home.css` says
+ *   THE CAPTURE BOX. `chrome.css` said `.jar-mouth-rest:not(--said) {
+ *   padding: 8px 12px }` from `@layer chrome`; `home.css` said
  *   `@media (pointer: coarse) .jar-mouth-rest { padding-top/bottom: 14px }`
  *   from `@layer product`. Measured at 393x852 DPR 3 with
- *   `matchMedia("(pointer: coarse)")` true, the element computes
- *   `padding: 12px 16px 4px 16px` — NEITHER of them. The winner is
+ *   `matchMedia("(pointer: coarse)")` true, the element computed
+ *   `padding: 12px 16px 4px 16px` — NEITHER of them. The winner was
  *   `.waka-composer-body .jar-keep-box` in unlayered `claims.css`. Two sheets
- *   state a vertical padding for that box and neither reaches it, which is
- *   finding 2 of `docs/reviews/code-quality-2026-10-11.md` with the real
- *   numbers in place of the predicted ones.
+ *   stated a vertical padding for that box and neither reached it.
  *
- *   THE CHAT PAGE. `home.css:5273`'s `.waka-over--talk .chat-page` sits
- *   OUTSIDE that file's layer blocks, so it out-ranks the whole of
- *   `chat.css`, which is `@layer chrome` end to end. It would win on
- *   specificity today; the day somebody writes `.chat-page` geometry in
- *   `chat.css` and it does not take, this is why, and until now there was no
- *   comment in either file to find.
+ *   THE WHITE BORDER THE FOUNDER BANNED. `layers.css` holds
+ *   `:focus-visible { outline: none }` UNLAYERED precisely so nothing can
+ *   remove it, because it replaced a 2px near-white ring on the founder's
+ *   ruling "never show this white border ANYWHERE". `claims.css` declared
+ *   `outline: 2px solid var(--ink)` — `rgb(242, 236, 225)`, the same
+ *   rectangle — on 22 controls, and being unlayered it beat that floor on
+ *   120 keyboard tab stops. Nothing in this repository could see it.
  *
- * ── WHY THIS IS A RATCHET AND NOT A RULE ──────────────────────────────────
+ * ── THE DEBT IS NOW MOSTLY PAID, AND THAT IS WHY THIS NUMBER FELL ─────────
  *
- * Because the honest fix is a restyling and this gate is not the place to
- * smuggle one. `layers.css:48-57` is emphatic that a sheet cannot be moved
- * between precedence levels on its own ("Wrapping chrome.css alone was tried
- * and instantly undid every override it exists to make"), and wrapping
- * `claims.css` in `@layer chrome` would drop 322 rules below `chat.css` and
- * below `home.css`'s own chrome block on every selector they share — 11 class
- * families do. That is the corners, all three overlays, the composer, the
- * card grid and the speech bubble changing at once, and it cannot be signed
- * off by reading a diff.
+ * `claims.css` is `@layer chrome` as of 2026-10-12, which took 350 unlayered
+ * rules to 32. The previous version of this header argued at length that the
+ * change could not be made — "the honest fix is a restyling and this gate is
+ * not the place to smuggle one", 11 class families colliding, "it cannot be
+ * signed off by reading a diff". That reasoning was right about the method
+ * and wrong about the size, and the correction is worth keeping because it
+ * is how the next one of these should be done:
  *
- * So the debt is COUNTED. `UNLAYERED_CEILING` is the number of unlayered
- * rules in `src/styles` today. It may fall and it may not rise, which means a
- * new sheet written without a layer fails here, and so does a new rule
- * appended past a closing brace — the way all 22 of `home.css`'s got there.
- * The companion case below fails when the ceiling floats above the real
- * count, for the reason `type-scale.test.ts` gives: "a ratchet that cannot
- * notice its own slack is a ratchet that only ever ran once."
+ *   COUNTING FAMILIES OVERSTATED IT BY AN ORDER OF MAGNITUDE. 11 class
+ *   families shared a selector; what matters is a shared PROPERTY on an
+ *   element both rules match, and that was 63 declarations, of which 59 were
+ *   decided in claims.css's favour inside `chrome` by specificity or stated
+ *   the value they were already beating. Four were real.
  *
- * ── WHAT IS DELIBERATELY UNLAYERED, AND IT IS EXACTLY ONE RULE ────────────
+ *   IT WAS SIGNED OFF BY MEASURING, NOT BY READING. 28 surfaces signed in at
+ *   two pointer kinds, `CSS.getMatchedStylesForNode` on every element for the
+ *   contested-property list, a computed-style diff over ~80 properties for
+ *   the result, the real tab order for the focus rings, and a pixel diff for
+ *   the one control whose ring mattered. The style diff is ZERO; the focus
+ *   rings are the change, they are the founder's own ruling arriving, and the
+ *   one surface that genuinely needed its ring keeps it. `layers.css` holds
+ *   the numbers.
  *
- * `layers.css`'s own `.jar :focus-visible`. Its unlayered position IS the
- * mechanism — "a surface that needs a different-looking focus may draw one;
- * it may not draw nothing" — and it is argued at length in that file. It is
- * named here so the ceiling can go to 1 rather than to 0 and still be true.
+ * ── WHY IT IS STILL A RATCHET ─────────────────────────────────────────────
+ *
+ * Because 32 is not 2. `home.css` still has 30 rules outside its own layer
+ * blocks — an append past a closing brace, which is how all of them got
+ * there and is exactly what this gate is for. `UNLAYERED_CEILING` is the
+ * real count today. It may fall and it may not rise, which means a new sheet
+ * written without a layer fails here, and so does a new rule appended past a
+ * closing brace. The companion case below fails when the ceiling floats
+ * above the real count, for the reason `type-scale.test.ts` gives: "a ratchet
+ * that cannot notice its own slack is a ratchet that only ever ran once."
+ *
+ * ── WHAT IS DELIBERATELY UNLAYERED, AND IT IS EXACTLY TWO RULES ───────────
+ *
+ * `layers.css`'s own `:focus-visible { outline: none }` and `.jar
+ * :focus-visible { filter: brightness(1.75) }`. Their unlayered position IS
+ * the mechanism — "a surface that needs a different-looking focus may draw
+ * one; it may not draw nothing" — and it is argued at length in that file.
+ * They are named here so the floor is 2 rather than 0 and still true.
+ *
+ * IT SAID ONE RULE UNTIL 2026-10-12, AND THAT WAS THIS GATE MISCOUNTING
+ * ITSELF, not a miscount of the tree. The parser treated `@layer base,
+ * product, chrome, register;` — a STATEMENT, with no block — as an at-rule
+ * BLOCK: nothing cleared the selector buffer at the `;`, so the next
+ * selector arrived as `@layer …; :focus-visible`, started with `@`, was
+ * pushed on the at-rule stack, and its own closing brace popped the stack
+ * again. The rule was never counted at all, and the one sheet it happened in
+ * is the sheet that declares the order. Fixed below; the fix is why the real
+ * total was 350 rather than the 349 this file asserted, and the arithmetic
+ * every earlier note in it did was off by the same one.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6). Nothing. It reads the stylesheets off
  * disk and brace-matches them, exactly as `one-class-one-thing.test.ts`,
@@ -83,54 +110,38 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const STYLES = resolve(HERE, "../src/styles");
 
 /**
- * The debt, as it stood when this gate was written.
+ * The debt, and the three times this number has moved.
  *
- *   claims.css   322   the whole file, no `@layer` statement anywhere
- *   home.css      22   lines 4424-4579 and 5154-5317, appended past a brace
- *   layers.css     1   `.jar :focus-visible`, deliberate and argued there
+ *   345  as first measured — claims.css 322, home.css 22, layers.css 1 (the
+ *        last of those being this gate's own off-by-one, see the header).
+ *   341  2026-10-12, and NOT because anybody layered anything: four dead
+ *        rules went out and took their unlayered-ness with them. The
+ *        `.jar-char-bubble-go` family had no renderer anywhere in `src` —
+ *        the offer inside the speech bubble is `.jar-char-bubble-act` now —
+ *        and the deletion is tombstoned at the family's own block in
+ *        claims.css.
+ *   349  RAISED on the `origin/dev` merge, the one direction this number is
+ *        not supposed to move. Eight rules written on `dev` since 2026-10-08
+ *        arrived in claims.css, which was entirely unlayered, so there was
+ *        nowhere else for them to land; they were old rules arriving, not new
+ *        debt. WHAT THE GATE DID CATCH IN THE SAME MERGE, and the reason it
+ *        earns its keep: a ninth rule landed OUTSIDE `chrome.css`'s `@layer
+ *        chrome` block. Our side wrapped that sheet; `dev` appended to the
+ *        end of it; git merged both without a conflict and the rule ended up
+ *        past the closing brace, silently outranking every layered sheet.
+ *        Nothing else would have seen it.
+ *    32  2026-10-12. `claims.css` is `@layer chrome`, which took 318 rules
+ *        out at once — and this time the number fell because the work was
+ *        done rather than because dead rules left, which is the first time
+ *        any of the four ratchets in this tree can say that. See
+ *        `layers.css` for the argument for `chrome` over `product`, the 63
+ *        contested declarations, the zero-difference computed-style diff and
+ *        the 144 focus rings that did change.
  *
- * 345 total. The ceiling is 345 and the floor it is walking toward is 1.
- *
- * 345 -> 341 on 2026-10-12, and NOT because anybody layered anything — four
- * dead rules went out and took their unlayered-ness with them. The
- * `.jar-char-bubble-go` family (base, `:hover:not(:disabled)`, `:disabled`,
- * `:focus-visible`) had no renderer anywhere in `src`: the offer inside the
- * speech bubble is `.jar-char-bubble-act` now, and the deletion is
- * tombstoned at the family's own block in `claims.css`. claims.css 322 ->
- * 318; the other two files are untouched.
- *
- * WHICH IS THE THIRD RATCHET IN THIS TREE TO MOVE FOR THAT REASON — see the
- * same sentence over `COLOUR_CEILING` and `SPACE_CEILING` in
- * `type-scale.test.ts`, each of which has now fallen only ever because dead
- * rules were deleted. Those two did not move in this pass: the deleted rules
- * carried `var()` tokens and no literals, measured at 72/72 and 19/19 after
- * the cut. This one did, and it is lowered to the real count rather than
- * left with four of slack in it, which is what the companion case below is
- * for and what it caught.
+ * What is left is `home.css`'s 30 and `layers.css`'s deliberate 2. The floor
+ * this is walking toward is 2.
  */
-/* RAISED 341 -> 349 ON THE `dev` MERGE (2026-10-12), which is the one
-   direction this number is not supposed to move, so the reason is written
-   down rather than the number quietly edited.
-
-   341 was measured on this branch before `origin/dev` was merged in. The
-   merge brought eight rules that had been written on `dev` since 2026-10-08
-   and they land in `claims.css`, which is the sheet that is entirely
-   unlayered — so there was nowhere else for them to go. They are not new
-   unlayered rules in the sense this gate exists to catch; they are old
-   rules arriving for the first time.
-
-   WHAT THE GATE DID CATCH IN THE SAME MERGE, and the reason it earns its
-   keep: a ninth rule landed OUTSIDE `chrome.css`'s `@layer chrome` block.
-   Our side wrapped that sheet; `dev` appended to the end of it; git merged
-   both without a conflict and the rule ended up past the closing brace,
-   silently outranking every layered sheet. Nothing else would have seen
-   it. It is inside the block now, which is why this is 349 and not 350.
-
-   THE DIRECTION STILL ONLY GOES DOWN from here. The way to make this
-   number fall properly is to give `claims.css` a layer — 322 rules that
-   currently beat every other sheet — which is deliberately not done
-   because it restyles surfaces nobody can verify by reading. */
-const UNLAYERED_CEILING = 349;
+const UNLAYERED_CEILING = 32;
 
 /** Read the rules, not the prose — the same blanking the other gates use. */
 const commentsBlanked = (css: string): string =>
@@ -206,6 +217,21 @@ function rulesIn(file: string): Rule[] {
       head = "";
       continue;
     }
+    /* AN AT-STATEMENT IS NOT AN AT-BLOCK, and missing that made this gate
+       undercount the one sheet it cares most about. `@layer base, product,
+       chrome, register;` has no `{`, so without this line the head goes on
+       accumulating and the NEXT selector arrives as
+       `@layer base, product, chrome, register; :focus-visible` — which
+       starts with `@`, is pushed on the at-rule stack as a block, and is
+       then popped by its own closing brace. `layers.css`'s
+       `:focus-visible { outline: none }` was invisible to this parser for
+       its whole life, which is why the total it reported was 349 against a
+       real 350. A `;` can only be reached HERE, outside a declaration
+       block, because a block is consumed whole by the brace-match above. */
+    if (ch === ";") {
+      head = "";
+      continue;
+    }
     if (head.trim() === "" && ch.trim() !== "") headLine = line;
     head += ch;
   }
@@ -247,13 +273,21 @@ describe("there is one cascade and every sheet declares where it sits in it", ()
     ).toBeLessThanOrEqual(3);
   });
 
-  it("lets no sheet but the three named ones hold an unlayered rule", () => {
-    /* THE LIST IS NOT AN ALLOWLIST FOR CONVENIENCE. `claims.css` and
-       `home.css` are debts with a measured cost written down in
-       `layers.css`'s table; `layers.css` itself is the one deliberate case.
-       A FOURTH name appearing here is a new sheet that never got a wrapper,
-       which is how `claims.css` happened. */
-    const known = new Set(["claims.css", "home.css", "layers.css"]);
+  it("lets no sheet but the two named ones hold an unlayered rule", () => {
+    /* THE LIST IS NOT AN ALLOWLIST FOR CONVENIENCE. `home.css` is a debt
+       with a measured cost written down in `layers.css`'s table;
+       `layers.css` itself is the one deliberate case. A THIRD name appearing
+       here is a new sheet that never got a wrapper, which is how
+       `claims.css` happened.
+
+       `claims.css` CAME OFF THIS LIST ON 2026-10-12, with the rest of its
+       318 rules, when it was wrapped in `@layer chrome`. Leaving the name
+       here would have been the exact hole this comment warns about: a sheet
+       that is now fully layered would be permitted to grow an unlayered rule
+       again, silently, and the only gate that could notice would be the one
+       holding the door open. A name may only be in this set while the sheet
+       really has rules outside a layer. */
+    const known = new Set(["home.css", "layers.css"]);
     const strays = [
       ...new Set(everyRule().filter((r) => r.layer === "").map((r) => r.file)),
     ].filter((file) => !known.has(file));
@@ -265,12 +299,16 @@ describe("there is one cascade and every sheet declares where it sits in it", ()
   });
 
   it("keeps `layers.css`'s assignment table matching the tree", () => {
-    /* THE TABLE WAS STALE FOR TWO WHOLE SHEETS and nothing could tell — which
-       `layers.css:38-47` records happening ONCE BEFORE, for a different pair,
-       and calls "not a harmless stale comment" because the rule it states is
-       true and a reader reasoning from a wrong table gets every duplicate
-       definition backwards. So the table must name every sheet that has
-       rules, by name. */
+    /* THE TABLE WAS STALE FOR TWO WHOLE SHEETS and nothing could tell. The
+       "A STALE TABLE IS NOT A HARMLESS STALE COMMENT" paragraph in
+       `layers.css` records both times it happened, and says why it is not
+       harmless: the rule the table states is TRUE, so a reader reasoning from
+       a wrong table gets every duplicate definition backwards. So the table
+       must name every sheet that has rules, by name.
+
+       CITED BY ITS SENTENCE AND NOT BY ITS LINE. This comment said
+       `layers.css:38-47`, and that range had already moved — which is the
+       same defect as a stale table, one file along. */
     const table = readFileSync(resolve(STYLES, "layers.css"), "utf8");
     const missing = sheets().filter(
       (file) => rulesIn(file).length > 0 && !table.includes(file),
