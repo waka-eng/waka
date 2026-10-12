@@ -227,11 +227,38 @@ function rasterDot(
  * luminance reads as a filter, grain that carries the ground's own warmth
  * reads as the material.
  */
-function rasterGrain(cast: [number, number, number]): HTMLCanvasElement | null {
-  /* CSS pixels, NOT device pixels. Sized in device px, the texture's scale
-     was an accident of the viewer's hardware — the same emulsion looked twice
-     as fine on a retina screen. A tile in CSS px is the same film everywhere. */
-  const cell = GRAIN_PX;
+function rasterGrain(cast: [number, number, number], dpr: number): HTMLCanvasElement | null {
+  /* ═══ THE FILM IS THE SAME SIZE EVERYWHERE, AND NOW IT IS ALSO SHARP ═══
+     Founder, from a phone: "케릭터 화질 왜이래 휴대폰으로 볼때?" — and, when
+     the character's shape turned out not to be the problem: "에이전트 형태의
+     렌더링 문제가 아니라 그냥 이미지 자체가 흐릿하잖아."
+
+     THE IMAGE ITSELF. This tile covers the entire product — it is the film
+     on the ground AND, through `bodyGrain`, the matte on the creature. It
+     was baked at `GRAIN_PX * GRAIN_TILE` = 128 pixels and displayed at 128
+     CSS px, so on a device with a ratio of 3 the browser magnified it
+     threefold: a one-pixel grain became a three-pixel blob, over every
+     surface at once. That is why nothing looked sharp rather than one thing
+     looking wrong, and why the earlier hunt through the character's own
+     sprites kept coming back 1.5%.
+
+     THE OLD NOTE WAS RIGHT ABOUT THE GOAL AND WRONG ABOUT THE MEANS. It
+     said: "CSS pixels, NOT device pixels. Sized in device px, the texture's
+     scale was an accident of the viewer's hardware — the same emulsion
+     looked twice as fine on a retina screen. A tile in CSS px is the same
+     film everywhere." Keeping the grain's APPARENT size constant is right.
+     But it bought that by throwing away resolution, when both are
+     available: bake `D * dpr` device pixels, keep displaying it at `D` CSS
+     px, and the emulsion is the same size on every screen AND drawn at the
+     screen's own resolution. Nothing about the look changes except that it
+     resolves.
+
+     IT ALSO MAKES THE BODY AGREE WITH THE PAGE. `rasterBody` paints this
+     pattern in DEVICE pixels, so its cells were 2px while the page's were 6
+     on a 3x phone — two different films, under a comment that calls them
+     "the same grain the rest of the page wears". At device resolution they
+     are the same film again. */
+  const cell = GRAIN_PX * dpr;
   const cells = GRAIN_TILE;
   const D = cell * cells;
   const [c, g] = makeSprite(D);
@@ -325,7 +352,7 @@ export function buildPalette(
   const grayCss = cs.getPropertyValue("--jar-dorm").trim() || "#28323f";
   const tiers: number[] = [];
   for (let t = 0; t < TIERS; t++) tiers.push(t);
-  const grainTile = rasterGrain(ramp.dorm);
+  const grainTile = rasterGrain(ramp.dorm, dpr);
   /* the same tile, as a pattern, for the one bake that genuinely has an
      opaque backdrop to blend against: the companion's own body */
   const bodyGrain = grainTile ? ctx.createPattern(grainTile, "repeat") : null;

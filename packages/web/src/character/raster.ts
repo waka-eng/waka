@@ -260,8 +260,37 @@ export function restPose(
   ramp: Ramp,
   be: Being,
   lit = 1,
+  /** Device pixels per CSS pixel, so the bake can be at least as big as the
+      paint. Defaults to 1 for callers that draw into an unscaled context. */
+  dpr = 1,
 ): void {
-  const body = rasterBody(Math.max(1, Math.round(size / BODY_PX * 4)), BODY_TIERS - 1, null, ramp, be);
+  /* ═══ BAKE AT LEAST AS LARGE AS WE PAINT ═══════════════════════════════
+     Founder, from a phone: "케릭터 화질 왜이래 휴대폰으로 볼때?"
+
+     THIS WAS A TRUE UPSCALE, AND IT WAS THE ONLY ONE IN THE PRODUCT. The
+     factor was `round(size / BODY_PX * 4)` — no `dpr` anywhere in it — and
+     `rasterBody` bakes `BODY_PX * factor` DEVICE pixels. At the companion's
+     88 CSS px that is `round(1.467)` = 1, so a 240px sprite; the context is
+     scaled by the ratio, so on a dpr-3 phone it is painted at 264 device
+     px. Measured: 240 -> 264, a 1.1x magnification of the creature on the
+     login, onboarding, loading and chat screens.
+
+     An upscale cannot be rescued by a filter — there is nothing to
+     recover — which is why this is the one place in the character pipeline
+     that was genuinely producing a worse image rather than merely resampling
+     a good one.
+
+     CEIL, NOT ROUND, and that is the whole correction: rounding is what let
+     1.467 become 1 and put the bake below the paint. `ceil` guarantees the
+     sprite is never smaller than the pixels it has to fill, so the draw is
+     a downscale or 1:1 forever, whatever size or ratio a caller brings.
+
+     THE 4x SUPERSAMPLE IS GONE WITH IT. It was measuring against CSS pixels
+     while the paint happens in device pixels, so on a phone it was not 4x
+     of anything — it was 0.9x. Asking for device pixels directly says what
+     was meant. */
+  const need = Math.max(1, Math.ceil((size * dpr) / BODY_PX));
+  const body = rasterBody(need, BODY_TIERS - 1, null, ramp, be);
   const half = size / 2;
 
   /* THE NUBS GO FIRST AND THEY ARE BOTH IN FRONT, which is the loop's
