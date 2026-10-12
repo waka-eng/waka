@@ -18,7 +18,7 @@
  * re-arming itself is a Lambda that runs until its timeout, every time.
  */
 
-import { runBackgroundJobWorker,readBackgroundJobRecoveryState,hasNearTermBackgroundJobRetry,type BackgroundJobRetryWake } from "./lib/queue.js";
+import { runBackgroundJobWorker,readBackgroundJobRecoveryState,hasNearTermBackgroundJobRetry,readBackgroundJobWakeReferences,hasNearTermRequestedReading,collectReadingWakeReferences,type BackgroundJobRetryWake } from "./lib/queue.js";
 import {QUEUE_RECOVERY_LIMITS,recordQueueRecovery} from './lib/queue-recovery.js';
 
 const DEFAULT_CRON_LIMIT = 5;
@@ -50,10 +50,12 @@ export async function handler(event?:unknown) {
   // Only our known asynchronous enqueue event opts into native error retries.
   // Local calls, daily sweeps and recovery must not manufacture Lambda errors.
   const asyncEnqueue = Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME && event && typeof event==='object' && (event as {mode?:unknown}).mode==='enqueue');
+  const wakes=asyncEnqueue?readBackgroundJobWakeReferences((event as {wakes?:unknown}).wakes):[];
   const retries:BackgroundJobRetryWake[]=[];
   const total = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
   let passes = 0;
 
+  const drain=async()=>{
   while (passes < MAX_DRAIN_PASSES) {
     const result = await runBackgroundJobWorker({ limit, ...(asyncEnqueue?{onTransientRetry:(retry:BackgroundJobRetryWake)=>{retries.push(retry);}}:{}) });
     passes += 1;
@@ -91,7 +93,11 @@ export async function handler(event?:unknown) {
     if (result.claimed === 0 && result.deferred === 0) break;
   }
 
-  const drained = { ...total, passes, exhaustedPasses: passes >= MAX_DRAIN_PASSES };
+  return { ...total, passes, exhaustedPasses: passes >= MAX_DRAIN_PASSES };
+  };
+  const collected=asyncEnqueue?await collectReadingWakeReferences(drain):{result:await drain(),wakes:[]};
+  const drained=collected.result;
+  const requested=readBackgroundJobWakeReferences([...new Map([...wakes,...collected.wakes].map(row=>[row.id,row])).values()].slice(0,50));
   console.log("[background-worker] drained background jobs", drained);
   if(asyncEnqueue && retries.length && await hasNearTermBackgroundJobRetry(retries)){
     // This error asks Lambda's existing async queue for at most two more
@@ -100,6 +106,10 @@ export async function handler(event?:unknown) {
     // count in Lambda Errors, not as permanently failed database jobs.
     console.info('[background-worker] transient retry remains; requesting bounded async redelivery');
     throw new Error('BackgroundJobRetryScheduled');
+  }
+  if(asyncEnqueue&&requested.length&&await hasNearTermRequestedReading(requested)){
+    console.info('[background-worker] requested reading remains near-term; requesting bounded async redelivery');
+    throw new Error('BackgroundJobWakeScheduled');
   }
   return drained;
 }

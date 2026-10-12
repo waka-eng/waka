@@ -1,0 +1,1225 @@
+{
+  "origin": "https://dev.waka.im",
+  "observedAt": "2026-10-08T19:43:12.047Z",
+  "synthetic": true,
+  "qualificationOverrides": false,
+  "declarationCalls": 0,
+  "corpusDigest": "09560a2b0f54690b4d36e48e71483795f2496ae8d6012e38f630c78aa315d0f8",
+  "evaluation": {
+    "allowanceUsd": 5,
+    "priorUsedOrHeldUsd": 4.7823478004,
+    "reservedUsd": 0.2,
+    "newUsedOrHeldUsd": 4.9823478004,
+    "actualDeployedCostUsd": null
+  },
+  "requests": [
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1769
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1216
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1133
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1169
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1148
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1075
+    },
+    {
+      "path": "/api/principles",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 705
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1581
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1610
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1555
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1667
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1594
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1572
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1641
+    },
+    {
+      "path": "/api/inspirations",
+      "method": "POST",
+      "status": 201,
+      "durationMs": 1515
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1109
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1162
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1226
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1105
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1140
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1103
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1155
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1126
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1123
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1195
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1074
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1153
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1071
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1073
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1118
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1130
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1229
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1477
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1183
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1228
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1117
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1124
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1162
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1124
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1062
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1067
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1119
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1067
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1120
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1117
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1172
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1231
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1124
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1193
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1121
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1119
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1118
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1132
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1174
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1126
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1120
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1140
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1063
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1123
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1207
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1065
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1163
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1127
+    },
+    {
+      "path": "/api/inspirations/:id/processing",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1071
+    },
+    {
+      "path": "/api/signals",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 1209
+    },
+    {
+      "path": "/api/top-of-mind/refresh",
+      "method": "POST",
+      "status": 202,
+      "durationMs": 1573
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 514
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 577
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 480
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 481
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 474
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 474
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 429
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 533
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 418
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 540
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 581
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 456
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 424
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 443
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 424
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 434
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 590
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 432
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 442
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 417
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 474
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 624
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 477
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 418
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 467
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 450
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 475
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 415
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 444
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 418
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 438
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 783
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 580
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 582
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 478
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 488
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 428
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 417
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 420
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 538
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 475
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 421
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 434
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 481
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 578
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 478
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 576
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 418
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 544
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 421
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 537
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 421
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 434
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 579
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 477
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 421
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 537
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 478
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 479
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 456
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 476
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 479
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 465
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 514
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 414
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 424
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 416
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 471
+    },
+    {
+      "path": "/api/top-of-mind/refresh/:id",
+      "method": "GET",
+      "status": 200,
+      "durationMs": 425
+    }
+  ],
+  "captures": [
+    {
+      "id": "577a69db-125d-418f-85f6-01ae305d8c6f",
+      "text": "I booked one pottery lesson before joining a year-long studio membership. I prefer trying a short class before making an expensive learning commitment.",
+      "processing": {
+        "id": "a1c07884-63e0-42ad-8a9d-278eb27396b6",
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "577a69db-125d-418f-85f6-01ae305d8c6f",
+        "materialRevision": "1",
+        "jobId": "ba8388db-7708-406a-9dcd-81031263a363",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "577a69db-125d-418f-85f6-01ae305d8c6f",
+        "receipt": {
+          "id": "a1c07884-63e0-42ad-8a9d-278eb27396b6",
+          "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+          "inspirationId": "577a69db-125d-418f-85f6-01ae305d8c6f",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "processing",
+        "stage": "reading",
+        "runAfter": null,
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "951a946a-536b-4abd-b355-1a3edf2329d6",
+      "text": "I tried one language lesson before paying for a long course. I prefer trying a short class before making an expensive learning commitment.",
+      "processing": {
+        "id": "feff4a30-466c-46a4-900b-6ec469c2b2cf",
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "951a946a-536b-4abd-b355-1a3edf2329d6",
+        "materialRevision": "1",
+        "jobId": "e24b9624-4166-4f61-a562-536ee97825cb",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "951a946a-536b-4abd-b355-1a3edf2329d6",
+        "receipt": {
+          "id": "feff4a30-466c-46a4-900b-6ec469c2b2cf",
+          "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+          "inspirationId": "951a946a-536b-4abd-b355-1a3edf2329d6",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T19:43:34.607Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "010d1ca7-6713-405c-a941-05c39ace791c",
+      "text": "I took one bicycle-repair workshop before enrolling in a full program. I prefer trying a short class before making an expensive learning commitment.",
+      "processing": {
+        "id": "b7a76b2b-35c7-46f8-9e95-659ca7f4a577",
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "010d1ca7-6713-405c-a941-05c39ace791c",
+        "materialRevision": "1",
+        "jobId": "c5f1c5dd-08f6-4999-9873-2b46045ea3ac",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "010d1ca7-6713-405c-a941-05c39ace791c",
+        "receipt": {
+          "id": "b7a76b2b-35c7-46f8-9e95-659ca7f4a577",
+          "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+          "inspirationId": "010d1ca7-6713-405c-a941-05c39ace791c",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T19:43:34.607Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "308a21d3-69ce-4332-bf2e-f92332d7d30d",
+      "text": "For freelance writing, I chose plain-text notes I can export instead of a locked platform. I choose tools that let me export and keep my data.",
+      "processing": {
+        "id": "6e3884cf-092a-47e4-bf2b-3d937f833329",
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "308a21d3-69ce-4332-bf2e-f92332d7d30d",
+        "materialRevision": "1",
+        "jobId": "78d608e8-e3a0-4b11-8fc1-739101694cf1",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "308a21d3-69ce-4332-bf2e-f92332d7d30d",
+        "receipt": {
+          "id": "6e3884cf-092a-47e4-bf2b-3d937f833329",
+          "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+          "inspirationId": "308a21d3-69ce-4332-bf2e-f92332d7d30d",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T19:43:34.607Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "4c962a85-0525-416b-be66-9155a9b372ee",
+      "text": "For our family photos, I chose a service that lets us download the originals. I choose tools that let me export and keep my data.",
+      "processing": {
+        "id": "e9d6c1fd-cad2-4f3c-a0bf-1bbcd01030cf",
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "4c962a85-0525-416b-be66-9155a9b372ee",
+        "materialRevision": "1",
+        "jobId": "2b43e748-4209-48cb-aece-ac7244a13ebc",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "4c962a85-0525-416b-be66-9155a9b372ee",
+        "receipt": {
+          "id": "e9d6c1fd-cad2-4f3c-a0bf-1bbcd01030cf",
+          "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+          "inspirationId": "4c962a85-0525-416b-be66-9155a9b372ee",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T19:43:34.607Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "14ce8a74-f57c-4efa-913a-f0db32d5f6ca",
+      "text": "For my personal budget, I kept a spreadsheet I can move between tools. I choose tools that let me export and keep my data.",
+      "processing": {
+        "id": "c381240e-813e-46d6-a577-d015f16e56f7",
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "14ce8a74-f57c-4efa-913a-f0db32d5f6ca",
+        "materialRevision": "1",
+        "jobId": "550b5e93-42f3-445a-a31f-549d73fa9a44",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "14ce8a74-f57c-4efa-913a-f0db32d5f6ca",
+        "receipt": {
+          "id": "c381240e-813e-46d6-a577-d015f16e56f7",
+          "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+          "inspirationId": "14ce8a74-f57c-4efa-913a-f0db32d5f6ca",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T19:43:34.607Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "a3689f1e-df42-4810-aedf-0fc635d5f89c",
+      "text": "At work, I declined an extra task until I could finish an existing promise. I keep commitments small enough to honor existing promises.",
+      "processing": {
+        "id": "041249ff-43f5-4726-99d9-fd4152a18b11",
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "a3689f1e-df42-4810-aedf-0fc635d5f89c",
+        "materialRevision": "1",
+        "jobId": "ae330d87-2ab5-4dc4-8bfb-41912d55674a",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "a3689f1e-df42-4810-aedf-0fc635d5f89c",
+        "receipt": {
+          "id": "041249ff-43f5-4726-99d9-fd4152a18b11",
+          "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+          "inspirationId": "a3689f1e-df42-4810-aedf-0fc635d5f89c",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T19:43:34.607Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "ba794cec-cd0c-4ead-83e7-5c7b44e476f4",
+      "text": "While volunteering, I offered one hour rather than a whole weekend so I could keep plans already made. I keep commitments small enough to honor existing promises.",
+      "processing": {
+        "id": "0f9fceb2-02b8-4e87-a4bf-e7258a7d36c0",
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "ba794cec-cd0c-4ead-83e7-5c7b44e476f4",
+        "materialRevision": "1",
+        "jobId": "66d70df7-e198-416b-919c-7c1e48617fb2",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "ba794cec-cd0c-4ead-83e7-5c7b44e476f4",
+        "receipt": {
+          "id": "0f9fceb2-02b8-4e87-a4bf-e7258a7d36c0",
+          "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+          "inspirationId": "ba794cec-cd0c-4ead-83e7-5c7b44e476f4",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T19:43:34.607Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    },
+    {
+      "id": "51223d23-4250-45bd-b4ff-37cac76efb4b",
+      "text": "For a family project, I accepted one manageable part rather than promising the whole job. I keep commitments small enough to honor existing promises.",
+      "processing": {
+        "id": "e965600c-b8ae-48d7-8e3b-da1406bd9b47",
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "51223d23-4250-45bd-b4ff-37cac76efb4b",
+        "materialRevision": "1",
+        "jobId": "953bf9e7-53f8-430e-857b-2e7d7ff233c2",
+        "requestVersion": "1"
+      },
+      "latestState": {
+        "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+        "inspirationId": "51223d23-4250-45bd-b4ff-37cac76efb4b",
+        "receipt": {
+          "id": "e965600c-b8ae-48d7-8e3b-da1406bd9b47",
+          "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+          "inspirationId": "51223d23-4250-45bd-b4ff-37cac76efb4b",
+          "materialRevision": "1"
+        },
+        "currentMaterialRevision": "1",
+        "requestedMaterialRevision": null,
+        "latestDerivedRevision": "1",
+        "latestCompletedRevision": "0",
+        "superseded": false,
+        "phase": "waiting",
+        "stage": "reading",
+        "runAfter": "2026-10-09T19:43:34.607Z",
+        "result": null,
+        "unavailableAttachments": 0,
+        "canRetry": false
+      },
+      "derived": true
+    }
+  ],
+  "checkpoints": [
+    {
+      "label": "first inspiration derived",
+      "attempts": 5,
+      "at": "2026-10-08T19:43:35.945Z"
+    },
+    {
+      "label": "all nine inspirations derived",
+      "attempts": 14,
+      "at": "2026-10-08T19:45:24.327Z"
+    }
+  ],
+  "signals": [
+    {
+      "id": "19f133c1-25f7-447e-9308-54128cb5034f",
+      "inspirationIds": [
+        "577a69db-125d-418f-85f6-01ae305d8c6f",
+        "951a946a-536b-4abd-b355-1a3edf2329d6",
+        "010d1ca7-6713-405c-a941-05c39ace791c"
+      ],
+      "statement": "I prefer trying a short class before making an expensive learning commitment.",
+      "status": "active",
+      "confidence": 42,
+      "evidenceCount": 3,
+      "lastEvidenceAt": "2026-10-08T19:43:38.407Z",
+      "locked": false,
+      "unsupported": false,
+      "dismissed": false,
+      "contested": false,
+      "yielded": false,
+      "sharedGroupIds": [],
+      "createdAt": "2026-10-08T19:43:26.724Z"
+    },
+    {
+      "id": "17a4cfb3-084e-4827-aca0-8a76485153fe",
+      "inspirationIds": [
+        "308a21d3-69ce-4332-bf2e-f92332d7d30d",
+        "14ce8a74-f57c-4efa-913a-f0db32d5f6ca"
+      ],
+      "statement": "I choose tools that let me export and keep my data; for freelance writing, I chose plain-text notes I can export instead of a locked platform.",
+      "status": "emerging",
+      "confidence": 33,
+      "evidenceCount": 2,
+      "lastEvidenceAt": "2026-10-08T19:43:40.057Z",
+      "locked": false,
+      "unsupported": false,
+      "supportPending": true,
+      "dismissed": false,
+      "contested": false,
+      "yielded": false,
+      "sharedGroupIds": [],
+      "createdAt": "2026-10-08T19:43:51.451Z"
+    },
+    {
+      "id": "23a9433b-3c58-4cc3-9d67-fea84d8f20c6",
+      "inspirationIds": [
+        "51223d23-4250-45bd-b4ff-37cac76efb4b"
+      ],
+      "statement": "I keep commitments small enough to honor existing promises. This time it was accepting one manageable part of a family project rather than promising the whole job. The two earlier captures (a3689f1e: \"I declined an extra task until I could finish an existing promise. I keep commitments small enough to honor existing promises.\"; ba794cec: \"I offered one hour rather than a whole weekend so I could keep plans already made. I keep commitments small enough to honor existing promises.\") show the same",
+      "status": "emerging",
+      "confidence": 24,
+      "evidenceCount": 1,
+      "lastEvidenceAt": "2026-10-08T19:43:48.046Z",
+      "locked": false,
+      "unsupported": false,
+      "supportPending": true,
+      "dismissed": false,
+      "contested": false,
+      "yielded": false,
+      "sharedGroupIds": [],
+      "createdAt": "2026-10-08T19:43:53.749Z"
+    }
+  ],
+  "reading": null,
+  "principles": [],
+  "failure": "Timed out waiting for current reading completed",
+  "cleanup": true,
+  "profileId": "b4ba5d49-f4e4-4382-af2d-d62991016e8e",
+  "startedAt": "2026-10-08T19:43:16.413Z",
+  "singleSourceControl": {
+    "principles": 0
+  },
+  "readingState": {
+    "requestVersion": "13",
+    "completedVersion": "0",
+    "status": "pending",
+    "runAfter": "2026-10-08T19:45:42.068Z",
+    "result": null
+  },
+  "finishedAt": "2026-10-08T19:49:29.987Z"
+}

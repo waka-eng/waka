@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-08",
+  "environment": "built web with real auth/Hono/SQL in isolated loopback fixture",
+  "providerCalls": 0,
+  "checks": {
+    "desktopAvatarOpensMemberPublicView": true,
+    "desktopPublicInspirationOpensExactWords": true,
+    "phone390AvatarOpensMemberPublicView": true,
+    "phone320UpwardControl": {
+      "width": 44,
+      "height": 44,
+      "unoccluded": true
+    },
+    "phone390PrinciplesUpAndHomeDownControls": true,
+    "phone390PageDownToInspirationsAndPageUpToHome": true,
+    "phone390WheelUpToPrinciples": true,
+    "phone390VerticalSwipesPrinciplesToHomeToInspirations": true
+  },
+  "automated": {
+    "webTypecheck": "passed",
+    "webBuild": "passed",
+    "webTests": 872,
+    "webSuites": 117
+  },
+  "limitations": [
+    "Synthetic browser checks are not first-time human acceptance.",
+    "Public member views use the existing room field projection and its bounded window."
+  ]
+}

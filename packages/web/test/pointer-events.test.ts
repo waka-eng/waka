@@ -233,6 +233,14 @@ describe("nothing visible loses its press", () => {
             ".jar-offline",
             ".jar-when-place",
             ".jar-reflection-key",
+            /* THE ROOM'S GROUND STATUS, merged from `origin/dev` 8b11c2f5.
+               `role="status"` and two `<p>`s: whose ground you are standing
+               on and whether they have anything public here. It is announced
+               rather than operated — the member list beside it
+               (`.jar-grounds`) is where the pressing happens — and it is
+               wider than its own text, so a press target would sit over the
+               room's sky for nothing. */
+            ".jar-group-ground-status",
             ".jar-hq-inner",
             /* paint over the whole world, no content of its own */
             ".jar-grain",

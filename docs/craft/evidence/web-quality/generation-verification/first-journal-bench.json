@@ -1,0 +1,346 @@
+{
+  "calls": 16,
+  "costUsd": 0.0018456100000000001,
+  "maxCostUsd": 0.1,
+  "attempts": [
+    {
+      "phase": "received",
+      "costUsd": 0.000092208,
+      "status": 200,
+      "output": "{\"statements\":[{\"statement\":\"My own calendar always loses to other people's urgency.\",\"quote\":\"my own calendar always loses to other people's urgency\",\"relatedEvidence\":[]}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00005838,
+      "status": 200,
+      "output": "{\"statements\": [{\"statement\": \"I keep coming back to designs that remove steps instead of adding features.\", \"reason\": \"The capture states this as the person's own recurring pull in design, with the quoted article line as the trigger rather than the claim itself.\", \"quote\": \"I keep coming back to designs that remove steps instead of adding features.\"}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00011835,
+      "status": 200,
+      "output": "{\"statements\": [{\"statement\": \"I only write well before anyone else is awake.\", \"reason\": \"The capture states this as a recurring observation about the person's own writing, marked by 'I noticed again.'\", \"quote\": \"I noticed again that I only write well before anyone else is awake.\"}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00031613,
+      "status": 200,
+      "output": "{\"statements\":[{\"statement\":\"I want long unbroken focus blocks.\",\"quote\":\"I want long unbroken focus blocks\",\"relatedEvidence\":[]},{\"statement\":\"I said yes to four meetings today without hesitating.\",\"quote\":\"I said yes to four meetings today without hesitating\",\"relatedEvidence\":[]}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.000080508,
+      "status": 200,
+      "output": "{\"statements\": [{\"statement\": \"Small daily rituals compound into identity.\", \"quote\": \"Small daily rituals compound into identity.\", \"relatedEvidence\": []}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.000038808,
+      "status": 200,
+      "output": "{\"statements\": []}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.000051108,
+      "status": 200,
+      "output": "{\n  \"statements\": []\n}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.000040833,
+      "status": 200,
+      "output": "{\n  \"statements\": []\n}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.000093876,
+      "status": 200,
+      "output": "{\n  \"statements\": [\n    {\n      \"statement\": \"내 일정은 늘 다른 사람의 다급함에 밀린다.\",\n      \"quote\": \"내 일정은 늘 다른 사람의 다급함에 밀린다.\",\n      \"relatedEvidence\": []\n    }\n  ]\n}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.000333651,
+      "status": 200,
+      "output": "{\"statements\":[{\"statement\":\"요즘 계속 기능을 더하기보다 단계를 없애는 디자인으로 돌아가게 된다. His underlining of the quote \\\"최고의 인터페이스는 인터페이스가 없는 것이다\\\" shows that the idea of interfaces without UI, rather than adding features, currently draws his attention. But because this is only one emphatic reading, it may be a temporary interest rather than a confirmed design belief. From the earlier capture on 2026-07-15, where he also noted \\\"더 이상 더할 것이 없다\\\" as a finish criterion, there is a parallel to the same direction of subtraction. Still, that earlier note independently witnesses a preference for removing rather than adding, so the pattern is not solely from today's sentence. As there is no explicit author-written rule, the narrowed statement reflects an ongoing interest marked by \\\"요즘,\\\" keeping the time scope limited. The quote serves as evidence of the current pull toward subtraction. Since this pattern is a temporary tendency, not a lasting principle, the wording avoids claiming a permanent belief beyond the captured moment. Therefore the statement names one coherent theme: a recent pull toward subtraction in design. No further statements are added because the capture contains only this single notable pattern and no other independent interest or value judgment. The quote's wording is preserved to ground the claim, and the time hedge \\\"요즘\\\" is kept to prevent overgeneralization. The statement remains a single plain sentence with no IDs or explanations. It is the pattern itself, not a reason, so the reason is placed separately and not included in the statement. The pattern is bounded to what the evidence says and does not extend to a habit or a necessary practice beyond the recent pull.\"}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.000132708,
+      "status": 200,
+      "output": "{\n  \"statements\": [\n    {\n      \"statement\": \"글은 남들이 깨기 전 새벽에만 잘 써진다.\",\n      \"quote\": \"글은 남들이 깨기 전 새벽에만 잘 써진다.\",\n      \"relatedEvidence\": []\n    }\n  ]\n}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.000069876,
+      "status": 200,
+      "output": "{\"statements\": [{\"statement\": \"회의를 망설임 없이 수락한다.\", \"quote\": \"오늘도 회의 네 개를 망설임 없이 수락했다\", \"relatedEvidence\": []}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00012504,
+      "status": 200,
+      "output": "{\n  \"statements\": [\n    {\n\"statement\": \"작은 습관이 정체성을 만든다고 본다.\",\n\"quote\": \"작은 습관이 정체성을 만든다.\",\n\"relatedEvidence\": []\n    }\n  ]\n}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00024095,
+      "status": 200,
+      "output": "{\"statements\": []}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.000038358,
+      "status": 200,
+      "output": "{\"statements\": []}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.000014826,
+      "status": 200,
+      "output": "{\"statements\": []}"
+    }
+  ],
+  "results": [
+    {
+      "c": {
+        "note": "recurring self-observation (en)",
+        "text": "Skipped the gym again to finish someone else's urgent thing. Third time this month — my own calendar always loses to other people's urgency.",
+        "locale": "en-US",
+        "min": 1,
+        "max": 3,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "My own calendar always loses to other people's urgency."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "a tension named, not resolved (en)",
+        "text": "I want long unbroken focus blocks, and I said yes to four meetings today without hesitating.",
+        "locale": "en-US",
+        "min": 1,
+        "max": 3,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "I want long unbroken focus blocks.",
+        "I said yes to four meetings today without hesitating."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "already a pattern sentence — near-verbatim is correct (en)",
+        "text": "Small daily rituals compound into identity.",
+        "locale": "en-US",
+        "min": 1,
+        "max": 2,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "Small daily rituals compound into identity."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "a bare fact of the day, no durable pattern (en)",
+        "text": "Flight UA118 delayed two hours. Gate changed to B44.",
+        "locale": "en-US",
+        "min": 0,
+        "max": 0
+      },
+      "statements": [],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "an errand log teaches nothing (en)",
+        "text": "Bought milk and eggs. Dentist moved to 4pm. Package arrives Thursday.",
+        "locale": "en-US",
+        "min": 0,
+        "max": 0
+      },
+      "statements": [],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "two distinct patterns in one capture (en)",
+        "text": "The long walk finally untangled the pricing decision. Separately — I noticed again that I only write well before anyone else is awake.",
+        "locale": "en-US",
+        "min": 2,
+        "max": 3,
+        "topics": [
+          {},
+          {}
+        ]
+      },
+      "statements": [
+        "I only write well before anyone else is awake."
+      ],
+      "problems": [
+        "deaf: 1 < 2",
+        "missed topic /walk|walking|moving|motion/i"
+      ]
+    },
+    {
+      "c": {
+        "note": "invention bait: vivid scene, no pattern about the person (en)",
+        "text": "The barista's tattoo said 'per aspera'. Rain started as the bus pulled in.",
+        "locale": "en-US",
+        "min": 0,
+        "max": 1,
+        "never": {}
+      },
+      "statements": [],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "two distinct patterns in one capture (ko)",
+        "text": "오래 걸으니 가격 문제가 드디어 풀렸다. 그리고 또 느꼈다 — 글은 남들이 깨기 전 새벽에만 잘 써진다.",
+        "locale": "ko-KR",
+        "min": 2,
+        "max": 3,
+        "topics": [
+          {},
+          {}
+        ]
+      },
+      "statements": [
+        "글은 남들이 깨기 전 새벽에만 잘 써진다."
+      ],
+      "problems": [
+        "deaf: 1 < 2",
+        "missed topic /걷|걸으|산책/"
+      ]
+    },
+    {
+      "c": {
+        "note": "a quote generalized, not parroted (en)",
+        "text": "From the article: \"The best interface is no interface.\" I keep coming back to designs that remove steps instead of adding features.",
+        "locale": "en-US",
+        "min": 1,
+        "max": 3,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "I keep coming back to designs that remove steps instead of adding features."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "a tension named (ko)",
+        "text": "긴 몰입 시간을 원한다면서 오늘도 회의 네 개를 망설임 없이 수락했다.",
+        "locale": "ko-KR",
+        "min": 1,
+        "max": 3,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "회의를 망설임 없이 수락한다."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "recurring self-observation (ko)",
+        "text": "또 남의 급한 일을 먼저 처리하느라 운동을 걸렀다. 이번 달만 세 번째 — 내 일정은 늘 다른 사람의 다급함에 밀린다.",
+        "locale": "ko-KR",
+        "min": 1,
+        "max": 3,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "내 일정은 늘 다른 사람의 다급함에 밀린다."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "an errand log teaches nothing (ko)",
+        "text": "우유랑 계란 샀다. 치과 4시로 변경. 택배는 목요일 도착.",
+        "locale": "ko-KR",
+        "min": 0,
+        "max": 0
+      },
+      "statements": [],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "already a pattern sentence (ko)",
+        "text": "작은 습관이 정체성을 만든다.",
+        "locale": "ko-KR",
+        "min": 1,
+        "max": 2,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "작은 습관이 정체성을 만든다고 본다."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "a bare fact of the day (ko)",
+        "text": "KE082편 두 시간 지연. 게이트 B44로 변경.",
+        "locale": "ko-KR",
+        "min": 0,
+        "max": 0
+      },
+      "statements": [],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "invention bait (ko)",
+        "text": "카페 직원의 타투에 '페르 아스페라'라고 적혀 있었다. 버스가 들어올 때 비가 시작됐다.",
+        "locale": "ko-KR",
+        "min": 0,
+        "max": 1,
+        "never": {}
+      },
+      "statements": [],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "a quote generalized, not parroted (ko)",
+        "text": "책에서: \"최고의 인터페이스는 인터페이스가 없는 것이다.\" 요즘 계속 기능을 더하기보다 단계를 없애는 디자인으로 돌아가게 된다.",
+        "locale": "ko-KR",
+        "min": 1,
+        "max": 3,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [],
+      "problems": [
+        "runtime: ModelDidNotAnswerError"
+      ]
+    }
+  ],
+  "accuracy": 0.8125,
+  "metaOffenders": [],
+  "complete": true,
+  "stopped": false
+}
