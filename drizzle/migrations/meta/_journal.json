@@ -498,6 +498,13 @@
       "when": 1791745200000,
       "tag": "0070_conversation_inspiration_start",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1791781200000,
+      "tag": "0071_inspiration_category_converge",
+      "breakpoints": true
     }
   ]
 }

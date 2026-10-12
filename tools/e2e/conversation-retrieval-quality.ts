@@ -10,6 +10,7 @@ import {createTestDatabase} from '../../packages/api/test/helpers/db.js';
 import {ensureInspirationEmbedding,GEMINI_EMBEDDING_MODEL,GeminiEmbeddingHttpClient,type EmbeddingTaskType} from '../../packages/api/src/lib/inspiration-embeddings.js';
 import {conversationSearchQuery} from '../../packages/api/src/lib/conversation-material.js';
 import {readConversationContext} from '../../packages/api/src/lib/conversation-context.js';
+import type {ConversationReference} from '../../packages/api/src/db/schema-conversations.js';
 const holdout=process.argv.includes('--holdout'),validation=process.argv.includes('--validation'),large=process.argv.includes('--large'),cases=validation?retrievalValidationCases:holdout?retrievalHoldoutCases:retrievalCases;
 assert.ok(!(holdout&&validation),'Choose one comparison set');
 const baseDigest=createHash('sha256').update(JSON.stringify({retrievalSources,retrievalCases,retrievalGate})).digest('hex');
@@ -83,6 +84,61 @@ try{
     benchmark={paddingNotes:5000,scanPlan:plan};
     assert.ok(JSON.stringify(plan).includes('inspiration_embeddings_profile_scope_recent_idx'),'Expected bounded-scan index');
   }
+  /* ═══ THE HYBRID ARM, CALLED BY NAME ══════════════════════════════════
+   *
+   * SECURITY REVIEW 2026-10-11, FINDING 8. `readConversationContext` gained
+   * `initialInspirationId` as a new POSITIONAL parameter between
+   * `initialPrincipleId` and `queryVector`. Every caller inside
+   * `packages/api` was updated — `conversation-retrieval.db.test.ts:38`
+   * correctly gained its sixth `undefined` — and this one was not. So
+   * `vector` (a `number[]`) landed in the `initialInspirationId` slot and
+   * the trace callback landed in `queryVector`.
+   *
+   * THE REVIEW PREDICTED THIS WOULD REPORT LEXICAL NUMBERS UNDER THE
+   * `hybrid` KEY. It does not, and the real behaviour is worth recording
+   * because it is why nobody noticed either way. `conversation-retrieval.ts:44`
+   * validates the vector — `queryVector.length!==GEMINI_EMBEDDING_DIMENSIONS`
+   * — and a function's `.length` is its ARITY, 1, so the stale call throws
+   * `Invalid conversation query vector` four frames down. Measured against
+   * the local test database on 2026-10-11 with a fabricated 768-float
+   * vector, both calls side by side: the stale one threw and no trace
+   * arrived; the corrected one returned and the trace arrived.
+   *
+   * So this harness ABORTS rather than lying, which is better than the
+   * review feared and still bad. The message names the vector, the vector
+   * is fine, and the fault is six parameters away at the call site — and it
+   * means nobody has run this gate since `initialInspirationId` was
+   * inserted, or that abort would have been reported. The silent-degrade
+   * reading stays worth defending against anyway: it is what happens the
+   * moment the mislanded argument is a `string|null` rather than an array,
+   * which is the next shape this family of parameters will take.
+   *
+   * WHY NOTHING CAUGHT IT. `packages/api/tsconfig.json` is
+   * `"include": ["src/**\/*.ts"]` and no package typechecks `tools/`, so
+   * the type mismatch never reached `tsc`. Six optional positional
+   * parameters and no typecheck is the whole mechanism, and inserting the
+   * missing `undefined` fixes today's call while leaving the mechanism
+   * intact for the seventh parameter.
+   *
+   * SO THE POSITIONS ARE WRITTEN ONCE, HERE. Both call sites below pass
+   * named fields; this shim is the only place in this file that knows the
+   * order, and it is three lines above the assertion that checks it. The
+   * upstream fix is an options object for the last four parameters of
+   * `readConversationContext` itself — that belongs in `packages/api` with
+   * its own callers and tests, and is not this file's to make.
+   *
+   * REJECTED: just adding the `undefined` and moving on. It is the smallest
+   * diff and the review's own suggested fix, and it leaves the mechanism in
+   * place with a message that points at the wrong thing. A quality gate
+   * that stops measuring — or stops with an accusation against an innocent
+   * argument — is worse than no gate, because the number it prints will be
+   * believed and the stack trace it prints will be chased.
+   */
+  assert.equal(readConversationContext.length,8,
+    'readConversationContext no longer takes 8 parameters, so the positional mapping in readContext() below is stale. '+
+    'Re-read its signature and fix the shim before trusting any number this harness prints.');
+  const readContext=(args:{question:string,referenceIds?:ConversationReference[],initialPrincipleId?:string|null,initialInspirationId?:string|null,queryVector?:number[],onRetrievalTrace?:(trace:unknown)=>void})=>
+    readConversationContext(fixture.db as never,owner,args.question,args.referenceIds,args.initialPrincipleId,args.initialInspirationId,args.queryVector,args.onRetrievalTrace as never);
   for(const item of cases){
     const originalTerms=[...new Set(item.query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)??[])].slice(0,8);
     let start=performance.now();
@@ -90,10 +146,22 @@ try{
       AND text ILIKE ANY(${originalTerms.map(term=>`%${term}%`)}::text[]) ORDER BY created_at DESC,id LIMIT 6`:[];
     const originalMs=performance.now()-start;
     const history=[...(item.prior?[{role:'user',content:item.prior}]:[]),{role:'user',content:item.query}],query=conversationSearchQuery(history);
-    start=performance.now();const lexical=await readConversationContext(fixture.db as never,owner,query);const lexicalMs=performance.now()-start;
+    start=performance.now();const lexical=await readContext({question:query});const lexicalMs=performance.now()-start;
     start=performance.now();const vector=await client.embed(query,'RETRIEVAL_QUERY');const embeddingMs=performance.now()-start;
     let trace:unknown;
-    start=performance.now();const hybrid=await readConversationContext(fixture.db as never,owner,query,undefined,undefined,vector,value=>{trace=value;});const hybridMs=performance.now()-start;
+    start=performance.now();const hybrid=await readContext({question:query,queryVector:vector,onRetrievalTrace:value=>{trace=value;}});const hybridMs=performance.now()-start;
+    /* AND IT ACTUALLY RAN HYBRID. The trace callback fires from exactly one
+       place — inside `if(queryVector&&!referenceIds)`, right after
+       `readSemanticConversationCandidates` — so an absent trace means the
+       embedding arm did not execute and `hybrid` is lexical wearing the
+       hybrid label. It is the only check here that does not depend on the
+       arguments being spelled correctly — it observes the behaviour rather
+       than the call — and it is what makes the arity guard above more than
+       a guess: a signature can keep its eight parameters and still reorder
+       them. Loud and immediate, because every number computed below this
+       line is otherwise a quiet lie. */
+    assert.ok(trace,`Hybrid retrieval produced no trace for case ${item.id}, so the embedding arm never ran and `+
+      'the "hybrid" column below would report lexical results. Check the arguments handed to readContext().');
     const describe=(rows:Array<{id:string}>)=>{const selected=rows.map(row=>labels.get(row.id)??'UNKNOWN');return {selected,hit:item.required.some(id=>selected.includes(id)),unexpected:selected.filter(id=>!item.allowed.includes(id)),leaked:selected.includes('foreign')||selected.includes('UNKNOWN')};};
     results.push({id:item.id,query:item.query,positive:item.required.length>0,semanticTarget:Boolean(item.semanticTarget),original:describe(original),lexical:describe(lexical.inspirations),hybrid:describe(hybrid.inspirations),originalMs,lexicalMs,embeddingMs,hybridMs,trace});snapshot();
     console.log(JSON.stringify(results.at(-1)));
