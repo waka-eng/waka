@@ -1,6 +1,6 @@
 # Web quality and intuitive use
 
-Status: in progress (2026-10-08). Web implementation merged and deployed to dev; human and operational acceptance remain open.
+Status: in progress (2026-10-08). Web and full generation flow verified on dev; human and remaining operational acceptance stay open.
 Branch: `codex/web-quality`, based on dev `043b07ec`.
 
 ## Objective
@@ -364,3 +364,133 @@ were made. The [receipt](../craft/evidence/web-quality/formation-help/receipt.js
 and [preview](../craft/evidence/web-quality/formation-help/preview.png) retain the
 scope. The evaluation ledger and existing human/operational gates stay open at
 their previously recorded values.
+
+### 2026 10 08 full generation verification start
+
+The owner authorized the next generation/operational checks and dev delivery.
+A guarded live development case used nine raw synthetic inspirations, ordinary
+API routes and the unmodified qualification bars. One source produced no
+Principle. All nine sources were derived, but a manual reading remained pending
+past its due time and timed out after four minutes. The account was erased and
+its session returned 401. Of three derived statements, one was active; one
+mixed a preference with a single event, and another copied internal reference
+text into its wording. No positive Principle-creation result is claimed.
+
+Candidate repairs keep known reading work in the existing bounded Lambda
+redelivery path, including reading follow-ups created/claimed in a drain.
+References are scoped to job/profile/version and checked against pending,
+unread, near-term work; completed jobs, active leases and next-day holds do not
+wake. No broad queue scan, sleep, budget or qualification change is introduced.
+The wider database regression caught an intentional rule that an automatic
+trailing request cannot inherit manual cadence bypass; that rule is retained.
+
+Extraction context guidance now keeps an explicit author-written rule separate
+from event examples and puts earlier evidence in citations. It applies only
+when earlier captures are supplied. A code guard refuses copied internal IDs
+and oversized generated text before publication. Both English/Korean context
+probes now return reusable author wording, with cited earlier evidence.
+
+The first fixed extraction run aborted on an unusable response and exposed a
+report-freshness issue: an older JSON file could remain after failure. The
+opt-in reporter now journals attempts/failures, awaits workers and bounds
+in-flight spending. Intermediate results and provider timeouts are retained.
+The latest context-only instruction run observed 15/16 correct (93.75%), zero
+meta-references and one provider timeout; the original 80% bench floor is not
+changed. This is a fixed extraction result, not a completed live pipeline.
+
+Paginated, bounded numeric dev reads fix the empty-first-page audit gap. A
+complete, overinclusive window reports USD 0.004043608 OpenRouter charges.
+Twenty-one embedding calls remain held at a maximum-token/rate estimate of
+USD 0.0064512, not an invoice. Unused reservation was released only after the
+full window was read. Model context limits/rates were checked against official
+Google/OpenRouter sources; no billing tier/privacy setting is inferred.
+Both later provider timeouts retain USD 0.02 each. All current evaluation
+charges/holds total USD 4.8453463206 of USD 5 before the final dev rerun.
+
+API types and 989 unit checks pass (three paid benches excluded); 62 targeted
+real-database generation/fencing/lease checks pass on the explicit disposable
+loopback database. A transient source-probe removal race in the policy scan
+is handled only for ENOENT, without changing the enqueue policy. The
+[verification evidence](../craft/evidence/web-quality/generation-verification/)
+retains failed cases, calibration, complete audit and the reconciled ledger.
+Dev rerun, real human observations and remaining operational attestation are
+still required.
+
+### 2026 10 08 generation dev delivery and final verdict
+
+PR [#366](https://github.com/waka-eng/waka/pull/366) passed full CI and merged
+to dev `f10b3119`. [Deployment 37847188378](https://github.com/waka-eng/waka/actions/runs/37847188378)
+passed configured database separation, schema and API/worker model/binding checks.
+
+The original mixed-choice archive was then rechecked. Its nine captures now
+produce three clean active statements, each with three pieces of evidence,
+and the manual reading completes. The Principle pass is ready/eligible but
+produces no candidate. Structural eligibility does not require the model to
+invent a coherent guide from unrelated themes. The initial positive expectation
+for that archive was too strong; the no-candidate observation is retained.
+
+The coherent portability case uses the previously calibrated themes of owning
+exportable data, understandable tools and easy exits. Nine raw inspirations
+produce three active signals, a current reading and one minted, held Principle
+citing all three signals. No declarations, seeded signals or bar overrides are
+used. A tenth inspiration arrives after a synthetic human wording edit. Another
+reading/Principle pass keeps that wording byte-for-byte and locked. All ten raw
+texts and both old/new Principle wordings survive. The edited Principle appears
+in the real deployed 390px view; its support is transparently unconfirmed, not
+silently endorsed. The account is erased and its session returns 401.
+
+The [final verdict](../craft/evidence/web-quality/generation-verification/final-verdict.json)
+and [phone receipt](../craft/evidence/web-quality/generation-verification/portable-principle-390.png)
+record the result. Normal manual rereads were used after evidence checks settled;
+automatic daily cadence stays intact. This proves one coherent positive case,
+not universal reliability or first-time comprehension. The original guide is
+well supported by ownership/exit preferences; understandable tools is a weaker
+part of its cited support, retained in the semantic review.
+
+All three development console alarms were forced through a test state and
+restored successfully, with zero notification actions. This verifies console
+state transitions only; threshold-triggered notification delivery and controlled
+overdue recovery remain separate gates. Four observed recovery periods still
+show checks with zero overdue/exhausted work. Complete numeric windows retain
+charges and embedding holds rather than treating missing billing as free.
+Final cumulative evaluation used/held is USD 4.8702219154 of USD 5, leaving
+USD 0.1297780846. Unknown provider timeouts and earlier reservations stay held.
+
+Actual first-time participant results are still absent. Budget environment scope
+was requested; the provider console is signed out and the available local key
+has inference permissions only. Actual recurring limits, provider privacy,
+source/proxy attestation and external alert delivery cannot be marked verified.
+The goal stays open for those human/administrative/operational requirements.
+
+### 2026 10 08 member and spatial navigation repairs
+
+Group avatar taps previously only named the member. They now open that member's
+public inspirations in the current room, immediately recording the member and
+section in history. The name buttons do the same; members with no visible public
+inspirations get a named empty view. Selection uses the painted room, so a fast
+tap after travel cannot accidentally open the personal field before the route
+observer catches up. This uses the existing membership/public-only projection.
+
+Review keeps one invitation, “Revisit your inspirations”, while retaining the
+owned unfinished session and its accessible continuation hint. Personal Home
+again exposes Principles above and Inspirations below, with return carets and
+44px targets. Phone spacing clears the tab bar, Capture and the header.
+
+Verification: web types/build and all 872 tests across 117 suites pass. Real
+built-browser checks cover desktop and 390px avatar navigation, opening exact
+public words, personal return controls, Page Down/Page Up, wheel and vertical
+swipes. At 320px the upward target is 44×44 and unoccluded. Evidence is in
+[the navigation receipt](../craft/evidence/web-quality/group-navigation/verification.json).
+The disposable loopback fixture made zero provider calls. Initial checks caught
+a deferred member-switch regression and duplicate CSS layout declaration; both
+were repaired before the full passing run. Human/operational gates remain open.
+
+### 2026 10 08 self-audit retained for follow-up
+
+The owner asked to keep the self-audit noted and push the remaining work to dev.
+PR 368's implementation and deployment were already complete. Recorded all six
+findings as open follow-ups in the [roadmap](../plans/2026-10-07-web-quality-roadmap.md#observed-usability-follow-ups--2026-10-08),
+with priorities, acceptance checks, screenshots and a keyboard-focus trace.
+The review covers the built app at dev `d07ac1c3`; its synthetic local fixtures
+made zero external provider calls and were cleaned up afterward. The findings
+remain pending implementation, and the human/operational gates remain open.
