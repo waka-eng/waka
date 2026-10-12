@@ -544,12 +544,28 @@ a:focus-visible {
   border: 1px solid var(--w-edge);
   color: var(--w-ink);
 }
-/* the Google button is the one place a foreign brand's own surface belongs —
-   it stays white, because a recoloured Google button is a phishing signal */
+/* ═══ THE GOOGLE BUTTON IS GOOGLE'S, AND IT IS NOT THE LOUDEST THING ════
+   It was a solid white pill — brighter than `Sign in`, which is this
+   page's actual primary action, on a ground this dark. The eye landed on
+   the secondary choice first.
+
+   THE OLD NOTE SAID WHITE WAS REQUIRED and it was half right: "a
+   recoloured Google button is a phishing signal" is true of recolouring
+   the MARK. Google's own identity guidelines publish three surfaces for
+   this button — white, light grey and NEUTRAL DARK — precisely so it can
+   sit on a dark product without being repainted. The dark one is the
+   compliant choice here, and it is the one that leaves the hierarchy
+   right.
+
+   THE MARK IS UNTOUCHED, which is what those guidelines actually protect:
+   the four-colour G is drawn with its own hexes in `GoogleSignIn.tsx` and
+   nothing here touches it. Checked rather than assumed — its blue, red,
+   yellow and green are all mid-tone, so the mark reads on this ground
+   exactly as it reads on white. */
 .btn-google {
-  background: #fff;
-  color: #1f1f1f;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: color-mix(in srgb, var(--moon-warm) 6%, transparent);
+  color: var(--w-ink);
+  border: 1px solid var(--w-edge);
   transition: border-color 0.2s ease;
 }
 /* it still has to answer the hand, and it cannot do it the way everything
@@ -1197,20 +1213,27 @@ a:focus-visible {
    file). Nothing new is being designed here; this is the same design, made
    order-independent. */
 
+/* ═══ THE FAKE LAMP IS GONE, AND A REAL ONE STANDS THERE ════════════════
+   A radial gradient at `50% 12%` used to light the top of this page — an
+   attempt at the world's quality of light with nothing in the room making
+   it, which is why it read as a smudge rather than as a lamp. The
+   companion is on this page now (see `Login.tsx`) and its aura is the same
+   shape made honest: there is a thing here, and it is lit.
+
+   CENTRED, NOT TOP-ALIGNED. `flex-start` with a clamped top padding put
+   the card a third of the way down a tall window and hard against the top
+   of a short one. Every other surface in this product centres what it is
+   holding; the door is the one people see first and it was the one that
+   did not. The padding stays as the FLOOR for a short window — `center`
+   alone would push the top of the card off screen on a laptop in
+   landscape, which is the failure mode a centred column has. */
 body .login-shell {
-  background:
-    radial-gradient(
-      120% 80% at 50% 12%,
-      rgba(242, 236, 225, 0.055) 0%,
-      rgba(242, 236, 225, 0.022) 34%,
-      transparent 68%
-    ),
-    var(--w-ground);
+  background: var(--w-ground);
   min-height: 100dvh;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: clamp(var(--sp-32), 7vh, var(--sp-88)) var(--sp-24) var(--sp-96);
+  padding: var(--sp-40) var(--sp-24) var(--sp-56);
 }
 body .profile-card,
 body .login-card {
@@ -1220,6 +1243,93 @@ body .login-card {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+/* ═══ THE DOOR IS A COLUMN DOWN THE MIDDLE ═══════════════════════════════
+   Founder, of the product generally: "모든 workflow and component 다 그렇게
+   디자인해줘" — every workflow and component.
+
+   WHY THIS ONE CENTRES WHEN THE ARCHIVE DOES NOT. An archive is a LIST:
+   rows start at a left margin because the eye returns to that margin for
+   every one of them. A door holds one object, one sentence and two
+   controls, and there is no second row for a margin to serve. It is the
+   same argument the loading screen makes, and these two screens are
+   consecutive — the creature should not jump sideways between them.
+
+   THE MEASURE IS NARROWER THAN THE CARD'S 620. A form read at 620 puts a
+   44px-tall field nearly two thirds of the way across a laptop, which is
+   the "ugly design that doesn't match the vibe" the archive was measured
+   for and fixed at 650. A door has less in it, so it wants less. */
+body .login-shell .login-card {
+  max-width: 26rem;
+  display: flex;
+  flex-direction: column;
+  /* STRETCH, AND CENTRE WHAT WANTS CENTRING. `align-items: center` here
+     was the obvious way to write this and it is a trap: every child then
+     shrinks to its CONTENT, and a `<form>` holding text inputs shrinks to
+     the inputs' intrinsic size — a browser default of about twenty
+     characters. `width: 100%` on the form does not undo that, because 100%
+     of a shrink-to-fit parent is the shrunk width. Measured in a browser:
+     a 416px card with 180px fields in the middle of it.
+
+     So the column stretches, which is the default, and the two things that
+     genuinely want to be centred say so for themselves below. */
+  align-items: stretch;
+  text-align: center;
+}
+
+/* THE COMPANION AND THE TABS CENTRE THEMSELVES. Everything else — the
+   form, the two buttons, the footer — is full width because it is a
+   control, and controls on a door should all be the same width. */
+body .login-shell .waka-companion {
+  align-self: center;
+}
+
+body .login-shell .login-tabs {
+  justify-content: center;
+}
+
+/* A LABEL OVER A FIELD READS LEFT, even in a centred card. Centring a
+   four-letter label over a full-width box leaves it floating with nothing
+   under it to align to.
+
+   `width: 100%` IS THE HALF THAT WAS MISSING. `align-items: center` on the
+   card makes every child shrink to its content, and a `<label>` wrapping an
+   input shrinks to the input's own intrinsic size — so the first cut of
+   this rendered two 150px fields floating in the middle of a 416px column.
+   Measured in a browser; invisible in the diff. */
+body .login-shell .field {
+  width: 100%;
+  text-align: left;
+}
+
+/* ═══ THE DOOR'S FIELDS ARE BOXES, LIKE THE REST OF THE PRODUCT ══════════
+   `chrome.css` has a standing note above the shared field rule — "a rule
+   under the words rather than a box around them: the world has no boxes,
+   and a bordered input on this ground reads as a slot cut into it." That
+   was true when it was written and three surfaces have since disagreed
+   with it for the same measured reason: the chat's composer, the archive's
+   search, and the settings card all became boxes because a field whose
+   entire appearance is one hairline does not read as a field when it sits
+   among other hairlines — or, here, among nothing at all.
+
+   A DOOR IS THE STRONGEST CASE OF THAT. Two labels over two underlines on
+   an empty dark page is barely a form; there is no content around it to
+   borrow structure from, and the one thing a person has to do on this
+   screen is find where to type.
+
+   THE SHAPE IS THE ONE THE OTHER THREE USE — `--field-edge`, a 12px
+   corner, no fill — so the four read as one control wearing one design
+   rather than four surfaces that each decided. */
+body .login-shell .field-input {
+  min-height: var(--waka-corner);
+  padding: 0 var(--sp-14);
+  border: 1px solid var(--field-edge);
+  border-radius: 12px;
+}
+
+body .login-shell .field-input:focus {
+  border-color: color-mix(in srgb, var(--w-ink) 80%, transparent);
 }
 body .profile-header h1,
 body .login-title {

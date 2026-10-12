@@ -243,8 +243,19 @@ describe("the spacing grid is one grid", () => {
    is a token reference and therefore not a literal. Warming the material
    drained six of these by writing the colour the way it should have been
    written anyway. */
-const COLOUR_CEILING = 84;
-/* 125 -> 104 on 2026-08-26. Nobody drained twenty-one colours: the dead rules
+const COLOUR_CEILING = 79;
+/* 84 -> 79 on 2026-10-11, and nobody drained five colours by hand — the
+   door's craft pass did it as a side effect, which is the behaviour this
+   ratchet exists to notice. Founder, of `/login`: the first screen anybody
+   sees had no companion on it and a fake lamp instead. What went: the
+   `rgba(242, 236, 225, …)` radial gradient painted at the top of the shell
+   — an attempt at the world's light with nothing in the room making it,
+   which read as a smudge — and the Google button's `#fff` / `#1f1f1f` /
+   `rgba(0,0,0,.12)` surface, replaced by Google's own published dark
+   variant built from palette tokens. The creature's aura is the lamp now,
+   and it is `--jar-live` like every other light in the product.
+
+   125 -> 104 on 2026-08-26. Nobody drained twenty-one colours: the dead rules
    that held them were deleted by `e2e:dead-css`, and this ceiling had no way
    to notice, which is the whole point of the test added below.
 

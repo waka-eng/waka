@@ -49,6 +49,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
+import { Companion } from "../components/Companion";
 import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSignIn";
 import { ApiError } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
@@ -687,6 +688,22 @@ export default function LoginPage(): JSX.Element {
   return (
     <main className="login-shell">
       <section className="login-card" aria-labelledby="login-title">
+        {/* ═══ THE COMPANION IS ON THE DOOR ══════════════════════════════
+            Founder, of the home screen: "this is my only favorite screen of
+            the experience", and of an empty chat: "nothing here feels
+            몽글몽글." The finding behind `Companion` was that this product
+            IS a companion and most of its surfaces had sent it away — and
+            the one surface that had never had it is the FIRST one anybody
+            sees. A person's first impression of WAKA was a form.
+
+            IT ALSO REPLACES SOMETHING FAKE. This page painted a radial
+            gradient at the top of the shell — a lamp with nothing holding
+            it, which read as a smudge on the ground rather than as light.
+            The creature's aura is the same shape made honest: there is a
+            thing here, and it is lit. See `.waka-companion`, which is sized
+            to its own falloff precisely so it can be dropped into a page
+            like this one. */}
+        <Companion size={88} />
         <p className="login-eyebrow">{t(locale, "loginEyebrow")}</p>
         <h1 id="login-title" className="login-title">
           {headline}

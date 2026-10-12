@@ -45,6 +45,7 @@ import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../lib/api";
+import { Companion } from "../components/Companion";
 import { useAuth } from "../lib/auth-context";
 import {
   normalizeSupportedLocale,
@@ -103,6 +104,12 @@ export default function OnboardingPage(): JSX.Element {
   return (
     <main className="login-shell">
       <section className="login-card" aria-labelledby="onboarding-title">
+        {/* THE SAME COMPANION THE DOOR HAS. These two screens are one
+            sequence — you sign up and land here — and the creature
+            appearing on the first and not the second would read as the
+            product losing interest the moment you are through. See the
+            long note at the same line in `Login.tsx`. */}
+        <Companion size={88} />
         <p className="login-eyebrow">{t(locale, "onboardingEyebrow")}</p>
         <h1 id="onboarding-title" className="login-title">
           {t(locale, "onboardingTitle")}
