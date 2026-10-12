@@ -285,8 +285,30 @@ async function walk(browser: Browser, negative: boolean): Promise<Finding[]> {
       await row.click();
       await page.waitForTimeout(1_200);
       found.push(...(await audit(page, "a note opened")));
-      await page.locator(".waka-over-back").first().click();
-      await page.waitForTimeout(1_200);
+      /* ═══ THE WAY OUT OF AN OPEN NOTE IS THE DOCK ════════════════════════
+         THIS PRESSED `.waka-over-back` AND COULD ONLY TIME OUT. The overlay's
+         chevron went with the dead-CSS sweep on 2026-10-11 and
+         `claims.css`'s own tombstone names this very line as one of the two
+         callers left outside `src`. Nothing in the tree renders the class, so
+         the step had stopped being a test of the way back and become a 30s
+         wait followed by a thrown locator — which is the worst of both: no
+         coverage, and a run that fails for a reason that is not the product's.
+
+         AND THE REPLACEMENT IS NOT A DIFFERENT CHEVRON, IT IS THE RULING.
+         Founder, on why the chevron went: "I can just go to all the
+         inspirations using the bottom panel. So don't do that." The dock IS
+         the way out, which is the structural promise `way-out.test.ts` holds
+         in jsdom — so the walk presses what a person presses, and `toDock`
+         already reports the real defect ("the dock does not offer this
+         place") if the row somebody must use is not there. A step that names
+         the row by its own words also breaks when the words change, which a
+         chevron with no label never could.
+
+         IT PRESSES Inspirations, NOT Now. The list is where the note was
+         opened from, so this returns to the surface behind it rather than all
+         the way to the world — the same arrival a chevron gave, by the door
+         the product actually offers. */
+      await toDock("Inspirations");
     }
   }
 
@@ -306,9 +328,52 @@ async function walk(browser: Browser, negative: boolean): Promise<Finding[]> {
     found.push(...(await audit(page, "your principles")));
   }
 
-  await page.goto(`${BASE}/profile`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(3_000);
-  found.push(...(await audit(page, "your account")));
+  /* ═══ YOUR ACCOUNT IS A CARD IN THE CORNER, NOT AN ADDRESS ═══════════════
+     THIS WALKED TO `/profile`, WHICH STOPPED BEING A ROUTE on 2026-10-11 —
+     founder: "I want all setting-related stuff to be only accessible through
+     the drop down and not be its own thing." `main.tsx:186` carries the
+     ruling and `lib/platform/navigation.ts:22` records the address leaving
+     the list of known ones. So this did not time out the way the chevron
+     above did; it did something worse. It navigated, got whatever the router
+     does with an address it does not know, and audited THAT against Nielsen
+     and WCAG under the heading "your account" — a clean report about a
+     surface nobody can reach, which is the one failure mode a usability walk
+     must not have.
+
+     SO IT PRESSES THE COG, the same door `tools/e2e/dead-css.ts:780` was
+     rewritten to use, and by the modifier rather than by `.first()`: the
+     right corner has held two buttons since 2026-10-11 — an "i" for how the
+     product works beside the cog — and the left corner has worn `.waka-corner`
+     the whole time, so `.first()` is a bet on document order that would lose.
+
+     AND THE THREE GROUPS ARE OPENED IN TURN, because settings is a card of
+     disclosures now and only one is open at a time. An audit of the card
+     with everything folded away reads the controls of one group and calls
+     the other two clean — the same reason `dead-css.ts` walks each group
+     rather than the card. Each is audited under its own heading so a finding
+     names the group it is in. */
+  await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(6_000);
+  const cog = page.locator("button.waka-corner--settings");
+  if ((await cog.count()) === 0) {
+    found.push({
+      check: "there is no way to your account at all",
+      surface: "your account",
+      detail: "no button.waka-corner--settings in the world's corner",
+    });
+  } else {
+    await cog.click();
+    await page.waitForTimeout(800);
+    found.push(...(await audit(page, "your account")));
+    const groups = await page.locator(".waka-settings-row").count();
+    for (let i = 0; i < groups; i += 1) {
+      await page.locator(".waka-settings-row").nth(i).click();
+      await page.waitForTimeout(600);
+      found.push(...(await audit(page, `your account, group ${i + 1}`)));
+      await page.locator(".waka-settings-row").nth(i).click();
+      await page.waitForTimeout(300);
+    }
+  }
 
   await ctx.close();
   return found;

@@ -28,12 +28,57 @@
  * rather than a fact you have to reconstruct from four import lines and a
  * bundler's behaviour.
  *
- * WHAT IS ASSIGNED, as of 85f3274:
+ * WHAT IS ASSIGNED — EVERY SHEET IN `src/styles`, MEASURED, as of
+ * 2026-10-12. Counts are declaration blocks with `@keyframes` excluded, got
+ * by brace-matching the comment-stripped files; `test/one-cascade.test.ts`
+ * re-measures them on every run and fails if this table stops matching the
+ * tree, because the last version of this table was stale for two sheets and
+ * nothing could tell:
  *
- *   product   global.css:2, system.css:2, home.css:5
- *   chrome    chrome.css:2
+ *   product   global.css:10 (58 rules), system.css:2 (13), home.css:10 (389)
+ *   chrome    chrome.css:2 (258), chat.css:1 (65), home.css:4580 (inside the
+ *             389 above — that file has a `product` block and a `chrome` block)
+ *   register  system.css:424 (13 above includes it; one rule, see below)
  *   base      nothing yet — declared so resets and element defaults have a
  *             floor to land on when they are separated out
+ *
+ *   UNLAYERED, AND THEREFORE BEATING ALL OF THE ABOVE:
+ *
+ *     claims.css        322 rules — THE WHOLE FILE. No `@layer` statement
+ *                       anywhere in 5.6k lines. This is the largest sheet in
+ *                       the tree and it out-ranks every other sheet at any
+ *                       specificity.
+ *     home.css           22 rules — lines 4424-4579 (`.jar-where-*`,
+ *                       `.jar-when*`, `.jar-here*`) and 5154-5317
+ *                       (`.jar-drift-*`, `.waka-over--talk*`). Not a decision
+ *                       anybody made: an append past a closing brace.
+ *     layers.css          1 rule — `.jar :focus-visible`, and it is
+ *                       DELIBERATE. The argument is below and the unlayered
+ *                       position IS the mechanism.
+ *
+ * THOSE 344 RULES ARE A DEBT, NOT A DESIGN, and they are the reason this
+ * table is now measured rather than asserted. Two consequences were found in
+ * the browser on 2026-10-12 and are worth having before anyone moves them:
+ *
+ *   `.waka-composer-body .jar-keep-box` (claims.css, unlayered) decides the
+ *   capture box's vertical air at `12px 16px 4px`, beating BOTH
+ *   `chrome.css`'s `.jar-mouth-rest:not(--said) { padding: 8px 12px }` and
+ *   `home.css`'s `@media (pointer: coarse) .jar-mouth-rest { 14px }`. Two
+ *   sheets state a padding for that element and neither reaches it.
+ *
+ *   `home.css:5273` `.waka-over--talk .chat-page` is unlayered, so it
+ *   out-ranks the whole of `chat.css`, which is `@layer chrome` end to end.
+ *   Today it would win on specificity anyway; the day somebody writes
+ *   `.chat-page` geometry in `chat.css` and it does not take, this is why.
+ *
+ * WHY THE DEBT IS NOT PAID IN THIS COMMIT. Read the next paragraph: moving a
+ * sheet between precedence levels has to move every sheet at that level
+ * together, and wrapping `claims.css` in `@layer chrome` would drop 322 rules
+ * BELOW `chat.css` and below `home.css`'s own chrome block on every selector
+ * they share — 11 class families do, measured. That is a restyling of the
+ * corners, the overlays, the composer and the speech bubble, and it cannot be
+ * signed off by reading. `test/one-cascade.test.ts` holds the count at 344 so
+ * it can only fall.
  *
  * This block used to say, in capitals, that nothing was assigned yet. It had
  * been false since that commit, and it was not a harmless stale comment: the

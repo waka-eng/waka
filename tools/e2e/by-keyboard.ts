@@ -395,11 +395,60 @@ async function main(): Promise<void> {
       }
     };
 
-    /* the one real sheet in the world's chrome */
-    const sheetLandedOn = await focusAfterKey("jar-account", "Escape");
-    const sheetReturns = sheetLandedOn.includes("jar-account");
+    /* ═══ THE ONE REAL SHEET IN THE WORLD'S CHROME IS THE COG'S CARD ══════
+       THIS TABBED FOR `jar-account`, WHICH HAS NO RENDERER. The account pill
+       in `.jar-topbar` went when the settings page became a card in the
+       corner — founder: "I want all setting-related stuff to be only
+       accessible through the drop down and not be its own thing" — and
+       `main.tsx:186` carries the ruling. `focusAfterKey` presses 30 Tabs
+       looking for a className that cannot appear, returns "(never reached
+       it)", and the line below then put `a sheet closed with Escape drops
+       focus to (never reached it)` into `broke`. That is worse than a step
+       that times out: it is a gate REPORTING A DEFECT THE PRODUCT DOES NOT
+       HAVE, against a surface it never opened, and whoever read it would go
+       looking for a focus bug in a card that restores focus correctly.
 
-    /* and the two ways out of the wall, each of which unmounts behind you */
+       THE SHEET IS STILL A SHEET, which is why this is a repoint and not a
+       deletion. The cog's card covers the world, closes with Escape, and
+       `Menu.tsx` holds `settingsTrigger` precisely so Escape "hands focus
+       back to the trigger" — so the question this measurement asks is
+       unchanged and now has something to ask it of.
+
+       BY THE MODIFIER, NOT THE BASE. `waka-corner` alone is worn by the left
+       corner and by the "i" beside the cog, so `includes("waka-corner")`
+       would be satisfied by the wrong button in both directions. The opener
+       is matched on `waka-corner--settings`; what Escape must hand back is
+       only required to BE a corner, because `focusAfterKey` reports the
+       landing element's first class and the trigger's is the base. */
+    const sheetLandedOn = await focusAfterKey("waka-corner--settings", "Escape");
+    const sheetReturns = sheetLandedOn.includes("waka-corner");
+
+    /* ═══ AND THE TWO WAYS OUT OF THE WALL, EACH OF WHICH UNMOUNTS BEHIND
+       YOU — AND BOTH NAMES BELOW ARE IN THE SAME STATE THE SHEET WAS, WHICH
+       IS SAID HERE RATHER THAN QUIETLY REPOINTED ══════════════════════════
+       Measured 2026-10-12 against every `.ts`/`.tsx` in `packages/web/src`
+       outside `src/styles`: `.jar-values` has no renderer (the up-signpost
+       that is drawn wears `.jar-up` / `.jar-up--down`) and `.jar-saved` has
+       none either — the two mentions left in `Home.tsx` both pass the string
+       to `querySelector`. Both still have rules in `home.css`. So these
+       two rows print `(never reached it)` and push `travelling through
+       .jar-values drops focus to the document` into `broke`, and the whole
+       "AND READING ONE BACK" section immediately below tabs for `jar-saved`
+       to find the archive's door and therefore reports `no keyboard route
+       opens a memory — the archive is write-only again` on a working
+       product. Three false findings from one cause, and the third of them is
+       this file's loudest line.
+
+       WHY THIS IS NOT FIXED IN THE SAME EDIT. It is not a repoint — it is the
+       sheet/way distinction above being re-argued. Both destinations open
+       from the dock now (`.waka-dock-item`, by the words Principles and
+       Inspirations), the dock stays on screen the whole time, and a thing you
+       reach from a bar that does not unmount is much closer to this file's
+       SHEET than to its WAY. Deciding that changes what `kept` means and what
+       `broke` should say, and this file's own header is explicit that "a
+       report that misnames the mechanism sends whoever reads it to the wrong
+       file". It wants the founder's reading of the dock, not a token swap.
+       Reported in full rather than absorbed. */
     const ways: Array<{ way: string; landedOn: string; kept: boolean }> = [];
     for (const way of ["jar-values", "jar-saved"]) {
       const landedOn = await focusAfterKey(way, null);
