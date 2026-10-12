@@ -1678,6 +1678,27 @@ body .profile-signout-button {
 
    The notepad's own grammar is corners without boxes — the tools pill and
    the save already opt out the same way. This is the third. */
+/* ═══ THE WAY BACK IS ONE CONTROL ON TWO PAGES ═════════════════════════
+   Unscoped from `.jar-inspiration-composer`, because `NotePage` renders it
+   on the archive's open note as well now and the archive's copy was coming
+   out 11px wide — the bare glyph, with no target around it — while the
+   notepad's was a proper 44. The same control at two sizes depending on how
+   you arrived is the class of difference this whole pass is closing. */
+/* ═══ BOTH SELECTORS, AND THE SECOND ONE IS NOT BELT-AND-BRACES ════════
+   `.jar-inspiration-composer button` is declared in this file, unlayered,
+   at (0,1,1). A bare `.jar-note-back` is (0,1,0) and LOSES to it — so
+   unscoping this block put the filled rounded box back around the notepad's
+   chevron, which is the exact control the founder said "why is this still
+   here?" about. It took one browser screenshot to see and would have taken
+   none to miss.
+
+   This is the third time this file's unlayered block has beaten a more
+   specific-looking rule elsewhere; the note at `.jar-inspiration-composer
+   .jar-note-back` below the original deletion records the first. ONE BLOCK
+   WITH TWO SELECTORS rather than two blocks: `one-class-one-thing.test.ts`
+   fails a class laid out in two places, and it is right — which of them
+   wins would depend on bundle order. */
+.jar-note-back,
 .jar-inspiration-composer .jar-note-back {
   /* SQUARE, NOW THAT IT IS ONLY A CHEVRON — the same change, for the same
      reason, as `.waka-over-back`: the destination moved to `aria-label` and
@@ -1685,16 +1706,30 @@ body .profile-signout-button {
      pages and must stay identical; see the note in `SavesOverlay`. */
   display: inline-grid;
   place-items: center;
+  /* AT THE START OF ITS TRACK, not centred in it. `.jar-note-top` is three
+     `1fr auto 1fr` tracks so the date can sit in the middle of the PAGE;
+     without this the chevron would float in the middle of the left third.
+     Carried over from the block that used to lay this out in `home.css`. */
+  justify-self: start;
   width: var(--waka-corner);
   min-width: var(--waka-corner);
   min-height: var(--waka-corner);
+  /* Pulled back so the GLYPH lands on the page's margin rather than the
+     target's left edge — a 44px box around an 11px chevron would otherwise
+     indent it by half the difference. */
   margin-inline-start: calc(var(--sp-12) * -1);
   padding: 0;
   border: 0;
   border-radius: 0;
+  background: none;
   color: var(--w-muted);
+  font-family: var(--waka-face);
   font-size: var(--t-body);
+  cursor: pointer;
+  transition: color 0.2s ease;
 }
+.jar-note-back:hover,
+.jar-note-back:focus-visible,
 .jar-inspiration-composer .jar-note-back:hover,
 .jar-inspiration-composer .jar-note-back:focus-visible {
   color: var(--w-ink);
@@ -1708,15 +1743,161 @@ body .profile-signout-button {
 .jar-composer-link { display: flex; gap: var(--sp-8); margin: var(--sp-12) 0; }
 .jar-composer-link input { min-width: 0; flex: 1; min-height: var(--sp-44); padding: var(--sp-8); border: 1px solid var(--w-edge); border-radius: var(--sp-8); background: transparent; color: var(--w-ink); }
 @media (max-width: 480px) { .jar-composer-link { flex-wrap: wrap; } .jar-composer-link input { flex-basis: 100%; } }
-.jar-composer-media { list-style: none; margin: var(--sp-12) 0; padding: 0; }
-.jar-composer-media li { display: flex; gap: var(--sp-12); align-items: center; flex-wrap: wrap; padding: var(--sp-12) 0; border-bottom: 1px solid var(--w-edge); }
-.jar-composer-media img { width: calc(var(--sp-44) * 2); height: calc(var(--sp-44) * 2); object-fit: cover; border-radius: var(--sp-8); }
-.jar-composer-media audio { width: 100%; }
+/* ═══ THE SHELF: ATTACHMENTS AS A GRID ═══════════════════════════════════
+ *
+ * Founder: "when a user drops an image, can we just show the image at the
+ * bottom as a grid rather than like this? I think it's a little ugly how
+ * files are added today."
+ *
+ * `.jar-composer-media` AND ITS FOUR `-name` RULES WERE A COLUMN OF ROWS,
+ * each a browser
+ * `<audio controls>` or a 88px thumbnail, then a filename, then two lines of
+ * meta, then a bordered ×. See `MediaTile` in `InspirationComposer` for what
+ * each of those was saying and why none of it needed saying.
+ *
+ * AUTO-FILL, NOT A FIXED COUNT. Five is the limit, and five tiles in a row
+ * at 390px would be 60px each. `auto-fill` with a floor lays out as many as
+ * fit and wraps the rest, so the same markup is a row of five on a laptop
+ * and two rows of three on a phone with no breakpoint.
+ *
+ * SQUARE, so a landscape screenshot and a portrait photo and a recording all
+ * occupy the same shape — a shelf of mixed rectangles is the thing that made
+ * the old list read as debris rather than as a set.
+ */
+.jar-shelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: var(--sp-8);
+  list-style: none;
+  margin: var(--sp-16) 0 0;
+  padding: 0;
+}
+
+.jar-tile {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 12px;
+  /* THE TILE IS THE ONLY FILLED SHAPE ON THE PAGE, and it has to be: a
+     photo needs a boundary or it bleeds into the ground, and a recording
+     with no picture needs a body to be a tile at all. Quiet enough that a
+     shelf of five does not out-weigh the words above it. */
+  background: var(--moon-raised);
+}
+
+.jar-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-orientation: from-image;
+}
+
+/* WHAT A TILE WITHOUT A PICTURE SHOWS. A recording is a press; a link and
+   an undrawable file are not, so they share the box and not the cursor. */
+.jar-tile-face,
+.jar-inspiration-composer .jar-tile-face {
+  display: grid;
+  place-content: center;
+  gap: var(--sp-4);
+  width: 100%;
+  height: 100%;
+  padding: var(--sp-8);
+  border: 0;
+  background: none;
+  color: var(--w-ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  line-height: 1.3;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+button.jar-tile-face,
+.jar-inspiration-composer button.jar-tile-face { cursor: pointer; }
+
+.jar-tile-face svg { justify-self: center; width: 22px; height: 22px; }
+
+.jar-tile-clock { color: var(--w-muted); font-variant-numeric: tabular-nums; }
+
+.jar-tile-link { text-decoration: underline; text-underline-offset: 2px; }
+
+/* THE × AND THE RETRY RIDE ON THE TILE, not in a column beside it. Both are
+   40px targets with a small glyph: the shape has to be pressable on a phone
+   and must not look like a button sitting on a photo. */
+/* ═══ AND THESE CARRY THE PAGE'S SELECTOR TOO ═════════════════════════
+   Same trap as the chevron above, found the same way — in a browser, not in
+   the file. `.jar-inspiration-composer button` is unlayered at (0,1,1) and
+   sets a 44px floor, a 12px padding, a 1px border and a 12px radius on
+   EVERY button inside the notepad. A bare `.jar-tile-x` is (0,1,0), so the
+   first version of these came out as bordered 44px boxes parked on top of
+   84px photos.
+
+   The blanket rule is the real problem and it is not this change's to fix:
+   it predates the component vocabulary and every control that has wanted to
+   look like anything else has had to out-specify it. This is the third such
+   escape in one file. Listing both selectors keeps the escape in ONE block,
+   which is what `one-class-one-thing.test.ts` requires. */
+.jar-tile-x,
+.jar-tile-retry,
+.jar-inspiration-composer .jar-tile-x,
+.jar-inspiration-composer .jar-tile-retry {
+  position: absolute;
+  top: 0;
+  display: grid;
+  place-items: center;
+  /* 28, NOT 44. The product's corner size would be a third of an 84px tile
+     and would read as a button parked on a photo rather than as a corner of
+     it. 28 clears WCAG 2.5.8's 24x24 floor, which is the number that
+     actually applies to a control inside a small item — 2.5.5's 44 is AAA
+     and is met by the shelf's own spacing between tiles. */
+  width: 28px;
+  height: 28px;
+  /* AND THE FLOOR, NOT JUST THE SIZE. `.jar-inspiration-composer button`
+     sets `min-height`/`min-width: var(--sp-44)`, and a `width` that loses
+     to a `min-width` is not a width — the first fix set both dimensions and
+     left the floor standing, so these stayed 44px squares. Overriding a
+     blanket rule means overriding every property it sets, which is the
+     cost of having one. */
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 0 12px 0 12px;
+  /* OVER A PHOTO, SO IT CARRIES ITS OWN GROUND. A bare glyph on an
+     arbitrary image is legible or not depending on the image.
+
+     BOTH FROM THE PALETTE, which the ratchet in `type-scale.test.ts`
+     insisted on and was right to: the first draft wrote `#000` and `#fff`
+     here, and a scrim and a white are two tiers this product has already
+     named. `--waka-scrim` is the same black every other veil in the
+     product uses, at the same opacity; `--moon-ink` is the warm white
+     everything else is written in, so a × on a photo is the same white as
+     a × anywhere else rather than a colder one. */
+  background: var(--waka-scrim);
+  color: var(--moon-ink);
+  font-size: var(--t-ui);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.jar-tile-x,
+.jar-inspiration-composer .jar-tile-x { right: 0; }
+.jar-tile-retry,
+.jar-inspiration-composer .jar-tile-retry { left: 0; border-radius: 12px 0 12px 0; }
+
+/* A FILE THAT NEEDS ATTENTION, SAID BY THE TILE ITSELF. The sentence is on
+   the control's `title` — one line of prose per broken file was most of
+   what made the old rows a wall. */
+.jar-tile--wrong {
+  outline: 1px solid var(--error);
+  outline-offset: -1px;
+}
+
+/* IN FLIGHT. The bar says that something is uploading; this says which. */
+.jar-tile--busy { opacity: 0.55; }
 .jar-recording-choice { padding-block: var(--sp-12); border-bottom: 1px solid var(--w-edge); }
 .jar-recording-choice audio { width: 100%; margin-bottom: var(--sp-12); }
-.jar-composer-media-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--t-ui); }
-.jar-composer-media-name a { color: inherit; }
-.jar-composer-media-name small { display: block; color: var(--w-muted); font-size: var(--t-ui); }
 .jar-composer-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--sp-12); margin-top: var(--sp-22); }
 .jar-composer-visibility button { border-color: transparent; }
 .jar-composer-visibility button[aria-pressed="true"] { background: var(--w-raised); border-color: var(--w-muted); }
@@ -1732,7 +1913,6 @@ body .profile-signout-button {
 .jar-attachment-preview summary { min-height: var(--sp-44); cursor: pointer; }
 .jar-attachment-excerpt { white-space: pre-wrap; overflow-wrap: anywhere; }
 .jar-saved-attachment img { image-orientation: from-image; }
-.jar-composer-media img { image-orientation: from-image; }
 .jar-review-backdrop { position:absolute; inset:0; z-index:7; border:0; background:rgba(0,0,0,.2); }
 .jar-seek.jar-review { box-sizing:border-box; z-index:8; width:min(640px,calc(100vw - var(--sp-44))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-44)); display:flex; flex-direction:column; color:var(--w-ink); font-size:var(--t-body); text-align:left; }
 .jar-review[aria-hidden="true"] { visibility:hidden; }

@@ -246,6 +246,8 @@
   "worldComposerTooManyFiles": "Keep up to five attachments.",
   "worldComposerOpening": "Opening your draft…",
   "worldComposerPhoto": "Photo",
+  "worldComposerRemoveFile": "Remove {name}",
+  "worldComposerRetryFile": "Try uploading {name} again",
   "worldComposerRecord": "Record",
   "worldComposerRecordAgain": "Record again",
   "worldComposerRecordingFor": "Recording · {seconds}s",

@@ -31,17 +31,140 @@
  */
 import { useEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import { DialogSurface } from './DialogSurface';
+import { HomeActionIcon } from './HomeActionIcon';
+import { NotePage } from './NotePage';
 import { AuthoredSaveNotice } from './AuthoredSaveNotice';
 import {inspirationWithPendingLink} from '../lib/inspiration-input';
-import { t, type SupportedLocale } from '../lib/locales';
-import { momentStamp } from '../lib/words';
+import { formatMessage, t, type SupportedLocale } from '../lib/locales';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { useAuthoredSave } from '../lib/use-authored-save';
 import type { useAudioRecording } from '../lib/use-audio-recording';
 
-function fileSize(bytes: number) {
-  return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+/* `fileSize` WENT WITH THE ROWS. It printed "142 KB" under every
+   attachment — a fact about storage rather than about the thing, and the
+   limit it was implicitly warning about is enforced by `validationError`,
+   which says so in words when it is actually reached. */
+/**
+ * ═══ ONE ATTACHMENT, AS A TILE ══════════════════════════════════════════
+ *
+ * Founder, with a recording and a screenshot stacked under a blank note:
+ * "when a user drops an image, can we just show the image at the bottom as
+ * a grid rather than like this? I think it's a little ugly how files are
+ * added today."
+ *
+ * WHAT WAS UGLY, AND IT WAS NOT THE ARRANGEMENT. Each file was a full-width
+ * ROW: a browser-chrome `<audio controls>` — a white pill with a play
+ * triangle and a volume icon, the single brightest object on a dark page
+ * whose whole argument is quiet — then the filename, then "34 KB · In this
+ * draft — not saved yet.", then a bordered × in its own box. Four pieces of
+ * furniture per file, three of which restate what the fourth already shows.
+ *
+ * A TILE SHOWS THE THING INSTEAD OF DESCRIBING IT. A photo is its own
+ * label; nobody reads "Screenshot 2026-10-11 at 4.49.54 PM.png" to find out
+ * which picture it is. A recording has no picture, so it gets the one fact
+ * a picture cannot carry — how long it is — and plays on a press.
+ *
+ * WHAT WENT WITH THE ROWS:
+ *
+ *   THE FILE SIZE. "142 KB" is a fact about storage, not about the thing;
+ *   the limit it was implicitly warning about is enforced by
+ *   `validationError`, which says so in words when it is actually hit.
+ *
+ *   "IN THIS DRAFT — NOT SAVED YET." Printed under every attachment, on a
+ *   page whose bar says "Save" and "Save as draft". It is Law 4 in minature:
+ *   a sentence restating the state the whole surface is in.
+ *
+ *   THE BROWSER'S AUDIO PLAYER. Replaced by the tile itself — one press,
+ *   play or pause, the same shape as every other tile.
+ */
+function MediaTile({
+  item, disabled, recording, uploading, onRemove, onRetry, removeLabel, retryLabel,
+}: {
+  item: InspirationDraftMedia;
+  disabled: boolean;
+  /** A running recorder pauses playback: two audio streams at once is noise. */
+  recording: boolean;
+  uploading: boolean;
+  onRemove: () => void;
+  onRetry: () => void;
+  /* WHOLE SENTENCES, NOT A VERB AND A FILENAME CONCATENATED. The caller
+     formats them, because joining `say('worldRetry')` to a name produces
+     "Try again Photo.heic" in English and worse in Korean, where the verb
+     goes last. These are the only two labels on this tile, and they are the
+     only thing a screen reader has to tell three photos apart. */
+  removeLabel: string;
+  retryLabel: string;
+}) {
+  const [url, setUrl] = useState('');
+  const [failedPreview, setFailedPreview] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [seconds, setSeconds] = useState<number | null>(null);
+  const audio = useRef<HTMLAudioElement>(null);
+  useEffect(() => { if (recording) { audio.current?.pause(); setPlaying(false); } }, [recording]);
+  useEffect(() => {
+    if (!item.blob) return;
+    const value = URL.createObjectURL(item.blob);
+    setUrl(value); setFailedPreview(false);
+    return () => URL.revokeObjectURL(value);
+  }, [item.blob]);
+
+  /* THE ONE THING WRONG WITH IT, IF ANYTHING IS — in priority order, so a
+     tile never carries two marks. A file the server refused and a file too
+     large are both "this one needs attention"; which it is belongs in the
+     tooltip, not in a second badge. */
+  const wrong = item.validationError || item.uploadError || '';
+  const retryable = Boolean(item.uploadError) && !item.validationError && !uploading;
+  const clock = seconds === null ? '' :
+    `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
+
+  return (
+    <li className={`jar-tile${wrong ? ' jar-tile--wrong' : ''}${uploading ? ' jar-tile--busy' : ''}`}>
+      {item.type === 'image' && url && !failedPreview ? (
+        <img src={url} alt={item.name} onError={() => setFailedPreview(true)} />
+      ) : item.type === 'audio' && url ? (
+        <>
+          {/* THE TILE IS THE PLAYER. No `controls`, so the browser draws
+              nothing of its own — see the note above about the white pill. */}
+          <audio ref={audio} src={url} preload="metadata" aria-hidden="true"
+            onLoadedMetadata={event => {
+              const length = event.currentTarget.duration;
+              setSeconds(Number.isFinite(length) ? length : null);
+            }}
+            onEnded={() => setPlaying(false)} />
+          <button type="button" className="jar-tile-face" disabled={recording}
+            aria-label={item.name}
+            onClick={() => {
+              const node = audio.current;
+              if (!node) return;
+              if (node.paused) { void node.play(); setPlaying(true); }
+              else { node.pause(); setPlaying(false); }
+            }}>
+            <HomeActionIcon kind={playing ? 'pause' : 'play'} />
+            {clock ? <span className="jar-tile-clock">{clock}</span> : null}
+          </button>
+        </>
+      ) : item.type === 'link' && item.url ? (
+        <a className="jar-tile-face jar-tile-link" href={item.url} target="_blank" rel="noreferrer">
+          {item.name}
+        </a>
+      ) : (
+        /* A FILE THIS BROWSER CANNOT DRAW — a HEIC on a browser with no
+           decoder for it, most often. It still uploads and still saves, so
+           the tile says what it is rather than disappearing. */
+        <span className="jar-tile-face jar-tile-name">{item.name}</span>
+      )}
+
+      {retryable ? (
+        <button type="button" className="jar-tile-retry" disabled={disabled}
+          title={wrong} aria-label={retryLabel} onClick={onRetry}>↻</button>
+      ) : null}
+      <button type="button" className="jar-tile-x" disabled={disabled}
+        title={wrong || undefined}
+        aria-label={removeLabel} onClick={onRemove}>×</button>
+    </li>
+  );
 }
+
 function MediaPreview({ item, recording = false, label }: { item: InspirationDraftMedia; recording?: boolean; label?: string }) {
   const [url, setUrl] = useState('');
   const [imageFailed, setImageFailed] = useState(false);
@@ -103,31 +226,21 @@ export function InspirationComposer(props: {
   return <DialogSurface className="jar-seek jar-inspiration-composer" aria-label={say('worldCaptureInspiration')} onClose={props.onClose} data-jar-chrome="1"
     onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
     onDrop={event => { if (event.dataTransfer.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.dataTransfer.files]); } }}>
-    {/* THE THREE CORNERS OF THE TOP, and the heading row they replaced. That
-        row was a title and a Close — a dialog announcing itself in a bar,
-        which is the one thing the reference's note page does not do. */}
-    <div className="jar-note-top">
-      {/* A CHEVRON, AND NOT ITS NAME — see the long note on the same
-          control in `SavesOverlay`, which is the page this one has to match
-          exactly. Founder: "remove the all inspirations thing here —
-          actually, maybe just have a back button." The destination stays on
-          the `aria-label`. */}
-      <button type="button" className="jar-note-back" aria-label={say('worldBackToAll')} onClick={props.onPast}>
-        <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
-          <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
-            strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </button>
-      <span className="jar-note-when">{momentStamp(when.current, props.locale)}</span>
-      {/* THE AUDIENCE PAIR IS GONE, AND SO IS WHAT IT CHOSE BETWEEN.
-          Founder: "I told you we got rid of the concept for room so there
-          shouldn't be only me and share with rooms."
-          A control offering two destinations when the product has one is
-          worse than clutter — it teaches a model of the thing that is no
-          longer true, and every person who presses it learns something they
-          will have to unlearn. `onVisibility` stays on the props so the
-          world keeps deciding what a save is; nothing on this page asks. */}
-    </div>
+    {/* ═══ THE TOP IS `NotePage`'S NOW, AND SO IS THE SAVED NOTE'S ═══════
+        Founder: "make sure that when I'm entering from create new
+        inspiration or my past inspiration, it's using the exact same
+        component, and I'm liking the new inspiration component a lot more."
+
+        The way back and the moment were written out here and again in
+        `SavesOverlay`, and the two copies had drifted apart in every
+        particular — see that component's header for the inventory. This
+        page is the one the founder prefers, so it is this page's chrome
+        that both now render.
+
+        NO TRAILING VERB HERE. A note that does not exist yet cannot be
+        deleted; the slot is for a verb ABOUT the note and a new one has
+        none. */}
+    <NotePage locale={props.locale} whenMs={when.current} onBack={props.onPast} backTo="worldBackToAll">
     <div className="jar-composer-body">
     <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={4} value={props.text} readOnly={props.busy || !props.ready || props.recording.phase !== 'idle'}
       aria-label={say('worldCaptureInspiration')} placeholder={say('worldCapturePrompt')}
@@ -143,16 +256,41 @@ export function InspirationComposer(props: {
       <button type="button" disabled={blocked} onClick={()=>{props.onLinkText('');setAddingLink(false);}}>{say('worldComposerCancelLink')}</button>
     </div> : null}
     {link.trim() ? <p className="jar-composer-storage-note">{say('worldComposerLinkReady')}</p> : null}
-    {props.media.length ? <ul className="jar-composer-media">{props.media.map(item => <li key={item.id}>
-      <MediaPreview item={item} recording={props.recording.phase !== 'idle'} label={item.type === 'audio' && props.recordingCandidate ? 'Previous recording' : undefined} /><div className="jar-composer-media-name">{item.type === 'link' ? <a href={item.url} target="_blank" rel="noreferrer">{item.name}</a> : item.type === 'audio' && props.recordingCandidate ? 'Previous recording' : item.name}
-        {item.blob ? <small>{fileSize(item.blob.size)} · {item.uploaded ? 'Uploaded — save to keep.' : 'In this draft — not saved yet.'}</small> : null}
-        {item.validationError ? <small role="alert">{item.validationError} Remove this file to save the others.</small> : null}
-        {props.uploadingId === item.id ? <small role="status">{say('worldComposerUploading')}</small> : null}
-        {item.uploadError && props.uploadingId !== item.id ? <><small role="alert">{item.uploadError}</small><button type="button" disabled={blocked} onClick={() => props.onRetryFile(item.id)} aria-label={`Retry upload for ${item.name}`}>Retry upload</button></> : null}</div>
-      <button type="button" disabled={blocked} aria-label={`${say('worldRemoveLower')} ${item.name}`} onClick={() => props.onRemove(item.id)}>×</button>
-    </li>)}</ul> : null}
-    {props.media.length > 5 ? <p role="alert">Keep up to five attachments. Remove the extras when you’re ready — your selections are still here.</p> : null}
-    {props.uploadingId ? <p role="status">Uploading file {props.media.filter(item => item.blob).findIndex(item => item.id === props.uploadingId) + 1} of {props.media.filter(item => item.blob).length}… Keep this window open.</p> : null}
+    {/* ═══ THE SHELF ═══════════════════════════════════════════════════
+        Founder: "when a user drops an image, can we just show the image at
+        the bottom as a grid rather than like this?"
+
+        A GRID, AND AT THE BOTTOM. Both halves were asked for and the second
+        is the one with a reason beyond taste: attachments used to push the
+        words down the page as they arrived, so dropping a third photo moved
+        the sentence somebody was in the middle of writing. The shelf is
+        pinned under the field now and the words never move.
+
+        See `MediaTile` for what each tile shows and what the rows it
+        replaces were saying that nothing needed to say. */}
+    {props.media.length ? <ul className="jar-shelf">{props.media.map(item => (
+      <MediaTile key={item.id} item={item} disabled={blocked}
+        recording={props.recording.phase !== 'idle'}
+        uploading={props.uploadingId === item.id}
+        removeLabel={formatMessage(props.locale, 'worldComposerRemoveFile', { name: item.name })}
+        retryLabel={formatMessage(props.locale, 'worldComposerRetryFile', { name: item.name })}
+        onRemove={() => props.onRemove(item.id)}
+        onRetry={() => props.onRetryFile(item.id)} />
+    ))}</ul> : null}
+    {/* ═══ AND THE TWO SENTENCES UNDER THE ROWS ARE IN THE BAR ══════════
+        Founder: "states should show and disappear in the bottom bar only."
+
+        "Keep up to five attachments…" was an alert that appeared the moment
+        a sixth arrived and pushed the whole shelf down; it is
+        `worldComposerTooManyFiles` on the bar's Save now, which is the
+        control it actually blocks — see `keep-ready.ts`.
+
+        "Uploading file 2 of 3… Keep this window open." lost its count on
+        purpose. A person cannot act on which of three files is in flight,
+        the instruction was asking them not to do something they were not
+        doing, and the bar says `worldComposerUploading` while any of them
+        is moving. The tile that is actually uploading dims, which is the
+        same fact where it belongs. */}
     {props.recording.phase !== 'idle' && props.media.some(item => item.type === 'audio') ? <p className="jar-composer-storage-note">Your earlier recording stays until you choose.</p> : null}
     {props.recordingCandidate ? <section className="jar-recording-choice" aria-label="Choose a recording">
       <p>New recording</p><MediaPreview item={props.recordingCandidate} label="New recording" />
@@ -175,6 +313,7 @@ export function InspirationComposer(props: {
         error, so it is absent from every normal note. */}
     {props.error.includes('another tab') ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
     </div>
+    </NotePage>
     {/* THE PILL IN THE BOTTOM-LEFT CORNER IS GONE, AND SO IS THE CORNER.
         Founder, twice, about that corner — "I don't like this thing on the
         left" — and about the shape of the bottom of the screen: "this

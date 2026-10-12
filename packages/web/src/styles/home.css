@@ -4689,11 +4689,19 @@
    */
   .jar-note-top {
     display: grid;
-    /* THREE TRACKS FOR TWO THINGS, deliberately. The audience pair that used
-       to hold the right track is gone with the concept behind it (founder:
-       "we got rid of the concept for room"), and collapsing to two tracks
-       would hang the stamp off the chevron instead of centring it on the
-       page. An empty track keeps the date where the reference puts it. */
+    /* THREE TRACKS, AND THE THIRD HAS A TENANT AGAIN. It held the audience
+       pair, which went with the concept behind it (founder: "we got rid of
+       the concept for room"), and was then kept EMPTY on purpose —
+       collapsing to two tracks would hang the stamp off the chevron instead
+       of centring it on the page.
+
+       It now holds `.jar-note-verb`: the one verb ABOUT the note, which is
+       Delete on a saved one and nothing on a new one. That is the slot's
+       original shape rather than a new idea — a thing that acts on the whole
+       note, as far from the way back as the row has room for. The track is
+       still declared `1fr` either way, so an empty one and a full one centre
+       the date identically; nothing moves when you open a saved note after a
+       new one. */
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: var(--sp-12);
@@ -4714,28 +4722,22 @@
      chats"), and this one goes somewhere with a name too: the archive the
      note is about to join. So it says so, in the register its three peers
      already use, with no box around it. */
-  .jar-note-back {
-    justify-self: start;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sp-8);
-    min-height: var(--waka-corner);
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--muted);
-    font-family: var(--waka-face);
-    font-size: var(--t-body);
-    font-weight: 300;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: color 0.2s ease;
-  }
+  /* ═══ THE BLOCK THAT STOOD HERE MOVED TO `chrome.css` ═══════════════
+     It laid this control out as an `inline-flex` row — chevron, gap, the
+     name of the destination — and `chrome.css` now lays the same class out
+     as a square `inline-grid` holding only the glyph. Two blocks laying out
+     one class is what `one-class-one-thing.test.ts` fails the build over,
+     and it was right to: the later block silently re-lays-out the earlier
+     one's element, and which one is later depends on bundle order.
 
-  .jar-note-back:hover,
-  .jar-note-back:focus-visible {
-    color: var(--ink);
-  }
+     THE MERGE KEPT WHAT THIS ONE KNEW. `justify-self: start` is the reason
+     the chevron sits at the start of its grid track rather than centred in
+     it, and the hover transition is the register every control in the
+     notepad uses. Both are in the surviving block.
+
+     WHY THAT ONE AND NOT THIS ONE: the control is `NotePage`'s now, rendered
+     on two pages, so its definition belongs with the component's vocabulary
+     rather than inside the notepad's page rules. */
 
   /* WHEN THIS NOTE IS, and it is the only thing on the page until somebody
      writes. Muted rather than faint: a placeholder is text you are meant to
@@ -4879,10 +4881,28 @@
      screen's left margin where a thumb finds it — inside the 34rem reading
      column it floated into the middle of the page beside the words, which is
      nowhere a back button has ever been. */
+  /* THE VERB SITS AT THE FAR END OF ITS TRACK. `1fr` would otherwise let a
+     two-button confirmation ("Delete it anyway · Not now") start at the
+     track's left edge, which is the middle of the page. */
+  .jar-note-verb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--sp-12);
+    justify-self: end;
+  }
+
   .jar-inspiration-composer > .jar-note-top {
     width: 100%;
     max-width: none;
   }
+
+  /* AND THE CHILD COMBINATOR ABOVE STILL HOLDS, which is worth one line
+     because it looks like it should not: `NotePage` wraps this row and the
+     body together, but it returns a FRAGMENT, so neither gains a wrapper
+     element and both are still direct children of the page. A later edit
+     that gives that component a real `<div>` has to revisit this selector
+     and the column rule below it. */
 
   .jar-inspiration-composer > :not(.jar-note-tools):not(.jar-note-top) {
     width: 100%;

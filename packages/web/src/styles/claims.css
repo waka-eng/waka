@@ -1470,6 +1470,95 @@
   padding: var(--sp-24) var(--sp-24) 0;
 }
 
+/* ═══ THE SAME PAGE THE NOTEPAD IS ═══════════════════════════════════════
+   Founder, having opened a saved inspiration: "it should go to the same
+   exact UI as when I'm creating a new inspiration ... make sure it's using
+   the exact same component."
+
+   `NotePage` is that component and it was not sufficient on its own: a
+   shared top row inside two different boxes still lands the chevron and the
+   first word in two different places. The box has to match too.
+
+   THE NUMBERS ARE THE NOTEPAD'S, NOT NEW ONES — `.jar-seek
+   .jar-inspiration-composer` in `home.css` is where they are reasoned
+   about, including why the bottom inset clears the dock. Restating them
+   here is the drift risk; the alternative is one page borrowing the other's
+   class name, which would make a change to the notepad silently reshape the
+   archive. Named and measured against each other is the lesser evil, and
+   `one-note.test.tsx` holds the two to the same geometry so a change to
+   either fails rather than diverges. */
+/* See `SavesOverlay` for why the reserve is dropped: the two corners it
+   holds room for are not on screen at this depth. The horizontal padding
+   goes with it — `.waka-over--note` below sets the notepad's own. */
+.waka-page--note {
+  padding: 0 0 calc(var(--sp-20) + var(--waka-corner) + var(--sp-24) + env(safe-area-inset-bottom));
+}
+
+.waka-over--note {
+  width: 100%;
+  max-width: none;
+  gap: 0;
+  /* The bottom inset is the page's now (see `.waka-page--note`), so this
+     keeps only the top and the sides — double-counting the dock's clearance
+     would leave a note scrolling to a stop well above the bar. */
+  padding: calc(var(--sp-24) + env(safe-area-inset-top)) clamp(20px, 6vw, 28px) 0;
+}
+
+.waka-over--note .waka-over-one {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  /* NO GAP. `.waka-over-one` keeps `--sp-16` between its rows because it
+     used to BE rows — a date line, a delete row, a picture, the words, two
+     notices. It is a page now, and the only spacing between the top row and
+     the first line should be the one `.jar-note-top` already declares
+     (`margin-block: --sp-16 --sp-32`), which is the spacing the notepad
+     has. The gap was adding 16px on top of that, which is the last
+     measurable difference between the two pages. */
+  gap: 0;
+}
+
+/* THE TOP ROW IS THE PAGE'S, the column is the words'. Same split the
+   notepad makes: the chevron belongs on the screen's left margin where a
+   thumb finds it, and a 34rem box centred in the page would drag it
+   inwards. */
+.waka-over--note .jar-note-top {
+  width: 100%;
+  max-width: none;
+}
+
+.waka-over--note .waka-note-page,
+.waka-over--note .waka-sheet-picture {
+  width: 100%;
+  max-width: 34rem;
+  margin-inline: auto;
+}
+
+/* ═══ AND THE WORDS ARE SET THE WAY THE NOTEPAD SETS THEM ════════════════
+   Founder: "it should go to the same exact UI as when I'm creating a new
+   inspiration ... I'm liking the new inspiration component a lot more."
+
+   Two differences were left after the geometry matched, and both came from
+   this field inheriting `.jar-panel-text` — the class the world's memory
+   panel uses, where a kept thought is something you READ in a card:
+
+     `margin: var(--sp-22) 0`, which started the words 38px lower than on a
+     new note. On a card that margin separates the text from the card's
+     other rows; on a page there are no other rows.
+
+     `--t-lead` where the notepad is `--t-body`. The notepad's size is
+     reasoned about at `.jar-seek.jar-inspiration-composer .jar-composer-text`
+     and the reason is the CARET: a browser draws it at the field's font
+     size, and the founder's "cursor size too big" is what a reading size
+     on an editable page produces. Both of these are editable pages. */
+.waka-over--note .waka-note-page {
+  margin-block: 0;
+  font-size: var(--t-body);
+  line-height: 1.7;
+}
+
 /**
  * IT NAMES ITSELF, which as a page it deliberately did not.
  *

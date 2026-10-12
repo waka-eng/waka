@@ -42,6 +42,8 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { DialogSurface } from "./DialogSurface";
+import { NotePage } from "./NotePage";
+import { NoteTools } from "./NoteTools";
 import {
   attachmentPreviewImageUrl,
   deleteInspiration,
@@ -51,9 +53,8 @@ import {
   uploadToPresignedUrl,
 } from "../lib/api";
 import { useFirstVisit } from "../lib/first-visit";
-import { supportedRecordingType, useAudioRecording } from "../lib/use-audio-recording";
-import { HomeActionIcon } from "./HomeActionIcon";
-import { archiveChapter, dateStamp, dateWords } from "../lib/words";
+import { useAudioRecording } from "../lib/use-audio-recording";
+import { archiveChapter, dateWords } from "../lib/words";
 /* THE SAME DOOR THE WORLD USES. `loadInspirations` is the archive's own
    reader — it pages, it carries the total the server reports, and it holds
    the invariant that a total is never smaller than what arrived. Reaching
@@ -75,7 +76,7 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onClose }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose }: {
   locale: SupportedLocale;
   /** Whose archive. The caller already knows whose world is on screen; this
       surface should never work it out a second way and risk disagreeing. */
@@ -83,6 +84,21 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   /** Named by the caller, because only the caller knows whether the world
       behind is yours or your agent's. */
   title: string;
+  /**
+   * WHETHER A NOTE IS OPEN IN HERE, SO THE BAR CAN TRANSFORM.
+   *
+   * Founder, of an opened saved inspiration: "the bottom bar should also
+   * change." It transforms while a NEW note is being written — the plus
+   * becomes record and photo — and an opened saved note is the same page,
+   * so it has to do the same thing.
+   *
+   * A BOOLEAN AND NOT THE NOTE. The dock needs to know THAT it should swap
+   * its middle slot; what goes in that slot is this component's business,
+   * and it puts it there itself (see `DOCK_SLOT`). Passing the row up would
+   * give the world a second opinion about which note is open, which is the
+   * kind of duplicate state this pass exists to remove.
+   */
+  onNoteOpen?: (open: boolean) => void;
   /**
    * WHOSE ARCHIVE THIS COULD BE INSTEAD — asked in the corner, not here.
    *
@@ -280,7 +296,9 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
    */
   const [attaching, setAttaching] = useState(false);
   const [attachFailed, setAttachFailed] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
+  /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
+     the button that opens it, and that button is in the bar now — see
+     `NoteTools`, which owns both. */
   const attach = useCallback(async (file: File) => {
     const note = open;
     if (!note) return;
@@ -315,6 +333,15 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   }, [load, open, profileId]);
   /* The same recorder the notepad uses, handed a different destination. */
   const recording = useAudioRecording(attach);
+
+  /* TELL THE BAR, AND UNTELL IT ON THE WAY OUT. The cleanup matters more
+     than the call: an archive unmounted with a note open would leave the
+     dock holding a mic for a page that is no longer on screen. */
+  const openId = open?.id ?? null;
+  useEffect(() => {
+    onNoteOpen?.(openId !== null);
+    return () => onNoteOpen?.(false);
+  }, [openId, onNoteOpen]);
 
   /* Case-folded substring over the preview, which is what a person reading the
      grid can actually see. Matching text they cannot read would return cards
@@ -376,13 +403,33 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   }, [shown, now, locale]);
 
   return (
-    <div className="waka-page">
+    /* THE PAGE STOPS RESERVING THE CORNER ROW WHILE A NOTE IS OPEN.
+       `.waka-page` holds 60px at the top for `ME / MY AGENT` and the gear,
+       which are fixed to the viewport and would otherwise sit on the
+       archive's title. At this depth those corners are HIDDEN — the notepad
+       hides them too, and `Home` is told through `onNoteOpen` — so the
+       reserve is holding room for nothing, and holding it was the last 60px
+       between this page and the one the founder prefers. */
+    <div className={`waka-page${open ? " waka-page--note" : ""}`}>
       <DialogSurface
-        className="waka-over"
+        /* ═══ AN OPEN NOTE IS A PAGE, NOT A COLUMN IN THE ARCHIVE ════════
+           Founder: "it should go to the same exact UI as when I'm creating
+           a new inspiration."
+
+           `NotePage` made the two tops identical and that was not enough:
+           the archive is a 650px column — the reading measure a list of
+           sentences wants — and the notepad is the whole window with its
+           words in a 34rem column inside it. So the chevron sat 300px in
+           from the left on one and at the page's margin on the other, and
+           the words started at two different x. Same component, two boxes.
+
+           The modifier gives this depth the notepad's geometry. The archive
+           keeps its own at the list depth, where it is right. */
+        className={`waka-over${open ? " waka-over--note" : ""}`}
         aria-label={title}
         onClose={onClose}
         >
-        <header className="waka-over-head">
+        {open ? null : <header className="waka-over-head">
           {/* THE NAME, THEN WHAT IS BEHIND IT. Founder: "Just write the
               number 36 next to your inspirations so that the search bar is
               taking up the full space." The count was sharing a row with the
@@ -400,33 +447,18 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
               it, because at this depth the title would be naming a place you
               are not in — and two controls that both lead out is the stack
               this change exists to remove. */}
-          {open ? (
-            /* ═══ A CHEVRON, AND NOT ITS NAME ════════════════════════════
-               Founder, with "‹ All inspirations" at the top of an open note
-               and again at the top of an open chat: "remove", and then, of
-               this page: "remove the all inspirations thing here — actually,
-               maybe just have a back button."
+          {/* ═══ THE HEADER IS ABSENT ON AN OPEN NOTE ════════════════
+              Founder: "make sure that when I'm entering from create new
+              inspiration or my past inspiration, it's using the exact same
+              component."
 
-               THIS REVERSES "NAMED, LIKE EVERY OTHER WAY BACK", and the old
-               argument is kept because it was right about a different
-               screen. It came from a bare chevron IN A BOX floating on the
-               world, where nothing said where it went. On a note that fills
-               the page, having arrived from the list one press ago, the
-               chevron at the top-left is the most over-learned control on a
-               phone — and the words beside it were the only thing on this
-               page that was not the note.
-
-               STILL NAMED WHERE IT COUNTS. `aria-label` carries the
-               destination, so the control a screen reader announces has not
-               lost anything; what went is ink. */
-            <button type="button" className="waka-over-back" disabled={saving}
-              aria-label={say("worldBackToAll")} onClick={() => void leaveNote()}>
-              <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
-                <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
-                  strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          ) : (
+              This used to render the archive's own header with the way back
+              inside it, which is why an opened note looked like a page of
+              the archive rather than like a note. `NotePage` carries the
+              chevron and the moment now, in the positions the notepad puts
+              them in — so there is nothing left for a header to hold at this
+              depth, and it is gone rather than emptied. */}
+          {open ? null : (
           <span className="waka-over-name">
             <h2 className="waka-over-title">{focus ? focus.label : title}</h2>
             {/* THE WAY OUT OF THE FILTER, WHICH IS NOT THE WAY OUT OF THE
@@ -461,7 +493,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             ) : null}
           </span>
           )}
-        </header>
+        </header>}
         {/* THE TWO FACTS A GRID NEEDS BEFORE IT CAN BE SEARCHED: how much is
             behind it, and a way to narrow it. Both were in the page's header
             and both still belong together — the count tells you whether
@@ -552,6 +584,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           </div>
         ) : null}
 
+        {open ? <NoteTools
+          attaching={attaching}
+          saving={saving}
+          recording={recording}
+          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : ""}
+          uploading={say("worldComposerUploading")}
+          recordLabel={say("worldComposerRecord")}
+          stopLabel={say("worldComposerStop")}
+          photoLabel={say("worldComposerPhoto")}
+          onFile={(file) => void attach(file)}
+        /> : null}
         {open ? (
           /* ═══ IT IS A NOTE, NOT A RECORD WITH AN EDIT MODE ═══════════════
              Founder: "when looking at an inspiration, don't have a separate
@@ -588,117 +631,90 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
              undone. `deleteInspiration` has existed in the client for
              months with no caller; this is the first door onto it. */
           <article className="waka-over-one">
-            {/* ═══ THE TOP ROW: WHEN IT IS, AND THE ONE DESTRUCTIVE VERB ══
-                Founder: "delete being at bottom left like this is weird.
-                Where did mic and image attachment buttons go?"
+            {/* ═══ THE SAME PAGE A NEW NOTE IS ═════════════════════════════
+                Founder: "when clicking on a saved inspiration, it should go
+                to the same exact UI as when I'm creating a new inspiration
+                ... the title should be the same position at like middle
+                center ... and the bottom bar should also change ... make
+                sure it's using the exact same component, and I'm liking the
+                new inspiration component a lot more."
 
-                Both halves are one mistake, and it is a bad one. The NOTEPAD
-                — the page you write a new thought on — puts attaching in the
-                bottom-left corner: record and photo, two glyphs, exactly
-                there. This page put DELETE in that corner. The same slot on
-                two screens for the same kind of object, meaning "add
-                something" on one and "destroy this" on the other. Nobody
-                should have to notice which page they are on to know what the
-                bottom-left corner does.
+                `NotePage` is that component. What it took over from here:
 
-                So the corner is vacated. Delete goes to the top row, beside
-                the date, which is the slot the notepad reserves for the
-                thing that is ABOUT the note rather than part of writing it —
-                and it is as far from the attach corner as this page has.
+                  THE WAY BACK, which was in the archive's header above this
+                  article rather than on the note — so an opened note read as
+                  a page of the list instead of as a note.
 
-                ATTACHING TO A SAVED THOUGHT IS NOT BUILT, and saying so is
-                better than leaving the question hanging: the upload queue,
-                the draft media store and the recorder all belong to the
-                composer, and wiring them into the archive is real work
-                rather than a missing button. */}
-            <div className="waka-note-top">
-              <span className="jar-panel-when jar-label">
-                {dateStamp(open.capturedMs, locale)}
-              </span>
-              <span className="waka-note-foot">
-                {asking ? (
-                  <>
-                    <button type="button" className="waka-note-erase" disabled={saving}
-                      onClick={() => {
-                        setSaving(true);
-                        void deleteInspiration(open.id)
-                          .then(() => {
-                            setRows((all) => all.filter((row) => row.id !== open.id));
-                            setAsking(false);
-                            setOpen(null);
-                          })
-                          .catch(() => setSaveFailed(true))
-                          .finally(() => setSaving(false));
-                      }}>
-                      {say(saving ? "worldDeleting" : "worldDeleteItAnyway")}
-                    </button>
-                    <button type="button" onClick={() => setAsking(false)}>{say("worldNotNow")}</button>
-                  </>
-                ) : (
-                  <button type="button" className="waka-note-erase" onClick={() => setAsking(true)}>
-                    {say("worldDelete")}
+                  WHEN IT IS, which was left-aligned in a row shared with
+                  Delete. It is centred now, which is where the page the
+                  founder prefers puts it.
+
+                  THE ATTACH CORNER, which is the half of this that was an
+                  actual bug. The notepad's mic-and-photo pair moved into the
+                  dock in an earlier pass — founder, of that corner, "I don't
+                  like this thing on the left", and of the bottom of the
+                  screen, "this double layer is so weird" — and this page,
+                  being a second copy of the same layout, kept its pair. The
+                  founder photographed it as a stray pair floating beside the
+                  bar and read it as a duplicate, which it was. Two layouts
+                  for one object is how that happens; there is one now.
+
+                DELETE IS THE TRAILING VERB, which is the slot `NotePage`
+                reserves for a verb ABOUT the note. It asks first, in the
+                same two-press shape the chats list uses, because erasing one
+                of your own things is the one move here that cannot be
+                undone. */}
+            <NotePage
+              locale={locale}
+              whenMs={open.capturedMs}
+              onBack={() => void leaveNote()}
+              backTo="worldBackToAll"
+              backBusy={saving}
+              trailing={asking ? (
+                <>
+                  <button type="button" className="waka-note-erase" disabled={saving}
+                    onClick={() => {
+                      setSaving(true);
+                      void deleteInspiration(open.id)
+                        .then(() => {
+                          setRows((all) => all.filter((row) => row.id !== open.id));
+                          setAsking(false);
+                          setOpen(null);
+                        })
+                        .catch(() => setSaveFailed(true))
+                        .finally(() => setSaving(false));
+                    }}>
+                    {say(saving ? "worldDeleting" : "worldDeleteItAnyway")}
                   </button>
-                )}
-              </span>
-            </div>
-
-            {pictureOf(open) ? (
-              <img className="waka-sheet-picture" src={pictureOf(open)!} alt="" />
-            ) : null}
-
-            {/* THE WORDS ARE THE PAGE. No border, no fill, no label — the
-                same blank-page treatment the notepad gives a new one, so a
-                thing you wrote reads the same whether it is ten seconds or
-                ten months old. */}
-            <textarea
-              className="jar-panel-text waka-note-page"
-              value={draft}
-              readOnly={saving}
-              aria-label={say("worldCaptureInspiration")}
-              onChange={(event) => { setDraft(event.target.value); setSaveFailed(false); }}
-            />
-
-            {saveFailed ? (
-              <p className="jar-settings-warn" role="alert">{say("worldClaimCorrectFailed")}</p>
-            ) : null}
-            {attachFailed ? (
-              <p className="jar-settings-warn" role="alert">{say("worldComposerUploadFailed")}</p>
-            ) : null}
-
-            {/* ═══ THE SAME CORNER THE NOTEPAD HAS ═════════════════════════
-                Founder: "where did mic and image attachment buttons go?"
-                Two glyphs, bottom-left, no words and no box — the notepad's
-                own specification, because this is the same page for a
-                thought written earlier. Absent where the browser cannot
-                record: a control that can never work is not a control. */}
-            <div className="jar-note-tools">
-              {supportedRecordingType() ? (
-                recording.phase === 'idle' ? (
-                  <button type="button" className="jar-note-tool" disabled={attaching || saving}
-                    aria-label={say('worldComposerRecord')}
-                    onClick={() => void recording.start()}><HomeActionIcon kind="record"/></button>
-                ) : (
-                  <button type="button" className="jar-note-tool jar-note-tool--wide"
-                    disabled={recording.phase === 'finishing'}
-                    onClick={() => void recording.stop()}>
-                    {say('worldComposerStop')} {Math.floor(recording.seconds / 60)}:{String(recording.seconds % 60).padStart(2, '0')}
-                  </button>
-                )
+                  <button type="button" onClick={() => setAsking(false)}>{say("worldNotNow")}</button>
+                </>
+              ) : (
+                <button type="button" className="waka-note-erase" onClick={() => setAsking(true)}>
+                  {say("worldDelete")}
+                </button>
+              )}
+            >
+              {pictureOf(open) ? (
+                <img className="waka-sheet-picture" src={pictureOf(open)!} alt="" />
               ) : null}
-              <button type="button" className="jar-note-tool" disabled={attaching || saving || recording.phase !== 'idle'}
-                aria-label={say('worldComposerPhoto')}
-                onClick={() => fileInput.current?.click()}><HomeActionIcon kind="photo"/></button>
-              <input ref={fileInput} type="file" hidden
-                accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif"
-                onChange={(event) => {
-                  const picked = event.target.files?.[0];
-                  event.target.value = "";
-                  if (picked) void attach(picked);
-                }} />
-              {attaching ? <span className="jar-label" role="status">{say('worldComposerUploading')}</span> : null}
-              {recording.error ? <span className="jar-settings-warn" role="alert">{recording.error}</span> : null}
-            </div>
 
+              {/* THE WORDS ARE THE PAGE. No border, no fill, no label — the
+                  same blank-page treatment the notepad gives a new one, so a
+                  thing you wrote reads the same whether it is ten seconds or
+                  ten months old. */}
+              <textarea
+                className="jar-panel-text waka-note-page"
+                value={draft}
+                readOnly={saving}
+                aria-label={say("worldCaptureInspiration")}
+                onChange={(event) => { setDraft(event.target.value); setSaveFailed(false); }}
+              />
+
+              {/* ═══ AND ITS STATE GOES TO THE BAR WITH EVERYTHING ELSE'S ══
+                  Founder: "states should show and disappear in the bottom
+                  bar only." They are in the bar below, beside the tools
+                  they belong to, rather than in the middle of the words. */}
+            </NotePage>
           </article>
         ) : phase === "loading" ? (
           <p className="waka-over-status" role="status">
