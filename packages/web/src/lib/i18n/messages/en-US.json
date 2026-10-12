@@ -192,6 +192,7 @@
   "worldConversationNew": "New chat",
   "worldConversationOpening": "Say what’s on your mind. WAKA answers from what you’ve saved.",
   "worldConversationReadFailed": "This conversation couldn’t be opened.",
+  "worldConversationRepliesUnavailable": "Replies aren’t available right now. Your messages are still saved.",
   "worldConversationReplyCheckFailed": "Couldn’t check reply progress.",
   "worldConversationReplyFailed": "The reply couldn’t be finished. Your message is saved.",
   "worldConversationReplyLimit": "Replies are busy right now. Try again in a few minutes.",
