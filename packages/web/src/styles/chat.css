@@ -315,24 +315,30 @@
  *
  * So: a question opens a pair, and the reply closes it.
  */
-.chat-messages > li {
+.chat-message {
   margin-block: 0;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 /* Air before a new question — this is where one exchange ends. */
-.chat-messages > li[data-role="user"],
-.chat-sending {
+.chat-message[data-role="user"] {
   margin-block-start: var(--sp-40);
 }
 
 /* And close to the question it answers. */
-.chat-messages > li[data-role="assistant"] {
+.chat-message[data-role="assistant"] {
   margin-block-start: var(--sp-16);
 }
 
-.chat-messages > li:first-child {
+/* TIGHTER STILL INSIDE A RUN. Two things one person said in a row are one
+   saying with a break in it; `--sp-40` between them would make a double
+   message look like two exchanges with a missing reply. */
+.chat-message[data-run^="m"] {
+  margin-block-start: var(--sp-4);
+}
+
+.chat-message:first-child {
   margin-block-start: 0;
 }
 
@@ -367,11 +373,71 @@
  *
  * STILL NO BUBBLE, NO BORDER, NO FILL, NO COLOUR. Position and light only.
  */
-.chat-messages > li[data-role="user"],
-.chat-sending {
+.chat-message[data-role="user"] {
   max-width: 85%;
   margin-inline-start: auto;
 }
+
+/* ═══ FILLED FOR YOU, GHOST FOR WAKA ═════════════════════════════════════
+   Founder: "make the chat message list and the chat message thing also
+   follow what you see on this AI chat conversation."
+
+   The reference ships exactly two bubble variants and documents when each
+   is for: `filled` — "sender-colored background (default)" — and `ghost`
+   — "transparent background, keeps alignment padding ... useful for
+   AI-style responses".
+
+   THIS SURFACE HAD ALREADY REASONED ITS WAY TO HALF OF IT, and the old
+   note is kept above because it is the better statement of why: "a
+   container implies an utterance and cannot hold a document." Your turns
+   are utterances and now get the container; a reply runs to paragraphs,
+   lists and code, so it gets the ghost — padding for alignment, no edge.
+
+   THE FILL IS THE RAISED TIER, not a colour. This product has no accent
+   and the contrast argument above still governs: the SPEAKER distinction
+   is carried by position and by `--jar-muted` clearing 3:1, and the
+   bubble is a shape on top of a distinction that already works rather
+   than the thing carrying it. */
+.chat-message[data-role="user"] .chat-bubble {
+  /* IT HUGS WHAT WAS SAID. `max-width` on the message caps the long case;
+     without `fit-content` on the bubble itself a four-word question still
+     filled 85% of the measure, so every turn looked the same length and
+     the shape stopped carrying anything. Measured in a browser: a 464px
+     bubble around 230px of text. */
+  width: fit-content;
+  max-width: 100%;
+  margin-inline-start: auto;
+  padding: var(--sp-10) var(--sp-14);
+  border-radius: 18px;
+  /* A STEP ABOVE `--waka-raised`, WHICH IS A 7% WHISPER. That token dresses
+     the dock, a large object read against the whole screen; a bubble is
+     small and is read against the text beside it, so the same value
+     disappeared. Still the raised TIER rather than a colour — this product
+     has no accent and the speaker distinction is carried by position and
+     by `--jar-muted` clearing 3:1, both unchanged. */
+  background: color-mix(in srgb, var(--moon-warm) 9%, transparent);
+}
+
+/* GHOST KEEPS THE PADDING, which is the whole of the variant: without it
+   a reply's first character sits flush against the measure while every
+   question is inset by 14, and the column reads as two columns. */
+.chat-message[data-role="assistant"] .chat-bubble {
+  padding: var(--sp-10) var(--sp-14);
+  padding-inline-start: 0;
+}
+
+/* ═══ GROUPING: A RUN IS ONE PERSON CONTINUING ═══════════════════════════
+   `data-run` is two letters — first/middle, middle/last — written by the
+   markup from each message's neighbours. The reference: "grouped bubbles
+   tighten corner radius on the sender side for a continuous visual flow."
+   Only the sender side, so the outer edge of the whole run stays round
+   and the joins inside it close up.
+
+   FOUR RULES, NOT SIXTEEN. Only the user's bubbles have corners to
+   tighten; the ghost has no edge for grouping to act on, and its own
+   spacing below does that job instead. */
+.chat-message[data-role="user"][data-run^="m"] .chat-bubble { border-top-right-radius: 6px; }
+.chat-message[data-role="user"][data-run$="m"] .chat-bubble { border-bottom-right-radius: 6px; }
 
 /**
  * "YOU" IS STILL SAID, AND IS NO LONGER PRINTED ABOVE EVERY MESSAGE.
@@ -391,6 +457,23 @@
  * was ever really for. Same technique as `.chat-input-label > span`, which
  * is directly below and does the same job for the box.
  */
+/* ═══ THE METADATA ROW ══════════════════════════════════════════════════
+   "Sender-aware line containing the visible metadata items" — the
+   reference's words, and sender-aware is the part that matters: it has to
+   sit under the end of the bubble it belongs to, which is the right edge
+   for a question and the left for a reply, or it reads as belonging to
+   the other speaker.
+
+   ONE STEP DOWN AND MUTED, because a timestamp is the least important
+   thing in a transcript and appears on every run. */
+.chat-meta {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+
+.chat-message[data-role="user"] .chat-meta { text-align: right; }
+
 .chat-said,
 .chat-sending > span {
   position: absolute;
@@ -436,11 +519,30 @@
   font-size: var(--t-meta);
 }
 
-/* The light half of it. See the note above for why this is `--jar-muted`
-   and not `--muted`: 3.11:1 against the reply instead of 1.57:1. */
-.chat-messages > li[data-role="user"] .chat-message-text,
+/* ═══ THE DIMMING GOES, BECAUSE THE BUBBLE DOES ITS JOB NOW ═════════════
+   Founder, with a question in a bubble: "kind of hard to read."
+
+   MEASURED, over the fill rather than over the ground, which is the whole
+   error. `--jar-muted` was chosen when your turn had no bubble: 0.55 of
+   the ink over `#05080f` is 5.48:1, AA for body text, and it was the only
+   channel saying who spoke. It is now painted over a RAISED surface —
+   `--moon-warm` at 9% makes `#1c1d21` — and the same token lands at
+   5.23:1 on it. Still nominally AA, and this file's own note already
+   explains why that number lies here: "a contrast figure is computed from
+   colour and knows nothing about stroke weight", and Jost 300 at
+   `--t-reading` is a thin stroke.
+
+   THE REDUNDANCY IS THE REAL ARGUMENT. Dimming existed because position
+   alone was not enough and the old distinction measured 1.57:1. The
+   speaker is now carried by position AND by a filled container, so a third
+   channel is buying nothing and costing legibility. Full ink on the
+   bubble is 14.32:1.
+
+   WHAT THIS DOES NOT TOUCH: the reply stays ghost and stays `--ink` on the
+   ground. The asymmetry is unchanged; one side simply stopped whispering. */
+.chat-message[data-role="user"] .chat-message-text,
 .chat-sending .chat-message-text {
-  color: var(--jar-muted);
+  color: var(--ink);
 }
 
 /* THE OPENING IS NOW THE EMPTY TRANSCRIPT AND THE BOX'S OWN QUESTION.
@@ -640,54 +742,56 @@
  * found before the keystroke. The disabled treatment below was already
  * reasoned about and is unchanged.
  */
-.chat-input-row {
+/* ═══ THE COMPOSER BODY ═════════════════════════════════════════════════
+   Founder, with a screenshot: "this is really ugly. Can you research some
+   actual components that are used to design chat experiences?"
+
+   Meta's Astryx names the parts and the naming is what was missing here:
+   a FRAME holding a BODY, with the status message outside the body and the
+   send action in a FOOTER under the input rather than beside it. See the
+   long note at the markup in `ConversationPanel`.
+
+   WHY THE SEND MOVED UNDER THE TEXT. Beside it, the button's vertical
+   position is a function of how much you have typed — at one line it is
+   centred, at four it is not, and `align-items: flex-end` pins it to the
+   bottom where it reads as having slipped. In a footer row it does not
+   move at all, and the field above is free to grow.
+
+   FLAT, NOT RAISED, which is the reference's own `elevation="none"`
+   variant: "it then draws a border with the same rest / hover / focus
+   treatment as a text input." This product has one floating object per
+   screen and it is the dock, directly below. Two raised pills stacked is
+   the "double layer is so weird" the founder reported.
+
+   THE CONTRAST ARGUMENT CARRIES OVER INTACT, which a later tidy-up must
+   not undo. `--field-edge` is 3.48:1 against the ground where `--line` is
+   1.41:1 — see its note in `chrome.css` — and focus is the same 3:1
+   CHANGE in the same pixels. */
+.chat-composer-body {
   display: flex;
-  flex-direction: row;
-  align-items: flex-end;
+  flex-direction: column;
   gap: var(--sp-8);
-  padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-16);
-  /* ═══ A BOX AFTER ALL, AND WHAT THAT HAD TO SURVIVE ═══════════════════
-     Founder, with the underlined field and its ghost Send on screen:
-     "replace with more traditional chat box."
-
-     THIS REVERSES A RULING, SO THE OLD ONE IS KEPT HERE RATHER THAN
-     DELETED. The rule-instead-of-capsule came from "this double layer is so
-     weird" — two rounded bars stacked at the bottom of a chat, the dock and
-     the composer, reading as a stutter. That complaint was about TWO
-     OBJECTS OF EQUAL WEIGHT, not about the radius, and flattening the field
-     to a hairline was one way out of it rather than the only one.
-
-     The other way out is to make them different kinds of thing, which they
-     are: the dock is the product's one permanent object — a filled pill
-     that floats, with a shadow of its own — and this is a field on the
-     page. So the field gets an edge and a radius and NO fill of its own
-     worth the name and NO shadow. Stacked, they read as a bar above a
-     panel rather than as two bars.
-
-     THE CONTRAST ARGUMENT CARRIES OVER INTACT, which is the part a later
-     tidy-up must not undo. `--field-edge` is still the token (3.48:1
-     against the ground, where `--line` is 1.41:1 — see its note in
-     `chrome.css`), and focus is still the same 3:1 CHANGE in the same
-     pixels. It is now spent on four edges instead of one.
-
-     NOT A PILL. `--r-pill` is the dock's radius and giving it to this would
-     rebuild the exact stutter above. A 20px corner on a box this tall is
-     plainly a rounded rectangle. */
+  padding: var(--sp-12) var(--sp-14) var(--sp-8);
   border: 1px solid var(--field-edge);
+  /* NOT `--r-pill`. That is the dock's radius and giving it to this would
+     rebuild the stutter above; a 20px corner on a box this tall is plainly
+     a rounded rectangle. */
   border-radius: 20px;
   background: none;
 }
-.chat-input-row:focus-within {
-  /* The edge brightens — the same 3:1 change the hairline used to make,
-     back on the whole border now that there is one. Still a colour change
-     rather than an added ring: a ring outside a rounded box is a second
-     shape, and this surface has one object on it already. */
+
+.chat-composer-body:focus-within {
   border-color: color-mix(in srgb, var(--ink) 80%, transparent);
 }
 
-/* The field's own ring would be the second rectangle; the row above has it. */
-.chat-input-row textarea:focus-visible {
-  outline: none;
+/* THE FOOTER: actions at the end, nothing at the start yet. `justify-content`
+   rather than a spacer, so adding a model picker or an attach control at the
+   start later needs no change here. */
+.chat-composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-4);
 }
 
 .chat-input-label {
@@ -730,11 +834,21 @@
      few months older gets a fixed `min-height` box that scrolls internally,
      which is why `max-height` and `overflow-y` stay on this element rather
      than being left to the newer property. */
-  min-height: 56px;
+  /* ONE LINE AT REST, EIGHT AT MOST. 56px was the whole composer's height
+     when the field WAS the composer and the send button sat inside it on
+     the same row; the body around it supplies that padding now, so keeping
+     56 here made a 130px box for one line of placeholder. Measured in a
+     browser. The eight-line ceiling above is unchanged and is the part
+     that was reasoned about. */
+  min-height: 1.6lh;
   max-height: min(8lh, 30dvh);
   overflow-y: auto;
   margin: 0;
-  padding: var(--sp-16) 0 var(--sp-16) var(--sp-16);
+  /* NO PADDING OF ITS OWN. `.chat-composer-body` is the padded surface
+     now — the reference's "rounded surface containing the header, input,
+     and footer" — and a field that pads itself inside a padded body is
+     two insets for one gap. */
+  padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -754,26 +868,79 @@
 /* `.chat-page select` went with the only two selects here: the draft picker
    in the `···` menu and the one inside the save editor. */
 
-/* The primary action, and the only filled control on the surface — the same
-   one the home screen's box ends with. */
-.chat-page .chat-send {
+/* ═══ ONE CIRCULAR CONTROL FOR SEND AND STOP ════════════════════════════
+   The reference's `ChatSendButton` is a "circular icon-only Button" that
+   "automatically toggles between send (primary) and stop (secondary) based
+   on streaming state", and its rules are followed rather than admired:
+   the translated name stays on `aria-label` because "the icon is
+   decorative and must not be the only name source", and `isDisabled`
+   applies only to the send state — "do not expect isDisabled to disable
+   the stop action."
+
+   WHY A CIRCLE AND NOT THE WORD. "Send" at `--t-ui` in a pill was 63px
+   wide sitting beside a 20px microphone, so the two controls in one row
+   read as unrelated objects. Equal circles read as a set. It is also what
+   lets the footer hold a third control later without re-balancing.
+
+   40, NOT 44. The same arithmetic as before: 32 clears WCAG 2.5.8's 24x24
+   and misses 2.5.5's 44x44; 40 is the largest that fits the footer row
+   with `--sp-8` of body padding under it, and the coarse-pointer rule at
+   the foot of this file still takes it to 44 on a touch screen, where the
+   floor is not a recommendation. */
+.chat-page .chat-send,
+.chat-page .chat-dictate {
   flex: none;
-  /* 40, not 32. 32 clears WCAG 2.5.8's 24x24 (AA) and misses 2.5.5's 44x44
-     (AAA); 40 is the largest that fits inside the 56px row this composer now
-     rests at, with `--sp-8` above and below it. The coarse-pointer rule at
-     the foot of this file still takes it to the full 44 on a touch screen,
-     where the floor is not a recommendation. */
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
   min-height: 40px;
-  /* NO MARGIN OF ITS OWN ANY MORE. It used to hold itself off a hairline
-     that had no padding to give it; it now sits inside a box whose padding
-     is the gap. A margin on top of that would be two spacings for one. */
   margin: 0;
-  padding: 0 var(--sp-16);
-  border: 1px solid var(--ink);
-  border-radius: var(--waka-r-control);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+
+.chat-page .chat-send {
   background: var(--ink);
   color: var(--bg);
-  font-size: var(--t-ui);
+}
+
+.chat-page .chat-send svg { width: 20px; height: 20px; }
+
+/* STOP IS SECONDARY, which is the reference's word for it. Filling it the
+   same as send would make interrupting look like the thing you came to do. */
+.chat-page .chat-send--stop {
+  background: none;
+  border: 1px solid var(--field-edge);
+  color: var(--ink);
+}
+
+/* THE MICROPHONE IS GHOST — "the underlying Button with ghost variant and
+   isIconOnly, providing the hit target and focus ring". It is an input
+   method, not an action, so it carries no fill. */
+.chat-page .chat-dictate {
+  background: none;
+  color: var(--muted);
+}
+
+.chat-page .chat-dictate svg { width: 19px; height: 19px; }
+
+.chat-page .chat-dictate:hover:not(:disabled),
+.chat-page .chat-dictate:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+/* LISTENING. The reference animates frequency bars off real microphone
+   volume; this product has a standing law that motion explains and never
+   decorates, and a bar chart of someone's voice is decoration. Full ink
+   says the same thing — the control is on — and says it without moving. */
+.chat-page .chat-dictate--on {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 .chat-page .chat-send:disabled {

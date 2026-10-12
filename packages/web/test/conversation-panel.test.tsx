@@ -61,7 +61,24 @@ beforeEach(()=>{vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clear
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();vi.unstubAllGlobals();vi.useRealTimers();});
 const mount=(conversationId:string|null=id,owner=scope)=>act(async()=>root.render(<ConversationPanel key={`${owner.accountId}:${owner.profileId}:${conversationId}`} scope={owner} id={conversationId} locale="en-US" onChoose={choose}/>));
-const click=(label:string)=>act(async()=>[...host.querySelectorAll('button')].find(row=>row.textContent===label)!.click());
+/* BY NAME, NOT BY INK. Send and Stop are circular icon-only buttons now —
+   the shape the reference ships and the founder asked for — so they carry
+   no text content at all. The `aria-label` is what they are CALLED, and it
+   is also what a person using this product by ear hears, so matching on it
+   tests the name that actually has to be right. Both are checked, because
+   the controls that still have words should keep them. */
+const click=(label:string)=>act(async()=>{
+  const row=[...host.querySelectorAll('button')].find(b=>b.textContent===label||b.getAttribute('aria-label')===label);
+  if(!row)throw new Error(`no control called ${label}`);
+  row.click();
+});
+/* WHAT THE SURFACE CALLS ITS CONTROLS. Send and Stop carry their names on
+   `aria-label` now rather than in ink — see `click` above — so an inventory
+   taken from `textContent` reads a row of empty strings. This reads each
+   control's accessible name, which is the thing the inventory was always
+   really about: not how many `<button>`s there are, but how many things
+   this surface offers. */
+const named=()=>[...host.querySelectorAll('button')].map(b=>b.getAttribute('aria-label')??b.textContent);
 const type=(content:string)=>act(async()=>{const area=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,content);area.dispatchEvent(new Event('input',{bubbles:true}));});
 const tick=(ms=2000)=>act(async()=>vi.advanceTimersByTimeAsync(ms));
 function completeReply(){stored={...stored,revision:stored.revision+1,messages:[...stored.messages,{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:stored.revision+1,role:'assistant',content:'Consider the conditions of the choice.',followUpQuestion:'Which condition matters most today?',replyRequestId:replyId,memoryChanged:false,citations:[{index:0,kind:'principle',id:'principle',available:true}],createdAt:'2026-10-03T01:00:01Z'}]};replyState={...replyState,phase:'ready',revision:stored.revision};}
@@ -215,7 +232,7 @@ it('keeps the surface to a transcript, a box and nothing at rest',async()=>{
   expect(host.querySelector('.chat-drawer-backdrop')).toBeNull();
   expect(host.querySelectorAll('select')).toHaveLength(0);
   expect(host.querySelectorAll('details')).toHaveLength(0);
-  expect([...host.querySelectorAll('button')].map(row=>row.textContent)).toEqual(['Send']);
+  expect(named()).toEqual(['Send']);
   expect(host.querySelector('textarea')!.value).toBe('A sentence in the box');
 });
 it('keeps the full-page composer within the visible keyboard viewport',async()=>{
@@ -248,7 +265,7 @@ it('sends one durable reply intent and displays the follow-up',async()=>{
   expect(host.textContent).toContain('Thinking about that…');completeReply();await tick();expect(host.textContent).toContain('Which condition matters most today?');
   /* The reply arrived, so nothing is being waited for and the one other
      control on the surface goes away with the sentence it interrupted. */
-  expect(host.textContent).not.toContain('Thinking about that…');expect([...host.querySelectorAll('button')].map(row=>row.textContent)).toEqual(['Send']);
+  expect(host.textContent).not.toContain('Thinking about that…');expect(named()).toEqual(['Send']);
 });
 it('stops a pending reply and still shows that the message was saved',async()=>{
   stored.generationEnabled=true;await mount();await type('Keep this question');await click('Send');
@@ -257,7 +274,7 @@ it('stops a pending reply and still shows that the message was saved',async()=>{
   /* AND NO WAY TO RE-RUN THE GENERATOR. "Retry reply" was the other half of
      this test; a stopped reply now ends in a sentence, and asking again means
      saying something again through the box. */
-  expect([...host.querySelectorAll('button')].map(row=>row.textContent)).toEqual(['Send']);
+  expect(named()).toEqual(['Send']);
   expect(host.querySelector('textarea')!.disabled).toBe(false);
 });
 it('does not jump away from older messages when a new reply arrives',async()=>{
@@ -277,17 +294,17 @@ function windowedThread(){
 }
 it('loads earlier words while preserving the visible scroll anchor and original topic',async()=>{
   const messages=windowedThread();await mount();const scroll=host.querySelector<HTMLElement>('.chat-scroll')!;
-  Object.defineProperties(scroll,{scrollHeight:{configurable:true,get:()=>host.querySelectorAll('.chat-messages > li').length*100},clientHeight:{configurable:true,value:300}});
+  Object.defineProperties(scroll,{scrollHeight:{configurable:true,get:()=>host.querySelectorAll('.chat-message').length*100},clientHeight:{configurable:true,value:300}});
   scroll.scrollTop=10;await act(async()=>scroll.dispatchEvent(new Event('scroll',{bubbles:true})));
   vi.mocked(fetchConversation).mockResolvedValueOnce({...stored,messageWindowStart:1,messages});
   await click('Load earlier messages');expect(fetchConversation).toHaveBeenLastCalledWith(scope.profileId,id,expect.any(AbortSignal),1);
-  expect(host.querySelectorAll('.chat-messages > li')).toHaveLength(60);expect(scroll.scrollTop).toBe(3010);
+  expect(host.querySelectorAll('.chat-message')).toHaveLength(60);expect(scroll.scrollTop).toBe(3010);
   expect(host.textContent).not.toContain('Load earlier messages');expect(saveConversationMessage).not.toHaveBeenCalled();
 });
 it('an earlier-read failure preserves current messages and the unfinished draft',async()=>{
   windowedThread();await mount();await type('Keep my unfinished thought');
   vi.mocked(fetchConversation).mockRejectedValueOnce(new Error('Read failed'));await click('Load earlier messages');
-  expect(host.querySelectorAll('.chat-messages > li')).toHaveLength(30);expect(host.querySelector('textarea')!.value).toBe('Keep my unfinished thought');
+  expect(host.querySelectorAll('.chat-message')).toHaveLength(30);expect(host.querySelector('textarea')!.value).toBe('Keep my unfinished thought');
   expect(host.textContent).toContain('Earlier messages couldn’t be loaded.');expect(saveConversationMessage).not.toHaveBeenCalled();
 });
 it('reopens the same scoped loaded window before restoring an older scroll position',async()=>{

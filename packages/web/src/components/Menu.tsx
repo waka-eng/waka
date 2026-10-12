@@ -11,7 +11,9 @@
  * the rung you are on.
  *
  * So the centre names the view and opens the other two. The right corner is
- * everything about the account, as it always was. The left corner is talking,
+ * everything about the account, as it always was — and, since 2026-10-11, an
+ * "i" beside the cog holding how the product works, because that is a
+ * question the chrome had no door for at all. The left corner is talking,
  * which until now could only be reached in the ten seconds after a save — the
  * receipt still offers it and that conversation still arrives with a subject,
  * but a corner is a door you can use on a day you have nothing to keep.
@@ -27,8 +29,9 @@
  *
  * A long switcher list is not the failure mode. A long home page is.
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { HowItWorksPanel } from "./HowItWorksPanel";
 import { SettingsPanel, type SettingsPanelProps } from "./SettingsPanel";
 import { t, type MessageKey, type SupportedLocale } from "../lib/locales";
 
@@ -154,11 +157,70 @@ export function Menu({ locale, items, current, label, left, account, settings, o
      is nothing to expand, nothing to focus into, nothing to close on Escape
      and nothing to close when the bar hides. Four pieces of state and
      lifecycle went with one piece of chrome. */
-  /** Whether the account card is showing under the cog. */
-  const [account_open, setAccountOpen] = useState(false);
+  /**
+   * WHICH CARD IS HANGING OFF THE CORNER — one value, not two booleans.
+   *
+   * The corner holds two triggers now (the "i" and the cog) and each opens
+   * a card the width of the corner. Two independent `open` flags would let
+   * both be true, and two 26rem cards stacked on the same right edge is a
+   * state nobody can read their way out of. Astryx says the same thing
+   * about the component class these cards belong to — Popover: "Don't nest
+   * popovers inside other popovers; it creates confusing focus and
+   * navigation." One slot means pressing either trigger puts the other
+   * card away, which is also what a person expects from two buttons 44px
+   * apart.
+   */
+  const [corner, setCorner] = useState<null | "settings" | "info">(null);
+  const account_open = corner === "settings";
   useEffect(() => {
-    if (hidden) setAccountOpen(false);
+    if (hidden) setCorner(null);
   }, [hidden]);
+
+  /**
+   * ═══ CLOSING GIVES THE PRESS BACK TO THE BUTTON THAT OPENED IT ═════════
+   *
+   * This was the real gap, and it is the corner's own standing complaint in
+   * a different costume: founder, one surface over, "I feel like I'm lost
+   * how to go back." A keyboard user pressed the cog, tabbed into the card,
+   * pressed Escape — and focus went to `<body>`, which means the next Tab
+   * starts the whole page again from the top. The card has three ways out
+   * (the scrim, Escape, a control inside it that is done) and all three left
+   * focus nowhere.
+   *
+   * Astryx puts this on Dialog rather than on Popover, but the reason it
+   * gives is about the TRIGGER relationship, which these cards have in full:
+   * the surface is "anchored to the trigger", so the trigger is where the
+   * person was and where they should be put back. Focus moves BEFORE the
+   * state change, because after it the element holding focus has unmounted
+   * and the browser has already dropped the selection to `<body>`.
+   *
+   * ── THREE THINGS THE REFERENCE OFFERS THAT ARE DELIBERATELY NOT HERE ───
+   *
+   * A FOCUS TRAP. Astryx reserves it for Dialog, whose backdrop "blocks page
+   * interaction" — these cards do not block the page, and trapping focus in
+   * a thing a person can click past is a cage with an open door. Our scrim
+   * is a dismiss target, not a modal barrier.
+   *
+   * ARROW-KEY MOVEMENT BETWEEN THE GROUPS. That is DropdownMenu behaviour,
+   * and the settings card is explicitly not one — Astryx: "Don't use a
+   * DropdownMenu for navigation", and more to the point a DropdownMenu is
+   * "a list of actionable items". The card is a name field, a language
+   * picker and three Collapsibles, and Collapsible takes Tab. Adding arrows
+   * would teach a menu model to something that is not a menu.
+   *
+   * AN EXPLICIT CLOSE BUTTON. Astryx Popover: "Provide a clear way to close:
+   * EITHER by clicking outside OR with an explicit close button." The scrim
+   * is the first of those, and it is full-screen, so the clearer of the two
+   * is already there. A visible "×" in a corner card would be the one piece
+   * of chrome the founder's standing rule rules out: "only the most
+   * absolutely necessary things should be shown."
+   */
+  const settingsTrigger = useRef<HTMLButtonElement>(null);
+  const infoTrigger = useRef<HTMLButtonElement>(null);
+  const close = (): void => {
+    (corner === "info" ? infoTrigger : settingsTrigger).current?.focus();
+    setCorner(null);
+  };
 
   /**
    * ESCAPE CLOSES THE CARD. THE PRESS-AWAY IS THE SCRIM, AND IT WAS MISSING.
@@ -185,13 +247,15 @@ export function Menu({ locale, items, current, label, left, account, settings, o
    * else is listening for Escape on its behalf.
    */
   useEffect(() => {
-    if (!account_open) return;
+    if (!corner) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAccountOpen(false);
+      if (event.key !== "Escape") return;
+      (corner === "info" ? infoTrigger : settingsTrigger).current?.focus();
+      setCorner(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [account_open]);
+  }, [corner]);
 
   if (hidden) return null;
 
@@ -306,12 +370,56 @@ export function Menu({ locale, items, current, label, left, account, settings, o
         ) : null}
 
         <span className="waka-corner-place">
+        {/* ═══ AN "i" BESIDE THE COG ════════════════════════════════════
+            Founder: "lets add a button next to the settinsg of info icon
+            and in there put all things to explain how waka works."
+
+            LEFT OF THE COG, not right of it. The cog has been the last
+            thing on that line since the product had a line, and a hand
+            that reaches for the screen's corner should still land on it.
+            The new door takes the position that was empty.
+
+            IT IS THE SECOND DOOR THIS CORNER HAS EVER HAD, and it earns
+            that by asking a different question. The cog answers "change
+            something about me". The "i" answers "what is this thing
+            doing" — which until today had no door at all, because the
+            answer was buried on the settings page and then deleted from
+            it. See `HowItWorksPanel` for what came back and what did
+            not. */}
         <button
           type="button"
-          className="waka-corner"
+          ref={infoTrigger}
+          className="waka-corner waka-corner--info"
+          aria-label={t(locale, "worldHowItWorksTitle")}
+          aria-expanded={corner === "info"}
+          onClick={() => setCorner((value) => (value === "info" ? null : "info"))}
+        >
+          {/* A RING AND AN "i", drawn rather than typed. The glyph has to
+              sit on the cog's own optical weight — same 20px box, same
+              1.3 stroke, same round joins — or two buttons 44px apart
+              read as two different products. Drawn also means it cannot
+              be restyled by the type scale or picked up by a font swap,
+              which is the whole reason the dock's plus is a path too. */}
+          <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <circle cx="10" cy="10" r="7.4" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            <circle cx="10" cy="6.3" r="0.85" fill="currentColor" />
+            <path
+              d="M10 9.1v4.7"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          ref={settingsTrigger}
+          className="waka-corner waka-corner--settings"
           aria-label={t(locale, "worldSettingsOpen")}
           aria-expanded={account_open}
-          onClick={() => setAccountOpen((value) => !value)}
+          onClick={() => setCorner((value) => (value === "settings" ? null : "settings"))}
         >
           <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
             <path
@@ -330,43 +438,57 @@ export function Menu({ locale, items, current, label, left, account, settings, o
             do I leave" are the two things this corner is reached for, and a
             navigation to answer either costs the screen you were reading.
             Everything that genuinely needs a page is one press further. */}
-        {account_open ? (
+        {corner ? (
           <>
             {/* FULL-SCREEN, AND NOT AIMED AT. The same reasoning the list's
                 scrim carries: "a way out you have to aim at is not one." It
                 is a button rather than a div so it is a real press target
                 with a real handler, and `aria-hidden` + `tabIndex={-1}` keep
-                it out of the reading order — the card already names its own
-                way out for anyone arriving by keyboard. */}
+                it out of the reading order — Escape is the keyboard's way
+                out, and it now hands focus back to the trigger. */}
             <button
               type="button"
               className="waka-menu-scrim"
               aria-hidden="true"
               tabIndex={-1}
-              onClick={() => setAccountOpen(false)}
+              onClick={close}
             />
-          {/* ═══ THE PANEL IS THE WHOLE OF SETTINGS NOW ═══════════════
-              Founder: "I want all setting-related stuff to be only
-              accessible through the drop down and not be its own thing."
+          {/* ═══ ONE PAINTED SURFACE, TWO THINGS SAID ON IT ═══════════
+              `.waka-account` is the corner's popover surface — the border,
+              the raised ground, the measure, the bound that keeps it on a
+              short screen — and both cards wear it so the corner has one
+              material rather than two. Astryx names this split exactly:
+              the "Popover surface" is "owned by Popover", and the
+              "Popover content" is "caller-supplied content rendered inside
+              the surface".
 
-              What stood here was a name, an address, a language and a LINK
-              to `/profile`. The page is gone; `SettingsPanel` holds what
-              survived the prune, and its header lists what did not and
-              why. This component keeps only the anchoring and the
-              dismissal, which is what a corner owns. */}
-          <span className="waka-account" role="note">
-            {settings ? (
+              NO `role="note"` WHEN THERE IS A FORM INSIDE. It said `note`
+              unconditionally, which is a landmark for STATIC commentary —
+              and the thing inside it is a name field, a language picker
+              and three disclosures. A screen reader announcing a note and
+              then reading out editable fields describes a surface that
+              does not exist. `SettingsPanel` already carries its own
+              `role="group"` with a name, and `HowItWorksPanel` carries a
+              group named by its heading, so the content supplies the
+              semantics and the surface supplies the paint. The bare
+              name-and-address check really IS a note, and keeps it. */}
+          {corner === "info" ? (
+            <span className="waka-account">
+              <HowItWorksPanel locale={locale} />
+            </span>
+          ) : settings ? (
+            <span className="waka-account">
               <SettingsPanel {...settings} locale={locale}
                 email={account?.email ?? null}
                 onSignOut={onSignOut ?? (() => undefined)}
-                onClose={() => setAccountOpen(false)} />
-            ) : (
-              <>
-                {account?.name ? <span className="waka-account-name">{account.name}</span> : null}
-                {account?.email ? <span className="waka-account-email">{account.email}</span> : null}
-              </>
-            )}
-          </span>
+                onClose={close} />
+            </span>
+          ) : (
+            <span className="waka-account" role="note">
+              {account?.name ? <span className="waka-account-name">{account.name}</span> : null}
+              {account?.email ? <span className="waka-account-email">{account.email}</span> : null}
+            </span>
+          )}
           </>
         ) : null}
         </span>

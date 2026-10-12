@@ -85,6 +85,9 @@ import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage
 import {useConversationReply} from '../lib/use-conversation-reply';
 import {Companion} from './Companion';
 import {ConversationText} from './ConversationText';
+import {HomeActionIcon} from './HomeActionIcon';
+import {timeOf} from '../lib/words';
+import {dictationAvailable,useDictation} from '../lib/use-dictation';
 import {fetchPrinciples,type ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
 import {readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft as Draft,type StoredConversationDraft} from '../lib/conversation-drafts';
@@ -238,6 +241,14 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     finally{working.current=false;if(mine(owner))setBusy(false);}
   };
   const edit=(content:string)=>{const current=draftRef.current,own=current?.writer===writer.current;keep({id:own?current.id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content,revision:conversation?.revision??0,pending:false});};
+  /* ═══ SPEAKING INTO THE FIELD ═════════════════════════════════════════
+     The same hook the notepad uses, pointed at this draft. `use-dictation`
+     carries the argument for why the microphone writes WORDS rather than a
+     file; here it is simply that a chat has nowhere to put an audio blob.
+
+     THE ANCHOR IS THE CURRENT DRAFT, read through a ref so a sentence
+     spoken over one already typed joins it rather than replacing it. */
+  const dictation=useDictation(()=>draftRef.current?.content??'',(text)=>edit(text),locale);
   const first=conversation?.initialPrinciple??focusPrinciple,canCompose=!id||Boolean(conversation);
   const full=(conversation?.revision??0)>=(generationEnabled?199:200);
   /* ONE SENTENCE FOR THE REPLY'S BAD NEWS, AND NO BUTTON UNDER IT. Three of
@@ -317,62 +328,167 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               <Companion size={64}/>
               <p>{say('worldConversationOpening')}</p>
             </div>:null}
-          <ol className="chat-messages" aria-label={say('worldConversationMessages')} aria-live="polite" aria-relevant="additions">
-            {(conversation?.messages??[]).map(message=><li key={message.id} data-role={message.role}><p className="chat-said">{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</p>
-              <ConversationText text={message.content}/>{message.followUpQuestion?<ConversationText text={message.followUpQuestion}/>:null}
-              {/* Under each reply there used to be: an actions disclosure, a
-                  takeaway editor with an adoption checkbox, a correction
-                  button, a principle editor, and a footnote list with a
-                  count in its label. See this file's header. */}
-            </li>)}
-            {draft?.pending&&!conversation?.messages.some(message=>message.id===draft.id)?<li className="chat-sending" data-role="user"><span>{say('worldConversationYou')}</span><ConversationText text={draft.content}/><small role="status">{say(busy?'worldChatSending':'worldReviewPending')}</small></li>:null}
-          </ol>
+          {/* ═══ THE TRANSCRIPT, ON THE REFERENCE'S MESSAGE ANATOMY ═════
+              Founder: "make the chat message list and the chat message
+              thing also follow what you see on this AI chat conversation."
+
+              `role="log"` RATHER THAN A BARE LIST. Astryx's
+              `ChatMessageList` is documented as providing 'role="log" with
+              aria-live="polite"', and log is the right role for a
+              transcript: it tells a screen reader this is a running record
+              where new entries arrive at the end, which `aria-live` alone
+              on an `<ol>` does not.
+
+              FILLED FOR YOU, GHOST FOR WAKA — the reference's two bubble
+              variants, and this surface had already reasoned its way to
+              half of it. The old note here is worth keeping because it
+              explains why the asymmetry is not decoration: "a container
+              implies an utterance and cannot hold a document". Your turns
+              are utterances, so they get the container; a reply can run to
+              paragraphs, lists and code, so it gets 'ghost' — transparent,
+              keeping the alignment padding, exactly as named.
+
+              AND GROUPING, which is the part that was missing entirely.
+              Consecutive turns from one speaker tighten their facing
+              corners so a run reads as one person continuing rather than
+              as two separate sayings. */}
+          <div className="chat-messages" role="log" aria-label={say('worldConversationMessages')} aria-live="polite" aria-relevant="additions">
+            {(conversation?.messages??[]).map((message,at,all)=>{
+              const before=all[at-1],after=all[at+1];
+              const run=`${before?.role===message.role?'m':'f'}${after?.role===message.role?'m':'l'}`;
+              return <article key={message.id} className="chat-message" data-role={message.role} data-run={run}>
+                <p className="chat-said">{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</p>
+                <div className="chat-bubble">
+                  <ConversationText text={message.content}/>{message.followUpQuestion?<ConversationText text={message.followUpQuestion}/>:null}
+                </div>
+                {/* ═══ THE METADATA ROW, ON THE LAST BUBBLE OF A RUN ══════
+                    The reference's rule, verbatim: "put metadata in the
+                    last ChatMessageBubble metadata slot when the message
+                    uses bubbles" and "do not put the same metadata on both
+                    a bubble and its enclosing message." A timestamp under
+                    every bubble in a run is the repetition the speaker
+                    label was already removed for. */}
+                {run.endsWith('l')&&message.createdAt?<p className="chat-meta">{timeOf(Date.parse(message.createdAt),locale)}</p>:null}
+              </article>;
+            })}
+            {draft?.pending&&!conversation?.messages.some(message=>message.id===draft.id)?
+              <article className="chat-message chat-sending" data-role="user" data-run="fl">
+                <p className="chat-said">{say('worldConversationYou')}</p>
+                <div className="chat-bubble"><ConversationText text={draft.content}/></div>
+                <p className="chat-meta" role="status">{say(busy?'worldChatSending':'worldReviewPending')}</p>
+              </article>:null}
+          </div>
           {/* THE ONE OTHER CONTROL ON THE SURFACE, AND IT IS HERE RATHER THAN
               IN THE FOOTER ON PURPOSE: it interrupts this sentence, so it
               stands beside this sentence. The status text keeps the live
               region to itself — a button inside one gets re-announced every
               time the phase changes. */}
+          {/* STOP LEFT THIS LINE FOR THE SEND BUTTON. It was here on the
+              argument that it "interrupts this sentence, so it stands
+              beside this sentence" — which is true and is outweighed by
+              where a hand already is. The reference puts send and stop on
+              one control in the composer, and a person who wants to
+              interrupt a reply is looking at the place they asked for it,
+              not at a status line halfway up a scrolling transcript. What
+              is left is the status, which keeps the live region to itself
+              — a button inside one gets re-announced on every phase. */}
           {awaitingReply&&!reply.error?<div className="chat-thinking"><span className="chat-thinking-dots" aria-hidden="true"><i/><i/><i/></span>
-            <span role="status">{say(reply.waiting?'worldConversationReplyWaiting':'worldConversationThinking')}</span>
-            {replyPending?<button type="button" disabled={reply.busy} onClick={()=>void reply.stop()}>{say('worldConversationStop')}</button>:null}</div>:null}
+            <span role="status">{say(reply.waiting?'worldConversationReplyWaiting':'worldConversationThinking')}</span></div>:null}
         </div>
       </div>
       {canCompose?<footer className="chat-composer">
-        {/* THE INSTALL'S OWN CONFIGURATION IS NOT NEWS FOR THE PERSON TYPING.
-            "WAKA can't reply yet — no model is connected. What you write is
-            kept." stood above this field on every local build. Founder,
-            pointing at it: "remove this."
+        {/* ═══ THE COMPOSER, ON THE ANATOMY THE REFERENCE SPELLS OUT ══════
+            Founder, with a screenshot of the old one: "this is really ugly.
+            So can you research some actual components that are used to
+            design chat experiences? ... don't necessarily just use this
+            code by code, but reference this and modify to match our own
+            thing."
 
-            It is a true sentence and it was still wrong here, for the reason
-            the permanent explainers went out everywhere else: it is read once
-            and stepped over forever, it describes the deployment rather than
-            anything the person did, and it occupied the line directly above
-            the one control on the surface. Somebody who presses Send with no
-            model connected still learns what happened — the message is kept,
-            which is what the sentence promised, and `whyNoSend` names any
-            state where the button cannot be pressed at all. */}
+            Meta's Astryx publishes `ChatComposer` as five named parts, and
+            the naming is the useful bit rather than the styling:
+
+              FRAME — groups the body with a status message ABOVE or BELOW
+              it. Not inside. That is the fix for the thing this surface got
+              wrong twice: a notice that lives in the body moves the field
+              when it appears.
+
+              BODY — "rounded, elevated surface containing the header,
+              input, and footer". One object, not a row of three.
+
+              INPUT, then FOOTER — "row for caller-supplied footer and send
+              actions plus the primary action". The send control belongs
+              UNDER the text, not beside it, which is what lets the field
+              grow to several lines without the button sliding down with it.
+
+              SEND OR STOP — one control, "circular icon-only", toggling on
+              streaming state.
+
+            WHAT WE DO DIFFERENTLY, deliberately. The reference's default is
+            `elevation="low"` — a raised surface — and it documents
+            `elevation="none"` as "flat, with a text-input-style border and
+            focus ring". We take the flat one: this product has exactly one
+            floating object per screen and it is the dock, directly beneath
+            this. Two raised pills stacked is the "double layer is so weird"
+            the founder reported, and the reference happens to ship the
+            variant that avoids it. */}
         {generationEnabled&&replyNotice?<p className="chat-reply-status" role="status">{say(replyNotice)}</p>:null}
-        <div className="chat-input-row"><label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
-          {/* ONE BUTTON, THREE STATES. It used to carry five labels, two of
-              which announced a mode ("Save message" when replies are not
-              connected) rather than an act. The notice above the transcript
-              already says replies are not connected; the button says Send
-              either way, because sending is what you are doing. */}
-          {/* AND IT SAYS WHY IT CANNOT BE PRESSED — see `whyNoSend`. A `title`
-              rather than visible copy: the reason belongs to the control, is
-              wanted only by somebody who has just tried to press it, and
-              printing six possible sentences beside a button would be the
-              clutter this surface was stripped to remove. The two states
-              worth saying out loud already print their own line above. */}
-          <button className="chat-send" type="button" title={say(whyNoSend ?? 'worldConversationSend')} disabled={Boolean(whyNoSend)} onClick={()=>void save()}>{say(busy&&draft?.pending?'worldChatSending':draft?.pending?'worldConversationRetry':'worldConversationSend')}</button>
+        {storageFailed?<p className="chat-reply-status" role="alert">{say('worldConversationDraftFailed')}</p>:null}
+        {full?<p className="chat-reply-status">{say('worldConversationFull')}</p>:null}
+        <div className="chat-composer-body">
+          <label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
+          <div className="chat-composer-footer">
+            {/* ═══ THE SEND ACTIONS, AND DICTATION IS ONE OF THEM ═══════
+                The reference is explicit about where a microphone goes:
+                "place the dictation button in the sendActions slot of
+                ChatComposer so it sits next to the send button where users
+                expect voice input controls." That is a correction to what
+                this product did an hour ago — the notepad's mic went into
+                the dock, which is right THERE because the dock is that
+                page's footer, and wrong here because this page has a
+                footer of its own.
+
+                "The button hides itself by default when the browser lacks
+                SpeechRecognition, but you should still design the composer
+                to work without it." Both halves are obeyed: absent where
+                it cannot work, and the field is typed into either way. */}
+            {dictationAvailable()?<button type="button"
+              className={`chat-dictate${dictation.listening?' chat-dictate--on':''}`}
+              aria-pressed={dictation.listening}
+              aria-label={say(dictation.listening?'worldComposerDictateStop':'worldComposerDictate')}
+              disabled={busy||draft?.pending}
+              onClick={()=>dictation.listening?dictation.stop():dictation.start()}>
+              <HomeActionIcon kind="record"/></button>:null}
+            {/* ONE CONTROL FOR THE TRANSPORT. Stop used to sit beside the
+                "thinking" line halfway up the page, which is the reference's
+                own anti-pattern — the thing you press to interrupt a reply
+                should be where the thing you press to ask for one is. And
+                `isDisabled` deliberately does not apply to the stop state:
+                a stop you cannot press is a conversation you cannot leave. */}
+            {replyPending
+              ?<button type="button" className="chat-send chat-send--stop" aria-label={say('worldConversationStop')}
+                 disabled={reply.busy} onClick={()=>void reply.stop()}><HomeActionIcon kind="stop"/></button>
+              :<button type="button" className="chat-send"
+                 /* ═══ THE SAME CONTROL RETRIES AN UNCERTAIN SAVE ═══════
+                    A message whose response was lost is still in the box
+                    and still unsent as far as anybody can tell, so the
+                    thing you press to send it is the thing you press to
+                    try again — this is one act in two states, not two
+                    acts. It was carrying this name before the button
+                    became a glyph and the name went with the words; a
+                    screen reader hearing "Send" for a message already on
+                    screen would be told the wrong thing about what is
+                    about to happen. */
+                 aria-label={say(draft?.pending?'worldConversationRetry':'worldConversationSend')}
+                 title={say(whyNoSend??(draft?.pending?'worldConversationRetry':'worldConversationSend'))}
+                 disabled={Boolean(whyNoSend)}
+                 onClick={()=>void save()}><HomeActionIcon kind="send"/></button>}
+          </div>
         </div>
-        {storageFailed?<p className="chat-muted" role="alert">{say('worldConversationDraftFailed')}</p>:null}
         {/* A SAVE THAT WAS NOT CONFIRMED KEEPS ITS ONE WAY OUT. This reads
             the conversation back rather than writing again, which is why it
             survived the sweep of retry-shaped controls: it is the only way to
             learn whether words you can still see on screen actually landed. */}
-        {draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldConversationCheck')}</button>:null}
-        {full?<p className="chat-muted">{say('worldConversationFull')}</p>:null}
+        {draft?.pending?<button type="button" className="chat-recheck" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldConversationCheck')}</button>:null}
       </footer>:null}
     </section>
   </main>;

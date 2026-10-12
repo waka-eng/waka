@@ -231,6 +231,30 @@ export function momentStamp(ms: number, locale: WordsLocale = "en-US"): string {
 }
 
 /**
+ * JUST THE CLOCK — a turn's own timestamp in a transcript.
+ *
+ * Founder, of the chat: "make the chat message thing also follow what you
+ * see on this AI chat conversation." Every message in that reference
+ * carries a bare time under the last bubble of its run — `2:30 PM` — and
+ * that is all it carries, because a transcript you are reading top to
+ * bottom already tells you the day.
+ *
+ * NOT `momentStamp`, WHICH IS THE WHOLE DATE. That one is alone on a page
+ * and is the only fact there; this one appears a dozen times down a column
+ * and has to disappear when you are not looking for it. Same reasoning as
+ * `dateWords` beside an archive row, one scale smaller.
+ */
+export function timeOf(ms: number, locale: WordsLocale = "en-US"): string {
+  const d = new Date(ms);
+  if (locale === "ko-KR") {
+    const hour = d.getHours();
+    const twelve = hour % 12 === 0 ? 12 : hour % 12;
+    return `${hour < 12 ? "오전" : "오후"} ${twelve}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+/**
  * WHICH STRETCH OF TIME A SAVE FALLS IN — the archive's own chapter headings.
  *
  * Founder, with a screenshot of the Apple Notes list: "copy this for saved
