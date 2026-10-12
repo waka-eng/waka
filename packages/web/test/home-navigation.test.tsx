@@ -366,6 +366,53 @@ it('changes form in place instead of travelling to the agent', async () => {
 });
 
 /**
+ * AND ON THE SURFACE THAT HAS NO OWNER, NEITHER FACE IS LIT.
+ *
+ * Founder: "When user clicks on chat, don't select any of me nor my agent
+ * because here it doesn't matter — what's selected. For inspirations it
+ * does, for now it does, but for chats it doesn't, so don't select
+ * anything."
+ *
+ * WHY THIS IS A GATE AND NOT A ONE-LINE FIX LEFT UNWATCHED. The lit face
+ * means "this is whose material you are reading" — light is the one channel
+ * this product reports with — and chats are not anybody's in that sense:
+ * `Home` hands the list and the panel `storageScope.profileId`, the signed-
+ * in person's own, on every wall. The switcher was therefore claiming a
+ * scope it could not change. The regression that brings it back is not a
+ * revert of the fix; it is somebody folding `lit` back into `here`, which
+ * looks like a tidy-up and reads correctly on three of the four views.
+ *
+ * BOTH HALVES, BECAUSE EITHER ALONE PASSES FOR THE WRONG REASON. Hiding the
+ * switcher would satisfy "nothing is lit" and is explicitly not what was
+ * asked — it is still the way to change form — so its presence is asserted
+ * beside the darkness. And the archive is checked in the same test: a fix
+ * that darkened the switcher everywhere would pass a test that only looked
+ * at chats, and would have deleted a distinction the founder said still
+ * matters ("For inspirations it does, for now it does").
+ */
+it('lights neither face on the chats page, and still lights one on the archive', async () => {
+  const faces = () =>
+    [...world!.container.querySelectorAll<HTMLButtonElement>('.jar-char-face')]
+      .map(button => ({
+        name: button.textContent?.trim(),
+        lit: button.getAttribute('aria-pressed') === 'true'
+          || button.classList.contains('jar-char-face--standing'),
+      }));
+
+  world = await mountWorld(FACTS, { initialEntries: ['/?open=conversations'], routerTools: <RouterTools /> });
+  await settle();
+  expect(faces(), 'the switcher may not be removed, only unlit').toHaveLength(2);
+  expect(faces().filter(face => face.lit)).toEqual([]);
+
+  await act(async () => world!.unmount());
+  world = await mountWorld(FACTS, { initialEntries: ['/?open=saves'], routerTools: <RouterTools /> });
+  await settle();
+  /* Whose inspirations these are is a real question with a real answer, and
+     the answer is the wall you are standing on. */
+  expect(faces().filter(face => face.lit).map(face => face.name)).toEqual(['Me']);
+});
+
+/**
  * THE CONVERSATION'S X ACTUALLY CLOSES IT.
  *
  * Founder: "x button doesnt work to close modal."
