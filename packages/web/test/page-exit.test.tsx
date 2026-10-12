@@ -35,16 +35,20 @@
  *
  *   `lib/auth-context` — the session is stated as a fact because the subject
  *   is what the chrome DOES with one, not how one is arrived at;
- *   `auth-boundary.test.ts` owns the second question. Same reasoning, and the
- *   same shape, as `Profile.test.ts` one directory over.
+ *   `auth-boundary.test.ts` owns the second question.
  *
  *   `lib/api` — the two pages each load on mount (`listKeptDays`,
  *   `fetchProfiles`, `fetchConnections`, …) and neither has a fixture
  *   fallback: every `catch` puts a message on screen and renders nothing in
  *   place of what it did not get. A wrong mock here produces an empty page
  *   and a red test rather than a green one describing something else — which
- *   is the condition that makes mocking this layer safe, and it is argued at
- *   length at the top of `Profile.test.ts`.
+ *   is the condition that makes mocking this layer safe.
+ *
+ *   THAT CONDITION USED TO BE ARGUED IN `Profile.test.ts`, which this
+ *   paragraph cited rather than restated. That file was deleted with the
+ *   settings page, so the argument briefly lived nowhere — a G6 declaration
+ *   whose justification is a dangling reference declares nothing. It is
+ *   stated here now, in full, and `public-page.test.tsx` states its own.
  *
  *   `lib/use-agent` — whether this account has an agent decides how many rows
  *   the switcher holds, and a two-row list is the only shape in which the exit

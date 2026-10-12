@@ -34,9 +34,14 @@
  *   There is no fixture fallback here — a failed load renders the "not here"
  *   state and nothing else — so a wrong mock produces an empty page and a red
  *   test rather than a green one describing something else. That is the
- *   condition argued at length at the top of `Profile.test.ts`, and it is the
- *   whole reason mocking this layer is safe on this page and not on the
- *   world.
+ *   condition that makes mocking this layer safe on this page and not on the
+ *   world: the world has fixture fallbacks and would go green describing
+ *   something else.
+ *
+ *   THIS USED TO CITE `Profile.test.ts` instead of saying it. That file went
+ *   with the settings page, leaving a G6 declaration resting on a reference
+ *   to nothing. Cite a sibling for a RULE if you must; never for the reason
+ *   your own mock is sound.
  *
  *   `lib/auth-context` — whether the reader has a world of their own is what
  *   the page's single control says, so it is the axis walked here. Stating the

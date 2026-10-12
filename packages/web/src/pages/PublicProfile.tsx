@@ -62,14 +62,21 @@
  * keeps its place because it is the only control on the page and the page has
  * no chrome of its own to put one in.
  *
- * WHAT IS STILL NOT ANSWERED, and it is recorded rather than guessed at: the
- * OWNER reaching their own public page from the settings page. `Profile`
- * renders the URL as a plain in-app link, so pressing it unmounts the
- * settings page and lands them here signed in — where the corner says "Open
- * WAKA" and takes them to the world, not back to the settings page they were
- * standing on. That is Law 2's own example ("reaching it unmounted the
- * world"), and the fix belongs on the link rather than here; see the note at
- * that link in `Profile.tsx`.
+ * WHAT IS STILL NOT ANSWERED, and the shape of the question changed under
+ * it on 2026-10-11, so the earlier wording is corrected rather than kept: the
+ * OWNER reaching their own public page. This used to say the fix "belongs on
+ * the link rather than here; see the note at that link in `Profile.tsx`" —
+ * but `Profile.tsx` went with the settings page, and `SettingsPanel` renders
+ * NO link to the public page at all. So the problem did not get solved; the
+ * door it came through was removed.
+ *
+ * THAT LEAVES A READER UNABLE TO TELL WHICH HAPPENED, which is the reason
+ * this is written down. The original defect was Law 2's own example: the
+ * owner pressed their public URL from settings, this page replaced the
+ * settings page, and the corner's "Open WAKA" took them to the world rather
+ * than back where they were standing — reaching it unmounted the world. If
+ * a link to the public page is ever put back into `SettingsPanel`, that
+ * defect returns with it unless the way back is built at the same time.
  */
 import { useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";

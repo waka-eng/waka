@@ -18,7 +18,6 @@
  * `useState`s in a file that already had seventy, and four more things a
  * reader had to prove were unrelated to the simulation.
  */
-import { Link } from "react-router-dom";
 import { DialogSurface } from "../../components/DialogSurface";
 
 import { useOptionalAuth } from "../../lib/auth-context";
@@ -461,11 +460,20 @@ export function SpaceSettings({
         </>
       ) : null}
 
-      <p className="jar-ask">
-        <Link className="jar-settings-verb" to="/profile">
-          {say("worldOpenYourAccount")}
-        </Link>
-      </p>
+      {/* THE WAY TO YOUR ACCOUNT WAS A DEAD DOOR, so it is gone rather than
+          repointed. It was `<Link to="/profile">` reading "Open your
+          account", and `/profile` stopped being a route when the settings
+          page became a panel in the corner. The path did not 404: it falls
+          through to `<Route path="/:handle">`, `PublicProfile` fails to
+          resolve a handle, and it redirects to "/" — so pressing it put you
+          silently on the world with no account settings and no explanation.
+
+          A DOOR THAT GOES SOMEWHERE WRONG IS WORSE THAN NO DOOR, which is
+          why this is a deletion and not a new target. Account settings are
+          behind the gear, which stands in the corner of the world on every
+          surface — see `SettingsPanel`. Closing this dialog puts you one
+          press from it. The honest cost is one extra press; the dishonest
+          alternative was a control that lied about where it went. */}
     </>
   )}
 </DialogSurface>
