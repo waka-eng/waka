@@ -7,7 +7,7 @@ import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/db.js';
 import {getDb} from './db.js';
 import {BackgroundJobHeldError} from './background-job-hold.js';
-import {drainBackgroundJobs,hasNearTermBackgroundJobRetry,postgresBackgroundJobStore,type BackgroundJobRetryWake} from './queue.js';
+import {drainBackgroundJobs,hasNearTermBackgroundJobRetry,hasNearTermRequestedReading,collectReadingWakeReferences,enqueueTopOfMindRefresh,postgresBackgroundJobStore,type BackgroundJobRetryWake} from './queue.js';
 let t:TestDatabase;
 const connection=process.env.DB_CONNECTION_URL!;
 const now=new Date('2026-10-06T12:00:00Z');
@@ -21,6 +21,37 @@ async function fixture(attempts=0,maxAttempts=5){
   const [job]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,run_after,attempts,max_attempts) VALUES(${profile.id},'derive_signals','{}',${now.toISOString()},${attempts},${maxAttempts}) RETURNING id`;
   return {id:job.id as string,profileId:profile.id as string,accountId:account.id as string};
 }
+it('wakes only the requested unread reading near its due time, without replaying another job',async()=>{
+  const job=await fixture();await t.sql`UPDATE background_jobs SET type='refresh_top_of_mind',run_after=${later(17).toISOString()},request_version=2,completed_version=0 WHERE id=${job.id}`;
+  const wake={id:job.id,profileId:job.profileId,requestVersion:'2'};
+  expect(await hasNearTermRequestedReading([wake],t.db as never,now)).toBe(true);
+  expect(await hasNearTermRequestedReading([{...wake,id:randomUUID()}],t.db as never,now)).toBe(false);
+  expect(await hasNearTermRequestedReading([{...wake,profileId:randomUUID()}],t.db as never,now)).toBe(false);
+  await t.sql`UPDATE background_jobs SET request_version=3,completed_version=2 WHERE id=${job.id}`;
+  expect(await hasNearTermRequestedReading([wake],t.db as never,now)).toBe(true);
+  await t.sql`UPDATE background_jobs SET request_version=2 WHERE id=${job.id}`;
+  await t.sql`UPDATE background_jobs SET completed_version=2 WHERE id=${job.id}`;
+  expect(await hasNearTermRequestedReading([wake],t.db as never,now)).toBe(false);
+});
+it('tracks only readings actually enqueued in a drain, and refuses a rolled-back follow-up',async()=>{
+  const job=await fixture();
+  const collected=await collectReadingWakeReferences(()=>enqueueTopOfMindRefresh(job.profileId,'signals_changed',t.db as never));
+  expect(collected.wakes).toEqual([{id:collected.result.jobId,profileId:job.profileId,requestVersion:collected.result.requestVersion}]);
+  expect(await hasNearTermRequestedReading(collected.wakes,t.db as never,new Date())).toBe(true);
+  const other=await fixture();const rolled=await collectReadingWakeReferences(async()=>{
+    try{await t.db.transaction(async tx=>{await enqueueTopOfMindRefresh(other.profileId,'signals_changed',tx as never);throw Error('Synthetic rollback');});}catch(error){expect((error as Error).message).toBe('Synthetic rollback');}
+  });
+  expect(rolled.wakes).toHaveLength(1);expect(await hasNearTermRequestedReading(rolled.wakes,t.db as never,new Date())).toBe(false);
+});
+it('leaves running, exhausted and next-day reading work to its existing lease/recovery policy',async()=>{
+  const job=await fixture();const wake={id:job.id,profileId:job.profileId,requestVersion:'1'};
+  await t.sql`UPDATE background_jobs SET type='refresh_top_of_mind',run_after=${later(86400).toISOString()} WHERE id=${job.id}`;
+  expect(await hasNearTermRequestedReading([wake],t.db as never,now)).toBe(false);
+  await t.sql`UPDATE background_jobs SET run_after=${now.toISOString()},status='running',locked_at=${now.toISOString()} WHERE id=${job.id}`;
+  expect(await hasNearTermRequestedReading([wake],t.db as never,now)).toBe(false);
+  await t.sql`UPDATE background_jobs SET status='pending',locked_at=NULL,attempts=max_attempts WHERE id=${job.id}`;
+  expect(await hasNearTermRequestedReading([wake],t.db as never,now)).toBe(false);
+});
 async function fail(){
   const retries:BackgroundJobRetryWake[]=[];
   const result=await drainBackgroundJobs({now,limit:1,processor:async()=>{throw new Error('Synthetic transport failure');},onTransientRetry:retry=>{retries.push(retry);}});

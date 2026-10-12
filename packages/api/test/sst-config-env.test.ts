@@ -162,7 +162,13 @@ describe("SST principle generation cadence", () => {
         if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) continue;
         const rel = relative(srcRoot, path);
         if (allowed.has(rel)) continue;
-        if (readFileSync(path, "utf8").includes("enqueueRefreshPrinciples(")) {
+        let source:string;
+        try{source=readFileSync(path,'utf8');}catch(error){
+          // Vocabulary tests create/remove source probes concurrently. A file
+          // that ceased to exist is not runtime code; other read errors fail.
+          if((error as NodeJS.ErrnoException).code==='ENOENT')continue;throw error;
+        }
+        if (source.includes("enqueueRefreshPrinciples(")) {
           offenders.push(rel);
         }
       }
