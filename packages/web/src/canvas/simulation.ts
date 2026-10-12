@@ -3832,6 +3832,35 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     function draw(now: number) {
       const pal = paletteRef.current;
       ctx!.setTransform(view.dpr, 0, 0, view.dpr, -cam.x * view.dpr, -cam.y * view.dpr);
+      /* ═══ ASK FOR THE GOOD DOWNSCALE, BECAUSE WE ALWAYS DOWNSCALE ═══════
+         Founder, on an iPhone: "케릭터 화질 왜이래 휴대폰으로 볼때?" — the
+         creature soft and smeared, while the same build on a desktop is
+         clean.
+
+         IT IS NOT THE PIXEL RATIO. Measured on a 393x852 viewport at
+         devicePixelRatio 3: the backing store is 1179x2556, a ratio of
+         exactly 3.0 — one drawn pixel per physical pixel. The 2026-09-08
+         fix in `canvas/scale.ts` holds.
+
+         IT IS THAT EVERY BODY IS DRAWN AT HALF ITS BAKED SIZE. `BODY_PX` is
+         240 and `CHAR_SIZE` is 120, so the sprite is a deliberate 2x
+         supersample and the loop resamples it down 0.5x on every frame, on
+         every device — the geometry is IDENTICAL on desktop and phone, which
+         is why the ratio could not be the answer.
+
+         SO THE ONLY VARIABLE LEFT IS THE FILTER, and we never chose one.
+         `imageSmoothingQuality` defaults to "low". Chrome's "low" survives a
+         halving; WebKit's does not, and a halved pixel grid is the worst
+         case for it — which is exactly why the agent, whose body is
+         quantised into hard cells by `pixelate`, looks the most destroyed.
+
+         SET EVERY FRAME, NOT ONCE AT SETUP. Assigning `canvas.width` resets
+         the whole 2D context state, and `measure()` reassigns it on every
+         resize and on every rebuild of this loop — a flag set at setup would
+         be silently dropped the first time the window changed. It is a
+         property write on a context that is about to issue hundreds of draw
+         calls; the cost is not measurable against them. */
+      ctx!.imageSmoothingQuality = "high";
       ctx!.clearRect(cam.x, cam.y, view.w, view.h);
       if (!pal) return;
       const t = now / 1000;
