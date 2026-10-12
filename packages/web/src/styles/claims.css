@@ -652,9 +652,18 @@
 
 
 /* An empty corner still holds the row's shape open, so the switcher stays
-   centred on the viewport whether or not there is a ground to pick. */
+   centred on the viewport whether or not there is a ground to pick.
+
+   TWO BUTTONS WIDE SINCE 2026-10-11. The right corner gained an "i" beside
+   the cog — founder: "lets add a button next to the settinsg of info icon"
+   — and `.waka-corners` centres by `space-between`, which only puts the
+   middle child in the middle when the two edges weigh the same. At one
+   corner width the switcher would have drifted 22px to the left of centre
+   on every screen with an empty left corner, which is the kind of thing
+   nobody can name and everybody can see. */
 .waka-corners > span[aria-hidden="true"].waka-corner {
   flex: none;
+  width: calc(var(--waka-corner) * 2);
 }
 
 .waka-switch {
@@ -741,6 +750,31 @@
 .waka-corner:hover,
 .waka-corner:focus-visible {
   color: var(--ink);
+}
+
+/* ═══ THE TWO TRIGGERS STAY REACHABLE WHILE THEIR CARD IS OPEN ═══════════
+   Found in a browser, and it could not have been found anywhere else: with
+   a card open, `.waka-menu-scrim` is a full-screen `z-index: 50` child of
+   the same stacking context as these buttons, so it painted OVER both of
+   them. Playwright's own words — "<button class='waka-menu-scrim'>
+   intercepts pointer events" — after fifty-seven retries on a button it
+   could see perfectly well.
+
+   IT DID NOT MATTER UNTIL TODAY and that is the whole lesson. With one
+   button in the corner the swallowed press still closed the card, because
+   the scrim does the same thing the cog's second press does, so the bug
+   was invisible for as long as the two handlers agreed. The moment a
+   SECOND door appeared beside it, pressing "i" while settings was open
+   closed settings and did not open the "i" — a press that lands on the
+   wrong control and looks like nothing happening.
+
+   Only these two are lifted, by name. The chat corner wears `.waka-corner`
+   too, and it must stay UNDER the scrim: pressing it with a card open
+   should put the card away, not open an overlay behind one. */
+.waka-corner--info,
+.waka-corner--settings {
+  position: relative;
+  z-index: 61;
 }
 
 .waka-corner:focus-visible {
@@ -1639,9 +1673,16 @@
    eye forever after. That is `six-laws.md` Law 4 in its purest form, and
    deleting it is also what buys the title the top of the column back. */
 
-.waka-over-search {
-  width: 100%;
-}
+/* `.waka-over-search { width: 100% }` STOOD HERE, A SECOND BLOCK FOR A CLASS
+   FULLY DECLARED TWO HUNDRED LINES DOWN. The note above `.waka-over-count`
+   says why that is worth cleaning rather than leaving: "Declared once: this
+   block was written twice, identically, which is the kind of thing a one-line
+   change to either copy would have made into two behaviours."
+
+   The measure belongs to the search SURFACE now, not to the input — see
+   `.waka-over-find` below, which carries it in the one block that owns the
+   control's geometry. A `width: 100%` left behind on what is now a flex child
+   of a padded row is how a field ends up a gutter wider than its container. */
 
 /**
  * WHOSE ARCHIVE, AS THE TITLE ITSELF.
@@ -1817,32 +1858,43 @@
    the distinction rather than handed an exemption. */
 
 
-.waka-over-search {
+/* ═══ THE PAINTED SURFACE, AND THE INPUT IS A PASSENGER ON IT ═══════════
+   Founder, pointing at this field: "search bar can also utilize some
+   reference from astryx."
+
+   Everything below the `padding`/`border`/`radius` line used to be declared
+   on the `<input>` itself, because the input WAS the box. It is not any more:
+   Astryx's `Typeahead` splits a search control into a "Input surface —
+   Required: Painted control surface containing the editable input" and the
+   things that sit on that surface (its "Icon-rendered start icon", its
+   "Clear button"). A glyph and a clear cannot live inside an `<input>`, so
+   the paint moves out to a wrapper and the input keeps only the typing.
+
+   WHAT DID NOT CHANGE, and must not: the box itself. Founder, with the
+   underlined field directly above the archive: "make it a more traditional
+   boxed search bar, because right now it has too similar of a visual with
+   the inspirations below as the list." The archive is a COLUMN OF
+   HAIRLINES, and a field whose entire appearance is one hairline reads as
+   the first row of that column rather than as a control. So: the same
+   `--field-edge`, the same 12px corner, no fill and no shadow — quieter
+   than the dock, same as the chat's box, so the one floating object on
+   screen stays the only one. The geometry is byte-for-byte what it was; it
+   is only declared one element further out. */
+.waka-over-find {
   /* `1 1 12rem` HERE WAS A ROW'S FLEX IN A COLUMN. This field used to share a
      row with the count, where growing sideways was the point; `.waka-over` is
      `flex-direction: column`, so `flex-grow: 1` grew it DOWNWARD — a 44px
      rule with two hundred pixels of empty field above the list, which read as
      a page with a hole in it. A control sizes to itself in a column. */
   flex: 0 0 auto;
+  width: 100%;
   min-width: 0;
   min-height: 44px;
-  /* ═══ A BOX, BECAUSE THE LIST BELOW IT IS ALSO LINES ════════════════
-     Founder, with the underlined field directly above the archive: "make
-     it a more traditional boxed search bar, because right now it has too
-     similar of a visual with the inspirations below as the list."
-
-     That is the argument against the old note here, and it is better than
-     the old note. "A rule, not a box" was reasoned from "the archive has
-     no boxes left in it" — true, and the thing it missed is that the
-     archive is a COLUMN OF HAIRLINES. A field whose entire appearance is
-     one hairline, sitting at the top of a stack of rows separated by
-     hairlines, does not read as a field at all; it reads as the first row.
-     Distinctness is what a control on a page of content needs, and here
-     sameness was costing exactly that.
-
-     QUIETER THAN THE DOCK, same as the chat's box — an edge and a corner,
-     no fill and no shadow, so the one floating object on screen stays the
-     only one. */
+  /* The glyph, the input and the clear on one baseline. `align-items: center`
+     rather than `stretch` so the 12px glyph centres on the 44px row instead
+     of being stretched into an oval by the cross-axis default. */
+  display: flex;
+  align-items: center;
   padding: 0 var(--sp-14);
   border: 1px solid var(--field-edge);
   border-radius: 12px;
@@ -1852,13 +1904,214 @@
   font-size: var(--t-input);
 }
 
-.waka-over-search:focus-visible {
+/* `:focus-within`, NOT `:focus-visible`, AND THE CHANGE IS NOT A LOOSENING.
+   The ring used to be on the input, where `:focus-visible` was the right
+   selector — a text field matches it on a mouse click too, which is why it
+   worked. The input is no longer the thing that draws an edge, and
+   `:focus-visible` on the wrapper would never match: a `<div>` is not
+   focusable. `:focus-within` is the wrapper's version of the same sentence,
+   and it also lights while the CLEAR is focused — correct, because focus is
+   still inside this control and the person is still mid-search. */
+.waka-over-find:focus-within {
   outline: none;
   border-color: color-mix(in srgb, var(--ink) 80%, transparent);
 }
 
+/* ═══ THE SEARCH GLYPH, DRAWN RATHER THAN IMPORTED ══════════════════════
+   Astryx's `CommandPalette` — the one component in that system whose only
+   job is search — marks it *Required*: "Search glyph: Required: Search
+   symbol rendered by Icon in the default Input." And its `TextInput` rules
+   name it as the thing that licenses a hidden label: "Only hide the label
+   when surrounding context makes it obvious, like a search bar with a
+   magnifying-glass icon." This field had a hidden label and no glyph, so
+   its only claim to being a search box was a placeholder — the one part of
+   the anatomy that vanishes the moment you focus it to type.
+
+   IT IS A CIRCLE AND A STEM, NOT AN ICON SET. This product has one typeface,
+   no accent colour and light as its only meaning channel; pulling in an icon
+   font or an SVG sprite to draw two primitives would be a second material
+   (Law 5) and a second place the product's weight is decided. A border-radius
+   and a rotated 1.5px bar are the same two shapes with no new dependency,
+   and they take their colour from `currentColor` so the glyph can never
+   drift from the ink beside it.
+
+   AT THE PLACEHOLDER'S TIER, which is the whole of its loudness argument.
+   It is a hint about what the field is for, exactly like the placeholder, so
+   it is `--muted` for the same reason — and when the field is empty the
+   glyph and the hint read as one grey phrase rather than as a mark and then
+   some words. */
+.waka-over-find-glyph {
+  position: relative;
+  flex: 0 0 auto;
+  /* 12px: the x-height of `--t-input` at this size, measured. A glyph taller
+     than the words beside it reads as a button; shorter, as a smudge. */
+  width: 12px;
+  height: 12px;
+  margin-right: var(--sp-12);
+  /* ═══ ONE HAIRLINE, AND IT HAD TO BE MEASURED TO FIND THAT OUT ══════
+     This was 1.5px, and so was the clear's cross, and they did NOT come out
+     the same weight on screen. Chrome rounds `border-width` to a whole
+     device pixel and renders a 1.5px BACKGROUND as 1.5px — so the ring
+     drew at 1 and the cross drew at 1.5, and the two marks on one 44px
+     surface read as two different pens. Caught in a browser screenshot;
+     entirely invisible in the stylesheet, where both said 1.5.
+     1px everywhere: it is the archive's own hairline, it is the weight
+     `--field-edge` draws the box at, and it is the one value that cannot
+     round to something else. */
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  color: var(--muted);
+}
+
+/* The stem, leaving the circle on the 45° diagonal — `top`/`left` put its
+   pivot on the circle's own edge at that angle (centre 6,6, radius 6, so
+   6 + 6·cos45° ≈ 10.25) rather than at a round number that would leave a
+   visible gap or a bite out of the ring. `transform-origin: top center`
+   makes the bar hang from that pivot, so rotating it swings the far end out
+   instead of sliding the whole stem off the circle. */
+.waka-over-find-glyph::after {
+  content: "";
+  position: absolute;
+  top: 10.25px;
+  left: 9.75px;
+  width: 1px;
+  height: 5px;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: top center;
+  transform: rotate(-45deg);
+}
+
+/* ═══ THE CLEAR, WHICH IS THE WAY OUT OF A SEARCH ═══════════════════════
+   Astryx `TextInput`, under Do: "Add a clear button for search and filter
+   inputs so users can quickly reset without selecting all text." Here that
+   is not a convenience, it is Law 2 — "every surface you can enter has a
+   visible way out, and it costs one press". Typing in this field puts you in
+   a filtered archive, and the only exit was select-all-and-delete.
+
+   A 44px SQUARE TARGET WITH A 10px MARK IN IT. The product's floor for
+   anything you press is 44, and a cross drawn at 44 would out-shout the
+   title. So the target is the full height of the field and the mark is
+   small, which is the same split the dock's controls use.
+
+   AND IT REACHES THE EDGE. `margin-right` cancels the surface's own right
+   padding, so the target ends where the border is and the mark sits one
+   gutter in from it — optically level with the glyph on the other side.
+   Without it, a 44px button inside 14px of padding put the cross 36px from
+   the edge, floating in the middle of nothing. */
+.waka-over-find-clear {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: var(--sp-44);
+  margin-right: calc(var(--sp-14) * -1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* Two bars crossing, positioned from the RIGHT rather than centred, so the
+   mark sits a gutter in from the border while the target keeps reaching
+   leftward over the dead space beside it. */
+.waka-over-find-clear::before,
+.waka-over-find-clear::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: var(--sp-10);
+  width: 11px;
+  height: 1px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.waka-over-find-clear::before {
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.waka-over-find-clear::after {
+  transform: translateY(-50%) rotate(-45deg);
+}
+
+/* LIGHT IS THE ONLY CHANNEL, so pressable-ness is announced by the mark
+   coming UP to full ink and nothing else — no fill arriving under it, no
+   second colour, no scale. `:focus-visible` gets the same treatment as
+   `:hover` because the keyboard route to this control must say the same
+   thing the pointer route does; the surface's own `:focus-within` edge is
+   already lit at that moment, which is what locates it on the page. */
+.waka-over-find-clear:hover,
+.waka-over-find-clear:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+.waka-over-search {
+  /* The input is now a passenger: no edge, no ground, no padding of its own
+     — all three belong to `.waka-over-find` above. It grows to fill whatever
+     the glyph and the clear leave, and `min-width: 0` is what lets it SHRINK
+     below its intrinsic size, without which a flex item with a long value
+     pushes the clear out through the right border. */
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.waka-over-search:focus-visible,
+.waka-over-search:focus {
+  outline: none;
+}
+
 .waka-over-search::placeholder {
   color: var(--muted);
+}
+
+/* THE BROWSER'S OWN CLEAR, REMOVED — AND THIS IS NOT COSMETIC TIDYING.
+   `type="search"` makes WebKit paint `::-webkit-search-cancel-button`, its
+   own little ×, once the field holds a value. Ours is now in that exact
+   spot, so in Chrome and Safari a person typing here would get TWO crosses
+   side by side: ours, and a grey system one in a weight and a shape this
+   product does not own. A control drawn by the user agent is the plainest
+   violation of Law 5 available — "the product is one material, and every
+   surface wears it" — and it is a second control for one act, which is the
+   stack every change to this surface has been removing.
+
+   WHY THIS IS WRITTEN RATHER THAN WAITED FOR, said plainly because the
+   codebase's rule is that a comment records what was actually checked: the
+   headless Chromium this project screenshots with does NOT paint that button,
+   and `getComputedStyle(input, "::-webkit-search-cancel-button")` does not
+   report the pseudo either — it echoes the host input's own box, identically
+   whether or not the rule is present. Both were tried. So there is no probe
+   in our harness that can see this one, and the browsers that DO paint it are
+   the ones the founder uses. It is declared on the strength of the WebKit
+   behaviour rather than on a screenshot, and that is the honest account.
+
+   `appearance: none` on the input is not enough by itself; the pseudo-element
+   has to be addressed by name. */
+/* ONE SELECTOR PER RULE, AND THAT IS THE WHOLE REASON THIS IS TWO BLOCKS.
+   CSS drops an entire selector LIST when any one selector in it is
+   unparseable. `::-webkit-search-decoration` is the shakier of these two —
+   it is a legacy alias WebKit has already stopped honouring in places — so
+   joining them with a comma would stake the cancel button, the one that
+   actually matters, on a selector that might not survive. Separated, each
+   stands or falls on its own, and this cannot become the kind of rule that
+   reads as correct while doing nothing. */
+.waka-over-search::-webkit-search-cancel-button {
+  appearance: none;
+  -webkit-appearance: none;
+  display: none;
+}
+
+.waka-over-search::-webkit-search-decoration {
+  appearance: none;
+  -webkit-appearance: none;
+  display: none;
 }
 
 .waka-over-status {
@@ -4544,6 +4797,30 @@
      past it. The two numbers have to be one number, so the panel takes
      `width: 100%` and this is where the measure is decided. */
   max-width: min(26rem, calc(100vw - var(--sp-32)));
+  /* ═══ THE BOUND LIVES ON THE SURFACE, NOT ON ITS CONTENT ═══════════════
+     Astryx, on Popover: "Don't assume scrolling alone means Popover is the
+     wrong component; a bounded Popover may scroll while a focused anchored
+     interaction remains appropriate." So a card taller than the screen is
+     not a reason to go back to a page — it is a reason to bound the card.
+
+     IT WAS BOUNDED ON `.waka-settings` AND THAT WAS SIX PIXELS SHORT. The
+     content's `100dvh - 44 - 40` did not know about the card's own 12px of
+     padding, its hairline, or the 8px it hangs below a corner that is
+     itself 12px down from the top — so with the agent roster open on a
+     520px window the card ended at 526 and the last of the delete row was
+     cut off the bottom of the screen. Measured, not guessed.
+
+     ON THE SURFACE IT IS ARITHMETIC ANYBODY CAN CHECK: this card's top edge
+     is the safe area, plus `.waka-corners`' 12px of padding, plus one 44px
+     corner, plus the 8px gap above — and `--sp-16` of air is left under it
+     so the card never touches the bottom edge. It also binds EVERY card the
+     corner opens rather than only the one that happened to overflow, which
+     is why the new "i" panel needed no bound of its own. */
+  max-height: calc(
+    100dvh - env(safe-area-inset-top) - var(--sp-12) - var(--waka-corner) - var(--sp-8) - var(--sp-16)
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--sp-12);
   border: 1px solid var(--line);
   border-radius: var(--waka-r-surface);
@@ -4659,8 +4936,11 @@
    IT IS A PANEL, NOT A PAGE IN A CORNER, and the difference is enforced by
    two things rather than by restraint. The groups are DISCLOSURES with one
    open at a time, so the tallest state is one group plus five rows; and the
-   whole thing caps at the viewport and scrolls inside itself, so a long
-   agent roster cannot push the sign-out off the bottom of the screen.
+   card it sits in caps at the viewport and scrolls, so a long agent roster
+   cannot push the sign-out off the bottom of the screen. That cap used to
+   be declared here and was six pixels short because it could not see the
+   card's own padding — it lives on `.waka-account` now, where the whole
+   offset is in one sum.
 
    WIDER THAN THE CARD IT REPLACES. 22rem held a name and an address; it
    does not hold a handle field with two switches under it. 26rem is the
@@ -4670,12 +4950,13 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  /* THE CARD DECIDES THE MEASURE — see `.waka-account` above, where 26rem
-     is set and why. A second width here is the thing that overflowed. */
+  /* THE CARD DECIDES THE MEASURE AND NOW THE HEIGHT TOO — see
+     `.waka-account` above, where 26rem and the viewport bound are both set,
+     and why. A second width here is the thing that overflowed sideways; a
+     second max-height is what overflowed downwards, because the inner
+     element cannot see the padding and the offset that sit outside it. One
+     scroller on the surface, nested in nothing. */
   width: 100%;
-  max-height: calc(100dvh - var(--waka-corner) - var(--sp-40));
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .waka-settings-who {
@@ -4806,6 +5087,79 @@
   width: 18px;
   height: 18px;
   accent-color: var(--ink);
+}
+
+/* ═══ HOW WAKA WORKS — THE OTHER CARD ON THE SAME SURFACE ═══════════════
+   Founder: "lets add a button next to the settinsg of info icon and in
+   there put all things to explain how waka works (inspirations leading to
+   top of mind leading to principles and anything else that we want to
+   describe)."
+
+   THE PAINT IS `.waka-account`'s AND ONLY THE TYPE IS HERE. Both cards hang
+   off the same corner from the same two triggers, so one border, one
+   ground, one measure and one viewport bound — a second surface would be
+   two products in one corner. Astryx names the split: the "Popover surface"
+   is owned by the popover, the content is "caller-supplied content rendered
+   inside the surface".
+
+   IT IS PROSE, SO IT IS SET LIKE PROSE. The settings panel is a column of
+   44px targets; this is four paragraphs somebody reads once, which wants a
+   line height and a measure and nothing else. Every other card in the
+   product sets `--t-ui` tight because it is holding controls.
+
+   LIGHT DOES THE STRUCTURE, as everywhere. The rung's name is ink and its
+   paragraph is muted, which is the same pairing the archive's rows and the
+   settings fields already use — so the eye goes down the four names first
+   and reads the loop as a sequence before reading a word of the bodies.
+   That ordering IS the content. No rules, no numerals, no bullets. */
+.waka-about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+
+.waka-about-title {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.waka-about-lead,
+.waka-about-caveat {
+  margin: 0;
+  font-size: var(--t-meta);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* THE CAVEAT IS SET APART BY A HAIRLINE, not by a heading saying "note".
+   It is the one paragraph that is about the loop rather than part of it —
+   what the product cannot promise — and a person who has read four
+   paragraphs is owed a visible seam before the fifth changes subject. */
+.waka-about-caveat {
+  padding-top: var(--sp-12);
+  border-top: 1px solid var(--line);
+}
+
+.waka-about-loop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  margin: 0;
+}
+
+.waka-about-loop dt {
+  font-size: var(--t-ui);
+  color: var(--ink);
+}
+
+.waka-about-loop dd {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--t-meta);
+  line-height: 1.5;
+  color: var(--muted);
 }
 
 .waka-account-failed {

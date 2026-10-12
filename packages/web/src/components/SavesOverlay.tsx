@@ -158,6 +158,15 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      anywhere. Filtering happens here, over what is already loaded, so typing
      narrows in place with no round trip and no empty frame between keys. */
   const [query, setQuery] = useState("");
+  /* THE FIELD ITSELF, so the clear control can hand focus back to it.
+     Astryx's `TextInput` anatomy defines the clear as the thing that "resets
+     the value AND RETURNS FOCUS TO THE INPUT" — without the ref, pressing it
+     would empty the field and leave the caret nowhere, so the next search
+     costs a click the person should not have had to make. A ref rather than
+     `autoFocus` or a `document.querySelector`: this surface can hold a second
+     field once a note is open, and a lookup by selector would be a second way
+     to name a thing we already have a handle on. */
+  const field = useRef<HTMLInputElement | null>(null);
   /**
    * WHICH CATEGORY IS BEING LOOKED AT, with `null` meaning all of them.
    *
@@ -500,9 +509,41 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
               <button type="button" className="waka-over-count waka-over-unfocus" onClick={onClearFocus}>
                 {say("worldBackToAll")}
               </button>
+            /* ═══ AND THE COUNT COUNTS WHAT IS ACTUALLY ON SCREEN ═════
+                Astryx's `PowerSearch` says it as a rule: "Provide a result
+                count to give users feedback on how their filters affect the
+                data set." We do not need its tokenised filter bar — that page
+                itself sends simple keyword search away ("Use PowerSearch for
+                simple keyword searches" is listed under Don't) — but the
+                feedback rule applies to any filter, and this line was failing
+                it in the worst available way: it kept printing the UNFILTERED
+                number. Search for something three of thirty-six saves match
+                and the title said `(36)` over three rows. Not merely unhelpful
+                — WRONG, and wrong in a product whose whole claim is that its
+                account of you is checkable.
+
+                SO IT IS `shown`, WHICH IS EVERY FILTER AND NOT JUST THE
+                SEARCH. Law 7: a ruling lands on the class, not the instance
+                it was pointed at. `shown` is already the one place the needle,
+                the category tab and a claim's focus are reconciled, so reading
+                it here means the count follows a category press for free
+                instead of waiting to be reported as its own bug.
+
+                NO NEW ELEMENT AND NO NEW WORD. The `(n/total)` shape was
+                already here for a half-loaded page, and "how many of the whole
+                are showing" is the same sentence whether the rest is unloaded
+                or filtered out. A separate "3 results" line under the field
+                would have been a second numeral saying one fact.
+
+                A NUMERAL STILL SURVIVES "STATES RENDER, NUMERALS NEVER" for
+                the reason the note above gives: that ruling is against
+                METRICS. This is the length of the list you are about to
+                scroll, which is navigation — and under a filter it is the only
+                way to learn the filter did something without scrolling to the
+                bottom to find out. */
             ) : total !== null ? (
               <span className="waka-over-count jar-saved-count">
-                {total > rows.length ? `(${rows.length}/${total})` : `(${total})`}
+                {shown.length < total ? `(${shown.length}/${total})` : `(${total})`}
               </span>
             ) : null}
           </span>
@@ -560,15 +601,107 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             one block down — "the row only appears when it divides something"
             — and the number is a screenful: past about a dozen rows the list
             stops being glanceable and finding becomes a real act. */}
+        {/* ═══ THE FIELD IS A SURFACE WITH THINGS IN IT, NOT A BARE INPUT ══
+            Founder, pointing at this field: "search bar can also utilize some
+            reference from astryx." Astryx is Meta's design system; its
+            `TextInput` page lists the anatomy a text field is allowed to have
+            — Label, Description, Start icon, Placeholder, Clear button,
+            Spinner, Status icon — and two of its rules name this exact field:
+
+              "Always provide a visible label so users know what the field is
+              for. Only hide the label when surrounding context makes it
+              obvious, LIKE A SEARCH BAR WITH A MAGNIFYING-GLASS ICON."
+
+              "Add a clear button for search and filter inputs so users can
+              quickly reset without selecting all text."
+
+            And its `CommandPalette` — the one component in that system that
+            exists only to search — marks the glyph *Required*: "Search glyph:
+            Required: Search symbol rendered by Icon in the default Input."
+
+            WHAT THIS FIELD WAS DOING WRONG, in those terms. It had a hidden
+            label and no icon, which means its entire claim to being a search
+            box was the placeholder — and the placeholder is the one part of
+            the anatomy that DISAPPEARS ON FOCUS. The moment you clicked it to
+            type, the only thing on screen saying what it was went away, and
+            what was left was an empty rounded box above a list. Astryx states
+            the prohibition directly: "Don't use placeholder text as a
+            replacement for a label."
+
+            So the box becomes the painted surface and the input moves inside
+            it — which is Astryx's own `Typeahead` anatomy, where the "Input
+            surface" is the "Painted control surface containing the editable
+            input" and the glyph and the clear sit on that surface rather than
+            on the input. The border, the corner and the focus edge all move
+            up to the wrapper; the input keeps only the typing.
+
+            THE GLYPH IS NOT AN ICON FILE. This product has one typeface, no
+            accent colour, and light as its only meaning channel — an imported
+            icon set would be a second material (Law 5). It is a circle and a
+            stem drawn in CSS out of the ink already on this surface, at the
+            muted tier the placeholder uses, so it reads as the same breath as
+            the words beside it.
+
+            WHAT WAS NOT ADOPTED, and why, so the next person does not add it:
+            Description (the founder removed the permanent explainers from
+            this surface under "only the most absolutely necessary things
+            should be shown", and the one line that survived is `newHere`
+            above, shown once); Spinner (filtering runs over rows already in
+            memory — there is no round trip for a spinner to describe, and one
+            that spun on a keystroke would be inventing latency); Status icon
+            (a search query cannot be invalid, and the error/warning tiers are
+            built on a red this product does not have). */}
         {!open && rows.length > SEARCHABLE ? (
-          <input
-            type="search"
-            className="waka-over-search"
-            value={query}
-            placeholder={say("worldInspirationsSearch")}
-            aria-label={say("worldInspirationsSearch")}
-            onChange={(event) => setQuery(event.target.value)}
-          />
+          <div className="waka-over-find">
+            {/* Decorative in the exact sense `aria-hidden` is for: it says
+                "search", and `aria-label` on the input below already says
+                "search" to anyone who cannot see it. Announcing it twice is
+                the duplication Law 4 is about. */}
+            <span className="waka-over-find-glyph" aria-hidden="true" />
+            <input
+              ref={field}
+              type="search"
+              className="waka-over-search"
+              value={query}
+              placeholder={say("worldInspirationsSearch")}
+              aria-label={say("worldInspirationsSearch")}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            {/* ═══ THE WAY OUT OF A SEARCH, AT ONE PRESS ═══════════════════
+                Law 2: "every surface you can enter has a visible way out, and
+                it costs one press." Typing here enters a filtered archive, and
+                until now the only way back to the whole of it was to select
+                the text and delete it — a two-handed act with no affordance on
+                screen pointing at it. The header's `(3/36)` tells you a filter
+                is on; it is a fact, not a door.
+
+                IT IS ONLY HERE WHILE THERE IS SOMETHING TO CLEAR, which is
+                what keeps it inside the founder's standing rule — "only the
+                most absolutely necessary things should be shown. minimalistic
+                and simplism is the key to our design principle." The resting
+                field gains nothing at all; the control appears as a
+                consequence of something the person did and leaves with it.
+                `query` rather than `needle`, so a field holding only spaces
+                can still be emptied — `needle` trims, and a space you cannot
+                see is still a value you have to get rid of.
+
+                AND IT RETURNS FOCUS, which is Astryx's wording and not a
+                flourish: "a trailing × button that RESETS THE VALUE AND
+                RETURNS FOCUS TO THE INPUT." Clearing is almost always the
+                start of a different search, and a cleared field you then have
+                to click again is a second press for the same intent. */}
+            {query ? (
+              <button
+                type="button"
+                className="waka-over-find-clear"
+                aria-label={say("worldInspirationsSearchClear")}
+                onClick={() => {
+                  setQuery("");
+                  field.current?.focus();
+                }}
+              />
+            ) : null}
+          </div>
         ) : null}
 
         {/* The row divides nothing until there are two things to divide into. */}

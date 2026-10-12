@@ -716,7 +716,12 @@ async function surfaces(
   await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(3_000);
   try {
-    await page.locator("button.waka-corner").first().click({ timeout: 8_000 });
+    /* BY THE MODIFIER, NOT BY `.first()`. The right corner holds two
+       buttons since 2026-10-11 — an "i" for how the product works beside
+       the cog — and the left corner has worn `.waka-corner` the whole
+       time, so `.first()` was already a bet on document order and is now
+       a bet that would lose. */
+    await page.locator("button.waka-corner--settings").click({ timeout: 8_000 });
     await page.waitForTimeout(600);
     await walkSurface(cdp, page, "settings", seen, ask);
     const groups = await page.locator(".waka-settings-row").count();
@@ -727,6 +732,15 @@ async function surfaces(
       await page.locator(".waka-settings-row").nth(i).click({ timeout: 5_000 });
       await page.waitForTimeout(300);
     }
+    /* THE OTHER CARD ON THE SAME CORNER. `.waka-about*` is only ever on
+       screen while the "i" is pressed, so without this step every rule in
+       that family reads as unused — which is the exact failure the note
+       above this walk was written about, one card along. */
+    await page.locator("button.waka-corner--info").click({ timeout: 8_000 });
+    await page.waitForTimeout(600);
+    await walkSurface(cdp, page, "how it works", seen, ask);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
   } catch {
     /* The corner is absent on a surface with no session. Walking what is
        there beats failing the whole run over one panel. */
@@ -756,7 +770,7 @@ async function surfaces(
     /* THE HANDLE IS IN THE PANEL'S PUBLIC GROUP NOW. Opened by name rather
        than by index, because the group order is a design decision and this
        walk should not break when it changes. */
-    await page.locator("button.waka-corner").first().click({ timeout: 8_000 }).catch(() => undefined);
+    await page.locator("button.waka-corner--settings").click({ timeout: 8_000 }).catch(() => undefined);
     await page.waitForTimeout(500);
     for (let i = 0; i < await page.locator(".waka-settings-row").count(); i += 1) {
       const row = page.locator(".waka-settings-row").nth(i);

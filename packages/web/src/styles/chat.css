@@ -519,11 +519,30 @@
   font-size: var(--t-meta);
 }
 
-/* The light half of it. See the note above for why this is `--jar-muted`
-   and not `--muted`: 3.11:1 against the reply instead of 1.57:1. */
+/* ═══ THE DIMMING GOES, BECAUSE THE BUBBLE DOES ITS JOB NOW ═════════════
+   Founder, with a question in a bubble: "kind of hard to read."
+
+   MEASURED, over the fill rather than over the ground, which is the whole
+   error. `--jar-muted` was chosen when your turn had no bubble: 0.55 of
+   the ink over `#05080f` is 5.48:1, AA for body text, and it was the only
+   channel saying who spoke. It is now painted over a RAISED surface —
+   `--moon-warm` at 9% makes `#1c1d21` — and the same token lands at
+   5.23:1 on it. Still nominally AA, and this file's own note already
+   explains why that number lies here: "a contrast figure is computed from
+   colour and knows nothing about stroke weight", and Jost 300 at
+   `--t-reading` is a thin stroke.
+
+   THE REDUNDANCY IS THE REAL ARGUMENT. Dimming existed because position
+   alone was not enough and the old distinction measured 1.57:1. The
+   speaker is now carried by position AND by a filled container, so a third
+   channel is buying nothing and costing legibility. Full ink on the
+   bubble is 14.32:1.
+
+   WHAT THIS DOES NOT TOUCH: the reply stays ghost and stays `--ink` on the
+   ground. The asymmetry is unchanged; one side simply stopped whispering. */
 .chat-message[data-role="user"] .chat-message-text,
 .chat-sending .chat-message-text {
-  color: var(--jar-muted);
+  color: var(--ink);
 }
 
 /* THE OPENING IS NOW THE EMPTY TRANSCRIPT AND THE BOX'S OWN QUESTION.
