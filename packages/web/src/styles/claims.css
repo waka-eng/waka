@@ -10,6 +10,20 @@
  * here wears it. Hierarchy comes from SIZE and WEIGHT, never from a change of
  * face.
  */
+/* ═══ THIS SHEET IS IN THE `chrome` LAYER, AS OF 2026-10-12 ════════════════
+   It was in NO layer for its whole life before that, which meant all 318 of
+   its rules beat every rule in `global.css`, `system.css`, `home.css`,
+   `chrome.css` and `chat.css` at any specificity — the largest sheet in the
+   tree winning every argument it was not even having. `layers.css` holds the
+   order, the argument for why this sheet belongs in `chrome` rather than in
+   `product`, and the measurement of what changed when it moved.
+
+   TWO SELECTORS IN THIS FILE WERE STRENGTHENED to survive the move, both on
+   the capture field, both tombstoned at their own blocks: search
+   `.waka-composer-body textarea.jar-mouth-rest.jar-keep-box`. Nothing else
+   needed it, and that is a measured claim rather than a hope — see
+   `layers.css` for the 63 contested declarations it was derived from. */
+@layer chrome {
 :root {
   /* THE ONE FACE, AND THE ONLY PLACE ITS STACK IS SPELLED. `global.css`
      points `--font-sans` and `--font-serif` here too, so the flat screens and
@@ -3013,7 +3027,62 @@
  *
  * It is prose now, and prose is set like the rest of the product's prose.
  */
-.waka-composer-body .jar-keep-box {
+/* ═══ AND THE SELECTOR CARRIES THREE CLASSES AND A TAG, WHICH IT DID NOT
+   NEED UNTIL THIS SHEET JOINED A LAYER (2026-10-12) ═════════════════════
+   It was `.waka-composer-body .jar-keep-box`, (0,2,0), and that was enough
+   for as long as `claims.css` was unlayered — an unlayered rule beats every
+   layered one at any specificity, so this block won arguments it was not
+   having. Inside `@layer chrome` it is an ordinary neighbour of `chrome.css`,
+   and ONE family there out-ranks (0,2,0) on this exact element:
+
+     chrome.css:1737  `.jar-mouth .jar-mouth-rest:not(.jar-mouth-rest--said)`
+                      (0,3,0) — display:flex, background:var(--w-ink),
+                      color:var(--w-ground), line-height:1.6
+     chrome.css:1748  the same selector again — background: a warm gradient
+     chrome.css:1744  `.jar-mouth-rest:not(--said):hover` (0,3,0), and
+     chrome.css:1762  again — the hover gradient
+
+   MEASURED, with the note open and `.jar-mouth-slot` at `opacity: 1` (it is
+   `opacity: 0` with the note closed, which is why this is only visible on
+   the one surface that matters): at (0,2,0) this field becomes a flex box
+   filled with a warm gradient, set in the ground colour, at line-height 1.6.
+   That is the PILL COSTUME — and taking the pill costume off is the entire
+   reason this block exists, as its own note above says: "`.jar-mouth-rest` is
+   the class this field inherited from the days when keeping something was a
+   labelled BUTTON".
+
+   WHY THIS SHAPE. The element has exactly one renderer — `Home.tsx:9241`,
+   `className="jar-mouth-rest jar-keep-box"`, always inside the
+   `.waka-composer-body` of `Home.tsx:9238` — so no part of this selector is
+   a guess about the markup. One ancestor class, two subject classes and the
+   tag is (0,3,1), which beats (0,3,0) on the ELEMENT count and therefore
+   beats all four rivals INCLUDING their `:hover`, which is also (0,3,0).
+   That is a win on SPECIFICITY and not on which sheet the bundler emitted
+   last, which is the distinction `layers.css` exists to make: the obvious
+   `.waka-composer-body .jar-mouth-rest.jar-keep-box` is (0,3,0), ties, and
+   would be decided by bundle order.
+
+   WHAT WAS REJECTED. (1) `!important`, on four declarations: it wins, and it
+   also takes those four properties out of the cascade for every future rule,
+   which is a larger loan than the debt. (2) Narrowing chrome.css's family to
+   `.jar .jar-capture-shortcut` — the fix its OWN comment at chrome.css:1721
+   argues for, and rejected here for the reason that comment itself gives:
+   the shortcut "renders on a surface this session could not reach", so a
+   change to fifteen rules dressing a control nobody can open in a browser
+   cannot be verified. It stays on the list. (3) Letting chrome.css win and
+   calling the old dominance accidental: measured, that is the pill costume
+   on a textarea, and it is not accidental — it is this block's purpose.
+
+   NOTHING IS REDESIGNED HERE. Every value below is the value that was
+   already computing, and `display: block` is stated here only because it was
+   the one declaration arriving from `.jar-keep-box` at (0,1,0), which cannot
+   survive chrome.css:1737 either. Verified identical before and after the
+   layering, at 1440x900 and at 393x852 DPR 3. */
+.waka-composer-body textarea.jar-mouth-rest.jar-keep-box {
+  /* FROM `.jar-keep-box` ABOVE, which is (0,1,0) and no longer reaches this
+     element past chrome.css:1737's `display: flex`. The generic block keeps
+     its own copy for any future host outside `.waka-composer-body`. */
+  display: block;
   /* 14rem is the width below which typing stops being possible rather than
      merely tight. Above it the field takes whatever the controls leave; below
      it the whole row wraps and the field gets the line to itself. */
@@ -3187,7 +3256,18 @@
    The one it kept is the one that says the ring belongs to the whole footer
    row rather than to this button, which is the true statement. */
 
-.waka-composer-body .jar-keep-box:focus-visible {
+/* AND THIS ONE IS STRENGTHENED FOR THE SAME REASON AND A SHARPER STAKE.
+   At `.waka-composer-body .jar-keep-box:focus-visible` it is (0,3,0) — a TIE
+   with `chrome.css:1745`'s `.jar-mouth-rest:not(--said):focus-visible`,
+   which asks for `outline: 2px solid var(--w-ink)`. A tie is decided by
+   position in the bundle, and the thing on the other side of that coin is a
+   2px near-white rectangle around the capture field every time it takes
+   focus — which Chromium does immediately, since it treats every
+   keyboard-accepting element as focus-visible. The founder's ruling on
+   exactly that rectangle is quoted in `layers.css`: "never show this white
+   border ANYWHERE". A declaration that answers a founder ruling may not be
+   left to the bundler, so it wins on specificity: (0,4,1) against (0,3,0). */
+.waka-composer-body textarea.jar-mouth-rest.jar-keep-box:focus-visible {
   outline: none;
 }
 
@@ -4458,8 +4538,53 @@
   cursor: default;
 }
 
+/* ═══ THE ONE `!important` THIS SHEET'S LAYERING NEEDED, AND SPECIFICITY
+   CANNOT REPLACE IT (2026-10-12) ══════════════════════════════════════════
+   `layers.css` holds `:focus-visible { outline: none }` UNLAYERED, on
+   purpose, to enforce a founder ruling — "never show this white border
+   ANYWHERE" — and an unlayered rule beats every layered one AT ANY
+   SPECIFICITY. So from inside `@layer chrome` there is no selector, however
+   long, that can draw an outline. That is the whole point of that rule and
+   it is working as designed; the problem is that it is working on the one
+   surface the design was not written for.
+
+   WHY THIS SURFACE IS THE EXCEPTION, in `layers.css`'s own words: "the two
+   grounds this product has are opposites: the world is near-black with pale
+   ink, where brightening a word makes it clearer, and the flat pages are
+   cream with dark ink, where brightening it would wash it out." The speech
+   bubble is a LIGHT ground that lives INSIDE `.jar`, so it gets the world's
+   focus — `filter: brightness(1.75)` — on dark ink. That is the washing-out
+   case, inside the selector written for the other one.
+
+   MEASURED IN CHROMIUM at 1440x900, this element's own box photographed at
+   rest and focused, differenced pixel by pixel:
+
+     with the ring    23.6% of pixels move, mean |Δ| 24.97/255, max Δ 188
+     without it        8.9% of pixels move, mean |Δ|  1.62/255, max Δ  20
+
+   20/255 at its strongest point is not a focus indicator; WCAG 2.2 asks for
+   3:1 between the focused and unfocused states (2.4.11) and this is nowhere
+   near it. The control is the offer inside the creature's speech — the home
+   screen's one call to action.
+
+   `!important` AND NOT A LONGER SELECTOR, because a longer selector does
+   nothing here: the rival is unlayered. For `!important` declarations the
+   cascade REVERSES layer order and the implicit outer layer sorts last, so a
+   layered `!important` is the only thing in author CSS that outranks an
+   unlayered normal declaration. It is scoped to the one property that is
+   contested — `outline-offset` and `border-radius` below are not, and are
+   left alone, so this does not take a whole focus state out of the cascade.
+
+   WHAT WAS REJECTED. (1) Moving `layers.css`'s rule into `@layer base`:
+   that would let this sheet beat it everywhere and restore every ring it
+   currently suppresses — 144 tab stops across 9 controls, 120 of them the
+   near-white rectangle the founder banned. (2) Re-drawing this focus as a
+   `box-shadow`, which `layers.css` does not touch: it would work, and it is
+   a DESIGN change to the one control on the first screen — that is the
+   founder's to make, not a side effect of a cascade repair. This keeps the
+   ring that is already there. (3) Leaving it: measured above. */
 .jar-char-bubble-act:focus-visible {
-  outline: 2px solid currentColor;
+  outline: 2px solid currentColor !important;
   outline-offset: 3px;
   border-radius: var(--waka-r-hand-sm);
 }
@@ -5645,4 +5770,6 @@
   .waka-moment-why {
     min-height: var(--sp-36);
   }
+}
+/* ─── end of `@layer chrome` ─── */
 }
