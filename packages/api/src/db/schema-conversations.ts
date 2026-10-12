@@ -3,11 +3,52 @@ import {check,foreignKey,index,integer,jsonb,pgTable,text,timestamp,unique,uniqu
 import {profiles} from './schema-profiles.js';
 import {backgroundJobs} from './schema-background-jobs.js';
 import {principles} from './schema-principles.js';
+import {inspirations} from './schema-inspirations.js';
 
 export const conversations=pgTable('conversations',{
   id:uuid('id').primaryKey(),
   profileId:uuid('profile_id').notNull().references(()=>profiles.id,{onDelete:'cascade'}),
   initialPrincipleId:uuid('initial_principle_id'),
+  /**
+   * WHICH SAVED THING THIS CONVERSATION IS ABOUT RIGHT NOW.
+   *
+   * Founder: "I basically want to have a good experience where user can pick
+   * an inspiration on the right and then like chat about it and then when the
+   * user specifically brings that up then the agent can read it."
+   *
+   * The last clause is the whole reason this column exists rather than being
+   * left to retrieval. Semantic and lexical retrieval answer "what in the
+   * archive resembles this question"; they do not answer "the person is
+   * pointing at THIS one". A picked keep whose words share nothing with the
+   * sentence typed about it — a photo caption, a link, a line in Korean asked
+   * about in English — is exactly the case retrieval misses, and it is the
+   * case the founder described. So the choice is stored and the reading is
+   * pinned from it (`readConversationContext`), never hoped for.
+   *
+   * MUTABLE, UNLIKE `initial_principle_id` BESIDE IT. A principle start is
+   * where a conversation came from and can never have been anywhere else; the
+   * picked keep is where the conversation is pointed, and "pick an inspiration
+   * on the right ... while chatting" means the person changes it mid-thread.
+   * `PATCH /conversations/:id` is the only writer after create. The `initial_`
+   * prefix is kept anyway so the pair reads as one family on the row and in
+   * the wire shape (`initialPrinciple` / `initialInspiration`) — renaming the
+   * concept to `focusInspirationId` was considered and rejected: it would have
+   * made two columns doing the same job look unrelated.
+   *
+   * NULLABLE AND NULL BY DEFAULT, with no backfill. Most conversations are
+   * about nothing in the archive, every row that exists today is one of those,
+   * and clearing the pick is a thing the person can do (`inspirationId: null`)
+   * — so null has to be a real, reachable answer rather than an absence.
+   *
+   * The composite FK below — `(profile_id, initial_inspiration_id)` against
+   * `inspirations (profile_id, id)` — is what makes cross-profile pinning
+   * STRUCTURAL rather than checked. A conversation cannot name another
+   * profile's keep even if every handler forgot to scope its query, because
+   * the row Postgres would have to find does not exist. A plain
+   * `references(inspirations.id)` was rejected for precisely that reason: it
+   * would have made tenant isolation a rule to remember.
+   */
+  initialInspirationId:uuid('initial_inspiration_id'),
   revision:integer('revision').notNull().default(0),
   createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
   updatedAt:timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
@@ -15,6 +56,16 @@ export const conversations=pgTable('conversations',{
 },table=>({
   ownerIdentity:unique('conversations_owner_identity').on(table.profileId,table.id),
   initialPrincipleFk:foreignKey({columns:[table.profileId,table.initialPrincipleId],foreignColumns:[principles.profileId,principles.id],name:'conversations_initial_principle_fk'}),
+  /**
+   * Declared without `.onDelete(...)` for the same reason the principle FK
+   * above is: deleting the keep must null `initial_inspiration_id` ALONE, and
+   * a bare composite `ON DELETE SET NULL` would null `profile_id` too —
+   * detaching the conversation from its owner, which is unthinkable. The
+   * column-list form `ON DELETE SET NULL (initial_inspiration_id)` that says
+   * so is not expressible in the builder, so it lives in migration 0070, the
+   * same split `inspirations.experience_id` and `profiles.group_id` use.
+   */
+  initialInspirationFk:foreignKey({columns:[table.profileId,table.initialInspirationId],foreignColumns:[inspirations.profileId,inspirations.id],name:'conversations_initial_inspiration_fk'}),
   ownerUpdated:index('conversations_owner_updated_idx').on(table.profileId,table.updatedAt),
   revisionBounds:check('conversations_revision_bounds',sql`${table.revision} BETWEEN 0 AND 200`),
 }));

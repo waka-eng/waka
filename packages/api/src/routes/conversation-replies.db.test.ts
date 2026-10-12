@@ -314,3 +314,47 @@ it('refuses foreign reply requests, exports owned metadata, and leaves generatio
   await t.sql`DELETE FROM accounts WHERE id=${a.accountId}`;expect(await t.sql`SELECT id FROM conversation_reply_requests WHERE profile_id=${a.profileId}`).toHaveLength(0);expect(await t.sql`SELECT id FROM conversation_messages WHERE profile_id=${a.profileId}`).toHaveLength(0);
   vi.stubEnv('WAKA_CONVERSATION_REPLIES','0');expect((await b.request()).status).toBe(503);expect(answer).not.toHaveBeenCalled();
 });
+it('hands the reply the picked inspiration and points the focus at it, and drops it once cleared',async()=>{
+  const f=await fixture();
+  const [picked]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'Ferry timetable, Ulleungdo.') RETURNING id`;
+  const id=randomUUID();
+  expect((await f.post('',{id,inspirationId:picked.id})).status).toBe(200);
+  await f.post(`/${id}/messages`,{id:randomUUID(),content:'What do you make of this?',revision:0,requestReply:true});
+  await processBackgroundJob(await claim());
+  /* THE POINT OF THE WHOLE CHANGE. The sentence typed shares nothing with a
+   * ferry timetable, so neither retrieval path has any reason to return it —
+   * and the fixture's own 'quiet morning' keep is exactly what they return
+   * instead, which is what this would look like if the pin were a ranking
+   * nudge. The pin is what puts the picked keep in front of the model, and
+   * `focusSourceNumber` is what tells the model this is the one being talked
+   * about rather than one of six it happened to be handed.
+   *
+   * Asserted on the INPUT, never on the mock's return value: a sibling test
+   * can leave an unconsumed `mockImplementationOnce` queued (`mockClear` does
+   * not drain those), so a case that reads the reply's text or citations
+   * passes or fails on the order the file runs in. What this change produces
+   * is the prompt. */
+  const input=answer.mock.calls[0][0];
+  const index=input.sources.findIndex(source=>source.kind==='inspiration'&&source.text.includes('Ferry timetable'));
+  expect(index,JSON.stringify(input.sources)).toBe(0);
+  expect(input.focusSourceNumber).toBe(1);
+  // What the reply actually read is recorded on its request, and that record
+  // is the proof an old citation reopens against.
+  const sources=async()=>JSON.stringify(await t.sql`SELECT context_sources FROM conversation_reply_requests WHERE conversation_id=${id}`);
+  const recorded=await sources();expect(recorded).toContain(picked.id);
+  /* CLEARED MID-THREAD. The next reply stops reading it. The one already given
+   * keeps both its assistant message and the record of what it read, because a
+   * conversation whose history re-interpreted itself when the rail moved would
+   * be the world moving without the person moving it. */
+  await f.app.request(`/conversations/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({inspirationId:null})});
+  await f.post(`/${id}/messages`,{id:randomUUID(),content:'And the quiet morning?',revision:2,requestReply:true});
+  await processBackgroundJob(await claim());
+  const next=answer.mock.calls[1][0];
+  expect(next.sources.some(source=>source.text.includes('Ferry timetable'))).toBe(false);
+  expect(next.focusSourceNumber).toBeUndefined();
+  expect(next.sources.some(source=>source.text.includes('quiet morning'))).toBe(true);
+  const after=await(await f.app.request(`/conversations/${id}`)).json() as any;
+  expect(after.conversation.initialInspiration).toBeNull();
+  expect(after.conversation.messages.map((row:any)=>row.role)).toEqual(['user','assistant','user','assistant']);
+  expect(await sources()).toContain(picked.id);
+});

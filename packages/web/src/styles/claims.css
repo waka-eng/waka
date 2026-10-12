@@ -431,9 +431,50 @@
   color: var(--bg);
 }
 
+/* ═══ AND WHEN THERE IS NOTHING TO KEEP, IT DIMS — IT DOES NOT OUTLINE ═══
+   Founder: "Just don't add the white border around it. Keep it lower
+   opacity. Save button. ... when the user didn't make any change, then make
+   it lower opacity, like basically disable it."
+
+   WHAT WAS ACTUALLY ON SCREEN WHEN THAT WAS SAID, measured rather than
+   assumed, because the obvious suspect was innocent. `.jar-inspiration-
+   composer button` in `chrome.css` is unlayered at (0,1,1) and puts a
+   `1px solid var(--w-edge)` and a 12px radius on every button inside the
+   notepad — it has silently overruled four component rules this week, and
+   it is the first thing to look at whenever a pale edge appears on a note
+   page. It is NOT the cause here: the dock is `nav.waka-dock` inside
+   `div.jar`, a sibling of the composer rather than a child, so that
+   selector never matches this control. Chromium on the real page agrees —
+   computed `border: 0px none`, `outline: none`, `box-shadow: none` in both
+   states, and a cropped screenshot of the bar shows no edge. So the
+   founder's sentence is a RULE FOR THE DISABLED STATE being added here, not
+   a bug report about one that existed; the rule is written down so the
+   obvious implementation of "show it is off" — an outline where the fill
+   was — cannot arrive later and be defended as an oversight.
+
+   `border: 0` and `box-shadow: none` are therefore standing guards rather
+   than fixes. They cost two declarations and they mean that if this control
+   is ever moved inside the composer — which is exactly where ask (c) was
+   first going to put the archive's copy — it cannot sprout the edge the
+   founder has now twice asked not to see.
+
+   ONE DIMMING CHANNEL, NOT TWO. This used to read `color: var(--muted)` and
+   lean on `button:disabled { opacity: .4 }` over in `chrome.css` for the
+   rest, which is dimming applied twice from two files: `--muted` is already
+   ink at 80%, so the glyph landed at 32% and 2.55:1 on the ground. Ink at a
+   stated 0.4 is 3.44:1 — still obviously off, and findable on a blank page,
+   which it now has to be: the button is PRESENT and dim before there is
+   anything to keep rather than absent. The opacity is stated here rather
+   than inherited because this file is unlayered and that one is not, so
+   borrowing it meant the number could move from a sheet this rule cannot
+   see. `color` has to be re-stated regardless — the enabled state paints
+   `--bg` for legibility on the fill, and the fill is gone. */
 .waka-dock-tool--keep:disabled {
+  border: 0;
   background: none;
-  color: var(--muted);
+  box-shadow: none;
+  color: var(--ink);
+  opacity: 0.4;
 }
 
 /* ═══ WHERE A PASSING SENTENCE GOES ═══════════════════════════════════════
@@ -1860,11 +1901,11 @@
 
 /* ═══ THE PAINTED SURFACE, AND THE INPUT IS A PASSENGER ON IT ═══════════
    Founder, pointing at this field: "search bar can also utilize some
-   reference from astryx."
+   reference from [a design system]."
 
    Everything below the `padding`/`border`/`radius` line used to be declared
    on the `<input>` itself, because the input WAS the box. It is not any more:
-   Astryx's `Typeahead` splits a search control into a "Input surface —
+   The reference library's typeahead component splits a search control into a "Input surface —
    Required: Painted control surface containing the editable input" and the
    things that sit on that surface (its "Icon-rendered start icon", its
    "Clear button"). A glyph and a clear cannot live inside an `<input>`, so
@@ -1918,7 +1959,7 @@
 }
 
 /* ═══ THE SEARCH GLYPH, DRAWN RATHER THAN IMPORTED ══════════════════════
-   Astryx's `CommandPalette` — the one component in that system whose only
+   The reference library's command-palette component — the one component in that system whose only
    job is search — marks it *Required*: "Search glyph: Required: Search
    symbol rendered by Icon in the default Input." And its `TextInput` rules
    name it as the thing that licenses a hidden label: "Only hide the label
@@ -1983,7 +2024,7 @@
 }
 
 /* ═══ THE CLEAR, WHICH IS THE WAY OUT OF A SEARCH ═══════════════════════
-   Astryx `TextInput`, under Do: "Add a clear button for search and filter
+   The reference library's text-input component, under Do: "Add a clear button for search and filter
    inputs so users can quickly reset without selecting all text." Here that
    is not a convenience, it is Law 2 — "every surface you can enter has a
    visible way out, and it costs one press". Typing in this field puts you in
@@ -4452,6 +4493,65 @@
  * of the same material, and it carries the same soft halo the body does,
  * which is what makes it dreamy rather than flat.
  */
+/* ═══ THE PREAMBLE AND THE ACT ══════════════════════════════════════════
+   Founder: "all speech bubbles should have an action at the end — such as
+   'add more inspiration' ... if there's a top of mind formed then say
+   'this is my current top of mind' and then write the top of mind, and
+   then the agent should say 'should we chat about it more?'"
+
+   THREE PARTS, AND THE MIDDLE ONE IS STILL THE LOUDEST. The preamble is
+   the fine step and muted; the reading keeps the body size and full ink;
+   the act is fine again and underlined. Light and size carry the ranking,
+   which is this product's only channel, so the words a person came to read
+   stay the words they land on.
+
+   THE ACT IS SPEECH, NOT A PILL, and the note one block down is why: "a
+   pill inside a speech bubble is a dialog box with an OK in it — the
+   bubble stops reading as something said and starts reading as something
+   that wants an answer." An underlined line in the creature's own voice is
+   it offering; a filled rectangle is a form. The founder asked for the
+   offer, not for the form.
+
+   UNDERLINED, AND HERE THAT IS THE RULE RATHER THAN AN EXCEPTION. The
+   offer this replaces argued its way OUT of an underline — "a rule drawn
+   under a five-word reply to a press you just made is explaining a thing
+   the press already explained." That was true when the bubble appeared
+   BECAUSE you pressed the creature. This one appears on its own, under a
+   sentence that is not pressable, so nothing else says it can be. */
+.jar-char-bubble-of {
+  font-size: var(--t-meta);
+  color: color-mix(in srgb, var(--waka-on-light) 60%, transparent);
+}
+
+.jar-char-bubble-act {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--waka-on-light);
+  font: inherit;
+  font-size: var(--t-meta);
+  letter-spacing: normal;
+  text-transform: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  cursor: pointer;
+}
+
+.jar-char-bubble-act:disabled {
+  color: color-mix(in srgb, var(--waka-on-light) 45%, transparent);
+  cursor: default;
+}
+
+.jar-char-bubble-act:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: var(--waka-r-hand-sm);
+}
+
 .jar-char-bubble-body {
   pointer-events: auto;
   position: relative;
@@ -4798,7 +4898,7 @@
      `width: 100%` and this is where the measure is decided. */
   max-width: min(26rem, calc(100vw - var(--sp-32)));
   /* ═══ THE BOUND LIVES ON THE SURFACE, NOT ON ITS CONTENT ═══════════════
-     Astryx, on Popover: "Don't assume scrolling alone means Popover is the
+     The reference, on popovers: "Don't assume scrolling alone means Popover is the
      wrong component; a bounded Popover may scroll while a focused anchored
      interaction remains appropriate." So a card taller than the screen is
      not a reason to go back to a page — it is a reason to bound the card.
@@ -5098,7 +5198,7 @@
    THE PAINT IS `.waka-account`'s AND ONLY THE TYPE IS HERE. Both cards hang
    off the same corner from the same two triggers, so one border, one
    ground, one measure and one viewport bound — a second surface would be
-   two products in one corner. Astryx names the split: the "Popover surface"
+   two products in one corner. The reference names the split: the "Popover surface"
    is owned by the popover, the content is "caller-supplied content rendered
    inside the surface".
 

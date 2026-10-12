@@ -51,6 +51,11 @@ export function NoteTools(props: {
   recordLabel: string;
   stopLabel: string;
   photoLabel: string;
+  /** Named for the act, not the page: it is the notepad's word, on purpose. */
+  keepLabel: string;
+  /** Whether the words on the note differ from the ones that are stored. */
+  canKeep: boolean;
+  onKeep: () => void;
   onFile: (file: File) => void;
 }): JSX.Element | null {
   const file = useRef<HTMLInputElement>(null);
@@ -97,6 +102,42 @@ export function NoteTools(props: {
           event.target.value = "";
           if (picked) props.onFile(picked);
         }} />
+      {/* ═══ AND THE SAVE, IN THE SAME SEAT IT HAS ON THE NOTEPAD ═════════
+          Founder: "this button should appear when I'm editing old
+          inspirations as well. So when I'm looking at past saved
+          inspirations, as soon as I start typing, then that save button
+          should be enabled."
+
+          THIRD IN THE ROW, BECAUSE THAT IS WHERE IT IS ON THE OTHER NOTE
+          PAGE. The notepad's middle slot runs mic, photo, Save, state, and
+          these two pages are supposed to be one page — founder: "when
+          clicking on a saved inspiration, it should go to the same exact UI
+          as when I'm creating a new inspiration ... make sure it's using the
+          exact same component." A control that is third on one and second on
+          the other is the same class of difference this whole file exists to
+          close, and it is the kind that costs a press every time because the
+          hand goes where it went last time.
+
+          SAME CLASS, SO SAME DIM. `.waka-dock-tool--keep` carries the fill
+          and the disabled treatment the founder specified — lower opacity,
+          no outline — in one place, so the two pages cannot drift into two
+          appearances of one control. See that rule for why the dim is an
+          opacity and never a border.
+
+          PRESENT EVEN WITH NOTHING TO SAVE, for the reason written at the
+          notepad's copy: a control that appears has to be discovered twice,
+          and the second discovery is "what summons it", which here is typing
+          — the act you are doing while not looking at the bar.
+
+          BUSY DOES NOT BLOCK IT, and that is deliberate rather than an
+          omission. `busy` disables the mic and the camera because a second
+          upload while one is in flight is a real conflict; a text write is
+          not in that queue — `attach` says so explicitly, "the write is
+          independent of the note's words". The caller's own `canKeep`
+          already folds in `saving`, which is the conflict that does exist. */}
+      <button type="button" className="waka-dock-tool waka-dock-tool--keep"
+        aria-label={props.keepLabel} disabled={!props.canKeep}
+        onClick={props.onKeep}><HomeActionIcon kind="keep" /></button>
       {/* ONE LINE, THE SAME SLOT THE NOTEPAD'S STATE USES. Founder: "states
           should show and disappear in the bottom bar only." */}
       {props.failed || props.recording.error ? (

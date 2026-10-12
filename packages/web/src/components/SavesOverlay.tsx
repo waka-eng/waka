@@ -159,7 +159,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      narrows in place with no round trip and no empty frame between keys. */
   const [query, setQuery] = useState("");
   /* THE FIELD ITSELF, so the clear control can hand focus back to it.
-     Astryx's `TextInput` anatomy defines the clear as the thing that "resets
+     The reference library's text-input component anatomy defines the clear as the thing that "resets
      the value AND RETURNS FOCUS TO THE INPUT" — without the ref, pressing it
      would empty the field and leave the caret nowhere, so the next search
      costs a click the person should not have had to make. A ref rather than
@@ -285,6 +285,75 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       if (mounted.current) setSaving(false);
     }
   }, [draft, open, saving]);
+
+  /**
+   * ═══ AND NOW THERE IS A SAVE TO PRESS, WITH THE NET STILL UNDER IT ═════
+   *
+   * Founder: "this button should appear when I'm editing old inspirations as
+   * well. So when I'm looking at past saved inspirations, as soon as I start
+   * typing, then that save button should be enabled."
+   *
+   * THE AUTOSAVE STAYS, AND IS NOT WHAT THIS REPLACES. `leaveNote` above is
+   * still what the chevron and the dock's other exits call, and the long
+   * note there is still right about why it fires on the way OUT rather than
+   * on a timer. What it was wrong about is the sentence "there is nothing
+   * for a button to disambiguate". There is one thing, and it is the only
+   * thing a person actually wants to know while editing something they wrote
+   * months ago: HAS IT TAKEN. An autosave that is correct and silent is
+   * indistinguishable, from the chair, from an edit that is about to be
+   * lost — and this is a product whose whole claim is that its account of
+   * you is checkable. A control that brightens when there is an unsaved
+   * change answers that without a spinner, a receipt or a timer.
+   *
+   * SO ITS DISABLED STATE IS THE RECEIPT. This writes and then re-points
+   * `open` at the words it just stored, which makes `draft` equal
+   * `open.preview` again, which dims the button. Nothing has to say "saved":
+   * the control that was lit is not lit any more, and that is the same
+   * single channel — light — the rest of this product reports with. It is
+   * also why this does NOT close the note. Closing would make Save a second
+   * way out standing beside the chevron, which is the "Save / Save as draft"
+   * pair the founder already rejected once ("this is so confusing"); staying
+   * put makes it a statement about the words instead of a door.
+   *
+   * THE SAME PREDICATE THE WRITE USES, which the caller's `canKeepOpenNote`
+   * reads. The obvious enablement test is `draft !== open.preview`, and it
+   * is subtly wrong: trailing whitespace makes those differ while the write
+   * below trims and returns early, so a single typed space would light the
+   * button and pressing it would do nothing. That exact failure — a control
+   * that looks pressable and silently refuses — is the one `whyNoSend` was
+   * written for on the chat composer and `keep-ready.ts` for the notepad.
+   * One condition, read by both.
+   *
+   * A FAILED WRITE KEEPS EVERYTHING, like `leaveNote`: the words stay, the
+   * note stays open, the bar says what happened through `saveFailed`, and
+   * the button stays lit because there is still an unsaved change. Pressing
+   * again retries, which is the whole recovery.
+   */
+  const keepOpenNote = useCallback(async () => {
+    const note = open;
+    const words = draft.trim();
+    if (!note || saving || !words || words === note.preview) return;
+    setSaving(true);
+    setSaveFailed(false);
+    try {
+      await updateInspiration(note.id, { text: words });
+      if (!mounted.current) return;
+      /* Both copies, for the reason `leaveNote` gives about the list and the
+         reason `attach` gives about the snapshot: the grid behind must not
+         show the old first line, and the note in front must agree that it is
+         saved or the button never dims. */
+      setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: words } : row)));
+      setOpen((card) => (card && card.id === note.id ? { ...card, preview: words } : card));
+    } catch {
+      if (mounted.current) setSaveFailed(true);
+    } finally {
+      if (mounted.current) setSaving(false);
+    }
+  }, [draft, open, saving]);
+
+  /** Whether the open note holds words that are not the stored ones yet. */
+  const canKeepOpenNote = Boolean(open) && !saving
+    && draft.trim().length > 0 && draft.trim() !== open?.preview;
 
   /**
    * ═══ A SAVED THOUGHT CAN STILL TAKE A RECORDING OR A PICTURE ═══════════
@@ -510,7 +579,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                 {say("worldBackToAll")}
               </button>
             /* ═══ AND THE COUNT COUNTS WHAT IS ACTUALLY ON SCREEN ═════
-                Astryx's `PowerSearch` says it as a rule: "Provide a result
+                The reference library's power-search component says it as a rule: "Provide a result
                 count to give users feedback on how their filters affect the
                 data set." We do not need its tokenised filter bar — that page
                 itself sends simple keyword search away ("Use PowerSearch for
@@ -603,8 +672,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             stops being glanceable and finding becomes a real act. */}
         {/* ═══ THE FIELD IS A SURFACE WITH THINGS IN IT, NOT A BARE INPUT ══
             Founder, pointing at this field: "search bar can also utilize some
-            reference from astryx." Astryx is Meta's design system; its
-            `TextInput` page lists the anatomy a text field is allowed to have
+            reference from [a design system]." Its text-input page lists the anatomy a text field is allowed to have
             — Label, Description, Start icon, Placeholder, Clear button,
             Spinner, Status icon — and two of its rules name this exact field:
 
@@ -624,12 +692,12 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             box was the placeholder — and the placeholder is the one part of
             the anatomy that DISAPPEARS ON FOCUS. The moment you clicked it to
             type, the only thing on screen saying what it was went away, and
-            what was left was an empty rounded box above a list. Astryx states
+            what was left was an empty rounded box above a list. The reference states
             the prohibition directly: "Don't use placeholder text as a
             replacement for a label."
 
             So the box becomes the painted surface and the input moves inside
-            it — which is Astryx's own `Typeahead` anatomy, where the "Input
+            it — which is the reference library's own typeahead anatomy, where the "Input
             surface" is the "Painted control surface containing the editable
             input" and the glyph and the clear sit on that surface rather than
             on the input. The border, the corner and the focus edge all move
@@ -685,7 +753,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                 can still be emptied — `needle` trims, and a space you cannot
                 see is still a value you have to get rid of.
 
-                AND IT RETURNS FOCUS, which is Astryx's wording and not a
+                AND IT RETURNS FOCUS, which is the reference library's wording and not a
                 flourish: "a trailing × button that RESETS THE VALUE AND
                 RETURNS FOCUS TO THE INPUT." Clearing is almost always the
                 start of a different search, and a cleared field you then have
@@ -740,6 +808,14 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           recordLabel={say("worldComposerRecord")}
           stopLabel={say("worldComposerStop")}
           photoLabel={say("worldComposerPhoto")}
+          /* THE NOTEPAD'S OWN WORDS, not a second string meaning the same
+             thing. One act, one name — and `worldSaveInspiration` is already
+             what a screen reader hears for this on the other note page. A
+             separate "Save changes" here would be the product admitting the
+             two pages are two pages. */
+          keepLabel={say("worldSaveInspiration")}
+          canKeep={canKeepOpenNote}
+          onKeep={() => { void keepOpenNote(); }}
           onFile={(file) => void attach(file)}
         /> : null}
         {open ? (

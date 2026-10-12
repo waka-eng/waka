@@ -232,6 +232,11 @@ it('keeps the surface to a transcript, a box and nothing at rest',async()=>{
   expect(host.querySelector('.chat-drawer-backdrop')).toBeNull();
   expect(host.querySelectorAll('select')).toHaveLength(0);
   expect(host.querySelectorAll('details')).toHaveLength(0);
+  /* ONE CONTROL AT REST AGAIN. The drawer's trigger sat here for an hour —
+     founder, cutting it: "let's get rid of the side part and referencing
+     inspiration ... it's too complicated right now" — and this line is the
+     ledger of that. If a fifteenth button is ever added here, this is still
+     the test that should stop it. */
   expect(named()).toEqual(['Send']);
   expect(host.querySelector('textarea')!.value).toBe('A sentence in the box');
 });

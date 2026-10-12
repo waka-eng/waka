@@ -35,7 +35,7 @@ it('adds a semantic-only owned match but excludes stale, foreign and public-scop
   const result=await readSemanticConversationCandidates(t.db as never,profileId,vector());
   expect(result.candidates.map(row=>row.id)).toEqual([relevant]);expect(result.trace.rejected).toBe(1);
   expect((await readConversationContext(t.db as never,profileId,'unstructured rest')).inspirations).toHaveLength(0);
-  const hybrid=await readConversationContext(t.db as never,profileId,'unstructured rest',undefined,undefined,vector());
+  const hybrid=await readConversationContext(t.db as never,profileId,'unstructured rest',undefined,undefined,undefined,vector());
   expect(hybrid.inspirations.map(row=>row.id)).toEqual([relevant]);expect(JSON.stringify(hybrid)).not.toContain('FOREIGN_PRIVATE_SENTINEL');
   await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer) VALUES(${profileId},${relevant},'Why?','My view has changed.')`;
   const changed=await readSemanticConversationCandidates(t.db as never,profileId,vector());

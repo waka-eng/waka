@@ -37,8 +37,8 @@
  * the loop on 2026-10-11, after that copy was written, and leaving it out
  * would describe a product that no longer exists.
  *
- * NO DISCLOSURES, though the panel one door over is nothing but. Astryx on
- * Collapsible: "Don't use a collapsible for a single short paragraph; just
+ * NO DISCLOSURES, though the panel one door over is nothing but. The reference on
+ * collapsibles: "Don't use a collapsible for a single short paragraph; just
  * show the text directly instead." Each of these IS a single short
  * paragraph, and the relationship between them — that each is made from the
  * one above — is the actual content, which is invisible the moment three of
@@ -83,7 +83,7 @@ const RUNGS = [
 export function HowItWorksPanel({ locale }: { locale: SupportedLocale }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
   /* THE HEADING NAMES THE PANEL, rather than an `aria-label` repeating it.
-     Astryx, on Dialog's header: the title "labels the dialog via
+     The reference, on a dialog's header: the title "labels the dialog via
      aria-labelledby". A second copy of the same words in an attribute is a
      second place for them to go stale, and a screen reader would be the
      only thing that ever noticed. */

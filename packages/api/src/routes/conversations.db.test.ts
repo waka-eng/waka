@@ -144,3 +144,72 @@ it('exports only the owner and cascades active messages on account erasure',asyn
   const exported=await assembleProfileExport(t.db as never,a.profileId);expect(exported.conversations.map(row=>row.id)).toEqual([a.id]);expect(exported.conversationMessages.map(row=>row.content)).toEqual(['Owned']);
   await t.sql`DELETE FROM accounts WHERE id=${a.accountId}`;expect(await t.sql`SELECT id FROM conversation_messages WHERE profile_id=${a.profileId}`).toHaveLength(0);expect(await t.sql`SELECT id FROM conversation_messages WHERE profile_id=${b.profileId}`).toHaveLength(1);
 });
+it('carries a picked inspiration from create, switches it mid-thread, clears it and refuses a foreign one',async()=>{
+  const f=await fixture(),other=await fixture();
+  const keep=async(profileId:string,text:string)=>(await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${profileId},${text}) RETURNING id`)[0].id as string;
+  const first=await keep(f.profileId,'  A ferry timetable I keep meaning to use.  ');
+  const second=await keep(f.profileId,'x'.repeat(200));
+  const stranger=await keep(other.profileId,'FOREIGN_PICKED_SENTINEL');
+  const patch=(id:string,body:unknown,app=f.app)=>app.request(`/conversations/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const read=async()=>(await (await f.app.request(`/conversations/${f.id}`)).json() as any).conversation;
+  // A keep named at create arrives trimmed to this route's one label budget,
+  // the same 120 characters `GET /` and `conversationPreview` use.
+  expect((await f.send('',{id:f.id,inspirationId:first})).status).toBe(200);
+  expect((await read()).initialInspiration).toEqual({id:first,text:'A ferry timetable I keep meaning to use.'});
+  expect((await patch(f.id,{inspirationId:second})).status).toBe(200);
+  expect((await read()).initialInspiration.text).toBe('x'.repeat(120));
+  // The rail moving is not a message. Every concurrent writer compares against
+  // `revision`, so a switch that bumped it would invalidate a valid in-flight
+  // send; `updatedAt` does move, because the person acted on this thread.
+  const switched=await read();expect(switched.revision).toBe(0);
+  expect(Date.parse(switched.updatedAt)).toBeGreaterThanOrEqual(Date.parse(switched.createdAt));
+  // Clearing is a real action with a real stored answer, not an omission.
+  expect((await patch(f.id,{inspirationId:null})).status).toBe(200);
+  expect((await read()).initialInspiration).toBeNull();
+  expect((await t.sql`SELECT initial_inspiration_id FROM conversations WHERE id=${f.id}`)[0].initial_inspiration_id).toBeNull();
+  // Replaying the same value is the offline retry, and must join rather than conflict.
+  for(let i=0;i<2;i++)expect((await patch(f.id,{inspirationId:first})).status).toBe(200);
+  // Another profile's keep is a 404 on every writer, and the stored pin is
+  // left exactly as it was rather than half-applied.
+  expect((await patch(f.id,{inspirationId:stranger})).status).toBe(404);
+  expect((await f.send('',{id:randomUUID(),inspirationId:stranger})).status).toBe(404);
+  expect((await read()).initialInspiration.id).toBe(first);
+  expect(await t.sql`SELECT id FROM conversations WHERE profile_id=${f.profileId}`).toHaveLength(1);
+  // Not reachable through the API, so proven at the level that actually
+  // forbids it: the composite FK, which is why owner scoping here is an
+  // invariant of the schema and not a rule each handler remembers.
+  await expect(t.sql`UPDATE conversations SET initial_inspiration_id=${stranger} WHERE id=${f.id}`).rejects.toMatchObject({code:'23503'});
+  // An empty body cannot be read as either intent, so it is a 400 rather than
+  // a silent no-op; another profile cannot reach this conversation at all.
+  for(const body of [{},{inspirationId:'not-a-uuid'}])expect((await patch(f.id,body)).status).toBe(400);
+  expect((await patch(f.id,{inspirationId:stranger},other.app)).status).toBe(404);
+  expect(JSON.stringify(await read())).not.toContain('FOREIGN_PICKED_SENTINEL');
+});
+it('reads the picked inspiration into context even when nothing in the conversation matches it',async()=>{
+  const f=await fixture();
+  const [picked]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'Ferry timetable, Ulleungdo.') RETURNING id`;
+  await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'Quiet mornings leave room for thought.')`;
+  await f.send('',{id:f.id,inspirationId:picked.id});
+  await f.send(`/${f.id}/messages`,{id:randomUUID(),content:'What do you make of this?',revision:0});
+  const context=async()=>await (await f.app.request(`/conversations/${f.id}/context`)).json() as any;
+  // "What do you make of this?" has nothing in common with a ferry timetable,
+  // which is the whole point: a person pointing at a keep does not re-describe
+  // it, so retrieval alone would hand the reading six other things.
+  expect((await context()).inspirations.map((row:any)=>row.id)).toEqual([picked.id]);
+  await f.app.request(`/conversations/${f.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({inspirationId:null})});
+  expect((await context()).inspirations).toEqual([]);
+});
+it('refuses a create replay whose first words match but whose picked inspiration does not',async()=>{
+  const f=await fixture();
+  const [one]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'The first keep.') RETURNING id`;
+  const [two]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'The second keep.') RETURNING id`;
+  const firstMessage={id:randomUUID(),content:'What do you make of this?'};
+  expect((await f.send('',{id:f.id,inspirationId:one.id,firstMessage})).status).toBe(200);
+  // Same id, same words, a different declared starting point: a different
+  // create wearing the same id, which joining would silently discard. Compared
+  // on exactly the terms `initialPrincipleId` is compared on.
+  expect((await f.send('',{id:f.id,inspirationId:two.id,firstMessage})).status).toBe(409);
+  expect((await f.send('',{id:f.id,firstMessage})).status).toBe(409);
+  expect((await f.send('',{id:f.id,inspirationId:one.id,firstMessage})).status).toBe(200);
+  expect(await t.sql`SELECT id FROM conversation_messages`).toHaveLength(1);
+});

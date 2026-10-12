@@ -1,0 +1,16 @@
+import { launchChromium } from "/Users/yunjichung/waka-fix-dev-sst-v3/tools/e2e/browser";
+const OUT = "/Users/yunjichung/waka-fix-dev-sst-v3/packages/web/scratch";
+const b = await launchChromium({ headless: true });
+const p = await b.newPage({ viewport: { width: 1280, height: 900 } });
+await p.goto("http://localhost:3010/login");
+await p.click("#login-tab-signup");
+await p.fill("input[name=email]", `s-${Date.now()}@example.test`);
+await p.fill("input[name=password]", "s-local-password-1");
+await p.fill("input[name=name]", "S"); await p.click("button[type=submit]");
+await p.waitForTimeout(9000);
+await p.goto("http://localhost:3010/?compose=1");
+await p.waitForTimeout(3000);
+console.log(await p.evaluate(() => Array.from(document.querySelectorAll("textarea,input[type=text]")).map((e:any)=>`${e.tagName}|${e.className}|ph=${e.placeholder}|vis=${!!e.offsetParent}`)));
+console.log("--- composer container classes ---");
+console.log(await p.evaluate(() => Array.from(document.querySelectorAll("[class*=composer],[class*=note]")).slice(0,25).map((e:any)=>e.className)));
+await b.close();

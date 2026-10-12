@@ -96,7 +96,16 @@
   inset-inline: 0;
   height: var(--chat-height, 100dvh);
   display: flex;
-  flex-direction: column;
+  /* A ROW, BECAUSE THE PAGE HOLDS TWO COLUMNS. It was `column` when the
+     transcript was its only child; `.chat-main` is the column now and the
+     drawer is its sibling. Declared HERE rather than in a second block —
+     two blocks laying out one class is what `one-class-one-thing.test.ts`
+     fails the build over, and which of them wins would depend on bundle
+     order. A row with one item centres it exactly as a column did; the
+     drawer that made it a row is gone (see below) and reverting would be
+     a second edit undoing a first with no behaviour between them. */
+  flex-direction: row;
+  align-items: stretch;
   overflow: hidden;
   background: var(--bg);
   color: var(--ink);
@@ -209,6 +218,17 @@
   flex-direction: column;
   padding-inline: clamp(20px, 6vw, 28px);
 }
+
+/* `.chat-aside*` AND `.chat-about*` WENT WITH THE DRAWER. Founder: "let's
+   get rid of the side part and referencing inspiration ... it's too
+   complicated right now." See the long note at the removal site in
+   `ConversationPanel.tsx`, which records what the panel was and what
+   survives on the server.
+
+   THE PAGE STAYS A ROW, and that is not a leftover: `.chat-main` is the
+   column, and a one-item row centres it exactly as a one-item column did.
+   Reverting would be a second edit to undo a first with no behaviour
+   between them. */
 
 /**
  * THE TRANSCRIPT FLOWS FROM THE TOP, BECAUSE THIS IS NOT A MESSAGING APP.
@@ -746,7 +766,8 @@
    Founder, with a screenshot: "this is really ugly. Can you research some
    actual components that are used to design chat experiences?"
 
-   Meta's Astryx names the parts and the naming is what was missing here:
+   The reference library names the parts and the naming is what was
+   missing here:
    a FRAME holding a BODY, with the status message outside the body and the
    send action in a FOOTER under the input rather than beside it. See the
    long note at the markup in `ConversationPanel`.

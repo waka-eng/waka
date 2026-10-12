@@ -85,7 +85,7 @@ import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-reco
 import { InspirationComposer } from '../components/InspirationComposer';
 import { paintField } from '../space/inspiration/field-paint';
 import { Menu } from '../components/Menu';
-import { usePageMenu } from '../lib/page-menu';
+import { usePageMenu, wallAgnosticView } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
@@ -1858,7 +1858,46 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const posterSaidRef = useRef(new Map<string, string>());
   /** What the companion is saying: its own line when tapped, and the told
       weather when an arrival has something on the record to tell. */
-  const [charSay, setCharSay] = useState("");
+  const [charSay, setCharSayNow] = useState("");
+  /**
+   * ═══ NOTHING SPEAKS WHILE THE CREATURE IS CHANGING FORM ════════════════
+   *
+   * Founder, reporting this as a REGRESSION against a ruling they had
+   * already given: "did I not tell you that when I'm switching between me
+   * and my agent the speech bubble should be gone? Sometimes it's not gone.
+   * So most times it works properly, but sometimes the speech bubble stays
+   * on so maybe it's a bug."
+   *
+   * The ruling WAS implemented — see `turning` and `FORM_HUSH_MS`, which put
+   * the top-of-mind bubble down for the length of the turn. What it could not
+   * cover is the OTHER bubble: `charSay` is written from about twenty places,
+   * most of them the tail of a promise, and a promise that was started on the
+   * wall you just left lands on the wall you just arrived at. The turn is
+   * 650ms; a fetch is longer than that about as often as it is shorter, which
+   * is exactly "most times it works properly".
+   *
+   * SO THE SEAL IS ON THE WRITE, NOT ON THE RENDER. The obvious shape —
+   * hiding the aside bubble while `turning` — is wrong in a way worth
+   * recording: the stale sentence would still be in state, so it would pop
+   * UP the moment the hush expired, which is the reported bug with an extra
+   * 650ms of delay. A write that arrives during a turn is answering a
+   * question asked on another wall, and the honest thing to do with it is
+   * drop it.
+   *
+   * CLEARING IS ALWAYS ALLOWED. The seal exists to stop words appearing over
+   * the back of a turning creature; silence is never the thing it is
+   * protecting against, and `setCharSay('')` runs from the notepad, from
+   * drafts and from the 4s whisper timer, none of which may be deferred.
+   *
+   * Every call site keeps writing through `setCharSay` and is unchanged —
+   * the guard is the setter itself, because a rule that has to be repeated
+   * at twenty call sites is a rule that will be missed at the twenty-first.
+   */
+  const speechSealed = useRef(false);
+  const setCharSay = useCallback((next: string) => {
+    if (next !== "" && speechSealed.current) return;
+    setCharSayNow(next);
+  }, []);
   /**
    * ═══ THE CREATURE WAS JUST PRESSED, AND IS OFFERING ════════════════════
    *
@@ -1937,6 +1976,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
        bubble was torn down and rebuilt mid-press. One writer cannot do that
        to itself; the epoch below handles two presses of the same kind. */
     speechEpoch += 1;
+    /* A PRESS IS A QUESTION ASKED ON THE WALL YOU ARE ON NOW, so it lifts
+       the switch's seal (see the effect on `wallAddress`). Without this, the
+       650ms of quiet a wall change buys would also swallow the answer to a
+       press made inside it — which is reachable, because the press target
+       stays on screen while you walk between rooms even though it is pulled
+       during a form turn. The seal is for sentences from BEFORE the switch;
+       this one is from after it. */
+    speechSealed.current = false;
     setLit(true);
     if (litTimer.current !== null) window.clearTimeout(litTimer.current);
     litTimer.current = window.setTimeout(() => setLit(false), LIT_MS);
@@ -2468,6 +2515,82 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     const timer = window.setTimeout(() => setTurning(false), FORM_HUSH_MS);
     return () => window.clearTimeout(timer);
   }, [wallSeat]);
+  /**
+   * ═══ CHANGING WALL INVALIDATES SPEECH, THE SAME WAY A PRESS DOES ═══════
+   *
+   * THIS IS THE SECOND RACE FOUND IN THIS MACHINERY, and the difference from
+   * the first one is the whole point of having two guards.
+   *
+   *   The first (`speechEpoch`, added for "there are like glitches sometimes
+   *   in the speech bubble when I click on it too fast") is a race between
+   *   TWO PRESSES on the same wall: press N's sentence lands after press
+   *   N+1 asked for a different one, and the bubble swaps under the hand.
+   *   Every press takes a number and a late answer to a superseded question
+   *   is dropped. `creatureSpeaks` was the only thing that bumped it.
+   *
+   *   This one is a race between A PRESS AND A WALL. Nothing about the fetch
+   *   is superseded — nobody pressed again — so the epoch still matched and
+   *   `mine()` said yes. What changed is WHOSE DAY the answer is about:
+   *   `sayTheWeather` reads `atWallRef.current` to decide which profile to
+   *   ask for, so the sentence in flight is about the wall you were standing
+   *   on, and it arrived on the one you had switched to. Proven with the
+   *   weather route held open for 2.5s: press the creature on Me, switch to
+   *   My agent, and the agent's own line ("I haven't formed anything yet")
+   *   is overwritten by a sentence about your day — on the wall where the
+   *   companion is not even allowed to offer a save.
+   *
+   * SO THE WALL BUMPS THE EPOCH TOO. A switch is a change of subject, which
+   * is a stronger invalidation than a second press, and the guard that
+   * already exists for one should answer both rather than growing a second
+   * mechanism beside it.
+   *
+   * AND WHAT IS ALREADY UP GOES WITH IT. Founder: "the speech bubble should
+   * be gone." The epoch only stops the NEXT write; a sentence that had
+   * already landed before the switch would otherwise hang there for the rest
+   * of its 4s whisper, over a creature that is now somebody else. That path
+   * needs no race at all to reproduce, and it is the half of the bug that is
+   * not intermittent.
+   *
+   * KEYED ON THE WHOLE ADDRESS (`spaceKey`), not on `wallSeat` above.
+   * `wallSeat` deliberately collapses every room to one value because the
+   * FORM only has two faces, and walking between two rooms turns nothing.
+   * Speech is not about form, it is about subject: room A's news is as wrong
+   * in room B as yours is on your agent's wall.
+   *
+   * WHAT DOES NOT CLEAR HERE, decided deliberately:
+   *   - the top-of-mind bubble (`lead`) — `notes` is derived per wall and
+   *     already returns [] off the self wall, so it is RE-DERIVED rather
+   *     than stale. Clearing it would mean re-fetching what the new wall
+   *     already knows.
+   *   - the resting line (`restingWord`) — likewise computed from
+   *     `standingAsAgent` and the new wall's chrome, in the same render the
+   *     wall changed in. It cannot be stale.
+   *   - the offer bubble — already gone ("an agent should never prompt user
+   *     to save something"); nothing left to clear.
+   *   Both surviving ones go down for the turn anyway through `turning`,
+   *   which is the ruling's original implementation and still correct.
+   *
+   * `charSay` is the only one of the three that is a property of a MOMENT
+   * rather than of a wall, which is why it is the only one that has to be
+   * thrown away when the wall changes.
+   */
+  const spokenFor = useRef<string | null>(null);
+  const wallAddress = spaceKey(atWall);
+  useEffect(() => {
+    /* first render is an arrival, not a switch: the away-window weather is
+       told right after it and must not be sealed out of existence */
+    if (spokenFor.current === null) { spokenFor.current = wallAddress; return; }
+    if (spokenFor.current === wallAddress) return;
+    spokenFor.current = wallAddress;
+    speechEpoch += 1;
+    speechSealed.current = true;
+    setCharSay("");
+    /* The seal lifts with the turn, for the same reason the turn is how long
+       it is: until the creature is facing you again, any sentence would be
+       words over the back of its head. See `FORM_HUSH_MS`. */
+    const unseal = window.setTimeout(() => { speechSealed.current = false; }, FORM_HUSH_MS);
+    return () => { window.clearTimeout(unseal); speechSealed.current = false; };
+  }, [wallAddress, setCharSay]);
   const claimsFor = standingAsAgent ? atWall.id : undefined;
   /**
    * WHETHER THE CREATURE'S BUBBLE IS UP AND SPEAKING FOR THE WALL.
@@ -15422,12 +15545,50 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          having nothing to say is a worse first chat than no
                          chat, and a control that opens one is the "opens an
                          empty page" failure this branch already refused. */
+                      /* ═══ AND EVERY BUBBLE ENDS IN A NAMED ACT ═══════
+                         Founder: "all speech bubbles should have an action
+                         at the end — such as 'add more inspiration', when
+                         you click on it then it opens add new inspiration.
+                         If there's a top of mind formed then say 'this is
+                         my current top of mind' and then write the top of
+                         mind, and then the agent should say 'should we
+                         chat about it more?' or something like that."
+
+                         THIS REVERSES "THE SENTENCE IS THE DOOR", and the
+                         old note is kept below because its warning is
+                         still the thing to design against: "a pill inside
+                         a speech bubble is a dialog box with an OK in it."
+                         What was wrong was not the reasoning but what it
+                         was reasoning about. The whole bubble being
+                         pressable is invisible — nothing says a sentence
+                         can be pressed, and a reading and the empty line
+                         went to DIFFERENT places with no way to tell. The
+                         founder has been pressing a surface whose two
+                         states look identical and behave differently.
+
+                         SO THE ACT IS NAMED AND THE WARNING IS OBEYED: the
+                         line underneath is set as speech, underlined, in
+                         the creature's own voice — "Let's talk about it" —
+                         rather than as a pill. It is the companion
+                         offering, which is what it was always supposed to
+                         read as, said out loud instead of implied.
+
+                         AND THE READING SAYS WHAT IT IS. "This is what's on
+                         your mind right now" above the words, because a
+                         sentence appearing in a speech bubble with no frame
+                         is something the creature SAID; with the frame it
+                         is something it is showing you about yourself. The
+                         founder asked for exactly this preamble. */
                       lead ? (
-                        <button type="button" className="jar-char-bubble-reading jar-char-bubble-open"
-                          disabled={talking}
-                          onClick={() => { void talkAbout({ id: '', text: lead.body }); }}>
-                          {lead.body}
-                        </button>
+                        <>
+                          <span className="jar-char-bubble-of">{say('worldBubbleActMine')}</span>
+                          <span className="jar-char-bubble-reading">{lead.body}</span>
+                          <button type="button" className="jar-char-bubble-act"
+                            disabled={talking}
+                            onClick={() => { void talkAbout({ id: '', text: lead.body }); }}>
+                            {say('worldBubbleActTalk')}
+                          </button>
+                        </>
                       ) : (
                         /* ═══ AND THE EMPTY LINE IS A DOOR AFTER ALL ═════
                            Founder: "this should say no top of mind formed
@@ -15453,10 +15614,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                            is the notepad. The offer ("Feeling inspired?
                            Save it.") and this line are the two that name
                            it, and they go to the same place. */
-                        <button type="button" className="jar-char-bubble-reading jar-char-bubble-open"
-                          onClick={startNewInspiration}>
-                          {restingWord}
-                        </button>
+                        <>
+                          <span className="jar-char-bubble-reading">{restingWord}</span>
+                          <button type="button" className="jar-char-bubble-act"
+                            onClick={startNewInspiration}>
+                            {say('worldBubbleActAdd')}
+                          </button>
+                        </>
                       )
                     )}
                   </span>
@@ -15488,14 +15652,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     something said and starts reading as something that wants
                     an answer." That is still why this is a line of speech
                     wearing a press, and not a button. */}
-                <button
-                  type="button"
-                  className="jar-char-bubble-reading jar-char-bubble-open"
+                {/* THE WEATHER GETS THE SAME NAMED ACT. Founder: "all
+                    speech bubbles should have an action at the end." This
+                    is the bubble that reports what has been happening, and
+                    it led into a chat on a press nothing advertised. */}
+                <span className="jar-char-bubble-reading" role="status">{charSay}</span>
+                <button type="button" className="jar-char-bubble-act"
                   disabled={talking}
-                  role="status"
-                  onClick={() => { void talkAbout({ id: '', text: charSay }); }}
-                >
-                  {charSay}
+                  onClick={() => { void talkAbout({ id: '', text: charSay }); }}>
+                  {say('worldBubbleActTalk')}
                 </button>
               </div>
             </div>
@@ -17288,6 +17453,41 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     Save on a blank page is a button for a thing that does not
                     exist." A blank note still leaves by the chevron or by
                     Now. */}
+                {/* ═══ OVERRULED: IT IS ALWAYS THERE, AND DIM UNTIL IT IS NOT ═
+                    Founder: "when the user didn't make any change, then make
+                    it lower opacity, like basically disable it. And then once
+                    the user starts having changes, then make it clickable and
+                    then clicking it would save it."
+
+                    THE ARGUMENT ABOVE WAS GOOD AND IS STILL WRONG. "An
+                    always-present Save on a blank page is a button for a
+                    thing that does not exist" is true about the OBJECT and
+                    false about the PERSON, and the person is who has to find
+                    it. A control that appears is a control you have to
+                    discover twice: once to learn it exists, and again to
+                    learn what summons it — and the thing that summons this
+                    one is typing, which is the act you are already doing and
+                    therefore not looking at the bar during. A control that
+                    DIMS is learned once. It is in the same place before and
+                    after, so the only thing left to notice is that it got
+                    brighter, and brightness is the one channel this product
+                    uses for meaning anyway.
+
+                    It also makes the blank page honest about what it is FOR.
+                    The notepad with nothing on it now shows mic, photo and a
+                    dim Save: three things you could do and one of them not
+                    yet. Before, it showed two, and the page gave no sign that
+                    keeping was even among the endings.
+
+                    NOTHING ELSE MOVES. `composerCanKeep` already folds
+                    `composerHasWords` in, so the empty note lands on exactly
+                    the disabled state every other blocked reason produces
+                    rather than a fourth appearance of its own — and
+                    `whyNotKept` deliberately returns `null` for an empty
+                    note, so the tooltip stays silent instead of complaining
+                    that you have not written anything yet. Dim is the whole
+                    message. See `.waka-dock-tool--keep:disabled` for why that
+                    dim is an opacity and never an outline. */}
                 {/* ═══ ONE MARK, NOT TWO WORDS ═══════════════════════════
                     Founder, with "Save as draft" and "Save" standing beside
                     each other in the bar: "this is so confusing. Save as
@@ -17315,17 +17515,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     one out, and "Save" at 12px in a filled pill was wider
                     than both of them together. The name stays on the
                     `aria-label`, where it is read in full. */}
-                {composerHasWords ? (
-                  <button type="button" className="waka-dock-tool waka-dock-tool--keep"
-                    aria-label={say('worldSaveInspiration')}
-                    /* AND IT SAYS WHY IT CANNOT BE PRESSED, the same way the
-                       chat's Send does and for the reason written there: the
-                       reason belongs to the control, and is wanted only by
-                       somebody who has just tried. */
-                    title={whyNotKeeping ? say(whyNotKeeping) : undefined}
-                    disabled={!composerCanKeep}
-                    onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep"/></button>
-                ) : null}
+                <button type="button" className="waka-dock-tool waka-dock-tool--keep"
+                  aria-label={say('worldSaveInspiration')}
+                  /* AND IT SAYS WHY IT CANNOT BE PRESSED, the same way the
+                     chat's Send does and for the reason written there: the
+                     reason belongs to the control, and is wanted only by
+                     somebody who has just tried. */
+                  title={whyNotKeeping ? say(whyNotKeeping) : undefined}
+                  disabled={!composerCanKeep}
+                  onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep"/></button>
 
                 {/* ═══ AND THE TRANSIENT STATE, IN THE BAR AND NOWHERE ELSE ══
                     Founder, with "Recording canceled." printed across the
@@ -17428,16 +17626,37 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            are a history rather than a depth of your own material, which is
            why they never sat among the three and why this corner is where
            they belong. */
+        /* ═══ AND ON A SURFACE WITH NO OWNER, NEITHER FACE IS LIT ═══════
+           Founder: "When user clicks on chat, don't select any of me nor my
+           agent because here it doesn't matter — what's selected. For
+           inspirations it does, for now it does, but for chats it doesn't,
+           so don't select anything."
+
+           `wallAgnosticView` holds which surfaces those are and the whole
+           argument for it, including the check that chats really are
+           unscoped in practice rather than only in feel. What is worth
+           saying HERE is the part that is about this markup: WHERE YOU ARE
+           STANDING AND WHICH FACE IS LIT STOP BEING ONE FACT.
+
+           They were the same boolean, used for two jobs — the appearance and
+           the decision not to travel — and separating them is the whole
+           change. `here` still answers "is the creature already wearing this
+           form", so pressing the face you are already on still does nothing;
+           a single boolean would have made a press on "Me" while on Me fire
+           `goToWall(0)` and move a camera nobody asked to move. `lit` is
+           allowed to say nothing on a page where whose-material is not a
+           question being asked. */
         left={agentWall ? (
               <span className="jar-char-form" role="group" aria-label={say('worldWallMyAgent')}>
                 {([null, agentWall] as const).map(wall => {
-                  const standing = wall ? atWall.kind === 'agent' : atWall.kind !== 'agent';
+                  const here = wall ? atWall.kind === 'agent' : atWall.kind !== 'agent';
+                  const lit = here && !wallAgnosticView(viewNavigation.view);
                   return (
                     <button
                       key={wall ? wall.id : 'me'}
                       type="button"
-                      className={`jar-char-face jar-label${standing ? ' jar-char-face--standing' : ''}`}
-                      aria-pressed={standing}
+                      className={`jar-char-face jar-label${lit ? ' jar-char-face--standing' : ''}`}
+                      aria-pressed={lit}
                       /* NO CROSSING. The creature changes form where it is
                          standing; it does not walk to another column to do
                          it. Founder: "rather than my agent like moving rooms
@@ -17445,7 +17664,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          form" — and, three times, "the character shouldn't
                          move left It should move right", which stops being a
                          question the moment nothing slides either way. */
-                      onClick={() => { if (!standing) simApiRef.current?.goToWall(wall ? wall.col : 0, true); }}
+                      onClick={() => { if (!here) simApiRef.current?.goToWall(wall ? wall.col : 0, true); }}
                     >
                       {say(wall ? 'worldWallMyAgent' : 'worldWallMe')}
                     </button>

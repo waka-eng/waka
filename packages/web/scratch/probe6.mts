@@ -1,0 +1,25 @@
+import { launchChromium } from "/Users/yunjichung/waka-fix-dev-sst-v3/tools/e2e/browser";
+const OUT = "/Users/yunjichung/waka-fix-dev-sst-v3/packages/web/scratch";
+const b = await launchChromium({ headless: true });
+const p = await b.newPage({ viewport: { width: 1280, height: 900 } });
+await p.goto("http://localhost:3010/login");
+await p.click("#login-tab-signup");
+await p.fill("input[name=email]", `s-${Date.now()}@example.test`);
+await p.fill("input[name=password]", "s-local-password-1");
+await p.fill("input[name=name]", "S"); await p.click("button[type=submit]");
+await p.waitForTimeout(9000);
+console.log(await p.evaluate(`fetch('/api/profiles',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Probe Agent'})}).then(function(r){return r.status + ' ' + r.text()}).catch(function(e){return 'ERR '+e})`));
+await p.waitForTimeout(500);
+console.log(await p.evaluate(`fetch('/api/profiles',{credentials:'include'}).then(function(r){return r.text()})`));
+const dump = `(() => {
+  var g = document.querySelector('.jar-char-form');
+  if (!g) return 'NO SWITCHER';
+  return Array.from(g.querySelectorAll('button')).map(function(x){ return x.textContent + ' pressed=' + x.getAttribute('aria-pressed') + ' standing=' + /--standing/.test(x.className) + ' vis=' + !!x.offsetParent; });
+})()`;
+await p.goto("http://localhost:3010/"); await p.waitForTimeout(5000);
+console.log("HOME:", await p.evaluate(dump));
+await p.screenshot({ path: `${OUT}/40-home-switcher.png` });
+await p.goto("http://localhost:3010/?open=conversations"); await p.waitForTimeout(4000);
+console.log("CONVERSATIONS:", await p.evaluate(dump));
+await p.screenshot({ path: `${OUT}/41-conversations-switcher.png` });
+await b.close();

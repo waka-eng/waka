@@ -4636,6 +4636,45 @@
        not drawn through a blank page somebody is writing on. */
     background: transparent;
     transform: none;
+    /* AND IT FADES WHEN A FILE IS HELD OVER IT — see the block directly
+       below, which is the only thing that ever changes this value. The
+       transition lives here rather than on the modifier so the page lights
+       and un-lights at the same speed; a wash that fades in and snaps off
+       reads as a glitch rather than as an answer. */
+    transition: background 160ms ease;
+  }
+
+  /**
+   * ═══ A FILE IS BEING HELD OVER THE PAGE ════════════════════════════════
+   *
+   * The reference's `FileInput` makes the drop zone a required part of its
+   * anatomy and spends a Don't on skipping it: "Don't avoid dropzone mode unless
+   * space is constrained; drag-and-drop is the expected interaction for file
+   * uploads." This page accepted drops and acknowledged nothing, so the only
+   * way to find out it was a target was to let go over it.
+   *
+   * ONE STEP OF LIGHT, ACROSS THE WHOLE PAGE. The reference draws a bordered
+   * box with an upload icon and hint text inside it; all three are furniture,
+   * and this is the surface whose entire specification is that there is none.
+   * The page IS the drop zone — `inset: 0` above — so the page is what
+   * answers, in the one channel this product has. `--w-raised` is the same
+   * step the tiles themselves rest on, which is the right size for "this will
+   * take it" and far too small for "look at me".
+   *
+   * BOTH SELECTORS, FOR THE REASON THE BASE BLOCK HAS BOTH — and this was
+   * found in a browser, not in the file. `DialogSurface` stamps
+   * `data-visual-viewport` on this element the moment it starts tracking the
+   * keyboard, which is immediately and on every real browser, so the base's
+   * SECOND selector — `.jar-seek.jar-inspiration-composer
+   * [data-visual-viewport]`, (0,3,0) — is the one actually painting
+   * `background: transparent`. A single `[data-dropping]` is (0,3,0) too, and
+   * which of two equally specific rules in one layer wins is decided by the
+   * order the bundler happened to emit them in. The pair below ends the
+   * question: the second is (0,4,0) and outranks the live one outright.
+   */
+  .jar-seek.jar-inspiration-composer[data-dropping],
+  .jar-seek.jar-inspiration-composer[data-visual-viewport][data-dropping] {
+    background: var(--w-raised);
   }
 
   /**

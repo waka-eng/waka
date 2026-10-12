@@ -19,7 +19,8 @@
 /* `send` AND `stop` ARRIVED 2026-10-11, for the chat composer's one action.
    Founder, of the composer: "this is really ugly ... can you research some
    actual components that are used to design chat experiences?" Meta's
-   Astryx ships `ChatSendButton` as a "circular icon-only Button" that
+   The reference library ships its send control as a "circular icon-only
+   Button" that
    "automatically toggles between send (primary) and stop (secondary) based
    on streaming state", and its first rule is that the translated Send-or-
    Stop accessible name survives any custom artwork, "the icon is decorative

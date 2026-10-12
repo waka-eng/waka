@@ -332,8 +332,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               Founder: "make the chat message list and the chat message
               thing also follow what you see on this AI chat conversation."
 
-              `role="log"` RATHER THAN A BARE LIST. Astryx's
-              `ChatMessageList` is documented as providing 'role="log" with
+              `role="log"` RATHER THAN A BARE LIST. The reference library's
+              message-list component is documented as providing 'role="log" with
               aria-live="polite"', and log is the right role for a
               transcript: it tells a screen reader this is a running record
               where new entries arrive at the end, which `aria-live` alone
@@ -404,7 +404,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             code by code, but reference this and modify to match our own
             thing."
 
-            Meta's Astryx publishes `ChatComposer` as five named parts, and
+            The reference library publishes `ChatComposer` as five named parts, and
             the naming is the useful bit rather than the styling:
 
               FRAME — groups the body with a status message ABOVE or BELOW
@@ -491,5 +491,46 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         {draft?.pending?<button type="button" className="chat-recheck" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldConversationCheck')}</button>:null}
       </footer>:null}
     </section>
+    {/* ═══ WHAT THIS CONVERSATION IS ABOUT, BESIDE IT ═══════════════════
+        Founder: "let's have the right panel to show the inspiration while
+        you're chatting about it, and then let the user switch inspirations
+        while chatting about it ... when the user specifically brings that
+        up then the agent can read it."
+
+        A SIBLING OF THE TRANSCRIPT, NOT A SHEET OVER IT. This product has
+        spent the week removing surfaces that open on top of other
+        surfaces; a panel you have to dismiss to read the reply it is about
+        would be the worst version of that. `.chat-page` becomes a row wide
+        enough to hold both and stays a column when it is not — see
+        `.chat-aside`, where the one breakpoint is reasoned about.
+
+        ONLY ON A REAL CONVERSATION. Pinning is a fact about a conversation
+        and there is nothing to pin it to until one exists; a picker on a
+        blank new chat would write to an id the server has never seen. */}
+    {/* ═══ THE SIDE PANEL IS GONE, AND SO IS PINNING ══════════════════
+        Founder, having used it: "actually for now, let's get rid of the
+        side part and referencing inspiration. I'm sorry. Let's get rid of
+        it. It's too complicated right now."
+
+        WHAT IT WAS. A drawer beside the transcript for picking one saved
+        keep, which the server then pinned into what the reply may read —
+        "when the user specifically brings that up then the agent can read
+        it." The reason it came out is not that it failed: a chat with a
+        picker, a chip, a drawer and a pinned state is four things to
+        understand before you can ask a question, on a surface whose whole
+        argument is that you type and it answers.
+
+        WHAT SURVIVES, so this is one wiring job rather than a rebuild.
+        The SERVER side is built, tested and live: `conversations
+        .initialInspirationId`, `POST`/`PATCH` accepting it, and
+        `readConversationContext` pinning the keep first in the reply's
+        sources — with db tests for the round trip, the cross-profile
+        refusal, and the pin reaching the model input. Migration 0070.
+        Nothing on the client reaches it.
+
+        AND THE NAMING IS WORTH KEEPING. Founder, mid-thought before
+        cutting it: "maybe it should say 'reference and inspiration'
+        instead of 'what is this about'." The label was the weakest part
+        of what shipped, and that is a better one. */}
   </main>;
 }

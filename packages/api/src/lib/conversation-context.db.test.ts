@@ -69,3 +69,43 @@ it('bounds per-source excerpts and total inspiration context even for long mater
   expect(context.inspirations.reduce((sum,row)=>sum+row.text.length,0)).toBeLessThanOrEqual(4000);
   for(const source of context.inspirations){expect(source.text.length).toBeLessThanOrEqual(1600);expect(source.truncated).toBe(true);}
 });
+it('pins the picked keep ahead of retrieval, ignores a foreign one and leaves citation reads closed',async()=>{
+  // The founder's case, reproduced exactly: the keep they clicked shares no
+  // word with the sentence they typed about it, so neither lexical nor
+  // semantic retrieval has any reason to return it. If the pin is a ranking
+  // nudge rather than a pin, this test is how that shows up.
+  const f=await owner(),foreign=await owner();
+  const [picked]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'Ferry timetable, Ulleungdo.') RETURNING id`;
+  const [matching]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'Woodland paths are good for thinking.') RETURNING id`;
+  const [stranger]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${foreign.profileId},'FOREIGN_PICKED_SENTINEL') RETURNING id`;
+  expect((await readConversationContext(t.db as never,f.profileId,'woodland')).inspirations.map(row=>row.id)).toEqual([matching.id]);
+  // Pinned: present though unmatched, and FIRST so its 1600 characters are
+  // taken off the allowance before anything retrieval found.
+  const pinned=await readConversationContext(t.db as never,f.profileId,'woodland',undefined,null,picked.id);
+  expect(pinned.inspirations.map(row=>row.id)).toEqual([picked.id,matching.id]);
+  expect(pinned.inspirations[0]!.text).toContain('Ferry timetable');
+  // A keep nothing matches at all still arrives: the empty-retrieval case is
+  // the one the rail produces most often, and the early return inside
+  // `readConversationMaterial` for an empty id list is easy to fall into.
+  expect((await readConversationContext(t.db as never,f.profileId,'nothing here matches',undefined,null,picked.id)).inspirations.map(row=>row.id)).toEqual([picked.id]);
+  // Already in front: the same answer, and no reordering that could drop it.
+  expect((await readConversationContext(t.db as never,f.profileId,'ferry timetable',undefined,null,picked.id)).inspirations.map(row=>row.id)).toEqual([picked.id]);
+  // CLEARED. `null` is a reachable state, not an unfilled one, so it must read
+  // exactly like a conversation that never had a pin.
+  expect((await readConversationContext(t.db as never,f.profileId,'woodland',undefined,null,null)).inspirations.map(row=>row.id)).toEqual([matching.id]);
+  // Another profile's id is not a smaller result, it is no result: the pin
+  // reads through the same owner predicate every other source does. The
+  // composite FK makes storing this impossible; this proves the reader does
+  // not trust that for its own correctness.
+  const foreignPin=await readConversationContext(t.db as never,f.profileId,'woodland',undefined,null,stranger.id);
+  expect(foreignPin.inspirations.map(row=>row.id)).toEqual([matching.id]);
+  expect(JSON.stringify(foreignPin)).not.toContain('FOREIGN_PICKED_SENTINEL');
+  // THE HISTORICAL-CITATION PATH STAYS CLOSED. `referenceIds` asks for an
+  // exact set so an old citation can be reopened and its hash reproved; an
+  // extra pinned source here would spend the shared allowance of the very
+  // record being reopened and could report an unchanged citation as changed.
+  const citation=(await readConversationContext(t.db as never,f.profileId,'woodland')).inspirations[0]!;
+  const reopened=await readConversationContext(t.db as never,f.profileId,'',[citation],null,picked.id);
+  expect(reopened.inspirations.map(row=>row.id)).toEqual([matching.id]);
+  expect((await currentConversationReferences(t.db as never,f.profileId,[citation]))[0]).not.toBeNull();
+});

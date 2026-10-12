@@ -78,7 +78,8 @@ import type { useAudioRecording } from '../lib/use-audio-recording';
  *   play or pause, the same shape as every other tile.
  */
 function MediaTile({
-  item, disabled, recording, uploading, onRemove, onRetry, removeLabel, retryLabel,
+  item, disabled, recording, uploading, onRemove, onRetry,
+  removeLabel, retryLabel, playLabel, pauseLabel,
 }: {
   item: InspirationDraftMedia;
   disabled: boolean;
@@ -94,6 +95,18 @@ function MediaTile({
      only thing a screen reader has to tell three photos apart. */
   removeLabel: string;
   retryLabel: string;
+  /* ═══ AND THE PRESS SAYS WHAT PRESSING DOES ════════════════════════════
+     The reference's `Thumbnail` — its component for exactly this tile —
+     makes its one rule about the name: "Always provide a `label` prop with
+     the file name so the thumbnail AND ITS REMOVE BUTTON are accessible to
+     screen readers and show a tooltip on hover." Ours named the remove
+     button and left the tile itself anonymous, and named the audio tile
+     with the bare filename — so a recording announced as "ambience.m4a,
+     button" and a listener had to press it to find out it was a transport.
+     Two labels, in the same whole-sentence shape as the two above and for
+     the same reason: Korean puts the verb last. */
+  playLabel: string;
+  pauseLabel: string;
 }) {
   const [url, setUrl] = useState('');
   const [failedPreview, setFailedPreview] = useState(false);
@@ -118,7 +131,13 @@ function MediaTile({
     `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
 
   return (
-    <li className={`jar-tile${wrong ? ' jar-tile--wrong' : ''}${uploading ? ' jar-tile--busy' : ''}`}>
+    /* THE NAME IS ON THE TILE, NOT PRINTED UNDER IT. The filename row was
+       most of what made the old list a wall, and nobody reads
+       "Screenshot 2026-10-11 at 4.49.54 PM.png" to find out which picture
+       it is — but on the one occasion you DO want it, hovering is where
+       the reference puts it. Nothing is shown until you ask. */
+    <li className={`jar-tile${wrong ? ' jar-tile--wrong' : ''}${uploading ? ' jar-tile--busy' : ''}`}
+      title={item.name}>
       {item.type === 'image' && url && !failedPreview ? (
         <img src={url} alt={item.name} onError={() => setFailedPreview(true)} />
       ) : item.type === 'audio' && url ? (
@@ -132,7 +151,7 @@ function MediaTile({
             }}
             onEnded={() => setPlaying(false)} />
           <button type="button" className="jar-tile-face" disabled={recording}
-            aria-label={item.name}
+            aria-label={playing ? pauseLabel : playLabel}
             onClick={() => {
               const node = audio.current;
               if (!node) return;
@@ -202,6 +221,9 @@ export function InspirationComposer(props: {
 }) {
   const fileInput = useRef<HTMLInputElement>(null), linkInput = useRef<HTMLInputElement>(null);
   const [addingLink, setAddingLink] = useState(Boolean(props.linkText));
+  /** Whether a file is being held over this page right now. See the drop
+      note on the surface below for why the page has to answer. */
+  const [overhead, setOverhead] = useState(false);
   const link = props.linkText;
   /* WHEN THIS NOTE IS, read once. Taking it from the draft's own `updatedAt`
      live would reprint the minute under somebody's hand on every keystroke,
@@ -223,9 +245,47 @@ export function InspirationComposer(props: {
     } catch {linkInput.current?.setCustomValidity(say('worldComposerInvalidLink'));linkInput.current?.reportValidity();}
   };
   useEffect(()=>{if(addingLink)linkInput.current?.focus();},[addingLink]);
+  /* ═══ THE PAGE ANSWERS A FILE HELD OVER IT ════════════════════════════
+     The reference's `FileInput` calls the drop target a required part of
+     its anatomy — "Drop zone: Required: the clickable area for file selection;
+     in dropzone mode, also accepts dragged files" — and spends a Don't on
+     it: "Don't avoid dropzone mode unless space is constrained;
+     drag-and-drop is the expected interaction for file uploads."
+
+     This page already took drops and said nothing about it. Dragging a
+     photo across it looked exactly like dragging a photo across a page
+     that would reject it, and the only way to learn otherwise was to let
+     go and see. A target that gives no sign is not a target.
+
+     WHAT IT ANSWERS WITH IS LIGHT, because that is the only channel this
+     product has: the whole page lifts one step while something is held
+     over it. Not an outline, not a dashed rectangle, not "Drop files
+     here" — the reference's own drop zone draws a box with an upload icon
+     and a line of hint text in it, and all three are furniture on the one
+     surface whose specification is that there is none. The page is the
+     drop zone, so the page is what lights.
+
+     AND IT ANSWERS ONLY WHEN IT WOULD ACCEPT. `blocked` is the same guard
+     the drop itself uses, so a page mid-save does not promise to take a
+     file it is about to refuse.
+
+     `relatedTarget` IS WHY THIS IS NOT A COUNTER. `dragleave` fires every
+     time the pointer crosses into a child — the textarea, a tile, the
+     link field — so the naive version flickered off and on down the whole
+     page. Leaving for somewhere still inside the surface is not leaving;
+     dragging out of the WINDOW gives a null `relatedTarget`, which
+     `contains` reports as outside, so that case still clears. */
+  const overheadOff = () => setOverhead(false);
   return <DialogSurface className="jar-seek jar-inspiration-composer" aria-label={say('worldCaptureInspiration')} onClose={props.onClose} data-jar-chrome="1"
-    onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
-    onDrop={event => { if (event.dataTransfer.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.dataTransfer.files]); } }}>
+    data-dropping={overhead ? '1' : undefined}
+    onDragOver={event => {
+      if (!event.dataTransfer.types.includes('Files')) return;
+      event.preventDefault();
+      setOverhead(!blocked);
+    }}
+    onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) overheadOff(); }}
+    onDragEnd={overheadOff}
+    onDrop={event => { overheadOff(); if (event.dataTransfer.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.dataTransfer.files]); } }}>
     {/* ═══ THE TOP IS `NotePage`'S NOW, AND SO IS THE SAVED NOTE'S ═══════
         Founder: "make sure that when I'm entering from create new
         inspiration or my past inspiration, it's using the exact same
@@ -267,13 +327,45 @@ export function InspirationComposer(props: {
         pinned under the field now and the words never move.
 
         See `MediaTile` for what each tile shows and what the rows it
-        replaces were saying that nothing needed to say. */}
-    {props.media.length ? <ul className="jar-shelf">{props.media.map(item => (
+        replaces were saying that nothing needed to say.
+
+        ═══ THE SHELF IS A GROUP, AND IT SAYS SO WHERE SAYING IT COSTS
+        NOTHING ═══════════════════════════════════════════════════════
+        The reference's `ChatComposerDrawer` is its pattern for a tray of
+        attachments beside a writing field, and its first rule is about the
+        name: "Give `label` a concrete plural noun such as 'Attachments' so
+        the expand and collapse actions have a useful accessible name."
+        Its `List` says the same thing from the other side — "List title:
+        Required: Heading that labels the list", "provide a header to label
+        the list and give context to screen readers".
+
+        WE TOOK THE NOUN AND REFUSED THE HEADING. A visible "Attachments"
+        over three visible attachments is Law 4 — a label restating what is
+        already on screen — on the one page whose specification is that
+        nothing is on it. So the plural noun is the list's accessible name
+        and draws no pixels.
+
+        AND WE REFUSED THE BADGE. The drawer's collapsed summary is "the
+        default count Badge and label"; `Badge`'s own page forbids exactly
+        that use — "Don't use badges for metadata. Durations, counts, dates
+        and descriptions are not statuses or categories." It is coherent
+        there because a COLLAPSED drawer has hidden its contents and the
+        count stands in for them. This shelf never collapses, so a "3"
+        beside three tiles counts something you are looking at.
+
+        `role="list"` IS NOT REDUNDANT HERE. Safari drops list semantics
+        from a `ul` with `list-style: none`, which this one has, so without
+        it the group name above would be announced over three loose items
+        rather than over a set of three. */}
+    {props.media.length ? <ul className="jar-shelf" role="list"
+      aria-label={say('worldComposerAttachments')}>{props.media.map(item => (
       <MediaTile key={item.id} item={item} disabled={blocked}
         recording={props.recording.phase !== 'idle'}
         uploading={props.uploadingId === item.id}
         removeLabel={formatMessage(props.locale, 'worldComposerRemoveFile', { name: item.name })}
         retryLabel={formatMessage(props.locale, 'worldComposerRetryFile', { name: item.name })}
+        playLabel={formatMessage(props.locale, 'worldComposerPlayFile', { name: item.name })}
+        pauseLabel={formatMessage(props.locale, 'worldComposerPauseFile', { name: item.name })}
         onRemove={() => props.onRemove(item.id)}
         onRetry={() => props.onRetryFile(item.id)} />
     ))}</ul> : null}
