@@ -1590,16 +1590,44 @@
  * the only arrangement that survives a long archive name without wrapping
  * into the owner switch beside it.
  */
+/* ═══ THE NAME AND THE COUNT ARE ONE LINE ═══════════════════════════════
+   Founder, twice. First: "just say Your Inspirations (36)." Then, with the
+   count still sitting under the title: "no, it should be side by side. So
+   it's Your Inspirations (36) in a single line."
+
+   The first change moved the count into the title's PHRASING and left this
+   block a column, so "(36)" went from being its own sentence to being its
+   own line — the same two rows wearing shorter words. The stack was the
+   thing being complained about both times.
+
+   BASELINE, NOT CENTRE. The two are at different sizes — the title is
+   `--t-reading` and the count is the fine step — and centring would float
+   the count in the middle of the title's cap height. Sitting on the same
+   baseline is what makes it read as part of the phrase rather than as a
+   badge beside it.
+
+   NO WRAP. If the pair ever outgrows the column the right failure is the
+   title truncating, not the count dropping to a second line and
+   recreating exactly what this fixes. */
 .waka-over-name {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
+  align-items: baseline;
+  gap: var(--sp-8);
   min-width: 0;
 }
 
+/* THE TITLE'S TAIL, NOT A LABEL BESIDE IT. One step down and in the muted
+   tier, so the phrase has a stress on the name and a fact after it — the
+   same relationship a list row's lead line has to its meta. Declared once:
+   this block was written twice, identically, which is the kind of thing a
+   one-line change to either copy would have made into two behaviours. */
 .waka-over-count {
   margin: 0;
   flex: 0 0 auto;
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  font-weight: 400;
+  color: var(--muted);
 }
 
 /* `.waka-over-what` IS GONE FROM BOTH SURFACES THAT WORE IT.
@@ -1787,12 +1815,6 @@
    world, and the dock cannot do it. See `way-out.test.ts`, which was taught
    the distinction rather than handed an exemption. */
 
-
-
-.waka-over-count {
-  margin: 0;
-  flex: 0 0 auto;
-}
 
 .waka-over-search {
   /* `1 1 12rem` HERE WAS A ROW'S FLEX IN A COLUMN. This field used to share a
