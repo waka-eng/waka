@@ -45,7 +45,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { InspirationComposer } from "../src/components/InspirationComposer";
+import { DOCK_SLOT } from "../src/components/NoteTools";
 import { SavesOverlay } from "../src/components/SavesOverlay";
+
+/** Every write the explicit Save has made, newest last. */
+const written: Array<{ id: string; text: string }> = [];
 
 const ROW = {
   id: "kept-1",
@@ -54,6 +58,22 @@ const ROW = {
   category: null,
   attachments: [],
 };
+
+/* THE WRITE, AND ONLY THE WRITE. `lib/api` is spread through rather than
+   replaced because this page also reaches it for presign, upload, finalize
+   and delete, and a bare mock would turn any of those into `undefined is
+   not a function` inside the overlay's own catch — a silent pass. The one
+   call under test is the one swapped. */
+vi.mock("../src/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/lib/api")>();
+  return {
+    ...actual,
+    updateInspiration: async (id: string, patch: { text?: string }) => {
+      written.push({ id, text: patch.text ?? "" });
+      return undefined as never;
+    },
+  };
+});
 
 vi.mock("../src/lib/data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/data")>();
@@ -202,4 +222,80 @@ it("hands the world a way to close an open note, and takes it back on the way ou
   expect(told).toHaveBeenLastCalledWith(null);
   /* Re-created so `afterEach` has something to unmount. */
   root = createRoot(host);
+});
+
+/**
+ * ═══ AND A SAVE YOU CAN PRESS ON A NOTE YOU WROTE MONTHS AGO ════════════
+ *
+ * Founder: "this button should appear when I'm editing old inspirations as
+ * well. So when I'm looking at past saved inspirations, as soon as I start
+ * typing, then that save button should be enabled."
+ *
+ * WHY THIS IS NOT COVERED BY THE AUTOSAVE'S OWN TESTS. `leaveNote` has
+ * always written on the way out and still does — this is a second door onto
+ * the same write, and the thing a second door can get wrong is the half
+ * that has nothing to do with writing: WHEN IT IS LIT. Three states, and
+ * the middle one is the only one anybody looks at.
+ *
+ * THE DIM-AFTER-PRESS IS THE LOAD-BEARING ASSERTION. The control reports
+ * "your change is stored" by going out, which only works if the write
+ * re-points the open note at the words it just saved. Forget that one line
+ * and everything still saves correctly, the button stays lit for ever, and
+ * the page quietly says the opposite of the truth — which is the exact
+ * failure this product cannot have, because its whole claim is that its
+ * account of you is checkable. The press itself passing is not the proof;
+ * the going-out is.
+ *
+ * AND IT IS TRIMMED, NOT RAW. Enablement reads `draft.trim()`, the same
+ * predicate the write reads, so a typed space cannot light a button that
+ * then refuses — the "looks pressable, does nothing" failure `whyNoSend`
+ * and `keep-ready.ts` were each written for after it happened.
+ */
+it("lends the bar a Save that lights only on an unsaved change, and goes out once it has taken", async () => {
+  /* The slot `Home` renders in the dock. Without it `NoteTools` portals
+     nowhere, which is the right behaviour on a surface with no bar and the
+     reason this test has to supply one. */
+  const slot = document.createElement("span");
+  slot.id = DOCK_SLOT;
+  document.body.append(slot);
+  written.length = 0;
+  try {
+    await savedNote();
+    const save = () => slot.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]');
+    /* PRESENT BEFORE IT IS PRESSABLE. Founder, of the notepad's: "when the
+       user didn't make any change, then make it lower opacity, like
+       basically disable it." A control that is absent until it is usable
+       has to be discovered twice. */
+    expect(save()).not.toBeNull();
+    expect(save()!.disabled).toBe(true);
+
+    const words = host.querySelector<HTMLTextAreaElement>(".waka-note-page")!;
+    const type = (text: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(words, text);
+      words.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    /* Whitespace is not a change. */
+    await type(`${ROW.preview}   `);
+    expect(save()!.disabled).toBe(true);
+
+    await type("dusk on the hill, and one light still on");
+    expect(save()!.disabled).toBe(false);
+
+    await act(async () => save()!.click());
+    expect(written).toEqual([{ id: ROW.id, text: "dusk on the hill, and one light still on" }]);
+    /* The receipt: it is not lit any more, and nothing had to say "saved". */
+    expect(save()!.disabled).toBe(true);
+    /* AND THE NOTE IS STILL OPEN. Saving is a statement about the words,
+       not a second way out standing beside the one the bar already has —
+       the "Save / Save as draft" pair the founder rejected once already:
+       "this is so confusing." */
+    expect(host.querySelector(".waka-over-one")).not.toBeNull();
+
+    /* Pressing again writes nothing: there is nothing left to write. */
+    await act(async () => save()!.click());
+    expect(written).toHaveLength(1);
+  } finally {
+    slot.remove();
+  }
 });
