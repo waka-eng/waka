@@ -1384,21 +1384,25 @@
      the body's width and the creature read as a pebble with a rim. */
   width: calc(var(--waka-companion-size) * 4);
   height: calc(var(--waka-companion-size) * 4);
-  /* ═══ THE LAMP TAKES NO ROOM ════════════════════════════════════════
-     The box has to be four times the body or the falloff is clipped (see
-     above). It must not also be four times the body to its NEIGHBOURS: on
-     the loading screen the creature is 190px and this wrapper was 760,
-     so the word underneath was pushed a third of a screen down and off the
-     bottom of the viewport — and the pair, centred as a column, put the
-     creature visibly above the middle. Founder, on exactly that symptom
-     elsewhere: "I wanted the character to be at the very very center."
+  /* ═══ AND IT DOES TAKE ROOM, WHICH IS THE WHOLE POINT ═══════════════
+     A negative margin stood here for about an hour, pulling the element
+     back to the body's own footprint on the theory that "light is not an
+     object; it should no more push a sentence around than it should take a
+     press". That theory is wrong in a way worth keeping written down.
 
-     Pulled back by `(4 - 1) / 2` of the size on every side, the element
-     occupies exactly the body's own footprint while still painting its
-     light out to the full radius. Light is not an object; it should no
-     more push a sentence around than it should take a press, which the
-     `pointer-events` below already says in the other direction. */
-  margin: calc(var(--waka-companion-size) * -1.5);
+     Founder, with the empty chat: "character is covering the text and then
+     the glow is also cut off."
+
+     THE GLOW IS PAINTED FROM THIS BOX. Shrinking the box's FOOTPRINT does
+     not shrink what it paints, so the neighbour below moved up by 1.5x the
+     size and landed underneath a creature that was still drawn at full
+     reach. Light that overlaps a sentence is not light that takes no room;
+     it is light drawn on top of words.
+
+     SO THE BOX IS ITS OWN SPACING, and the only caller that found that
+     awkward — the loading screen, whose word was pushed off the bottom —
+     handles it where the awkwardness is, by pulling the word up rather
+     than by changing what every companion in the product occupies. */
   /* It is light, not an object, so it never takes a press and never pushes
      the thing beside it around. */
   pointer-events: none;

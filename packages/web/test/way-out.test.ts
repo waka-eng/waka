@@ -193,6 +193,27 @@ const LEFT_BY_THE_DOCK: Record<string, string> = {
   "components/ClaimsOverlay.tsx": "claims",
 };
 
+/**
+ * ═══ AND ONE SURFACE AT A TIME, WHERE A WHOLE FILE IS TOO BLUNT ═════════
+ *
+ * `LEFT_BY_THE_DOCK` is keyed by FILE, which is right for the overlays —
+ * each of those files is one destination. `Home.tsx` renders five surfaces
+ * and only one of them leans on the bar; exempting the file would stop the
+ * law being checked on the other four, which is how a completeness check
+ * quietly stops checking.
+ *
+ * So the claim is made where it is true, on the surface itself:
+ * `data-way-out="dock"`. The same two things are still proved about it —
+ * the dock offers that destination and the dock is up while it is open —
+ * because the id is checked against the bar's own list below, exactly as a
+ * file-keyed entry is.
+ *
+ * Founder, whose ruling this is: "I still don't get why you have this
+ * carrot button ... I can just go to all the inspirations using the bottom
+ * panel." Said of the notepad; Law 7 carried it to the chat.
+ */
+const SURFACE_LEFT_BY_DOCK = /data-way-out="([a-z]+)"/;
+
 const NO_VISIBLE_WAY_OUT: Record<string, string> = {
   /* EMPTY, AND IT EMPTIED ITSELF. Both entries named corner MENUS — lists
      whose every row leaves them, so the only control they could add is the
@@ -277,7 +298,9 @@ describe("every surface has a way out you can see", () => {
     for (const path of files) {
       const key = path.replace(/^src\//, "");
       const spans = surfacesIn(readFileSync(path, "utf8"));
-      const without = spans.filter((span) => !hasWayOut(span));
+      const without = spans.filter(
+        (span) => !hasWayOut(span) && !SURFACE_LEFT_BY_DOCK.test(span),
+      );
       if (!without.length || NO_VISIBLE_WAY_OUT[key] || LEFT_BY_THE_DOCK[key]) continue;
       trapped.push(
         `${key}: ${without.length} of ${spans.length} surface(s) render no control that leaves.\n` +
@@ -322,6 +345,19 @@ describe("every surface has a way out you can see", () => {
       "the dock is hidden while a note is being written, and the notepad " +
         "gave up its chevron on the promise that it would not be",
     ).not.toMatch(/view\?\.compose/);
+
+    /* THE PER-SURFACE CLAIMS, held to the same bar. A surface that says
+       `data-way-out="x"` is asserting that the dock has a row called `x`;
+       if that row is renamed or dropped, the surface has no exit at all
+       and this is where it is caught. */
+    const claimed = [...readFileSync(join("src", "pages", "Home.tsx"), "utf8")
+      .matchAll(/data-way-out="([a-z]+)"/g)].map((hit) => hit[1]!);
+    expect(claimed.length, "no surface claims the dock as its way out any more — was the attribute renamed?")
+      .toBeGreaterThanOrEqual(1);
+    for (const id of claimed) {
+      expect(dock, `a surface says the dock's "${id}" row is its way out, and the dock has no such row`)
+        .toContain(id);
+    }
 
     const orphans = Object.entries(LEFT_BY_THE_DOCK).filter(([file, id]) => {
       let text: string;
