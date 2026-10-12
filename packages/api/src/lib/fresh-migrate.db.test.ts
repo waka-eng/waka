@@ -122,6 +122,17 @@ describe("the first migration on an empty database", () => {
         SELECT column_name FROM information_schema.columns
         WHERE table_name = 'inspirations' AND column_name = 'category'`;
       expect(shelves, "the archive's shelves reached a fresh database").toHaveLength(1);
+
+      /* ═══ AND THE COLUMN 0070 CREATES, for the same reason ══════════════
+         `conversations.initial_inspiration_id` is what a chat is about.
+         `schema-conversations.ts` declares it in this PR, so the migration
+         that creates it has to reach a fresh database in this PR too —
+         which is why `0070_conversation_inspiration_start.sql` and its
+         journal entry travelled back here from the next one. */
+      const about = await sql<{ column_name: string }[]>`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'conversations' AND column_name = 'initial_inspiration_id'`;
+      expect(about, "what a conversation is about reached a fresh database").toHaveLength(1);
     } finally {
       await sql.end();
     }

@@ -96,7 +96,14 @@
   inset-inline: 0;
   height: var(--chat-height, 100dvh);
   display: flex;
-  flex-direction: column;
+  /* A ROW, BECAUSE THE PAGE HOLDS TWO COLUMNS. It was `column` when the
+     transcript was its only child; `.chat-main` is the column now and the
+     drawer is its sibling. Declared HERE rather than in a second block —
+     two blocks laying out one class is what `one-class-one-thing.test.ts`
+     fails the build over, and which of them wins would depend on bundle
+     order. See `.chat-aside` for why there is no breakpoint. */
+  flex-direction: row;
+  align-items: stretch;
   overflow: hidden;
   background: var(--bg);
   color: var(--ink);
@@ -208,6 +215,214 @@
   display: flex;
   flex-direction: column;
   padding-inline: clamp(20px, 6vw, 28px);
+}
+
+/* ═══ THE DRAWER SITS BESIDE THE TRANSCRIPT, AND ONLY WHEN ASKED ════════
+   Founder: "let's have the right panel to show the inspiration while
+   you're chatting about it", then: "the default should be that
+   inspiration drawer is closed, but the user can open it if they want."
+
+   NO BREAKPOINT, AND THAT IS THE POINT. The first build put the panel
+   beside the transcript above a guessed 1000px and stacked it below that
+   — a number nobody measured, which `phone-breakpoints.test.ts` correctly
+   refused. Closed by default, the question answers itself: the panel is
+   only ever on screen because somebody asked for it, and somebody who
+   asked for it wants to see it. So it takes its width from the page on
+   every screen and the transcript keeps whatever is left.
+
+   THE TRANSCRIPT NEVER DROPS BELOW ITS MEASURE, which is what the
+   breakpoint was really protecting. `.chat-main` keeps `flex: 1` and the
+   `--chat-measure` cap inside it, so on a narrow screen the two share the
+   width and the reading column shrinks to fit rather than overflowing. On
+   a phone the drawer is most of the screen, which is correct: you opened
+   it to read a keep. */
+.chat-aside {
+  flex: 1 1 20rem;
+  max-width: 24rem;
+  border-inline-start: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* CLEARS THE DOCK, like every other column on this page. The bar is
+     fixed and this scrolls under it. */
+  padding: var(--sp-32) clamp(20px, 6vw, 28px)
+    calc(var(--sp-20) + var(--waka-corner) + var(--sp-24) + env(safe-area-inset-bottom));
+}
+
+/* THE WAY OUT, at the top where a panel's close belongs. A word rather
+   than a glyph: this product has nine hand-drawn shapes and no icon set,
+   and "Close" is shorter to understand than any X is to recognise. */
+.chat-aside-close {
+  align-self: flex-end;
+  min-height: var(--waka-corner);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  cursor: pointer;
+}
+
+.chat-aside-close:hover,
+.chat-aside-close:focus-visible { color: var(--ink); outline: none; }
+
+/* ═══ THE TRIGGER, AND THE CHIP IT BECOMES ══════════════════════════════
+   At the start of the composer's footer, opposite the send actions. See
+   the long note at the markup for why the control that changes what the
+   reply may read belongs where the next message is written.
+
+   IT TRUNCATES RATHER THAN WRAPS. A pinned keep's lead line can be a
+   paragraph; a footer row that grows to three lines because of what you
+   pinned is a composer that changes height for a reason nobody can see.
+   The whole keep is in the drawer, one press away. */
+.chat-about {
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 32px;
+  margin-inline-end: auto;
+  padding: 0 var(--sp-10);
+  border: 1px solid var(--field-edge);
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.chat-about:hover,
+.chat-about:focus-visible { color: var(--ink); outline: none; }
+
+/* PINNED READS AS A STATEMENT, NOT AN INVITATION — full ink, and the
+   edge goes, because the words in it are now a thing you kept rather
+   than a label for a control. */
+.chat-about--pinned {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--moon-warm) 9%, transparent);
+  color: var(--ink);
+}
+
+/* WHAT THE PANEL IS FOR, in the label register the product uses for a
+   fact about the thing below it. */
+.chat-aside-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-meta);
+  line-height: 1.5;
+}
+
+/* THE PINNED KEEP IS THE PANEL. No card and no border: the same
+   blank-page treatment an opened note gets, at this column's width. */
+.chat-aside-pinned {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+
+.chat-aside-text {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-ui);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-aside-unpin {
+  align-self: flex-start;
+  min-height: var(--waka-corner);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.chat-aside-unpin:hover,
+.chat-aside-unpin:focus-visible { color: var(--ink); outline: none; }
+
+.chat-aside-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-meta);
+}
+
+.chat-aside-find input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: var(--waka-corner);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--field-edge);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+}
+
+.chat-aside-find input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--ink) 80%, transparent);
+}
+
+/* ROWS ARE LEAD LINES, like the archive's — the first line of what you
+   wrote is the title you never had to give it. No ordinal and no chapter
+   heading: this is a picker, not a second archive. */
+.chat-aside-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-aside-rows li + li { border-top: 1px solid var(--line); }
+
+.chat-aside-rows button {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-12) 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-aside-rows button:hover .chat-aside-lead,
+.chat-aside-rows button:focus-visible .chat-aside-lead {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.chat-aside-rows button:focus-visible { outline: none; }
+
+.chat-aside-lead {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.chat-aside-when {
+  color: var(--muted);
+  font-size: var(--t-label);
 }
 
 /**
@@ -746,7 +961,8 @@
    Founder, with a screenshot: "this is really ugly. Can you research some
    actual components that are used to design chat experiences?"
 
-   Meta's Astryx names the parts and the naming is what was missing here:
+   The reference library names the parts and the naming is what was
+   missing here:
    a FRAME holding a BODY, with the status message outside the body and the
    send action in a FOOTER under the input rather than beside it. See the
    long note at the markup in `ConversationPanel`.

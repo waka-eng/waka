@@ -1,7 +1,7 @@
 import {Hono} from 'hono';
 import {z} from 'zod';
 import {and,asc,desc,eq,gte,isNull,sql} from 'drizzle-orm';
-import {conversationMessages,conversationReplyRequests,conversations,inspirationConversationOrigins,principles,profiles} from '../db/index.js';
+import {conversationMessages,conversationReplyRequests,conversations,inspirationConversationOrigins,inspirations,principles,profiles} from '../db/index.js';
 import {getDb} from '../lib/db.js';
 import {requireAuth,humanSessionsOnly,type AuthEnv} from '../lib/middleware.js';
 import {resolveTargetProfile} from './inspirations-tenancy.js';
@@ -44,14 +44,44 @@ async function readConversation(db:Reader,profileId:string,id:string,window?:Mes
   const messages=await db.select().from(conversationMessages).where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id),gte(conversationMessages.position,start))).orderBy(asc(conversationMessages.position)).limit(CONVERSATION_LIMITS.messages);
   const [initialPrinciple]=row.initialPrincipleId?await db.select({id:principles.id,statement:principles.statement,state:principles.state}).from(principles)
     .where(and(eq(principles.profileId,profileId),eq(principles.id,row.initialPrincipleId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS))):[];
+  /* The chip above the composer: which keep this conversation is pointed at.
+   * Trimmed to 120 characters because that is this route's one and only text
+   * budget for a label — `GET /` previews a thread with
+   * `left(trim(m.content),120)` and `conversationPreview` slices to the same
+   * 120 — and a keep's text is unbounded, so handing the whole thing over for
+   * a chip would ship kilobytes per read to render one line. The reply reads
+   * the full text through `readConversationContext`; this field exists only so
+   * the person can see what they picked.
+   *
+   * No readability predicate, unlike `initialPrinciple` beside it: a principle
+   * can be machine-minted and not yet earned enough evidence to be shown, so
+   * reading one has a gate. A keep is the person's own saved words with no
+   * such state — owner scoping is the entire test, and `eq(profileId)` plus
+   * the composite FK are both already carrying it. */
+  const [initialInspiration]=row.initialInspirationId?await db.select({id:inspirations.id,text:sql<string>`left(trim(${inspirations.text}),120)`}).from(inspirations)
+    .where(and(eq(inspirations.profileId,profileId),eq(inspirations.id,row.initialInspirationId))):[];
   const saved=await db.select({messageId:inspirationConversationOrigins.messageId,inspirationId:inspirationConversationOrigins.inspirationId}).from(inspirationConversationOrigins)
     .where(and(eq(inspirationConversationOrigins.profileId,profileId),eq(inspirationConversationOrigins.conversationId,id)));
   const topic=window?await db.select({role:conversationMessages.role,content:conversationMessages.content}).from(conversationMessages)
     .where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id),eq(conversationMessages.role,'user')))
     .orderBy(sql`CASE WHEN trim(${conversationMessages.content}) IN (${sql.join(CONVERSATION_STARTERS.map(value=>sql`${value}`),sql`, `)}) THEN 1 ELSE 0 END`,asc(conversationMessages.position)).limit(1):messages;
-  return {...row,preview:conversationPreview(topic),...(window?{messageWindowStart:start}:{}),initialPrinciple:initialPrinciple??null,messages:(await projectConversationMessages(db,profileId,id,messages)).map(message=>({...message,savedInspirationIds:saved.filter(item=>item.messageId===message.id).map(item=>item.inspirationId)}))};
+  return {...row,preview:conversationPreview(topic),...(window?{messageWindowStart:start}:{}),initialPrinciple:initialPrinciple??null,initialInspiration:initialInspiration??null,messages:(await projectConversationMessages(db,profileId,id,messages)).map(message=>({...message,savedInspirationIds:saved.filter(item=>item.messageId===message.id).map(item=>item.inspirationId)}))};
 }
-
+/**
+ * The keep a conversation is being pointed at must exist AND be this
+ * profile's. Checked here rather than left to the composite FK not because the
+ * FK is unreliable — it is the thing that makes cross-profile pinning
+ * impossible to store — but because its refusal arrives as SQLSTATE 23503,
+ * which this route's `onError` does not translate and would therefore report
+ * as a 500 "could not be updated". A person picking a keep that was deleted in
+ * another tab has made an ordinary mistake and deserves the same 404 the
+ * principle start already gives them, not a server error. Belt and braces, in
+ * that order: the FK is the invariant, this is the sentence.
+ */
+async function requireOwnedInspiration(db:Reader,profileId:string,inspirationId:string){
+  const [source]=await db.select({id:inspirations.id}).from(inspirations).where(and(eq(inspirations.profileId,profileId),eq(inspirations.id,inspirationId)));
+  if(!source)throw new ConversationError('This inspiration is not available.',404);
+}
 
 export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMiddleware?:typeof requireAuth}={}){
   const routes=new Hono<ConversationEnv>(),database=deps.getDatabase??getDb;
@@ -81,7 +111,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
   });
   routes.post('/',async c=>{
     const window=messageWindow(c.req.query('from'),c.req.query('limit'));
-    const input=z.object({id:uuid,principleId:uuid.optional(),firstMessage:messageInput.omit({revision:true,correctsMessageId:true}).optional()}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
+    const input=z.object({id:uuid,principleId:uuid.optional(),inspirationId:uuid.optional(),firstMessage:messageInput.omit({revision:true,correctsMessageId:true}).optional()}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
     const profileId=c.get('conversationProfileId');
     const row=await database().transaction(async tx=>{
       await tx.select({id:profiles.id}).from(profiles).where(eq(profiles.id,profileId)).for('update');
@@ -92,7 +122,25 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
           const first=current.messages[0];
           // Source deletion clears its FK, but cannot make a committed first
           // message impossible to recover. A replay never restores that source.
-          if(current.initialPrincipleId!==null&&current.initialPrincipleId!==(input.data.principleId??null)||!first||first.role!=='user'||first.id!==input.data.firstMessage.id||first.content!==input.data.firstMessage.content)
+          //
+          // The keep is compared on exactly the same terms as the principle,
+          // for exactly the same reason: a create whose words match but whose
+          // declared starting point does not is a different create wearing the
+          // same id, and joining it would silently discard the caller's
+          // intent. The asymmetry both share — a conversation that started
+          // from nothing accepts a replay that names a source, but one that
+          // started from a source rejects a replay naming another — is
+          // deliberate: `null` is "unstated", not "stated as none".
+          //
+          // ONE KNOWN INTERACTION, recorded because it is not a bug to fix
+          // here: a PATCH that re-points the keep makes a later replay of the
+          // original create conflict, since the stored value is now the
+          // current pick rather than the created one. That window needs a
+          // first-send retry to arrive after a switch, and the person cannot
+          // switch until the conversation exists — and a 409 here is
+          // recoverable by re-reading, whereas storing a created-with value
+          // purely to answer replays would add a column nothing else reads.
+          if(current.initialPrincipleId!==null&&current.initialPrincipleId!==(input.data.principleId??null)||current.initialInspirationId!==null&&current.initialInspirationId!==(input.data.inspirationId??null)||!first||first.role!=='user'||first.id!==input.data.firstMessage.id||first.content!==input.data.firstMessage.content)
             throw new ConversationError('This conversation already began with different words.',409);
         }
         return windowedConversation(current,window,input.data.firstMessage?.id);
@@ -100,8 +148,9 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       const [count]=await tx.select({n:sql<number>`count(*)::int`}).from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt)));
       if(count.n>=CONVERSATION_LIMITS.conversations)throw new ConversationError('Conversation limit reached. Delete an old conversation first.',429);
       if(input.data.principleId){const [source]=await tx.select({id:principles.id}).from(principles).where(and(eq(principles.profileId,profileId),eq(principles.id,input.data.principleId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)));if(!source)throw new ConversationError('This principle is not available.',404);}
+      if(input.data.inspirationId)await requireOwnedInspiration(tx,profileId,input.data.inspirationId);
       const first=input.data.firstMessage;
-      await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null,revision:first?1:0});
+      await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null,initialInspirationId:input.data.inspirationId??null,revision:first?1:0});
       if(first){
         await tx.insert(conversationMessages).values({id:first.id,profileId,conversationId:input.data.id,position:1,role:'user',content:first.content});
         if(first.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,input.data.id,{messageId:first.id,afterRequestId:null});
@@ -118,6 +167,61 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     const row=await database().transaction(tx=>readConversation(tx,c.get('conversationProfileId'),id.data,window),{isolationLevel:'repeatable read',accessMode:'read only'});
     return c.json({conversation:row,...conversationCapabilities()});
   });
+  /**
+   * RE-POINT THE CONVERSATION AT A DIFFERENT KEEP, MID-THREAD.
+   *
+   * Founder: "user can pick an inspiration on the right and then like chat
+   * about it" — the rail stays on screen while they talk, so the pick is
+   * something they change, not something they declared once at create.
+   *
+   * PATCH `/:id` and not `POST /:id/inspiration`, because PATCH on the
+   * resource is what this codebase already does for a small scoped field
+   * change (`principles.ts`, `signals.ts`, `top-of-mind.ts`,
+   * `inspirations-editing.ts`, `attachment-transcripts.ts`), and because the
+   * field belongs to the conversation rather than being a sub-resource of it.
+   * It returns the identical `{conversation, ...capabilities}` envelope that
+   * GET and POST return, so the client re-renders from one shape instead of
+   * learning a second one for this one write.
+   *
+   * `inspirationId: null` CLEARS IT, and the schema is `.nullable()` rather
+   * than `.optional()` on purpose: an absent key and an explicit null would
+   * otherwise be indistinguishable, and "stop talking about this" is a real
+   * thing the person does. A strict body with exactly one required key means
+   * an empty `{}` is a 400 — it cannot be read as either intent.
+   *
+   * NO REVISION BUMP. `conversations.revision` is the message count that every
+   * concurrent writer compares against (`CONVERSATION_LIMITS.messages`, the
+   * position bound, the reply's staleness check); moving it because the rail
+   * changed would invalidate an in-flight send that is perfectly valid.
+   * `updatedAt` does move, because the thread list is ordered by it and the
+   * person did act on this conversation.
+   *
+   * NOTHING IS RE-GENERATED HERE. Switching the pick changes what the NEXT
+   * reply reads; it does not rewrite replies already given, which were
+   * grounded in what was pinned at the time and whose citations still prove
+   * it. A conversation whose history silently re-interpreted itself when the
+   * rail moved would be the world moving without the user moving it.
+   */
+  routes.patch('/:id',async c=>{
+    const id=uuid.safeParse(c.req.param('id'));if(!id.success)return c.json({error:'Invalid conversation'},400);
+    const window=messageWindow(c.req.query('from'),c.req.query('limit'));
+    const input=z.object({inspirationId:uuid.nullable()}).strict().safeParse(await c.req.json().catch(()=>null));
+    if(!input.success)return c.json({error:'Choose one of your saved inspirations, or null to clear it.'},400);
+    const profileId=c.get('conversationProfileId');
+    const row=await database().transaction(async tx=>{
+      // Locked before reading for the same reason Send locks: two rails
+      // clicked in two tabs must land in an order, and the one that returns
+      // last must return what is actually stored.
+      await tx.select({id:conversations.id}).from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id.data))).for('update');
+      const current=await readConversation(tx,profileId,id.data);
+      if(current.initialInspirationId===input.data.inspirationId)return windowedConversation(current,window);
+      if(input.data.inspirationId)await requireOwnedInspiration(tx,profileId,input.data.inspirationId);
+      await tx.update(conversations).set({initialInspirationId:input.data.inspirationId,updatedAt:new Date()})
+        .where(and(eq(conversations.profileId,profileId),eq(conversations.id,id.data)));
+      return windowedConversation(await readConversation(tx,profileId,id.data),window);
+    });
+    return c.json({conversation:row,...conversationCapabilities()});
+  });
   routes.get('/:id/context',async c=>c.json(await database().transaction(async tx=>{
     const profileId=c.get('conversationProfileId'),row=await readConversation(tx,profileId,c.req.param('id'));
     const lastUser=[...row.messages].reverse().find(message=>message.role==='user');
@@ -132,7 +236,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       });
       return {profileId,principles:bound('principle',8000),reading:bound('top_of_mind_entry',4000),inspirations:bound('inspiration',4000),...conversationCapabilities()};
     }
-    return readConversationContext(tx,profileId,conversationSearchQuery(row.messages),undefined,row.initialPrincipleId);
+    return readConversationContext(tx,profileId,conversationSearchQuery(row.messages),undefined,row.initialPrincipleId,row.initialInspirationId);
   },{isolationLevel:'repeatable read',accessMode:'read only'})));
   routes.post('/:id/messages',async c=>{
     const window=messageWindow(c.req.query('from'),c.req.query('limit'));

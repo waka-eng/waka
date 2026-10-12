@@ -1860,11 +1860,11 @@
 
 /* ═══ THE PAINTED SURFACE, AND THE INPUT IS A PASSENGER ON IT ═══════════
    Founder, pointing at this field: "search bar can also utilize some
-   reference from astryx."
+   reference from [a design system]."
 
    Everything below the `padding`/`border`/`radius` line used to be declared
    on the `<input>` itself, because the input WAS the box. It is not any more:
-   Astryx's `Typeahead` splits a search control into a "Input surface —
+   The reference library's typeahead component splits a search control into a "Input surface —
    Required: Painted control surface containing the editable input" and the
    things that sit on that surface (its "Icon-rendered start icon", its
    "Clear button"). A glyph and a clear cannot live inside an `<input>`, so
@@ -1918,7 +1918,7 @@
 }
 
 /* ═══ THE SEARCH GLYPH, DRAWN RATHER THAN IMPORTED ══════════════════════
-   Astryx's `CommandPalette` — the one component in that system whose only
+   The reference library's command-palette component — the one component in that system whose only
    job is search — marks it *Required*: "Search glyph: Required: Search
    symbol rendered by Icon in the default Input." And its `TextInput` rules
    name it as the thing that licenses a hidden label: "Only hide the label
@@ -1983,7 +1983,7 @@
 }
 
 /* ═══ THE CLEAR, WHICH IS THE WAY OUT OF A SEARCH ═══════════════════════
-   Astryx `TextInput`, under Do: "Add a clear button for search and filter
+   The reference library's text-input component, under Do: "Add a clear button for search and filter
    inputs so users can quickly reset without selecting all text." Here that
    is not a convenience, it is Law 2 — "every surface you can enter has a
    visible way out, and it costs one press". Typing in this field puts you in
@@ -4798,7 +4798,7 @@
      `width: 100%` and this is where the measure is decided. */
   max-width: min(26rem, calc(100vw - var(--sp-32)));
   /* ═══ THE BOUND LIVES ON THE SURFACE, NOT ON ITS CONTENT ═══════════════
-     Astryx, on Popover: "Don't assume scrolling alone means Popover is the
+     The reference, on popovers: "Don't assume scrolling alone means Popover is the
      wrong component; a bounded Popover may scroll while a focused anchored
      interaction remains appropriate." So a card taller than the screen is
      not a reason to go back to a page — it is a reason to bound the card.
@@ -5098,7 +5098,7 @@
    THE PAINT IS `.waka-account`'s AND ONLY THE TYPE IS HERE. Both cards hang
    off the same corner from the same two triggers, so one border, one
    ground, one measure and one viewport bound — a second surface would be
-   two products in one corner. Astryx names the split: the "Popover surface"
+   two products in one corner. The reference names the split: the "Popover surface"
    is owned by the popover, the content is "caller-supplied content rendered
    inside the surface".
 

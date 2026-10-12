@@ -20,7 +20,19 @@ export function conversationPromptSources(sources:ConversationSource[]):Conversa
   return sources.map(({kind,text,recordedAt,artifactVersion,historical,state,rank,locked,supportCurrent,truncated})=>({kind,text,...(recordedAt?{recordedAt}:{}),...(artifactVersion?{artifactVersion,historical}:{}),state,rank,locked,supportCurrent,truncated}));
 }
 /** Reuse exactly the serving predicates; no cached excerpts or model calls. */
-export async function readConversationContext(db:Reader,profileId:string,question:string,referenceIds?:ConversationReference[],initialPrincipleId?:string|null,queryVector?:number[],onRetrievalTrace?:(trace:ConversationRetrievalTrace)=>void){
+/**
+ * `initialInspirationId` is the keep the person has pointed this conversation
+ * at, and it is PINNED rather than ranked: present in `inspirations` whether
+ * or not either retrieval path would have found it, and first in the list.
+ *
+ * Why pinning and not a ranking boost: the founder's case is "pick an
+ * inspiration on the right and then like chat about it", and the sentence
+ * typed about a keep routinely shares no words and no embedding neighbourhood
+ * with it. A boost moves a candidate that was already a candidate; a keep that
+ * scored nothing has nothing to boost. Nothing short of pinning makes "the
+ * agent can read it" true.
+ */
+export async function readConversationContext(db:Reader,profileId:string,question:string,referenceIds?:ConversationReference[],initialPrincipleId?:string|null,initialInspirationId?:string|null,queryVector?:number[],onRetrievalTrace?:(trace:ConversationRetrievalTrace)=>void){
   return measurePerformanceStage('context_read','conversation',async()=>{
   const byKind=(kind:ConversationReference['kind'])=>referenceIds?.filter(row=>row.kind===kind).map(row=>row.id);
   const pIds=byKind('principle'),rIds=byKind('top_of_mind_entry'),iIds=byKind('inspiration');
@@ -37,6 +49,35 @@ export async function readConversationContext(db:Reader,profileId:string,questio
     const ids=rankConversationCandidates(i.map(row=>row.id),semantic.candidates,semantic.similarities);
     i=await readConversationMaterial(db,profileId,[],ids);
   }
+  /* THE PIN, APPLIED LAST so it survives both retrieval paths above — lexical
+   * on its own (`GET /:id/context`, and a reply with no embedding yet) and the
+   * hybrid re-read that replaces `i` wholesale when `queryVector` is supplied,
+   * which is the live path `conversation-replies.ts` takes. Pinning before
+   * either would have been silently discarded by the second one; this is the
+   * only position where one piece of code covers both.
+   *
+   * NOT WHEN `referenceIds` IS GIVEN. That is the historical-citation read
+   * (`readConversationReferenceSources`), which asks for an exact, closed set
+   * of sources so an old citation can be re-opened and its hash re-proved.
+   * An unrequested extra source there is not merely noise: `bound` below
+   * spends one shared character allowance in list order, so a pinned keep
+   * placed first would eat the allowance of the very source being re-opened
+   * and could truncate or drop it — turning "your citation changed" on for a
+   * record that never changed.
+   *
+   * Re-read rather than re-sorted in memory: `readConversationMaterial` is
+   * the only thing that knows how to assemble a keep's reflections and media
+   * into its excerpt, and a pinned keep that retrieval never saw has no row
+   * here to sort. Handing it the ids re-reads with `array_position` ordering,
+   * so the pin lands first and the retrieved order behind it is preserved.
+   *
+   * OWNER SCOPING COSTS NOTHING HERE: `readConversationMaterial` filters on
+   * `profileId`, so a foreign or deleted id yields no row and the pin simply
+   * does not appear — the same answer the composite FK already guarantees
+   * cannot be stored. Skipped entirely when the pin is already in front,
+   * which is the steady state once a conversation has one. */
+  if(initialInspirationId&&!referenceIds&&i[0]?.id!==initialInspirationId)
+    i=await readConversationMaterial(db,profileId,[],[initialInspirationId,...i.map(row=>row.id).filter(id=>id!==initialInspirationId)].slice(0,6));
   const bound=<T extends {id:string;text:string}>(kind:ConversationSource['kind'],rows:T[],allowance:number):ConversationSource[]=>rows.flatMap(row=>{
     if(allowance<=0)return [];const text=row.text.slice(0,Math.min(1600,allowance));allowance-=text.length;
     return [{...row,kind,text,hash:'hash' in row&&typeof row.hash==='string'?row.hash:conversationHash(row),truncated:text.length<row.text.length||('truncated' in row&&row.truncated===true)}];

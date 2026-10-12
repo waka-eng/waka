@@ -70,9 +70,30 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     history.unshift({role:row.role,content,...(row.correctsMessageId?{correction:true}:{})});characters+=content.length;
   }
   let retrievalTrace:ConversationRetrievalTrace|undefined;
-  const context=conversationUsesSavedSources(history)?await readConversationContext(db,profileId,conversationSearchQuery(history),undefined,conversation.initialPrincipleId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
+  const context=conversationUsesSavedSources(history)?await readConversationContext(db,profileId,conversationSearchQuery(history),undefined,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
   const [profile]=await db.select({locale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId));
-  const focusIndex=sources.findIndex(source=>source.kind==='principle'&&source.id===conversation.initialPrincipleId);
+  /* Pinning a keep into `sources` puts it in front of the model; pointing
+   * `focusSourceNumber` at it is what tells the model that THIS is the one the
+   * person is talking about. Without the second half, "the agent can read it"
+   * is still only "the agent was handed it among six" — and the picked keep
+   * sits after every principle and reading in the concatenation above, so its
+   * source number is never 1 and nothing in the prompt distinguishes it.
+   *
+   * The principle keeps precedence, and the fallback order is deliberate: a
+   * principle start is a fact about where the conversation came from and
+   * cannot change, so a conversation that has one has always had it, and
+   * demoting it would alter replies that work today. The inspiration pin takes
+   * the slot only when it is unoccupied, which is every conversation the
+   * founder's rail creates.
+   *
+   * One slot, not two. `focusSourceNumber` is singular and its prompt sentence
+   * is written for one source; adding a second focus field would have meant
+   * editing the conversation system prompt, which is a separately evaluated
+   * surface and not what was asked for here. */
+  const focusIndex=[
+    sources.findIndex(source=>source.kind==='principle'&&source.id===conversation.initialPrincipleId),
+    sources.findIndex(source=>source.kind==='inspiration'&&source.id===conversation.initialInspirationId),
+  ].find(index=>index>=0)??-1;
   const input:ConversationReplyInput={preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
   return {input,sources,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }

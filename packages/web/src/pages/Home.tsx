@@ -1856,7 +1856,46 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const posterSaidRef = useRef(new Map<string, string>());
   /** What the companion is saying: its own line when tapped, and the told
       weather when an arrival has something on the record to tell. */
-  const [charSay, setCharSay] = useState("");
+  const [charSay, setCharSayNow] = useState("");
+  /**
+   * ═══ NOTHING SPEAKS WHILE THE CREATURE IS CHANGING FORM ════════════════
+   *
+   * Founder, reporting this as a REGRESSION against a ruling they had
+   * already given: "did I not tell you that when I'm switching between me
+   * and my agent the speech bubble should be gone? Sometimes it's not gone.
+   * So most times it works properly, but sometimes the speech bubble stays
+   * on so maybe it's a bug."
+   *
+   * The ruling WAS implemented — see `turning` and `FORM_HUSH_MS`, which put
+   * the top-of-mind bubble down for the length of the turn. What it could not
+   * cover is the OTHER bubble: `charSay` is written from about twenty places,
+   * most of them the tail of a promise, and a promise that was started on the
+   * wall you just left lands on the wall you just arrived at. The turn is
+   * 650ms; a fetch is longer than that about as often as it is shorter, which
+   * is exactly "most times it works properly".
+   *
+   * SO THE SEAL IS ON THE WRITE, NOT ON THE RENDER. The obvious shape —
+   * hiding the aside bubble while `turning` — is wrong in a way worth
+   * recording: the stale sentence would still be in state, so it would pop
+   * UP the moment the hush expired, which is the reported bug with an extra
+   * 650ms of delay. A write that arrives during a turn is answering a
+   * question asked on another wall, and the honest thing to do with it is
+   * drop it.
+   *
+   * CLEARING IS ALWAYS ALLOWED. The seal exists to stop words appearing over
+   * the back of a turning creature; silence is never the thing it is
+   * protecting against, and `setCharSay('')` runs from the notepad, from
+   * drafts and from the 4s whisper timer, none of which may be deferred.
+   *
+   * Every call site keeps writing through `setCharSay` and is unchanged —
+   * the guard is the setter itself, because a rule that has to be repeated
+   * at twenty call sites is a rule that will be missed at the twenty-first.
+   */
+  const speechSealed = useRef(false);
+  const setCharSay = useCallback((next: string) => {
+    if (next !== "" && speechSealed.current) return;
+    setCharSayNow(next);
+  }, []);
   /**
    * ═══ THE CREATURE WAS JUST PRESSED, AND IS OFFERING ════════════════════
    *
@@ -1935,6 +1974,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
        bubble was torn down and rebuilt mid-press. One writer cannot do that
        to itself; the epoch below handles two presses of the same kind. */
     speechEpoch += 1;
+    /* A PRESS IS A QUESTION ASKED ON THE WALL YOU ARE ON NOW, so it lifts
+       the switch's seal (see the effect on `wallAddress`). Without this, the
+       650ms of quiet a wall change buys would also swallow the answer to a
+       press made inside it — which is reachable, because the press target
+       stays on screen while you walk between rooms even though it is pulled
+       during a form turn. The seal is for sentences from BEFORE the switch;
+       this one is from after it. */
+    speechSealed.current = false;
     setLit(true);
     if (litTimer.current !== null) window.clearTimeout(litTimer.current);
     litTimer.current = window.setTimeout(() => setLit(false), LIT_MS);
@@ -2466,6 +2513,82 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     const timer = window.setTimeout(() => setTurning(false), FORM_HUSH_MS);
     return () => window.clearTimeout(timer);
   }, [wallSeat]);
+  /**
+   * ═══ CHANGING WALL INVALIDATES SPEECH, THE SAME WAY A PRESS DOES ═══════
+   *
+   * THIS IS THE SECOND RACE FOUND IN THIS MACHINERY, and the difference from
+   * the first one is the whole point of having two guards.
+   *
+   *   The first (`speechEpoch`, added for "there are like glitches sometimes
+   *   in the speech bubble when I click on it too fast") is a race between
+   *   TWO PRESSES on the same wall: press N's sentence lands after press
+   *   N+1 asked for a different one, and the bubble swaps under the hand.
+   *   Every press takes a number and a late answer to a superseded question
+   *   is dropped. `creatureSpeaks` was the only thing that bumped it.
+   *
+   *   This one is a race between A PRESS AND A WALL. Nothing about the fetch
+   *   is superseded — nobody pressed again — so the epoch still matched and
+   *   `mine()` said yes. What changed is WHOSE DAY the answer is about:
+   *   `sayTheWeather` reads `atWallRef.current` to decide which profile to
+   *   ask for, so the sentence in flight is about the wall you were standing
+   *   on, and it arrived on the one you had switched to. Proven with the
+   *   weather route held open for 2.5s: press the creature on Me, switch to
+   *   My agent, and the agent's own line ("I haven't formed anything yet")
+   *   is overwritten by a sentence about your day — on the wall where the
+   *   companion is not even allowed to offer a save.
+   *
+   * SO THE WALL BUMPS THE EPOCH TOO. A switch is a change of subject, which
+   * is a stronger invalidation than a second press, and the guard that
+   * already exists for one should answer both rather than growing a second
+   * mechanism beside it.
+   *
+   * AND WHAT IS ALREADY UP GOES WITH IT. Founder: "the speech bubble should
+   * be gone." The epoch only stops the NEXT write; a sentence that had
+   * already landed before the switch would otherwise hang there for the rest
+   * of its 4s whisper, over a creature that is now somebody else. That path
+   * needs no race at all to reproduce, and it is the half of the bug that is
+   * not intermittent.
+   *
+   * KEYED ON THE WHOLE ADDRESS (`spaceKey`), not on `wallSeat` above.
+   * `wallSeat` deliberately collapses every room to one value because the
+   * FORM only has two faces, and walking between two rooms turns nothing.
+   * Speech is not about form, it is about subject: room A's news is as wrong
+   * in room B as yours is on your agent's wall.
+   *
+   * WHAT DOES NOT CLEAR HERE, decided deliberately:
+   *   - the top-of-mind bubble (`lead`) — `notes` is derived per wall and
+   *     already returns [] off the self wall, so it is RE-DERIVED rather
+   *     than stale. Clearing it would mean re-fetching what the new wall
+   *     already knows.
+   *   - the resting line (`restingWord`) — likewise computed from
+   *     `standingAsAgent` and the new wall's chrome, in the same render the
+   *     wall changed in. It cannot be stale.
+   *   - the offer bubble — already gone ("an agent should never prompt user
+   *     to save something"); nothing left to clear.
+   *   Both surviving ones go down for the turn anyway through `turning`,
+   *   which is the ruling's original implementation and still correct.
+   *
+   * `charSay` is the only one of the three that is a property of a MOMENT
+   * rather than of a wall, which is why it is the only one that has to be
+   * thrown away when the wall changes.
+   */
+  const spokenFor = useRef<string | null>(null);
+  const wallAddress = spaceKey(atWall);
+  useEffect(() => {
+    /* first render is an arrival, not a switch: the away-window weather is
+       told right after it and must not be sealed out of existence */
+    if (spokenFor.current === null) { spokenFor.current = wallAddress; return; }
+    if (spokenFor.current === wallAddress) return;
+    spokenFor.current = wallAddress;
+    speechEpoch += 1;
+    speechSealed.current = true;
+    setCharSay("");
+    /* The seal lifts with the turn, for the same reason the turn is how long
+       it is: until the creature is facing you again, any sentence would be
+       words over the back of its head. See `FORM_HUSH_MS`. */
+    const unseal = window.setTimeout(() => { speechSealed.current = false; }, FORM_HUSH_MS);
+    return () => { window.clearTimeout(unseal); speechSealed.current = false; };
+  }, [wallAddress, setCharSay]);
   const claimsFor = standingAsAgent ? atWall.id : undefined;
   /**
    * WHETHER THE CREATURE'S BUBBLE IS UP AND SPEAKING FOR THE WALL.

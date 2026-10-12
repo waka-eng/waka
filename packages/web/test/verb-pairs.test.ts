@@ -244,6 +244,21 @@ const REGISTER: Record<string, string> = {
     "ruling as a claim that signing in has no inverse.",
   updateAuthProfile: "RULED: an edit is its own inverse",
   updateAuthPreferences: "RULED: an edit is its own inverse",
+  /* WHAT A CONVERSATION IS ABOUT. Founder: "user can pick an inspiration
+     on the right and then like chat about it ... and then when the user
+     specifically brings that up then the agent can read it", and "let the
+     user switch inspirations while chatting about it."
+
+     ITS OWN INVERSE, AND THE PRODUCT WIRES IT. The same call clears the
+     pin by passing `null`, and the panel offers that as a named control
+     ("Read from everything again") rather than leaving it to be inferred
+     — which is the difference between a verb that happens to accept null
+     and a way back somebody can find. Nothing is deleted either way: the
+     keep is untouched and only what the reply may draw on changes. */
+  pinConversationInspiration:
+    "RULED: its own inverse — the same call with `null` returns the reply " +
+    "to reading from everything, and `ChatAside` offers that as a visible " +
+    "control rather than a hidden argument.",
   createProfile: "deleteProfile",
   deleteProfile: "createProfile",
   renameProfile: "RULED: an edit is its own inverse",

@@ -159,7 +159,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      narrows in place with no round trip and no empty frame between keys. */
   const [query, setQuery] = useState("");
   /* THE FIELD ITSELF, so the clear control can hand focus back to it.
-     Astryx's `TextInput` anatomy defines the clear as the thing that "resets
+     The reference library's text-input component anatomy defines the clear as the thing that "resets
      the value AND RETURNS FOCUS TO THE INPUT" — without the ref, pressing it
      would empty the field and leave the caret nowhere, so the next search
      costs a click the person should not have had to make. A ref rather than
@@ -510,7 +510,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                 {say("worldBackToAll")}
               </button>
             /* ═══ AND THE COUNT COUNTS WHAT IS ACTUALLY ON SCREEN ═════
-                Astryx's `PowerSearch` says it as a rule: "Provide a result
+                The reference library's power-search component says it as a rule: "Provide a result
                 count to give users feedback on how their filters affect the
                 data set." We do not need its tokenised filter bar — that page
                 itself sends simple keyword search away ("Use PowerSearch for
@@ -603,8 +603,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             stops being glanceable and finding becomes a real act. */}
         {/* ═══ THE FIELD IS A SURFACE WITH THINGS IN IT, NOT A BARE INPUT ══
             Founder, pointing at this field: "search bar can also utilize some
-            reference from astryx." Astryx is Meta's design system; its
-            `TextInput` page lists the anatomy a text field is allowed to have
+            reference from [a design system]." Its text-input page lists the anatomy a text field is allowed to have
             — Label, Description, Start icon, Placeholder, Clear button,
             Spinner, Status icon — and two of its rules name this exact field:
 
@@ -624,12 +623,12 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             box was the placeholder — and the placeholder is the one part of
             the anatomy that DISAPPEARS ON FOCUS. The moment you clicked it to
             type, the only thing on screen saying what it was went away, and
-            what was left was an empty rounded box above a list. Astryx states
+            what was left was an empty rounded box above a list. The reference states
             the prohibition directly: "Don't use placeholder text as a
             replacement for a label."
 
             So the box becomes the painted surface and the input moves inside
-            it — which is Astryx's own `Typeahead` anatomy, where the "Input
+            it — which is the reference library's own typeahead anatomy, where the "Input
             surface" is the "Painted control surface containing the editable
             input" and the glyph and the clear sit on that surface rather than
             on the input. The border, the corner and the focus edge all move
@@ -685,7 +684,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                 can still be emptied — `needle` trims, and a space you cannot
                 see is still a value you have to get rid of.
 
-                AND IT RETURNS FOCUS, which is Astryx's wording and not a
+                AND IT RETURNS FOCUS, which is the reference library's wording and not a
                 flourish: "a trailing × button that RESETS THE VALUE AND
                 RETURNS FOCUS TO THE INPUT." Clearing is almost always the
                 start of a different search, and a cleared field you then have

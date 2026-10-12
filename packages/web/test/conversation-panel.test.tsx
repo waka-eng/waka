@@ -232,7 +232,14 @@ it('keeps the surface to a transcript, a box and nothing at rest',async()=>{
   expect(host.querySelector('.chat-drawer-backdrop')).toBeNull();
   expect(host.querySelectorAll('select')).toHaveLength(0);
   expect(host.querySelectorAll('details')).toHaveLength(0);
-  expect(named()).toEqual(['Send']);
+  /* TWO CONTROLS AT REST, AND THE SECOND ONE EARNED ITS PLACE. The drawer's
+     trigger joined the footer when the founder asked for a way to pick what
+     a conversation is about — "user can pick an inspiration on the right and
+     then like chat about it" — and it is CLOSED by default, so what this
+     case protects is unchanged: nothing is open, nothing is stacked, and the
+     surface offers exactly the controls somebody can name. If a fifteenth
+     button is ever added here, this is still the test that should stop it. */
+  expect(named()).toEqual(['What this is about','Send']);
   expect(host.querySelector('textarea')!.value).toBe('A sentence in the box');
 });
 it('keeps the full-page composer within the visible keyboard viewport',async()=>{
@@ -265,7 +272,7 @@ it('sends one durable reply intent and displays the follow-up',async()=>{
   expect(host.textContent).toContain('Thinking about that…');completeReply();await tick();expect(host.textContent).toContain('Which condition matters most today?');
   /* The reply arrived, so nothing is being waited for and the one other
      control on the surface goes away with the sentence it interrupted. */
-  expect(host.textContent).not.toContain('Thinking about that…');expect(named()).toEqual(['Send']);
+  expect(host.textContent).not.toContain('Thinking about that…');expect(named()).toEqual(['What this is about','Send']);
 });
 it('stops a pending reply and still shows that the message was saved',async()=>{
   stored.generationEnabled=true;await mount();await type('Keep this question');await click('Send');
@@ -274,7 +281,7 @@ it('stops a pending reply and still shows that the message was saved',async()=>{
   /* AND NO WAY TO RE-RUN THE GENERATOR. "Retry reply" was the other half of
      this test; a stopped reply now ends in a sentence, and asking again means
      saying something again through the box. */
-  expect(named()).toEqual(['Send']);
+  expect(named()).toEqual(['What this is about','Send']);
   expect(host.querySelector('textarea')!.disabled).toBe(false);
 });
 it('does not jump away from older messages when a new reply arrives',async()=>{

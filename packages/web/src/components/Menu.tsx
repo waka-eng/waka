@@ -163,7 +163,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
    * The corner holds two triggers now (the "i" and the cog) and each opens
    * a card the width of the corner. Two independent `open` flags would let
    * both be true, and two 26rem cards stacked on the same right edge is a
-   * state nobody can read their way out of. Astryx says the same thing
+   * state nobody can read their way out of. The reference says the same thing
    * about the component class these cards belong to — Popover: "Don't nest
    * popovers inside other popovers; it creates confusing focus and
    * navigation." One slot means pressing either trigger puts the other
@@ -187,7 +187,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
    * (the scrim, Escape, a control inside it that is done) and all three left
    * focus nowhere.
    *
-   * Astryx puts this on Dialog rather than on Popover, but the reason it
+   * The reference puts this on dialogs rather than on popovers, but the reason it
    * gives is about the TRIGGER relationship, which these cards have in full:
    * the surface is "anchored to the trigger", so the trigger is where the
    * person was and where they should be put back. Focus moves BEFORE the
@@ -196,19 +196,19 @@ export function Menu({ locale, items, current, label, left, account, settings, o
    *
    * ── THREE THINGS THE REFERENCE OFFERS THAT ARE DELIBERATELY NOT HERE ───
    *
-   * A FOCUS TRAP. Astryx reserves it for Dialog, whose backdrop "blocks page
+   * A FOCUS TRAP. The reference reserves it for dialogs, whose backdrop "blocks page
    * interaction" — these cards do not block the page, and trapping focus in
    * a thing a person can click past is a cage with an open door. Our scrim
    * is a dismiss target, not a modal barrier.
    *
    * ARROW-KEY MOVEMENT BETWEEN THE GROUPS. That is DropdownMenu behaviour,
-   * and the settings card is explicitly not one — Astryx: "Don't use a
+   * and the settings card is explicitly not one — the reference: "Don't use a
    * DropdownMenu for navigation", and more to the point a DropdownMenu is
    * "a list of actionable items". The card is a name field, a language
    * picker and three Collapsibles, and Collapsible takes Tab. Adding arrows
    * would teach a menu model to something that is not a menu.
    *
-   * AN EXPLICIT CLOSE BUTTON. Astryx Popover: "Provide a clear way to close:
+   * AN EXPLICIT CLOSE BUTTON. The reference, on popovers: "Provide a clear way to close:
    * EITHER by clicking outside OR with an explicit close button." The scrim
    * is the first of those, and it is full-screen, so the clearer of the two
    * is already there. A visible "×" in a corner card would be the one piece
@@ -457,7 +457,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
               `.waka-account` is the corner's popover surface — the border,
               the raised ground, the measure, the bound that keeps it on a
               short screen — and both cards wear it so the corner has one
-              material rather than two. Astryx names this split exactly:
+              material rather than two. The reference names this split exactly:
               the "Popover surface" is "owned by Popover", and the
               "Popover content" is "caller-supplied content rendered inside
               the surface".

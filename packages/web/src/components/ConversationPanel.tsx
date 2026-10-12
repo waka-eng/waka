@@ -79,11 +79,12 @@
  * left; a reply that fails, stops or is rate-limited still prints a sentence
  * saying which. A quiet surface is not the same as a quiet failure.
  */
-import {useEffect,useLayoutEffect,useRef,useState} from 'react';
-import {createConversation,fetchConversation,listConversations,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
+import {useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
+import {createConversation,fetchConversation,listConversations,pinConversationInspiration,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
 import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage';
 import {useConversationReply} from '../lib/use-conversation-reply';
 import {Companion} from './Companion';
+import {ChatAside} from './ChatAside';
 import {ConversationText} from './ConversationText';
 import {HomeActionIcon} from './HomeActionIcon';
 import {timeOf} from '../lib/words';
@@ -248,6 +249,27 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
 
      THE ANCHOR IS THE CURRENT DRAFT, read through a ref so a sentence
      spoken over one already typed joins it rather than replacing it. */
+  /* ═══ PINNING, AND WHAT IT COSTS TO GET WRONG ════════════════════════
+     The write is small and the failure mode is not: a pin that looks
+     applied but did not land would have the person asking about a keep the
+     reply cannot see, and nothing on screen would say so. So the panel is
+     disabled while it is in flight, the conversation is re-read after it
+     lands rather than patched locally, and a refusal surfaces as the
+     surface's own error rather than silently reverting. */
+  /* CLOSED BY DEFAULT. Founder: "the default should be that inspiration
+     drawer is closed, but the user can open it if they want." Not in the
+     address: opening a drawer is not going anywhere, and a conversation
+     you could link to with its side panel already open would make a
+     reading preference part of the thing you shared. */
+  const [aboutOpen,setAboutOpen]=useState(false);
+  const [pinning,setPinning]=useState(false);
+  const pin=useCallback(async(inspirationId:string|null)=>{
+    if(!id||pinning)return;
+    setPinning(true);
+    try{await pinConversationInspiration(scope.profileId,id,inspirationId);await refresh();}
+    catch{setError(say('worldChatAboutFailed'));}
+    finally{setPinning(false);}
+  },[id,pinning,refresh,say,scope.profileId]);
   const dictation=useDictation(()=>draftRef.current?.content??'',(text)=>edit(text),locale);
   const first=conversation?.initialPrinciple??focusPrinciple,canCompose=!id||Boolean(conversation);
   const full=(conversation?.revision??0)>=(generationEnabled?199:200);
@@ -332,8 +354,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               Founder: "make the chat message list and the chat message
               thing also follow what you see on this AI chat conversation."
 
-              `role="log"` RATHER THAN A BARE LIST. Astryx's
-              `ChatMessageList` is documented as providing 'role="log" with
+              `role="log"` RATHER THAN A BARE LIST. The reference library's
+              message-list component is documented as providing 'role="log" with
               aria-live="polite"', and log is the right role for a
               transcript: it tells a screen reader this is a running record
               where new entries arrive at the end, which `aria-live` alone
@@ -404,7 +426,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             code by code, but reference this and modify to match our own
             thing."
 
-            Meta's Astryx publishes `ChatComposer` as five named parts, and
+            The reference library publishes `ChatComposer` as five named parts, and
             the naming is the useful bit rather than the styling:
 
               FRAME — groups the body with a status message ABOVE or BELOW
@@ -437,6 +459,27 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         <div className="chat-composer-body">
           <label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
           <div className="chat-composer-footer">
+            {/* ═══ WHAT THIS IS ABOUT, AT THE START OF THE FOOTER ═══════
+                Opposite the send actions, in the slot the reference
+                library reserves for contextual controls. It belongs here
+                rather than in a corner because what the panel changes is
+                what the NEXT message may draw on, and this is where the
+                next message is being written.
+
+                IT IS ALSO THE CHIP. When a keep is pinned the trigger
+                carries its lead line, so the thing the reply will read is
+                visible while typing without the drawer being open — the
+                reference's composer drawer uses a chip for exactly this.
+                Only on a real conversation: there is nothing to pin to
+                until the server has seen one. */}
+            {id&&conversation?<button type="button"
+              className={`chat-about${conversation.initialInspiration?' chat-about--pinned':''}`}
+              aria-expanded={aboutOpen}
+              onClick={()=>setAboutOpen(value=>!value)}>
+              {conversation.initialInspiration
+                ?(conversation.initialInspiration.text.split('\n')[0]??'').trim()
+                :say('worldChatAboutOpen')}
+            </button>:null}
             {/* ═══ THE SEND ACTIONS, AND DICTATION IS ONE OF THEM ═══════
                 The reference is explicit about where a microphone goes:
                 "place the dictation button in the sendActions slot of
@@ -491,5 +534,25 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         {draft?.pending?<button type="button" className="chat-recheck" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldConversationCheck')}</button>:null}
       </footer>:null}
     </section>
+    {/* ═══ WHAT THIS CONVERSATION IS ABOUT, BESIDE IT ═══════════════════
+        Founder: "let's have the right panel to show the inspiration while
+        you're chatting about it, and then let the user switch inspirations
+        while chatting about it ... when the user specifically brings that
+        up then the agent can read it."
+
+        A SIBLING OF THE TRANSCRIPT, NOT A SHEET OVER IT. This product has
+        spent the week removing surfaces that open on top of other
+        surfaces; a panel you have to dismiss to read the reply it is about
+        would be the worst version of that. `.chat-page` becomes a row wide
+        enough to hold both and stays a column when it is not — see
+        `.chat-aside`, where the one breakpoint is reasoned about.
+
+        ONLY ON A REAL CONVERSATION. Pinning is a fact about a conversation
+        and there is nothing to pin it to until one exists; a picker on a
+        blank new chat would write to an id the server has never seen. */}
+    {id&&conversation?<ChatAside locale={locale} profileId={scope.profileId}
+      open={aboutOpen} onClose={()=>setAboutOpen(false)}
+      pinned={conversation.initialInspiration??null} busy={pinning}
+      onPin={(next)=>{void pin(next);}}/>:null}
   </main>;
 }
