@@ -29,10 +29,23 @@
  *
  * A long switcher list is not the failure mode. A long home page is.
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { HowItWorksPanel } from "./HowItWorksPanel";
+import { AntechamberPanel } from "./AntechamberPanel";
+import { DuplicatesPanel } from "./DuplicatesPanel";
+import { HowItWorksPanel, type MachineryDoor } from "./HowItWorksPanel";
+import { ReadingPanel } from "./ReadingPanel";
 import { SettingsPanel, type SettingsPanelProps } from "./SettingsPanel";
+import {
+  fetchSignalDuplicates,
+  fetchTheReading,
+  fetchTheWeather,
+  resolveSignalDuplicate,
+  restoreSignal,
+  type ApiAntechamberRow,
+  type ApiReading,
+  type ApiSignalDuplicate,
+} from "../lib/api";
 import { t, type MessageKey, type SupportedLocale } from "../lib/locales";
 
 export interface MenuItem {
@@ -221,6 +234,100 @@ export function Menu({ locale, items, current, label, left, account, settings, o
     (corner === "info" ? infoTrigger : settingsTrigger).current?.focus();
     setCorner(null);
   };
+
+  /**
+   * ═══ THE THREE MACHINERY DOORS, AND WHY THEIR STATE IS HERE ═══════════
+   *
+   * How it reads you, the antechamber, the gardener's asks. They were
+   * deleted with the settings page (5df201f6) under a note calling it "the
+   * removal most worth disagreeing with", and `SettingsPanel`'s header named
+   * the home they wanted: "next to the top of mind rather than next to a
+   * language picker". `HowItWorksPanel` renders the rows; this component
+   * holds the state, the fetches and the surfaces, because the corner is
+   * what owns opening and closing things in this product and the panel that
+   * lists them must not have to know that.
+   *
+   * ONE DOOR AT A TIME, one value, for the same reason `corner` is one
+   * value rather than two booleans: three independent flags can all be
+   * true, and three centred `.jar-roomform` sheets on one screen is a state
+   * nobody can read their way out of.
+   *
+   * OPENING ONE CLOSES THE CARD IT WAS PRESSED IN. The founder has twice
+   * rejected a surface stacking on another surface, and the card and the
+   * sheet are two popovers deep — the reference is explicit that popovers do
+   * not nest. So the screen holds exactly one of: the card, a door, or
+   * neither.
+   *
+   * NO PRESS-AWAY, WHICH IS A DEPARTURE FROM `useDismissAway` AND ON
+   * PURPOSE. Each door is a `DialogSurface`, so Escape is answered by the
+   * surface itself, and each carries a visible one-press Close at its foot
+   * — Law 2 is satisfied twice before a press-away is considered. What a
+   * press-away would cost is specific: two of the three are surfaces you
+   * ANSWER in ("put it back", "these are one"), and a global pointerdown in
+   * capture would take the sheet away on a stray press next to the verb you
+   * were reaching for. `dismiss.ts` already records the antechamber as
+   * having left that hook "the other way", owning its own dismissal; this
+   * keeps that, rather than quietly changing it and leaving that file's
+   * header describing a product that no longer exists.
+   *
+   * CLOSING A DOOR PUTS FOCUS ON THE "i", NOT BACK IN THE CARD. The row
+   * that opened it has unmounted by then, so `DialogSurface`'s own
+   * restore-the-opener has nothing to restore to and would leave focus on
+   * `<body>` — the gap this corner already fixed once for the cards
+   * themselves. The "i" is the control that is still standing and is where
+   * the person came in, so one press from there is back in the card.
+   */
+  const [door, setDoor] = useState<MachineryDoor | null>(null);
+  const [theReading, setTheReading] = useState<ApiReading | null>(null);
+  const readingAsked = useRef(false);
+  const [antechamber, setAntechamber] = useState<ApiAntechamberRow[] | null>(null);
+  const [restoredAnchors, setRestoredAnchors] = useState<ReadonlySet<string>>(() => new Set());
+  const [duplicates, setDuplicates] = useState<ApiSignalDuplicate[] | null>(null);
+  const [resolvedDuplicates, setResolvedDuplicates] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const closeDoor = useCallback((): void => {
+    infoTrigger.current?.focus();
+    setDoor(null);
+  }, []);
+  const openDoor = useCallback((which: MachineryDoor): void => {
+    setCorner(null);
+    setDoor(which);
+    if (which === "reading") {
+      /* FETCHED ONCE AND HELD — the rules do not change mid-visit. The
+         guard is a ref rather than a read of `theReading`, because this
+         callback must not be rebuilt every time the fetch lands, and
+         because a side effect inside a state updater runs twice under
+         StrictMode: two GETs of the same immutable document, each writing
+         a consultation on the server. */
+      if (!readingAsked.current) {
+        readingAsked.current = true;
+        fetchTheReading()
+          .then(setTheReading)
+          .catch(() => {
+            /* the panel keeps saying it is still fetching, and a second
+               press is allowed to try again */
+            readingAsked.current = false;
+          });
+      }
+    } else if (which === "antechamber") {
+      /* REFETCHED EVERY TIME, unlike the reading. A refusal is answerable
+         from inside the panel, so what stood here a minute ago may be
+         wrong; and `null` is the pending state the panel says out loud. */
+      setAntechamber(null);
+      fetchTheWeather()
+        .then((weather) => setAntechamber(weather.antechamber))
+        .catch(() => setAntechamber([]));
+    } else {
+      setDuplicates(null);
+      fetchSignalDuplicates().then(setDuplicates).catch(() => setDuplicates([]));
+    }
+  }, []);
+  /* A DOOR GOES WHEN THE BAR GOES, like the cards above it — a sheet whose
+     chrome has left the screen is a sheet with no way back to anything. */
+  useEffect(() => {
+    if (hidden) setDoor(null);
+  }, [hidden]);
 
   /**
    * ESCAPE CLOSES THE CARD. THE PRESS-AWAY IS THE SCRIM, AND IT WAS MISSING.
@@ -474,7 +581,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
               name-and-address check really IS a note, and keeps it. */}
           {corner === "info" ? (
             <span className="waka-account">
-              <HowItWorksPanel locale={locale} />
+              <HowItWorksPanel locale={locale} onOpenDoor={openDoor} />
             </span>
           ) : settings ? (
             <span className="waka-account">
@@ -490,6 +597,60 @@ export function Menu({ locale, items, current, label, left, account, settings, o
             </span>
           )}
           </>
+        ) : null}
+
+        {/* ═══ THE THREE DOORS, OPEN OVER THE WORLD ════════════════════
+            Not inside the card: a 26rem popover cannot hold a fetching
+            diagnostic surface, and two popovers deep is the nesting the
+            reference rules out. Each is a centred `.jar-roomform` sheet, which
+            is how every other thing that opens over the world arrives, and
+            each owns its own Escape and its own visible Close.
+
+            THE WORLD BEHIND THEM DOES NOT MOVE — founder law — and the bar
+            stays where it is, which is the whole reason the "i" is still
+            reachable to come back to. */}
+        {door === "reading" ? (
+          <ReadingPanel locale={locale} reading={theReading} onClose={closeDoor} />
+        ) : null}
+
+        {door === "antechamber" ? (
+          <AntechamberPanel
+            locale={locale}
+            rows={antechamber}
+            onClose={closeDoor}
+            /* Answer in the same beat rather than waiting for a refetch; the
+               row only comes back if the server refused. */
+            onRestoreAnchor={(anchorSignalId) => {
+              setRestoredAnchors((prev) => new Set(prev).add(anchorSignalId));
+              restoreSignal(anchorSignalId).catch(() => {
+                setRestoredAnchors((prev) => {
+                  const next = new Set(prev);
+                  next.delete(anchorSignalId);
+                  return next;
+                });
+              });
+            }}
+            restoredAnchorIds={restoredAnchors}
+          />
+        ) : null}
+
+        {door === "duplicates" ? (
+          <DuplicatesPanel
+            locale={locale}
+            rows={duplicates}
+            onClose={closeDoor}
+            onResolve={(duplicateId, act) => {
+              setResolvedDuplicates((prev) => new Set(prev).add(duplicateId));
+              resolveSignalDuplicate(duplicateId, act).catch(() => {
+                setResolvedDuplicates((prev) => {
+                  const next = new Set(prev);
+                  next.delete(duplicateId);
+                  return next;
+                });
+              });
+            }}
+            resolvedIds={resolvedDuplicates}
+          />
         ) : null}
         </span>
       </div>

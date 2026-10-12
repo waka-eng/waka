@@ -48,23 +48,65 @@
  * NO NUMERALS, no "step 1 of 4". "States render, numerals never" is a
  * founder law, and reading order already says what order the loop runs in.
  *
- * ── WHAT IS DELIBERATELY STILL MISSING ───────────────────────────────────
+ * ── AND THE THREE MACHINERY DOORS, WHICH ARE WHY THIS PANEL IS NOT PROSE ─
  *
- * THE THREE MACHINERY DOORS — how it reads you, the antechamber, the
- * gardener's asks. They are the obvious next addition and THIS IS THE HOME
- * `SettingsPanel`'s header was pointing at: they SHOW what the product is
- * doing on your behalf, which is a stronger version of the promise these
- * paragraphs only describe. They are not here because their components and
- * their API clients were deleted with the page, and standing three fetching
- * surfaces back up is its own piece of work rather than a line in this one.
+ * How it reads you, the antechamber, the gardener's asks. They were deleted
+ * with the settings page in the morning of the same day, under a note
+ * calling that "the removal most worth disagreeing with", and
+ * `SettingsPanel`'s header said where they belonged: "next to the top of
+ * mind rather than next to a language picker". This is that home.
  *
- * Everything needed is one commit back. `git show 5df201f6^` has the three
- * panels — `src/components/ReadingPanel.tsx`, `AntechamberPanel.tsx` and
- * `DuplicatesPanel.tsx` — their clients (`src/lib/api/reading.ts`,
- * `consultations.ts`, `signal-duplicates.ts`), the markup that mounted them
- * in `src/pages/Profile.tsx`, and the headings `worldHowItReadsYou`,
- * `worldTheAntechamber` and `worldGardenerAsks`, which went out of both
- * catalogues with everything else and have to come back with them.
+ * THEY ARE THE PART THAT CANNOT BE FAKED. The five paragraphs above DESCRIBE
+ * what the machine does; these three SHOW it doing it — the rules it is
+ * actually enforcing, the sentences it refused and why, the pairs it thinks
+ * are one thing. The vague-explanation research is the whole argument (docs/
+ * craft/the-legible-loop.md, finding 8): an explanation disconnected from
+ * mechanism costs more trust than silence. An explainer panel with no door
+ * onto the mechanism is exactly that explanation.
+ *
+ * ── WHY THEY OPEN OVER THE WORLD AND NOT IN HERE ─────────────────────────
+ *
+ * This card is 26rem wide and already scrolls. Three fetching diagnostic
+ * surfaces — one of them a list of statement pairs with four verbs each —
+ * cannot be nested in it, and nesting them would also break the rule this
+ * corner was built on: the reference, on the component class these cards
+ * belong to, "Don't nest popovers inside other popovers". `Menu` holds ONE
+ * corner slot for exactly that reason.
+ *
+ * So pressing a door CLOSES THIS CARD and opens the door over the world,
+ * which is how every other destination in the product arrives. That is one
+ * surface on screen at a time, never two — the founder has twice rejected a
+ * surface stacking on another surface — and it is also what these three
+ * already were: each is a `DialogSurface` that was opened from a row on a
+ * page, so the interaction is recovered rather than invented. The state and
+ * the fetches live in `Menu`, which owns the corner; this component is the
+ * rows, and says nothing about what is behind them.
+ *
+ * ── WHY THE ROWS CARRY A MARK AND THE RUNGS DO NOT ───────────────────────
+ *
+ * The four rungs above are `dt`s set in ink. The three doors are buttons set
+ * in ink. Light is this product's only meaning channel and it has nothing
+ * left to say here — so without a mark the two groups are typographically
+ * identical and only one of them does anything when pressed. A chevron is
+ * the smallest honest difference, and it is the switcher's own chevron
+ * turned round, because "this opens" is the thing it already means
+ * elsewhere in the same bar.
+ *
+ * WHERE THEY LAND, MEASURED RATHER THAN ASSUMED. On a laptop and on a
+ * 390x844 phone all three rows are on screen with the card open and all
+ * three hit-test clean — the dock is the one thing that could have painted
+ * over the last of them and does not. On a 390x667 phone the card scrolls
+ * and the doors are below its fold, which is the card's designed behaviour
+ * and the cost of putting them last. It is the right cost: "the
+ * antechamber" means nothing until the paragraph above has said what it is
+ * an antechamber of, and a person who pressed an "i" came to read.
+ *
+ * ONE SENTENCE OVER ALL THREE, not a gloss under each. `worldMachineryLead`
+ * is recovered copy — it was the settings section's subtitle — and it names
+ * the three in order, so the person reads one line instead of three. Its
+ * title is NOT recovered: it said "How WAKA works", which is this panel's
+ * own heading, and a second copy of the heading four paragraphs down is the
+ * duplication Law 4 is about.
  */
 import { useId } from "react";
 
@@ -80,7 +122,32 @@ const RUNGS = [
   { label: "worldPrinciplesShortcut", body: "worldFormationPrinciples" },
 ] as const;
 
-export function HowItWorksPanel({ locale }: { locale: SupportedLocale }): JSX.Element {
+/** The three doors, in the order `worldMachineryLead` names them: what it
+ *  reads you by, what it set aside, what it thinks it is hearing twice. */
+const DOORS = ["reading", "antechamber", "duplicates"] as const;
+
+export type MachineryDoor = (typeof DOORS)[number];
+
+const DOOR_LABEL: Record<MachineryDoor, Parameters<typeof t>[1]> = {
+  reading: "worldHowItReadsYou",
+  antechamber: "worldTheAntechamber",
+  duplicates: "worldGardenerAsks",
+};
+
+export interface HowItWorksPanelProps {
+  locale: SupportedLocale;
+  /**
+   * Open one of the three doors.
+   *
+   * REQUIRED, NOT `onOpen?.()`. An optional handler with no default is the
+   * exact shape Law 8 records as having shipped three times here: the row
+   * renders, it is enabled, it is pressed, and nothing happens. A caller
+   * that cannot open these panels must not render this panel.
+   */
+  onOpenDoor: (door: MachineryDoor) => void;
+}
+
+export function HowItWorksPanel({ locale, onOpenDoor }: HowItWorksPanelProps): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
   /* THE HEADING NAMES THE PANEL, rather than an `aria-label` repeating it.
      The reference, on a dialog's header: the title "labels the dialog via
@@ -111,6 +178,38 @@ export function HowItWorksPanel({ locale }: { locale: SupportedLocale }): JSX.El
           person who read four paragraphs about how the machine works is
           owed the part where it says what it cannot do. */}
       <p className="waka-about-caveat">{say("worldFormationKeep")}</p>
+
+      {/* ═══ THE MACHINERY ITSELF, LAST AND BEHIND THREE ROWS ═══════════
+          Last because none of these three names means anything until the
+          loop has been described: "the antechamber" is a room of something,
+          and the paragraph above is what it is a room of. See the header
+          for why they open over the world rather than in here. */}
+      <div className="waka-about-doors">
+        <p className="waka-about-lead">{say("worldMachineryLead")}</p>
+        {DOORS.map((door) => (
+          <button
+            key={door}
+            type="button"
+            className="waka-about-door"
+            /* It opens a dialog, and says so rather than leaving a screen
+               reader to find out by arriving in one. */
+            aria-haspopup="dialog"
+            onClick={() => onOpenDoor(door)}
+          >
+            {say(DOOR_LABEL[door])}
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false">
+              <path
+                d="M4 2l3 3-3 3"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </svg>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
