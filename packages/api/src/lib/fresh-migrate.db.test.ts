@@ -70,12 +70,25 @@ describe("the first migration on an empty database", () => {
     freshUrl = url.replace(/\/[^/?]+(\?|$)/, `/${DATABASE}$1`);
   }, 60_000);
 
+  /* ═══ 60s, THE SAME CEILING ITS `beforeAll` ALREADY HAS ════════════════
+     This hook asked for no timeout and so inherited vitest's 45s default,
+     while the `beforeAll` directly above asks for 60. Under the full API
+     suite — 187 files, many holding Postgres connections — `DROP DATABASE
+     ... WITH (FORCE)` waits to terminate those backends and overran it.
+     The run then reported FAIL with `1842 passed, 0 failed`: a file-level
+     failure with no failing assertion, which is the shape that teaches
+     people to rerun CI instead of reading it.
+
+     IT IS A FIX, NOT A LONGER WAIT. After one such failure the orphaned
+     database was looked for and was already gone — the statement had
+     completed and the hook was merely slow. In isolation the same teardown
+     finishes in under a second. */
   afterAll(async () => {
     if (admin) {
       await admin.unsafe(`DROP DATABASE IF EXISTS "${DATABASE}" WITH (FORCE)`).catch(() => {});
       await admin.end();
     }
-  });
+  }, 60_000);
 
   it("applies the whole corpus through drizzle's own migrator, in one run", async () => {
     const sql = postgres(freshUrl, { max: 1, onnotice: () => {} });
@@ -308,7 +321,7 @@ describe("a database that migrated during the broken journal window", () => {
       await stuckAdmin.end();
     }
     if (staged) rmSync(staged, { recursive: true, force: true });
-  });
+  }, 60_000);
 
   it("receives `inspirations.category` anyway, through 0071", async () => {
     const folder = migrationsFolder();
