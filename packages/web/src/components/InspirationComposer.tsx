@@ -240,7 +240,7 @@ export function InspirationComposer(props: {
         NO TRAILING VERB HERE. A note that does not exist yet cannot be
         deleted; the slot is for a verb ABOUT the note and a new one has
         none. */}
-    <NotePage locale={props.locale} whenMs={when.current} onBack={props.onPast} backTo="worldBackToAll">
+    <NotePage locale={props.locale} whenMs={when.current}>
     <div className="jar-composer-body">
     <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={4} value={props.text} readOnly={props.busy || !props.ready || props.recording.phase !== 'idle'}
       aria-label={say('worldCaptureInspiration')} placeholder={say('worldCapturePrompt')}

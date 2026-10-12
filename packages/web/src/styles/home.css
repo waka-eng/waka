@@ -4881,10 +4881,37 @@
      screen's left margin where a thumb finds it — inside the 34rem reading
      column it floated into the middle of the page beside the words, which is
      nowhere a back button has ever been. */
+  /* ═══ THE MIDDLE TRACK, NAMED RATHER THAN COUNTED ════════════════════
+     The date used to be the row's second child and landed in the second
+     track by source order. The chevron in front of it is gone — founder:
+     "I can just go to all the inspirations using the bottom panel" — so by
+     source order it would now be FIRST, and a date hanging off the left
+     margin is not where this page puts it.
+
+     The alternative is an empty element holding the first track open, which
+     is a node in the document whose entire job is to be nothing. Saying
+     which column each child belongs in is the same outcome with nothing to
+     explain, and it survives the next change to what is in this row. */
+  .jar-note-when { grid-column: 2; }
+
+  /* ═══ THE ROW IS THE SAME HEIGHT WITH OR WITHOUT THE VERB ═════════════
+     Measured in a browser: a new note's row was the date's own 18px and a
+     saved note's was 32, because Delete is a control and controls are
+     taller than text. `align-items: center` then put the date 7px lower on
+     one page than the other and the first line of words 14px lower — a
+     difference nobody would name and everybody would feel, on the two
+     pages the founder asked to be identical.
+
+     THE FLOOR IS THE VERB'S OWN HEIGHT, so the row never grows past what
+     it already was; what changes is that a row with nothing in the third
+     track no longer collapses. */
+  .jar-note-top { min-height: 32px; }
+
   /* THE VERB SITS AT THE FAR END OF ITS TRACK. `1fr` would otherwise let a
      two-button confirmation ("Delete it anyway · Not now") start at the
      track's left edge, which is the middle of the page. */
   .jar-note-verb {
+    grid-column: 3;
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;

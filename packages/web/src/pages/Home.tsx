@@ -2726,6 +2726,35 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      See `NoteTools`, which fills it through a portal — ownership does not
      move, only the DOM does. */
   const [savedNoteOpen, setSavedNoteOpen] = useState(false);
+  /* HOW TO LEAVE IT, HELD WHERE THE DOCK CAN REACH IT. Since the chevron
+     went — founder: "I can just go to all the inspirations using the bottom
+     panel" — pressing Inspirations IS the way out of an open note, and
+     leaving commits what was typed. A ref rather than state: it is replaced
+     on every keystroke (the closer captures the draft), and re-rendering
+     the world for that would be a frame of work per character. */
+  const closeSavedNote = useRef<(() => void) | null>(null);
+  const savedNoteChanged = useCallback((close: (() => void) | null) => {
+    closeSavedNote.current = close;
+    setSavedNoteOpen(Boolean(close));
+  }, []);
+  /* ═══ EVERY WAY OUT OF A NOTE COMMITS IT ═══════════════════════════════
+     Not only Inspirations. With no chevron on the page, all five of the
+     bar's presses are exits from an open note, and four of them used to
+     unmount the archive underneath it — which fires no autosave, because
+     the autosave lives in the component being unmounted.
+
+     THAT BUG PREDATES THE CHEVRON'S REMOVAL. Pressing Now from an edited
+     note has always discarded it; the chevron merely gave people a path
+     that did not. Removing the chevron is what made it the only path, so
+     it is fixed here rather than noted.
+
+     IT DOES NOT AWAIT. `leaveNote` fires the write and the navigation
+     happens; the request completes whether or not this component is still
+     mounted, and `leaveNote`'s own `mounted.current` guards keep it from
+     writing state into a page that has gone. Awaiting would hold the bar
+     unresponsive for the length of a round trip, which is the thing a
+     bottom bar must never do. */
+  const commitOpenNote = useCallback(() => { closeSavedNote.current?.(); }, []);
   const [settingsName, setSettingsName] = useState<string | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsFailed, setSettingsFailed] = useState(false);
@@ -16939,7 +16968,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                dark — the two rows that could tell you where you are, both
                wrong, on the one surface that already had the worst record
                for leaving people lost. */
-            { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open && !viewNavigation.view?.compose && !viewNavigation.view?.conversationId, go: () => { if (viewNavigation.view?.compose) saveAsDraft(); else openOverHome(null); } },
+            { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open && !viewNavigation.view?.compose && !viewNavigation.view?.conversationId, go: () => { commitOpenNote(); if (viewNavigation.view?.compose) saveAsDraft(); else openOverHome(null); } },
             /* SAVE IS NOT A TAB. Founder: "home, inspirations -> let see list
                of past inspirations with main CTA to save new, chat -> see
                list of past chats with main CTA to start new chat,
@@ -16965,7 +16994,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
                One verb for making things, in the one place every phone puts
                it, and the nouns mean what they say. */
-            { id: 'saves', label: 'worldDockSaves' as const, here: viewNavigation.view?.open === 'saves', go: () => openOverHome('saves') },
+            /* AND IT IS THE WAY OUT OF AN OPEN NOTE, which is what the
+               chevron used to be. Founder: "I still don't get why you have
+               this carrot button when I do new inspiration, because I can
+               just go to all the inspirations using the bottom panel."
+               Closing commits what was typed — see `onNoteOpen` in
+               `SavesOverlay`, which hands up `leaveNote` rather than a
+               flag, precisely so this press cannot discard an edit. */
+            { id: 'saves', label: 'worldDockSaves' as const, here: viewNavigation.view?.open === 'saves',
+              go: () => { const close = closeSavedNote.current; if (close) close(); else openOverHome('saves'); } },
             /* THE PLUS. Not a place, so it does not light and does not take
                `aria-current`: it is the only verb in a row of nouns, and the
                sheet it raises is where the verb is chosen. */
@@ -16975,8 +17012,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                the ladder's order — what you kept, what you said about it,
                what has endured — so the row reads left to right the way the
                material actually moves. */
-            { id: 'talk', label: 'worldDockTalk' as const, here: viewNavigation.view?.open === 'conversations' || Boolean(viewNavigation.view?.conversationId), go: () => openOverHome('conversations') },
-            { id: 'principles', label: 'worldDockPrinciples' as const, here: viewNavigation.view?.open === 'principles', go: () => openOverHome('principles') },
+            { id: 'talk', label: 'worldDockTalk' as const, here: viewNavigation.view?.open === 'conversations' || Boolean(viewNavigation.view?.conversationId), go: () => { commitOpenNote(); openOverHome('conversations'); } },
+            { id: 'principles', label: 'worldDockPrinciples' as const, here: viewNavigation.view?.open === 'principles', go: () => { commitOpenNote(); openOverHome('principles'); } },
           ]).map(item => (
             /* THE SHEET HANGS OFF THE PLUS, not off the middle of the screen.
                Founder, with a screenshot: "this not being aligned with the +
@@ -17148,25 +17185,43 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     Save on a blank page is a button for a thing that does not
                     exist." A blank note still leaves by the chevron or by
                     Now. */}
+                {/* ═══ ONE MARK, NOT TWO WORDS ═══════════════════════════
+                    Founder, with "Save as draft" and "Save" standing beside
+                    each other in the bar: "this is so confusing. Save as
+                    draft and save are... let's just have a save icon.
+                    There's no save as draft. There's just a save icon."
+
+                    THE PAIR WAS WRONG EVEN THOUGH BOTH WERE TRUE. Naming
+                    the draft exit was meant as honesty — leaving already
+                    keeps your words, and nothing said so — but putting it
+                    beside Save turned an invisible safety net into a
+                    DECISION, and a decision between two things that both
+                    sound like saving. The founder read them as two kinds of
+                    save, which is exactly what they look like.
+
+                    SO THE NET GOES BACK TO BEING A NET. `saveAsDraft` is
+                    still what Now and every other way out call, and the
+                    words are still kept; it simply is not a button any
+                    more. That is the reference's behaviour — Apple Notes
+                    has no "save as draft" either — and it is what the
+                    founder has asked for twice now under "only the most
+                    absolutely necessary things should be shown".
+
+                    A GLYPH, BESIDE TWO GLYPHS. The bar's middle slot is
+                    the mic and the photo; a word between them was the odd
+                    one out, and "Save" at 12px in a filled pill was wider
+                    than both of them together. The name stays on the
+                    `aria-label`, where it is read in full. */}
                 {composerHasWords ? (
-                  <>
-                    <button type="button" className="waka-dock-tool waka-dock-tool--wide"
-                      disabled={recording.phase !== 'idle'}
-                      onClick={saveAsDraft}>{say('worldSaveDraft')}</button>
-                    {/* THE WORD IS "SAVE" AND THE NAME IS LONGER, which is
-                        the split every short label in a bar needs: beside
-                        "Save as draft" one word is unambiguous, and read
-                        aloud on its own by a screen reader it is not. */}
-                    <button type="button" className="waka-dock-tool waka-dock-tool--keep"
-                      aria-label={say('worldSaveInspiration')}
-                      /* AND IT SAYS WHY IT CANNOT BE PRESSED, the same way
-                         the chat's Send does and for the reason written
-                         there: the reason belongs to the control, and is
-                         wanted only by somebody who has just tried. */
-                      title={whyNotKeeping ? say(whyNotKeeping) : undefined}
-                      disabled={!composerCanKeep}
-                      onClick={() => { void keepIt(); }}>{say('worldSave')}</button>
-                  </>
+                  <button type="button" className="waka-dock-tool waka-dock-tool--keep"
+                    aria-label={say('worldSaveInspiration')}
+                    /* AND IT SAYS WHY IT CANNOT BE PRESSED, the same way the
+                       chat's Send does and for the reason written there: the
+                       reason belongs to the control, and is wanted only by
+                       somebody who has just tried. */
+                    title={whyNotKeeping ? say(whyNotKeeping) : undefined}
+                    disabled={!composerCanKeep}
+                    onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep"/></button>
                 ) : null}
 
                 {/* ═══ AND THE TRANSIENT STATE, IN THE BAR AND NOWHERE ELSE ══
@@ -17356,7 +17411,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           copy that only it printed. `ReadingPanel` is untouched — it is a
           different component and `/profile` still renders it. */}
       {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
-        onNoteOpen={setSavedNoteOpen}
+        onNoteOpen={savedNoteChanged}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         title={say(atWall.kind==='agent'?'worldAgentField':'worldMenuField')}

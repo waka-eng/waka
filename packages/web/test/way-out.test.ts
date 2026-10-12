@@ -165,6 +165,28 @@ function closedByAVisibleButton(span: string): boolean {
  * is not actually a dock destination fails both checks.
  */
 const LEFT_BY_THE_DOCK: Record<string, string> = {
+  /* THE NOTEPAD JOINED 2026-10-11, and it is the entry that needed the
+     most argument because it is the only one that HAD a visible exit and
+     gave it up.
+
+     Founder: "I still don't get why you have this carrot button when I do
+     new inspiration, because I can just go to all the inspirations using
+     the bottom panel. So don't do that."
+
+     That is this map's premise stated by the person it is for. The chevron
+     had already been argued down twice — it lost its box ("why is this
+     still here?") and then its words ("remove the all inspirations thing")
+     — and what was left was a glyph pointing at a room the dock names in a
+     word and reaches in one press. Three rounds of making a control
+     quieter, when the finding was that it was a second door.
+
+     THE VALUE IS "saves" BECAUSE THAT IS WHERE IT LEAVES TO: pressing
+     Inspirations from a note goes to the archive the note is about to join,
+     which is where the chevron went. The checks below then hold the claim
+     to the product — the row has to exist, and the bar has to be up while
+     this page is open, which the compose check further down now asserts
+     directly rather than by implication. */
+  "components/InspirationComposer.tsx": "saves",
   "components/SavesOverlay.tsx": "saves",
   "components/ConversationsOverlay.tsx": "conversations",
   "components/PrinciplesOverlay.tsx": "principles",
@@ -289,6 +311,17 @@ describe("every surface has a way out you can see", () => {
       "the dock is hidden while a destination is open, so the surfaces in " +
         "LEFT_BY_THE_DOCK have no way out at all",
     ).not.toMatch(/view\?\.open/);
+    /* AND IT STANDS ON THE NOTEPAD, which is the newest entry in that map
+       and the only one whose own exit was removed on the strength of this
+       being true. A condition that hid the bar while `view.compose` was set
+       would leave a half-written note with no way out at all — the exact
+       trap this file is named for, reintroduced by a change that looks like
+       tidying. */
+    expect(
+      condition![1],
+      "the dock is hidden while a note is being written, and the notepad " +
+        "gave up its chevron on the promise that it would not be",
+    ).not.toMatch(/view\?\.compose/);
 
     const orphans = Object.entries(LEFT_BY_THE_DOCK).filter(([file, id]) => {
       let text: string;

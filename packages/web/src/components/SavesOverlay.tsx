@@ -85,20 +85,28 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       behind is yours or your agent's. */
   title: string;
   /**
-   * WHETHER A NOTE IS OPEN IN HERE, SO THE BAR CAN TRANSFORM.
+   * WHETHER A NOTE IS OPEN IN HERE, AND HOW TO LEAVE IT.
    *
    * Founder, of an opened saved inspiration: "the bottom bar should also
    * change." It transforms while a NEW note is being written — the plus
    * becomes record and photo — and an opened saved note is the same page,
    * so it has to do the same thing.
    *
-   * A BOOLEAN AND NOT THE NOTE. The dock needs to know THAT it should swap
-   * its middle slot; what goes in that slot is this component's business,
-   * and it puts it there itself (see `DOCK_SLOT`). Passing the row up would
-   * give the world a second opinion about which note is open, which is the
-   * kind of duplicate state this pass exists to remove.
+   * IT HANDS UP A CLOSER, NOT THE NOTE. Two things need it. The dock swaps
+   * its middle slot while this is non-null, and — since the chevron went
+   * (founder: "I can just go to all the inspirations using the bottom
+   * panel") — pressing Inspirations in the bar IS the way back out of an
+   * open note, so the bar has to be able to close one.
+   *
+   * AND CLOSING IS NOT `setOpen(null)`. It is `leaveNote`, which commits
+   * what was typed on the way out — the autosave this page is built around.
+   * Handing up a boolean and letting the world clear its own flag would
+   * have been the version of this that silently discards edits.
+   *
+   * WHAT IS NOT HANDED UP is which note, or its words, or anything else the
+   * world could form a second opinion with.
    */
-  onNoteOpen?: (open: boolean) => void;
+  onNoteOpen?: (close: (() => void) | null) => void;
   /**
    * WHOSE ARCHIVE THIS COULD BE INSTEAD — asked in the corner, not here.
    *
@@ -336,12 +344,18 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
 
   /* TELL THE BAR, AND UNTELL IT ON THE WAY OUT. The cleanup matters more
      than the call: an archive unmounted with a note open would leave the
-     dock holding a mic for a page that is no longer on screen. */
+     dock holding a mic — and a way out — for a page that is no longer on
+     screen.
+
+     IT RE-RUNS WHEN `leaveNote` CHANGES, which is on every keystroke,
+     because that callback closes over the draft. That is the point rather
+     than a cost: the bar must hold the CURRENT closer, or pressing
+     Inspirations would commit the words as they were when the note opened. */
   const openId = open?.id ?? null;
   useEffect(() => {
-    onNoteOpen?.(openId !== null);
-    return () => onNoteOpen?.(false);
-  }, [openId, onNoteOpen]);
+    onNoteOpen?.(openId === null ? null : () => void leaveNote());
+    return () => onNoteOpen?.(null);
+  }, [openId, onNoteOpen, leaveNote]);
 
   /* Case-folded substring over the preview, which is what a person reading the
      grid can actually see. Matching text they cannot read would return cards
@@ -667,9 +681,6 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             <NotePage
               locale={locale}
               whenMs={open.capturedMs}
-              onBack={() => void leaveNote()}
-              backTo="worldBackToAll"
-              backBusy={saving}
               trailing={asking ? (
                 <>
                   <button type="button" className="waka-note-erase" disabled={saving}
