@@ -606,45 +606,26 @@ body {
   padding: 10px var(--sp-12);
 }
 
-.form-success {
-  font-size: var(--t-ui);
-  color: var(--ink);
-  background: rgba(15, 15, 14, 0.04);
-  border: var(--border-hairline);
-  padding: 10px var(--sp-12);
-}.btn-destructive {
-  border: var(--border-hairline);
-  border-radius: var(--radius-none);
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-  line-height: 1;
-  padding: var(--sp-10) 13px;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard),
-    opacity var(--duration-fast) var(--ease-standard);
-}
+/* ═══ `.form-success` AND `.btn-destructive` ARE GONE FROM THIS FILE ════
+   Both were `Profile.tsx`'s, and `Profile.tsx` was deleted on 2026-10-11
+   with the `/profile` route. Five blocks went: `.form-success`, the
+   `.btn-destructive` base (hairline, square, `--sp-10` 13px),
+   `.btn-destructive { justify-self; color }`, `.btn-destructive:not(:disabled)`
+   and the `:hover:not(:disabled), :focus-visible` pair — along with the
+   comment above them, "THE THREE DOORS INTO THE MACHINERY", which named
+   `ReadingPanel`, `AntechamberPanel` and `DuplicatesPanel`. Those three
+   components were deleted the same day.
 
-/* THE THREE DOORS INTO THE MACHINERY.
-   Quiet text, wrapping rather than colliding — they are things to look at
-   once, not controls to reach for, so none of them is a filled button. */
+   THREE COLOUR LITERALS WENT WITH THEM: `rgba(15, 15, 14, 0.04)`,
+   `rgba(179, 38, 30, 0.45)` and `rgba(179, 38, 30, 0.08)` — the only red
+   fill and the only red border in the product, kept alive by a page that no
+   longer exists while `chrome.css`'s own actions note says in capitals
+   "There is no red anywhere in Waka". `COLOUR_CEILING` in
+   `test/type-scale.test.ts` was lowered by this deletion, which is what
+   that ratchet is for. The error TEXT colour stays: `--error` is a token
+   and `.form-error` above still renders.
 
-.btn-destructive {
-  justify-self: start;
-  color: var(--muted);
-}
-
-.btn-destructive:not(:disabled) {
-  border-color: rgba(179, 38, 30, 0.45);
-  color: var(--error);
-}
-
-.btn-destructive:hover:not(:disabled),
-.btn-destructive:focus-visible {
-  background: rgba(179, 38, 30, 0.08);
-  outline: 0;
-}
+   `git show ea1727db:packages/web/src/styles/global.css`, lines 609-647. */
 
 
 .btn-primary:disabled {
@@ -1132,19 +1113,13 @@ textarea {
 /* it rests at `--ink-3`; focus lifts it the rest of the way, which is the
    same move its own `:hover` makes and the same one the world's chrome makes */
 
-/* Rooms arrive rather than blink: a short rise, no layout properties. */
-
-
-@keyframes profile-room-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+/* `@keyframes profile-room-in` WENT WITH `Profile.tsx` (2026-10-11). It was
+   the room list's arrival — "rooms arrive rather than blink: a short rise,
+   no layout properties" — and no `animation` property in any sheet in
+   `src/styles` named it any more. A keyframes block is invisible to a
+   class-name sweep, which is why it is called out rather than counted:
+   `@keyframes` is the one kind of dead CSS in this tree that neither
+   `e2e:dead-css` nor the review's own class resolver can see. */
 
 
 @media (prefers-reduced-motion: reduce) {

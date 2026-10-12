@@ -68,9 +68,42 @@ import { launchChromium } from "./browser";
 import { openTheNotepad, saveAnInspiration } from "./keep";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STYLES = resolve(HERE, "../../packages/web/src/styles");
-/** The sheets a rule can be attributed back to, in load order. */
-const SOURCES = ["layers.css", "global.css", "system.css", "chrome.css", "home.css"] as const;
-
+/**
+ * The sheets a rule can be attributed back to, in load order.
+ *
+ * `claims.css` AND `chat.css` JOINED ON 2026-10-12, and the omission was not
+ * an attribution gap — it was a COVERAGE gap, because this list is also what
+ * builds `ask.list`, the second pass that puts every selector to
+ * `querySelectorAll` on every surface. Any sheet missing from here is not
+ * asked about at all: its rules can appear in the matched half of the report
+ * (the protocol hands back whatever matched, whatever file it came from) and
+ * can NEVER appear in the UNUSED half, however dead they are. So the two
+ * largest sheets in the tree — 5.6k lines of `claims.css` and 1k of
+ * `chat.css`, holding the corners, the settings panel, all three overlays,
+ * the note page, the composer, the speech bubble and the whole chat console —
+ * were the only live sheets whose dead rules this walk structurally could not
+ * see. It reported 94 unreachable selectors and none of them could have been
+ * from either.
+ *
+ * It is the same omission, with the same cause and the same cost, that
+ * `type-scale.test.ts` and `one-class-one-thing.test.ts` both fixed on
+ * 2026-10-10 by adding these two files to their own hand-written lists. A
+ * gate with a hand-written list of what it watches only watches the past —
+ * `one-class-one-thing.test.ts`'s words — and this was the third copy of that
+ * list and the last one still describing 2026-08.
+ *
+ * `mobile-fonts.css` is deliberately absent: ten lines, one `@font-face`
+ * group, no selectors to ask about.
+ */
+const SOURCES = [
+  "layers.css",
+  "global.css",
+  "system.css",
+  "chrome.css",
+  "home.css",
+  "claims.css",
+  "chat.css",
+] as const;
 interface Seen {
   /** `selectorList.text`, as the browser normalised it. */
   selector: string;
@@ -591,25 +624,57 @@ async function surfaces(
     console.log("  a memory open         NOT WALKED — no card opened");
   }
 
-  /* AND THE THINGS THE WORLD ITSELF OPENS. */
+  /* ═══ AND THE THINGS THE WORLD ITSELF OPENS ════════════════════════
+     `["your settings", ".jar-account"]` WAS HERE AND COULD NEVER OPEN.
+     `.jar-account` has no renderer in `src` — it was the world's own way to
+     the settings PAGE, and settings is a panel on the corner now, walked
+     below under the name `settings`. So the step printed
+     `your settings NOT WALKED — it did not open` on every run AND duplicated
+     a surface name that was already covered (M7,
+     `docs/reviews/cleanliness-2026-10-11.md`).
+
+     `the timeline` IS A DIFFERENT CASE and is why this is a rewrite rather
+     than a deletion: `.jar-when` IS LIVE (`Home.tsx:16881`) and the step was
+     still failing, which the review correctly called a real walk defect. The
+     reason is its render condition —
+
+         dial && phase === "ready" && !dialAway
+           && (atWall.kind === "group" || parkedAt !== null)
+
+     — so on a fresh account standing at its own wall at NOW, the control does
+     not exist. A room would satisfy the first branch and rooms cannot be made
+     any more (see the note further down); the second branch is reachable, by
+     WINDING THE DIAL AWAY FROM NOW FIRST. That is what a person does before
+     they ever see this control, so it is what the walk does: press a stop
+     that is not `now`, which sets `parkedAt`, and only then look for the way
+     back. If there is only one stop on a young account, the reason is printed
+     rather than a bare timeout. */
+  /* FROM A FRESH LOAD, same reason as every other re-entry in this walk:
+     the card states above leave modals standing, and a dial stop under an
+     invisible leftover is found-but-not-actionable. */
   await page.keyboard.press("Escape");
   await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(6_000);
-  for (const [what, selector] of [
-    ["the timeline", ".jar-when"],
-    ["your settings", ".jar-account"],
-  ] as Array<[string, string]>) {
-    try {
-      await page.locator(selector).first().click({ timeout: 6_000 });
+  try {
+    const stops = page.locator(".jar-dial-stop");
+    const howMany = await stops.count();
+    if (howMany < 2) {
+      console.log(`  the timeline          NOT WALKED — the dial has ${howMany} stop(s); winding needs two`);
+    } else {
+      await stops.nth(1).click({ timeout: 6_000 });
       await page.waitForTimeout(1_500);
-      await walkSurface(cdp, page, what, seen, ask);
+      await walkSurface(cdp, page, "wound back", seen, ask);
+      await page.locator(".jar-when").first().click({ timeout: 6_000 });
+      await page.waitForTimeout(1_500);
+      await walkSurface(cdp, page, "the timeline", seen, ask);
       await page.keyboard.press("Escape");
       await page.waitForTimeout(800);
-    } catch {
-      console.log(`  ${what.padEnd(22)} NOT WALKED — it did not open`);
     }
+  } catch (err) {
+    console.log(
+      `  the timeline          NOT WALKED — ${err instanceof Error ? err.message.split("\n")[0] : err}`,
+    );
   }
-
   /* FROM A FRESH LOAD, because the chain below is three clicks deep and the
      surfaces before it leave things standing. Reported as
      `locator.click: Timeout 6000ms exceeded` on a button that was plainly on
@@ -621,58 +686,49 @@ async function surfaces(
   await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(6_000);
 
-  /* THE WALLS, AND MAKING ANOTHER ONE.
-     Three more states behind the `▾` beside the wall's name. They were the
-     largest block of `home.css` selectors this walk had never put on screen,
-     and an unentered state is indistinguishable from a dead rule from here. */
-  for (const [what, open] of [
-    ["the walls list", async () => {
-      await page.locator(".jar-here-more").first().click({ timeout: 6_000 });
-    }],
-    ["make another place", async () => {
-      await page.locator(".jar-here-row--make").first().click({ timeout: 6_000 });
-    }],
-    ["making a room", async () => {
-      await page.locator(".jar-newplace-row").first().click({ timeout: 6_000 });
-    }],
-  ] as Array<[string, () => Promise<void>]>) {
-    try {
-      await open();
-      await page.waitForTimeout(1_200);
-      await walkSurface(cdp, page, what, seen, ask);
-    } catch (err) {
-      console.log(
-        `  ${what.padEnd(22)} NOT WALKED — ${err instanceof Error ? err.message.split("\n")[0] : err}`,
-      );
-    }
-  }
+  /* ═══ FOUR STEPS ARE GONE, AND THEY WERE LEFTOVERS RATHER THAN DEFECTS ══
+     `the walls list`, `make another place`, `making a room` and `a room, just
+     made` all timed out on every run, and the cleanliness review counted the
+     cost: with four surfaces NOT WALKED, "~94 selectors are reported
+     unreachable with no way to tell leftovers from unentered states", which
+     is this walk's most valuable property degraded for about a quarter of
+     `home.css` (M8, `docs/reviews/cleanliness-2026-10-11.md`).
 
-  /* AND A ROOM THAT EXISTS, which is the only way to reach the room's own
-     wall and the panel that dresses it. Made rather than assumed: a fresh
-     account has none, and every selector belonging to a room read as dead for
-     exactly that reason.
+     THE REVIEW ASKED WHETHER THE WALLS LIST STILL EXISTS. It does not, and
+     neither does anything the other three pressed. Checked against the tree
+     rather than assumed, and all four controls have NO renderer anywhere in
+     `src`:
 
-     THE FORM IS `.jar-roomform` AND ITS SUBMIT IS THE WORDS `make it`. The
-     first version of this looked for a button inside `.jar-newplace` — but
-     choosing "a room" REPLACES that dialog with the form, so the dialog is
-     gone by the time the submit is needed, and the submit carries no class of
-     its own. Both were guesses; the shapes above are measured. */
-  try {
-    await page.locator(".jar-roomform-box").first().fill(`a room for the walk ${Date.now().toString(36)}`, {
-      timeout: 8_000,
-    });
-    await page.locator(".jar-roomform button", { hasText: /^make it$/i }).first().click({ timeout: 8_000 });
-    await page.waitForTimeout(7_000);
-    await walkSurface(cdp, page, "a room, just made", seen, ask);
-  } catch (err) {
-    /* SAY WHY, NOT JUST THAT. Two states went unwalked for a whole run
-       reported only as "it did not open", and finding out why cost a separate
-       probe of the same flow. The reason is printed now. */
-    console.log(`  a room, just made     NOT WALKED — ${err instanceof Error ? err.message.split("\n")[0] : err}`);
-  }
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(700);
+         .jar-here-more        the `▾` beside the wall's name
+         .jar-here-row--make   "make another place" in the list it opened
+         .jar-newplace-row     choosing "a room" in the dialog that followed
+         .jar-roomform-box     still EXISTS, and is now a different control —
+                               `Home.tsx:17059` renders it as the field that
+                               NAMES AN AGENT. So this step was not merely
+                               timing out: had it succeeded it would have
+                               walked the wrong surface and called it a room.
 
+     AND THE DELETION OF THE CONTROLS WAS DELIBERATE. `Home.tsx:18110` carries
+     the ruling in full — founder: "get rid of the rooms and agent related
+     stuff for now" — and records that the make/join sheet "was unreachable"
+     and "had survived three cleanliness passes because it looks alive from
+     the inside". Making a room from the world is not a thing the product
+     offers; joining by a `?join=<code>` address is what survives.
+
+     WHAT COVERAGE THIS WALK LOSES, SAID OUT LOUD RATHER THAN ABSORBED, which
+     is the whole point of the header's warning that an unentered state and a
+     dead rule look identical from here. Everything behind a room's wall is
+     now beyond this walk: the `.jar-here*` family, the group panel, the
+     dial's group branch, and `.jar-when` (below). Those selectors will be
+     reported UNUSED and ARE NOT THEREFORE DEAD — they are unreachable because
+     the only door to them is gone. Deleting them is a separate piece of work
+     from deleting a leftover rule, and it needs a founder ruling on whether
+     rooms are coming back, not a walk.
+
+     WHAT WOULD RESTORE THE COVERAGE: a `?join=<code>` address for a room this
+     walk made through the API, or a seeded account. Either is a bigger change
+     than this file, and both beat four steps that can only ever print a
+     timeout. */
   /* HEADQUARTERS, REACHED FOR. Its four acts are revealed by hover and by
      focus-within, and nothing else in this walk hovers anything — which is
      exactly why they read as dead until now.

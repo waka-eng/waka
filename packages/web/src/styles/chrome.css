@@ -300,7 +300,6 @@ body {
 .waka-public {
   font-family: var(--waka-face);
 }.login-subtitle,
-.field-hint,
 .login-footer {
   color: var(--w-muted);
 }
@@ -366,12 +365,51 @@ select:focus {
 .login-tab {
   --t-label-size: var(--t-meta);
 }
-.btn-destructive {
-  --t-label-size: var(--t-ui);
-}
+/* ═══ `.btn-destructive`, `.field-hint` AND `.form-success` ARE GONE ════
+   All three were `Profile.tsx`'s vocabulary, and `Profile.tsx` was deleted
+   on 2026-10-11 with the `/profile` route (`main.tsx:182` records it).
+   Nothing in `src` renders any of them; nothing in `test/` or `tools/`
+   names them either, which was checked before this cut.
+
+   WHAT WENT, IN THIS FILE, so the next reader does not go looking:
+
+     `.btn-destructive { --t-label-size: var(--t-ui) }`   its own type step
+     the `.btn-primary, …, button[type=submit]` list       one selector part
+     `.btn-destructive { color; opacity }`                 the quiet face
+     `.btn-destructive:hover, :focus-visible`              its one state
+     `.field-hint` in the `--w-muted` trio                 one selector part
+     `.field-hint { font-size; line-height; color }`       its own block
+     `.form-success` beside `.form-error`                  one selector part
+     `body .field-hint` beside `body .login-subtitle`      one selector part
+
+   AND THE SAME THREE NAMES ARE ALSO IN `global.css` AND `system.css`,
+   including the label register in `@layer register` — which is why they
+   are worth more than a silent deletion. `main.tsx:52` justified keeping
+   this whole file with "it dresses `/login` and `/profile`", thirteen
+   lines above the note that says `/profile` is gone, and that stale
+   sentence is the reason nobody looked here (M4 of
+   `docs/reviews/cleanliness-2026-10-11.md`; the fix is in `main.tsx`,
+   which this sweep does not own).
+
+   WHERE THE PART WAS DROPPED RATHER THAN THE RULE, the rule's own
+   reasoning is untouched and so are its surviving selectors — measured in
+   Chromium on both faces of the door before and after, and `.btn-primary`,
+   `button[type=submit]`, `.btn-google`, `.login-subtitle`, `.login-tab`
+   and `.field-label` come out pixel-identical.
+
+   `git show ea1727db:packages/web/src/styles/chrome.css`. */
+/* `.btn-google` KEEPS ITS OWN TYPE STEP, and this line was briefly deleted
+   by accident during the 2026-10-12 stranded-CSS sweep: the cut that took
+   `.btn-destructive`'s `--t-label-size` block above was anchored on the
+   next `.btn-destructive` selector and swallowed this one-liner sitting
+   between them. Nothing failed. The register in `system.css` falls back to
+   `var(--t-label)` when the custom property is absent, so the Google button
+   at the door silently went from 12px / 1.92px tracking to 10px / 1.6px —
+   found by diffing computed styles in Chromium before and after, which is
+   the only thing that could have found it. A missing custom property has no
+   error state; it has a fallback. */
 .btn-google { --t-label-size: var(--t-meta); }
 .btn-primary,
-.btn-destructive,
 button[type="submit"] {
   appearance: none;
   -webkit-appearance: none;
@@ -409,15 +447,6 @@ button[type="submit"]:hover:not(:disabled),
 .btn-primary:focus-visible:not(:disabled),
 button[type="submit"]:focus-visible:not(:disabled) {
   text-decoration-color: var(--w-ink);
-}
-.btn-destructive {
-  color: var(--w-muted);
-  opacity: 0.7;
-}
-.btn-destructive:hover,
-.btn-destructive:focus-visible {
-  opacity: 1;
-  color: var(--w-ink);
 }
 .btn-primary:disabled,
 button:disabled {
@@ -458,8 +487,10 @@ a:focus-visible {
 
 /* Messages speak in the world's voice: prose, quiet, and no colour carrying
    the meaning — the words carry it. */
-.form-error,
-.form-success {
+/* `.form-success` WAS THE SECOND SELECTOR HERE and is gone — see the
+   actions section above. The door only ever refuses; the one surface that
+   reported success was the settings page's save. */
+.form-error {
   background: none;
   border: 0;
   padding: 0;
@@ -745,11 +776,10 @@ a:focus-visible {
   line-height: 1.6;
   letter-spacing: 0;
 }
-.field-hint {
-  font-size: var(--t-ui);
-  line-height: 1.55;
-  color: var(--w-faint);
-}
+/* `.field-hint`'s OWN BLOCK WAS HERE and went with the class — the full
+   argument is in the actions section above, at `.btn-destructive`. It set
+   `--t-ui` / 1.55 / `--w-faint`, which is the faint tier the pair below
+   still states for the label register. */
 /* the long privacy paragraph: reading size, and a measure that does not run
    the full width of the column */
 
@@ -1250,7 +1280,9 @@ body {
 }
 
 /* help text is read once and must be readable that once */
-body .field-hint,
+/* `body .field-hint` LED THIS PAIR AND IS GONE WITH `Profile.tsx` — see the
+   tombstone in the actions section above. The subtitle is the only help
+   text the door has left, and it still has to clear the contrast gate. */
 body .login-subtitle {
   /* The token, not its value: this followed `--moon-faint` up to 6.7:1 the
      moment the tier was re-spec'd, which is the whole reason the tier has a
@@ -1370,78 +1402,30 @@ body .login-shell .login-footer {
 .jar-composer-heading h2 { margin: 0; font-size: var(--t-body); font-weight: 500; }
 .jar-inspiration-composer button { min-height: var(--sp-44); min-width: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: none; color: var(--w-ink); font: inherit; font-size: var(--t-ui); cursor: pointer; }
 .jar-inspiration-composer button:disabled { opacity: .5; cursor: default; }
-/* THE WAY BACK IS NOT ONE OF THOSE BUTTONS, and this override is here rather
-   than in `home.css` because of where the cascade actually resolves.
+/* ═══ THE NOTEPAD'S CHEVRON IS GONE, AND THIS WAS THE SURVIVING HALF ═══
+   `.jar-note-back`, `.jar-inspiration-composer .jar-note-back` and their
+   four-selector hover/focus block went on 2026-10-11. Founder: "I still
+   don't get why you have this carrot button when I do new inspiration,
+   because I can just go to all the inspirations using the bottom panel. So
+   don't do that." `NotePage.tsx` carries that ruling at the top of
+   `.jar-note-top` and `way-out.test.ts` holds the dock to being the exit.
 
-   Founder, twice, with a screenshot of a chevron in a rounded outlined box:
-   "why is this still here?" and then "아니 이거 별로라고 내가 몇번을 말해?"
-   — and they were right to ask twice, because the first fix did not render.
-   `.jar-note-back` was rewritten to be a plain chevron with a name, in
-   `home.css` inside `@layer chrome`; this file is UNLAYERED, and an
-   unlayered rule beats every layered one regardless of specificity. So the
-   generic composer-button box above went on winning and nothing on screen
-   changed. Two lessons, both recorded because both are cheap to repeat: a
-   change to a layered rule can be silently overruled from an unlayered
-   file, and a CSS edit that is never looked at in a browser is not a fix.
+   THIS BLOCK WAS THIRTY-FIVE LINES OF SPECIFICITY ARGUMENT FOR A CONTROL
+   THAT NO LONGER RENDERED, and `home.css` still carried the tombstone of
+   the merge that produced it — the two pointed at each other, which is how
+   the cleanliness review found them (H4,
+   `docs/reviews/cleanliness-2026-10-11.md`). Both are gone now.
 
-   The notepad's own grammar is corners without boxes — the tools pill and
-   the save already opt out the same way. This is the third. */
-/* ═══ THE WAY BACK IS ONE CONTROL ON TWO PAGES ═════════════════════════
-   Unscoped from `.jar-inspiration-composer`, because `NotePage` renders it
-   on the archive's open note as well now and the archive's copy was coming
-   out 11px wide — the bare glyph, with no target around it — while the
-   notepad's was a proper 44. The same control at two sizes depending on how
-   you arrived is the class of difference this whole pass is closing. */
-/* ═══ BOTH SELECTORS, AND THE SECOND ONE IS NOT BELT-AND-BRACES ════════
-   `.jar-inspiration-composer button` is declared in this file, unlayered,
-   at (0,1,1). A bare `.jar-note-back` is (0,1,0) and LOSES to it — so
-   unscoping this block put the filled rounded box back around the notepad's
-   chevron, which is the exact control the founder said "why is this still
-   here?" about. It took one browser screenshot to see and would have taken
-   none to miss.
+   THE LESSON IS NOT DEAD AND MUST NOT GO WITH THE RULE. It was this: a
+   bare `.jar-note-back` at (0,1,0) LOSES to
+   `.jar-inspiration-composer button` at (0,1,1) one line above, so the
+   generic composer-button box came back around the chevron and nothing on
+   screen changed — found by one browser screenshot and missable by any
+   amount of reading. Anything that needs to opt out of that generic box
+   has the same problem and needs the same two selectors. `.jar-composer-text`
+   at the bottom of this section is the live example to copy.
 
-   This is the third time this file's unlayered block has beaten a more
-   specific-looking rule elsewhere; the note at `.jar-inspiration-composer
-   .jar-note-back` below the original deletion records the first. ONE BLOCK
-   WITH TWO SELECTORS rather than two blocks: `one-class-one-thing.test.ts`
-   fails a class laid out in two places, and it is right — which of them
-   wins would depend on bundle order. */
-.jar-note-back,
-.jar-inspiration-composer .jar-note-back {
-  /* SQUARE, NOW THAT IT IS ONLY A CHEVRON — the same change, for the same
-     reason, as `.waka-over-back`: the destination moved to `aria-label` and
-     took the width with it. These two controls are the same control on two
-     pages and must stay identical; see the note in `SavesOverlay`. */
-  display: inline-grid;
-  place-items: center;
-  /* AT THE START OF ITS TRACK, not centred in it. `.jar-note-top` is three
-     `1fr auto 1fr` tracks so the date can sit in the middle of the PAGE;
-     without this the chevron would float in the middle of the left third.
-     Carried over from the block that used to lay this out in `home.css`. */
-  justify-self: start;
-  width: var(--waka-corner);
-  min-width: var(--waka-corner);
-  min-height: var(--waka-corner);
-  /* Pulled back so the GLYPH lands on the page's margin rather than the
-     target's left edge — a 44px box around an 11px chevron would otherwise
-     indent it by half the difference. */
-  margin-inline-start: calc(var(--sp-12) * -1);
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  color: var(--w-muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-body);
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-.jar-note-back:hover,
-.jar-note-back:focus-visible,
-.jar-inspiration-composer .jar-note-back:hover,
-.jar-inspiration-composer .jar-note-back:focus-visible {
-  color: var(--w-ink);
-}
+   `git show ea1727db:packages/web/src/styles/chrome.css`, lines 1373-1444. */
 .jar-inspiration-composer button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
 .jar-inspiration-composer .jar-composer-text { position: static; display: block; width: 100%; max-width: none; min-height: calc(var(--sp-44) * 3); max-height: calc(var(--sp-44) * 6); margin: var(--sp-12) 0; padding: var(--sp-8) 0; background: none; border: 0; border-bottom: 1px solid var(--w-muted); border-radius: 0; color: var(--w-ink); font-size: var(--t-input); line-height: 1.6; letter-spacing: normal; text-transform: none; text-align: left; resize: vertical; }
 .jar-composer-tools, .jar-composer-actions, .jar-composer-visibility { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
@@ -1535,7 +1519,15 @@ button.jar-tile-face,
    and must not look like a button sitting on a photo. */
 /* ═══ AND THESE CARRY THE PAGE'S SELECTOR TOO ═════════════════════════
    Same trap as the chevron above, found the same way — in a browser, not in
-   the file. `.jar-inspiration-composer button` is unlayered at (0,1,1) and
+   the file. `.jar-inspiration-composer button` IS IN `@layer chrome`, LIKE
+   EVERY RULE IN THIS FILE — line 2 is `@layer chrome {` and it closes at
+   the last line — and it wins by SPECIFICITY INSIDE THAT LAYER, at (0,1,1)
+   against a bare class's (0,1,0). This sentence said "is unlayered" until
+   2026-10-12 and that was the costliest kind of wrong: a reader chasing the
+   pale edge concluded they had to move their rule into a layer to beat it,
+   which does nothing, because the winner is already in the last layer any
+   sheet here uses. `home.css:5035` records somebody losing an afternoon to
+   the symmetrical mistake. The rule
    sets a 44px floor, a 12px padding, a 1px border and a 12px radius on
    EVERY button inside the notepad. A bare `.jar-tile-x` is (0,1,0), so the
    first version of these came out as bordered 44px boxes parked on top of
@@ -1696,11 +1688,51 @@ button.jar-tile-face,
 @media (max-width: 600px) { .jar-inspiration-composer { padding: var(--sp-16); } .jar-composer-footer { align-items: stretch; flex-direction: column; } .jar-composer-actions { justify-content: flex-end; } .jar-inspiration-composer .jar-composer-text { font-size: var(--t-input); } }
 
 /* Personal actions share a readable scale; the world and its artwork stay quiet. */
+/* ═══ THE PADDING LEFT THIS LIST, AND ONLY THE PADDING ════════════════════
+   `padding: var(--sp-8) var(--sp-12)` used to be declared here for BOTH
+   subjects. It never reached `.jar-mouth-rest` — not once, on any screen —
+   and it was the declaration that made `test/one-box-two-faces.test.ts`'s
+   stated invariant false while that gate was green (finding 2,
+   `docs/reviews/code-quality-2026-10-11.md`).
+
+   MEASURED IN CHROMIUM, signed in, at 393x852 DPR 3 with
+   `matchMedia("(pointer: coarse)")` true, and again at 1200x900:
+
+       .jar-mouth-rest   padding: 12px 16px 4px 16px   (both widths)
+                         min-height 44px, box 351x44 (coarse) / 509x44 (fine)
+
+   12/4, not 8/8. `CSS.getMatchedStylesForNode` names the winner:
+   `.waka-composer-body .jar-keep-box` in `claims.css`, which is UNLAYERED and
+   therefore beats this `@layer chrome` block at any specificity, and beats
+   `home.css`'s `@media (pointer: coarse) .jar-mouth-rest { 14px }` in
+   `@layer product` as well. THREE SHEETS STATED A VERTICAL PADDING FOR THAT
+   ONE BOX AND ONLY THE UNLAYERED ONE REACHED IT. See `layers.css`'s
+   assignment table and `test/one-cascade.test.ts` for the debt behind that.
+
+   SO THE DECLARATION MOVES TO THE SUBJECT IT ACTUALLY DRESSES rather than
+   being deleted: `.jar .jar-capture-shortcut` is a real control and its 8/12
+   is its own. Nothing else in this block moves — the border, the radius, the
+   fill and the min-height are shared by both subjects and the rest face's
+   computed values for them are unchanged by this edit (verified before and
+   after: border 0px, background transparent, radius 0px, min-height 44px,
+   which is to say the rest of this block does not reach it either).
+
+   WHAT IS NOT FIXED HERE, and it is bigger than one declaration: the WHOLE
+   `.jar-mouth-rest:not(.jar-mouth-rest--said)` family in this file — fifteen
+   rules, including the spark `::before`, the hover gradient and the focus
+   ring — is overruled on that element by the same unlayered sheet. They
+   cannot simply go, because every one of them also dresses
+   `.jar .jar-capture-shortcut`, and that control renders on a surface this
+   session could not reach (`.jar-personal-shortcuts`), so removing its half
+   could not be verified. Reported rather than cut. `.jar-mouth-rest--said`
+   has no renderer anywhere in `src` either, so the `:not()` in all fifteen
+   is a no-op that costs one point of specificity and reads as a condition. */
 .jar-mouth-rest:not(.jar-mouth-rest--said), .jar .jar-capture-shortcut {
-  min-height:var(--sp-44); box-sizing:border-box; padding:var(--sp-8) var(--sp-12);
+  min-height:var(--sp-44); box-sizing:border-box;
   border:1px solid var(--w-muted); border-radius:var(--sp-22); background:var(--w-raised);
   color:var(--w-ink); --t-label-size:var(--t-ui);
 }
+.jar .jar-capture-shortcut { padding:var(--sp-8) var(--sp-12); }
 .jar-mouth .jar-mouth-rest:not(.jar-mouth-rest--said) { text-decoration:none; }
 .jar-mouth .jar-mouth-rest:not(.jar-mouth-rest--said), .jar .jar-capture-shortcut {
   display:flex; align-items:center; justify-content:center; gap:var(--sp-6);

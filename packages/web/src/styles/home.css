@@ -1825,22 +1825,32 @@
   color: var(--jar-ink);
 }
 .jar-group-moment-words li + li { margin-top: var(--sp-8); }
-/* THE READING. Sentences at reading weight, air between them — a page a
-   person actually reads, not a settings sheet. The coda sits quieter: it is
-   the page speaking about the person's own hand, not another rule. */
+/* THE READING. A scroll bound, and nothing else left: what it bound is gone.
+
+   `.jar-reading-line` AND `.jar-reading-coda` WENT ON 2026-10-12. The
+   machinery doors — the three components that rendered the reading, the
+   antechamber and the duplicates — were deleted at the founder's request,
+   and these two are what was left standing where the sentences used to be.
+   Neither has a renderer anywhere in `packages/web/src` outside this
+   directory, measured against every `.ts`/`.tsx` in the tree.
+
+   WHAT THEY KNEW, because it is the ruling for anything that reads like this
+   again: the lines sat at reading weight with air between them — a page a
+   person actually reads, not a settings sheet — and the coda sat quieter at
+   `--jar-faint`, because it was the page speaking about the person's own
+   hand rather than stating another rule. The line itself was full `--jar-ink`
+   at `--t-body` with `line-height: 1.55`, which is the measure
+   `contrast.test.ts` held it to: a class a person must READ is set at muted
+   or brighter, never faint.
+
+   AND `.jar-reading` ITSELF STAYS, which is the whole reason this is not one
+   deletion. `lib/surface-input.ts` names it in the list of surfaces the
+   world's pointer handling must not swallow, so it has a live reference in
+   `src` and a live job: it is the scroll container. Deleting a rule because
+   its siblings died is how a live one goes out beside them. */
 .jar-reading {
   max-height: min(70vh, 560px);
   overflow-y: auto;
-}
-.jar-reading-line {
-  margin: 0 0 var(--sp-12);
-  font-size: var(--t-body);
-  line-height: 1.55;
-  color: var(--jar-ink);
-}
-.jar-reading-coda {
-  margin: var(--sp-16) 0 0;
-  color: var(--jar-faint);
 }
 /* A gesture's receipt: the same quiet register as the panel's meta lines —
    it states, it never celebrates. */
@@ -4042,110 +4052,42 @@
   }
 }
 
-/* ═══ THE THREE MACHINERY DOORS SHARE ONE FRAME ════════════════════════
-   Reached from the "i" in the top corner since 2026-10-11 (see
-   `HowItWorksPanel`), each one is the same shape: a label, a body, and the
-   way out at the foot. That air used to be two inline `style` objects
-   repeated in all three components — `marginBottom: 14`, `marginTop: 14` —
-   raw pixels in JSX, where the type scale cannot see them and where three
-   copies can drift apart one at a time. One rule, on the direct children
-   only, so a row's own verbs inside the body keep their own rhythm. */
-.jar-machinery > .jar-label { margin-bottom: var(--sp-14); }
+/* ═══ THE ANTECHAMBER'S SIX ROW RULES ARE GONE ═══════════════════════════
+   `.jar-ante-row`, `.jar-ante-candidate`, `.jar-ante-anchor`,
+   `.jar-ante-anchor-words`, `.jar-ante-standing` and `.jar-ante-restore`
+   (with its hover/focus pair) went on 2026-10-12. The three machinery-door
+   components were deleted at the founder's request and these rules are what
+   was left standing in the empty room — zero renderers across every
+   `.ts`/`.tsx` in `packages/web/src` outside this directory, measured.
 
-/* ═══ THE WAY OUT STAYS ON SCREEN ══════════════════════════════════════
-   Found by opening the reading in a browser, and only there: its twelve
-   rules are taller than the panel's 560px cap, so the panel scrolled and
-   the Close sat four hundred pixels below the fold. Law 2 is the product's
-   most-reported complaint — "a visible way out, and it costs one press" —
-   and its own test says knowing Escape works is not an exit. The panel was
-   like this the whole time it lived on the settings page; the diff that
-   moved it could not show it.
+   IT WAS THE DIM PLACE, and that is the ruling worth keeping rather than the
+   rules: the refused candidates rendered at the faint end of the ink scale ON
+   PURPOSE — these were the sentences that did not come to be, and light is
+   the only channel that may say so. But the candidate itself stayed at
+   `--jar-muted` and NOT `--jar-faint`, with its own comment saying why: "the
+   dim place stays dim by standing (muted, under the panel's hush), not by
+   being unreadable". `contrast.test.ts` held that line, and its reading list
+   loses `.jar-ante-candidate` in the same pass.
 
-   Sticky rather than a wrapper, because the three panels are a flat list
-   of children and a scrolling body would mean a new element inside each.
-   The negative inline margins let the bar reach the panel's own edges, so
-   the ground behind the word is the panel's ground and the rules passing
-   under it are properly covered. */
-.jar-machinery > .jar-ask {
-  position: sticky;
-  bottom: calc(var(--sp-20) * -1);
-  z-index: 1;
-  margin: var(--sp-14) calc(var(--sp-24) * -1) calc(var(--sp-20) * -1);
-  padding: var(--sp-8) var(--sp-24) var(--sp-20);
-  background: var(--jar-panel);
-}
+   AND THE SELF-FALLBACK IN TWO OF THEM WAS NOT AN UNFINISHED EDIT, which is
+   worth recording because it looked exactly like one. `.jar-ante-anchor-words`
+   and `.jar-ante-restore` both read `color: var(--jar-muted, var(--jar-muted))`
+   — a custom property falling back to itself, which is a no-op and reads as a
+   scripted replacement someone abandoned half-way. It is not: the identical
+   string is in TWO LIVE RULES in this same file, `.jar-prov-row:hover` and
+   `.jar-ground:hover`, both `border-left-color`. Four occurrences, one
+   spelling, nothing else in any of the seven sheets shaped like it — a
+   literal-to-token pass that wrote the token into the fallback slot as well.
+   The other two are live rules and are left alone here, because a no-op is
+   not a defect and this deletion is not the place to go editing live
+   declarations; they are reported instead.
 
-/* THE GARDENER'S ASKS, capped like the two beside it. The class was on the
-   element from the day the panel was written with no rule behind it, so a
-   long list of asks grew the panel past the viewport and scrolled the world
-   instead of itself. Found by opening it, not by reading the diff. */
-.jar-duplicates {
-  max-height: min(70vh, 560px);
-  overflow-y: auto;
-}
-
-/* THE ANTECHAMBER — the dim place. The refused candidates render at the
-   faint end of the ink scale on purpose: these are the sentences that did
-   not come to be, and light is the only channel that may say so. */
+   `.jar-antechamber` ITSELF STAYS, for the same reason `.jar-reading` does:
+   `lib/surface-input.ts` names it in the list of scroll surfaces the world's
+   pointer handling must not swallow, so it has a live reference in `src`. */
 .jar-antechamber {
   max-height: min(70vh, 560px);
   overflow-y: auto;
-}
-.jar-ante-row {
-  margin: 0 0 var(--sp-14);
-}
-.jar-ante-candidate {
-  margin: 0 0 var(--sp-2);
-  font-size: var(--t-ui);
-  line-height: 1.62;
-  /* the dim place stays dim by standing (muted, under the panel's hush),
-     not by being unreadable */
-  color: var(--jar-muted);
-}
-.jar-ante-anchor {
-  margin: 0;
-  color: var(--jar-faint);
-}
-/* ═══ A PERSON'S OWN SENTENCE IS NEVER SET IN THE LABEL REGISTER ═══════
-   Found by opening the antechamber with refusals in it, which is the only
-   place it could be found: the row's anchor line carries `.jar-label` so
-   that "Too close to:" and the standing marks speak in the eyebrow voice,
-   and `text-transform` INHERITS — so the anchor's own words, which are a
-   sentence WAKA wrote about the person, rendered as
-   `YOU ARE A MORNING PERSON.` in tracked capitals. `system.css` states the
-   rule being broken in its own comment above the register: "small labels,
-   never prose."
-
-   UNSET ON THE WORDS RATHER THAN BY LEAVING THE REGISTER. The register is
-   in `@layer register`, declared last, and cannot be out-ranked — but that
-   only governs declarations competing for the SAME element, and this is an
-   inherited value on a child. A declaration here always beats one
-   inherited from a parent, whatever layer the parent's came from. The
-   prefix and the marks keep their voice; only the quotation loses it,
-   which is the distinction the register was written to make. */
-.jar-ante-anchor-words {
-  color: var(--jar-muted);
-  text-transform: none;
-  letter-spacing: normal;
-  font-weight: 400;
-}
-.jar-ante-standing {
-  color: var(--jar-faint);
-}
-.jar-ante-restore {
-  border: 0;
-  padding: 0;
-  background: none;
-  font: inherit;
-  color: var(--jar-muted, var(--jar-muted));
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.jar-ante-restore:hover,
-.jar-ante-restore:focus-visible {
-  color: var(--jar-ink);
-  outline: none;
 }
 
 /* A GROUND THE POSTER STANDS ON, LIT BY WHO HOLDS IT. Same face, same size,
@@ -4806,33 +4748,26 @@
     margin-block: var(--sp-16) var(--sp-32);
   }
 
-  /* THE SAME WAY BACK AS EVERYWHERE ELSE. Founder, with a screenshot of
-     just this control: "why is this still here?"
+  /* ═══ AND NOW BOTH HALVES OF THE WAY BACK ARE GONE ════════════════════
+     What stood here was the tombstone of a MERGE: `.jar-note-back`'s layout
+     moved from this file to `chrome.css` on 2026-10-11 because two blocks
+     laying out one class is what `one-class-one-thing.test.ts` fails the
+     build over. The surviving block in `chrome.css` then carried thirty-five
+     lines of specificity argument for a control the founder had already
+     removed, and this note pointed at it — "the tombstone and the dead code
+     now point at each other" (H4,
+     `docs/reviews/cleanliness-2026-10-11.md`). Both are out now; the
+     `chrome.css` tombstone keeps the one lesson worth keeping, which is
+     about `.jar-inspiration-composer button`'s specificity rather than about
+     this control.
 
-     It was a filled rounded square holding a chevron — the only boxed back
-     button in the product, on the one surface that most wants to look like
-     a blank page. Every other surface's return is a plain chevron with the
-     name of the place it returns to beside it ("All inspirations", "All
-     chats"), and this one goes somewhere with a name too: the archive the
-     note is about to join. So it says so, in the register its three peers
-     already use, with no box around it. */
-  /* ═══ THE BLOCK THAT STOOD HERE MOVED TO `chrome.css` ═══════════════
-     It laid this control out as an `inline-flex` row — chevron, gap, the
-     name of the destination — and `chrome.css` now lays the same class out
-     as a square `inline-grid` holding only the glyph. Two blocks laying out
-     one class is what `one-class-one-thing.test.ts` fails the build over,
-     and it was right to: the later block silently re-lays-out the earlier
-     one's element, and which one is later depends on bundle order.
-
-     THE MERGE KEPT WHAT THIS ONE KNEW. `justify-self: start` is the reason
-     the chevron sits at the start of its grid track rather than centred in
-     it, and the hover transition is the register every control in the
-     notepad uses. Both are in the surviving block.
-
-     WHY THAT ONE AND NOT THIS ONE: the control is `NotePage`'s now, rendered
-     on two pages, so its definition belongs with the component's vocabulary
-     rather than inside the notepad's page rules. */
-
+     THE RULING, SO IT IS NOT RE-ARGUED A FOURTH TIME. Founder: "I still
+     don't get why you have this carrot button when I do new inspiration,
+     because I can just go to all the inspirations using the bottom panel. So
+     don't do that." Before that it had lost its box ("why is this still
+     here?") and then its words ("remove the all inspirations thing"). The
+     way out is the dock, in a word. `NotePage.tsx` states it at the top of
+     `.jar-note-top` and `way-out.test.ts` holds it structurally. */
   /* WHEN THIS NOTE IS, and it is the only thing on the page until somebody
      writes. Muted rather than faint: a placeholder is text you are meant to
      look past, and this is a fact you are meant to be able to read. */
@@ -4847,66 +4782,49 @@
   }
 
   /**
-   * ═══ THE PILL, BOTTOM-LEFT ═════════════════════════════════════════════
+   * ═══ THE PILL, BOTTOM-LEFT, IS GONE ═══════════════════════════════════
    *
-   * Founder: "maybe just a recording button at bottom left of canvas", then,
-   * on the reference's own toolbar: "2 icons: 1. record 2. image".
+   * `.jar-note-tools` and the three `.jar-inspiration-composer
+   * .jar-note-tool` rules (base, hover/focus pair, `--wide`) went on
+   * 2026-10-11. Founder, of this corner: "I don't like this thing on the
+   * left", and of the shape of the bottom of the screen: "this double layer
+   * is so weird." Record and photo moved into the dock's making-slot, which
+   * is where `NoteTools.tsx` renders them now.
    *
-   * It wears the dock's material — same raised tone, same radius, same height
-   * — because they are the same kind of object: something resting near the
-   * bottom of a world that has no edges. Sitting it beside the dock rather
-   * than inside it keeps the distinction that matters: the dock is places,
-   * this is what you can put in a note.
-   */
-  .jar-note-tools {
-    position: fixed;
-    z-index: 59;
-    left: calc(var(--sp-20) + env(safe-area-inset-left));
-    bottom: calc(var(--sp-20) + env(safe-area-inset-bottom));
-    display: flex;
-    align-items: center;
-    gap: var(--sp-4);
-    /* NOT A PILL EITHER — same ruling as the chat's composer. Founder:
-       "this double layer is so weird." Two glyphs sitting on the page beside
-       the dock are two glyphs; two glyphs in their own capsule beside the
-       dock's capsule are a second bar, and the notepad is the one surface
-       whose whole specification is "the middle of the screen is yours,
-       nothing is in it". The dock stays the only drawn object down there. */
-    padding: 0;
-    background: none;
-  }
-
-  .jar-inspiration-composer .jar-note-tool {
-    display: grid;
-    place-items: center;
-    width: var(--waka-corner);
-    min-width: var(--waka-corner);
-    height: var(--waka-corner);
-    min-height: var(--waka-corner);
-    padding: 0;
-    border: 0;
-    border-radius: var(--r-pill);
-    background: none;
-    color: var(--jar-muted);
-    cursor: pointer;
-    transition: color 0.2s ease;
-  }
-
-  .jar-inspiration-composer .jar-note-tool:hover,
-  .jar-inspiration-composer .jar-note-tool:focus-visible {
-    color: var(--jar-ink);
-  }
-
-  /* A running recording says so in words and seconds. A red dot cannot tell
-     anybody how long they have been talking. */
-  .jar-inspiration-composer .jar-note-tool--wide {
-    width: auto;
-    padding-inline: var(--sp-16);
-    font-size: var(--t-meta);
-    letter-spacing: normal;
-    text-transform: none;
-    color: var(--jar-ink);
-  }
+   * NO TEST NAMES `.jar-note-tools` ANY MORE, AND THAT IS THE FIX RATHER
+   * THAN A LOSS. This block used to say two of them did — one in
+   * `inspiration-composer.test.tsx` reading "the attach corner came back
+   * beside the bar" and one in `one-note.test.tsx`'s `shape()` — and both
+   * asserted ZERO. The sentence was true when it was written and false by
+   * the end of the same session, which is the worst shape a comment can
+   * take: it tells a reader a guard exists and names the file to go and
+   * check.
+   *
+   * WHY THE TWO COUNTS WENT. An assertion that an absent class is absent
+   * cannot fail. `.jar-note-tools` has had no renderer anywhere in `src`
+   * since 2026-10-11, so "it rendered zero times" was a sentence about
+   * nothing, and the regression it stood in for — somebody puts a control
+   * back in that corner — would not arrive wearing the old spelling.
+   *
+   * WHAT WATCHES THE CORNER NOW: `packages/web/test/helpers/note-top-row.ts`.
+   * `pressesInTopRow()` asks the question of the SLOT instead of the name —
+   * everything focusable inside `.jar-note-top` that is not the trailing
+   * verb — so it catches a way back under any class or none, and both
+   * `one-note.test.tsx` and `inspiration-composer.test.tsx` call it. The
+   * corner's own half is held by `inspiration-composer.test.tsx` counting
+   * `.waka-dock-tool`, which is what Record and photo wear in the dock's
+   * slot now. The regression is still the corner REAPPEARING, so a dead
+   * rule here would not help those gates and a live one would hide them.
+   *
+   * WHAT THE BLOCK KNEW, and it is still the ruling for anything that ever
+   * sits down there again: it deliberately had NO capsule — "two glyphs
+   * sitting on the page beside the dock are two glyphs; two glyphs in their
+   * own capsule beside the dock's capsule are a second bar" — and the
+   * notepad is the one surface whose whole specification is "the middle of
+   * the screen is yours, nothing is in it". The dock stays the only drawn
+   * object at the bottom of this page.
+   *
+   * `git show ea1727db:packages/web/src/styles/home.css`, lines 4787-4847. */
 
   /* KEEPING IT MOVED TO THE BAR, so its rules go with it. Founder: "the
      save button is very hard to see. Maybe the save button should be in the
@@ -5025,7 +4943,15 @@
      that gives that component a real `<div>` has to revisit this selector
      and the column rule below it. */
 
-  .jar-inspiration-composer > :not(.jar-note-tools):not(.jar-note-top) {
+  /* `:not(.jar-note-tools)` WAS IN THIS SELECTOR AND MATCHED NOTHING. The
+     tool pill was the notepad's only other direct child; it is gone, and a
+     `:not()` for a class no element wears is a no-op that reads as a
+     constraint — the next person widening this rule would have had to work
+     out which of the two exclusions was load-bearing. Measured in Chromium
+     at 1200x900: the composer has exactly two direct children, the note's
+     top row and the textarea, and the textarea comes out 544px wide with
+     `max-width: 544px` both before and after this cut. */
+  .jar-inspiration-composer > :not(.jar-note-top) {
     width: 100%;
     max-width: 34rem;
     margin-inline: auto;

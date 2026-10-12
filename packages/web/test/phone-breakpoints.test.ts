@@ -278,15 +278,73 @@ describe("the four breaks that a browser found and reading did not", () => {
     ).toEqual([]);
   });
 
-  it("lets the delete question shrink instead of hanging off the edge", () => {
+  /* ═══ THIS CASE NAMED A CLASS NOTHING RENDERS, AND SO COULD NOT FAIL ════
+     It was `expect(/flex: 0 0 auto/.test(block("claims.css",
+     ".waka-talks-ask"))).toBe(false)`. `block()` returns the EMPTY STRING
+     for a selector it cannot find, the regex does not match an empty string,
+     and the case therefore passed on nothing at all — a vacuous absence
+     assertion of exactly the kind the 2026-10-11 reviews counted seven of.
+     The whole `.waka-talks-*` family had been renamed: the list is
+     `.waka-rail-*` and `.waka-list-*` now.
+
+     AND THE REGRESSION IT GUARDED HAD ALREADY COME BACK UNDER THE NEW NAME.
+     Measured in Chromium at 320x568 with touch, a real account, one
+     conversation, its delete asked:
+
+       `.waka-rail-ask` carries the same `flex: 0 0 auto` the old class was
+       measured for, and `.waka-rail-item` does not wrap. The group no longer
+       OVERFLOWS — it is 145.5px, not 334, because the failure line takes its
+       own row — but the preview collapses from 183.7px to 78.5px. Read off
+       the screenshot: "a message ...". Seven characters and an ellipsis, on
+       the one control that tells you WHICH conversation you are erasing,
+       which is the founder-facing half of the original finding.
+
+     SO THE QUESTION IS ASKED OF THE BREAKPOINT RATHER THAN OF A `flex`
+     SHORTHAND. What matters is not which of several shorthands the base rule
+     writes — it is that under 560 the question gets its own line and the
+     preview keeps the width of the row. A rule naming one value dies the
+     next time somebody writes the same behaviour a different way; this reads
+     the block the behaviour lives in. */
+  it("gives the delete question its own line instead of crushing the preview", () => {
+    const text = rules("claims.css");
+    const at = text.indexOf("@media (max-width: 560px) {");
     expect(
-      /flex:\s*0\s+0\s+auto/.test(block("claims.css", ".waka-talks-ask")),
-      "`.waka-talks-ask` refuses to shrink again. Pinned at its widest it " +
-        "wants 334px in a 230px row — 83px off the right edge at 320 — and " +
-        "all of the shrinking lands on the open button beside it, which " +
-        "measured ZERO pixels wide: you are asked to confirm erasing a " +
-        "conversation whose name you can no longer read.",
-    ).toBe(false);
+      at,
+      "the 560 breakpoint is gone from claims.css. Under it the chats " +
+        "list's confirm group and the row's preview share one line, and the " +
+        "preview measured 78.5px — about seven characters — at 320.",
+    ).toBeGreaterThan(-1);
+    let depth = 1;
+    let i = at + "@media (max-width: 560px) {".length;
+    const from = i;
+    for (; i < text.length && depth > 0; i += 1) {
+      if (text[i] === "{") depth += 1;
+      else if (text[i] === "}") depth -= 1;
+    }
+    const body = text.slice(from, i - 1);
+
+    expect(
+      /\.waka-rail-item\s*\{[^}]*flex-wrap:\s*wrap/.test(body),
+      "`.waka-rail-item` no longer wraps under 560. Without it the confirm " +
+        "group and the conversation's preview share one line, and the " +
+        "preview measured 78.5px at 320 — 'a message ...' — while you are " +
+        "asked to confirm erasing it.",
+    ).toBe(true);
+    expect(
+      /\.waka-rail-ask\s*\{[^}]*flex:\s*1\s+0\s+100%/.test(body),
+      "`.waka-rail-ask` no longer takes a full line under 560. Its base rule " +
+        "pins it at `flex: 0 0 auto` — measured at its widest it took 145.5px " +
+        "out of a 232px row — so this override is the only thing standing " +
+        "between the question and the preview it is about.",
+    ).toBe(true);
+    expect(
+      /\.waka-rail-item\s*>\s*\.waka-list-row\s*\{[^}]*flex:\s*1\s+1\s+0/.test(body),
+      "the row lost its zero flex-basis under 560. With the item wrapping " +
+        "and the preview's basis left at `auto` — its full un-truncated " +
+        "title, 461px for an ordinary one — the preview alone asks for more " +
+        "than the row has and pushes the delete verb onto a second line, on " +
+        "every row in the list and not only the one being asked about.",
+    ).toBe(true);
   });
 
   it("does not pin the transcript with a property that eats its own overflow", () => {
@@ -421,9 +479,32 @@ describe("the acts are reachable by a thumb", () => {
     ["claims.css", ".waka-composer-ask", "the other destination for it"],
     ["claims.css", ".waka-composer-mic", "how the words get in"],
     ["claims.css", ".waka-tab", "choosing a shelf, inside a sideways slider"],
-    ["claims.css", ".waka-talks-open", "opening a conversation"],
+    /* ═══ TWO OF THESE NAMED CLASSES NOTHING RENDERS ════════════════════
+       `.waka-talks-open` and `.jar-char-bubble-go` were in this list until
+       2026-10-12 and both had zero renderers in `packages/web/src`. Unlike
+       the absence assertions elsewhere in this file these did not pass
+       vacuously — the loop below FAILS on a selector with no coarse rule —
+       so they passed because the dead rules were still in the sheet. That
+       is the worse half of the same disease: the gate was green, the rule
+       it checked was unreachable, and the live control it was written about
+       was never measured.
+
+       `.jar-char-bubble-go` is the sharp one. The offer inside the bubble is
+       `.jar-char-bubble-act` now, and it arrived with NO floor at all:
+       measured in Chromium at 320x568 with touch, "Add an inspiration" was
+       93.8 x 18 — under the 24 WCAG 2.2 AA asks, let alone the 44 this
+       project gives acts — while this list asserted, and got, 44 on a class
+       no hand could reach.
+
+       `.waka-talks-open` is the press that opens a conversation, which is
+       `.waka-list-row` now and is the same class the archive and the
+       principles list use, so the floor covers three surfaces instead of
+       one. Only the floor moved: the old rule's `align-items: center` was
+       written for a one-line ROW and `.waka-list-row` is a COLUMN — see the
+       note on the rule itself. */
+    ["claims.css", ".waka-list-row", "opening a conversation, a save or a principle"],
     ["claims.css", ".waka-account-out", "signing out"],
-    ["claims.css", ".jar-char-bubble-go", "the way into a conversation"],
+    ["claims.css", ".jar-char-bubble-act", "the way into a conversation"],
     ["chat.css", ".chat-page .chat-send", "the one act on the chat surface"],
   ];
 

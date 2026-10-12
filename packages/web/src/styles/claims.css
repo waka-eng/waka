@@ -440,13 +440,30 @@
    outline-free word, because a draft is what happens anyway if you leave —
    naming it is honesty about an existing exit, not a second thing to
    choose. Two filled pills would make it a decision. */
-.waka-dock-tool--keep {
-  width: auto;
-  padding: 0 var(--sp-16);
-  border-radius: var(--r-pill);
-  background: var(--ink);
-  color: var(--bg);
-}
+/* ═══ SAVE IS NOT A FILLED PILL. IT IS A TOOL LIKE THE OTHERS ══════════
+   Founder, looking at it: "I don't know why there's a white — why it's a
+   white button. I told you not to do that. I gave you specific instructions
+   saying the button itself should be disabled when nothing changed. If
+   stuff that can be saved is added then save it."
+
+   WHAT WAS HERE: `background: var(--ink); color: var(--bg)` — on a dark
+   ground that is a solid white pill, the brightest object on the screen,
+   sitting in a bar of quiet line-art icons. Plus `width: auto` and side
+   padding to carry the fill.
+
+   WHY IT WAS WRONG, and it is the same rule twice. Light is the only
+   meaning channel here, so brightness has to mean one thing: available.
+   A permanently-white Save spends the brightest value in the product on a
+   control that is unavailable most of the time, which leaves the dim state
+   nothing to contrast against — the founder had already ruled on this
+   ("keep it lower opacity... basically disable it") and the fill was the
+   half that never got done. Nothing else in the dock is filled.
+
+   SO THE WHOLE RULE GOES and `.waka-dock-tool` governs: square, pill
+   radius, no background, `--ink`. The modifier survives ONLY for the
+   disabled state below, which is where the founder's instruction actually
+   lives — full strength when there is something to keep, 0.4 when there
+   is not, and no outline either way. */
 
 /* ═══ AND WHEN THERE IS NOTHING TO KEEP, IT DIMS — IT DOES NOT OUTLINE ═══
    Founder: "Just don't add the white border around it. Keep it lower
@@ -455,7 +472,8 @@
 
    WHAT WAS ACTUALLY ON SCREEN WHEN THAT WAS SAID, measured rather than
    assumed, because the obvious suspect was innocent. `.jar-inspiration-
-   composer button` in `chrome.css` is unlayered at (0,1,1) and puts a
+   composer button` in `chrome.css` is (0,1,1) IN `@layer chrome` — not
+   unlayered, which this sentence claimed until 2026-10-12 — and puts a
    `1px solid var(--w-edge)` and a 12px radius on every button inside the
    notepad — it has silently overruled four component rules this week, and
    it is the first thing to look at whenever a pale edge appears on a note
@@ -468,6 +486,17 @@
    a bug report about one that existed; the rule is written down so the
    obvious implementation of "show it is off" — an outline where the fill
    was — cannot arrive later and be defended as an oversight.
+
+   AND FROM INSIDE THIS FILE YOU DO NOT NEED TO OUT-SPECIFY IT AT ALL.
+   `claims.css` carries no `@layer` statement — 322 rules, every one of them
+   unlayered — and `layers.css` is explicit that an unlayered rule beats
+   every layer regardless of specificity. So a bare class written here at
+   (0,1,0) already beats `.jar-inspiration-composer button` at (0,1,1) in
+   `@layer chrome`. The escape hatch `chrome.css` describes for its own
+   residents — out-specify the blanket rule — is advice for a constraint that
+   does not apply where you are standing, and following it here buys
+   specificity nobody needed. That is a debt rather than a feature: see the
+   ratchet and the argument in `test/one-cascade.test.ts`.
 
    `border: 0` and `box-shadow: none` are therefore standing guards rather
    than fixes. They cost two declarations and they mean that if this control
@@ -528,6 +557,34 @@
   font-size: var(--t-meta);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ═══ THE WAY OUT OF AN ARMED DELETE, BESIDE THE QUESTION ══════════════
+   The bar asks "Delete this?" and this is the other answer. It lives
+   INSIDE `.waka-dock-state` rather than as a sixth tool because it is part
+   of the sentence, not a standing control — it exists only while the
+   question does, and a person reading the question should not have to look
+   elsewhere for the way out of it (Law 2).
+
+   IT INHERITS RATHER THAN DECLARES. No colour, no size, no family: the
+   span above sets `--muted` and `--t-meta` and this takes both, so the
+   question and its answer are one line of type with one thing underlined.
+   An underline, not a fill — the founder's ruling on the Save mark one
+   rule above applies to the whole bar: nothing in it is filled, and light
+   is the only meaning channel.
+
+   `white-space: nowrap` ON THE PARENT MEANS THE PAIR CANNOT WRAP, which is
+   what keeps the bar from growing a second line and moving every label in
+   the row — the same reason the state slot is capped at 14rem. */
+.waka-dock-undo {
+  margin-inline-start: var(--sp-8);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .waka-dock-tool:focus-visible {
@@ -1077,99 +1134,35 @@
   outline-offset: 1px;
 }
 
-.jar-keep-via:hover,
-.jar-keep-via:focus-visible {
-  color: var(--ink);
-  text-decoration: underline;
-}
+/* ═══ THE HOVER CARD IS GONE, AND SO IS THE ORPHAN IT LEFT BEHIND ══════
+   `HoverCard.tsx` was deleted on 2026-10-11 with the settings PAGE it was
+   last mounted on, and nine selectors went on standing here: `.waka-hovercard`,
+   `.waka-hovercard-trigger` and its two states, `.waka-hovercard-card`,
+   `.waka-hovercard-card a`, and `.jar-keep-via .waka-hovercard-card`.
 
-/* ---------------------------------------------------------------------------
- * The hover card
- *
- * Opens UPWARD: the line it hangs off sits near the bottom of the screen, so
- * a card below it would be off the page. Anchored to the right edge for the
- * same reason — the trigger is the rightmost thing on its row.
- * ------------------------------------------------------------------------- */
+   THE COMMENT THAT STOOD HERE ASSERTED ITS OWN CALL SITE, and the call site
+   had been deleted in the same session: "`HoverCard` has exactly one call
+   site in the tree now (`Profile.tsx`, the MCP line under the agent keys),
+   and it wears `.jar-keep-via`." It read as though somebody had checked.
+   Both the host and the component are gone, and a comment asserting
+   something false is worse than no comment — which is the whole reason this
+   tombstone names the sentence rather than quietly dropping it.
 
-.waka-hovercard {
-  pointer-events: auto;
-  position: relative;
-  display: inline-block;
-}
+   AND `.jar-keep-via:hover, :focus-visible` WENT WITH IT, which is the part
+   worth arguing. It had NO BASE RULE anywhere in `src/styles` — the second
+   orphaned modifier of the session, after `.jar-char-bubble--aside`, and the
+   same cause: a scripted edit took the base block and left the state. The
+   choice was to bring the base back or to take the state, and the state
+   loses: `.jar-keep-via` is the class the deleted MCP line wore, nothing in
+   the tree renders it, and a base rule written now would be furniture for a
+   control that does not exist. An orphaned modifier is only dangerous while
+   its ELEMENT is still on screen (that is what `--aside` cost: every speech
+   bubble silently changed fill). This element is not.
 
-.waka-hovercard-trigger {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  cursor: help;
-}
-
-.waka-hovercard-trigger:hover,
-.waka-hovercard-trigger[aria-expanded="true"] {
-  color: var(--ink);
-}
-
-.waka-hovercard-trigger:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 3px;
-}
-
-/**
- * THE ONE CARD LEFT IN THE PRODUCT OPENS DOWNWARD, AND FROM THE LEFT.
- *
- * The default card sits above its trigger and hangs off its right edge,
- * which is what the composer's footer at the bottom of the screen wants and
- * is wrong everywhere else: above is off-screen when the trigger is near the
- * top, and right-aligned runs the card out past a line that starts at the
- * left margin.
- *
- * THIS RULE WAS WRITTEN FOR `.jar-reading-what` AND SURVIVED IT. That host
- * is gone — `HoverCard` has exactly one call site in the tree now
- * (`Profile.tsx`, the MCP line under the agent keys), and it wears
- * `.jar-keep-via`. Deleting the rule with the selector would have been the
- * easy half of a dead-CSS sweep and the wrong half: the REASONING outlived
- * the name, and it applies to the new host word for word — the line starts at
- * the section's left margin, and the heading it would open over sits directly
- * above it. So the selector moves and the rule stays.
- */
-.jar-keep-via .waka-hovercard-card {
-  top: calc(100% + var(--sp-8));
-  bottom: auto;
-  right: auto;
-  left: 0;
-}
-
-.waka-hovercard-card {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + var(--sp-12));
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  width: max-content;
-  max-width: 19rem;
-  padding: var(--sp-16);
-  border: 1px solid var(--line);
-  border-radius: var(--waka-r-surface);
-  background: var(--waka-raised);
-  color: var(--ink);
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  line-height: 1.45;
-  letter-spacing: 0;
-  text-align: left;
-  /* The one shadow on this screen: the card is the only thing that floats. */
-  box-shadow: 0 14px 34px rgb(0 0 0 / 45%);
-}
-
-.waka-hovercard-card a {
-  color: var(--ink);
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-}
+   RECOVER WITH `git show ea1727db:packages/web/src/styles/claims.css`, lines
+   1080–1172. The placement reasoning the old comment was proud of — "the one
+   card left opens DOWNWARD, and from the LEFT" — is in there too, and it is
+   worth reading before any card is written again. */
 
 /* ---------------------------------------------------------------------------
  * Pages: the archive and the principles
@@ -1814,44 +1807,24 @@
   outline: none;
 }
 
-/* THE NOTE'S TOP ROW: when it is on the left, the one destructive verb on the
-   right. The bottom-left corner belongs to ATTACHING on the notepad, and a
-   slot that means "add" on one note page and "destroy" on the other is the
-   mistake this arrangement exists to undo. */
-.waka-note-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-16);
-}
+/* ═══ THE NOTE PAGE'S OWN TOP AND FOOT ARE GONE ════════════════════════
+   `.waka-note-top`, `.waka-note-foot`, `.waka-note-foot button` and its
+   hover/focus pair went on 2026-10-11. `SavesOverlay` renders the open note
+   through `NotePage` now, which brings `.jar-note-top` and `.jar-note-verb`
+   from `home.css` — one chrome on both note pages, which is the whole point
+   of `one-note.test.ts`. `#waka-note-tools` is an id on the dock's slot, not
+   this family.
 
-/* ERASING, AND IT IS THE QUIETEST THING ON THE PAGE. It asks before it does
-   anything — the same two-press shape the chats list uses for the same act,
-   because one of your own things going away is the only move in this product
-   that cannot be undone. */
-.waka-note-foot {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-12);
-  margin: 0;
-}
-
-.waka-note-foot button {
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.waka-note-foot button:hover,
-.waka-note-foot button:focus-visible {
-  color: var(--ink);
-}
+   AND IT TOOK THE DESTRUCTIVE VERB'S TARGET WITH IT, which is worth writing
+   down rather than discovering twice. `.waka-note-foot button` was the only
+   rule that ever gave `.waka-note-erase` a 44px floor; measured in Chromium
+   at 1200x900 the delete verb on an open note is now 59x32 with `padding:
+   4px 8px` — inside the WCAG floor but under the 44 this product rules for
+   ACTS, and `.waka-note-erase` has no rule of its own in any sheet in
+   `src/styles`. That is a real regression from the deletion that removed the
+   wrapper, and it wants its own look: the fix is either a rule for the class
+   here or the verb joining `.jar-note-verb`'s own block in `home.css`. It is
+   not fixed by keeping a rule for a wrapper nothing renders. */
 
 .waka-over-one {
   display: flex;
@@ -1860,36 +1833,51 @@
   min-height: 0;
 }
 
-/* THE WAY BACK IS THE NAME. Quiet at rest and inked on approach, like every
-   other secondary act — it is a return, not a destination, and a return that
-   shouts is a page that does not expect you to stay. */
-/* A CHEVRON ALONE NEEDS A TARGET THE WORDS USED TO GIVE IT. It was an
-   inline row — chevron, gap, destination — so the text supplied the width.
-   With the name gone to `aria-label` (see the note in `SavesOverlay`) an
-   11px glyph would be an 11px press. Square at the product's corner size,
-   and the glyph centred in it. */
-.waka-over-back {
-  display: inline-grid;
-  place-items: center;
-  width: var(--waka-corner);
-  min-height: var(--waka-corner);
-  margin-inline-start: calc(var(--sp-12) * -1);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-lead);
-  font-weight: 300;
-  cursor: pointer;
-  white-space: nowrap;
-}
+/* ═══ THE OVERLAY'S CHEVRON IS GONE ════════════════════════════════════
+   `.waka-over-back` and its hover/focus pair went on 2026-10-11 with the
+   control. Nothing in `src` renders the class: the three overlays keep
+   `.waka-over-head` and the open note is `NotePage`'s `.jar-note-top`, whose
+   own comment carries the founder's ruling — "I can just go to all the
+   inspirations using the bottom panel. So don't do that." Law 2 is answered
+   by the dock, which `way-out.test.ts` holds structurally.
 
-.waka-over-back:hover,
-.waka-over-back:focus-visible {
-  color: var(--ink);
-  outline: none;
-}
+   WHAT THE BLOCK KNEW, so it is not re-learned: the chevron had been an
+   inline row (chevron, gap, destination) and the words supplied its width;
+   when the name moved to `aria-label` an 11px glyph became an 11px press,
+   and the fix was a square at `--waka-corner` with the glyph centred in it.
+   That is the same lesson `chrome.css`'s `.jar-note-back` block recorded and
+   the same reason both are gone — the control the lesson was about does not
+   render any more.
+
+   NEITHER CALLER OUTSIDE `src` NAMES IT ANY MORE, AND BOTH WERE FIXED
+   RATHER THAN LEFT. This block used to report them as outstanding: a click
+   in `tools/e2e/usability.ts` that could only time out, and a count in
+   `one-note.test.tsx`'s `shape()` asserting ZERO. Written as a to-do and
+   read, two reviews later, as a statement of fact — which is why it is
+   rewritten here instead of being left to age.
+
+     the walk      `usability.ts` presses the dock's Inspirations row to
+                   leave an opened note now. That is not a different chevron,
+                   it is the ruling: "I can just go to all the inspirations
+                   using the bottom panel. So don't do that." A step that
+                   names the row by its words also breaks when the words
+                   change, which a chevron with no label never could.
+
+     the test      the `headerBacks` field is gone from `shape()`. An
+                   assertion that an absent class is absent cannot fail, and
+                   three of that comparison's five fields could only ever be
+                   `0`. The question is asked of the SLOT now, by
+                   `packages/web/test/helpers/note-top-row.ts` —
+                   `pressesInTopRow()` returns everything focusable in
+                   `.jar-note-top` that is not the trailing verb, so a way
+                   back fails it under any class name or none.
+
+   WHICH MEANS THE STRING `waka-over-back` SURVIVES IN THREE PLACES AND ALL
+   THREE ARE PROSE ABOUT ITS REMOVAL: this block, `usability.ts`'s own
+   tombstone at the step that used to click it, and `note-top-row.ts`'s
+   header listing the four names it replaced. Nothing selects it, nothing
+   presses it, nothing counts it. A fourth mention is somebody bringing the
+   control back without reading any of them. */
 
 .waka-over-title {
   margin: 0;
@@ -2611,134 +2599,32 @@
  * over the list.
  * ------------------------------------------------------------------------- */
 
-/* ---------------------------------------------------------------------------
- * The reading's own page
+/* ═══ THE READING'S OWN PAGE IS GONE, AND SO IS THE DOOR INTO IT ═══════
  *
- * Founder, with the reference's question page on screen: "it should show the
- * text and let the user engage with it. And the bottom part here should also
- * be something they can quickly engage with."
+ * Thirteen rules went on 2026-10-11: `.waka-over-head--reading`,
+ * `.waka-reading-statement`, `-when`, `-grounds`, `-ground`,
+ * `-ground-statement`, `-ground-statement--answered`, `-chain` and its
+ * hover/focus pair, `-talk` and its `:disabled`, and `.jar-char-bubble-open`
+ * — the control in the speech bubble that was the way in.
  *
- * Four things, in the reference's own order: a chevron, the sentence with
- * nothing level with it, a quiet line of meta, and the responses.
- * ------------------------------------------------------------------------- */
-
-/* The head is a chevron and nothing else, so it does not need the
-   space-between a titled head wants. */
-.waka-over-head--reading {
-  justify-content: flex-start;
-}
-
-/* THE SENTENCE, AT THE SIZE THE POSTER SET IT. It is the same sentence that
-   used to be the home screen's `h1`; arriving on a page of its own is not a
-   reason for it to get quieter. */
-.waka-reading-statement {
-  margin: 0;
-  max-width: 24ch;
-  font-family: var(--waka-face);
-  font-size: var(--t-reading);
-  font-weight: 300;
-  line-height: 1.3;
-  color: var(--ink);
-  text-wrap: pretty;
-}
-
-.waka-reading-when {
-  margin: 0;
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  letter-spacing: normal;
-  text-transform: none;
-  color: var(--muted);
-}
-
-.waka-reading-grounds {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-24);
-  margin: var(--sp-16) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.waka-reading-ground {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  max-width: 44ch;
-}
-
-.waka-reading-ground-statement {
-  margin: 0;
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  line-height: 1.5;
-  color: var(--ink);
-  text-wrap: pretty;
-}
-
-/* ANSWERED IS DIMMER, NOT TICKED. Light is the only meaning channel, and a
-   signal you have already ruled on is a thing you are done with rather than a
-   thing marked complete. */
-.waka-reading-ground-statement--answered {
-  color: var(--muted);
-}
-
-.waka-reading-chain {
-  align-self: start;
-  margin-top: var(--sp-8);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.waka-reading-chain:hover,
-.waka-reading-chain:focus-visible {
-  color: var(--ink);
-}
-
-/* THE QUICK ONE, ALONG THE BOTTOM — beside the dock rather than in it, for
-   the reason the notepad's pill is: the dock is places, and this is about the
-   sentence you are reading. On the dock's own line, at the dock's own height,
-   so the bottom of the screen reads as one row of objects. */
-.waka-reading-talk {
-  position: fixed;
-  z-index: 59;
-  right: calc(var(--sp-20) + env(safe-area-inset-right));
-  bottom: calc(var(--sp-20) + var(--sp-6) + env(safe-area-inset-bottom));
-  min-height: var(--waka-corner);
-  padding-inline: var(--sp-20);
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--ink);
-  color: var(--bg);
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  letter-spacing: normal;
-  text-transform: none;
-  cursor: pointer;
-}
-
-.waka-reading-talk:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-/* THE READING IN THE BUBBLE IS A DOOR NOW. Founder: "the user can click on it
-   to go to a new page where the user can engage with it." It keeps the
-   reading's own type exactly — a sentence that became pressable must not
-   become a button, or the creature stops speaking and starts offering. */
-.jar-char-bubble-open {
-  appearance: none;
-  -webkit-appearance: none;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
+ * ALL THIRTEEN WERE ALREADY DEAD BEFORE THIS SWEEP, which is why they are
+ * recorded together rather than one per family: the page they dressed went
+ * out ahead of them, and only `.jar-char-bubble-open` was named in the
+ * cleanliness review's stranded list (`docs/reviews/cleanliness-2026-10-11.md`,
+ * H4). Deleting the door and leaving the room it opened would have been the
+ * easy half of the sweep. `ReadingPanel.tsx` — the panel that replaced the
+ * page, reached from the "i" — was deleted in the same session, so there is
+ * no reader for this vocabulary on any surface.
+ *
+ * WHAT IT KNEW, worth having before a reading gets a page again: the
+ * sentence arrived at `--t-reading` because "arriving on a page of its own is
+ * not a reason for it to get quieter"; an answered ground went DIMMER rather
+ * than ticked, because light is the only meaning channel here; and the quick
+ * reply sat BESIDE the dock at the dock's own height rather than in it,
+ * because "the dock is places, and this is about the sentence you are
+ * reading" — the same argument the notepad's tool pill lost.
+ *
+ * `git show ea1727db:packages/web/src/styles/claims.css`, lines 2521–2648. */
 
 .waka-list {
   display: flex;
@@ -3027,7 +2913,9 @@
 
 /* The name gives way, the × never does: a truncated filename is still
    recognisable and a missing remove button is a file you cannot take back
-   out. This is the same deal `.waka-talks-words` strikes with its date. */
+   out. This is the same deal `.waka-list-lead` strikes with its date — it
+   was `.waka-talks-words` when this was written, and that class has had no
+   renderer since the chats list was rebuilt. */
 .waka-drawer-items li > span {
   min-width: 0;
   overflow: hidden;
@@ -4777,44 +4665,40 @@
   text-wrap: pretty;
 }
 
-/**
- * THE OFFER IS PART OF THE SPEECH.
- *
- * It was a bordered pill, which made the bubble a dialog box with an OK in
- * it — something that wants an answer rather than something said. Founder:
- * "talk about this rather than put it in a button."
- *
- * A line of the same voice, underlined, the way an offer is made inside a
- * sentence. It keeps a full target height so it is still reachable by a
- * thumb; what it loses is the costume.
- */
-.jar-char-bubble-go {
-  min-height: var(--sp-24);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: color-mix(in srgb, var(--waka-on-light) 62%, transparent);
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-decoration-thickness: 1px;
-  cursor: pointer;
-}
+/* ═══ `.jar-char-bubble-go` IS GONE, AND ITS JOB IS `-act`'s NOW ═════════
+   The base rule and its `:hover:not(:disabled)`, `:disabled` and
+   `:focus-visible` went on 2026-10-12, along with the coarse-pointer rule
+   at the bottom of this file. Nothing in `packages/web/src` outside
+   `src/styles` has rendered the class since the bubble was rebuilt: the
+   offer inside the speech is `.jar-char-bubble-act`, forty lines above,
+   which `Home.tsx` renders in three places (talk about this, talk about
+   that, add an inspiration).
 
-.jar-char-bubble-go:hover:not(:disabled) {
-  color: var(--waka-on-light);
-}
+   THE RULING SURVIVES THE CLASS, and it is `-act`'s to keep: founder, "talk
+   about this rather than put it in a button". It was a bordered pill, which
+   made the bubble a dialog box with an OK in it — something that wants an
+   answer rather than something said — and became a line of the same voice,
+   underlined, the way an offer is made inside a sentence. `-act` is written
+   that way already.
 
-.jar-char-bubble-go:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
+   WHAT WENT WITH IT AND HAD TO BE PUT BACK, which is the only reason this
+   is a long tombstone. The dead rule carried `min-height: var(--sp-24)` and
+   a coarse-pointer rule lifting it to `--waka-corner`, with the note "it
+   keeps the costume it was given and gains only the air around it".
+   `.jar-char-bubble-act` had neither. MEASURED in Chromium at 320x568 with
+   touch, on the world's own bubble: the live "Add an inspiration" offer is
+   93.8 x 18 with `min-height: auto` — under the 24 this file's own coarse
+   block calls the WCAG 2.2 AA floor, let alone the 44 the house ruling gives
+   ACTS. So the target rule moved to `-act` rather than being deleted with
+   the class, and `phone-breakpoints.test.ts` was repointed at the live name
+   in the same edit.
 
-.jar-char-bubble-go:focus-visible {
-  outline: 2px solid var(--waka-on-light);
-  outline-offset: 3px;
-}
+   AND THIS IS WHY A GATE PINNED TO A CLASS NAME IS WEAKER THAN IT LOOKS.
+   That test asserted `.jar-char-bubble-go` reaches `--waka-corner` on a
+   coarse pointer, and it PASSED — green, on a rule no person could reach,
+   while the control it was actually written about shipped at 18px. The
+   rename broke nothing except the instrument, and the instrument was the
+   only thing that would have said so. */
 
 /* ---------------------------------------------------------------------------
  * WHICH FORM IT IS WEARING
@@ -5165,8 +5049,42 @@
   border-color: color-mix(in srgb, var(--ink) 80%, transparent);
 }
 
+/* ═══ AND `.waka-settings-erase` IS IN THIS LIST NOW, BY NAME ══════════
+   It had a `:hover, :focus-visible` pair below and NO BASE RULE — the
+   third orphaned modifier of the session, after `.jar-char-bubble--aside`
+   and `.jar-keep-via:hover`. It looked harmless because one of its two
+   instances is dressed by accident: the agent row's erase sits inside
+   `.waka-settings-rows` (`SettingsPanel.tsx:203`) and so matches the
+   descendant selector above. The ACCOUNT-DELETION instance
+   (`SettingsPanel.tsx:266`) is a direct child of the danger group's body
+   and matched nothing.
+
+   MEASURED, signed in, Chromium at 1200x900, the two instances of one
+   class on one surface:
+
+       the agent row's erase    60x44   min-height 44px   padding 0 14px
+                                        radius 999px      font 12px
+       delete account           390x21  min-height auto   padding 1px 6px
+                                        radius 0px        font 13px
+
+   A 21px-tall default browser button with a hover colour, for the one
+   irreversible act in the product — half the 44 this file's own
+   `pointer: coarse` block rules for ACTS, and under the 24 WCAG 2.2 AA
+   asks of anything. Reported as SUSPECTED by the cleanliness review (S1,
+   `docs/reviews/cleanliness-2026-10-11.md`), which could not sign in;
+   confirmed here by measuring both.
+
+   IN THE LIST RATHER THAN GIVEN ITS OWN BLOCK. A second block would be
+   one class laid out in two places, which is what
+   `one-class-one-thing.test.ts` fails the build over and which is how the
+   merge in `chrome.css` went wrong once already. Naming it here makes the
+   two instances identical by construction rather than by one of them
+   happening to live inside the right list — and the review's own point
+   stands: the pair's whole specification is "each asks twice", which is
+   a behaviour, so both halves of the pair had better look the same. */
 .waka-settings-rows button,
 .waka-settings-add button,
+.waka-settings-erase,
 .waka-settings-keep {
   flex: 0 0 auto;
   min-height: var(--waka-corner);
@@ -5286,59 +5204,26 @@
   color: var(--muted);
 }
 
-/* ═══ THE THREE MACHINERY DOORS, AT THE FOOT OF THE EXPLANATION ═════════
-   The paragraphs above say what the loop does; these three open it. They
-   take the hairline seam the caveat already uses, because the subject
-   changes again — from the product telling you about itself to the product
-   showing you its working — and a person who has read five paragraphs is
-   owed a visible edge before the thing they can press.
+/* ═══ THE THREE MACHINERY DOORS ARE GONE FROM THE FOOT OF THE CARD ═════
+   `.waka-about-doors`, `.waka-about-door`, `.waka-about-door svg` and its
+   hover/focus pair went on 2026-10-11, the same day `ReadingPanel.tsx`,
+   `AntechamberPanel.tsx` and `DuplicatesPanel.tsx` were deleted.
+   `HowItWorksPanel` renders four paragraphs and the loop now, and nothing
+   below the caveat.
 
-   THE ROW IS THE PRESS, full width and 44px tall, which is the register
-   `.waka-settings-row` already set for "a row in this corner that opens
-   something". Same face, same step, same ink; what differs is the mark,
-   and the mark is the whole reason the rows are distinguishable from the
-   `dt`s above them — see `HowItWorksPanel`'s header. No border, no fill, no
-   second colour: light is the only channel, and these sit at `--ink`
-   against the muted prose, which is already the strongest thing on the
-   card. */
-.waka-about-doors {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  padding-top: var(--sp-12);
-  border-top: 1px solid var(--line);
-}
+   THIS FAMILY WAS ALIVE WHEN THE CLEANLINESS REVIEW RAN and is not in its
+   stranded list — it was stranded hours later, by the deletion of the three
+   components it opened. Which is the review's own finding stated once more:
+   a sweep of the live code is not a sweep of what pointed at it.
 
-.waka-about-door {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-12);
-  width: 100%;
-  min-height: var(--waka-corner);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  text-align: left;
-  cursor: pointer;
-}
+   WHAT THE BLOCK KNEW: the row WAS the press, full width at
+   `--waka-corner`, borrowing `.waka-settings-row`'s register so that one
+   corner has one kind of openable row; the chevron brightened rather than
+   the word moving, because "a row that shifts under the cursor is motion
+   nobody asked for". Both facts are still true of `.waka-settings-row`,
+   which is where to read them if the doors come back.
 
-/* THE CHEVRON LEANS IN RATHER THAN THE WORD MOVING. A row that shifts under
-   the cursor is motion nobody asked for; the mark brightening is the same
-   thing the corner's own triggers do, and it is the only state this row has
-   to report. */
-.waka-about-door svg {
-  flex: none;
-  color: var(--muted);
-}
-
-.waka-about-door:hover svg,
-.waka-about-door:focus-visible svg {
-  color: var(--ink);
-}
+   `git show ea1727db:packages/web/src/styles/claims.css`, lines 5094–5146. */
 
 .waka-account-failed {
   margin-top: var(--sp-8);
@@ -5358,15 +5243,26 @@
   overflow-wrap: anywhere;
 }
 
-.waka-account-go,
-.waka-account-out {
-  margin-top: var(--sp-8);
-  padding: var(--sp-6) var(--sp-8);
-  border-radius: var(--waka-r-control);
-}
+/* ═══ `.waka-account-go` IS GONE, AND THE PAIR BECAME ONE BLOCK ════════
+   The link to `/profile` went with the route (`main.tsx` records the
+   deletion); settings is a panel hanging off this same corner now, so a
+   control whose whole job was to travel to another page had nowhere to go.
 
+   MERGED RATHER THAN HALVED, which is the part that needed thought. This
+   was `.waka-account-go, .waka-account-out { margin-top: var(--sp-8); … }`
+   followed by `.waka-account-out { margin-top: 0; }` — a pair plus its own
+   correction, which is legitimate while the pair exists. Dropping the dead
+   half alone would have left TWO bare single-class blocks disagreeing about
+   `margin-top` for one class, and `one-class-one-thing.test.ts` fails the
+   build over exactly that: `solo` is `parts.length === 1`, so halving a
+   two-part list manufactures the collision. One block, and the computed
+   values are unchanged — verified in Chromium, 197x31 at rest with
+   `margin-top: 0px`, `padding: 6px 8px`, `border-radius: 10px`, before and
+   after. */
 .waka-account-out {
   margin-top: 0;
+  padding: var(--sp-6) var(--sp-8);
+  border-radius: var(--waka-r-control);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -5453,15 +5349,57 @@
  * 560 and not 480: it is the step `home.css` already breaks the top row at,
  * and the arithmetic lands four pixels under it. One breakpoint in the
  * product beats two that nearly agree.
+ *
+ * ── THE THREE SELECTORS WERE `.waka-talks-*` AND NONE OF THEM EXISTS ──────
+ *
+ * Repointed 2026-10-12. The whole `.waka-talks-` family — `-row`, `-ask`,
+ * `-open`, `-del`, `-words` — has zero renderers anywhere in
+ * `packages/web/src`, and had NO BASE RULES LEFT EITHER: every surviving
+ * mention in this file was inside a media query. Three `max-width` overrides
+ * and one coarse-pointer override of rules that are not here, which is the
+ * orphaned-modifier shape this file has now been bitten by three times
+ * (`.jar-char-bubble--aside`, `.jar-keep-via:hover`, and these).
+ *
+ * The list was rebuilt under `.waka-rail-*` and `.waka-list-*`:
+ *
+ *   .waka-talks-row    ->  .waka-rail-item        the <li>
+ *   .waka-talks-ask    ->  .waka-rail-ask         the confirm group
+ *   .waka-talks-open   ->  .waka-list-row         the press that opens it
+ *   .waka-talks-del    ->  .waka-rail-del         the verb it replaces
+ *   .waka-talks-words  ->  .waka-list-lead        the preview
+ *
+ * AND HALF OF WHAT THIS BLOCK PREVENTED CAME BACK WITH THE RENAME, which is
+ * why these are moved rather than deleted. MEASURED in Chromium at 320x568
+ * with touch, on a real account with one conversation in the list and its
+ * delete asked:
+ *
+ *   the overflow does NOT recur. `.waka-rail-ask` right edge 276,
+ *   `.waka-rail-item` right edge 276, `documentElement.scrollWidth` 320.
+ *   The group is 145.5px now, not 334 — two buttons instead of three
+ *   controls and a sentence, because the failure line is
+ *   `.waka-rail-warn { flex: 1 1 100% }` and already takes its own line.
+ *
+ *   THE PREVIEW COLLAPSE DOES. `.waka-list-row` is 183.7px wide at rest and
+ *   78.5px with the question open — about seven characters and an ellipsis.
+ *   Screenshot read back: "a message ...". `.waka-rail-ask` carries
+ *   `flex: 0 0 auto`, exactly the pin the old `.waka-talks-ask` was measured
+ *   for, and `.waka-rail-item` does not wrap.
+ *
+ * So the second half of the founder-facing fact is live again: the preview
+ * is the only thing that tells you WHICH conversation you are about to
+ * erase, and under 560 it is seven characters. Same breakpoint, same three
+ * declarations, new names.
  */
 @media (max-width: 560px) {
-  .waka-talks-row {
+  .waka-rail-item {
     flex-wrap: wrap;
   }
 
   /* Its own line, at the end of it — the verbs stay under the delete they
-     replaced rather than jumping to the opposite side of the row. */
-  .waka-talks-ask {
+     replaced rather than jumping to the opposite side of the row.
+     `flex: 1 0 100%` also overrides the base `flex: 0 0 auto` that pinned it,
+     which is the declaration the measurement above is about. */
+  .waka-rail-ask {
     flex: 1 0 100%;
     justify-content: flex-end;
   }
@@ -5473,8 +5411,10 @@
      pushed its neighbour off. From a zero basis the preview claims only what
      is left after the verb, which is what it was already doing before the
      row could wrap. Only the confirm group takes a line of its own, and only
-     while it is open. */
-  .waka-talks-open {
+     while it is open.
+     WRITTEN AS THE BASE RULE'S OWN SELECTOR so it is the same specificity
+     and later in the file, which is how this sheet decides a tie. */
+  .waka-rail-item > .waka-list-row {
     flex: 1 1 0;
   }
 }
@@ -5533,10 +5473,23 @@
  *   .waka-composer-ask    108×32   the other destination, its peer
  *   .waka-composer-mic     32×32   how words get in
  *   .waka-tab              ..×32   choosing a shelf, inside a sideways slider
- *   .waka-talks-open       ..×22   opening a conversation
- *   .waka-account-go      135×31   the way to the settings page
+ *   .waka-talks-open       ..×22   opening a conversation — RENAMED, not
+ *                                  deleted: the press is `.waka-list-row`
+ *                                  and the floor moved with it (2026-10-12)
+ *   .waka-account-go      135×31   the way to the settings page — MEASURED
+ *                                  AND THEN DELETED. The link went when the
+ *                                  settings PAGE did (2026-10-11); settings
+ *                                  is a panel on this same corner now, so
+ *                                  there is nothing to travel to. The row
+ *                                  stays struck through rather than removed
+ *                                  because the measurement is what justifies
+ *                                  the 44 its surviving peer still takes.
  *   .waka-account-out     135×31   signing out
- *   .jar-char-bubble-go    69×24   the way into a conversation
+ *   .jar-char-bubble-go    69×24   the way into a conversation — RENAMED to
+ *                                  `.jar-char-bubble-act`, which arrived
+ *                                  without the floor and measured 93.8×18 in
+ *                                  Chromium at 320×568 with touch. Re-taken
+ *                                  2026-10-12; see the family's tombstone.
  *
  * All eight are acts — a mis-hit costs you the thing you were keeping, the
  * conversation you were opening, or your session. They get 44.
@@ -5553,7 +5506,8 @@
  *                                  `.jar-char-say` is already scrolling
  *   .jar-char-claim-from   ..×29   a cited save; four of them under a claim
  *   .waka-talks-del        39×44   destructive, and a bigger destructive
- *                                  target is a worse one
+ *                                  target is a worse one. `.waka-rail-del`
+ *                                  now, and it still carries its own 44.
  *
  * The attachment drawer's × was 20×20 — under even the WCAG floor — so it is
  * brought to 24 rather than to 44: it lives inside a 28px-tall pill beside a
@@ -5577,16 +5531,35 @@
     min-height: var(--waka-corner);
   }
 
-  /* Centred rather than on its baseline, because the row that holds it aligns
-     on baselines and a 44px box with its words pinned to the top edge reads
-     as a mistake. The preview and the date are both one line, so centring
-     them together keeps the row looking exactly as it was drawn. */
-  .waka-talks-open {
+  /* THE FLOOR MOVES TO `.waka-list-row` AND `align-items` DOES NOT.
+     This was `.waka-talks-open`, which has no renderer; the press that opens
+     a conversation is `.waka-list-row` now, and the same class is the press
+     that opens a saved inspiration and a principle — so the floor is given
+     to all three at once, which is what the ruling asks for anyway.
+
+     THE SECOND DECLARATION IS DELIBERATELY NOT CARRIED OVER, and that is the
+     whole reason this is three sentences rather than a renamed selector. The
+     old note said "centred rather than on its baseline, because the row that
+     holds it aligns on baselines and a 44px box with its words pinned to the
+     top edge reads as a mistake. The preview and the date are both one line."
+     That described a ROW: one line of preview beside a date. `.waka-list-row`
+     is `flex-direction: column` — the preview on top of the meta — so
+     `align-items: center` would centre both of them HORIZONTALLY and silently
+     turn every list in the product into centred text. Copying a declaration
+     onto a renamed class without re-reading what the class now is, is the
+     exact accident this file keeps paying for.
+
+     AND THE FLOOR IS A GUARANTEE RATHER THAN A CHANGE: measured in Chromium
+     at 320x568 with touch, a conversation row is already 71px tall from its
+     `var(--sp-16)` of padding and two lines of text. This holds the floor for
+     a one-line row with no meta, which is what a list of short titles is. */
+  .waka-list-row {
     min-height: var(--waka-corner);
-    align-items: center;
   }
 
-  .waka-account-go,
+  /* `.waka-account-go` LED THIS PAIR AND IS GONE — see the tombstone at
+     `.waka-account-out`'s own block above. Signing out is the only verb
+     left in the card, and it still gets the 44. */
   .waka-account-out {
     min-height: var(--waka-corner);
     display: flex;
@@ -5596,8 +5569,15 @@
   /* It keeps the costume it was given — a line of the same speech, underlined
      (founder: "talk about this rather than put it in a button") — and gains
      only the air around it. The underline does not move because the text is
-     centred in the taller box. */
-  .jar-char-bubble-go {
+     centred in the taller box.
+
+     THE SELECTOR WAS `.jar-char-bubble-go` AND THAT CLASS NO LONGER EXISTS.
+     Its tombstone is at the family's own block above. The offer inside the
+     speech is `.jar-char-bubble-act` now, and it arrived WITHOUT this rule:
+     measured in Chromium at 320x568 with touch, the world's "Add an
+     inspiration" offer was 93.8 x 18 with `min-height: auto`. So this is the
+     same rule, moved to the control it was always about. */
+  .jar-char-bubble-act {
     min-height: var(--waka-corner);
     display: inline-flex;
     align-items: center;
