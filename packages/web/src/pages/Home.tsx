@@ -9685,7 +9685,33 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          is something the creature SAID; with the frame it
                          is something it is showing you about yourself. The
                          founder asked for exactly this preamble. */
-                      lead ? (
+                      /* ═══ AND IT IS ONLY YOURS ON YOUR OWN WALL ══════
+                         Founder, standing on their agent's wall and reading
+                         their own reading back: "this is my top of mind, why
+                         is my agent also showing it."
+
+                         `lead` IS THE ACCOUNT'S READING, NOT THE WALL'S. It
+                         comes from `loadPersonalReading`, keyed on
+                         `storageScope.profileId`, so it is the same object
+                         whichever wall you are standing on — and the bubble
+                         printed it under "This is what's on your mind right
+                         now" while the creature was wearing somebody else's
+                         form. An agent that has formed nothing was showing
+                         its owner's sentence as though it were its own.
+
+                         THE EMPTY CASE WAS ALREADY RIGHT, which is what makes
+                         this a miss rather than a decision: `restingWord`
+                         branches on `standingAsAgent` and says the agent has
+                         adopted nothing. Only the case where a reading EXISTS
+                         was left unscoped, so the bug appears exactly when
+                         the owner has a top of mind and the agent does not —
+                         the common case, and the one nobody tests with.
+
+                         THE REFRESH WAS ALREADY SCOPED TOO: the loop that
+                         re-reads the reading returns early on
+                         `atWall.kind !== "self"`. So the data layer and the
+                         empty state both knew; only the sentence did not. */
+                      lead && !standingAsAgent ? (
                         <>
                           <span className="jar-char-bubble-of">{say('worldBubbleActMine')}</span>
                           <span className="jar-char-bubble-reading">{lead.body}</span>
