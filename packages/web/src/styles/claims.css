@@ -431,9 +431,50 @@
   color: var(--bg);
 }
 
+/* ═══ AND WHEN THERE IS NOTHING TO KEEP, IT DIMS — IT DOES NOT OUTLINE ═══
+   Founder: "Just don't add the white border around it. Keep it lower
+   opacity. Save button. ... when the user didn't make any change, then make
+   it lower opacity, like basically disable it."
+
+   WHAT WAS ACTUALLY ON SCREEN WHEN THAT WAS SAID, measured rather than
+   assumed, because the obvious suspect was innocent. `.jar-inspiration-
+   composer button` in `chrome.css` is unlayered at (0,1,1) and puts a
+   `1px solid var(--w-edge)` and a 12px radius on every button inside the
+   notepad — it has silently overruled four component rules this week, and
+   it is the first thing to look at whenever a pale edge appears on a note
+   page. It is NOT the cause here: the dock is `nav.waka-dock` inside
+   `div.jar`, a sibling of the composer rather than a child, so that
+   selector never matches this control. Chromium on the real page agrees —
+   computed `border: 0px none`, `outline: none`, `box-shadow: none` in both
+   states, and a cropped screenshot of the bar shows no edge. So the
+   founder's sentence is a RULE FOR THE DISABLED STATE being added here, not
+   a bug report about one that existed; the rule is written down so the
+   obvious implementation of "show it is off" — an outline where the fill
+   was — cannot arrive later and be defended as an oversight.
+
+   `border: 0` and `box-shadow: none` are therefore standing guards rather
+   than fixes. They cost two declarations and they mean that if this control
+   is ever moved inside the composer — which is exactly where ask (c) was
+   first going to put the archive's copy — it cannot sprout the edge the
+   founder has now twice asked not to see.
+
+   ONE DIMMING CHANNEL, NOT TWO. This used to read `color: var(--muted)` and
+   lean on `button:disabled { opacity: .4 }` over in `chrome.css` for the
+   rest, which is dimming applied twice from two files: `--muted` is already
+   ink at 80%, so the glyph landed at 32% and 2.55:1 on the ground. Ink at a
+   stated 0.4 is 3.44:1 — still obviously off, and findable on a blank page,
+   which it now has to be: the button is PRESENT and dim before there is
+   anything to keep rather than absent. The opacity is stated here rather
+   than inherited because this file is unlayered and that one is not, so
+   borrowing it meant the number could move from a sheet this rule cannot
+   see. `color` has to be re-stated regardless — the enabled state paints
+   `--bg` for legibility on the fill, and the fill is gone. */
 .waka-dock-tool--keep:disabled {
+  border: 0;
   background: none;
-  color: var(--muted);
+  box-shadow: none;
+  color: var(--ink);
+  opacity: 0.4;
 }
 
 /* ═══ WHERE A PASSING SENTENCE GOES ═══════════════════════════════════════

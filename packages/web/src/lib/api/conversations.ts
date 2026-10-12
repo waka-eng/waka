@@ -1,4 +1,4 @@
-import {ApiError,apiPath,deleteJson,getJson,patchJson,postJson} from './http';
+import {ApiError,apiPath,deleteJson,getJson,postJson} from './http';
 export type ConversationSourceKind='principle'|'top_of_mind_entry'|'inspiration';
 export interface ApiConversationMessage{id:string;profileId:string;conversationId:string;position:number;role:'user'|'assistant';content:string;createdAt:string;correctsMessageId?:string|null;savedInspirationIds?:string[];followUpQuestion?:string|null;memoryChanged?:boolean;replyRequestId?:string|null;citations?:Array<{index:number;kind:ConversationSourceKind;id:string;available:boolean;preview?:string;historical?:boolean;recordedAt?:string}>}
 export interface ApiConversation{id:string;profileId:string;revision:number;createdAt:string;updatedAt:string;messages:ApiConversationMessage[];messageWindowStart?:number;preview?:string;generationEnabled?:boolean;initialPrinciple?:{id:string;statement:string;state:string}|null;
@@ -40,15 +40,13 @@ function checked(body:{conversation:ApiConversation;generationEnabled:boolean},p
 export async function listConversations(profile:string,signal?:AbortSignal){const body=await getJson<{profileId:string;conversations:ConversationSummary[];generationEnabled:boolean}>(path(profile),'Could not load conversations.',signal);if(body?.profileId!==profile||typeof body.generationEnabled!=='boolean'||!Array.isArray(body.conversations)||body.conversations.length>100||body.conversations.some(row=>row.profileId!==profile||typeof row.id!=='string'||typeof row.preview!=='string'))throw invalid();return body;}
 export async function fetchConversation(profile:string,id:string,signal?:AbortSignal,from?:number){return checked(await readWindow(profile,`/${encodeURIComponent(id)}`,signal,from),profile,id);}
 export async function createConversation(profile:string,id:string,signal?:AbortSignal,principleId?:string,firstMessage?:{id:string;content:string;requestReply?:boolean}){return checked(await writeWindow(profile,'',{id,...(principleId?{principleId}:{}),...(firstMessage?{firstMessage}:{})},'Could not start the conversation.',signal),profile,id);}
-/* ═══ CHANGING WHAT A CONVERSATION IS ABOUT ═════════════════════════════
-   Founder: "let the user switch inspirations while chatting about it."
-   `null` clears the pin and returns the reply to reading from everything.
-   Owner-scoped like every other write here; the server's composite foreign
-   key is what makes pinning another profile's keep structurally impossible
-   rather than merely checked. */
-export async function pinConversationInspiration(profile:string,id:string,inspirationId:string|null,signal?:AbortSignal){
-  return checked(await patchJson(path(profile,`/${encodeURIComponent(id)}`),{inspirationId},'Could not change what this conversation is about.',signal),profile,id);
-}
+/* `pinConversationInspiration` WENT WITH THE DRAWER THAT CALLED IT.
+   Founder: "let's get rid of the side part and referencing inspiration ...
+   it's too complicated right now." The ROUTE is live and tested — PATCH
+   with `{inspirationId}` or `{inspirationId: null}` — and
+   `initialInspiration` still arrives on the row below, so bringing this
+   back is one wrapper and one panel. See the long note at the removal
+   site in `ConversationPanel`. */
 export async function saveConversationMessage(profile:string,id:string,input:{id:string;content:string;revision:number;requestReply?:boolean;correctsMessageId?:string},signal?:AbortSignal,from?:number){return checked(await writeWindow(profile,`/${encodeURIComponent(id)}/messages`,input,'Could not confirm this message. Check your saved messages before retrying.',signal,from),profile,id);}
 /* DELETING A CONVERSATION LEFT WITH THE `···` MENU IT WAS HIDDEN IN.
  * Founder on the surface that held it: "so many different buttons that I have

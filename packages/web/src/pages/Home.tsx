@@ -85,7 +85,7 @@ import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-reco
 import { InspirationComposer } from '../components/InspirationComposer';
 import { paintField } from '../space/inspiration/field-paint';
 import { Menu } from '../components/Menu';
-import { usePageMenu } from '../lib/page-menu';
+import { usePageMenu, wallAgnosticView } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
@@ -17381,6 +17381,41 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     Save on a blank page is a button for a thing that does not
                     exist." A blank note still leaves by the chevron or by
                     Now. */}
+                {/* ═══ OVERRULED: IT IS ALWAYS THERE, AND DIM UNTIL IT IS NOT ═
+                    Founder: "when the user didn't make any change, then make
+                    it lower opacity, like basically disable it. And then once
+                    the user starts having changes, then make it clickable and
+                    then clicking it would save it."
+
+                    THE ARGUMENT ABOVE WAS GOOD AND IS STILL WRONG. "An
+                    always-present Save on a blank page is a button for a
+                    thing that does not exist" is true about the OBJECT and
+                    false about the PERSON, and the person is who has to find
+                    it. A control that appears is a control you have to
+                    discover twice: once to learn it exists, and again to
+                    learn what summons it — and the thing that summons this
+                    one is typing, which is the act you are already doing and
+                    therefore not looking at the bar during. A control that
+                    DIMS is learned once. It is in the same place before and
+                    after, so the only thing left to notice is that it got
+                    brighter, and brightness is the one channel this product
+                    uses for meaning anyway.
+
+                    It also makes the blank page honest about what it is FOR.
+                    The notepad with nothing on it now shows mic, photo and a
+                    dim Save: three things you could do and one of them not
+                    yet. Before, it showed two, and the page gave no sign that
+                    keeping was even among the endings.
+
+                    NOTHING ELSE MOVES. `composerCanKeep` already folds
+                    `composerHasWords` in, so the empty note lands on exactly
+                    the disabled state every other blocked reason produces
+                    rather than a fourth appearance of its own — and
+                    `whyNotKept` deliberately returns `null` for an empty
+                    note, so the tooltip stays silent instead of complaining
+                    that you have not written anything yet. Dim is the whole
+                    message. See `.waka-dock-tool--keep:disabled` for why that
+                    dim is an opacity and never an outline. */}
                 {/* ═══ ONE MARK, NOT TWO WORDS ═══════════════════════════
                     Founder, with "Save as draft" and "Save" standing beside
                     each other in the bar: "this is so confusing. Save as
@@ -17408,17 +17443,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     one out, and "Save" at 12px in a filled pill was wider
                     than both of them together. The name stays on the
                     `aria-label`, where it is read in full. */}
-                {composerHasWords ? (
-                  <button type="button" className="waka-dock-tool waka-dock-tool--keep"
-                    aria-label={say('worldSaveInspiration')}
-                    /* AND IT SAYS WHY IT CANNOT BE PRESSED, the same way the
-                       chat's Send does and for the reason written there: the
-                       reason belongs to the control, and is wanted only by
-                       somebody who has just tried. */
-                    title={whyNotKeeping ? say(whyNotKeeping) : undefined}
-                    disabled={!composerCanKeep}
-                    onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep"/></button>
-                ) : null}
+                <button type="button" className="waka-dock-tool waka-dock-tool--keep"
+                  aria-label={say('worldSaveInspiration')}
+                  /* AND IT SAYS WHY IT CANNOT BE PRESSED, the same way the
+                     chat's Send does and for the reason written there: the
+                     reason belongs to the control, and is wanted only by
+                     somebody who has just tried. */
+                  title={whyNotKeeping ? say(whyNotKeeping) : undefined}
+                  disabled={!composerCanKeep}
+                  onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep"/></button>
 
                 {/* ═══ AND THE TRANSIENT STATE, IN THE BAR AND NOWHERE ELSE ══
                     Founder, with "Recording canceled." printed across the
@@ -17521,16 +17554,37 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            are a history rather than a depth of your own material, which is
            why they never sat among the three and why this corner is where
            they belong. */
+        /* ═══ AND ON A SURFACE WITH NO OWNER, NEITHER FACE IS LIT ═══════
+           Founder: "When user clicks on chat, don't select any of me nor my
+           agent because here it doesn't matter — what's selected. For
+           inspirations it does, for now it does, but for chats it doesn't,
+           so don't select anything."
+
+           `wallAgnosticView` holds which surfaces those are and the whole
+           argument for it, including the check that chats really are
+           unscoped in practice rather than only in feel. What is worth
+           saying HERE is the part that is about this markup: WHERE YOU ARE
+           STANDING AND WHICH FACE IS LIT STOP BEING ONE FACT.
+
+           They were the same boolean, used for two jobs — the appearance and
+           the decision not to travel — and separating them is the whole
+           change. `here` still answers "is the creature already wearing this
+           form", so pressing the face you are already on still does nothing;
+           a single boolean would have made a press on "Me" while on Me fire
+           `goToWall(0)` and move a camera nobody asked to move. `lit` is
+           allowed to say nothing on a page where whose-material is not a
+           question being asked. */
         left={agentWall ? (
               <span className="jar-char-form" role="group" aria-label={say('worldWallMyAgent')}>
                 {([null, agentWall] as const).map(wall => {
-                  const standing = wall ? atWall.kind === 'agent' : atWall.kind !== 'agent';
+                  const here = wall ? atWall.kind === 'agent' : atWall.kind !== 'agent';
+                  const lit = here && !wallAgnosticView(viewNavigation.view);
                   return (
                     <button
                       key={wall ? wall.id : 'me'}
                       type="button"
-                      className={`jar-char-face jar-label${standing ? ' jar-char-face--standing' : ''}`}
-                      aria-pressed={standing}
+                      className={`jar-char-face jar-label${lit ? ' jar-char-face--standing' : ''}`}
+                      aria-pressed={lit}
                       /* NO CROSSING. The creature changes form where it is
                          standing; it does not walk to another column to do
                          it. Founder: "rather than my agent like moving rooms
@@ -17538,7 +17592,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          form" — and, three times, "the character shouldn't
                          move left It should move right", which stops being a
                          question the moment nothing slides either way. */
-                      onClick={() => { if (!standing) simApiRef.current?.goToWall(wall ? wall.col : 0, true); }}
+                      onClick={() => { if (!here) simApiRef.current?.goToWall(wall ? wall.col : 0, true); }}
                     >
                       {say(wall ? 'worldWallMyAgent' : 'worldWallMe')}
                     </button>

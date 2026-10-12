@@ -79,12 +79,11 @@
  * left; a reply that fails, stops or is rate-limited still prints a sentence
  * saying which. A quiet surface is not the same as a quiet failure.
  */
-import {useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
-import {createConversation,fetchConversation,listConversations,pinConversationInspiration,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
+import {useEffect,useLayoutEffect,useRef,useState} from 'react';
+import {createConversation,fetchConversation,listConversations,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
 import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage';
 import {useConversationReply} from '../lib/use-conversation-reply';
 import {Companion} from './Companion';
-import {ChatAside} from './ChatAside';
 import {ConversationText} from './ConversationText';
 import {HomeActionIcon} from './HomeActionIcon';
 import {timeOf} from '../lib/words';
@@ -249,27 +248,6 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
 
      THE ANCHOR IS THE CURRENT DRAFT, read through a ref so a sentence
      spoken over one already typed joins it rather than replacing it. */
-  /* ═══ PINNING, AND WHAT IT COSTS TO GET WRONG ════════════════════════
-     The write is small and the failure mode is not: a pin that looks
-     applied but did not land would have the person asking about a keep the
-     reply cannot see, and nothing on screen would say so. So the panel is
-     disabled while it is in flight, the conversation is re-read after it
-     lands rather than patched locally, and a refusal surfaces as the
-     surface's own error rather than silently reverting. */
-  /* CLOSED BY DEFAULT. Founder: "the default should be that inspiration
-     drawer is closed, but the user can open it if they want." Not in the
-     address: opening a drawer is not going anywhere, and a conversation
-     you could link to with its side panel already open would make a
-     reading preference part of the thing you shared. */
-  const [aboutOpen,setAboutOpen]=useState(false);
-  const [pinning,setPinning]=useState(false);
-  const pin=useCallback(async(inspirationId:string|null)=>{
-    if(!id||pinning)return;
-    setPinning(true);
-    try{await pinConversationInspiration(scope.profileId,id,inspirationId);await refresh();}
-    catch{setError(say('worldChatAboutFailed'));}
-    finally{setPinning(false);}
-  },[id,pinning,refresh,say,scope.profileId]);
   const dictation=useDictation(()=>draftRef.current?.content??'',(text)=>edit(text),locale);
   const first=conversation?.initialPrinciple??focusPrinciple,canCompose=!id||Boolean(conversation);
   const full=(conversation?.revision??0)>=(generationEnabled?199:200);
@@ -459,27 +437,6 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         <div className="chat-composer-body">
           <label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
           <div className="chat-composer-footer">
-            {/* ═══ WHAT THIS IS ABOUT, AT THE START OF THE FOOTER ═══════
-                Opposite the send actions, in the slot the reference
-                library reserves for contextual controls. It belongs here
-                rather than in a corner because what the panel changes is
-                what the NEXT message may draw on, and this is where the
-                next message is being written.
-
-                IT IS ALSO THE CHIP. When a keep is pinned the trigger
-                carries its lead line, so the thing the reply will read is
-                visible while typing without the drawer being open — the
-                reference's composer drawer uses a chip for exactly this.
-                Only on a real conversation: there is nothing to pin to
-                until the server has seen one. */}
-            {id&&conversation?<button type="button"
-              className={`chat-about${conversation.initialInspiration?' chat-about--pinned':''}`}
-              aria-expanded={aboutOpen}
-              onClick={()=>setAboutOpen(value=>!value)}>
-              {conversation.initialInspiration
-                ?(conversation.initialInspiration.text.split('\n')[0]??'').trim()
-                :say('worldChatAboutOpen')}
-            </button>:null}
             {/* ═══ THE SEND ACTIONS, AND DICTATION IS ONE OF THEM ═══════
                 The reference is explicit about where a microphone goes:
                 "place the dictation button in the sendActions slot of
@@ -550,9 +507,30 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         ONLY ON A REAL CONVERSATION. Pinning is a fact about a conversation
         and there is nothing to pin it to until one exists; a picker on a
         blank new chat would write to an id the server has never seen. */}
-    {id&&conversation?<ChatAside locale={locale} profileId={scope.profileId}
-      open={aboutOpen} onClose={()=>setAboutOpen(false)}
-      pinned={conversation.initialInspiration??null} busy={pinning}
-      onPin={(next)=>{void pin(next);}}/>:null}
+    {/* ═══ THE SIDE PANEL IS GONE, AND SO IS PINNING ══════════════════
+        Founder, having used it: "actually for now, let's get rid of the
+        side part and referencing inspiration. I'm sorry. Let's get rid of
+        it. It's too complicated right now."
+
+        WHAT IT WAS. A drawer beside the transcript for picking one saved
+        keep, which the server then pinned into what the reply may read —
+        "when the user specifically brings that up then the agent can read
+        it." The reason it came out is not that it failed: a chat with a
+        picker, a chip, a drawer and a pinned state is four things to
+        understand before you can ask a question, on a surface whose whole
+        argument is that you type and it answers.
+
+        WHAT SURVIVES, so this is one wiring job rather than a rebuild.
+        The SERVER side is built, tested and live: `conversations
+        .initialInspirationId`, `POST`/`PATCH` accepting it, and
+        `readConversationContext` pinning the keep first in the reply's
+        sources — with db tests for the round trip, the cross-profile
+        refusal, and the pin reaching the model input. Migration 0070.
+        Nothing on the client reaches it.
+
+        AND THE NAMING IS WORTH KEEPING. Founder, mid-thought before
+        cutting it: "maybe it should say 'reference and inspiration'
+        instead of 'what is this about'." The label was the weakest part
+        of what shipped, and that is a better one. */}
   </main>;
 }
