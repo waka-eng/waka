@@ -1303,6 +1303,8 @@ export interface FieldAudit {
    * smallest thing that would have gone to zero.
    */
   provenanceCount: number;
+  /** Painted group-avatar hit areas in screen coordinates, for interaction QA. */
+  company: Array<{ id: string; x: number; y: number; r: number }>;
   /** which column the loop is standing on, and whether it is mid-glide */
   col: number;
   travelling: boolean;
@@ -3010,7 +3012,9 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * yours. Same pattern as `setMembersRef`: the ref is the one honest way
    * across a declaration-order boundary.
    */
+  const [members, setMembers] = useState<Map<string, ApiGroupMember[]>>(() => new Map());
   const membersRef = useRef<Map<string, ApiGroupMember[]>>(new Map());
+  const openGroupMemberRef = useRef<(profileId: string | null) => void>(() => undefined);
   /* the hue map the legend reads — written where the orbs are tinted, so the
      two can never disagree about who is which colour */
   const hueByOwnerRef = useRef<Map<string, number>>(new Map());
@@ -8795,7 +8799,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      * the pointer never lies about which being it would take.
      */
     function memberAt(cx: number, wy: number): string | null {
-      for (const seat of companySeats) {
+      // Match the painter: nearer avatars receive overlapping taps first.
+      for (let index = companySeats.length - 1; index >= 0; index--) {
+        const seat = companySeats[index];
         const dx = cx - seat.x;
         const dy = wy - seat.y;
         if (dx * dx + dy * dy <= seat.r * seat.r) return seat.id;
@@ -8866,12 +8872,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         wake();
         return;
       }
-      /* a member of the room answers with who it is — and nothing more.
-         Whose memories these are is a fact about the room; what they think
-         is on their own wall, which is a journey and not a tap. */
+      /* Open only this member's public inspirations within the current room. Record the
+         destination immediately so Back returns to the room, even mid-glide. */
       const member = memberAt(cx, cy + cam.y);
       if (member) {
         noticeMember(member);
+        openGroupMemberRef.current(member);
         return;
       }
       const ball = hitAt(cx, cy);
@@ -10241,6 +10247,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               glowing,
             };
           })(),
+          company: companySeats.map(seat => ({ ...seat, y: seat.y - cam.y })),
           /* the same question asked upward: how far the sky has leaned into
              headquarters. There is nothing IN it to elect any more, so the
              scalar is the whole answer — and it still tells a rip-out from a
@@ -10652,20 +10659,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       string,
       { id: string; name: string; hue: number; agent: boolean; mine: boolean }
     >();
+    // Members without public inspirations still have a reachable, honest empty view.
+    for (const member of members.get(atWall.id) ?? []) {
+      const mine = member.profileId === viewerIdRef.current;
+      seen.set(member.profileId, {
+        id: member.profileId, name: mine ? say("worldYou") : member.name,
+        hue: mine ? -1 : hueByOwnerRef.current.get(member.profileId) ?? -1,
+        agent: member.type === "agent", mine,
+      });
+    }
     for (const c of caps) {
       if (seen.has(c.ownerProfileId)) continue;
-      /* WHO YOU ARE IS A COMPARISON OF IDS, never an inference from the hue.
-         `hueByOwnerRef` is empty until the tint pass has run, and when it is,
-         `?? -1` hands every member the same value your own row uses — so a
-         hue-based test called all five of them "you" and lit every row at
-         once. The id is known from the first render and cannot drift. */
       const mine = c.ownerProfileId === viewerIdRef.current;
       seen.set(c.ownerProfileId, {
-        id: c.ownerProfileId,
-        name: mine ? "you" : c.ownerName,
+        id: c.ownerProfileId, name: mine ? say("worldYou") : c.ownerName,
         hue: mine ? -1 : hueByOwnerRef.current.get(c.ownerProfileId) ?? -1,
-        agent: c.ownerType === "agent",
-        mine,
+        agent: c.ownerType === "agent", mine,
       });
     }
     const rows = [...seen.values()];
@@ -10675,7 +10684,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     return rows.sort((a, b) =>
       a.mine ? -1 : b.mine ? 1 : a.hue - b.hue || a.name.localeCompare(b.name),
     );
-  }, [atWall, groupFieldTick, wokenGroups]);
+  }, [atWall, groupFieldTick, wokenGroups, members, say, locale]);
 
   /**
    * Whose ground is under you right now — null is yours, and travelling to
@@ -10691,9 +10700,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setStanding(null);
   }, [wallKey]);
   const standIn = useCallback((ownerProfileId: string | null) => {
+    const sim = simApiRef.current, wall = sim?.navigationState().wall;
+    if (!sim || wall?.kind !== 'group') return;
+    sim.release();
     setStanding(ownerProfileId);
-    simApiRef.current?.standIn(ownerProfileId);
+    sim.standIn(ownerProfileId);
+    sim.toGround();
+    // The painted wall may arrive before the route observer's debounce.
+    viewNavigationRef.current.write({ ...EMPTY_VIEW, wallId: wall.id, label: wall.name, at: parkedRef.current,
+      section: 'field', memberId: ownerProfileId }, { observed: true });
   }, []);
+  openGroupMemberRef.current = standIn;
   /**
    * Whether the grounds have just been arrived at. True for GROUNDS_LIT_MS
    * after travelling onto a shared wall, and the class it drives is removed
@@ -12331,9 +12348,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * wall, not before — the axis can hold many rooms and none of them owes a
    * request until you are standing in it.
    */
-  const [members, setMembers] = useState<Map<string, ApiGroupMember[]>>(() => new Map());
-  /* the fixture fills membership from inside the sim's effect, which is
-     declared above this state — a ref is the one honest way across */
+  /* Membership arrives from the frame loop; keep the state setter available
+     across that boundary. */
   setMembersRef.current = setMembers;
   /* `membersRef` is declared up beside `viewerIdRef`, above the sim's
      effect, because the frame loop now reads it too — the room's company is
@@ -16733,12 +16749,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           standing on, so like the offline line it holds still while you
           descend. Only the sky is exempt: up there you are reading patterns,
           and whose ground is under you is not the question. */}
-      {grounds.length > 0 && phase === "ready" ? (
+      {grounds.length > 0 && phase === "ready" && !inSky ? (
         <div
           className={groundsLit ? "jar-grounds jar-grounds--lit" : "jar-grounds"}
           data-jar-chrome="1"
           role="radiogroup"
+          data-jar-surface="group-members"
           aria-label={say("worldWhoseGround")}
+          onKeyDown={(event) => {
+            if (event.metaKey || event.ctrlKey || event.altKey || event.nativeEvent.isComposing) return;
+            const direction = event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1
+              : event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : 0;
+            if (!direction && event.key !== 'Home' && event.key !== 'End') return;
+            const rows = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+            const index = rows.indexOf(event.target as HTMLButtonElement);
+            if (index < 0) return;
+            event.preventDefault();
+            const next = rows[event.key === 'Home' ? 0 : event.key === 'End' ? rows.length - 1 : (index + direction + rows.length) % rows.length];
+            next.focus(); next.click();
+          }}
         >
           {grounds.map((m) => {
             const here = m.mine ? standing === null : standing === m.id;
@@ -16748,6 +16777,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 key={m.id}
                 type="button"
                 role="radio"
+                tabIndex={here ? 0 : -1}
                 aria-checked={here}
                 className={here ? "jar-grounds-row jar-grounds-row--here" : "jar-grounds-row"}
                 onClick={() => standIn(m.mine ? null : m.id)}
@@ -16761,6 +16791,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               </button>
             );
           })}
+        </div>
+      ) : null}
+
+      {phase === "ready" && inField && atWall.kind === "group" ? (
+        <div className="jar-group-ground-status" data-jar-chrome="1" role="status">
+          <p>{grounds.find(member => member.id === (standing ?? viewerIdRef.current))?.name ?? say("worldYou")}</p>
+          <p>{say(wallCount > 0 ? "worldMemberPublicInspirations" : "worldMemberNoPublicInspirations")}</p>
         </div>
       ) : null}
 
@@ -16918,6 +16955,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           It was: the new chrome arrived on top of the old chrome, which had
           never been swept because it only ever appeared where the new chrome
           had not. */}
+      {/* AND `origin/dev` 8b11c2f5 EXTENDED THIS PILL TO YOUR OWN WALL rather
+          than removing it: it dropped the `atWall.kind!=="self"` gate and
+          made the lit state read `principles?.length` on the self wall. That
+          commit and this one are the same complaint answered from opposite
+          ends — it made every wall match by giving the self wall the old
+          chrome, and this branch made every wall match by giving every wall
+          the dock. The dock wins here because the pill's destination is
+          covered on EVERY wall by `PrinciplesOverlay` (dock row
+          `worldDockPrinciples` -> `openOverHome('principles')`, rendered
+          with `profileId={atWall.kind==='agent'?atWall.id:...}`), which also
+          carries the count, the share and the open — and because two
+          controls saying "Principles" in the same place is the exact defect
+          the quote above is about. The sky itself is NOT orphaned: opening a
+          principle from that overlay writes `section:'sky'`, and dev's
+          other change in this region — the caret back down, now unlocked on
+          the self wall too — is kept verbatim a few lines below, which is
+          what gives that state its one-press way out. */}
 
       {/* AND WHAT THE SKY SAYS, STANDING IN IT. One sentence, in prose. The
           numeral law needs nothing here: what is forming is not countable
@@ -16926,10 +16980,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           2026-08-25: "from the sky, just have a carrot icon to go back
           down"). Up here there is one other place and you came from it — a
           name beside the mark would be telling somebody where they live. */}
-      {phase === "ready" && atWall.kind!=="self" && inSky ? (
+      {phase === "ready" && inSky ? (
         <button
           type="button"
-          className="jar-up jar-up--down"
+          className={`jar-up jar-up--down${atWall.kind === "self" ? " jar-up--personal" : ""}`}
           data-jar-chrome="1"
           aria-label={say("worldBackDown")}
           onClick={() => simApiRef.current?.toTop()}
@@ -17015,6 +17069,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          forbids — it survived the law for exactly as long as it was invisible
          to whoever wrote it. The archive is a destination in the switcher on
          every wall now. */}
+      {/* `origin/dev` 8b11c2f5 EXTENDED THIS ONE TO THE SELF WALL TOO, on the
+          same reasoning as the pill, and it loses to the same answer: the
+          archive is `SavesOverlay`, reached from the dock on every wall, and
+          the door's own text is a printed numeral — "states render, numerals
+          never". The exception that justified the numeral was that it is the
+          size of your own archive; the overlay says that in the place the
+          archive actually is. dev's `.jar-saved--personal` CSS is therefore
+          dropped from `home.css` rather than merged: there is no `.jar-saved`
+          left for it to modify. */}
 
       {/* The mouth belongs below the companion, but a person can also be in
           the ground, the sky, or the room's past. From there the same act is
@@ -17093,12 +17156,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           already written are still read: `ReviewEvidence` quotes them under
           the principles they are evidence for, which is where the collecting
           was pointed all along. */}
-      <div className={`jar-personal-shortcuts${atWall.kind==='self'?' jar-personal-shortcuts--self':''}${!inField&&!inSky&&wallCount>0&&(!atNow||(charSay!==''&&!mouthOpen))?' jar-personal-shortcuts--above-count':''}`}
+      <div className={`jar-personal-shortcuts${atWall.kind==='self'?' jar-personal-shortcuts--self':''}${atWall.kind==='self'&&inSky?' jar-personal-shortcuts--sky':''}${!inField&&!inSky&&wallCount>0&&(!atNow||(charSay!==''&&!mouthOpen))?' jar-personal-shortcuts--above-count':''}`}
         hidden={Boolean(panelOpen||mouthOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple||viewNavigation.view?.open)}>
       {/* THE REVIEW SHORTCUT IS GONE FROM THIS CORNER. It was the one door
           into the folded flow, and `useReviewEntry` existed only to decide
           whether it should read "Review" or "Resume review" — a fetch on
           every arrival to label a button. Capture keeps the corner. */}
+      {/* THE `--sky` MODIFIER IS `origin/dev` 8b11c2f5's, AND IT IS STILL
+          NEEDED. That commit unlocked the caret back down on the self wall
+          (`.jar-up--down.jar-up--personal`, which `home.css` parks at
+          bottom:76px), so on your own wall in the sky there is now a control
+          exactly where this row sits. 128px lifts the row clear of it. The
+          rest of dev's version of this hunk — the review shortcut and its
+          `reviewEntry.label` — is gone with the fold, and `useReviewEntry`
+          with it, so dev's relabelling of that button had nothing left to
+          relabel. */}
       {phase==='ready'&&(inField||inSky||!atNow)?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
         <HomeActionIcon kind="capture"/> {say('worldCaptureInspiration')}</button>:null}
       {/* AND SO IS FIND. Founder ruling, long since applied everywhere

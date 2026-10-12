@@ -1,0 +1,25 @@
+{
+  "source": "complete, overinclusive development window",
+  "run": 37840080195,
+  "window": {
+    "start": "2026-10-08T19:43:10.000Z",
+    "end": "2026-10-08T20:31:39.315Z",
+    "maxPagesPerRead": 5
+  },
+  "reportedOpenRouterUsd": 0.004043608,
+  "geminiEmbeddingCalls": 21,
+  "geminiHeldUpperUsd": 0.0064512,
+  "geminiMaxTokensPerCall": 2048,
+  "geminiRateUsdPerMillion": 0.15,
+  "geminiModel": "gemini-embedding-001",
+  "sources": [
+    "https://ai.google.dev/gemini-api/docs/models/gemini-embedding-001",
+    "https://ai.google.dev/gemini-api/docs/pricing?hl=es"
+  ],
+  "originalReservationUsd": 0.2,
+  "chargedOrHeldUsd": 0.010494808,
+  "reservationReleasedUsd": 0.18950519200000002,
+  "priorUsedOrHeldUsd": 4.7823478004,
+  "newUsedOrHeldUsd": 4.7928426084,
+  "caveat": "Gemini remains a held maximum-rate/token-limit estimate, not an invoice. The full window can include other activity, so its total is a conservative bound for the synthetic case."
+}
