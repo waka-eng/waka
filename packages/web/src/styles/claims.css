@@ -3631,7 +3631,14 @@
 
 /* The one sentence with weight. Same face and the same light weight as the
    reading above it — it is the same kind of thing, said earlier. */
-/* `.jar-char-claim-from` IS GONE WITH THE LIST IT DRESSED. Founder, on a
+/* `.jar-char-claim-from` IS NOT GONE, AND THIS NOTE SAID IT WAS. Corrected
+   2026-10-12: the rule is still declared below and `Home.tsx` still renders
+   it — measured on screen as "From 2 things you kept" under a live claim. A
+   tombstone for something still alive is worse than no comment, because the
+   next person deletes the rule on its word. What follows is the history,
+   which is true and worth keeping; only the first sentence was wrong.
+
+   THE EVIDENCE LIST IS GONE — that is what this paragraph was about. Founder, on a
    screenshot of three evidence lines under a claim: "makes the page messy",
    and before that "we need to remove this or else it's gonna not have enough
    space." The claim's slot has a reserved height now so the creature cannot
@@ -3642,22 +3649,27 @@
 /* THE READING WEARS THE SAME NOTE AS THE QUESTION — same seat, same
    material — and is a shade quieter, because it is something to read rather
    than something waiting on you. */
-.jar-char-claim--reading {
-  color: var(--muted);
-}
+/* ═══ `.jar-char-claim--reading` WENT WITH THE SEAT IT DRESSED ══════════
+   Founder, on a bordered box with nothing inside it: "there isn't anything
+   the user needs to engage with, so why is this box here?"
 
-.jar-char-claim--reading .jar-char-claim-statement {
-  color: var(--ink);
-  /* THE COMPANION SPEAKS IN THE INTERFACE FACE, NOT THE READING ONE.
-     Founder, shown the same bubble set both ways: "I prefer this font
-     over [the serif]." The reading face stays where a person settles in to
-     READ — a page's name, a saved thought opened, a conversation's turns,
-     a principle. A bubble is a line somebody SAYS, it is five words long,
-     and at that length a serif reads as a pull quote rather than as
-     speech. The claim keeps the same voice because it comes from the same
-     mouth. */
-  font-family: var(--waka-face);
-}
+   The seat held one of two things — a claim to answer, or the reading's
+   verbs. The verbs came off the top of mind ("controls under a statement
+   about you must ANSWER it, not administer it"), which made "neither"
+   reachable for the first time, and the branch went on drawing its frame
+   around nothing. The branch is gone; these two rules dressed only that
+   branch.
+
+   RECORDED RATHER THAN QUIETLY DELETED, because no gate would ever have
+   noticed: `dead-css.ts` is report-only — its `main()` returns 0 and prints
+   "EVIDENCE, NOT A DELETION LIST" — and `every-class-is-dressed.test.ts` is
+   the inverse check, which deleting markup can only make greener. Two dead
+   rules here would have sat unnoticed indefinitely.
+
+   What it set: `color: var(--muted)` on the seat, and `--ink` plus the
+   interface face on the statement inside it. The claim seat keeps its own
+   rules; only the reading modifier is gone. */
+
 
 /* WHERE THE CLAIM CAME FROM — one quiet line, in the same register the
    principles' proof line wears, and a door rather than a label. It sits
