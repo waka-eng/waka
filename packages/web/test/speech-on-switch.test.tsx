@@ -52,7 +52,14 @@ const face = (label: string) =>
   [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-face')]
     .find(button => button.textContent?.trim() === label);
 /** The creature's own speech, which is the `--aside` weight and only that. */
-const speech = () => world.container.querySelector('.jar-char-bubble--aside')?.textContent?.trim() ?? null;
+/* THE SENTENCE, NOT THE WHOLE BUBBLE. Every bubble ends in a named act
+   now — founder: "all speech bubbles should have an action at the end" —
+   so the bubble's `textContent` is the sentence with "Let's talk about it"
+   welded to it. `.jar-char-bubble-reading` is the said thing, which is
+   what this suite is about: whether a stale sentence survives a wall
+   switch. Presence of the bubble itself is asserted separately below. */
+const speech = () => world.container
+  .querySelector('.jar-char-bubble--aside .jar-char-bubble-reading')?.textContent?.trim() ?? null;
 const press = () => world.container.querySelector<HTMLButtonElement>('.jar-char-press');
 
 /**

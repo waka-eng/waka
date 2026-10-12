@@ -15529,12 +15529,50 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          having nothing to say is a worse first chat than no
                          chat, and a control that opens one is the "opens an
                          empty page" failure this branch already refused. */
+                      /* ═══ AND EVERY BUBBLE ENDS IN A NAMED ACT ═══════
+                         Founder: "all speech bubbles should have an action
+                         at the end — such as 'add more inspiration', when
+                         you click on it then it opens add new inspiration.
+                         If there's a top of mind formed then say 'this is
+                         my current top of mind' and then write the top of
+                         mind, and then the agent should say 'should we
+                         chat about it more?' or something like that."
+
+                         THIS REVERSES "THE SENTENCE IS THE DOOR", and the
+                         old note is kept below because its warning is
+                         still the thing to design against: "a pill inside
+                         a speech bubble is a dialog box with an OK in it."
+                         What was wrong was not the reasoning but what it
+                         was reasoning about. The whole bubble being
+                         pressable is invisible — nothing says a sentence
+                         can be pressed, and a reading and the empty line
+                         went to DIFFERENT places with no way to tell. The
+                         founder has been pressing a surface whose two
+                         states look identical and behave differently.
+
+                         SO THE ACT IS NAMED AND THE WARNING IS OBEYED: the
+                         line underneath is set as speech, underlined, in
+                         the creature's own voice — "Let's talk about it" —
+                         rather than as a pill. It is the companion
+                         offering, which is what it was always supposed to
+                         read as, said out loud instead of implied.
+
+                         AND THE READING SAYS WHAT IT IS. "This is what's on
+                         your mind right now" above the words, because a
+                         sentence appearing in a speech bubble with no frame
+                         is something the creature SAID; with the frame it
+                         is something it is showing you about yourself. The
+                         founder asked for exactly this preamble. */
                       lead ? (
-                        <button type="button" className="jar-char-bubble-reading jar-char-bubble-open"
-                          disabled={talking}
-                          onClick={() => { void talkAbout({ id: '', text: lead.body }); }}>
-                          {lead.body}
-                        </button>
+                        <>
+                          <span className="jar-char-bubble-of">{say('worldBubbleActMine')}</span>
+                          <span className="jar-char-bubble-reading">{lead.body}</span>
+                          <button type="button" className="jar-char-bubble-act"
+                            disabled={talking}
+                            onClick={() => { void talkAbout({ id: '', text: lead.body }); }}>
+                            {say('worldBubbleActTalk')}
+                          </button>
+                        </>
                       ) : (
                         /* ═══ AND THE EMPTY LINE IS A DOOR AFTER ALL ═════
                            Founder: "this should say no top of mind formed
@@ -15560,10 +15598,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                            is the notepad. The offer ("Feeling inspired?
                            Save it.") and this line are the two that name
                            it, and they go to the same place. */
-                        <button type="button" className="jar-char-bubble-reading jar-char-bubble-open"
-                          onClick={startNewInspiration}>
-                          {restingWord}
-                        </button>
+                        <>
+                          <span className="jar-char-bubble-reading">{restingWord}</span>
+                          <button type="button" className="jar-char-bubble-act"
+                            onClick={startNewInspiration}>
+                            {say('worldBubbleActAdd')}
+                          </button>
+                        </>
                       )
                     )}
                   </span>
@@ -15595,14 +15636,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     something said and starts reading as something that wants
                     an answer." That is still why this is a line of speech
                     wearing a press, and not a button. */}
-                <button
-                  type="button"
-                  className="jar-char-bubble-reading jar-char-bubble-open"
+                {/* THE WEATHER GETS THE SAME NAMED ACT. Founder: "all
+                    speech bubbles should have an action at the end." This
+                    is the bubble that reports what has been happening, and
+                    it led into a chat on a press nothing advertised. */}
+                <span className="jar-char-bubble-reading" role="status">{charSay}</span>
+                <button type="button" className="jar-char-bubble-act"
                   disabled={talking}
-                  role="status"
-                  onClick={() => { void talkAbout({ id: '', text: charSay }); }}
-                >
-                  {charSay}
+                  onClick={() => { void talkAbout({ id: '', text: charSay }); }}>
+                  {say('worldBubbleActTalk')}
                 </button>
               </div>
             </div>

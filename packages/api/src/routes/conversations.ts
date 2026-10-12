@@ -206,7 +206,11 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     const id=uuid.safeParse(c.req.param('id'));if(!id.success)return c.json({error:'Invalid conversation'},400);
     const window=messageWindow(c.req.query('from'),c.req.query('limit'));
     const input=z.object({inspirationId:uuid.nullable()}).strict().safeParse(await c.req.json().catch(()=>null));
-    if(!input.success)return c.json({error:'Choose one of your saved inspirations, or null to clear it.'},400);
+    // Terse, like this route's sibling 400s ('Invalid conversation', 'Invalid
+    // reply request'): a malformed body is unreachable from the interface, so
+    // the reader is a client author, not the person. The 404 below is the one
+    // a person can actually cause and it is written for them.
+    if(!input.success)return c.json({error:'Invalid inspiration choice'},400);
     const profileId=c.get('conversationProfileId');
     const row=await database().transaction(async tx=>{
       // Locked before reading for the same reason Send locks: two rails

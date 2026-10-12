@@ -4452,6 +4452,65 @@
  * of the same material, and it carries the same soft halo the body does,
  * which is what makes it dreamy rather than flat.
  */
+/* ═══ THE PREAMBLE AND THE ACT ══════════════════════════════════════════
+   Founder: "all speech bubbles should have an action at the end — such as
+   'add more inspiration' ... if there's a top of mind formed then say
+   'this is my current top of mind' and then write the top of mind, and
+   then the agent should say 'should we chat about it more?'"
+
+   THREE PARTS, AND THE MIDDLE ONE IS STILL THE LOUDEST. The preamble is
+   the fine step and muted; the reading keeps the body size and full ink;
+   the act is fine again and underlined. Light and size carry the ranking,
+   which is this product's only channel, so the words a person came to read
+   stay the words they land on.
+
+   THE ACT IS SPEECH, NOT A PILL, and the note one block down is why: "a
+   pill inside a speech bubble is a dialog box with an OK in it — the
+   bubble stops reading as something said and starts reading as something
+   that wants an answer." An underlined line in the creature's own voice is
+   it offering; a filled rectangle is a form. The founder asked for the
+   offer, not for the form.
+
+   UNDERLINED, AND HERE THAT IS THE RULE RATHER THAN AN EXCEPTION. The
+   offer this replaces argued its way OUT of an underline — "a rule drawn
+   under a five-word reply to a press you just made is explaining a thing
+   the press already explained." That was true when the bubble appeared
+   BECAUSE you pressed the creature. This one appears on its own, under a
+   sentence that is not pressable, so nothing else says it can be. */
+.jar-char-bubble-of {
+  font-size: var(--t-meta);
+  color: color-mix(in srgb, var(--waka-on-light) 60%, transparent);
+}
+
+.jar-char-bubble-act {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--waka-on-light);
+  font: inherit;
+  font-size: var(--t-meta);
+  letter-spacing: normal;
+  text-transform: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  cursor: pointer;
+}
+
+.jar-char-bubble-act:disabled {
+  color: color-mix(in srgb, var(--waka-on-light) 45%, transparent);
+  cursor: default;
+}
+
+.jar-char-bubble-act:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: var(--waka-r-hand-sm);
+}
+
 .jar-char-bubble-body {
   pointer-events: auto;
   position: relative;
