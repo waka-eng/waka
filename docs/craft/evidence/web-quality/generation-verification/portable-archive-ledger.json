@@ -1,0 +1,15 @@
+{
+  "scope": "Complete overinclusive development window; coherent positive case",
+  "window": {
+    "start": "2026-10-08T21:42:40.000Z",
+    "end": "2026-10-08T21:50:34.253Z",
+    "maxPagesPerRead": 5
+  },
+  "reportedOpenRouterUsd": 0.005490582800000001,
+  "geminiCalls": 23,
+  "geminiHeldUpperUsd": 0.007065599999999999,
+  "priorUsedOrHeldUsd": 4.8576657326,
+  "usedOrHeldUsd": 4.8702219154,
+  "remainingUsd": 0.12977808459999984,
+  "pricesAreNotInvoice": true
+}

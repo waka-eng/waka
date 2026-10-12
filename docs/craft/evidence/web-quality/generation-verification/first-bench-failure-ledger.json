@@ -1,0 +1,7 @@
+{
+  "scope": "Failed pre-repair-report bench; all reported usage lines in child output, no stale JSON counted as a new pass",
+  "calls": 16,
+  "costUsd": 0.002810051,
+  "allPriced": true,
+  "passed": false
+}
