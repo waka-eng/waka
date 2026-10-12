@@ -25,7 +25,7 @@ beforeEach(() => {
   vi.mocked(fetchAttachmentDetails).mockImplementation(async () => current);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); });
-const mount = (id = 'link', url = 'https://example.test/article') => act(async () => root.render(<AttachmentPreview item={{ id, type: 'link', label: url, url }} />));
+const mount = (id = 'link', url = 'https://example.test/article') => act(async () => root.render(<AttachmentPreview item={{ id, type: 'link', label: url, url }} locale="en-US" />));
 const button = (label: string) => [...host.querySelectorAll('button')].find(item => item.textContent === label)!;
 
 it('keeps the original usable during loading and metadata failure', async () => {
@@ -73,7 +73,7 @@ it('explains access-required pages without exposing error details', async () => 
 });
 it('shows original access without analysis mutation controls in read-only review mode',async()=>{
   current.analysis={status:'failed',canRetry:true,retryAfter:null};
-  await act(async()=>root.render(<AttachmentPreview item={{id:'link',type:'link',label:'https://example.test/article'}} readOnly/>));
+  await act(async()=>root.render(<AttachmentPreview item={{id:'link',type:'link',label:'https://example.test/article'}} locale="en-US" readOnly/>));
   expect(host.querySelector('a')?.href).toBe(current.attachment.url);expect(button('Retry preview')).toBeUndefined();expect(retryAttachmentAnalysis).not.toHaveBeenCalled();
 });
 it.each(['javascript:alert(1)', 'https://user:password@example.test/'])('does not navigate unsafe original %s', async url => {
