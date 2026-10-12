@@ -545,6 +545,138 @@ async function main(): Promise<void> {
         `    ${w.kept ? "yes " : "NO  "}  .${w.way.padEnd(12)} arrives with focus on ${w.landedOn}`,
       );
     }
+
+    /**
+     * ── THE WAY OUT OF A DESTINATION, PRESSED WITH THE KEY IT COSTS ────────
+     *
+     * THE FAILURE THIS WAS WRITTEN FOR, AND IT WAS A GATE EXCUSING ITSELF.
+     * The archive, the chats list, the principles and the claims queue all
+     * rendered through `DialogSurface` with `role="dialog"`, `aria-modal` and
+     * a Tab trap. Meanwhile `styles/claims.css` says the dock "is how you
+     * leave one", and `test/way-out.test.ts` exempts all four from Law 2 on
+     * exactly that sentence — its own header: "the dock is visible the entire
+     * time one is open, it never moves, and its first row is called Now. That
+     * is a visible way out costing one press."
+     *
+     * Both could not be true. Measured here before the fix, on a wall with
+     * things on it: open the archive from the bar with the keys, then press
+     * Tab sixty times and Shift+Tab sixty times. The bar was never reached,
+     * in either direction. For anybody working from the keyboard those four
+     * surfaces had NO way out at all — Law 2, the founder's single most
+     * repeated complaint, failing on the four most-visited surfaces in the
+     * product, and failing invisibly because the exit is right there on the
+     * screen and merely unreachable.
+     *
+     * WHY THIS BELONGS HERE AND NOT IN A UNIT TEST. `way-out.test.ts` reads
+     * source text, which is the right instrument for "is there a control that
+     * leaves" and no instrument at all for "can focus get to it". It can see
+     * that the dock offers each destination and that the bar renders while one
+     * is open; it cannot see a `keydown` handler calling `preventDefault` on
+     * Tab three files away. Only a browser with a real focus order can answer
+     * that, which is what this walk is.
+     *
+     * HOW IT IS MEASURED. Every destination is arrived at FRESH for each
+     * direction. The first version of this reused the page between the two
+     * and so measured the second direction from wherever the first had left
+     * focus — on the bar, not in the page — and reported six presses for a
+     * journey that costs one. A reachability number taken from the wrong
+     * starting point is not a weaker measurement, it is a different one.
+     *
+     * THE CLAIMS QUEUE IS NOT WALKED, and that is the product rather than an
+     * omission: it is the one destination with no row of its own in the bar —
+     * reached from the home screen, which `way-out.test.ts` states and allows
+     * — so there is no word in the dock to Tab to and press. It shares the
+     * primitive with the three below, and `test/dialog-surface.test.ts`
+     * holds the primitive directly.
+     */
+    interface Reach {
+      /** the word in the bar that goes there */
+      word: string;
+      opened: boolean;
+      /** what the surface says it is, read off the live DOM */
+      role: string;
+      modal: boolean;
+      /** presses to the nearest dock row, 0 meaning never reached */
+      forward: number;
+      backward: number;
+    }
+
+    /** Tab (or Shift+Tab) until focus is on a row of the bar, or give up. */
+    const pressesToTheDock = async (back: boolean, limit = 60): Promise<number> => {
+      for (let i = 1; i <= limit; i += 1) {
+        await page.keyboard.press(back ? "Shift+Tab" : "Tab");
+        await page.waitForTimeout(70);
+        if (/waka-dock-item/.test(await focused())) return i;
+      }
+      return 0;
+    };
+
+    /**
+     * Go to the destination the given word in the bar names, with keys only,
+     * and come back with how far the bar is from where you land.
+     *
+     * Nothing here is reached by selector except as a name for whatever is
+     * focused — every move is Tab or Enter, which is the only way this walk
+     * can claim what it claims.
+     */
+    const reachTheDockFrom = async (word: string): Promise<Reach> => {
+      const out: Reach = { word, opened: false, role: "", modal: false, forward: 0, backward: 0 };
+      for (const back of [false, true]) {
+        try {
+          await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
+          await page.waitForTimeout(7_000);
+          await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+          let pressed = false;
+          for (let i = 0; i < 40; i += 1) {
+            await page.keyboard.press("Tab");
+            await page.waitForTimeout(90);
+            const here = await focused();
+            if (!/waka-dock-item/.test(here) || !here.includes(word)) continue;
+            await page.keyboard.press("Enter");
+            await page.waitForTimeout(3_500);
+            pressed = true;
+            break;
+          }
+          if (!pressed) continue;
+          out.opened = (await page.locator(".waka-over").count()) > 0;
+          if (!out.opened) continue;
+          /* WHAT THE SURFACE SAYS IT IS, asked of the live DOM rather than of
+             the source — a `role` that a prop fails to reach is exactly the
+             kind of thing a source-reading gate agrees with and the browser
+             does not. `aria-modal` is half the bug on its own: it tells a
+             reader that nothing outside this node exists, so the bar the
+             exemption rests on is gone from the accessibility tree too. */
+          const says = (await page.evaluate(() => {
+            const el = document.querySelector(".waka-over");
+            return el
+              ? { role: el.getAttribute("role") ?? "", modal: el.getAttribute("aria-modal") === "true" }
+              : null;
+          })) as { role: string; modal: boolean } | null;
+          out.role = says?.role ?? "";
+          out.modal = says?.modal ?? false;
+          const presses = await pressesToTheDock(back);
+          if (back) out.backward = presses;
+          else out.forward = presses;
+        } catch {
+          /* left as whatever it reached — a throw here is a finding */
+        }
+      }
+      return out;
+    };
+
+    const destinations: Reach[] = [];
+    for (const word of ["Inspirations", "Chats", "Principles"]) {
+      destinations.push(await reachTheDockFrom(word));
+    }
+    console.log("\n  standing in a destination, how far away is the bar that leaves it:");
+    for (const d of destinations) {
+      console.log(
+        `    ${d.word.padEnd(13)} ${d.opened ? `a ${d.role || "(no role)"}${d.modal ? ", aria-modal" : ""}` : "NEVER OPENED"}` +
+          `   Shift+Tab: ${d.backward ? `${d.backward} press(es)` : "UNREACHABLE"}` +
+          `   Tab: ${d.forward ? `${d.forward} press(es)` : "UNREACHABLE"}`,
+      );
+    }
+
     /**
      * ── THE GROUND THAT IS NOT YOURS ───────────────────────────────────────
      *
@@ -737,6 +869,78 @@ async function main(): Promise<void> {
       broke.push("the ground's label promises keys that do not open a memory");
     }
     if (!sheetReturns) broke.push(`a sheet closed with Escape drops focus to ${sheetLandedOn}`);
+    /* ── THE BAR IS REACHABLE FROM INSIDE EVERY DESTINATION ────────────────
+       Three claims, and each of them is the one that was false:
+
+         1. the destination opens from the bar with keys alone — if it does
+            not, the rest is unmeasured rather than passing;
+         2. it does not declare itself modal. `aria-modal` deletes the bar
+            from the accessibility tree, and `role="dialog"` says the exit is
+            inside, which on these four is a statement about a control that
+            does not exist. A page says `region`;
+         3. the bar can actually be reached, backwards AND forwards.
+
+       BACKWARDS IS HELD AT A CEILING, AND THE FIRST DRAFT OF THIS HELD IT AT
+       ONE, WRONGLY. The reasoning was that `way-out.test.ts` rests its
+       exemption on "a visible way out costing one press", so one Shift+Tab
+       ought to be the price — and it measured three on all three
+       destinations, which looked like a finding and was a category error. The
+       law's "one press" is one ACTIVATION: see the exit, press it once, be
+       gone. How far focus has to travel to get onto that control is an
+       ordinary keyboard distance, and every control in every product has one.
+       Writing the gate so that the law meant "one Tab" would have made it
+       red on a product that had just been fixed, and the lesson this file
+       already records about itself — "a check which is always red is a check
+       everyone learns to skip" — would have arrived a third time.
+
+       So the number is held as a ceiling with a reason rather than a target.
+       The three stops behind a destination are the chrome that legitimately
+       outranks it: the two corners (`.waka-corners`, z-58 — "ABOVE A
+       DESTINATION'S GROUND", `claims.css`) and then the bar's last row. Four
+       is that plus one. A number above it means either the chrome grew tab
+       stops over a page or the page grew something focusable above its own
+       content, and both are worth a look; a number at or below it means the
+       bar is where it has always been. The REAL claim is the one underneath:
+       reachable at all, in both directions, which is precisely what was
+       false.
+
+       FORWARDS IS HELD ONLY AS REACHABLE AT ALL, with no number, because the
+       count is the size of the destination: the archive forwards is every
+       memory on the wall before the focus order comes round to the chrome.
+       Reaching it forwards is the proof there is no trap. */
+    const DOCK_IS_AT_MOST = 4;
+    for (const d of destinations) {
+      if (!d.opened) {
+        broke.push(`the bar's "${d.word}" row does not open its destination with the keyboard`);
+        continue;
+      }
+      if (d.modal || d.role === "dialog") {
+        broke.push(
+          `"${d.word}" is a destination reached from a bar that never leaves the screen, and it ` +
+            `renders as ${d.role === "dialog" ? 'role="dialog"' : `role="${d.role}"`}` +
+            `${d.modal ? " with aria-modal" : ""} — which says the way out is inside it, and it is not`,
+        );
+      }
+      if (!d.backward) {
+        broke.push(
+          `standing in "${d.word}", Shift+Tab cannot reach the bar in 60 presses — the surface ` +
+            "traps focus, so the dock that way-out.test.ts calls its way out is unreachable and " +
+            "this destination has NO way out at all",
+        );
+      } else if (d.backward > DOCK_IS_AT_MOST) {
+        broke.push(
+          `standing in "${d.word}", the bar is ${d.backward} presses back, over the ceiling of ` +
+            `${DOCK_IS_AT_MOST} — either the chrome gained tab stops over a page or the page ` +
+            "gained something focusable above its own content",
+        );
+      }
+      if (!d.forward) {
+        broke.push(
+          `standing in "${d.word}", Tab cannot reach the bar in 60 presses — focus is trapped ` +
+            "going forwards",
+        );
+      }
+    }
     for (const w of ways) {
       if (!w.kept) broke.push(`travelling through .${w.way} drops focus to the document`);
     }

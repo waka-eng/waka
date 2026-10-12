@@ -519,6 +519,27 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
            keeps its own at the list depth, where it is right. */
         className={`waka-over${open ? " waka-over--note" : ""}`}
         aria-label={title}
+        /* ═══ A PAGE, NOT A DIALOG ══════════════════════════════════════
+           This surface is the one the audit names: "A keyboard user
+           standing in the inspirations archive cannot Tab to the dock —
+           and the dock is the documented way out." It was `role="dialog"`
+           with `aria-modal` and a Tab trap, while `claims.css` said the
+           dock "is how you leave one" and `test/way-out.test.ts` excused
+           this file from Law 2 on exactly that ground. Both could not be
+           true, and the one that was false was the one a keyboard meets.
+
+           Measured here before the change: open the archive from the bar
+           with the keys, then press Tab sixty times and Shift+Tab sixty
+           times. The bar was never reached once. `modal={false}` is the
+           whole fix — see `DialogSurface`'s header for what a page keeps
+           (focus on arrival, focus return, Escape) and what it gives up
+           (the trap, and `aria-modal`'s claim that nothing else exists).
+
+           IT IS THE BIGGEST SURFACE IN THE PRODUCT, which is why it is
+           also the worst place to be held: a search field, a category
+           row and a chapter-grouped list of everything you have ever
+           kept, and the way out of all of it was a key nobody can see. */
+        modal={false}
         onClose={onClose}
         >
         {open ? null : <header className="waka-over-head">

@@ -121,9 +121,19 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
 
   return (
     <div className="waka-page">
+      {/* A PAGE, NOT A DIALOG — `modal={false}`. Founder, on this surface by
+          name: "how do we even need the close button for inspiration and
+          chat? It's supposed to just be moving around. I mean for principles
+          too. There's no reason for there to be an X button when we're just
+          moving across the pages." The ✕ went on that ruling, and the dock
+          took over as the way out — but the markup still said modal, so the
+          keyboard lost the exit the mouse kept. A surface that gave up its
+          own close control cannot also trap Tab; that combination is the
+          only one where there is no way out at all. */}
       <DialogSurface
         className="waka-over"
         aria-label={title}
+        modal={false}
         onClose={onClose}
         >
         <header className="waka-over-head">
