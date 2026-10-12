@@ -3945,57 +3945,18 @@
 
 
 /* ---------------------------------------------------------------------------
- * HOW ONE LAYER BECOMES THE NEXT
+ * `.profile-formation` IS GONE WITH THE PROSE IT SET
  *
- * `.profile-formation`, and it was `.profile-forms` until the settings page
- * stopped borrowing the door's words. "Forms" here is the VERB — what the
- * three layers do to each other — and the settings page's own `<form>` had
- * just become `.profile-form`, one letter apart in the same stylesheet. A
- * name a reader has to disambiguate by counting characters is not a name.
+ * A definition list naming the three layers and a note under it about what
+ * the loop cannot promise — four paragraphs on the page somebody opens to
+ * change their name. Founder: "this is so ugly too." See the long note at
+ * the deletion site in `Profile.tsx`: the part of that section worth keeping
+ * is the three doors, which SHOW the machinery rather than describing it.
  *
- * A definition list, because that is what it is: three names and what each
- * one is made of. The names wear the label register so they read as the same
- * three things the switcher offers, and the prose sits quiet beneath each.
+ * KEPT FROM IT, because it outlived its markup and `chat.css` cites it: the
+ * spacing shape of a term-and-prose pair is tight inside the pair and airy
+ * between pairs. That is still how `.chat-*` sets its own definition rows.
  * ------------------------------------------------------------------------- */
-
-.profile-formation {
-  display: grid;
-  gap: var(--sp-4);
-  margin: 0;
-}
-
-.profile-formation dt {
-  margin-top: var(--sp-12);
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.profile-formation dt:first-of-type {
-  margin-top: 0;
-}
-
-.profile-formation dd {
-  margin: 0;
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  font-weight: 300;
-  line-height: 1.55;
-  color: var(--ink);
-}
-
-/* What it cannot promise, at the foot of what it does. */
-.profile-formation-note {
-  margin: var(--sp-16) 0 0;
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  line-height: 1.55;
-  color: var(--muted);
-}
-
 
 /* ---------------------------------------------------------------------------
  * WHAT THE CREATURE SAYS, ABOVE ITS HEAD
@@ -4580,9 +4541,81 @@
   color: var(--ink);
 }
 
+/* ═══ THE TWO SETTINGS IN THE CARD ═══════════════════════════════════════
+   Founder: "how do I kind of make it more of a drop down when I click on
+   this settings icon rather than a new page."
+
+   LABEL ABOVE FIELD, both at the fine step, because this card is narrow and
+   a label beside a field in 22rem leaves neither enough room. The label is
+   the muted tier and the value is ink, which is the same pairing the
+   archive's rows use for a lead line and its meta — the eye reads down the
+   card and the values are what it lands on.
+
+   BOXED, LIKE THE OTHER TWO FIELDS IN THE PRODUCT. The chat's composer and
+   the archive's search both became boxes in the same pass, for the same
+   reason: a field distinguishes itself from the text around it. A card of
+   stacked hairlines would be the "too similar of a visual" complaint again,
+   one surface along.
+
+   `width: 100%` AND `box-sizing` ON THE CONTROLS, because a `<select>`
+   sizes to its longest option and an `<input>` to a browser default, so
+   without this the card's width would be whichever of the two happened to
+   be wider — and would CHANGE when the language list changes. */
+.waka-account-field {
+  display: grid;
+  gap: var(--sp-4);
+  margin-top: var(--sp-8);
+}
+
+.waka-account-field > span {
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+
+.waka-account-field input,
+.waka-account-field select {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: var(--waka-corner);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--field-edge);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+}
+
+.waka-account-field input:focus-visible,
+.waka-account-field select:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--ink) 80%, transparent);
+}
+
+/* A `<select>`'s own list is drawn by the operating system on the system's
+   ground, so its options need an explicit pair or they come out dark ink on
+   dark here. Only the closed control is ours to style. */
+.waka-account-field select option {
+  background: var(--waka-raised);
+  color: var(--ink);
+}
+
+.waka-account-failed {
+  margin-top: var(--sp-8);
+  font-size: var(--t-meta);
+  color: var(--error);
+}
+
 .waka-account-email {
   color: var(--muted);
   font-size: var(--t-meta);
+  /* AN ADDRESS HAS NO SPACES IN IT, so it is one unbreakable word as far as
+     the line breaker is concerned — and the card is `width: max-content`
+     under a `max-width`, which means a long address sets the width, hits
+     the cap, and then overhangs the right edge rather than wrapping.
+     `anywhere` lets it break mid-token, which is the only place it CAN
+     break; `--sp-12` of padding is then actually padding again. */
+  overflow-wrap: anywhere;
 }
 
 .waka-account-go,

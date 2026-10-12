@@ -203,7 +203,7 @@ import {
   monthTag,
 } from "../lib/words";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
-import type { MessageKey } from "../lib/locales";
+import type { MessageKey, SupportedLocale } from "../lib/locales";
 
 import {
   affirmGroupProposal,
@@ -636,6 +636,11 @@ let speechEpoch = 0;
    fetch on a normal connection, so the light and the sentence read as one
    event rather than two. */
 const LIT_MS = 1400;
+
+/* HOW LONG A PAUSE IN TYPING COUNTS AS FINISHING A NAME. Long enough that
+   a normal hesitation mid-word does not write, short enough that closing
+   the card straight after typing cannot beat it. */
+const NAME_SETTLE_MS = 700;
 /**
  * HOW LONG THE BUBBLE STAYS DOWN WHILE THE CREATURE CHANGES FORM.
  *
@@ -2664,6 +2669,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
   const auth = useOptionalAuth();
+
   /**
    * THE WORLD IS WHERE "WHOSE" IS DECIDED, AND IT SAYS SO OUT LOUD.
    *
@@ -2687,6 +2693,72 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      minted before a language change still speaks the language of the moment
      it fires. */
   const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
+
+  /* ═══ THE TWO SETTINGS THE CORNER CARD HOLDS ═════════════════════════════
+     Founder: "how do I kind of make it more of a drop down when I click on
+     this settings icon rather than a new page."
+
+     NO SAVE BUTTON, FOR THE REASON THE ARCHIVE'S NOTE ALREADY WORKED OUT:
+     "the write is idempotent and already scoped to one row, the words are on
+     screen the whole time, and leaving is the only exit — so the moment to
+     commit is unambiguous and there is nothing for a button to disambiguate."
+     All three hold for a display name in a card that closes on a press
+     outside it.
+
+     ON A TIMER HERE, THOUGH, AND NOT ON THE WAY OUT. The archive's note
+     argues against keystroke-debounced writes, and it is right about a page
+     you can leave by four different doors — but this card has no owned exit
+     to hang a write on: it closes by a press on the scrim, by Escape, and by
+     the gear. Three exits is how a save gets missed. A short pause in typing
+     is a moment somebody can name ("I stopped typing"), which is the test
+     that note actually sets.
+
+     THE LANGUAGE WRITES IMMEDIATELY, because a `<select>` has no pause in it
+     — the choice IS the commit. */
+  const [settingsName, setSettingsName] = useState<string | null>(null);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsFailed, setSettingsFailed] = useState(false);
+  const nameTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (nameTimer.current !== null) window.clearTimeout(nameTimer.current); }, []);
+  /* The field shows what you typed while you are typing and the account's
+     own name the rest of the time, so another tab renaming you is not
+     overwritten by a stale field — and nothing is held here that the
+     session does not already own. */
+  const accountName = auth?.profile?.name ?? '';
+  /* `preferredLocale` RIDES ALONG BECAUSE THE WRITE IS A REPLACE, not a
+     patch: `UpdateProfileInput` requires both, and sending the name alone
+     would reset the language to whatever the server defaults to. The
+     language control below writes through `updatePreferredLocale`, which is
+     the narrow endpoint for exactly that field. */
+  const settingsCard = auth ? {
+    name: settingsName ?? accountName,
+    busy: settingsBusy,
+    failed: settingsFailed,
+    onName: (value: string) => {
+      setSettingsName(value); setSettingsFailed(false);
+      if (nameTimer.current !== null) window.clearTimeout(nameTimer.current);
+      const trimmed = value.trim();
+      /* AN EMPTY NAME IS NOT A RENAME. The field may be empty while somebody
+         clears it to type a new one; writing that would blank the account
+         between two keystrokes. */
+      if (!trimmed || trimmed === accountName) return;
+      nameTimer.current = window.setTimeout(() => {
+        setSettingsBusy(true);
+        void auth.updateProfile({ name: trimmed, preferredLocale: locale })
+          .then(() => setSettingsName(null))
+          .catch(() => setSettingsFailed(true))
+          .finally(() => setSettingsBusy(false));
+      }, NAME_SETTLE_MS);
+    },
+    locale,
+    onLocale: (next: SupportedLocale) => {
+      setSettingsBusy(true); setSettingsFailed(false);
+      void auth.updatePreferredLocale(next)
+        .catch(() => setSettingsFailed(true))
+        .finally(() => setSettingsBusy(false));
+    },
+  } : null;
+
 
   const localeRef = useRef(locale);
   localeRef.current = locale;
@@ -17185,6 +17257,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             ) : null}
         onSettings={()=>navigate('/profile')}
         account={auth?.account ? { name: auth.profile?.name, email: auth.account.email } : null}
+        settings={settingsCard}
         onSignOut={auth ? () => { void auth.logout(); } : undefined}
         hidden={Boolean(panelOpen||mouthOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
       {seek !== null ? (
