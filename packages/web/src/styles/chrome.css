@@ -112,14 +112,28 @@ body {
      which carries the reasoning and the measurements. These two must be the
      same value: a page one shade off the world it opens over is the "why is
      this screen different" complaint in its purest form. */
-  /* DARKER THAN THE FIRST ATTEMPT AT THIS. Founder, with the archive beside
-     the world: "too bright. I prefer this darker navy." The world reads
-     darker than the pages at the SAME token value, because the canvas
-     composites its own vignette over it while a page gets the flat value
-     plus a lamp — so matching the numbers made the pages lighter than the
-     thing they are supposed to be part of. Matched by eye against the world
-     rather than by arithmetic against itself. */
-  --moon-ground: #0a0e18;
+  /* DARKER AGAIN, AND THIS TIME MATCHED TO THE WORLD'S OWN LITERAL.
+     Founder, twice. First, with the archive beside the world: "too bright.
+     I prefer this darker navy." Then, with two screenshots side by side:
+     "the pages compared to Now feel slightly lighter than Now. Why is that
+     so? I like the darker shade shown in Now."
+
+     WHY THE FIRST FIX DID NOT HOLD. It was matched BY EYE, on the theory
+     that the canvas composites a vignette a page does not get, so the two
+     wanted different numbers to look the same. That theory had the sign
+     right and the magnitude wrong, and it is the wrong KIND of answer
+     anyway: the ground behind the creature is not `--jar-atmos` at all. The
+     world paints a gradient volume over it — `var(--jar-deep)` from 30%
+     down, which is every pixel around the creature — so Now's ground is
+     `#05080f` and the pages were set to `#0a0e18`. Two literals, five
+     values apart, neither aware of the other.
+
+     THE MEASUREMENT BELOW WAS ALREADY THIS NUMBER, which is the tell. The
+     ink note directly underneath states 17.04:1 against `--moon-ground`;
+     at `#0a0e18` it is 16.40:1. The comment was measured before the eye-
+     match moved the token and nobody reran it, so the file has been
+     describing `#05080f` for some time. Both are now true. */
+  --moon-ground: #05080f;
   /**
    * THE INK IS WARM NOW, AND THE CONTRAST IS THE SAME NUMBER.
    *
@@ -1665,7 +1679,16 @@ body .profile-signout-button {
    The notepad's own grammar is corners without boxes — the tools pill and
    the save already opt out the same way. This is the third. */
 .jar-inspiration-composer .jar-note-back {
-  min-width: 0;
+  /* SQUARE, NOW THAT IT IS ONLY A CHEVRON — the same change, for the same
+     reason, as `.waka-over-back`: the destination moved to `aria-label` and
+     took the width with it. These two controls are the same control on two
+     pages and must stay identical; see the note in `SavesOverlay`. */
+  display: inline-grid;
+  place-items: center;
+  width: var(--waka-corner);
+  min-width: var(--waka-corner);
+  min-height: var(--waka-corner);
+  margin-inline-start: calc(var(--sp-12) * -1);
   padding: 0;
   border: 0;
   border-radius: 0;

@@ -87,9 +87,13 @@ export function InspirationComposer(props: {
   if (when.current === null) when.current = (props.text.trim() && props.draftUpdatedMs) ? props.draftUpdatedMs : Date.now();
   useEffect(()=>{if (props.linkText) setAddingLink(true);},[props.linkText]);
   const blocked = props.busy || Boolean(props.save.pending) || !props.ready || props.recording.phase !== 'idle';
-  const invalidFiles = props.media.some(item => item.validationError) || props.media.length > 5;
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
-  const empty = !props.text.trim() && !props.media.length && !link.trim();
+  /* `invalidFiles` AND `empty` WENT WITH THE SAVE BUTTON. Both existed only
+     to decide whether that button was there and whether it was pressable;
+     the bar asks the same two questions now and asks them of the draft
+     directly — `composerHasWords` and `composerCanKeep` in `Home.tsx`,
+     which is also where `keepIt`'s own guards live, so there is one copy of
+     each condition instead of two that can disagree. */
   const submit = () => {
     try {
       inspirationWithPendingLink(props.text,link);props.onSubmit();
@@ -103,18 +107,16 @@ export function InspirationComposer(props: {
         row was a title and a Close — a dialog announcing itself in a bar,
         which is the one thing the reference's note page does not do. */}
     <div className="jar-note-top">
-      {/* NAMED, LIKE EVERY OTHER WAY BACK IN THE PRODUCT. A bare chevron in
-          a box said nothing about where it went — founder, pointing at it:
-          "why is this still here?" — while the archive, the chats and an
-          open note all return with a chevron and the name of the place.
-          `worldBackToAll` is the archive's own words, which is exactly
-          where this goes. */}
-      <button type="button" className="jar-note-back" onClick={props.onPast}>
+      {/* A CHEVRON, AND NOT ITS NAME — see the long note on the same
+          control in `SavesOverlay`, which is the page this one has to match
+          exactly. Founder: "remove the all inspirations thing here —
+          actually, maybe just have a back button." The destination stays on
+          the `aria-label`. */}
+      <button type="button" className="jar-note-back" aria-label={say('worldBackToAll')} onClick={props.onPast}>
         <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" focusable="false">
           <path d="M6.5 1.5 2.5 5.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.5"
             strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
-        {say('worldBackToAll')}
       </button>
       <span className="jar-note-when">{momentStamp(when.current, props.locale)}</span>
       {/* THE AUDIENCE PAIR IS GONE, AND SO IS WHAT IT CHOSE BETWEEN.
@@ -157,10 +159,21 @@ export function InspirationComposer(props: {
       <div className="jar-composer-actions"><button type="button" disabled={blocked} onClick={() => props.onChooseRecording(true)}>Use new recording</button>
         <button type="button" disabled={blocked} onClick={() => props.onChooseRecording(false)}>{props.media.some(item => item.type === 'audio') ? 'Keep previous recording' : 'Discard recording'}</button></div>
     </section> : null}
-    {props.recording.notice && !props.recording.error && !props.error ? <p role="status" className="jar-composer-storage-note">{props.recording.notice}</p> : null}
-    {props.error || props.recording.error ? <p className="jar-settings-warn" role="alert">{props.error || props.recording.error}</p> : null}
+    {/* ═══ THE STATE LINES ARE IN THE BAR NOW ═══════════════════════════
+        Founder, with "Recording canceled." printed across an empty note:
+        "states should show and disappear in the bottom bar only."
+
+        What stood here: the recorder's notice, the error, and "Opening…".
+        Each appeared and vanished in the middle of the page somebody was
+        writing on, pushing the words below it. See `composerState` in
+        `Home.tsx`, which is where all three are now assembled and where the
+        dock renders them.
+
+        THE ONE THING THAT STAYS IS A CONTROL, not a state: the fork button
+        below is the only way out of the one error that has an action, and a
+        button cannot live in a status line. It renders only with that
+        error, so it is absent from every normal note. */}
     {props.error.includes('another tab') ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
-    {!props.ready ? <p role="status">{say('worldComposerOpening')}</p> : null}
     </div>
     {/* THE PILL IN THE BOTTOM-LEFT CORNER IS GONE, AND SO IS THE CORNER.
         Founder, twice, about that corner — "I don't like this thing on the
@@ -178,11 +191,19 @@ export function InspirationComposer(props: {
 
         See the note at `waka-dock-making` in `Home.tsx` for why only this
         one slot transforms and the four places never move. */}
-    {/* KEEPING IT, BOTTOM-RIGHT, and only once there is something to keep.
-        An always-present Save on a blank page is a button for a thing that
-        does not exist. */}
-    {empty ? null : <button type="button" className="jar-note-save" aria-label={say('worldSaveInspiration')}
-      disabled={blocked || invalidFiles || Boolean(props.recordingCandidate)} onClick={submit}>{say('worldSave')}</button>}
+    {/* ═══ AND KEEPING IT IS IN THE BAR TOO ═════════════════════════════
+        Founder: "the save button is very hard to see. Maybe the save button
+        should be in the bottom bar as well. And then it should have save or
+        save as draft."
+
+        It was a pale pill in the bottom-right corner — the only control on
+        the page, with nothing beside it to be read against. The dock renders
+        both endings now; see the long note at `waka-dock-making` in
+        `Home.tsx`. `onSubmit` is unchanged and is what that button calls, so
+        Enter in the link field and the bar's Save are still one path.
+
+        KEPT: "only once there is something to keep", which the bar also
+        obeys through `composerHasWords`. */}
     <AuthoredSaveNotice save={props.save} locale={props.locale} />
   </DialogSurface>;
 }

@@ -80,15 +80,33 @@ function completeReply(){stored={...stored,revision:stored.revision+1,messages:[
    lost: `restores a scoped non-bottom transcript position after reopening`
    and `does not jump away from older messages when a new reply arrives` below
    hold the transcript's scrolling to account. */
-/* THE WORDING MOVED, THE PROMISE DID NOT. Founder, on this line: "what does
-   this mean". "Replies aren't connected yet. Your messages are saved
-   privately." is true and says nothing a person can act on — it names a
-   state of the installation in the passive voice and leaves them to guess
-   whether they did something wrong. What this case protects is unchanged:
-   the surface must not imply a reply is coming when none can. */
+/* THE SENTENCE WENT; WHAT IT PROTECTED IS WHAT THIS ALWAYS TESTED.
+   Founder, pointing at "WAKA can't reply yet — no model is connected. What
+   you write is kept.": "remove this."
+
+   THE HISTORY MATTERS HERE, because this is the second rewording of one
+   line and now the deletion of it. It began as "Replies aren't connected
+   yet. Your messages are saved privately." — founder: "what does this
+   mean" — and was rewritten to name the cause and the consequence. The
+   remaining objection is not about the words: a standing fact about the
+   deployment, printed above the one control on the surface, is read once
+   and stepped over forever, which is the rule that cleared the permanent
+   explainers off every other screen.
+
+   SO THIS CASE IS NOW WRITTEN AS THE NEGATIVE IT ALWAYS WAS. "Must not
+   imply a reply is coming when none can" never needed a sentence to be
+   true — it needed the surface to be silent about a reply, which is a
+   stronger claim and the one asserted below. The save behaviour it guards
+   is untouched. */
 it('clearly saves messages without promising an assistant reply',async()=>{
-  await mount();expect(host.textContent).toContain('WAKA can’t reply yet');await type('I want quiet mornings.');await click('Send');
+  await mount();
+  expect(host.textContent).not.toContain('Thinking');
+  await type('I want quiet mornings.');await click('Send');
   expect(host.textContent).toContain('I want quiet mornings.');expect(host.querySelector('textarea')!.value).toBe('');expect(stored.messages).toHaveLength(1);expect(readConversationDrafts(scope,id)).toEqual([]);
+  /* AND STILL NOTHING AFTER THE PRESS, which is the moment a person would
+     start waiting. Nothing on screen says one is on the way. */
+  expect(host.textContent).not.toContain('Thinking');
+  expect(host.textContent).not.toContain('Still working');
 });
 it('offers a new-chat exit when a conversation is unavailable, without showing old words',async()=>{
   vi.mocked(fetchConversation).mockRejectedValueOnce(new Error('Unavailable'));await mount();

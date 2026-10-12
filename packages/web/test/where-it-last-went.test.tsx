@@ -180,9 +180,20 @@ async function worldWithTheMouthOpen(): Promise<MountedWorld> {
    for room so there shouldn't be only me and share with rooms." There is no
    row, because there is no second destination for a save to go to. */
 
+/* ═══ THE WHOLE SCREEN, NOT THE NOTE ════════════════════════════════════
+   This looked inside `.jar-inspiration-composer`, which was right while
+   every control for a note was on the note. Save and Save as draft are in
+   the dock now — founder: "the save button is very hard to see. Maybe the
+   save button should be in the bottom bar as well. And then it should have
+   save or save as draft" — so scoping to the page would report a moved
+   control as a deleted one.
+
+   SCOPING TO THE CONTAINER IS NOT A LOOSENING, because of what else is on
+   screen while the mouth is open: the dock's four places are nouns, and
+   nothing else in this world says "Save". Each `press` below is still an
+   unambiguous target. */
 async function press(word: RegExp): Promise<void> {
-  const row = layout?.container.querySelector(".jar-inspiration-composer");
-  const button = Array.from(row?.querySelectorAll("button") ?? []).find((b) =>
+  const button = Array.from(layout?.container.querySelectorAll("button") ?? []).find((b) =>
     word.test(b.textContent ?? ""),
   );
   if (!button) throw new Error(`no ${word} on the row`);

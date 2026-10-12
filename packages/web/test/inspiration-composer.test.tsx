@@ -21,23 +21,40 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 const mount = () => act(async () => root.render(<InspirationComposer {...props} />));
-it('saves once without asking the user to choose reflection, and blocks an unresolved save',async()=>{
+/* THE ONE WAY THIS PAGE STILL COMMITS. Save is in the dock; Enter in the
+   restored link field is what is left, and it runs the same `submit()` the
+   button used to — including the link parse, which is why the two link cases
+   below still belong to this file and not to `keep-ready`. */
+const enterLink = () => host.querySelector<HTMLInputElement>('input[type=url]')!
+  .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+/* ═══ THE PAGE DOES NOT COMMIT ANYTHING ANY MORE ═══════════════════════
+   Founder: "the save button is very hard to see. Maybe the save button
+   should be in the bottom bar as well. And then it should have save or save
+   as draft."
+
+   WHAT THIS CASE USED TO DO was press `.jar-note-save` and assert `onSubmit`
+   was called with no arguments. The control is in the dock now, so pressing
+   it here is impossible — and the two things it protected both survive
+   somewhere better:
+
+     THAT EXACTLY ONE THING COMMITS A SAVE is asserted below as zero on this
+     page, which is the stronger form. A second Save growing back HERE is the
+     regression; the dock's own is covered by `where-it-last-went`, which
+     presses it end to end.
+
+     THAT `onSubmit` TAKES NO ARGUMENTS — it once took a `reflect` boolean
+     that only ever got `false` — is now held by the type and by the one
+     remaining caller, the link field's Enter, asserted further down with
+     `toHaveBeenCalledExactlyOnceWith()`.
+
+   AND WHEN A SAVE IS BLOCKED is no longer a DOM question at all. It was
+   written twice — here and in `keepIt` — and the two lists were never the
+   same; `keep-ready.test.ts` enumerates the one list both now read. */
+it('commits nothing itself, because keeping it is the bar\'s job',async()=>{
   props.text='A thought to come back to.';props.media=[];await mount();
-  /* SAVE IS A CORNER NOW, NOT A FOOTER ROW. `.jar-composer-actions` held it
-     beside an audience pair and an explanatory line; the founder's ruling on
-     that block was "remove all", so what is left is one control in the
-     bottom-right. The assertion that matters is unchanged and is the reason
-     this line counts rather than selecting: there is exactly ONE thing on
-     this page that commits a save. */
-  const actions=host.querySelectorAll<HTMLButtonElement>('.jar-note-save');expect(actions).toHaveLength(1);
-  /* NO ARGUMENT, WHERE THERE USED TO BE `false` (2026-10-10). `onSubmit`
-     took a `reflect` boolean and this control only ever passed `false` — so
-     the parameter went with the question sheet it was meant to open, which
-     nothing could reach. Asserting the EXACT argument list rather than just
-     the call count is what keeps that from silently coming back. */
-  await act(async()=>actions[0].click());expect(props.onSubmit).toHaveBeenCalledExactlyOnceWith();
-  props.save.pending={} as NonNullable<typeof props.save.pending>;await mount();
-  expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(true);
+  expect(host.querySelectorAll('.jar-note-save')).toHaveLength(0);
+  expect(host.querySelector('[aria-label="Save inspiration"]')).toBeNull();
+  expect(props.onSubmit).not.toHaveBeenCalled();
 });
 /* ═══ THE HEADING ROW IS GONE, AND SO IS ITS SPARK ═══════════════════════
    Founder, with Notion's new page on screen: "notion style - just blank
@@ -59,7 +76,14 @@ it('opens straight into the words, under the moment and the way back',async()=>{
      chevron-and-name the archive, the chats and an open note all use, and
      `worldBackToAll` is the archive's own words. */
   const back=host.querySelector<HTMLButtonElement>('.jar-note-back')!;
-  expect(back.textContent?.trim()).toBe('All inspirations');
+  /* THE NAME IS ON THE LABEL, NOT IN INK — which reverses what this line
+     used to assert, and the reversal is the founder's: "remove the all
+     inspirations thing here — actually, maybe just have a back button."
+     Asserted BOTH ways round, because the thing that would be wrong is a
+     chevron with no accessible name at all, and an empty-text assertion
+     alone would pass for that. */
+  expect(back.textContent?.trim()).toBe('');
+  expect(back.getAttribute('aria-label')).toBe('All inspirations');
   await act(async()=>back.click());
   expect(props.onPast).toHaveBeenCalledOnce();
   /* The one fact a blank page can state. Not asserted to an exact string —
@@ -86,9 +110,11 @@ it('offers no audience choice, because there is nowhere else for a save to go', 
   expect(host.querySelector('#capture-audience')).toBeNull();
   expect(host.textContent).not.toContain('Only me');
   expect(host.textContent).not.toContain('Share with rooms');
-  await act(async()=>host.querySelector<HTMLButtonElement>('.jar-note-save')!.click());
+  /* NOTHING ON THIS PAGE ASKS, AND NOTHING ON IT COMMITS — the second half
+     is new only because Save moved to the bar. `onVisibility` stays on the
+     props because the world still decides what a save is. */
   expect(props.onVisibility).not.toHaveBeenCalled();
-  expect(props.onSubmit).toHaveBeenCalledOnce();
+  expect(props.onSubmit).not.toHaveBeenCalled();
 });
 it('keeps an unsupported browser preview saveable and gives the failed file its own retry', async () => {
   await mount();
@@ -96,7 +122,11 @@ it('keeps an unsupported browser preview saveable and gives the failed file its 
   expect(host.textContent).toContain('original can still be saved'); expect(host.textContent).toContain('1 KB');
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Retry upload for Photo.heic"]')!.click());
   expect(props.onRetryFile).toHaveBeenCalledWith('photo'); expect(props.onSubmit).not.toHaveBeenCalled();
-  expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(false);
+  /* THAT IT IS STILL SAVEABLE is the point of the case and is now asserted
+     where the decision is made: a file the browser cannot PREVIEW carries no
+     `validationError`, so `whyNotKept` returns null for it. See
+     `keep-ready.test.ts`. A preview failure is this page's business; whether
+     it blocks a save is not. */
 });
 it('disables remove and retry during upload and distinguishes upload from final save', async () => {
   props.busy = true; props.uploadingId = 'photo'; await mount();
@@ -116,24 +146,31 @@ it('retains invalid/extra selections with removal controls and blocks saving unt
   props.media = Array.from({length:6}, (_, index) => ({id:String(index), type:'image', name:`Photo ${index}.png`,
     blob:new Blob(['photo']), ...(index === 5 ? {validationError:'This photo is over 25 MB.'} : {})}));
   await mount(); expect(host.textContent).toContain('selections are still here');
-  expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(true);
+  /* THE BLOCKING MOVED, THE RETAINING DID NOT. What this page owes somebody
+     who picked six files is that all six are still here, each marked, each
+     removable — losing a selection to a validation error would be the real
+     harm. Whether Save is pressable while one is marked is
+     `whyNotKept`'s answer and is enumerated in `keep-ready.test.ts`. */
+  expect(host.querySelectorAll('.jar-composer-media > li')).toHaveLength(6);
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="remove Photo 5.png"]')!.click());
   expect(props.onRemove).toHaveBeenCalledWith('5');
-  props.media = props.media.slice(0,5); await mount();
-  expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(false);
 });
 it('restores the separate link draft and includes it through the single Save action',async()=>{
   props.text='My note';props.linkText='https://example.test/unfinished';await mount();
   expect(host.querySelector<HTMLInputElement>('input[type=url]')?.value).toBe(props.linkText);
-  expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(false);
   expect(host.textContent).toContain('This link will be included when you save.');
-  await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.click());
+  /* THROUGH ENTER IN THE FIELD, which is the composer's one remaining way to
+     commit now that Save is in the bar — and the only one that was ever
+     reachable without lifting your hands off the keyboard. It is the same
+     `submit()`, so what it protects is unchanged: ONE call, no arguments,
+     and the link neither rewritten into the words nor cleared on the way. */
+  await act(async()=>enterLink());
   expect(props.onSubmit).toHaveBeenCalledExactlyOnceWith();
   expect(props.onLinkText).not.toHaveBeenCalled();expect(props.onText).not.toHaveBeenCalled();
 });
 it('refuses unsafe link schemes without submitting or discarding the draft',async()=>{
   props.linkText='javascript:alert(1)';await mount();
-  await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.click());
+  await act(async()=>enterLink());
   expect(props.onSubmit).not.toHaveBeenCalled();expect(props.onLinkText).not.toHaveBeenCalled();
   expect(host.querySelector<HTMLInputElement>('input[type=url]')!.validationMessage).toContain('HTTP or HTTPS');
 });
