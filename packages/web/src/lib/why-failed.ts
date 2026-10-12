@@ -50,6 +50,7 @@
  * Required means every call site states its answer.
  */
 import { ApiError } from "./api";
+import { PhotoRefused } from "./inspiration-photo";
 import { formatMessage, t, type SupportedLocale } from "./locales";
 
 /**
@@ -66,6 +67,17 @@ import { formatMessage, t, type SupportedLocale } from "./locales";
  * reader is that every word IT chooses is in their language.
  */
 export function whyOf(err: unknown, locale: SupportedLocale): string {
+  /* A PHOTO REFUSED BY THE SNIFFER SPEAKS THE READER'S LANGUAGE. The three
+     refusals in `lib/inspiration-photo.ts` used to be finished English
+     sentences thrown from a lib and printed verbatim — so a Korean reader
+     got their own language for the frame and English for the reason, the
+     exact half-translated shape this function's `locale` argument was made
+     required to stop.
+
+     IT IS RESOLVED HERE RATHER THAN AT THE FOUR CALL SITES because this is
+     the one place that holds both facts: which refusal it was, and whose
+     screen it is going to. Three of those call sites are in `Home.tsx`. */
+  if (err instanceof PhotoRefused) return t(locale, err.reason);
   if (err instanceof ApiError) {
     if (err.status === 0) return t(locale, "worldWhyUnreachable");
     if (err.status === 401) return t(locale, "worldWhySignedOut");
