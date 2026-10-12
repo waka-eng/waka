@@ -82,7 +82,7 @@ const ask=async(words:string)=>{
 it('retains the confirmed first question through the real new-to-id route without another GET',async()=>{
   await render();await ask('What has changed in how I think?');
   expect(createConversation).toHaveBeenCalledOnce();expect(fetchConversation).not.toHaveBeenCalled();
-  expect(host.querySelector('.chat-messages > li[data-role="user"]')?.textContent).toContain('What has changed in how I think?');
+  expect(host.querySelector('.chat-message[data-role="user"]')?.textContent).toContain('What has changed in how I think?');
   expect(host.textContent).toContain('Thinking about that…');expect(host.textContent).not.toContain('This conversation couldn’t be opened.');
   /* STARTING OVER MOVED TO THE CORNER, which this harness does not mount —
      it renders the panel alone, so there is no "New conversation" button
