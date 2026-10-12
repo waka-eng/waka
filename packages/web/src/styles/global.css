@@ -137,11 +137,6 @@
 }
 
 
-
-
-
-
-
 @keyframes contentsFlowIn {
   from {
     opacity: 0;
@@ -435,8 +430,6 @@ body {
 }
 
 
-
-
 @keyframes skeletonPulse {
   0%,
   100% {
@@ -456,7 +449,6 @@ body {
     border-color 200ms ease,
     background 400ms ease;
 }
-
 
 
 /* Focus-mode expansion: capture grows to cover the entire grid. The
@@ -546,12 +538,6 @@ body {
 }
 
 
-
-
-
-
-
-
 /* -----------------------------------------------------------------------
  * /login page
  *
@@ -568,11 +554,7 @@ body {
   background: var(--cell);
   border: var(--border-hairline);
   padding: var(--sp-40) 36px;
-}
-
-.login-eyebrow,
-
-.profile-eyebrow {
+}.login-eyebrow {
   color: var(--muted);
   margin: 0 0 var(--sp-14) 0;
 }
@@ -582,20 +564,12 @@ body {
   font-style: italic;
   color: var(--muted);
   font-weight: 400;
-}
-
-.login-subtitle,
-
-.profile-subtitle {
+}.login-subtitle {
   margin: 0 0 var(--sp-28) 0;
   color: var(--muted);
   font-size: var(--t-ui);
   line-height: 1.5;
-}
-
-.login-form,
-
-.profile-form {
+}.login-form {
   display: flex;
   flex-direction: column;
   gap: var(--sp-16);
@@ -606,7 +580,6 @@ body {
   flex-direction: column;
   gap: var(--sp-6);
 }
-
 
 
 .field-input:focus {
@@ -639,24 +612,7 @@ body {
   background: rgba(15, 15, 14, 0.04);
   border: var(--border-hairline);
   padding: 10px var(--sp-12);
-}
-
-
-.profile-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-18);
-  margin-bottom: var(--sp-20);
-}
-
-.profile-email {
-  margin-bottom: 0;
-  overflow-wrap: anywhere;
-}
-
-.profile-signout-button,
-.btn-destructive {
+}.btn-destructive {
   border: var(--border-hairline);
   border-radius: var(--radius-none);
   background: transparent;
@@ -670,126 +626,9 @@ body {
     opacity var(--duration-fast) var(--ease-standard);
 }
 
-.profile-signout-button:hover:not(:disabled),
-.profile-signout-button:focus-visible {
-  background: var(--ink);
-  color: var(--bg);
-  outline: 0;
-}
-
-.profile-public-panel,
-.profile-memories-panel,
-.profile-danger-panel {
-  display: grid;
-  gap: var(--sp-16);
-  margin-top: var(--sp-12);
-}
-
-.profile-public-heading,
-.profile-memories-heading,
-.profile-danger-heading {
-  display: grid;
-  gap: var(--sp-8);
-}
-
-.profile-public-heading .profile-eyebrow,
-.profile-memories-heading .profile-eyebrow,
-.profile-danger-heading .profile-eyebrow,
-.profile-public-heading .profile-subtitle,
-.profile-danger-heading .profile-subtitle {
-  margin: 0;
-}
-
 /* THE THREE DOORS INTO THE MACHINERY.
    Quiet text, wrapping rather than colliding — they are things to look at
    once, not controls to reach for, so none of them is a filled button. */
-.profile-machinery-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-12) var(--sp-20);
-  margin: 0;
-}
-
-.profile-machinery-row button {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.profile-machinery-row button:hover,
-.profile-machinery-row button:focus-visible {
-  color: var(--ink);
-}
-
-.profile-handle-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-}
-
-.profile-handle-prefix {
-  padding-right: var(--sp-10);
-  color: var(--ink);
-  font-family: var(--font-serif);
-  font-size: var(--t-reading);
-  line-height: 1;
-}
-
-
-.profile-toggle-row {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  align-items: start;
-  gap: var(--sp-10);
-  color: var(--ink);
-  cursor: pointer;
-  font-size: var(--t-ui);
-  line-height: 1.35;
-}
-
-.profile-toggle-row input {
-  appearance: none;
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  border: var(--border-hairline);
-  border-radius: 3px;
-  background: transparent;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-
-.profile-toggle-row input::after {
-  content: "";
-  width: 9px;
-  height: 5px;
-  border-left: 2px solid var(--bg);
-  border-bottom: 2px solid var(--bg);
-  opacity: 0;
-  transform: rotate(-45deg) translateY(-1px);
-}
-
-.profile-toggle-row input:checked {
-  background: var(--ink);
-  border-color: var(--ink);
-}
-
-.profile-toggle-row input:checked::after {
-  opacity: 1;
-}
-
-
-.profile-public-link {
-  color: var(--muted);
-  font-size: var(--t-meta);
-  overflow-wrap: anywhere;
-}
 
 .btn-destructive {
   justify-self: start;
@@ -808,15 +647,10 @@ body {
 }
 
 
-
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.login-footer,
-
-.profile-footer {
+}.login-footer {
   margin-top: var(--sp-24);
   font-size: var(--t-meta);
   color: var(--muted);
@@ -853,13 +687,7 @@ body {
 
 .login-tab + .login-tab {
   border-left: var(--border-hairline);
-}
-
-
-.login-link,
-
-
-.profile-link {
+}.login-link {
   background: none;
   border: none;
   padding: 0;
@@ -867,11 +695,7 @@ body {
   color: var(--ink);
   text-decoration: underline;
   cursor: pointer;
-}
-
-.login-link:hover,
-
-.profile-link:hover {
+}.login-link:hover {
   text-decoration: none;
 }
 
@@ -948,12 +772,9 @@ body {
 }
 
 
-
 @media (max-width: 760px) {
 
   }
-
-
 
 
 @keyframes ncSaveSavedFlash {
@@ -1234,11 +1055,7 @@ textarea {
     border-top: 1px solid rgba(15, 15, 14, 0.08);
     font-size: var(--t-label);
     line-height: 1.2;
-  }
-
-  .login-link,
-
-  .profile-link {
+  }.login-link {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
@@ -1284,8 +1101,6 @@ textarea {
  * ============================================================ */
 
 
-
-
 /* Coarse pointers have no hover, so nothing may hide behind one. */
 @media (hover: none) {
   }
@@ -1310,64 +1125,14 @@ textarea {
    four buttons that happen to sit together.
    --------------------------------------------------------------------------- */
 
-.profile-tabs {
-  position: relative;
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  gap: 0;
-  padding: 3px;
-  margin-top: var(--sp-12);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-  /* The tray is recessed, the pill sits proud: two planes, not one surface. */
-  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 5%, transparent);
-}
-
 /* The moving part. Width is a quarter of the tray, so the whole animation is
    one translate — no layout, no repaint of the labels it passes under. */
-.profile-tabs-indicator {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: calc((100% - 6px) / 2);
-  height: calc(100% - 6px);
-  border-radius: var(--r-pill);
-  background: var(--cell, #fff);
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 60%, transparent);
-  transition: transform var(--dur) var(--ease);
-  will-change: transform;
-}
-
-.profile-tab {
-  position: relative;
-  z-index: 1;
-  padding: 9px var(--sp-4);
-  border: 0;
-  background: transparent;
-  font: inherit;
-  color: var(--ink-3);
-  cursor: pointer;
-  border-radius: var(--r-pill);
-  transition: color var(--dur) var(--ease);
-}
-
-
 
 
 /* it rests at `--ink-3`; focus lifts it the rest of the way, which is the
    same move its own `:hover` makes and the same one the world's chrome makes */
-.profile-tab:focus-visible {
-  color: var(--ink-1);
-}
 
 /* Rooms arrive rather than blink: a short rise, no layout properties. */
-.profile-panel {
-  animation: profile-room-in var(--dur-slow) var(--ease) both;
-}
 
 
 @keyframes profile-room-in {
@@ -1383,20 +1148,9 @@ textarea {
 
 
 @media (prefers-reduced-motion: reduce) {
-  .profile-tabs-indicator {
-    transition: none;
-  }
-  .profile-panel {
-    animation: none;
-  }
 }
 
 @media (max-width: 520px) {
-  .profile-tab {
-    font-size: var(--t-label);
-    letter-spacing: 0.04em;
-    padding: var(--sp-8) var(--sp-2);
-  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -1407,88 +1161,12 @@ textarea {
    read as text until touched — the list is a list, not a form.
    --------------------------------------------------------------------------- */
 
-.profile-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid var(--rule);
-  border-radius: var(--r-paper);
-  background: color-mix(in srgb, var(--ink) 2%, transparent);
-}
-
-
-.profile-list-row + .profile-list-row {
-  border-top: 1px solid var(--rule);
-}
-
 
 /* Inline, borderless name. The underline appears only when editing, so a
    resting row reads as text and a touched one declares itself. */
-.profile-row-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: var(--sp-6) 0;
-  border: 0;
-  border-bottom: 1px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  font: inherit;
-  font-size: var(--t-body);
-  color: var(--ink-1);
-  transition: border-color var(--dur-fast) var(--ease);
-}
-
-.profile-row-name:hover:not(:disabled) {
-  border-bottom-color: var(--rule);
-}
-
-.profile-row-name:focus {
-  outline: none;
-  border-bottom-color: var(--rule-strong);
-}
-
-
-.profile-row-main {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: grid;
-  gap: var(--sp-2);
-}
-
-.profile-row-title {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-8);
-  font-size: var(--t-body);
-  color: var(--ink-1);
-}
-
-.profile-row-tag {
-  color: var(--ink-3);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-pill);
-  padding: 1px 7px;
-  transform: translateY(-1px);
-}
-
-.profile-row-meta {
-  font-size: var(--t-meta);
-  color: var(--ink-3);
-}
 
 /* Actions: quiet mono verbs, right-aligned on one shared column so every
    Remove and End lines up down the list. */
-.profile-row-actions {
-  flex: 0 0 auto;
-  display: flex;
-  gap: var(--sp-8);
-  justify-content: flex-end;
-}
-
-
-.profile-memory-action:hover:not(:disabled) {
-  color: var(--ink-1);
-}
 
 /* DISABLED DIMS THE FILL, NEVER THE LABEL. These are the rename, remove and
    mint verbs on the settings page, and every one of them swaps its own word
@@ -1497,24 +1175,8 @@ textarea {
    happening, so the one moment the label matters is the one moment it cannot
    be read. There is no fill on these, so the ink is all there is to move, and
    `progress` says busy where `default` said forbidden. */
-.profile-memory-action:disabled {
-  color: var(--muted);
-  cursor: progress;
-}
-
-.profile-memory-action.is-destructive:hover:not(:disabled) {
-  color: color-mix(in srgb, #8a2a1d 80%, var(--ink));
-}
-
-.profile-memory-action:focus-visible {
-  color: var(--ink);
-  border-bottom-color: var(--rule-strong);
-}
 
 
 /* Section hints stay readable: one measure, not full-bleed. */
-.profile-memories-heading .profile-subtitle {
-  max-width: 52ch;
-}
 
 }

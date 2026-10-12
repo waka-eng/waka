@@ -78,7 +78,11 @@ export interface PageMenu {
   stand: (next: Standing | null) => void;
   /** Which owner is being read, for the switcher's own checkmark. */
   current: string | null;
-  onSettings: () => void;
+  /* `onSettings` WENT WITH `/profile`. Founder: "I want all setting-related
+     stuff to be only accessible through the drop down and not be its own
+     thing." The gear opens `SettingsPanel` in place; there is nowhere left
+     to navigate to, and a field describing a destination that does not
+     exist is the kind of leftover the dead-code sweep reads as live. */
 }
 
 /**
@@ -184,7 +188,6 @@ export function usePageMenu(
         open === "saves" || open === "claims" || open === "principles" ? open : "top-of-mind",
       standing,
       stand: (next: Standing | null) => setStanding(accountId, next),
-      onSettings: () => navigate("/profile"),
     };
   }, [accountId, agent?.id, agent?.name, locale, navigate, onOpen, pathname, search, standing]);
 }

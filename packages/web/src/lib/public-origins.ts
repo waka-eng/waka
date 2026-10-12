@@ -8,6 +8,8 @@ function mobileOrigin(value: unknown): string {
 export function publicWebOrigin(): string {
   return isMobileBuild ? mobileOrigin(import.meta.env.VITE_PUBLIC_WEB_URL) : typeof window === 'undefined' ? '' : window.location.origin;
 }
-export function publicApiOrigin(): string {
-  return isMobileBuild ? mobileOrigin(import.meta.env.VITE_API_URL) : typeof window === 'undefined' ? '' : window.location.origin;
-}
+/* `publicApiOrigin` WENT WITH THE KEEPER KEYS. Its one caller was the
+   settings page's key panel, which printed the API address beside a minted
+   key so it could be pasted into an MCP config — see `SettingsPanel`'s
+   header for why that panel is gone. Nothing calls it now, and
+   `reachable.test.ts` counted it the moment it stopped being called. */

@@ -62,9 +62,14 @@ export async function saveAnInspiration(
   await page.fill(".jar-composer-text", text);
   /* SAVE APPEARS ONLY ONCE THERE IS SOMETHING TO KEEP — "an always-present
      Save on a blank page is a button for a thing that does not exist" — so
-     it is waited for rather than assumed. */
-  await page.locator(".jar-note-save").waitFor({ state: "visible", timeout: 8_000 });
-  await press(".jar-note-save");
+     it is waited for rather than assumed.
+
+     AND IT IS IN THE BAR, NOT ON THE PAGE. Founder: "let's just have a save
+     icon. There's no save as draft. There's just a save icon." The control
+     moved out of the note's bottom-right corner into the dock's middle
+     slot and became a check; `.jar-note-save` no longer exists. */
+  await page.locator(".waka-dock-tool--keep").waitFor({ state: "visible", timeout: 8_000 });
+  await press(".waka-dock-tool--keep");
   await page.waitForTimeout(4_500);
 }
 

@@ -520,10 +520,6 @@
 .jar-first-capture-hint { margin:var(--sp-8) 0; color:var(--w-muted); font-size:var(--t-ui); line-height:1.6; }
 
 
-
-
-
-
 .jar-capture-receipt { pointer-events:auto; display:flex; align-items:center; justify-content:center; gap:var(--sp-12); margin-top:var(--sp-8); color:var(--w-muted); font-size:var(--t-ui); }
 .jar-capture-receipt button { min-height:var(--sp-44); padding:var(--sp-8); border:0; background:none; color:var(--w-ink); font:inherit; cursor:pointer; }
 .jar-capture-receipt button:hover,.jar-capture-receipt button:focus-visible { text-decoration:underline; text-underline-offset:var(--sp-4); }
@@ -1535,7 +1531,6 @@
    to choose between them. */
 
 
-
 /* the way to make one, at the foot of the list of the ones you have */
 /* ---------- how much is down there, and the way to it ----------
    The ground is a whole section below headquarters and nothing on the resting
@@ -2341,8 +2336,6 @@
    there are words. Reserving the height is what keeps the typing line from
    jumping when the choice appears; inert while invisible, so the empty mouth
    still offers no control. */
-
-
 
 
 .jar-mouth-field::-webkit-scrollbar {

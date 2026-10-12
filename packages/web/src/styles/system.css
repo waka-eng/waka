@@ -280,7 +280,6 @@
    product, and the one that made every screen read as an instrument panel.
    ======================================================================= */
 .login-eyebrow,
-.profile-eyebrow,
 .field-label {
   font-family: var(--voice-you);
   font-size: var(--t-meta);
@@ -343,22 +342,14 @@
 
 .login-card {
   border-radius: var(--r-paper);
-}
-
-.login-subtitle,
-
-.profile-subtitle {
+}.login-subtitle {
   font-family: var(--voice-you);
   font-size: var(--t-lead);
   line-height: 1.5;
   color: var(--ink-2);
-}
-
-.field-hint,
+}.field-hint,
 .login-footer,
-.profile-footer,
 .login-link,
-.profile-link,
 .login-divider__label,
 .login-tabs {
   font-family: var(--voice-you);
@@ -426,7 +417,6 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
 }
-
 
 
 }

@@ -700,23 +700,36 @@ async function surfaces(
   await page.waitForTimeout(3_000);
   await walkSurface(cdp, page, "the welcome", seen, ask);
 
-  /* THE ACCOUNT PAGE IS TABBED, AND ONLY ONE TAB WAS EVER WALKED.
-     Every panel but the open one is `hidden`, so half that page's rules — the
-     public handle, the rooms, the danger zone — were never on screen and read
-     as unused. Found by the handle lookup below coming back empty on a page
-     that certainly has a handle field on it. Every tab is opened in turn. */
-  await page.goto(`${base}/profile`, { waitUntil: "domcontentloaded" });
+  /* ═══ SETTINGS IS A PANEL IN THE CORNER, NOT A TABBED PAGE ═══════════
+     `/profile` is gone — founder: "I want all setting-related stuff to be
+     only accessible through the drop down and not be its own thing" — so
+     the tab walk that used to open each of its panels in turn has nothing
+     to open.
+
+     THE SHAPE OF THE PROBLEM SURVIVES THE PAGE, which is why this is a
+     rewrite rather than a deletion. That walk existed because every panel
+     but the open one carried `hidden`, so half the page's rules were never
+     on screen and read as unused — and the lookup below nearly reported a
+     hundred and fifty live selectors as dead because of it. The panel has
+     the same property: its three groups are disclosures, and only one is
+     open at a time. So each is opened in turn, for the same reason. */
+  await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(3_000);
-  const tabs = await page.locator('.profile-tabs button, [role="tab"]').count();
-  await walkSurface(cdp, page, "your account", seen, ask);
-  for (let i = 0; i < tabs; i += 1) {
-    try {
-      await page.locator('.profile-tabs button, [role="tab"]').nth(i).click({ timeout: 5_000 });
-    } catch {
-      continue;
+  try {
+    await page.locator("button.waka-corner").first().click({ timeout: 8_000 });
+    await page.waitForTimeout(600);
+    await walkSurface(cdp, page, "settings", seen, ask);
+    const groups = await page.locator(".waka-settings-row").count();
+    for (let i = 0; i < groups; i += 1) {
+      await page.locator(".waka-settings-row").nth(i).click({ timeout: 5_000 });
+      await page.waitForTimeout(500);
+      await walkSurface(cdp, page, `settings group ${i + 1}`, seen, ask);
+      await page.locator(".waka-settings-row").nth(i).click({ timeout: 5_000 });
+      await page.waitForTimeout(300);
     }
-    await page.waitForTimeout(1_200);
-    await walkSurface(cdp, page, `your account tab ${i + 1}`, seen, ask);
+  } catch {
+    /* The corner is absent on a surface with no session. Walking what is
+       there beats failing the whole run over one panel. */
   }
 
   /* THE PAGE OTHER PEOPLE SEE, which is a whole prefix of its own.
@@ -740,6 +753,16 @@ async function surfaces(
   const handle = `deadcss${Date.now().toString(36)}`;
   let published = false;
   try {
+    /* THE HANDLE IS IN THE PANEL'S PUBLIC GROUP NOW. Opened by name rather
+       than by index, because the group order is a design decision and this
+       walk should not break when it changes. */
+    await page.locator("button.waka-corner").first().click({ timeout: 8_000 }).catch(() => undefined);
+    await page.waitForTimeout(500);
+    for (let i = 0; i < await page.locator(".waka-settings-row").count(); i += 1) {
+      const row = page.locator(".waka-settings-row").nth(i);
+      if (/public/i.test((await row.textContent()) ?? "")) { await row.click(); break; }
+    }
+    await page.waitForTimeout(400);
     /* THE PANELS ARE UNHIDDEN TO REACH THE FIELD, AND ONLY NOW. Clicking the
        tabs did not do it — the panel's `hidden` is driven by React state that
        a synthetic click on this build did not flip — and Playwright will not
@@ -750,14 +773,14 @@ async function surfaces(
       for (const el of document.querySelectorAll("[hidden]")) el.removeAttribute("hidden");
     });
     await page.waitForTimeout(400);
-    await page.locator(".profile-handle-input, input[name=publicHandle]").first().fill(handle, { timeout: 8_000 });
-    const boxes = page.locator(".profile-toggle-row input[type=checkbox]");
+    await page.locator(".waka-settings-body input[type=text]").first().fill(handle, { timeout: 8_000 });
+    const boxes = page.locator(".waka-settings-toggle input[type=checkbox]");
     const count = await boxes.count();
     for (let b = 0; b < count; b += 1) {
       const box = boxes.nth(b);
       if (!(await box.isChecked())) await box.check({ timeout: 4_000, force: true });
     }
-    await page.locator('button[type="submit"]').first().click({ timeout: 8_000, force: true });
+    await page.locator(".waka-settings-keep").first().click({ timeout: 8_000, force: true });
     await page.waitForTimeout(5_000);
     published = true;
   } catch {

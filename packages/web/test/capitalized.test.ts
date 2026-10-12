@@ -130,20 +130,15 @@ function startsLower(value: string): boolean {
  * object after one — belongs on this list.
  */
 const EXEMPT: Record<string, string> = {
-  profileGrantReads:
-    "the verb between two names on the grants row: `{agent} reads {memory}` " +
-    "(`Profile.tsx`, .profile-row-title). A capital here prints inside the " +
-    "sentence, not at its head.",
-  profileReadRecordRead:
-    "the verb in the read record's sentence: `{reader} read {owner}’s " +
-    "{surface}` (`Profile.tsx`, .profile-row-title). Same shape.",
-  profileSurfaceSignals:
-    "the object of that same sentence, via `surfaceWord` — it has no other " +
-    "call site, so it is only ever read as `… read Yunji’s signals`.",
-  profileSurfaceTopOfMind: "the same sentence's object, via `surfaceWord`.",
-  profileSurfacePrinciples: "the same sentence's object, via `surfaceWord`.",
-  profileSurfaceWeather: "the same sentence's object, via `surfaceWord`.",
-  profileSurfaceExport: "the same sentence's object, via `surfaceWord`.",
+  /* THREE EXEMPTIONS WENT WITH `Profile.tsx` (2026-10-11), and the gate
+     found them the same run — which is what the companion case below it
+     exists for. They excused the mid-sentence verbs on the grants row and
+     the read record (`{agent} reads {memory}`, `{reader} read {owner}'s
+     {surface}`) and the object of the second. Founder: "I want all
+     setting-related stuff to be only accessible through the drop down and
+     not be its own thing"; the five sections those lines belonged to did
+     not survive the prune. An exemption that excuses nothing is worse than
+     none, because the next reader trusts it. */
   worldPrinciplesRoomProgress:
     "rendered as `{n}/3 shared patterns ready` (`PrincipleRead.tsx`). The " +
     "count is the head of that line, so the words after it are mid-sentence " +
@@ -176,7 +171,14 @@ describe("every string a person reads begins with a capital", () => {
     /* And it has to be reading real copy, not a file of placeholders: the
        product's strings overwhelmingly start with a letter, so a run where
        almost nothing does means the parse, not the catalogue, is wrong. */
-    expect(values.filter((value) => /^[A-Za-z]/.test(value)).length).toBeGreaterThanOrEqual(600);
+    /* 600 -> 540 on 2026-10-11. The settings page was deleted — founder:
+       "I want all setting-related stuff to be only accessible through the
+       drop down and not be its own thing" — and 121 strings went with the
+       five sections that did not survive the prune. This is a TRIPWIRE for
+       a broken parse, not a ratchet on the catalogue's size, so it is set
+       below the real figure rather than at it; what it is watching for is
+       a run that suddenly reads almost nothing. */
+    expect(values.filter((value) => /^[A-Za-z]/.test(value)).length).toBeGreaterThanOrEqual(540);
   });
 
   it("starts no en-US value with a lowercase letter", () => {
@@ -271,9 +273,17 @@ describe("every string a person reads begins with a capital", () => {
        "you kept a memory." in the bubble, and was caught by a probe
        printing what the creature actually said rather than by this. A file
        that speaks two clauses needs two calls. */
+    /* `ReadingPanel.tsx` LEFT THIS LIST WITH THE SURFACE (2026-10-11). It
+       printed the loop's rules one clause per line and was one of three
+       machinery doors on the settings page; founder: "I want all
+       setting-related stuff to be only accessible through the drop down."
+       See `SettingsPanel`'s header, which argues that those three are the
+       removal most worth disagreeing with. If they come back, the entry
+       comes back with them — a surface that speaks a server clause alone
+       and does not pass it through `asSentence` prints a sentence starting
+       in lower case. */
     const SPEAKS_A_CLAUSE_ALONE = [
       ["pages/Home.tsx", 2, "the creature asked what has been happening, and the away-window sentence"],
-      ["components/ReadingPanel.tsx", 1, "the record, one clause per line"],
     ] as const;
     const bare: string[] = [];
     for (const [file, wanted, why] of SPEAKS_A_CLAUSE_ALONE) {
@@ -305,9 +315,13 @@ describe("every string a person reads begins with a capital", () => {
     const flagged = Object.entries(korean)
       .filter(([, value]) => startsLower(value))
       .map(([key, value]) => `${key}: ${JSON.stringify(value)}`);
-    /* The one Latin-initial Korean value is a command's name — `waka-mcp 열기`
-       — and a command is spelled the way it is typed. It is lower case on
-       purpose and is not evidence of the decay this file guards. */
-    expect(flagged).toEqual(['worldKeepMcpOpen: "waka-mcp 열기"']);
+    /* THE ONE LATIN-INITIAL KOREAN VALUE WAS A COMMAND'S NAME — `waka-mcp
+       열기` — spelled the way it is typed, lower case on purpose, and not
+       evidence of the decay this file guards. It went with the settings
+       page's key panel on 2026-10-11, so the Korean catalogue now has no
+       such value at all. Asserted as empty rather than deleted: a list
+       pinned to exactly what is there is what makes the NEXT lower-case
+       Korean string arrive as a failure to think about. */
+    expect(flagged).toEqual([]);
   });
 });

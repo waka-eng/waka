@@ -324,7 +324,7 @@ async function main(): Promise<void> {
         /* SAVE IS NOT ON THE FIELD'S OWN ENTER HERE. The notepad takes
            multi-line writing, so Enter makes a line; the keep is the button
            in the corner, which is what a person tabs to. */
-        await tabTo(/jar-note-save/, 8);
+        await tabTo(/waka-dock-tool--keep/, 10);
         await page.keyboard.press("Enter");
         await page.waitForTimeout(4_500);
         keptByKeyboard = (await page.evaluate(async () => {

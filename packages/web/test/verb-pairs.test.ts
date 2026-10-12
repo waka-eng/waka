@@ -137,7 +137,11 @@ const REGISTER: Record<string, string> = {
   // what the machine concluded, and what you may say back
   updateSignal: "releaseSignal",
   releaseSignal: "updateSignal",
-  restoreSignal: "createFeedback",
+  /* `restoreSignal` LEFT THE REGISTER with its client wrapper (2026-10-11).
+     It was a dismissal's undo, and the only surface listing dismissed
+     signals was the antechamber — one of three machinery doors on the
+     settings page the founder folded into the gear's dropdown. The ROUTE
+     stands; what is gone is the verb this product offers. */
   createFeedback: "RULED: a verdict is answered by giving a different one, not by withdrawing it",
   updateTopOfMindEntry: "releaseTopOfMindEntry",
   releaseTopOfMindEntry: "updateTopOfMindEntry",
@@ -221,8 +225,23 @@ const REGISTER: Record<string, string> = {
 
   // you, and what can speak as you
   signup: "RULED: the account's own end is deleteAccount, behind a typed confirmation",
-  login: "endConnection",
-  endConnection: "login",
+  /* `endConnection` WENT WITH THE CONNECTIONS LIST (2026-10-11), and that
+     leaves `login` without the partner it named. The honest reading is not
+     that signing in has no way back — it is that ending a SESSION FROM
+     ANOTHER DEVICE is no longer a thing this product offers, so the way
+     back from signing in is signing out, which `logout` is. Founder, on
+     the settings page: "remove anything that is not absolutely necessary";
+     connections govern people-to-people reading and the product has had no
+     people-to-people surface since rooms were removed. */
+  login:
+    "RULED: the way back is signing out. `logout` in `lib/api/auth.ts` is " +
+    "wired through the auth context and reachable from the gear on every " +
+    "screen — it is not NAMED here as the partner because this file " +
+    "discovers verbs by the shared write helpers (`postJson` and friends) " +
+    "and `logout` reaches the network through `apiFetch` directly. That is " +
+    "a blind spot in the discovery, not a missing exit, and it is written " +
+    "down rather than worked around so the next person does not read the " +
+    "ruling as a claim that signing in has no inverse.",
   updateAuthProfile: "RULED: an edit is its own inverse",
   updateAuthPreferences: "RULED: an edit is its own inverse",
   createProfile: "deleteProfile",
@@ -231,24 +250,20 @@ const REGISTER: Record<string, string> = {
   createAgentKey: "revokeAgentKey",
   revokeAgentKey: "createAgentKey",
 
-  // the keeper's own keys (2026-08-29): same door, the person's hand
-  createKeeperKey: "revokeKeeperKey",
-  revokeKeeperKey: "createKeeperKey",
+  /* THE KEEPER'S KEYS AND THE SIBLING GRANTS left the register together
+     (2026-10-11). Both were tables of credentials on the settings page — a
+     developer surface on a consumer product's account screen — and the
+     founder's instruction was "remove anything that is not absolutely
+     necessary". `createAgentKey` STAYS, and is still minted when an agent
+     is made; what went is the UI for reading and revoking by hand, and the
+     client wrappers that only that UI called. */
 
-  // the sibling door (2026-08-29): opened and closed by the owner's hand
-  createAgentGrant: "revokeAgentGrant",
-  revokeAgentGrant: "createAgentGrant",
 
-  // the gardener's asks (2026-08-31, waka#294): answering is deliberately
-  // standing. keep_apart is a permanent answer the gardener respects — the
-  // way to change your mind is that both signals still exist. A merge keeps
-  // every exit open by construction: the retired signal keeps its statement,
-  // its history, and its own evidence links, and the proposal row names the
-  // survivor — nothing is deleted, so there is nothing an un-merge verb
-  // would restore that the record does not already hold.
-  resolveSignalDuplicate:
-    "RULED: both answers are standing by design; a merge retires without deleting, " +
-    "so the record itself is the way back",
+  /* THE GARDENER'S ASKS went with the third machinery door (2026-10-11).
+     `resolveSignalDuplicate`'s ruling is kept here in spirit because it is
+     the best of the three and would be true again if the surface returns:
+     both answers are standing by design, a merge retires without deleting,
+     and the record itself is the way back. */
 };
 
 describe("every verb has a way back, or a reason it does not", () => {

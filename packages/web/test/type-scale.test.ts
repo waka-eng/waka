@@ -145,7 +145,14 @@ function onTheScale(value: string): boolean {
  * counted here. The point is not shorter CSS — `var(--sp-14)` is longer than
  * `14px`. It is that "off the grid" becomes something a machine can see.
  */
-const SPACE_CEILING = 29;
+/* 29 -> 19 on 2026-10-11, and the ten were not drained by hand. The
+   settings page was deleted — founder: "I want all setting-related stuff
+   to be only accessible through the drop down and not be its own thing" —
+   and 130 rules went with it across four stylesheets, carrying their
+   off-grid paddings. The same thing happened to the colour ceiling in the
+   same run. A ratchet that only notices deliberate work is not watching
+   the thing that actually moves these numbers. */
+const SPACE_CEILING = 19;
 /* 38 -> 33 on 2026-08-26, for the same reason as `CEILING` above: the
    literals left with the dead rules that carried them.
    33 -> 32 on 2026-09-08: the mouth's coarse-pointer air was a raw 13px on
