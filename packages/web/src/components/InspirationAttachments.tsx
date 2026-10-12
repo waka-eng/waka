@@ -13,13 +13,20 @@ function Attachment({ item, locale,readOnly }: { item: ApiAttachmentSummary; loc
       .catch(() => { if (!controller.signal.aborted) setFailed(true); });
     return () => controller.abort();
   }, [item.id, item.type, retry]);
-  if (item.type === 'link') return <div className="jar-saved-attachment"><AttachmentPreview item={item} readOnly={readOnly} /></div>;
+  /* THE LOCALE WENT NO FURTHER THAN THIS FILE'S OWN THREE STRINGS.
+     It was held here, used for `worldAttachmentOpenFailed` and the two lines
+     beside it, and handed to NEITHER child — so the shelf said "Opening
+     attachment…" in Korean and then every sentence inside the preview and the
+     transcript in English. Reading this file was not enough to see that,
+     because the locale is plainly in use on the lines that have it; what was
+     missing is invisible until you open the children. Both now require it. */
+  if (item.type === 'link') return <div className="jar-saved-attachment"><AttachmentPreview item={item} locale={locale} readOnly={readOnly} /></div>;
   return <div className="jar-saved-attachment">
     {url && item.type === 'image' && !failed ? <img src={url} alt={item.label} onError={() => setFailed(true)} /> : null}
-    {url && item.type === 'image' ? <a href={url} target="_blank" rel="noreferrer">Open original image ↗</a> : null}
-    {item.type === 'image' ? <AttachmentPreview item={item} readOnly={readOnly} /> : null}
+    {url && item.type === 'image' ? <a href={url} target="_blank" rel="noreferrer">{t(locale, 'worldAttachmentOpenOriginalImage')}</a> : null}
+    {item.type === 'image' ? <AttachmentPreview item={item} locale={locale} readOnly={readOnly} /> : null}
     {url && item.type === 'audio' ? <audio controls preload="metadata" src={url} aria-label={item.label} onError={() => setFailed(true)} /> : null}
-    {item.type === 'audio' ? <AttachmentTranscript key={item.id} id={item.id} readOnly={readOnly} /> : null}
+    {item.type === 'audio' ? <AttachmentTranscript key={item.id} id={item.id} locale={locale} readOnly={readOnly} /> : null}
     {failed ? <p role="alert">{t(locale, 'worldAttachmentOpenFailed')} <button type="button" onClick={() => setRetry(value => value + 1)}>{t(locale, 'worldRoomHistoryRetry')}</button></p> : null}
     {!url && !failed ? <p role="status">{t(locale, 'worldOpeningAttachment')}</p> : null}
   </div>;
