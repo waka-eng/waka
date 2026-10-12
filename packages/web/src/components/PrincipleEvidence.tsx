@@ -1,5 +1,6 @@
 import type { ApiPrinciple } from "../lib/api/principles";
 import { t, type SupportedLocale } from "../lib/i18n";
+import { dateWords } from "../lib/words";
 import {ReviewEvidence} from './ReviewEvidence';
 
 /** A display excerpt, never a rewrite of the saved statement or its evidence. */
@@ -35,7 +36,13 @@ export function PrincipleEvidence({ signals, locale }: {
         {excerpt ? <p>{excerpt}</p> : null}
         {sourceText && example ? <blockquote>
           <p>{sourceText}</p>
-          <footer>{t(locale, "worldPrincipleSavedExample")} · {new Date(example.createdAt).toLocaleDateString(locale, { month: "short", day: "numeric" })}</footer>
+          {/* THE SAME DATE WORD THE QUOTE BELOW IT WEARS — see
+              `ReviewEvidence`, which carried the identical option bag and the
+              identical missing year rule. Two footers under one principle,
+              saying when, out of two hand-written `Intl` calls: they agreed
+              today and had nothing holding them together. `dateWords` is the
+              one place that question is answered. */}
+          <footer>{t(locale, "worldPrincipleSavedExample")} · {Number.isFinite(Date.parse(example.createdAt))?dateWords(Date.parse(example.createdAt),Date.now(),locale):''}</footer>
         </blockquote> : null}
         <ReviewEvidence rows={reviews} locale={locale}/>
       </div>;
