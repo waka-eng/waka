@@ -65,3 +65,9 @@ snap.json
 /work/principle-relation-eval/
 /work/principle-grounding-eval/
 /work/mobile-foundation/
+
+# Agent and session scratch: browser probes, screenshots, throwaway scripts.
+# These were committed once by an all-files add during a parallel session and
+# are not artefacts anybody should review or ship.
+scratch/
+packages/*/scratch/
