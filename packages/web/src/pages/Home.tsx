@@ -15248,9 +15248,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                    `--aside` rather than `--dim`: it is not a disabled or
                    lesser control, it is a different register of speech, and
                    naming it for the state would invite the next person to
-                   reach for it whenever a bubble felt loud. */
+                   reach for it whenever a bubble felt loud.
+
+                   THE SLOT TAKES THE WHITE, NOT THE READING. The first cut
+                   of this keyed on whether a reading EXISTS — `lead ? '' :
+                   aside` — which is a different rule and a worse one, and
+                   the founder caught it on an account with no top of mind
+                   yet: both bubbles came out quiet, so nothing stood out
+                   from anything. "Keep the current white one for the top of
+                   mind" is about the slot. This branch is the top-of-mind
+                   slot whatever is in it — the reading, or the line saying
+                   there is not one yet — and its prominence should not
+                   flicker depending on whether the machine has written
+                   anything. Everything else the creature says arrives
+                   through `charSay`, which is always the lighter weight. */
                 <div
-                  className={`jar-char-bubble${lead ? '' : ' jar-char-bubble--aside'}`}
+                  className="jar-char-bubble"
                   data-jar-chrome="1"
                   /* Both states of this bubble are pressable — a reading and
                      the empty line — so the flag is unconditional. */

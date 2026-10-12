@@ -116,11 +116,23 @@ it('offers no audience choice, because there is nowhere else for a save to go', 
   expect(props.onVisibility).not.toHaveBeenCalled();
   expect(props.onSubmit).not.toHaveBeenCalled();
 });
+/* ═══ A FILE THE BROWSER CANNOT DRAW IS STILL A FILE ═══════════════════
+   A HEIC on a browser with no decoder for it. The old rows said so in a
+   sentence — "This browser can't preview this photo. The original can still
+   be saved." — beside a "1 KB".
+
+   THE TILE SAYS IT BY STILL BEING THERE, with the filename in it. Founder,
+   of the rows: "I think it's a little ugly how files are added today."
+   A paragraph explaining that an absent thumbnail is not a failure is a
+   paragraph about the product's own limitation; a named tile in the shelf
+   with the other four is the fact itself. What must not happen is the file
+   vanishing, which is what this now asserts. */
 it('keeps an unsupported browser preview saveable and gives the failed file its own retry', async () => {
   await mount();
   await act(async () => host.querySelector('img')!.dispatchEvent(new Event('error')));
-  expect(host.textContent).toContain('original can still be saved'); expect(host.textContent).toContain('1 KB');
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Retry upload for Photo.heic"]')!.click());
+  expect(host.querySelectorAll('.jar-tile')).toHaveLength(1);
+  expect(host.querySelector('.jar-tile-name')?.textContent).toBe('Photo.heic');
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Try uploading Photo.heic again"]')!.click());
   expect(props.onRetryFile).toHaveBeenCalledWith('photo'); expect(props.onSubmit).not.toHaveBeenCalled();
   /* THAT IT IS STILL SAVEABLE is the point of the case and is now asserted
      where the decision is made: a file the browser cannot PREVIEW carries no
@@ -128,11 +140,22 @@ it('keeps an unsupported browser preview saveable and gives the failed file its 
      `keep-ready.test.ts`. A preview failure is this page's business; whether
      it blocks a save is not. */
 });
-it('disables remove and retry during upload and distinguishes upload from final save', async () => {
+/* ═══ WHICH FILE IS IN FLIGHT, SHOWN RATHER THAN COUNTED ═══════════════
+   "Uploading file 1 of 1… Keep this window open." is gone. A person cannot
+   act on which of three files is moving, and the instruction asked them not
+   to do a thing they were not doing. The BAR says that an upload is
+   happening (founder: "states should show and disappear in the bottom bar
+   only"); the tile that is actually uploading marks itself, which is the
+   same fact in the place it belongs.
+
+   AND IT CANNOT BE REMOVED OR RETRIED MID-FLIGHT, which is the half of this
+   case that is about data rather than about words. */
+it('marks the file in flight and disables remove and retry during upload', async () => {
   props.busy = true; props.uploadingId = 'photo'; await mount();
-  expect(host.textContent).toContain('Uploading file 1 of 1');
-  expect(host.querySelector<HTMLButtonElement>('[aria-label="remove Photo.heic"]')!.disabled).toBe(true);
-  expect(host.querySelector('[aria-label="Retry upload for Photo.heic"]')).toBeNull();
+  expect(host.querySelector('.jar-tile')!.className).toContain('jar-tile--busy');
+  expect(host.textContent).not.toContain('Uploading file');
+  expect(host.querySelector<HTMLButtonElement>('[aria-label="Remove Photo.heic"]')!.disabled).toBe(true);
+  expect(host.querySelector('[aria-label="Try uploading Photo.heic again"]')).toBeNull();
 });
 it('routes pasted and dropped files through the same validation callback, never during an upload', async () => {
   await mount(); const file = new File(['bytes'], 'photo.png', {type:'image/png'});
@@ -145,14 +168,19 @@ it('routes pasted and dropped files through the same validation callback, never 
 it('retains invalid/extra selections with removal controls and blocks saving until resolved', async () => {
   props.media = Array.from({length:6}, (_, index) => ({id:String(index), type:'image', name:`Photo ${index}.png`,
     blob:new Blob(['photo']), ...(index === 5 ? {validationError:'This photo is over 25 MB.'} : {})}));
-  await mount(); expect(host.textContent).toContain('selections are still here');
+  await mount();
   /* THE BLOCKING MOVED, THE RETAINING DID NOT. What this page owes somebody
      who picked six files is that all six are still here, each marked, each
      removable — losing a selection to a validation error would be the real
-     harm. Whether Save is pressable while one is marked is
-     `whyNotKept`'s answer and is enumerated in `keep-ready.test.ts`. */
-  expect(host.querySelectorAll('.jar-composer-media > li')).toHaveLength(6);
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="remove Photo 5.png"]')!.click());
+     harm. Whether Save is pressable while one is marked is `whyNotKept`'s
+     answer and is enumerated in `keep-ready.test.ts`, and the sentence
+     "Keep up to five attachments…" that used to appear here is on that
+     control's `title` now rather than pushing the shelf down the page. */
+  expect(host.querySelectorAll('.jar-shelf > .jar-tile')).toHaveLength(6);
+  /* THE ONE THAT IS WRONG SAYS SO, and only that one. A shelf where every
+     tile is outlined would be no information at all. */
+  expect(host.querySelectorAll('.jar-tile--wrong')).toHaveLength(1);
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Remove Photo 5.png"]')!.click());
   expect(props.onRemove).toHaveBeenCalledWith('5');
 });
 it('restores the separate link draft and includes it through the single Save action',async()=>{
