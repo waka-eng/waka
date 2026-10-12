@@ -241,6 +241,27 @@ describe("resolveRelatedEvidence — which citations code lets stand", () => {
 });
 
 describe("parseSignalCandidates — related-citation shape discipline", () => {
+  const earlier='a3689f1e-0000-4000-8000-000000000001';
+  const input={profileId:'profile',preferredLocale:'en-US' as const,
+    inspiration:{id:'00000000-0000-4000-8000-000000000002',text:'I keep commitments small enough to honor existing promises.',source:'app' as const,createdAt:new Date()},
+    /* `existingCategories` is this branch's, and it is REQUIRED on the input
+       type — the shelf labels already in use, so the prompt can reuse a name
+       rather than inventing a synonym of it. dev's cases (#366) predate it;
+       empty is the honest value here, since none of them are about the shelf. */
+    reflections:[],attachments:[],existingStatements:[],existingCategories:[],relatedInspirations:[{id:earlier,text:'An earlier promise.',createdAt:new Date()}]};
+  it.each([earlier,earlier.slice(0,8)])('refuses internal context IDs in visible pattern text: %s',id=>{
+    expect(()=>parseSignalCandidates({statements:[{statement:`I keep commitments small. The earlier capture ${id} shows the same.`}]},input)).toThrow('signal extraction');
+    expect(()=>parseSignalCandidates({statements:[{statement:'I keep commitments small.',reason:`Earlier capture ${id} supports this.`}]},input)).toThrow('signal extraction');
+  });
+  it('keeps metadata in citations and permits technical IDs genuinely present in authored material',()=>{
+    const payload={statements:[{statement:'I keep commitments small enough to honor existing promises.',relatedEvidence:[{inspirationId:earlier,quote:'An earlier promise.'}]}]};
+    expect(parseSignalCandidates(payload,input).statements[0]?.relatedEvidence?.[0].inspirationId).toBe(earlier);
+    const text=`I review the code revision ${earlier.slice(0,8)} before deploying.`;
+    expect(parseSignalCandidates({statements:[{statement:text}]},{...input,inspiration:{...input.inspiration,text}}).statements[0]?.statement).toBe(text);
+  });
+  it('refuses oversized generated prose before it can be truncated into an unfinished statement',()=>{
+    expect(()=>parseSignalCandidates({statements:[{statement:'x'.repeat(501)}]},input)).toThrow('signal extraction');
+  });
   it("collapses duplicate ids, drops blanks, and enforces the cap", () => {
     const parsed = parseSignalCandidates({
       statements: [

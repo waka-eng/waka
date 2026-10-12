@@ -1,0 +1,339 @@
+{
+  "calls": 16,
+  "costUsd": 0.0022714949999999997,
+  "maxCostUsd": 0.1,
+  "attempts": [
+    {
+      "phase": "received",
+      "costUsd": 0.00030998,
+      "status": 200,
+      "output": "{\"statements\":[{\"statement\":\"This month, my own calendar keeps losing to other people's urgency — I've skipped the gym three times to finish someone else's urgent thing.\",\"quote\":\"Skipped the gym again to finish someone else's urgent thing. Third time this month — my own calendar always loses to other people's urgency.\",\"relatedEvidence\":[]}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00023545,
+      "status": 200,
+      "output": "{\"statements\": [{\"statement\": \"I keep coming back to designs that remove steps instead of adding features.\", \"quote\": \"I keep coming back to designs that remove steps instead of adding features.\", \"relatedEvidence\": []}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.0003069,
+      "status": 200,
+      "output": "{\"statements\":[{\"statement\":\"Walking untangles a decision for me — the long walk finally untangled the pricing decision.\",\"quote\":\"The long walk finally untangled the pricing decision.\"},{\"statement\":\"I only write well before anyone else is awake.\",\"quote\":\"I noticed again that I only write well before anyone else is awake.\"}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00008934,
+      "status": 200,
+      "output": "{\"statements\": [{\"statement\": \"I want long unbroken focus blocks.\", \"quote\": \"I want long unbroken focus blocks\", \"relatedEvidence\": []}, {\"statement\": \"Today I said yes to four meetings without hesitating.\", \"quote\": \"I said yes to four meetings today without hesitating\", \"relatedEvidence\": []}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00008616,
+      "status": 200,
+      "output": "{\"statements\": [{\"statement\": \"Small daily rituals compound into identity.\"}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00004164,
+      "status": 200,
+      "output": "{\n  \"statements\": []\n}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00009171,
+      "status": 200,
+      "output": "{\"statements\": []}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.0002277,
+      "status": 200,
+      "output": "{\"statements\": []}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00017694,
+      "status": 200,
+      "output": "{\"statements\":[{\"statement\":\"이번 달만 세 번째로, 남의 급한 일을 먼저 처리하느라 운동을 걸렀고, 내 일정은 늘 다른 사람의 다급함에 밀린다.\",\"quote\":\"또 남의 급한 일을 먼저 처리하느라 운동을 걸렀다. 이번 달만 세 번째 — 내 일정은 늘 다른 사람의 다급함에 밀린다.\",\"relatedEvidence\":[]}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00011094,
+      "status": 200,
+      "output": "{\"statements\":[{\"statement\":\"요즘은 기능을 더하기보다 단계를 없애는 디자인으로 돌아가게 된다.\",\"quote\":\"요즘 계속 기능을 더하기보다 단계를 없애는 디자인으로 돌아가게 된다.\"}]}"
+    },
+    {
+      "phase": "dispatching",
+      "costUsd": null
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.000079385,
+      "status": 200,
+      "output": "{\"statements\": [{\"statement\": \"회의 네 개를 망설임 없이 수락하면서도 긴 몰입 시간을 원한다.\", \"reason\": \"The capture shows the person accepting four meetings without hesitation while saying they want long blocks of focus time — a tension between the stated wish and today's action, bounded to today.\", \"quote\": \"긴 몰입 시간을 원한다면서 오늘도 회의 네 개를 망설임 없이 수락했다.\"}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00003616,
+      "status": 200,
+      "output": "{\"statements\": [{\"statement\": \"작은 습관이 정체성을 만든다고 본다.\"}]}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.0002304,
+      "status": 200,
+      "output": "{\"statements\": []}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00003864,
+      "status": 200,
+      "output": "{\"statements\": []}"
+    },
+    {
+      "phase": "received",
+      "costUsd": 0.00021015,
+      "status": 200,
+      "output": "{\"statements\": []}"
+    }
+  ],
+  "results": [
+    {
+      "c": {
+        "note": "two distinct patterns in one capture (en)",
+        "text": "The long walk finally untangled the pricing decision. Separately — I noticed again that I only write well before anyone else is awake.",
+        "locale": "en-US",
+        "min": 2,
+        "max": 3,
+        "topics": [
+          {},
+          {}
+        ]
+      },
+      "statements": [
+        "Walking untangles a decision for me — the long walk finally untangled the pricing decision.",
+        "I only write well before anyone else is awake."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "a tension named, not resolved (en)",
+        "text": "I want long unbroken focus blocks, and I said yes to four meetings today without hesitating.",
+        "locale": "en-US",
+        "min": 1,
+        "max": 3,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "I want long unbroken focus blocks.",
+        "Today I said yes to four meetings without hesitating."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "an errand log teaches nothing (en)",
+        "text": "Bought milk and eggs. Dentist moved to 4pm. Package arrives Thursday.",
+        "locale": "en-US",
+        "min": 0,
+        "max": 0
+      },
+      "statements": [],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "recurring self-observation (en)",
+        "text": "Skipped the gym again to finish someone else's urgent thing. Third time this month — my own calendar always loses to other people's urgency.",
+        "locale": "en-US",
+        "min": 1,
+        "max": 3,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "This month, my own calendar keeps losing to other people's urgency — I've skipped the gym three times to finish someone else's urgent thing."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "already a pattern sentence — near-verbatim is correct (en)",
+        "text": "Small daily rituals compound into identity.",
+        "locale": "en-US",
+        "min": 1,
+        "max": 2,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "Small daily rituals compound into identity."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "invention bait: vivid scene, no pattern about the person (en)",
+        "text": "The barista's tattoo said 'per aspera'. Rain started as the bus pulled in.",
+        "locale": "en-US",
+        "min": 0,
+        "max": 1,
+        "never": {}
+      },
+      "statements": [],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "recurring self-observation (ko)",
+        "text": "또 남의 급한 일을 먼저 처리하느라 운동을 걸렀다. 이번 달만 세 번째 — 내 일정은 늘 다른 사람의 다급함에 밀린다.",
+        "locale": "ko-KR",
+        "min": 1,
+        "max": 3,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "이번 달만 세 번째로, 남의 급한 일을 먼저 처리하느라 운동을 걸렀고, 내 일정은 늘 다른 사람의 다급함에 밀린다."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "a bare fact of the day, no durable pattern (en)",
+        "text": "Flight UA118 delayed two hours. Gate changed to B44.",
+        "locale": "en-US",
+        "min": 0,
+        "max": 0
+      },
+      "statements": [],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "a quote generalized, not parroted (ko)",
+        "text": "책에서: \"최고의 인터페이스는 인터페이스가 없는 것이다.\" 요즘 계속 기능을 더하기보다 단계를 없애는 디자인으로 돌아가게 된다.",
+        "locale": "ko-KR",
+        "min": 1,
+        "max": 3,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "요즘은 기능을 더하기보다 단계를 없애는 디자인으로 돌아가게 된다."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "a quote generalized, not parroted (en)",
+        "text": "From the article: \"The best interface is no interface.\" I keep coming back to designs that remove steps instead of adding features.",
+        "locale": "en-US",
+        "min": 1,
+        "max": 3,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "I keep coming back to designs that remove steps instead of adding features."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "already a pattern sentence (ko)",
+        "text": "작은 습관이 정체성을 만든다.",
+        "locale": "ko-KR",
+        "min": 1,
+        "max": 2,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "작은 습관이 정체성을 만든다고 본다."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "an errand log teaches nothing (ko)",
+        "text": "우유랑 계란 샀다. 치과 4시로 변경. 택배는 목요일 도착.",
+        "locale": "ko-KR",
+        "min": 0,
+        "max": 0
+      },
+      "statements": [],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "a bare fact of the day (ko)",
+        "text": "KE082편 두 시간 지연. 게이트 B44로 변경.",
+        "locale": "ko-KR",
+        "min": 0,
+        "max": 0
+      },
+      "statements": [],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "a tension named (ko)",
+        "text": "긴 몰입 시간을 원한다면서 오늘도 회의 네 개를 망설임 없이 수락했다.",
+        "locale": "ko-KR",
+        "min": 1,
+        "max": 3,
+        "topics": [
+          {}
+        ]
+      },
+      "statements": [
+        "회의 네 개를 망설임 없이 수락하면서도 긴 몰입 시간을 원한다."
+      ],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "invention bait (ko)",
+        "text": "카페 직원의 타투에 '페르 아스페라'라고 적혀 있었다. 버스가 들어올 때 비가 시작됐다.",
+        "locale": "ko-KR",
+        "min": 0,
+        "max": 1,
+        "never": {}
+      },
+      "statements": [],
+      "problems": []
+    },
+    {
+      "c": {
+        "note": "two distinct patterns in one capture (ko)",
+        "text": "오래 걸으니 가격 문제가 드디어 풀렸다. 그리고 또 느꼈다 — 글은 남들이 깨기 전 새벽에만 잘 써진다.",
+        "locale": "ko-KR",
+        "min": 2,
+        "max": 3,
+        "topics": [
+          {},
+          {}
+        ]
+      },
+      "statements": [],
+      "problems": [
+        "runtime: ModelRequestTimeoutError"
+      ]
+    }
+  ],
+  "accuracy": 0.9375,
+  "metaOffenders": [],
+  "complete": true,
+  "stopped": false
+}
