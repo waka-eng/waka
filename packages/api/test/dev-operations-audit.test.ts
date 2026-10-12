@@ -2,7 +2,7 @@
  * and logs. Real audit/CLI policy, no cloud, credentials or model calls. */
 import {readFileSync} from 'node:fs';
 import {expect,it,vi} from 'vitest';
-import {auditDevOperations,devAuditReadFailure,summarizeDevEvents,validateDevAuditTargets} from '../../../scripts/dev-operations-audit.mjs';
+import {auditDevOperations,devAuditReadFailure,readDevLogPages,summarizeDevEvents,validateDevAuditTargets} from '../../../scripts/dev-operations-audit.mjs';
 const api='waka-development-ApiFunction-efwcwxdn',worker='waka-development-BackgroundWorkerFunction-xxbrbmcx';
 const environment={PUBLIC_WEB_URL:'https://dev.waka.im',PUBLIC_API_URL:'https://dev.waka.im',NODE_ENV:'production',WAKA_STAGE:'development',WAKA_TRUSTED_PROXY_HOPS:null,
   OPENROUTER_GENERATION_MODEL:'deepseek/deepseek-v4.1-flash',WAKA_MODEL_CHAT:'deepseek/deepseek-v4.1-flash'};
@@ -15,12 +15,36 @@ it('refuses production, missing or flag-bearing targets before AWS access',()=>{
 it('bounds reads, scopes development and leaves broad operational gates unproven',()=>{
   const awsRead=vi.fn(args=>args[0]==='lambda'?{environment,database:'PRIVATE_DB',logGroup:'/aws/lambda/'+args[3]}:{events:[],nextToken:'PRIVATE_CURSOR'});
   const result=auditDevOperations({api,worker,now:1791266400000,awsRead});
-  expect(awsRead).toHaveBeenCalledTimes(13);expect(result.failures).toEqual([]);
+  expect(awsRead).toHaveBeenCalledTimes(21);expect(result.failures).toEqual([]);
   expect(result.configuration).toMatchObject({trustedOrigins:true,proxyTopologyDeclared:false,apiWorkerDatabaseIdentical:true,chatModelsMatch:true,restrictivePrivacyOverrides:false});
   expect(result).toMatchObject({controlledConcurrentMeasurement:false,alertDeliveryVerified:false,providerPrivacyVerified:false,recurringMonetaryLimitsVerified:false});
   expect(result.logs.every(log=>log.partialPage&&log.samples===0)).toBe(true);
+  expect(result.logs.every(log=>log.pagesRead===2&&log.cursorRepeated)).toBe(true);
+  expect(result.logPagesComplete).toBe(false);
   expect(JSON.stringify(result)).not.toContain('PRIVATE');
   for(const [args] of awsRead.mock.calls)expect(args.slice(0,2)).toEqual(args[0]==='lambda'?['lambda','get-function-configuration']:args[0]==='logs'?['logs','filter-log-events']:['cloudwatch','get-metric-statistics']);
+});
+it('continues through empty pages and suppresses duplicate events without exposing IDs or cursors',()=>{
+  const event={eventId:'PRIVATE_EVENT',message:JSON.stringify({event:'model_usage',Stage:'development',Provider:'openrouter',ModelRequests:1,UnpricedRequests:0,CostUsd:.004})};
+  const pages=[{events:[],nextToken:'PRIVATE_1'},{events:[event],nextToken:'PRIVATE_2'},{events:[event]}];
+  const read=vi.fn(()=>pages.shift());const result=readDevLogPages('usage',['logs','filter-log-events'],read);
+  expect(result).toMatchObject({pagesRead:3,partialPage:false,cursorRepeated:false,samples:1});
+  expect(result.readings[0].CostUsd).toBe(.004);expect(JSON.stringify(result)).not.toContain('PRIVATE');
+  expect(read.mock.calls[1][0]).toEqual(['logs','filter-log-events','--next-token','PRIVATE_1']);
+});
+it('retains partial coverage at the page ceiling and refuses invalid bounds before cloud access',()=>{
+  const read=vi.fn(()=>({events:[],nextToken:'page-'+read.mock.calls.length}));
+  expect(readDevLogPages('usage',[],read,3)).toMatchObject({pagesRead:3,partialPage:true});
+  read.mockClear();for(const maxPages of [0,11,1.5,NaN])expect(()=>readDevLogPages('usage',[],read,maxPages)).toThrow('bound');
+  expect(read).not.toHaveBeenCalled();
+});
+it('refuses unsafe time windows before AWS access and uses an explicit controlled start',()=>{
+  const now=1791266400000,awsRead=vi.fn(args=>args[0]==='lambda'?{environment,database:'PRIVATE_DB',logGroup:'/aws/lambda/'+args[3]}:{events:[]});
+  for(const since of ['PRIVATE',new Date(now+1).toISOString(),new Date(now-3*3600000).toISOString()])expect(()=>auditDevOperations({api,worker,now,awsRead,since})).toThrow('start');
+  expect(awsRead).not.toHaveBeenCalled();
+  const since=new Date(now-60000).toISOString();const result=auditDevOperations({api,worker,now,awsRead,since});
+  expect(result.logWindow.start).toBe(since);expect(result.logPagesComplete).toBe(true);
+  for(const [args] of awsRead.mock.calls.filter(([args])=>args[0]==='logs'))expect(args[args.indexOf('--start-time')+1]).toBe(String(now-60000));
 });
 it('reports refused reads without echoing provider errors, configuration or credentials',()=>{
   const result=auditDevOperations({api,worker,awsRead:()=>{throw new Error('PRIVATE_CREDENTIAL PRIVATE_DB');}});
