@@ -939,7 +939,8 @@ const JOURNEYS: Journey[] = [
 
        "KEYS and AGENT KEYS — tables of API credentials with mint, copy and
         revoke. A developer surface on a consumer product's settings screen.
-        `createAgentKey` STAYS and is still called when an agent is made;
+        `createAgentKey` NO LONGER RUNS (2026-10-12) — the quoted header
+        said it stayed, and that stopped being true when minting was removed;
         what went is the UI for reading and revoking them by hand."
 
        "WHAT AGENTS MAY READ — grants, which govern the keys above. With no
@@ -954,7 +955,10 @@ const JOURNEYS: Journey[] = [
      key, showing a secret exactly once, revoking it, or granting one agent
      read of another. THE SERVER KEEPS ALL OF IT — `lib/api/inspirations.ts`
      says so of the reflection routes and the same is true here: the routes
-     are live and `createAgentKey` is still called when an agent is made.
+     are live, but `createAgentKey` IS NO LONGER CALLED when an agent is
+     made (2026-10-12). The secret it minted was discarded by the line that
+     minted it, and listing and revoking live on a panel that can never
+     mount, so it was a credential nobody could hold, see or revoke.
      WHAT WOULD RESTORE IT: a key surface coming back, or these two claims
      moving to `tools/e2e/organic.ts`, which is the harness for things only a
      machine does. The second is the better home and is somebody's call, not
