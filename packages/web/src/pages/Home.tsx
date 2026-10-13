@@ -10027,68 +10027,30 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   ))}
                 </p>
               </div>
-            ) : !mouthOpen && !standingAsAgent && lead ? (
-              /* ═══ WHEN NOTHING IS BEING ASKED, THE SEAT HOLDS YOUR READING
-                 Founder: "where is my top of mind now? I don't see it
-                 anywhere in the experience."
-
-                 It had effectively disappeared, and the cause was mine: the
-                 statement band above the creature YIELDS whenever a claim is
-                 waiting, and a claim is almost always waiting — so the only
-                 way back to your own reading was to answer a whole sitting
-                 of three. A thing you can only reach by finishing a chore is
-                 not on the screen.
-
-                 ONE SEAT, TWO CONTENTS. The note the creature holds up is
-                 "what WAKA has to say to you right now", and that is either
-                 a question it needs answered or the reading it currently
-                 holds — never both, never neither. It also makes the loop
-                 visible for free: answer the last claim and the seat fills
-                 with the statement those answers are written from. */
-              <div className="jar-char-claim jar-char-claim--reading">
-                {/* THE SENTENCE MOVED UP INTO THE BUBBLE; what stays here is
-                    what you can do about it. Printing it in both places would
-                    be the same words twice on one screen. */}
-                {/* ITS VERBS COME WITH IT. They used to live in the band above
-                    the creature; that band now yields on this wall always, so
-                    leaving them there would have made three controls nobody
-                    can reach — the dead-press shape this codebase gates
-                    against. Edit, Remove, and ask for a new one: the three the
-                    founder named. */}
-                {/* ═══ THE TOP OF MIND IS NOT EDITED FROM UNDER ITSELF ════════
-                    Founder, asked whether Edit / Remove / Write a new one
-                    belong under the reading: "NO."
-
-                    WHAT STOOD HERE. Three verbs in a row beneath the
-                    statement — rewrite its wording, drop it, ask for a new
-                    one — on the world's own screen, under the one sentence
-                    this product exists to show you.
-
-                    THEY WERE ALSO BROKEN, WHICH IS HOW THEY WERE FOUND. The
-                    row wore `jar-poster-aside`, a class no stylesheet ever
-                    declared, so the three printed as "EditRemoveWrite a new
-                    one" — one run of text, no gaps, wrong type size. Fixing
-                    the layout is what put them in front of the founder, and
-                    the answer was that they should not be there at all. The
-                    gate from that fix stays: `every-class-is-dressed.test.ts`
-                    catches the next class nothing dresses.
-
-                    WHY THEY DO NOT BELONG. The reading is a thing the product
-                    says TO you, and a row of maintenance verbs under it turns
-                    a statement about your life into a record with an edit
-                    mode. The founder's own ruling on the sibling case says
-                    the same: controls under a statement about you must ANSWER
-                    it, not administer it. Rewriting and discarding are
-                    administration.
-
-                    THE CAPABILITIES ARE NOT DELETED, only this doorway. The
-                    reading is still answered where answering is the subject,
-                    and regeneration still happens where a reading is asked
-                    for. If any of the three turns out to have had no other
-                    door, that is a missing door to put somewhere it reads as
-                    an answer — not a reason to put this row back. */}
-              </div>
             ) : null}
+            {/* ═══ AND THE SEAT DOES NOT SIT THERE EMPTY ═══════════════════
+                Founder, on a bordered box with nothing inside it: "there
+                isn't anything the user needs to engage with, so why is this
+                box here?"
+
+                THE SEAT HAD TWO CONTENTS AND ONE WAS JUST REMOVED. Its own
+                note called it "one seat, two contents" — a claim that needs
+                answering, or the reading's verbs — "never both, never
+                neither". Taking the verbs out made "neither" reachable for
+                the first time, and the branch went on rendering its frame
+                around nothing. A box with no contents is the clearest
+                possible case of chrome saying "something belongs here" when
+                nothing does.
+
+                SO THE READING BRANCH IS GONE, NOT EMPTIED. The claim branch
+                above is untouched and is still the whole of it: when WAKA
+                has something for you to answer, the seat appears with the
+                question in it, and when it does not, there is no seat. That
+                is what the founder checked — "just because I deleted the
+                other thing doesn't mean this entire bottom experience is
+                gone, right?" It is not: answering claims is a different
+                branch of this same ternary and nothing in this change
+                touches it. */}
             {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
             {/* ONE THING FROM ONE MOUTH. The narration ("you kept two memories
                 today") stacked under the claim, so the creature was reporting
