@@ -158,7 +158,16 @@ function onTheScale(value: string): boolean {
    off-grid paddings. The same thing happened to the colour ceiling in the
    same run. A ratchet that only notices deliberate work is not watching
    the thing that actually moves these numbers. */
-const SPACE_CEILING = 19;
+/* 19 -> 15 on 2026-10-12, same shape again. Rooms were removed (founder: "방
+   없애") and the memory's Private/Public toggle with them, and four off-grid
+   literals went out inside those rules: the room ground-switcher's `5px`
+   swatch, the pair's own `5px` gap and `30px` minimum height, and the phone
+   breakpoint's `17px` — which was 17 rather than 16 precisely because the
+   words were 11px and 16 landed the row on 43, one pixel short of the touch
+   gate. Four is also exactly the slack this ceiling had, which is the
+   companion test below earning its keep for the fourth time: left at 19 it
+   would have gone on permitting four new literals nobody decided on. */
+const SPACE_CEILING = 15;
 /* 38 -> 33 on 2026-08-26, for the same reason as `CEILING` above: the
    literals left with the dead rules that carried them.
    33 -> 32 on 2026-09-08: the mouth's coarse-pointer air was a raw 13px on

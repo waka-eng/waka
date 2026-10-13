@@ -37,11 +37,14 @@
  *   `helpers/render-home.tsx` carries the same warning beside `dataMockFrom`,
  *   and `fixture-says-so.test.ts` proves the fixture now announces itself.
  *
- *   `lib/api` — for the group reads ONLY. `fetchGroups`, `fetchGroupField`,
- *   `fetchGroupMembers` and the rest have no loader above them, so here the
- *   client genuinely IS the layer directly beneath the page. Two different
- *   seams for two different reads is not an inconsistency; it is the shape of
- *   the code being described accurately.
+ *   `lib/api` — FOR WHAT HAS NO LOADER ABOVE IT. This used to read "for the
+ *   group reads ONLY": `fetchGroups`, `fetchGroupField`, `fetchGroupMembers`
+ *   and the rest had no loader above them, so the client genuinely WAS the
+ *   layer directly beneath the page, and two seams for two kinds of read was
+ *   the shape of the code rather than an inconsistency. Rooms went on
+ *   2026-10-12 (founder: "방 없애"); what is left of `apiMockFrom` is three
+ *   verbs that answer with nothing, and the rule it illustrates still holds
+ *   for the next read that arrives without a loader.
  *
  *   `lib/auth-context` — the session, stated rather than fetched. The page
  *   reads the OPTIONAL hook and renders for a signed-out visitor too, so
@@ -70,12 +73,14 @@ import {
   type MountedWorld,
 } from "./helpers/render-home";
 
-const OTHER = "profile-other";
-
 /**
- * A viewer with nine memories of their own, in a group whose ground holds
- * theirs and one other person's. The counts are deliberately different so a
- * filter that silently does nothing cannot pass by coincidence.
+ * A viewer with nine memories of their own.
+ *
+ * IT USED TO HOLD A ROOM TOO — "The four of us", whose ground carried five of
+ * the viewer's memories and three of Hana's, counts deliberately different so
+ * that a filter silently doing nothing could not pass by coincidence. Rooms
+ * went on 2026-10-12 (founder: "방 없애"), and with them five cases in this
+ * file. They are named where they stood.
  */
 const FACTS = {
   inspirations: Array.from({ length: 9 }, (_, i) => ({
@@ -83,26 +88,6 @@ const FACTS = {
     text: `something I kept, ${i}`,
     daysAgo: i + 1,
   })),
-  groups: [
-    {
-      id: "group-1",
-      name: "The four of us",
-      field: [
-        ...Array.from({ length: 5 }, (_, i) => ({
-          id: `g-mine-${i}`,
-          ownerProfileId: VIEWER_ID,
-          ownerName: "You",
-          daysAgo: i + 2,
-        })),
-        ...Array.from({ length: 3 }, (_, i) => ({
-          id: `g-theirs-${i}`,
-          ownerProfileId: OTHER,
-          ownerName: "Hana",
-          daysAgo: i + 4,
-        })),
-      ],
-    },
-  ],
 };
 
 vi.mock("../src/lib/api", async (importOriginal) => {
@@ -213,100 +198,90 @@ describe("the ground under a wall", () => {
     expectGroundIsWhole("on opening");
   });
 
+  /* ═══ THE REGRESSION THIS FILE EXISTS FOR CANNOT BE STAGED ANY MORE ═════
+     Two cases stood here — "is whole after travelling to another wall" and
+     "is whole again after travelling back" — and they were the reason this
+     suite was written. `arriveColumn` re-ran the layout and gave every newly
+     present memory a home, but `active` is only ever set by `enter()`
+     through a pour or by `settleInstantly`, and travelling ran neither.
+     Measured at the time: 0 of 9 present. Against the commit before that fix
+     these two failed and the ones either side passed, which was the point —
+     the failure was specific.
+
+     BOTH TRAVELLED TO A ROOM, because a room was the only second wall a
+     fixture could cheaply have: an agent's wall needs an agent bundle, and
+     this file mocks `lib/data` rather than the agent roster. Rooms went on
+     2026-10-12 (founder: "방 없애").
+
+     WHAT IS LEFT COVERING IT: `home-memory` and `where-it-last-went` both
+     travel to an agent's wall and assert the ground, and the invariant itself
+     — present === active === onScreen — is asserted on opening below and
+     after every pour in `home-light`. If the lateral-travel activation bug
+     ever returns, the first place to re-stage it is here with an AGENT wall,
+     which is a bigger fixture and the honest cost of rooms going. */
+
+
   /**
-   * THE REGRESSION, AS A TEST.
+   * NOTHING ARRIVES BY TRAVELLING — the pour, as a test.
    *
-   * `arriveColumn` re-ran the layout and gave every newly-present memory a
-   * home, but `active` is only ever set by `enter()` through a pour or by
-   * `settleInstantly`, and travelling ran neither. Measured at the time: 0 of
-   * 9 present. Against the commit before the fix this case fails and the two
-   * either side of it pass, which is the point — the failure is specific.
+   * Founder, 2026-10-11: "When I save an inspiration, I don't know why the
+   * balls are forming and headed to the bottom of the page. That's from the
+   * old design that we got completely rid of." The staggered arrival is
+   * deleted; the tombstone and the whole argument are where `POUR_MS` used to
+   * be in `canvas/simulation.ts`.
+   *
+   * WHY THIS MEASUREMENT AND NOT A PICTURE. The canvas here draws nothing, so
+   * no test in this file may claim anything about appearance — but "an orb is
+   * part-way through arriving" is not an appearance, it is a number the field
+   * publishes about itself. `arrive` runs 0 → 1 across an entrance and is 1 on
+   * a ball that was placed rather than flown, so `drawn.arriveMin` is 1 for a
+   * field that is simply there and less than 1 for one that is still coming in.
+   *
+   * AND IT IS MEASURED HERE, with no `toField()` and no extra frames, because
+   * that is the window the pour lived in. `mountWorld` ends at 30 frames —
+   * 501ms — and the pour's deadlines ran from 300ms at 35ms apiece, so against
+   * the commit before this one, four of these nine memories are still staged
+   * at this instant: `drawn.active` reads 5 or 6 of 9 and `arriveMin` reads 0.
+   * Step the clock further and both heal, which is exactly why the case above
+   * could not see the pour and this one can.
    */
-  it("is whole after travelling to another wall", async () => {
-    await layout.travelTo(/four of us/i);
-    await layout.toField();
-    expectGroundIsWhole("after travelling");
-  });
-
-  it("is whole again after travelling back", async () => {
-    await layout.travelTo(/four of us/i);
-    await layout.toField();
-    await layout.travelTo(/^me$/i);
-    await layout.toField();
-    expectGroundIsWhole("after returning");
-  });
-});
-
-describe("whose ground you are standing in", () => {
-  it("starts as your own, and holds only your memories", async () => {
-    await layout.travelTo(/four of us/i);
-    await layout.toField();
+  it("has nothing part-way through arriving, the moment the world exists", () => {
     const a = layout.audit();
-
-    expect(a.ground, "the default ground is the viewer's own").toBeNull();
-    expect(a.present, "five of the group's memories are the viewer's").toBe(5);
-    expectGroundIsWhole("standing in my own ground");
-  });
-
-  /**
-   * Switching is the product's claim that a group's ground belongs to one
-   * person at a time. If the count does not change, the switch drew a
-   * different label over the same memories — which is what happened the first
-   * time this was built, and it read as working.
-   */
-  it("changes the memories, not just the label, when you switch", async () => {
-    await layout.travelTo(/four of us/i);
-    await layout.toField();
-    const mine = layout.audit().present;
-
-    await layout.standIn(/hana/i);
-    const theirs = layout.audit();
-
-    expect(theirs.ground, "the switch reached the simulation").toBe(OTHER);
-    expect(theirs.present, "Hana kept three of the group's memories").toBe(3);
-    expect(theirs.present).not.toBe(mine);
-    expectGroundIsWhole("standing in Hana's ground");
-  });
-
-  it("comes back to your own ground when you switch back", async () => {
-    await layout.travelTo(/four of us/i);
-    await layout.toField();
-    await layout.standIn(/hana/i);
-    await layout.standIn(/^you$/i);
-
-    const a = layout.audit();
-    expect(a.ground).toBeNull();
-    expect(a.present).toBe(5);
-    expectGroundIsWhole("back in my own ground");
-  });
-});
-
-/**
- * WHAT THE CLAIM IS STANDING ON.
- *
- * A group's poster is its board's lead entry, and under it sits the peek row:
- * the memories that entry was read from. That row was EMPTY for every group,
- * because the provenance map was written under a hand-built key
- * (`room:<id>`, then `cached:<id>`) while the only reader asked for
- * `spaceKey(w)` — `group:<id>`. Two spellings, both wrong, and 64 tests
- * stayed green through both.
- *
- * A count is the smallest assertion that would have caught it. The rule is
- * not "provenance is non-empty" in general — a group whose members shared
- * nothing genuinely has none — it is that a group WITH shared signals feeding
- * its decision has a claim standing on something.
- */
-describe("what a wall's claim rests on", () => {
-  it("is not empty on a group whose shared signals fed its decision", async () => {
-    await layout.travelTo(/four of us/i);
-    await layout.toField();
-
-    const a = layout.audit();
-    expect(a.wallKind, "we are standing on the group").toBe("group");
+    expect(a.present, "nothing is standing on this wall at all").toBeGreaterThan(0);
     expect(
-      a.provenanceCount,
-      "the group's poster is standing on nothing — check the key the " +
-        "provenance map is written under against spaceKey()",
-    ).toBeGreaterThan(0);
+      a.drawn.active,
+      "memories are laid out but not switched on — an arrival is still in flight",
+    ).toBe(a.present);
+    expect(
+      a.drawn.arriveMin,
+      "an orb is part-way through an entrance: the field is animating its own arrival",
+    ).toBe(1);
   });
 });
+
+/* ═══ WHOSE GROUND YOU ARE STANDING IN — GONE WITH THE ROOM ══════════════
+   Founder, 2026-10-12: "방 없애" — remove rooms.
+
+   Three cases: the default ground is your own, switching CHANGES THE
+   MEMORIES rather than the label, and switching back returns you. The middle
+   one carried the argument — "if the count does not change, the switch drew a
+   different label over the same memories, which is what happened the first
+   time this was built, and it read as working." A room's ground belonged to
+   one person at a time and the band of names was how you chose whose; both
+   are deleted, along with `MountedWorld.standIn` and the audit's `ground`
+   field having anything to report. */
+
+
+/* ═══ WHAT THE CLAIM IS STANDING ON — GONE WITH THE ROOM ════════════════
+   A room's poster was its board's lead entry, and under it sat the peek row:
+   the memories that entry was read from. That row was EMPTY for every room,
+   because the provenance map was written under a hand-built key
+   (`room:<id>`, then `cached:<id>`) while its only reader asked for
+   `spaceKey(w)` — `group:<id>`. Two spellings, both wrong, and 64 tests
+   stayed green through both. A count was the smallest assertion that would
+   have caught it.
+
+   THE RULE OUTLIVES THE ROOM and is worth carrying to the next keyed map:
+   write and read a key through the SAME FUNCTION, never through two strings
+   that have to agree. `pages/Home` keeps that note where the room branch
+   used to be. */

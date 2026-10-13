@@ -42,12 +42,19 @@ export const FIELD_REFLECTION_WEIGHT = 0.25;
  * FLOORS — what cannot sink to dark, and by how much.
  *
  * A memory that is load-bearing does not rot: cited by a pattern, answered in
- * your own words, or out loud in a group. Animal Crossing's rule — weeds grow
+ * your own words. (It read "or out loud in a group" until rooms went.)
+ * Animal Crossing's rule — weeds grow
  * where you never built, never where you did.
  */
 export const FIELD_FLOOR_CITED = 0.15;
 export const FIELD_FLOOR_ANSWERED = 0.18;
-export const FIELD_FLOOR_IN_GROUP = 0.1;
+/* `FIELD_FLOOR_IN_GROUP = 0.1` IS GONE. A memory sat a tenth of the way up
+   the field's range when a pattern resting on it had been shared into a
+   room — the "out loud in a group" half of the sentence above, and the only
+   floor in this file that depended on anything outside the account. Rooms
+   were removed on 2026-10-12 (founder: "방 없애"), `Signal.sharedGroupIds`
+   went with them, and nothing could set the flag true any more. The cited
+   and answered floors are untouched. */
 
 /**
  * ATTENTION PAID SURVIVES THE WEATHER (founder, 2026-08-24: brightness must

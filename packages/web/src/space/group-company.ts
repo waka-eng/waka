@@ -1,6 +1,18 @@
 /**
  * THE ROOM'S COMPANY — who stands behind your companion, and where.
  *
+ * ── THERE IS NO COMPANY LEFT TO PLACE (2026-10-12) ───────────────────────
+ *
+ * Founder: "방 없애" — remove rooms. Every room surface in the product is
+ * gone, `members` is a permanently-empty map in `pages/Home`, and
+ * `groupCompanyPlaces` is therefore called with `undefined` on the one
+ * branch that still calls it. THIS FILE AND ITS TEST SURVIVE THIS CHANGE FOR
+ * ONE REASON: `canvas/simulation.ts` imports `groupCompanyPlaces`,
+ * `noticeLight`, `NOTICE_MS` and `CompanyPlace` by name, and that file is
+ * owned by another change in flight and may not be edited from here. It goes
+ * the moment the loop's group branches do — along with the research below,
+ * which is the only part anybody should be sorry to lose.
+ *
  * founder, 2026-08-27: "if room is group, show the character as many times as
  * number of members are there. but the character should feel like its behind
  * mine, and more small and subtle."
@@ -59,7 +71,9 @@ import { unit } from "../character/body";
 import type { ApiGroupMember } from "../lib/api";
 
 /** How many ways there are to stand. See `idle` below. */
-export const COMPANY_IDLES = 4;
+/* NOT EXPORTED: `groupCompanyPlaces` below is its only reader and lives
+   here. It was public for a sim that reads the places and not the count. */
+const COMPANY_IDLES = 4;
 
 export interface CompanyPlace {
   profileId: string;

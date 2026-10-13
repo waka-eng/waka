@@ -34,7 +34,6 @@ import {
   fetchInspirationSaveRequest,
   fetchInspirations,
   fetchInspirationPage,
-  fetchGroupInspiration,
   fetchAttachmentUrl,
   presignAttachment,
   fetchPublicProfile,
@@ -230,13 +229,15 @@ it('checks the identity and profile of a linked inspiration before translating i
   stubFetch(Response.json({ inspiration: { ...inspiration, id: 'wrong-id' } }));
   await expect(loadInspiration('inspiration-1', 'profile-1')).rejects.toThrow();
 });
-it('reads a direct public group inspiration as a cancellable authenticated GET', async () => {
-  const row = { id: 'inspiration-1', text: 'Public thought', ownerProfileId: 'peer' };
-  stubFetch(Response.json({ inspiration: row }));
-  const controller = new AbortController();
-  await expect(fetchGroupInspiration('group-1', 'inspiration-1', controller.signal)).resolves.toEqual(row);
-  expect(fetch).toHaveBeenCalledWith('/api/groups/group-1/field/inspiration-1', { method: 'GET', headers: { Accept: 'application/json' }, credentials: 'include', signal: controller.signal });
-});
+/* `fetchGroupInspiration` IS GONE, with every other verb in the groups
+   client (founder, 2026-10-12: "방 없애" — remove rooms). This case pinned
+   three things and two of them are pinned elsewhere: that the request is an
+   authenticated GET with the JSON Accept header (every other case here), and
+   that an abort signal is forwarded (`loadInspiration`'s own case). The third
+   was the only one specific to a room — resolving ONE of somebody else's
+   public memories by id, which was the bookmarkable `/w/:wall/:label` path
+   reaching into a member's ground. There is nothing left that reads a memory
+   this account does not own. */
 
 it('preserves the processing receipt on a saved inspiration', async () => {
   const processing = { id: 'receipt', profileId: 'profile-1', inspirationId: inspiration.id, materialRevision: '2', jobId: 'job', requestVersion: '3' };

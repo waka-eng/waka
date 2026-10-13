@@ -138,10 +138,20 @@ const STYLES = resolve(HERE, "../src/styles");
  *        contested declarations, the zero-difference computed-style diff and
  *        the 144 focus rings that did change.
  *
- * What is left is `home.css`'s 30 and `layers.css`'s deliberate 2. The floor
+ *    25  2026-10-12, and like the 341 above it, NOT because anybody layered
+ *        anything: rooms were removed (founder: "방 없애") and seven of
+ *        `home.css`'s unlayered rules went with them. They were in the
+ *        append-past-a-closing-brace run this file's own header names —
+ *        `.jar-grounds*`, the band of members under a room's wall, and
+ *        `.jar-group-ground-status`, the line saying whose ground you were
+ *        standing in. The ratchet is lowered in the same change, which is
+ *        the rule: slack in a ratchet is room for the thing it was built to
+ *        stop.
+ *
+ * What is left is `home.css`'s 23 and `layers.css`'s deliberate 2. The floor
  * this is walking toward is 2.
  */
-const UNLAYERED_CEILING = 32;
+const UNLAYERED_CEILING = 25;
 
 /** Read the rules, not the prose — the same blanking the other gates use. */
 const commentsBlanked = (css: string): string =>

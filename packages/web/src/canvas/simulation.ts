@@ -272,8 +272,48 @@ const PEEK_MAX = 8;
  * throw was being read as a nudge and then re-timed from scratch.
  */
 const FLICK = 380;
-/** The whole pour fits in this, however many memories there are to pour. */
-const POUR_MS = 2400;
+/*
+ * `POUR_MS = 2400` LIVED HERE, AND THE POUR IT TIMED IS GONE (2026-10-11).
+ *
+ * Founder, on keeping something: "When I save an inspiration, I don't know
+ * why the balls are forming and headed to the bottom of the page. That's from
+ * the old design that we got completely rid of. So please get rid of that
+ * animation as well."
+ *
+ * THE OLD DESIGN IT CAME FROM. The field was a JAR: orbs fell in, stacked,
+ * and the order they fell in WAS the sediment — oldest deepest, newest resting
+ * on top. A staggered fall is the only honest way to show a stack building, so
+ * the pour was motion that explained the mechanism, which is the one licence
+ * this file grants motion at all (`Home.tsx` still says so at its head: "the
+ * pour-in explains stratification").
+ *
+ * THAT MECHANISM NO LONGER EXISTS, and `primePour` had already written the
+ * obituary in its own body: "Nothing stacks in a float field, so arrival order
+ * no longer has to build the strata. `applyPresence` owns who is lit; this
+ * only stages the arrival's animation over its set." A stagger over a set
+ * whose order means nothing is a stagger that says nothing.
+ *
+ * AND NOBODY WAS EVEN LOOKING AT IT. `computeLayout` records the later ruling
+ * that finished the jar off — "NO PEEK (founder ruling: no scrolling down, and
+ * no dots along the bottom) … the ground begins exactly at the bottom edge:
+ * nothing of it is in frame at rest". A pour only ever ran with the camera
+ * above the ground (a first open lands at headquarters; travel is forbidden
+ * from inside the field; `standIn` does not move the camera), so every pour
+ * played in full, for up to 2.4 seconds, entirely BELOW THE FOLD. The only
+ * part of it a person could see was the handful of orbs whose entry path
+ * crossed the bottom edge of the screen — which is the complaint, twice over:
+ * `docs/six-laws.md` Law 6 already carries the first one ("the bottom of the
+ * page still has the old floating circles, I can see it float up and down once
+ * in a while") and names "every mount-time animation" as where to look next.
+ * This was the mount-time animation.
+ *
+ * WHAT WAS KEPT. The field itself, untouched — it is still the ground, it is
+ * still reachable, every orb still drifts and lights there. And the dial's
+ * drop-in (`enter`, from `reconcileScrub`) is kept whole: winding time forward
+ * is a thing the person just did, and an orb dropping in answers it. That is
+ * the test Law 6 states — "every animation answers 'what did the user just
+ * do?'" — and it is the test the pour failed and the scrub passes.
+ */
 /**
  * THE SETTLE — a moving hold, not a freeze.
  *
@@ -1132,9 +1172,24 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
 
     /* ONE FIELD, BUILT ONCE, WHOLE. What you kept and what your agents kept
        live in the same ground — that is the whole of the direction, and it is
-       also the only thing that makes the lens mean anything. Oldest first: the
+       also the only thing that makes the lens mean anything.
+
+       OLDEST FIRST, AND NOT FOR THE REASON IT SAYS ANY MORE. This read: "the
        pour order IS the stratification, oldest sink deepest and newest rest on
-       top, and the load burst explains the strata. */
+       top, and the load burst explains the strata." Both halves of that are
+       dead — the field is a float field with no stacking, and the pour that
+       burst is deleted (tombstone at `POUR_MS`). The order is kept because
+       `homeY` carries TIME through the rank this list fixes (see
+       `assignHomes`), so it decides where a memory LIVES. It no longer decides
+       when it appears, because they all appear at once.
+
+       AND "POUR" SURVIVES AS A WORD IN THIS FILE, deliberately, for the BUILD
+       and never for an animation: `pourSignature` / `pourSig` name what makes
+       this effect run again, `PouredSky` names the sky it reads as it builds,
+       and "one pour, never a second one" is a rule about rebuilds. Renaming
+       those would reach into `Home.tsx` and `space/pour-signature.ts`'s own
+       test, and it is a rename, not a deletion — it is in the report instead
+       of in this change. */
     /* THE FIELD IS YOURS, ON EVERY WALL. Founder ruling: the bottom section is
        always the full set of the owner's own inspirations, identical wherever
        you stand — "3번째 섹션에서는 양옆 못 움직여야 해, 항상 같으니깐".
@@ -1451,25 +1506,22 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       inSky: false,
     };
     /**
-     * STAGING ORBS INTO THE FIELD — the pour, and everything that schedules it.
+     * WHAT THE FIELD STILL OWES THE NEXT FRAME.
      *
-     * One object rather than five loose flags because they are only ever
-     * correct together: `active` without `step` is a pour with no cadence, and
-     * `done` set while `active` is still true is a state the field cannot be
-     * in. Grouped, a reader sees the whole of what a pour is in five lines;
-     * loose, they were spread over sixty and read as five unrelated booleans.
+     * It was `pour`, and it held five fields: `active`, `done` and `step` ran
+     * the staggered arrival, and these two were along for the ride. The pour
+     * is gone (see the tombstone where `POUR_MS` used to be), so three of the
+     * five went with it and the name went too — an object called `pour` with no
+     * pour in it is a worse lie than a long comment, because a reader greps for
+     * the word and finds state that does not do it any more.
      *
-     * The object is `const` and only its fields move. Nothing about lifetime
-     * or identity changes from the `let`s this replaces — every closure below
-     * captures the object, exactly as it used to capture each variable.
+     * The two that are left are genuinely the same kind of thing: a piece of
+     * work the frame loop has to finish before the picture is honest again. One
+     * object rather than two loose flags for the reason the five were grouped
+     * in the first place — `const`, only its fields move, every closure below
+     * captures the object.
      */
-    const pour = {
-      /** a pour is running: orbs are still arriving on their stagger */
-      active: false,
-      /** a pour has finished here, so returning to this wall must not re-pour */
-      done: false,
-      /** The gap between two arrivals in the current pour. */
-      step: 35,
+    const owed = {
       /** How many newborns are fading out because their keep did not land. */
       doomed: 0,
       /** the dial moved: the field's contents need re-solving before the next frame */
@@ -1489,14 +1541,15 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     /**
      * HOW ALIVE THE WORLD IS RIGHT NOW.
      *
-     * Not the pour's, though the pour stirs it. `amp` scales every ambient
+     * Not an arrival's, though an arrival stirs it. `amp` scales every ambient
      * drift in the world at once — the nebulae's wander, the orbs' float, the
      * companion's bob, the dust — so that a world left alone eases toward
      * stillness instead of jittering at a reader who has stopped reading.
      *
-     * That is why these two are their own object and not fields on `pour`:
-     * four subsystems read `amp` and none of them is the pour. `wake()` is the
-     * only writer, which is what keeps "something happened" a single fact.
+     * That is why these two are their own object and not fields on `owed`
+     * (which was `pour` when this was written): four subsystems read `amp` and
+     * none of them is the field's own bookkeeping. `wake()` is the only
+     * writer, which is what keeps "something happened" a single fact.
      */
     const stir = {
       /** 1 while something is happening, easing to SETTLE_MIN when nothing is. */
@@ -1796,7 +1849,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     function wake() {
       clock.lastActive = performance.now();
       /* ANY REAL EVENT WAKES THE WORLD, at once and to full amplitude. wake()
-         is what every one of them already calls — a touch, the pour, a scrub,
+         is what every one of them already calls — a touch, a keep, a scrub,
          a relight, a travel, an adoption, a room arriving — so the layout's
          attention and the loop's attention are the same thing. */
       stir.at = clock.lastActive;
@@ -1810,7 +1863,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
 
     /**
      * Assign every present orb a HOME in the field. Called once the ball set
-     * is known and again whenever it changes (resize, scrub, pour), so the
+     * is known and again whenever it changes (resize, scrub, build), so the
      * field always fills the space it has and the peek is exact by
      * construction rather than by a servo chasing a settling pile.
      *
@@ -1859,9 +1912,14 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
      * else. Every defense this file grew across three disappearances (the
      * lights-out sweep at arrival, the rest-convergence, the orphan burial,
      * the pour's all-off preamble, the carry's recompute) was this function,
-     * written five times from five directions. A ball mid-stage
-     * (spawnAt > 0) is left to the pour's own `enter`, which is the
-     * animation's half of the same rule.
+     * written five times from five directions.
+     *
+     * IT USED TO YIELD TO ONE THING: a ball mid-stage, `spawnAt > 0`, was
+     * skipped and left to the pour's own `enter` — the animation's half of the
+     * same rule. There is no pour and no staging, so the exception is gone and
+     * this function is now the whole of the rule rather than most of it. Every
+     * `spawnAt` in this file is `-1` for the same reason; see the tombstone
+     * where `POUR_MS` used to be.
      */
     function applyPresence() {
       const w = curWall();
@@ -1875,7 +1933,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             b.spawnAt = -1;
             continue;
           }
-          if (b.spawnAt > 0) continue;
           if (!b.active) {
             b.active = true;
             b.arrive = 1;
@@ -2080,28 +2137,21 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       return clamp01(1 - cam.y / Math.min(view.layout.minCam, -1));
     }
 
-    /**
-     * WHERE THE WORDS ARE, RIGHT NOW — read off the mouth itself rather than
-     * guessed at from the seam constant, so a newborn leaves from the middle
-     * of the sentence that made it however many lines it had wrapped to.
+    /*
+     * `mouthSpot()` STOOD HERE, AND IT HAD ONE READER: the fall.
      *
-     * One layout read, on a discrete act, never in the frame loop. `y` is a
-     * world coordinate (the mouth rides the camera at 1x, so screen + camY);
-     * `x` is the field's own, which is the column's screen x — the ground is
-     * solved between world.wallL and world.wallR and the mouth stands over
-     * the middle of it.
+     * It read the composer's own box — never the seam constant — so that a
+     * newborn left from the middle of the sentence that made it, however many
+     * lines that sentence had wrapped to. One layout read on a discrete act,
+     * never in the frame loop. It was good code for a thing that is no longer
+     * done: `born` does not throw the orb from the words to the ground any
+     * more (see the tombstone inside it), so there is nothing left that needs
+     * to know where the words are, and `noUnusedLocals` is right to say so.
+     *
+     * `measured.mouthSpot` is still in `SimulationOptions` and `Home.tsx`
+     * still attaches it — that ref is not this change's to remove, and it is
+     * named in the report instead.
      */
-    function mouthSpot(): { x: number; y: number } | null {
-      const el = measured.mouthSpot.current;
-      if (!el) return null;
-      const r = el.getBoundingClientRect();
-      if (r.width === 0 && r.height === 0) return null;
-      const rr = root!.getBoundingClientRect();
-      return {
-        x: r.left + r.width / 2 - rr.left,
-        y: r.top + r.height / 2 - rr.top + cam.y,
-      };
-    }
 
     /**
      * Take one ball out of the ground for good. The ONLY caller is the
@@ -2506,9 +2556,26 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          empty ground however much was standing on it. */
       applyPresence();
       const here = presentBalls();
-      if (view.reduced) settleInstantly();
-      else primePour(here);
+      /* AND THE GROUND IS THERE, NOT ARRIVING. This was `view.reduced ?
+         settleInstantly() : primePour(here)`, and the pour was the half with a
+         story: "a ground filling as you get there is the world answering a move
+         you made" (`Home.tsx`, beside the room's claim). The story was true
+         while a strip of the field showed under headquarters. It is not true
+         now — nothing of the ground is in frame until the camera goes down into
+         it, and travel is only ever begun from above it, so the filling
+         happened where nobody could watch. What a person actually saw of it was
+         the orbs crossing the bottom edge of the screen, which is the founder's
+         complaint. `here` is still exactly what elects the peek row.
+
+         AND THE ROW IS ELECTED FIRST NOW, which it was not before and had to
+         become. `settleInstantly` places each orb at its EFFECTIVE home — the
+         peek-lifted one where this wall's claim rests on it — so it has to know
+         which orbs are in the row before it can place them. The pour did not:
+         its `enter` read the election three hundred milliseconds later, by
+         which time this line had already run. Elect, then settle, or "settled"
+         means settled onto the previous wall's row. */
       electPeek(here);
+      settleInstantly();
       tryWakeWall();
     }
 
@@ -3304,7 +3371,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       cam.xTarget = (trip.active ? trip.dest : trip.col) * view.w;
       if (!trip.active && !cam.xBack) cam.x = trip.col * view.w;
       if (!view.primed) {
-        /* first sizing: everything starts on its home, then pours or fades in */
+        /* first sizing: everything starts on its home, and now stays there —
+           the arrival animation that used to take it off its home is gone */
         for (const b of list) {
           b.x = b.homeX;
           b.y = b.homeY;
@@ -3410,62 +3478,74 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     }
 
     /**
-     * `only` is the set to pour — the wall you have just walked into. Left out,
-     * it is the CURRENT WALL'S ground, filtered the same way homes are
-     * assigned. It used to be the whole `list`, "which is what the first open
-     * wants" — true when the list held only your own archive, and a leak the
-     * moment the list grew every wall's balls (founder, 2026-08-30: thirteen
-     * orbs on a ground that honestly holds one — your keep placed, and two
-     * agents' twelve drifting unplaced but poured active). Every wall reached
-     * by TRAVELLING always used the narrow form, which is why the leak only
-     * ever showed on the wall you open into.
+     * THE GROUND IS SOLVED, LIT, AND ALREADY WHERE IT BELONGS.
      *
-     * Arriving needs the narrow form for two reasons. The stagger is
-     * POUR_MS/length, so pouring all 128 balls to show the 9 that belong here
-     * spreads those 9 across two seconds of mostly-empty slots. And more
-     * importantly nothing else activates them: arriveColumn re-ran the LAYOUT
-     * and gave every newly-present ball a home, but `active` is only ever set
-     * by `enter` (through a pour) or by `settleInstantly`, so a wall reached by
-     * travelling had homes assigned to orbs that were never switched on. That
-     * is the empty ground under a group's sky.
+     * The one way orbs arrive in the field now, for everybody. It was the
+     * reduced-motion path and `primePour` was the other one; the pour is gone
+     * (tombstone at `POUR_MS`) and the two paths therefore converged, so every
+     * `view.reduced ? settleInstantly() : primePour(…)` in this file collapsed
+     * to this call alone. That is deliberate: a `prefers-reduced-motion` branch
+     * that does what the ordinary branch does is not a courtesy, it is a lie
+     * about there being something to reduce.
+     *
+     * `primePour` TOOK A SET AND THIS ONE DOES NOT, and the difference is only
+     * that the set was an animation's business. It existed because a stagger
+     * over 128 balls to show the 9 standing here spreads those 9 over two
+     * seconds of empty slots, and because of a leak it caused (founder,
+     * 2026-08-30: thirteen orbs on a ground that honestly holds one — your keep
+     * placed, and two agents' twelve drifting unplaced but poured active).
+     * `presentBalls()` is the scene's own balls at the dial's time, which is
+     * the narrow set by construction, so the leak cannot be expressed here.
+     *
+     * AND THIS IS WHAT SWITCHES THEM ON, which is the whole reason the call
+     * cannot simply be dropped from any of its sites. `active` is set in
+     * exactly two places — `applyPresence` (which this calls first) and
+     * `enter` — so a wall reached by travelling whose arrival forgot to settle
+     * has homes assigned to orbs that were never switched on. That was the
+     * empty ground under a group's sky, and it is the failure mode to fear
+     * here: a field that silently loses its orbs is far worse than any
+     * animation nobody asked for.
+     *
+     * `computeInspiration()` IS PART OF ARRIVING, not an extra. The companion's
+     * light is the top of what is standing on the ground, and the pour used to
+     * recompute it in the frame its last orb landed — so with the pour deleted
+     * and nothing in its place, a first open left the creature reading a field
+     * of zero memories while the field was full. It belongs at the moment the
+     * ground becomes final, and this is that moment.
      */
-    function primePour(only?: Ball[]) {
-      const t0 = performance.now() + 300;
-      /* Newest first: the peek band is the invitation, so it must fill on the
-         first beat rather than the last. Nothing stacks in a float field, so
-         arrival order no longer has to build the strata. `applyPresence` owns
-         who is lit; this only stages the arrival's animation over its set. */
-      const order = (only ?? presentBalls()).slice().sort((a, b) => b.capturedMs - a.capturedMs);
-      /* A FIXED STAGGER IS A LOCKOUT LONGER THAN THE THING IT PROTECTS. At
-         thirty-five milliseconds apiece, two hundred memories are still
-         arriving seven seconds after open — every morning, in a tool used
-         daily. The pour explains the strata; it does not need seven seconds
-         to say it. */
-      /* The floor is ONE FRAME, not less. At 11ms a large archive put two and
-         three orbs on the same 60Hz frame, so past roughly two hundred
-         memories the stagger stopped being a stagger and the pour arrived as
-         a clump — in exactly the full-jar case this pacing exists to carry.
-         17ms is the first value that guarantees one orb per frame. */
-      pour.step = clamp(POUR_MS / Math.max(order.length, 1), 17, 35);
-      const step = pour.step;
-      order.forEach((b, i) => {
-        b.active = false;
-        b.spawnAt = t0 + i * step;
-      });
-      pour.active = true;
-    }
-
-    /** Reduced motion: no arrival animation — every orb starts at home. */
     function settleInstantly() {
       applyPresence();
+      /*
+       * THE HOME THE PHYSICS IS ACTUALLY PULLING IT TO, which at headquarters
+       * is not the one `assignHomes` solved.
+       *
+       * This placed every orb at `homeX/homeY` — its field home — and that is
+       * only where it belongs when you are standing DOWN in the field. A
+       * memory this wall's claim rests on is lifted toward the row under that
+       * claim by `peekLift()`, which is 1 at headquarters, and `moveField`
+       * eases toward that lifted home every frame. So "settled" placed the
+       * orb up to six hundred pixels from its real target and the field then
+       * spent a second flying it there — an arrival animation produced by the
+       * function whose entire job is not to have one. Measured on a fresh load
+       * with five memories, before this line: one orb travelled 802px of path,
+       * net 618px, every single open.
+       *
+       * It is the same mistake `enter` records at length ("IT ENTERS FROM JUST
+       * ABOVE WHERE IT IS ACTUALLY GOING"), and `born` has always used this
+       * exact `lerp`. Safe to read here because `assignHomes` ends by calling
+       * `electPeek`, so `peek`/`peekX`/`peekY` are as fresh as the homes are —
+       * and every caller of this function solves homes first, because you
+       * cannot settle onto a home nobody has worked out.
+       */
+      const lift = peekLift();
       for (const b of presentBalls()) {
         b.spawnAt = -1;
         b.arrive = 1;
-        b.x = b.homeX;
-        b.y = b.homeY;
+        b.entryH = 0;
+        b.x = b.peek ? lerp(b.homeX, b.peekX, lift) : b.homeX;
+        b.y = b.peek ? lerp(b.homeY, b.peekY, lift) : b.homeY;
       }
-      pour.active = false;
-      pour.done = true;
+      computeInspiration();
     }
 
     /** Ease-out with a soft overshoot: the arrival settles, it does not stop. */
@@ -3484,29 +3564,14 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     function step(dt: number, now: number) {
       const t = now / 1000;
 
-      /* the arrival the founder likes, kept: oldest first, 60ms apart, each
-         orb entering from above its home */
-      if (pour.active) {
-        let waiting = false;
-        let arriving = false;
-        for (const b of list) {
-          if (b.spawnAt > 0) {
-            waiting = true;
-            if (now >= b.spawnAt) {
-              b.spawnAt = -1;
-              if (b.capturedMs <= TRef.current) enter(b);
-              else b.active = false;
-            }
-          } else if (b.active && b.arrive < 1) {
-            arriving = true;
-          }
-        }
-        if (!waiting && !arriving) {
-          pour.active = false;
-          pour.done = true;
-          computeInspiration();
-        }
-      }
+      /* THE POUR'S CLOCK STOOD HERE and is gone with it: each frame it walked
+         `list` for balls whose `spawnAt` had come, called `enter` on them, and
+         declared the pour finished when none was still waiting or easing.
+         Nothing stages a ball any more — `primePour` was the only writer of a
+         positive `spawnAt` — so this was a scan of every ball, every frame,
+         for a condition that can no longer be true. `computeInspiration()`
+         moved to `settleInstantly`, which is now where a ground becomes
+         final; `enter` survives for the dial (see `reconcileScrub`). */
 
       /** The field's physics, between its own walls. */
       const moveField = (arr: Ball[], lo: number, hi: number) => {
@@ -3596,11 +3661,11 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       /* A newborn whose keep did not land has finished fading: it leaves the
          ground, and the field closes over the space exactly as it does for a
          scrub. Only ever walked while one is actually pending. */
-      if (pour.doomed > 0) {
+      if (owed.doomed > 0) {
         for (let i = list.length - 1; i >= 0; i--) {
           const b = list[i];
           if (b.doomed !== true || b.active) continue;
-          pour.doomed--;
+          owed.doomed--;
           dropBall(i);
         }
       }
@@ -3716,11 +3781,22 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       return pick(["worldSayQuiet1", "worldSayQuiet2", "worldSayQuiet3"]);
     }
 
-    /** An orb enters from above its home and eases down into it. */
+    /**
+     * AN ORB DROPS IN AND EASES INTO ITS HOME — THE DIAL'S OWN ANIMATION.
+     *
+     * It had two callers and now has one. The pour staged a whole ground and
+     * then called this on each ball in turn; that is gone (tombstone at
+     * `POUR_MS`). `reconcileScrub` is what is left, and it is the caller that
+     * earns the motion: winding time forward is a thing the person is doing
+     * with their hand, right now, while watching, and an orb dropping in is
+     * the answer to it — "the drop-in the founder likes, kept for scrubbing
+     * forward". A memory that did not exist yet now does, and the drop is how
+     * the field says so.
+     *
+     * No wall test, because the one caller reads the scene's own balls and
+     * the scene container made the foreign-ball case unrepresentable.
+     */
     function enter(b: Ball) {
-      /* Only the scene's own balls are ever staged (`primePour` reads
-         `presentBalls()`), so entering needs no wall test any more — the
-         scene container made the foreign-ball case unrepresentable. */
       b.active = true;
       b.gone = 0;
       b.arrive = view.reduced ? 1 : 0;
@@ -3736,14 +3812,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
        * of above the row, and a memory arrived out of the sky rather than out
        * of the ground.
        *
-       * `born` has always measured against the lifted home — that is how a
-       * newborn comes out of the sentence instead of off the top of the
-       * screen — and this is the same sum, for the orbs that arrive by pour.
+       * `born` MEASURED AGAINST THE LIFTED HOME TOO, and this was the same
+       * sum written for the orbs that arrived by pour. `born` no longer moves
+       * an orb at all — it is placed at that lifted home and left there — so
+       * this is the only place the sum survives, and the dial is the only
+       * thing that spends it.
        *
        * It was invisible while a rebuild re-poured the WHOLE field: every orb
        * did it at once and it read as the world re-staging, which was the
-       * louder bug. With only genuinely new memories pouring, one orb does it
-       * alone, and then it is the only thing moving on the screen.
+       * louder bug. One orb doing it alone is what made it legible — and a
+       * scrub is exactly that case, one memory crossing the dial's time.
        */
       const enterLift = peekLift();
       const fromY = b.peek ? lerp(b.homeY, b.peekY, enterLift) : b.homeY;
@@ -3751,8 +3829,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          "the balls fly wierdly"). "From just above where it is going" is
          right for an orb landing in the field — the fall is short and happens
          down in the ground. A PEEK orb lands under the poster, so from-above
-         started it mid-headquarters and the pour's stagger turned arrival
-         into a two-second rain of spheres past the companion and the mouth.
+         started it mid-headquarters, and when the pour still existed its
+         stagger turned arrival into a two-second rain of spheres past the
+         companion and the mouth.
          The lift's own sentence is that these memories RISE out of the ground
          to sit under the claim that stands on them — so the entrance rises
          too: negative height, spent by the same `rise` term in the draw.
@@ -3772,10 +3851,12 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       let changed = false;
       const entering: Ball[] = [];
       for (const b of sceneBalls(w.id)) {
-        if (pour.active && b.spawnAt > 0) {
-          colorBall(b, T);
-          continue;
-        }
+        /* A BALL MID-POUR WAS SKIPPED HERE — recoloured for the dial's new
+           time and otherwise left to the pour's own `enter`, because a scrub
+           landing between two staged arrivals would otherwise decide the ball
+           was absent and re-enter it a second time. No ball is ever staged
+           now (tombstone at `POUR_MS`), so the race it guarded against cannot
+           happen and the branch could only ever be false. */
         const want = b.capturedMs <= T && standingOk(b, w);
         const present = b.active && !b.leaving;
         if (want !== present) {
@@ -3905,7 +3986,18 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         t,
         depthSpan: Math.max(view.layout.fieldBottom - view.layout.fieldTop, 1),
         selId: selectedIdRef.current,
-        still: pour.active,
+        /* THE BREATH-HOLD HAD EXACTLY ONE CAUSE AND IT IS GONE. `still` was
+           `pour.active`: while orbs were arriving on their stagger the field's
+           ambient breath held, so the arrival was the only thing moving. With
+           no pour there is nothing to hold the breath for, and this is the
+           honest value rather than a flag that can never be set. The field
+           still holds its breath under reduced motion — `field-paint.ts` reads
+           `view.reduced || still`, so that half is untouched — which means the
+           parameter itself is now vestigial and should go with the next change
+           to that file. Not done here: `space/inspiration/field-paint.ts` is
+           not this change's to edit, and a signature change smuggled into a
+           deletion is how a deletion stops being reviewable. */
+        still: false,
         mech,
         grid,
         panelOpen: () => panelOpenRef.current,
@@ -4819,8 +4911,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             : lerp(stir.amp, settleWant, kd(EASE_SETTLE, dt));
       }
 
-      if (pour.scrubDirty) {
-        pour.scrubDirty = false;
+      if (owed.scrubDirty) {
+        owed.scrubDirty = false;
         reconcileScrub();
         computeInspiration();
         clock.lastActive = now;
@@ -5159,10 +5251,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          fall into while it is visible: the loop rests only when the document
          is hidden (handled in onVis) or when reduced motion has parked every
          orb at its home and genuinely nothing is moving. */
+      /* `pour.active || !pour.done ||` STOOD HERE, and both halves were about
+         an arrival still in flight: a reduced-motion session had to keep
+         rendering until the field had finished staging, and `!done` covered
+         the window between setup and the first settle. Nothing stages now, and
+         `settleInstantly` finishes inside setup itself — before the first
+         frame — so the field is final by the time this question is first
+         asked. The `wake()` at the end of setup is what keeps the loop running
+         long enough to paint it. */
       let awake =
         !view.reduced ||
-        pour.active ||
-        !pour.done ||
         trip.active ||
         cam.xBack ||
         selActive ||
@@ -5848,25 +5946,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         clock.running = false;
         cancelAnimationFrame(clock.raf);
       } else {
-        /* Pour deadlines sit on the absolute clock and the rAF loop was
-           cancelled while hidden: re-stagger any that expired so the balls
-           still pour in order instead of all landing in one frame. Walk them
-           by their existing deadline, which is the pour order whatever the
-           list order happens to be. */
-        /* ONLY THE DEADLINES THAT ALREADY EXPIRED. Re-staggering the whole
-           pending set pushed the ones still in the FUTURE further out every
-           time, so a page whose visibility flapped — a backgrounded tab, a
-           window being resized, an occluded pane — could starve its own pour
-           forever and simply never finish arriving. Balls whose moment has
-           not come yet keep it. */
-        const nowVis = performance.now();
-        let next = nowVis;
-        const pending = list.filter((b) => b.spawnAt > 0).sort((a, b) => a.spawnAt - b.spawnAt);
-        for (const b of pending) {
-          if (b.spawnAt > nowVis) continue;
-          b.spawnAt = next;
-          next += pour.step;
-        }
+        /* COMING BACK TO A TAB USED TO HAVE A POUR TO REPAIR, and that whole
+           repair is gone with it. Stage deadlines sat on the absolute clock
+           while the rAF loop was cancelled, so every one of them expired at
+           once behind a hidden tab and the balls all landed in a single frame
+           on return; the fix re-staggered the expired ones by their existing
+           deadline (and only the expired ones, or a tab whose visibility
+           flapped pushed the future ones out forever and never finished
+           arriving). No ball carries a deadline now — nothing stages — so
+           returning to the tab has nothing to put back in order, and waking
+           the loop is the whole of what this branch owes. */
         wake();
       }
     };
@@ -5946,43 +6035,48 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     )
       trip.awaitingWake = true;
     measure();
-    if (view.reduced) settleInstantly();
-    else if (carryRef.current) {
+    /* ONE PATH FOR EVERYBODY NOW. This was `if (view.reduced)
+       settleInstantly(); else if (carryRef.current) …`, so a reduced-motion
+       session never reached the carry at all: every orb was snapped back to
+       its home on every rebuild, which is a JUMP — the one thing a reduced
+       motion preference is asking to be spared. Routing it through the carry
+       like everyone else is strictly stiller, because a carried ball does not
+       move at all. The two branches below are now about whether this run has a
+       previous one to inherit from, which is the only thing they were ever
+       really about. */
+    if (carryRef.current) {
       /*
        * A REBUILD IS NOT AN ARRIVAL.
        *
-       * `primePour()` with no argument stages the WHOLE archive, and on a
-       * rebuild that means every memory you were already looking at falls in
-       * from above again — the pour is how the field explains that something
-       * has arrived, and nothing has. But the rebuild happened BECAUSE there
-       * is new data, and those memories genuinely are arriving, so the answer
-       * is not to skip the pour: it is to pour only what this run did not
-       * already have.
+       * This branch exists because the rebuild used to re-stage the WHOLE
+       * archive: every memory you were already looking at fell in from above
+       * again, a second after you had watched it settle. The answer then was
+       * to pour only what this run did not already have; the answer now is
+       * that nothing pours (tombstone at `POUR_MS`), and what survives is the
+       * part that was never about animation — a ball the previous run already
+       * had is put back EXACTLY where that run left it, so a rebuild is
+       * invisible rather than merely brief.
        *
        * Identity is the ball's id. The objects are rebuilt from scratch every
        * run, so the id is the only thing that survives, and it is what says
        * whether a memory is new to the FIELD rather than new to this array.
+       *
+       * A BALL THE CARRY HAS NEVER SEEN starts at its home, lit by
+       * `applyPresence` below if it belongs on this wall and left dark if it
+       * does not. It used to be sorted first — new-and-on-this-wall was
+       * handed to `primePour`, everything else placed — and that sort was the
+       * animation's, not the layout's: an arrival had to happen on the wall it
+       * belonged to or an agent's memories poured into your ground. With no
+       * arrival to place, both halves want the same two lines.
        */
       const carried = carryRef.current.balls;
-      const currentSceneId = curWall().id;
-      const fresh: Ball[] = [];
       for (const b of list) {
         const was = carried.get(b.id);
         if (!was) {
-          /* New to the field — but the pour is an ARRIVAL, and an arrival
-             happens on the wall it belongs to. A ball for another wall is
-             registered quiet; travelling there is what switches it on. */
-          if (
-            b.capturedMs <= TRef.current &&
-            (b.agentId ?? "") === currentSceneId
-          ) {
-            fresh.push(b);
-          } else {
-            b.spawnAt = -1;
-            b.arrive = 1;
-            b.x = b.homeX;
-            b.y = b.homeY;
-          }
+          b.spawnAt = -1;
+          b.arrive = 1;
+          b.x = b.homeX;
+          b.y = b.homeY;
           continue;
         }
         b.x = was.x;
@@ -5991,22 +6085,17 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         b.spawnAt = -1;
       }
       /* PRESENCE IS DERIVED, NOT CARRIED — one owner, whatever the rebuild
-         interrupted: an arrival's lost pour, a mid-flight shear, a pour that
-         died with balls still staged. The staged `fresh` are excluded by
-         their own spawn times, so the arrival animation still lands. */
-      if (fresh.length > 0) primePour(fresh);
-      else {
-        pour.active = false;
-        pour.done = true;
-      }
+         interrupted: an arrival's lost settle, a mid-flight shear. */
       if (!trip.active) {
         assignHomes();
         applyPresence();
       }
       computeInspiration();
     } else {
-      applyPresence();
-      primePour();
+      /* A FIRST OPEN. `settleInstantly` applies presence itself, so the
+         `applyPresence()` that used to stand in front of `primePour()` here
+         would now be the same sweep run twice in a row. */
+      settleInstantly();
     }
 
     simApiRef.current = {
@@ -6023,22 +6112,28 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       standIn: (ownerProfileId: string | null) => {
         if (ground === ownerProfileId) return;
         ground = ownerProfileId;
-        /* the ground that left goes dark, the one that arrived pours in — the
-           same arrival the layout uses everywhere, so a swap reads as a ground
-           filling rather than as a screen being replaced */
+        /* THE GROUND THAT LEFT GOES DARK AND THE ONE THAT ARRIVED IS SIMPLY
+           THERE. It used to pour in, "so a swap reads as a ground filling
+           rather than as a screen being replaced" — and the camera does not
+           move for a `standIn`, which means the camera is wherever it already
+           was, which is above the ground: the filling it described was
+           happening below the fold. The swap reads as a swap from the one
+           place it is legible, standing down in the field, and there a ground
+           appearing in place is exactly what has happened. */
         assignHomes();
         applyPresence();
         const here = presentBalls();
-        if (view.reduced) settleInstantly();
-        else primePour(here);
+        /* elect, then settle — same order and same reason as `arriveColumn`:
+           the row has to be known before an orb can be placed in it */
         electPeek(here);
+        settleInstantly();
         wake();
       },
       windTo: (T: number) => {
         if (trip.active) return; /* the dial is the personal jar's alone */
         TRef.current = T;
         if (selectedIdRef.current) release();
-        pour.scrubDirty = true;
+        owed.scrubDirty = true;
         wake();
       },
       select,
@@ -6305,18 +6400,47 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         wake();
       },
       /**
-       * BORN AT THE MOUTH.
+       * BORN INTO THE GROUND.
        *
-       * The order here is the whole behaviour: it joins the ground FIRST and
-       * the field re-fits around it (so it is homed, sized and counted like
-       * every other memory before it has moved a pixel), and only then is it
-       * placed at the words and let go. Its entrance is the field's own —
-       * the same ease, the same overshoot, the same settle the pour uses —
-       * with the height it falls from measured from the mouth rather than
-       * dealt from a constant, so it genuinely comes out of the sentence.
+       * The order here is the whole behaviour: it joins the ground and the
+       * field re-fits around it, so it is homed, sized, lit and counted like
+       * every other memory — and that is now the entire act.
        *
-       * No camera move. The fall crosses the seam by itself, which is the
-       * teaching: what you say goes down there.
+       * THE FALL IS GONE (2026-10-11), AND IT IS THE ONE THE FOUNDER SAW.
+       * "When I save an inspiration, I don't know why the balls are forming
+       * and headed to the bottom of the page. That's from the old design that
+       * we got completely rid of. So please get rid of that animation as
+       * well." This is that animation, exactly: the orb was placed at the
+       * words (`mouthSpot`, now also gone) and let go, falling from the middle
+       * of the sentence to the home the field had just solved for it — "the
+       * fall crosses the seam by itself, which is the teaching: what you say
+       * goes down there."
+       *
+       * IT WAS THE ONLY PART OF THE OLD JAR A PERSON COULD STILL SEE. The
+       * composer only opens from headquarters (`Home.tsx` refuses it in the
+       * field and in the sky) and the ground begins below the fold, so the
+       * fall started on screen, in the brightest place on it, and ran off the
+       * bottom edge. Every other arrival animation in this world played out of
+       * frame; this one was aimed at the viewer. "Balls", plural, is honest
+       * too: with the row of memories under the claim re-elected around the
+       * newcomer, one of the older orbs was dropped from the row in the same
+       * beat and eased down to its own home beside the newborn.
+       *
+       * WHAT THE KEEP STILL SAYS, because a keep is the loudest thing that
+       * happens here and it must not go quiet. The creature looks down and
+       * flares (`acknowledge("kept")`, `companion.flare`), the field re-fits
+       * so every neighbour eases over to make room, and the orb is simply
+       * there, lit, countable and pressable. What is gone is only the travel.
+       *
+       * THE REJECTED HALF-MEASURE was to keep the fall and shorten it, or to
+       * start it at the seam instead of at the words. Both keep a motion whose
+       * entire content is "your memory is moving to the bottom of the page",
+       * which is a sentence about the jar that used to be down there, and the
+       * founder has now said twice that it is over (`docs/six-laws.md`, Law 6:
+       * "the bottom of the page still has the old floating circles").
+       *
+       * Still no camera move. The world does not jump to show you the result;
+       * the ground is where the ground is.
        */
       born: (seed: BornSeed) => {
         if (byId.has(seed.id)) return;
@@ -6346,29 +6470,24 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         /* everyone eases to a new home; nobody leaves the screen, which is
            what assignHomes guarantees by construction */
         assignHomes();
-        const spot = mouthSpot();
-        /* where it is actually headed at THIS camera: a wall whose claim
-           rests on it would lift it into the peek row, and the entrance has
-           to be measured against the home it is really falling to */
+        /* WHERE IT IS, WHICH USED TO BE WHERE IT WAS HEADED. A wall whose
+           claim rests on this memory lifts it into the row under that claim,
+           so the home it occupies depends on the camera — the same `lerp` the
+           field's own physics uses every frame, read once here so the orb is
+           at its real home from its first frame rather than for the length of
+           a fall. This was the destination of the fall; it is the position
+           now. Reduced motion took this exact path already, which is why
+           there is no longer a branch: the two cases had the same answer and
+           only one of them was being given it. */
         const lift = peekLift();
-        const homeX = b.peek ? lerp(b.homeX, b.peekX, lift) : b.homeX;
-        const homeY = b.peek ? lerp(b.homeY, b.peekY, lift) : b.homeY;
         b.active = true;
         b.leaving = false;
         b.gone = 0;
         b.spawnAt = -1;
-        if (view.reduced || spot === null || spot.y >= homeY) {
-          /* reduced motion: it is simply already at home, settled */
-          b.arrive = 1;
-          b.entryH = 0;
-          b.x = homeX;
-          b.y = homeY;
-        } else {
-          b.arrive = 0;
-          b.entryH = homeY - spot.y;
-          b.x = spot.x;
-          b.y = spot.y;
-        }
+        b.arrive = 1;
+        b.entryH = 0;
+        b.x = b.peek ? lerp(b.homeX, b.peekX, lift) : b.homeX;
+        b.y = b.peek ? lerp(b.homeY, b.peekY, lift) : b.homeY;
         computeInspiration();
         /* the companion answers a keep as it answers a reflection */
         companion.flare = Math.max(companion.flare, view.reduced ? 0 : 0.9);
@@ -6389,7 +6508,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         const b = byId.get(id);
         if (!b || b.doomed === true) return;
         b.doomed = true;
-        pour.doomed++;
+        owed.doomed++;
         if (view.reduced) {
           b.active = false;
           b.leaving = false;
@@ -6734,13 +6853,18 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          *
          * A keep exists twice before it settles: the local seed born at the
          * mouth, `kept-…`, and the row the server hands back with an id of its
-         * own. The pour builder drops the seed the moment `inspirations`
-         * contains either name (see `kept` above), so on the rebuild that
-         * arrival causes, the local ball LEAVES the list and the server ball
-         * ENTERS it — and keyed only by the local id, the carry has nothing to
-         * say about the newcomer. It reads as a memory that has never been
-         * seen, so it pours: falling in from above a second after you watched
-         * the same words fall out of the sentence.
+         * own. The builder drops the seed the moment `inspirations` contains
+         * either name (see `kept` above), so on the rebuild that arrival
+         * causes, the local ball LEAVES the list and the server ball ENTERS it
+         * — and keyed only by the local id, the carry has nothing to say about
+         * the newcomer. It reads as a memory that has never been seen.
+         *
+         * THAT USED TO MEAN IT POURED — falling in from above a second after
+         * you watched the same words arrive — and now it means it is SNAPPED
+         * to the home the rebuild solved, from wherever it had drifted to in
+         * the second you were watching it. A jump instead of a flight, which
+         * is not an improvement: this is the position carry, and a memory that
+         * has not moved must not appear to.
          *
          * Filing each position under `sigId` as well is what lets the second
          * name find the first one's place. It is the same memory; it should

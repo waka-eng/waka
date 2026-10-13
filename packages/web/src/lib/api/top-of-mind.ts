@@ -61,7 +61,8 @@ export interface ApiTopOfMindEntry {
 }
 
 /**
- * The single synthesized artifact for a profile or a group. Entries compose
+ * The single synthesized artifact for a profile. (It was "for a profile or a
+ * group" until rooms were removed on 2026-10-12.) Entries compose
  * it, but the artifact is the unit: one identity, one current version, a
  * linear history. A regeneration writes a new version rather than mutating
  * this one.

@@ -415,9 +415,17 @@ describe("one class, one thing", () => {
   it("reads the sheets it claims to read", () => {
     /* A parser that silently returns nothing passes the test above forever.
        This is the tripwire under it: home.css is the world's own sheet and it
-       has hundreds of unconditional bare-class blocks. */
+       has hundreds of unconditional bare-class blocks.
+
+       200 -> 150 on 2026-10-12. Rooms were removed (founder: "방 없애") and 69
+       of home.css's bare-class blocks went with them — the room's settings
+       sheet, its proposals, its stance row, its progress stages, the band of
+       member grounds and the room's own doors. This is a TRIPWIRE for a dead
+       parser, not a ratchet on the sheet's size, so it is set well below the
+       real figure rather than at it; a gate that fails on honest subtraction
+       teaches people to edit the gate. */
     const home = blocksIn("home.css").filter((b) => BARE_CLASS.test(b.selector));
-    expect(home.length).toBeGreaterThan(200);
+    expect(home.length).toBeGreaterThan(150);
     /* and the conditional half is really excluded: `.jar-values` is
        re-declared inside `@media (max-width: 560px)`, which is not a
        collision and must not be counted as one */

@@ -53,7 +53,10 @@ export interface Ball {
   /** Nothing rests on this memory yet, and it is old enough that something
       could have. The one place the field points forward instead of back. */
   frontier: boolean;
-  hasGroup: boolean;
+  /* `hasGroup` IS GONE — a pattern resting on this memory had been shared
+     into a room, which bought the orb a floor in the field's light. Rooms
+     were removed on 2026-10-12 (founder: "방 없애") and nothing could set it
+     true, since the server stopped computing `Signal.sharedGroupIds`. */
   textPreview: string;
   /** What kind of capture it was — the reflection question is asked about it. */
   kind: string | null;
@@ -256,9 +259,10 @@ export interface SignalSeed {
   promotion: number;
   onPoster: boolean;
   underPrinciple: boolean;
-  /** True when a pattern citing it is shared to a room. Captures themselves
-      never cross an account boundary — only the patterns above them do. */
-  inGroup: boolean;
+  /* `inGroup` — a pattern citing this memory was shared to a room. The
+     distinction it held is still true of the product and worth keeping: a
+     CAPTURE never crossed an account boundary, only the patterns above one
+     did. There is nothing to cross into now. */
   /** The words a pattern quoted from this memory, when one named them. */
   quote: string | null;
   /** The statements that rest on this memory, in the server's words. */
@@ -320,7 +324,6 @@ export interface SkyOverInspiration {
   onPoster: boolean;
   /** A pattern citing it is cited by a principle. */
   underPrinciple: boolean;
-  inGroup: boolean;
   quote: string | null;
   terms: string[];
 }
@@ -374,10 +377,6 @@ export function skyOf(
     underPrinciple: principleSignalIds
       ? above.some((p) => principleSignalIds.has(p.id))
       : false,
-    /* A memory is never in a room. What can be is a PATTERN resting on it —
-       so this says "something you shared out loud stands on this", which is
-       true, without the memory itself having gone anywhere. */
-    inGroup: above.some((p) => p.sharedGroupIds.length > 0),
     quote: cites.find((e) => e.quote)?.quote ?? null,
     terms: above.map((p) => p.statement),
   };
@@ -421,7 +420,6 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     onPoster: s.onPoster,
     underPrinciple: s.underPrinciple,
     frontier: false,
-    hasGroup: s.inGroup,
     textPreview: s.textPreview,
     kind: s.kind,
     quote: s.quote ?? null,
@@ -530,7 +528,6 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
     onPoster: false,
     underPrinciple: false,
     frontier: false,
-    hasGroup: false,
     textPreview: s.textPreview,
     kind: s.kind,
     quote: s.quote,
@@ -587,7 +584,18 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
   return b;
 }
 
-/** A scene instance is not another API identifier for its inspiration. */
+/**
+ * A scene instance is not another API identifier for its inspiration.
+ *
+ * THESE TWO ARE THE LAST ROOM CODE IN THIS FILE AND THEY ARE A SPLINT. Rooms
+ * were removed on 2026-10-12 (founder: "방 없애"), so nothing in the product
+ * builds a room orb — but `canvas/simulation.ts` belongs to a change in
+ * flight, may not be edited from here, and calls `makeGroupInspirationBall`
+ * by name for every wall of kind `"group"`, of which there are none. Both
+ * functions go the moment that file's group branches do, and `Ball.col`,
+ * `Ball.authorName` and `Ball.own` — which only a room orb ever set — go
+ * with them.
+ */
 export function groupInspirationViewId(groupId: string, inspirationId: string) {
   return `group:${groupId}:inspiration:${inspirationId}`;
 }

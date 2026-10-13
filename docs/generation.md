@@ -1262,6 +1262,16 @@ disagreeing with the five constants above.
 
 Source: `packages/web/src/lib/aliveness.ts`.
 
+A THIRD FLOOR LEFT THIS TABLE ON 2026-10-12. `FIELD_FLOOR_IN_GROUP` (0.1)
+lifted a memory that was "out loud in a group" — a memory with a pattern
+resting on it that had been shared into a room. The founder removed rooms
+("방 없애"), `Signal.sharedGroupIds` went with the routes that computed it,
+and nothing could set the flag true any more, so the constant and the term it
+added to `colorBall` are both gone. Cited and answered are the two floors
+there are. (`generation-doc.test.ts` is what noticed: it reads the exported
+constants out of the code and fails on a table that names one the code does
+not have, which is exactly the lie this table would otherwise have told.)
+
 | Constant | Value | What it does |
 | --- | --- | --- |
 | `FIELD_DECAY_HALF_LIFE_DAYS` | 7 | Half-life of an untended memory's light |
@@ -1269,7 +1279,6 @@ Source: `packages/web/src/lib/aliveness.ts`.
 | `FIELD_REFLECTION_WEIGHT` | 0.25 | What each reflection adds, as a fraction of current decay |
 | `FIELD_FLOOR_CITED` | 0.15 | A memory a signal rests on cannot sink below this |
 | `FIELD_FLOOR_ANSWERED` | 0.18 | Nor one you answered in your own words |
-| `FIELD_FLOOR_IN_GROUP` | 0.1 | Nor one that is out loud in a group |
 | `FIELD_FRONTIER_DAYS` | 3 | Untouched longer than this and cited by nothing = a frontier |
 | `BULB_FLOOR` | 0.12 | The dimmest the character burns — lit, never dark |
 | `FIELD_CARRY_ROOT_SATURATION` | 3 | Roots stop adding carry past this many citing patterns |

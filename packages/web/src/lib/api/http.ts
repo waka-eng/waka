@@ -21,7 +21,8 @@
  * WHAT ELSE LIVES HERE, AND WHY IT IS NOT IN A RESOURCE FILE.
  *
  * Two wire types below name no single route: `ApiProfileType` is stamped on
- * profiles, connections and group members alike, and `ProfileScoped` is the
+ * profiles and connections alike (and room members, when there were rooms),
+ * and `ProfileScoped` is the
  * `?profile=` convention that three layer endpoints honour. Putting either in
  * one resource file would make the other resources import from a module they
  * have nothing to do with, so they sit with the plumbing that is already

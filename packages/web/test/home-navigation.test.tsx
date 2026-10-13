@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/data` supplies the three layers and
- * direct detail reads, `lib/api` supplies group reads and principle edits,
+ * direct detail reads, `lib/api` supplies principle edits (it supplied the
+ * group reads too, until rooms were removed on 2026-10-12),
  * `lib/api/principles` supplies principle reads, `lib/auth-context` supplies the
  * session. `helpers/render-home` and `helpers/canvas-stub` replace canvas/viewport/clock/randomness, but the real
  * world simulation and React Router history run. Appearance/SQL are not claimed. */
@@ -10,15 +11,19 @@ import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressChatCorner, closeOverlay, keepBox, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { loadInspirations, loadInspiration, type InspirationDetail } from '../src/lib/data';
-import {fetchGroupMembers,fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
+import {fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
 
-const FACTS = vi.hoisted(() => ({ inspirations: [{ id: 'loaded', text: 'Current inspiration', daysAgo: 1 }],
-  groups: [{ id: 'group-id', name: 'Renamed room', field: [{id:'viewer-public',ownerProfileId:'profile-viewer',ownerName:'You',daysAgo:1},{id:'peer-public',ownerProfileId:'peer',ownerName:'Bo',daysAgo:1}] }] }));
+/* THE ROOM "Renamed room" IS GONE FROM THESE FACTS (founder, 2026-10-12: "방
+   없애"). It held one memory of the viewer's and one of Bo's, and it was the
+   second wall this file used for every Back/Forward-across-walls case as well
+   as for the five member-navigation cases. There is no second wall a fixture
+   can reach cheaply now: an agent's needs an agent roster and a bundle. */
+const FACTS = vi.hoisted(() => ({ inspirations: [{ id: 'loaded', text: 'Current inspiration', daysAgo: 1 }] }));
 const principleState=vi.hoisted(()=>({rows:[] as ApiPrinciple[]}));
 vi.mock('../src/lib/api/principles',async original=>({...await original<typeof import('../src/lib/api/principles')>(),fetchPrincipleRead:vi.fn(async()=>({principles:principleState.rows,status:{phase:'ready',eligible:false}}))}));
 vi.mock('../src/lib/data', async (original) => ({ ...await original<typeof import('../src/lib/data')>(),
   ...dataMockFrom(FACTS), loadInspirations: vi.fn(dataMockFrom(FACTS).loadInspirations), loadInspiration: vi.fn() }));
-vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),fetchGroupMembers:vi.fn(apiMockFrom(FACTS).fetchGroupMembers),fetchPrinciples:vi.fn(async()=>principleState.rows),updatePrinciple:vi.fn(),updateInspiration:vi.fn() }));
+vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),fetchPrinciples:vi.fn(async()=>principleState.rows),updatePrinciple:vi.fn(),updateInspiration:vi.fn() }));
 vi.mock('../src/lib/auth-context', async (original) => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
     profile: { id: VIEWER_ID, name: 'You', type: 'human' }, profiles: [], refresh: async () => undefined, signOut: async () => undefined };
@@ -33,7 +38,7 @@ const detail: InspirationDetail = { id: 'older', text: 'An older inspiration bey
     { id: 'answer-2', question: 'Next?', answer: 'My later words', skipped: false, createdMs: 1700000001000 },
   ] };
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
-beforeEach(() => { principleState.rows=[];vi.mocked(updatePrinciple).mockReset();vi.mocked(fetchPrinciples).mockClear();vi.mocked(fetchGroupMembers).mockReset().mockImplementation(apiMockFrom(FACTS).fetchGroupMembers);localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); vi.mocked(loadInspirations).mockClear(); vi.mocked(loadInspiration).mockReset().mockResolvedValue(detail); });
+beforeEach(() => { principleState.rows=[];vi.mocked(updatePrinciple).mockReset();vi.mocked(fetchPrinciples).mockClear();localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); vi.mocked(loadInspirations).mockClear(); vi.mocked(loadInspiration).mockReset().mockResolvedValue(detail); });
 afterEach(() => { world?.unmount(); vi.useRealTimers(); });
 async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
@@ -179,58 +184,40 @@ it('keeps a one-press way out of the sky and of the ground on your own wall',asy
   await act(async()=>caret('.jar-up:not(.jar-up--down)')!.click());await settle();
   expect(location.pathname+location.search).toBe('/');
 });
-it('makes a group avatar tap open that member’s public view and lets Back return to the room',async()=>{
-  world=await mountWorld(FACTS,{initialEntries:['/w/group-id/renamed-room'],routerTools:<RouterTools/>});await settle();
-  const peer=world.audit().company.find(seat=>seat.id==='peer')!;
-  expect(peer).toBeDefined();const {x,y}=peer;
-  const pointer={pointerId:1,pointerType:'mouse',bubbles:true,clientX:x,clientY:y};
-  await act(async()=>{
-    world.container.querySelector('canvas')!.dispatchEvent(new PointerEvent('pointerdown',{...pointer,cancelable:true}));
-    window.dispatchEvent(new PointerEvent('pointerup',pointer));
-  });
-  expect(location.search).toContain('member=peer');await settle();
-  expect(location.search).toContain('view=field');expect(world.audit().ground).toBe('peer');expect(world.audit().present).toBe(1);
-  await navigate(-1);expect(location.search).toBe('');expect(world.audit().ground).toBeNull();
-});
-it('opens the member on the painted room even before the room route observer catches up',async()=>{
-  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  await world.travelTo(/Renamed room/);expect(world.audit().wallId).toBe('group-id');
-  const member=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-grounds-row')].find(button=>button.textContent==='Bo')!;
-  await act(async()=>member.click());expect(location.pathname).toContain('/w/group-id/');
-  expect(location.search).toContain('member=peer');await settle();expect(world.audit().ground).toBe('peer');
-});
-it('gives a member with nothing public an explicit empty view',async()=>{
-  const base=await apiMockFrom(FACTS).fetchGroupMembers('group-id');
-  vi.mocked(fetchGroupMembers).mockResolvedValue([...base,{profileId:'empty-member',name:'Sora',type:'human',role:'member',joinedAt:'2026-10-01T12:00:00Z'}]);
-  world=await mountWorld(FACTS,{initialEntries:['/w/group-id/renamed-room'],routerTools:<RouterTools/>});await settle();
-  const member=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-grounds-row')].find(button=>button.textContent==='Sora')!;
-  await act(async()=>member.click());await settle();
-  expect(world.audit().ground).toBe('empty-member');expect(world.audit().present).toBe(0);
-  expect(world.container.querySelector('.jar-group-ground-status')?.textContent).toContain('SoraNo public inspirations');
-});
-it('keeps member-list scrolling and arrow selection inside the list',async()=>{
-  world=await mountWorld(FACTS,{initialEntries:['/w/group-id/renamed-room'],routerTools:<RouterTools/>});await settle();
-  const group=world.container.querySelector<HTMLElement>('[role="radiogroup"]')!;
-  const rows=[...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
-  expect(rows[0].tabIndex).toBe(0);expect(rows[1].tabIndex).toBe(-1);
-  const wheel=new WheelEvent('wheel',{deltaY:300,bubbles:true,cancelable:true});
-  await act(async()=>group.dispatchEvent(wheel));await settle();
-  expect(wheel.defaultPrevented).toBe(false);expect(location.search).toBe('');
-  await act(async()=>rows[0].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true})));await settle();
-  expect(world.audit().ground).toBe('peer');expect(rows[1].tabIndex).toBe(0);expect(document.activeElement).toBe(rows[1]);
-  await act(async()=>rows[1].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowUp',bubbles:true,cancelable:true})));await settle();
-  expect(world.audit().ground).toBeNull();expect(rows[0].tabIndex).toBe(0);
-});
-it('opens a room member’s public view by name and keeps that selection across Back/Forward',async()=>{
-  world=await mountWorld(FACTS,{initialEntries:['/w/group-id/renamed-room'],routerTools:<RouterTools/>});await settle();
-  const member=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-grounds-row')].find(button=>button.textContent==='Bo')!;
-  await act(async()=>member.click());await settle();
-  expect(location.search).toContain('view=field');expect(location.search).toContain('member=peer');
-  expect(world.audit().ground).toBe('peer');expect(world.audit().present).toBe(1);
-  expect(world.container.querySelector('.jar-group-ground-status')?.textContent).toContain('BoPublic inspirations');
-  await navigate(-1);expect(location.search).toBe('');expect(world.audit().ground).toBeNull();
-  await navigate(1);expect(world.audit().ground).toBe('peer');
-});
+/* ═══ FIVE CASES ABOUT STANDING IN SOMEBODY ELSE'S GROUND ════════════════
+   Founder, 2026-10-12: "방 없애" — remove rooms. All five are gone with the
+   surfaces they drove, and they are named because each pinned a rule nothing
+   else in the suite does:
+
+     A GROUP AVATAR TAP OPENED THAT MEMBER'S PUBLIC VIEW, and Back returned
+     to the room. It pressed a PAINTED avatar — a pointerdown on the canvas
+     at the seat's own coordinates, read out of `audit().company` — which is
+     the only test in this file that ever proved the loop's hit areas agree
+     with where the figures are drawn.
+
+     THE PAINTED ROOM ANSWERED BEFORE THE ROUTE OBSERVER CAUGHT UP: pressing
+     a member wrote the address immediately rather than waiting for the
+     debounced observer, so the ground switched on the press and not a frame
+     later.
+
+     A MEMBER WITH NOTHING PUBLIC GOT AN EXPLICIT EMPTY VIEW — "Sora. No
+     public inspirations" — rather than an empty ground with no explanation,
+     which is the same rule the rest of this product follows: an empty place
+     you can stand in beats a door that refuses.
+
+     THE MEMBER LIST KEPT SCROLLING AND ARROW SELECTION INSIDE ITSELF: a
+     wheel over the band did not travel the world and did not write the
+     address, and Arrow keys roved focus through the radios while actually
+     switching the ground. That is the roving-focus standard this product
+     holds radio groups to, and the band was the only radiogroup in the world
+     layer.
+
+     AND THE SAME VIEW OPENED BY NAME, surviving Back and Forward — the
+     bookmarkable `?member=` half of `/w/:wall/:label`.
+
+   `audit().ground`, `audit().company` and `MountedWorld.standIn` all exist
+   only for these, and `canvas/simulation.ts` still publishes the first two
+   because that file is owned by a change in flight. */
 
 it('keeps the selected principle and its route after editing, so Back returns to the prior view',async()=>{
   principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'declared',rank:0,locked:true,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[]}];
@@ -288,26 +275,22 @@ it('starts a review beside the personal reading and restores home through Back',
      The route is still reached below, which is the part that still exists. */
   await navigate(-1);expect(location.pathname).toBe('/');
 });
-it('requires a visible audience confirmation before publishing and leaves cancel private',async()=>{
-  vi.mocked(updateInspiration).mockClear();
-  world=await mountWorld(FACTS,{initialEntries:['/inspirations/older'],routerTools:<RouterTools/>});await settle();
-  expect(world.container.querySelector<HTMLElement>('.jar-personal-shortcuts')?.hidden).toBe(true);
-  const button=(label:string)=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-panel button')].find(item=>item.textContent?.trim()===label)!;
-  expect(world.container.querySelector('.jar-panel .jar-audience-note')).toBeNull();
-  expect(button('Private').getAttribute('title')).toBeNull();
-  expect(button('Public').getAttribute('title')).toBeNull();
-  await act(async()=>button('Public').click());
-  expect(world.container.textContent).toContain('People in your rooms can read it and its attachments');
-  expect(updateInspiration).not.toHaveBeenCalled();
-  await act(async()=>button('Keep private').click());expect(updateInspiration).not.toHaveBeenCalled();
-  expect(button('Private').getAttribute('aria-pressed')).toBe('true');
-  await act(async()=>button('Public').click());
-  vi.mocked(updateInspiration).mockResolvedValue({} as Awaited<ReturnType<typeof updateInspiration>>);
-  await act(async()=>button('Make public').click());
-  expect(updateInspiration).toHaveBeenCalledExactlyOnceWith('older',{visibility:'public'});
-  expect(button('Public').getAttribute('aria-pressed')).toBe('true');
-  expect(world.container.querySelector('.jar-panel .jar-audience-note')).toBeNull();
-});
+/* `requires a visible audience confirmation before publishing and leaves
+   cancel private` IS GONE WITH THE TOGGLE (founder, 2026-10-12). It was the
+   strictest case in this file and it is worth saying what it held, because
+   the standard outlives the control: a destructive or disclosing press had to
+   show a VISIBLE confirmation — not a `title` attribute, which it asserted
+   was absent on both words, and not a note that was already on screen — and
+   cancelling had to leave the state exactly as it was, proven by
+   `updateInspiration` not having been called at all rather than by the word
+   on screen. It then pressed through and asserted the PATCH went out exactly
+   once with `{visibility:'public'}`.
+
+   THE AUDIENCE IT CONFIRMED WAS ROOMS: the sentence it matched was "People in
+   your rooms can read it and its attachments". With rooms gone that promise
+   is false, which is why the founder removed the control rather than
+   reworded it. `updateInspiration` is still imported by this file for the
+   editor's own save. */
 
 it('keeps what you typed in the box across a re-render, without opening anything',async()=>{
   /* KEEPING IS INLINE NOW (founder ruling: "it shouldn't open up a modal, it
@@ -367,18 +350,27 @@ it('restores an older card, its earlier reflection and date across Back/Forward 
      disclosure's state. */
   expect(world.container.querySelector('[data-reflection-id="answer-1"]')?.textContent).toContain('My earlier words');
   expect(loadInspiration).toHaveBeenCalledWith('older', VIEWER_ID, expect.any(AbortSignal));
-  await navigate('/w/group-id/old-name?view=sky');
-  /* THE CORNER NO LONGER NAMES A ROOM. It is a two-state switch — me, my
-     agent — because those are the two places the product currently holds, so
-     a room's name has nowhere to render there until rooms come back.
-     What this line was really protecting survives and is still asserted: the
-     URL carries a STALE slug (`old-name`) and the world still resolves it to
-     the right wall rather than trusting the words in the address. */
-  expect(world.audit().wallId).toBe('group-id');
+  /* A HOP TO ANOTHER WALL STOOD HERE and it was doing two jobs. The first is
+     gone with rooms (founder, 2026-10-12: "방 없애"): it navigated to
+     `/w/group-id/old-name?view=sky`, whose point was that the URL carries a
+     STALE SLUG and the world resolves the ID rather than trusting the words
+     in the address — `resolveViewWall` matches `/w/:wall/:label` against your
+     own walls, so there is no wall left in this fixture for it to resolve to.
+     (An agent's wall still produces and accepts that address; proving the
+     stale-slug rule again needs an agent roster here.)
+
+     THE SECOND JOB IS WHAT THIS CASE IS ABOUT and it is kept: a hop AWAY and
+     a Back restore the date, the card and its earlier answer, and the field
+     is never re-fetched — `loadInspirations` once for the whole walk. The hop
+     is up to the sky on your own wall now, which is a different view of the
+     same wall rather than a different wall; what it has to be is a second
+     history entry that is not the card. */
+  await navigate('/?view=sky');
+  expect(location.search).toContain('view=sky');
   await navigate(-1);
   expect(location.search).toContain(`at=${date}`); expect(world.container.textContent).toContain('My earlier words');
   expect(world.audit().wallKind).toBe('self');
-  await navigate(1); expect(world.audit().wallId).toBe('group-id');
+  await navigate(1); expect(location.search).toContain('view=sky');
   expect(loadInspirations).toHaveBeenCalledOnce();
 });
 it('cold opens an older inspiration link without needing its orb in the initial field', async () => {
@@ -395,19 +387,26 @@ it('restores reflection on the same inspiration across Back/Forward, without cha
   await navigate(1); expect(world.container.querySelector('[data-reflection-id="answer-1"]')?.textContent).toContain('My earlier words');
   expect(location.search).toContain('reflection=answer-1');
 });
-it('records actual world travel as a new history entry instead of replacing the previous ground', async () => {
-  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
-  await world.toField(); await settle(); expect(location.search).toContain('view=field');
-  await world.travelTo(/Renamed room/i); await settle(); expect(location.pathname).toContain('/w/group-id/');
-  await navigate(-1); expect(world.audit().wallKind).toBe('self'); expect(location.search).toContain('view=field');
-});
+/* `records actual world travel as a new history entry instead of replacing
+   the previous ground` IS GONE WITH THE SECOND WALL IT NEEDED. It descended
+   to the ground, travelled to the room, and asserted that Back came home to
+   the GROUND rather than to the top — travel must PUSH a history entry, not
+   replace the one the descent wrote. The rule is live and the only thing
+   missing is a wall to travel to: re-stage it with an agent's wall when this
+   file grows an agent roster (founder, 2026-10-12: "방 없애"). */
 it('discards a late detail when the person navigates elsewhere', async () => {
   let resolve!: (value: InspirationDetail) => void;
   vi.mocked(loadInspiration).mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
-  await navigate('/inspirations/older'); await navigate('/w/group-id/renamed-room');
+  /* ELSEWHERE USED TO BE A ROOM — `/w/group-id/renamed-room` — and is the
+     ground on your own wall now (founder, 2026-10-12: "방 없애"). The
+     property is unchanged and is the one that matters: a detail that lands
+     AFTER the person has moved on is dropped rather than painted over
+     wherever they now are. */
+  await navigate('/inspirations/older'); await navigate('/?view=field');
   await act(async () => resolve(detail)); await settle();
-  expect(world.audit().wallId).toBe('group-id'); expect(world.container.textContent).not.toContain(detail.text);
+  expect(location.search).toContain('view=field');
+  expect(world.container.textContent).not.toContain(detail.text);
 });
 it('shows an unavailable link without silently opening another room and can return home', async () => {
   world = await mountWorld(FACTS, { initialEntries: ['/w/missing-id/old-name'], routerTools: <RouterTools /> }); await settle();

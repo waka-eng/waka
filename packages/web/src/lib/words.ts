@@ -84,19 +84,19 @@ export function monthTag(ms: number, locale: WordsLocale = "en-US"): string {
   return `${d.toLocaleDateString("en-US", { month: "long" })} ${yearWords(d.getFullYear())}`;
 }
 
-/** The collapsed links sentence, adapted for a group: what cited this save.
-    Korean joins the titles with commas and closes with the locative 에 —
-    which never inflects, so no title can break the grammar. */
-export function citedWords(titles: string[], locale: WordsLocale = "en-US"): string {
-  if (locale === "ko-KR") {
-    if (titles.length === 1) return `“${titles[0]}”에 인용됨`;
-    if (titles.length === 2) return `“${titles[0]}”, “${titles[1]}”에 인용됨`;
-    return `“${titles[0]}”, “${titles[1]}” 외 ${koNativeCount(titles.length - 2)} 곳에 인용됨`;
-  }
-  if (titles.length === 1) return `Cited by “${titles[0]}”`;
-  if (titles.length === 2) return `Cited by “${titles[0]}” and “${titles[1]}”`;
-  return `Cited by “${titles[0]}”, “${titles[1]}” and ${numWords(titles.length - 2)} more`;
-}
+/* `citedWords` IS GONE — the collapsed links sentence, "Cited by X, Y and 3
+   more". Its one reader was A ROOM ORB'S PANEL, naming which of the room's
+   readings had cited somebody's shared save: attribution by reading, which
+   was the finest grain a room was allowed to know about another person's
+   memory. Rooms went on 2026-10-12 (founder: "방 없애") and nothing has
+   called it since, so `test/reachable.test.ts`'s ratchet is what finally
+   decided it: an export nothing names is a surface nobody asked for.
+
+   WHAT IS WORTH REBUILDING IF THE PROVENANCE ROOM EVER NAMES SEVERAL
+   READINGS AT ONCE: the Korean half was grammar rather than a string — the
+   titles joined with commas and closed with the locative 에, which never
+   inflects, so no title could break the sentence. `git log -S citedWords`
+   has it. */
 
 /**
  * The absolute date — "Aug 23", and with the year when it is not this one.
@@ -366,15 +366,15 @@ export function givenName(full: string): string {
   return first || full.trim();
 }
 /**
- * WHO IS IN THIS ROOM — said in words, and no longer said at all.
+ * WHO IS IN THIS ROOM — said in words, then drawn, then not at all.
  *
  * `groupCompany` turned a room's member list into "with Jina and Minsu". Its
- * only reader was the wall's eyebrow, and the eyebrow is gone: the room now
- * DRAWS its company — a figure per member, standing in the ground, each one
- * giving its name when you reach for it. That is the same fact in the channel
- * this world actually has, so the sentence was a second telling of something
- * already on screen. Removed rather than kept warm; `git show 65f6ce1` has it
- * if the drawing ever needs words back.
+ * only reader was the wall's eyebrow; the eyebrow went and the room DREW its
+ * company instead — a figure per member, standing in the ground, each giving
+ * its name when you reached for it — because that is the same fact in the
+ * channel this world actually has. The rooms themselves went on 2026-10-12
+ * (founder: "방 없애"), so there is nobody to name and nothing to draw.
+ * `git show 65f6ce1` still has the words.
  */
 
 /* `ordWords` IS GONE — ordinals as words, "twenty-fifth" rather than "25th",

@@ -64,8 +64,11 @@ export interface Ramp {
  * Two disciplines keep this from becoming decoration:
  *
  *  - Your own memories are NEVER tinted. You are the warm white this world
- *    has always used, so your own ground looks the same in a room as it does
+ *    has always used, so your own ground looked the same in a room as it did
  *    at home, and the hues read as "other people" rather than as a palette.
+ *    (Rooms went on 2026-10-12. Nothing asks for a hue now; `tintRamp` is
+ *    reached only through `canvas/sprites.ts`, which is owned by a change in
+ *    flight and still offers the parameter.)
  *
  *  - The DORMANT end is never tinted either. A memory nobody has touched in
  *    months goes colourless whoever kept it — because at that point the true
@@ -78,7 +81,13 @@ export interface Ramp {
  * aliveness. They are also picked to stay apart under the common forms of
  * colour blindness — no red/green pair carries a distinction alone.
  */
-export const MEMBER_HUES: Array<{ name: string; rgb: [number, number, number] }> = [
+/* NOT EXPORTED ANY MORE. `tintRamp` below is the only thing that reads it,
+   and it is in this file; `test/reachable.test.ts`'s ratchet counts an export
+   nothing outside its own file names, which this became when the room legend
+   that printed these colours as dots went with rooms (2026-10-12, founder:
+   "방 없애"). The sprite tinting is untouched — an agent's ground still asks
+   for a ramp and still gets one. */
+const MEMBER_HUES: Array<{ name: string; rgb: [number, number, number] }> = [
   { name: "blue", rgb: [126, 168, 224] },
   { name: "amber", rgb: [224, 176, 108] },
   { name: "green", rgb: [128, 200, 166] },
@@ -86,11 +95,10 @@ export const MEMBER_HUES: Array<{ name: string; rgb: [number, number, number] }>
   { name: "rose", rgb: [226, 148, 164] },
 ];
 
-/** css for the legend's dot — the same value the sprite is tinted with. */
-export function hueCss(i: number): string {
-  const h = MEMBER_HUES[i % MEMBER_HUES.length]!.rgb;
-  return `rgb(${h[0]}, ${h[1]}, ${h[2]})`;
-}
+/* `hueCss` IS GONE. It returned the css for the LEGEND'S DOT — "the same
+   value the sprite is tinted with", which was the point: one function so a
+   name in the room's ground-switcher and the orbs it switched to could not
+   disagree about whose colour was whose. The switcher went with rooms. */
 
 /**
  * A member's ramp: the live end pulled toward their hue, the dormant end left

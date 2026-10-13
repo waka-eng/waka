@@ -133,20 +133,9 @@ const FACTS = {
     text: `something I kept, ${i}`,
     daysAgo: i + 2,
   })),
-  /* One group, and it exists for one reason: see `atOwnWallWithGround` below.
-     Its own contents are the existing field test's business, not this file's. */
-  groups: [
-    {
-      id: "group-1",
-      name: "The four of us",
-      field: Array.from({ length: 4 }, (_, i) => ({
-        id: `g-${i}`,
-        ownerProfileId: i < 2 ? VIEWER_ID : OTHER,
-        ownerName: i < 2 ? "You" : "Hana",
-        daysAgo: i + 2,
-      })),
-    },
-  ],
+  /* ONE ROOM USED TO BE HERE and it existed for exactly one reason — see the
+     tombstone where `atOwnWallWithGround` stood. Rooms went on 2026-10-12
+     (founder: "방 없애"). */
 };
 
 /**
@@ -587,43 +576,39 @@ describe("the poster's drift readout", () => {
  * function, and the same class of mistake one key along.
  */
 describe("what the poster is standing on", () => {
-  /**
-   * WHY THE TRIP OUT AND BACK IS NOT CEREMONY.
-   *
-   * The provenance map reaches the field through an effect that calls
-   * `simApiRef.current?.setProvenance`, and measured here that effect runs
-   * once at boot with `simApiRef.current` still null — every fetch the page
-   * makes settles inside a single React commit under these mocks, and the
-   * effect is declared above the one that builds the simulation. Nothing
-   * re-triggers it on your own wall, so the count reads zero at boot however
-   * long the loop is stepped. Arriving at a group changes `wokenGroups`, the
-   * effect runs again, and the field is handed the whole map — your own wall's
-   * entry under `self:` included.
-   *
-   * That boot-time gap is reported rather than pinned: whether it survives
-   * real network latency is not something a mock can answer, and freezing it
-   * in a test would be asserting a scheduling accident. What IS pinned is the
-   * harder half and the one the bug lived in — after arriving somewhere else
-   * and coming home, your own wall's claim still resolves under the key the
-   * field asks for.
-   */
-  async function atOwnWallWithGround(): Promise<void> {
-    await layout.travelTo(/four of us/i);
-    await layout.travelTo(/^me$/i);
-    const a = layout.audit();
-    expect(a.wallKind, "we came home to our own wall").toBe("self");
-    expect(a.wallId, "and it is the self wall, whose key is `self:`").toBe("");
-  }
+  /* ═══ THE TRIP OUT AND BACK IS GONE, AND SO IS THE CASE IT SERVED ══════
+     Founder, 2026-10-12: "방 없애" — remove rooms.
 
-  it("stands on the memories its statement was read from, not on the newest few", async () => {
-    await atOwnWallWithGround();
+     `atOwnWallWithGround()` travelled to a room and came home, and the case
+     above it asserted that your own poster then stood on `CHAIN_SIZE`
+     memories. The trip was not ceremony and the reason is a real finding
+     that OUTLIVES the room, so it is kept here rather than deleted with the
+     code:
 
-    expect(
-      layout.audit().provenanceCount,
-      "your own poster is standing on nothing — check the key the provenance " +
-        "map is written under against spaceKey() for the self wall",
-    ).toBe(CHAIN_SIZE);
-  });
+     THE PROVENANCE MAP REACHES THE FIELD THROUGH AN EFFECT that calls
+     `simApiRef.current?.setProvenance`, and measured under these mocks that
+     effect runs once at boot with `simApiRef.current` STILL NULL — every
+     fetch settles inside a single React commit here, and the effect is
+     declared above the one that builds the simulation. On your own wall
+     nothing re-triggered it, so the count read zero at boot however long the
+     loop was stepped. Arriving at a room changed `wokenGroups`, the effect
+     ran again, and the field was handed the whole map — your own wall's
+     entry under `self:` included. That boot-time gap was reported rather
+     than pinned, because whether it survives real network latency is not
+     something a mock can answer and freezing it would be asserting a
+     scheduling accident.
+
+     WHAT CHANGED, AND WHAT TO WATCH. `wokenGroups`, `groupFieldTick` and
+     `groupReadTick` are all gone from that effect's dependency list; what
+     remains is `[provenance, agents, inspirations, walls]`. Against a real
+     server the provenance fetch lands AFTER the simulation exists, so the
+     effect re-runs and the row fills — which is why this is a lost test and
+     not a lost feature. But there is no longer any second wall a fixture can
+     reach cheaply to force it, so the harder half this case pinned — after
+     arriving somewhere else and coming home, your own wall's claim still
+     resolves under the key the field asks for — is UNCOVERED until this file
+     grows an agent fixture. The case below still proves the chain resolves;
+     it is the re-trigger that has no stage. */
 
   /**
    * AND THE ROW SAYS THE SAME THING THE FIELD DOES.
