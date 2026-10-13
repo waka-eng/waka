@@ -3832,35 +3832,34 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     function draw(now: number) {
       const pal = paletteRef.current;
       ctx!.setTransform(view.dpr, 0, 0, view.dpr, -cam.x * view.dpr, -cam.y * view.dpr);
-      /* ═══ ASK FOR THE GOOD DOWNSCALE, BECAUSE WE ALWAYS DOWNSCALE ═══════
-         Founder, on an iPhone: "케릭터 화질 왜이래 휴대폰으로 볼때?" — the
-         creature soft and smeared, while the same build on a desktop is
-         clean.
+      /* ═══ NO FILTER HINT HERE, AND THE MEASUREMENT IS WHY ═════════════
+         `ctx.imageSmoothingQuality = "high"` was set here on 2026-10-12 to
+         answer the founder's "케릭터 화질 왜이래 휴대폰으로 볼때?". A review
+         measured it and it is reverted.
 
-         IT IS NOT THE PIXEL RATIO. Measured on a 393x852 viewport at
-         devicePixelRatio 3: the backing store is 1179x2556, a ratio of
-         exactly 3.0 — one drawn pixel per physical pixel. The 2026-09-08
-         fix in `canvas/scale.ts` holds.
+         IT CHANGED ZERO PIXELS. Compared byte for byte on the product's
+         real configuration — a visible full-viewport canvas at the real
+         backing-store size with detached sprite canvases — "low" and
+         "high" produce identical output in BOTH Chromium and WebKit, at
+         every ratio this loop draws: 0.5x for a body, 0.21x for seated
+         company, 0.10x for an orb, at dpr 2 and dpr 3. The only
+         configuration where the hint does anything is a
+         `willReadFrequently` software raster, which this product never
+         asks for.
 
-         IT IS THAT EVERY BODY IS DRAWN AT HALF ITS BAKED SIZE. `BODY_PX` is
-         240 and `CHAR_SIZE` is 120, so the sprite is a deliberate 2x
-         supersample and the loop resamples it down 0.5x on every frame, on
-         every device — the geometry is IDENTICAL on desktop and phone, which
-         is why the ratio could not be the answer.
+         AND IT COST 0.6-1.8ms A FRAME once the draw mix saturates — all of
+         it on the UPSCALES it was never aimed at: the aura at 1.6-2.4x,
+         the nebulae, and the vignette stretched 512 -> 2880. A downscale
+         filter cannot help a magnification, and in Chromium "high" also
+         CHANGED those pixels, which nobody had reviewed.
 
-         SO THE ONLY VARIABLE LEFT IS THE FILTER, and we never chose one.
-         `imageSmoothingQuality` defaults to "low". Chrome's "low" survives a
-         halving; WebKit's does not, and a halved pixel grid is the worst
-         case for it — which is exactly why the agent, whose body is
-         quantised into hard cells by `pixelate`, looks the most destroyed.
-
-         SET EVERY FRAME, NOT ONCE AT SETUP. Assigning `canvas.width` resets
-         the whole 2D context state, and `measure()` reassigns it on every
-         resize and on every rebuild of this loop — a flag set at setup would
-         be silently dropped the first time the window changed. It is a
-         property write on a context that is about to issue hundreds of draw
-         calls; the cost is not measurable against them. */
-      ctx!.imageSmoothingQuality = "high";
+         THE REASONING THAT PRODUCED IT WAS SOUND IN FORM AND WRONG IN
+         FACT: the geometry is identical on desktop and phone, so the
+         filter looked like the only variable left. It was not the
+         variable; the premise that one had to remain was. Four attempts
+         died here, and the sentence that kills them all is that this
+         defect does not reproduce in Chromium — so anything measurable in
+         Chromium, as this was, is not it. */
       ctx!.clearRect(cam.x, cam.y, view.w, view.h);
       if (!pal) return;
       const t = now / 1000;
