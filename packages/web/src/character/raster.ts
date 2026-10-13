@@ -260,35 +260,41 @@ export function restPose(
   ramp: Ramp,
   be: Being,
   lit = 1,
-  /** Device pixels per CSS pixel, so the bake can be at least as big as the
-      paint. Defaults to 1 for callers that draw into an unscaled context. */
-  dpr = 1,
+  /** Device pixels per CSS pixel. REQUIRED, and the reason is the bug this
+      fixed: a default would silently restore it the first time somebody
+      forgot the argument. */
+  dpr: number,
 ): void {
   /* ═══ BAKE AT LEAST AS LARGE AS WE PAINT ═══════════════════════════════
-     Founder, from a phone: "케릭터 화질 왜이래 휴대폰으로 볼때?"
+     The factor was `round(size / BODY_PX * 4)` with no `dpr` in it, while
+     `rasterBody` bakes `BODY_PX * factor` DEVICE pixels and this context is
+     scaled by the ratio. So the bake was chosen in CSS pixels and spent in
+     device pixels.
 
-     THIS WAS A TRUE UPSCALE, AND IT WAS THE ONLY ONE IN THE PRODUCT. The
-     factor was `round(size / BODY_PX * 4)` — no `dpr` anywhere in it — and
-     `rasterBody` bakes `BODY_PX * factor` DEVICE pixels. At the companion's
-     88 CSS px that is `round(1.467)` = 1, so a 240px sprite; the context is
-     scaled by the ratio, so on a dpr-3 phone it is painted at 264 device
-     px. Measured: 240 -> 264, a 1.1x magnification of the creature on the
-     login, onboarding, loading and chat screens.
+     ONE CONFIGURATION WAS ACTUALLY BROKEN, and it is worth naming exactly
+     because the first write-up of this change claimed more: at 88 CSS px
+     and dpr 3 the factor is `round(1.467)` = 1, a 240px sprite painted at
+     264 device px. Analytically that is the only under-bake — it needs
+     size in (80, 90) at dpr 3 — and 88 is the login and onboarding
+     companion. Every other caller and ratio was already large enough.
 
-     An upscale cannot be rescued by a filter — there is nothing to
-     recover — which is why this is the one place in the character pipeline
-     that was genuinely producing a worse image rather than merely resampling
-     a good one.
+     THE REAL WIN IS THE LOADING SCREEN, which the first write-up missed
+     entirely. At 190 CSS px and dpr 1 the old rule baked 720px and painted
+     190 — a 0.264x reduction, which ALIASES. Measured against ground truths
+     baked at 4x, 6x, 8x and 12x the paint, the new 240px bake is about
+     twice as faithful for a ninth of the memory; at dpr 2 it is ~25% more
+     faithful for a quarter. That is a desktop improvement, honestly, not a
+     phone one.
 
-     CEIL, NOT ROUND, and that is the whole correction: rounding is what let
-     1.467 become 1 and put the bake below the paint. `ceil` guarantees the
-     sprite is never smaller than the pixels it has to fill, so the draw is
-     a downscale or 1:1 forever, whatever size or ratio a caller brings.
+     AND NO, IT IS NOT "7% SHARPER" AT 88/dpr3. That number came from mean
+     gradient, which REWARDS ALIASING and calls it sharpness — the old
+     0.264x path scores well on it precisely because it aliases. Measured
+     properly, the 88/dpr3 case moves +0.29% and the ranking flips with the
+     ground truth. The under-bake is worth fixing because a bake smaller
+     than its paint is wrong, not because anyone can see it.
 
-     THE 4x SUPERSAMPLE IS GONE WITH IT. It was measuring against CSS pixels
-     while the paint happens in device pixels, so on a phone it was not 4x
-     of anything — it was 0.9x. Asking for device pixels directly says what
-     was meant. */
+     CEIL, NOT ROUND. Rounding is what let 1.467 become 1 and put the bake
+     below the paint; `ceil` on DEVICE pixels makes that unrepresentable. */
   const need = Math.max(1, Math.ceil((size * dpr) / BODY_PX));
   const body = rasterBody(need, BODY_TIERS - 1, null, ramp, be);
   const half = size / 2;

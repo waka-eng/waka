@@ -227,38 +227,40 @@ function rasterDot(
  * luminance reads as a filter, grain that carries the ground's own warmth
  * reads as the material.
  */
-function rasterGrain(cast: [number, number, number], dpr: number): HTMLCanvasElement | null {
-  /* ═══ THE FILM IS THE SAME SIZE EVERYWHERE, AND NOW IT IS ALSO SHARP ═══
-     Founder, from a phone: "케릭터 화질 왜이래 휴대폰으로 볼때?" — and, when
-     the character's shape turned out not to be the problem: "에이전트 형태의
-     렌더링 문제가 아니라 그냥 이미지 자체가 흐릿하잖아."
+function rasterGrain(cast: [number, number, number]): HTMLCanvasElement | null {
+  /* ═══ THE FILM STAYS AT CSS RESOLUTION, AND THE REASON IS MEASURED ═══
+     An attempt on 2026-10-12 baked this at `GRAIN_PX * dpr` to stop the
+     browser magnifying it 3x on a phone. The magnification is real — a
+     128px tile in a 128 CSS px box, measured at exactly 3.00x — and
+     sharpening it measured +15% on the film in isolation. It was still
+     wrong, and a review measured why.
 
-     THE IMAGE ITSELF. This tile covers the entire product — it is the film
-     on the ground AND, through `bodyGrain`, the matte on the creature. It
-     was baked at `GRAIN_PX * GRAIN_TILE` = 128 pixels and displayed at 128
-     CSS px, so on a device with a ratio of 3 the browser magnified it
-     threefold: a one-pixel grain became a three-pixel blob, over every
-     surface at once. That is why nothing looked sharp rather than one thing
-     looking wrong, and why the earlier hunt through the character's own
-     sprites kept coming back 1.5%.
+     IT CANNOT BE THE BLUR ANYBODY SEES. The layer is `opacity: 0.035` at
+     normal blend: composited over the ground it is a 9-out-of-255
+     perturbation. A 96.5%-transparent additive dither cannot soften an
+     edge beneath it. `claims.css` already names the threshold — "over
+     ~0.05 it becomes texture" — so this is tuned below perceptibility on
+     purpose.
 
-     THE OLD NOTE WAS RIGHT ABOUT THE GOAL AND WRONG ABOUT THE MEANS. It
-     said: "CSS pixels, NOT device pixels. Sized in device px, the texture's
-     scale was an accident of the viewer's hardware — the same emulsion
-     looked twice as fine on a retina screen. A tile in CSS px is the same
-     film everywhere." Keeping the grain's APPARENT size constant is right.
-     But it bought that by throwing away resolution, when both are
-     available: bake `D * dpr` device pixels, keep displaying it at `D` CSS
-     px, and the emulsion is the same size on every screen AND drawn at the
-     screen's own resolution. Nothing about the look changes except that it
-     resolves.
+     AND SHARPENING IT BREAKS WHAT IT IS FOR. This film exists to dissolve
+     8-bit contour banding in the companion's glow. A hard 6-device-px cell
+     guarantees six identical adjacent pixels, where the magnified cell's
+     ramped edge broke a run almost every pixel: measured over 6 trials x
+     24 scanlines, mean flat runs grew 2.21 -> 3.05 at dpr 3 and 1.69 ->
+     2.36 at dpr 2 — a 38-40% WORSE dither at identical amplitude. The
+     blurry tile was, by accident, the better one.
 
-     IT ALSO MAKES THE BODY AGREE WITH THE PAGE. `rasterBody` paints this
-     pattern in DEVICE pixels, so its cells were 2px while the page's were 6
-     on a 3x phone — two different films, under a comment that calls them
-     "the same grain the rest of the page wears". At device resolution they
-     are the same film again. */
-  const cell = GRAIN_PX * dpr;
+     It also coarsened the creature's matte — which `rasterBody` lays at
+     14% over a light body, the one place this grain is actually visible —
+     by 45-61% of its fine texture, and took the tile's backing store from
+     64KB to 576KB.
+
+     THE SELF-REFUTING PART, which is the lesson worth keeping: the
+     sharpening was measured in Chromium at dpr 3, while the defect it
+     claimed to fix does not reproduce in Chromium at dpr 3. Both cannot be
+     true of one cause. ANY CANDIDATE THAT REPRODUCES HERE IS NOT THE
+     FOUNDER'S SYMPTOM — four attempts have now died on that sentence. */
+  const cell = GRAIN_PX;
   const cells = GRAIN_TILE;
   const D = cell * cells;
   const [c, g] = makeSprite(D);
@@ -352,7 +354,7 @@ export function buildPalette(
   const grayCss = cs.getPropertyValue("--jar-dorm").trim() || "#28323f";
   const tiers: number[] = [];
   for (let t = 0; t < TIERS; t++) tiers.push(t);
-  const grainTile = rasterGrain(ramp.dorm, dpr);
+  const grainTile = rasterGrain(ramp.dorm);
   /* the same tile, as a pattern, for the one bake that genuinely has an
      opaque backdrop to blend against: the companion's own body */
   const bodyGrain = grainTile ? ctx.createPattern(grainTile, "repeat") : null;
