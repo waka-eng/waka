@@ -371,21 +371,14 @@ const EASE_PRESS_IN = 1e-16;
 const EASE_PRESS_OUT = 3.8e-3;
 /** The camera's rubber band at the ends of the world. */
 const EASE_BAND = 2.6e-5;
-/**
- * THE HAND'S OWN SPEED, SMOOTHED — the last per-frame rate in the input path,
- * and the one that mattered most.
- *
- * It read `v = v * 0.6 + instant * 0.4`, a blend per EVENT, so the estimate
- * converged twice as fast where the pointer reports twice as often. That was
- * harmless while the snap threw the number away. It is not harmless now that
- * the snap is SEEDED with it: the same flick, on two phones, would be handed
- * two different speeds and therefore timed two different ways — which is
- * exactly the failure the rest of this pass exists to remove, hiding one
- * level below the eases everybody had already fixed. This is the same 0.4 at
- * 60Hz, said as a rate, and it is fed the interval between the two samples it
- * is actually blending.
- */
-const EASE_VEL = 4.89e-14;
+/* THE HAND'S OWN SPEED went with the lateral gesture. `EASE_VEL` smoothed a
+   per-frame pointer rate that only the horizontal drag read, to seed the
+   travel snap; with no sideways drag there is no snap to seed and nothing
+   left to smooth. The lesson it recorded is worth keeping even though the
+   constant is not: a velocity blended PER EVENT converges twice as fast on a
+   device that reports twice as often, so the same flick on two phones is
+   handed two different speeds. Any future rate here must blend per INTERVAL,
+   not per event. */
 /** The companion's turn, with a travel. */
 const EASE_YAW_TRAVEL = 2.6e-5;
 /** A scrubbed-away bubble fades out in place over this long. It never flies. */
@@ -706,7 +699,6 @@ export interface SimApi {
   toSky: () => void;
   toGround: () => void;
   /** The traveler: one column left or right, the companion leading. */
-  travel: (dir: 1 | -1) => void;
   /** Walk to a wall by column, from the axis map along the bottom. */
   /**
    * TRAVEL TO A WALL — or, with `instant`, BE THERE WITHOUT TRAVELLING.
@@ -1700,11 +1692,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       lastX: 0,
       lastY: 0,
       lastT: 0,
-      velX: 0,
       /** undecided · vertical · horizontal */
       axis: 0 as 0 | 1 | 2,
-      wheelXAcc: 0,
-      wheelXUntil: 0,
       /** Set on wheel; the section snap fires once the wheel goes quiet. */
       snapAt: 0,
       /** a held horizontal drag: the companion walks */
@@ -2568,7 +2557,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       simApiRef.current?.acknowledge("arrived");
       trip.yaw = false;
       companion.unwindAt = 0; /* the unwind branch turns it back front, the short way */
-      gesture.wheelXUntil = performance.now() + 120;
       pushArrivedRef.current(curWall());
       headingRef.current = null; /* landed; there is nowhere still to get to */
       /* `ground = null` STOOD HERE: you arrived in your own ground, always,
@@ -2621,54 +2609,34 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
      * moves exactly one column, and only begins from a vertical rest point —
      * never mid-sky. Reduced motion: an instant column switch.
      */
-    /**
-     * TRAVEL IS A THING YOU DO ABOVE THE GROUND.
-     *
-     * It used to be allowed from headquarters and from the field alike, back
-     * when every column carried a jar of its own and there was something
-     * different down there to travel to. There is one field now and it is the
-     * same field on every wall, so a sideways gesture in it would slide the
-     * world and change nothing — the definition of motion that explains no
-     * mechanism. So the field section refuses travel outright: no drag, no
-     * sideways wheel, no arrow keys, and no edge affordance is drawn there to
-     * offer one. Above it — headquarters and the sky — travel is unchanged.
-     */
-    function canTravelHere(): boolean {
-      /**
-       * SIDEWAYS IS FOR ROOMS, AND ROOMS ARE NOT OFFERED YET.
-       *
-       * Founder: "the moving left and right should only be used for changing
-       * rooms, which we're not offering at the moment so keep that code to
-       * move, but disable it."
-       *
-       * The axis was built for three kinds of neighbour — agents one way,
-       * rooms the other — and two of those three are gone from the product:
-       * rooms are set aside by ruling, and changing to your agent became a
-       * turn in place rather than a journey, because the creature is one
-       * companion with two faces rather than two creatures in two places.
-       * That left a whole degree of freedom whose only remaining destination
-       * was a wall you can already reach by pressing a face.
-       *
-       * So every USER-DRIVEN lateral gesture stops here: the drag, the
-       * sideways wheel, the arrow keys, and the edge affordance that offers
-       * them. `goToWall` is untouched and still carries the form change and
-       * any deep link — this gates the gestures, not the mechanism, which is
-       * the difference between disabling a thing and deleting it.
-       *
-       * ONE FLAG RATHER THAN FOUR DELETIONS, deliberately. The travel code is
-       * some of the most carefully tuned in the file — the sqrt duration, the
-       * companion's lead and yaw, the rubber-band, the crossing quantisation
-       * — and rooms will want every bit of it. Deleting it to re-derive it
-       * later is how the room form became unreachable code that nobody could
-       * safely remove. Flip this to `true` on the day rooms come back.
-       */
-      const ROOMS_ARE_OFFERED = false;
-      if (!ROOMS_ARE_OFFERED) return false;
-      if (cam.aiming) return false;
-      const atHQ = Math.abs(cam.y) < 2;
-      const atSky = hasSky(curWall().kind) && Math.abs(cam.y - view.layout.minCam) < 2;
-      return atHQ || atSky;
-    }
+    /* NOBODY TRAVELS SIDEWAYS BY GESTURE ANY MORE, so there is no longer a
+       `canTravelHere()` to ask, nor a `travel(dir)` for it to gate.
+
+       Founder, when rooms were merely deferred: "the moving left and right
+       should only be used for changing rooms, which we're not offering at the
+       moment so keep that code to move, but disable it." That ruling bought a
+       flag -- `ROOMS_ARE_OFFERED = false` -- and kept the tuned travel code
+       behind it against the day rooms returned. Rooms have now been removed
+       from the product outright ("방 없애"), so the flag had one reachable
+       value forever and the code behind it could never run.
+
+       WHAT WENT: `canTravelHere()`, `travel(dir)` and its reversal, the
+       horizontal drag axis and its three handlers (move, release, cancel),
+       the sideways wheel accumulator, and the arrow keys' travel call.
+
+       WHAT STAYED, and this is the important half: `goToWall(col)` and the
+       whole `trip` choreography -- the sqrt duration, the companion's lead
+       and yaw, the crossing quantisation. Walls did NOT go away with rooms;
+       an agent still has its own wall, and `Home.tsx` calls `goToWall` in
+       three places to reach one. Programmatic travel is alive. What is gone
+       is the USER-DRIVEN lateral gesture, which is what the founder disabled
+       in the first place.
+
+       ONE BUG DIED HERE TOO. `travel()` checked `canTravelHere()` only AFTER
+       its reversal branch, and the arrow-key handler called `travel()`
+       without consulting the flag at all. So while a `goToWall` glide was in
+       flight, an arrow key still reversed it -- a user-driven lateral gesture
+       surviving the ruling that was supposed to have stopped it. */
 
     /*
      * `trip.ms` is how long THIS glide takes, and it is declared with the rest
@@ -2680,61 +2648,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     const travelSpanMs = (walls: number) =>
       TRAVEL_MS * Math.sqrt(Math.max(1, Math.abs(walls)));
 
-    function travel(dir: 1 | -1) {
-      if (cam.aiming) return;
-      if (trip.active) {
-        /* REVERSAL. The opposite key mid-flight retargets to the other end
-           of the segment — the character turns first (the turn IS the
-           acknowledgment) and leads back; being able to change your mind is
-           what kills the trapped feeling. The same direction stays ignored:
-           one column per gesture. */
-        if (dir === trip.dir) return;
-        const back = trip.dest === trip.col ? trip.col + dir : trip.col;
-        if (back < colLo() || back > colHi()) return;
-        loadWallRef.current(wallAt(back));
-        trip.dest = back;
-        trip.dir = dir;
-        cam.xTarget = back * view.w;
-        trip.fromX = cam.x;
-        trip.at = performance.now();
-        companion.from = companion.off;
-        companion.lead = dir * Math.min(view.w * TRAVEL_LEAD_X, 190);
-        companion.yawTarget = dir * (TAU / 4);
-        companion.unwindAt = 0;
-        trip.awaitingWake = false;
-        wake();
-        return;
-      }
-      if (!canTravelHere()) return;
-      const dest = trip.col + dir;
-      if (dest < colLo() || dest > colHi()) return;
-      if (selectedIdRef.current) release();
-      loadWallRef.current(wallAt(dest));
-      trip.awaitingWake = false;
-      trip.dest = dest;
-      trip.dir = dir;
-      cam.xTarget = dest * view.w;
-      cam.xBack = false;
-      gesture.leadOn = false; /* the travel choreography owns the lead now */
-      if (view.reduced) {
-        trip.col = dest;
-        cam.x = cam.xTarget;
-        companion.off = 0;
-        arriveColumn();
-        wake();
-        return;
-      }
-      trip.active = true;
-      trip.ms = TRAVEL_MS;
-      trip.at = performance.now();
-      trip.fromX = cam.x;
-      companion.lead = trip.dir * Math.min(view.w * TRAVEL_LEAD_X, 190);
-      companion.from = companion.off;
-      trip.yaw = true;
-      companion.yawTarget = trip.dir * (TAU / 4);
-      companion.unwindAt = 0;
-      wake();
-    }
 
     /* ---------------- the sky: where ambitions are still forming ----------------
        Section S is one viewport ABOVE headquarters. Its inhabitants are the
@@ -5279,7 +5192,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       gesture.lastX = e.clientX;
       gesture.downT = gesture.lastT = performance.now();
       cam.vel = 0;
-      gesture.velX = 0;
       /* Interrupting a camera move is always legal — a camera is a position
          and a velocity, and nothing about one is half-rendered. But the layout
          still owes you a resting place: this used to strand the camera
@@ -5435,63 +5347,22 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         /* the finger is moving the world now, not touching a memory: the
            contact light lets go the moment the gesture changes its mind */
         gesture.pressId = null;
-        /* The gesture picks its axis ONCE. Sideways on the ground is travel
-           (v8) — allowed only from a vertical rest point, never mid-sky, and
-           only when a neighbouring column exists to go to. */
-        const horiz = Math.abs(e.clientX - gesture.downX) > Math.abs(e.clientY - gesture.downY);
-        gesture.axis =
-          horiz && canTravelHere() && wallsRef.current.length > 1 && !trip.active
-            ? 2
-            : 1;
+        /* THE GESTURE NO LONGER HAS A SIDEWAYS AXIS. It used to pick between
+           travel (2) and the vertical drag (1) on the first movement; travel
+           was for crossing to another room and there are no rooms, so axis 2
+           has no handler left and the choice has one outcome. */
+        gesture.axis = 1;
       }
       /* The pointer's vertical travel is still TRACKED — the gesture router
          below compares it against the horizontal to decide whether this drag
          is a wall crossing — it just no longer moves the camera. */
       gesture.lastY = e.clientY;
-      const dxm = e.clientX - gesture.lastX;
       gesture.lastX = e.clientX;
       if (!gesture.dragging) return;
       const nowT = performance.now();
       /* Four milliseconds, not one. A coalesced three-pixel jitter over a
          floored 1ms reports three thousand pixels a second — a phantom flick
          six times over the threshold, and the snap now CONSUMES this number. */
-      const dts = Math.max(nowT - gesture.lastT, 4) / 1000;
-      if (gesture.axis === 2) {
-        /* The room slides only part-way under a finger — commitment is on
-           release, and the TRAVELER leads the actual transition. Pulling
-           where no neighbour exists meets heavy resistance instead. */
-        const off = -(e.clientX - gesture.downX);
-        const hasNext = trip.col + 1 <= colHi();
-        const hasPrev = trip.col - 1 >= colLo();
-        const resist = (off > 0 && !hasNext) || (off < 0 && !hasPrev) ? 0.16 : 0.55;
-        cam.x = trip.col * view.w + clamp(off * resist, -view.w * 0.32, view.w * 0.32);
-        cam.xBack = false;
-        if (!view.reduced) gesture.velX = lerp(gesture.velX, dxm / dts, kd(EASE_VEL, dts));
-        /* THE COMPANION SETS OFF WITH THE DRAG: from the first centimetres
-           it turns toward the pull and starts walking — leading by the
-           fraction of the commit distance dragged. Reduced motion: parked. */
-        if (!view.reduced) {
-          gesture.leadOn = true;
-          const disp = cam.x - trip.col * view.w;
-          gesture.leadTarget = clamp(disp / (view.w * 0.14), -1, 1) * DRAG_LEAD_PX;
-          if (Math.abs(gesture.leadTarget) > 4) {
-            trip.yaw = true;
-            companion.yawTarget = (gesture.leadTarget > 0 ? 1 : -1) * (TAU / 4);
-            companion.unwindAt = 0;
-          }
-        }
-        /* A ROOM WAS PREFETCHED FROM 20px OF DRAG. Travel toward a room began
-           at swipe start, not at commit, so the board and ground were in
-           flight while the glide was still deciding whether to happen — the
-           same "already there when you arrive" ruling the company's alpha
-           obeyed. `loadWallRef` keeps the idea for the walls that remain; what
-           went is the room-only branch and the `groupsRef[col-1]` indexing
-           that translated a column into a room, an axis that is now agents
-           then you and holds no rooms to index. */
-        gesture.lastT = nowT;
-        wake();
-        return;
-      }
       /* AND NOT BY DRAG EITHER. Same ruling as the wheel: there is nowhere
          above or below to go, so dragging the world vertically only carried
          the reading off the screen. The inertia goes with it — velocity that
@@ -5510,36 +5381,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       releaseOwner(e.pointerId);
       if (!gesture.down) return;
       gesture.down = false;
-      if (gesture.axis === 2) {
-        /* completing a swipe: velocity-biased, one column per gesture. The
-           finger only pulled the room part-way — the companion now leads the
-           actual crossing, or the layout eases home uncommitted. */
-        const disp = cam.x - trip.col * view.w;
-        const dir: 1 | -1 =
-          Math.abs(gesture.velX) > FLICK ? (gesture.velX < 0 ? 1 : -1) : disp > 0 ? 1 : -1;
-        const dest = trip.col + dir;
-        const commit =
-          (Math.abs(gesture.velX) > FLICK || Math.abs(disp) > view.w * 0.14) &&
-          dest >= colLo() &&
-          dest <= colHi();
-        gesture.dragging = false;
-        gesture.axis = 0;
-        gesture.leadOn = false;
-        if (commit) travel(dir);
-        if (!trip.active && cam.x !== trip.col * view.w) {
-          /* uncommitted (or travel refused): ease home — never rest between */
-          cam.xTarget = trip.col * view.w;
-          cam.xBack = true;
-        }
-        if (!trip.active) {
-          /* it changed its mind with you: turns back and eases home while
-             the layout springs back under it */
-          trip.yaw = false;
-          companion.unwindAt = 0;
-        }
-        wake();
-        return;
-      }
       /* A TAP IS DECIDED ON RELEASE. Six pixels of MANHATTAN distance means a
          four-and-four thumb wobble latches a drag, and the else-branch then
          "snaps" a camera that never moved. What actually distinguishes a tap
@@ -5555,7 +5396,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          ago. */
       if (performance.now() - gesture.lastT > 80) {
         cam.vel = 0;
-        gesture.velX = 0;
       }
       if (wasTap && !isChrome(e.target)) {
         tap(e.clientX, e.clientY);
@@ -5574,20 +5414,13 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     const onCancel = (e: PointerEvent) => {
       if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
       gesture.pressId = null;
-      if (gesture.axis === 2) {
-        cam.xTarget = trip.col * view.w;
-        cam.xBack = true;
-        gesture.leadOn = false;
-        trip.yaw = false;
-        companion.unwindAt = 0;
-      } else if (gesture.dragging || gesture.interruptedSnap) {
+      if (gesture.dragging || gesture.interruptedSnap) {
         /* cancelled mid-drag, or cancelled on a press that had interrupted a
            move: either way the layout is owed a resting place */
         snapSection(0);
       }
       gesture.interruptedSnap = false;
       cam.vel = 0;
-      gesture.velX = 0;
       gesture.down = false;
       gesture.dragging = false;
       gesture.axis = 0;
@@ -5599,30 +5432,14 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       if (e.defaultPrevented || isNativeSurface(e.target)) return;
       e.preventDefault();
       if (trip.active) return; /* mid-travel the wheel waits */
-      const nowW = performance.now();
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.2) {
-        /* a sideways wheel gesture is travel too: same gates, one column per
-           gesture, and the companion still leads the crossing */
-        /* A MOMENTUM TAIL MUST NOT BANK THE NEXT CROSSING. A trackpad keeps
-           sending deltaX for the better part of a second after the fingers
-           have left it, and accumulating that through the lockout meant the
-           tail was already over threshold the instant the lockout lifted —
-           one gesture, two walls. What arrives during a lockout is the
-           previous gesture still ending: it is spent, not saved. */
-        if (nowW < gesture.wheelXUntil) {
-          gesture.wheelXAcc = 0;
-          return;
-        }
-        if (!canTravelHere() || wallsRef.current.length < 2) return;
-        gesture.wheelXAcc += e.deltaX;
-        if (Math.abs(gesture.wheelXAcc) > 70) {
-          const dir: 1 | -1 = gesture.wheelXAcc > 0 ? 1 : -1;
-          gesture.wheelXAcc = 0;
-          gesture.wheelXUntil = nowW + 450;
-          travel(dir);
-        }
-        return;
-      }
+      /* NO SIDEWAYS TRAVEL BY WHEEL. This branch used to accumulate deltaX
+         and cross a wall per gesture, with a lockout so a trackpad momentum
+         tail could not bank the next crossing. The destination was another
+         room, and rooms are gone, so the accumulator, the 70px threshold and
+         the 450ms lockout went with the crossing they served. The gesture is
+         swallowed rather than passed on: a sideways flick over the world must
+         not scroll the page behind it. */
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.2) return;
       /* NO VERTICAL TRAVEL BY GESTURE (founder ruling, asked for repeatedly).
          The wheel used to drive `cam.y` between the sky and the ground, which
          is how a person reached their principles and their archive. Both are
@@ -5634,7 +5451,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          and the panels that live in those bands — a principle being edited,
          a memory's own card — are reached that way. What is removed is the
          gesture, not the geometry. */
-      gesture.wheelXAcc = 0;
     };
     const onKey = (e: KeyboardEvent) => {
       // This guard precedes ALL shortcuts, including slash. Editors and IME
@@ -5676,16 +5492,15 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         if (selectedIdRef.current) release();
         return;
       }
-      /* Left and right are the traveler's keys — they pass through even
-         mid-flight, because travel() itself ignores the same direction and
-         treats the opposite one as a REVERSAL back to where it left from.
-         UNLESS A CARD IS OPEN: then they page the reading (founder,
-         2026-08-27), because the memory in your hand is the nearer subject
-         and stepping through what you kept must not become travelling to
-         somebody else's wall. */
+      /* Left and right PAGE AN OPEN READING, and do nothing else.
+         They used to also travel sideways between walls. Founder:
+         "the moving left and right should only be used for changing
+         rooms" -- and rooms are gone, so the destination is gone with
+         them. Paging the reading in your hand is the whole remaining
+         job (founder, 2026-08-27): stepping through what you kept must
+         not become travelling to somebody else's wall. */
       if (horiz) {
-        if (panelArrowRef.current(e.key === "ArrowRight" ? 1 : -1)) return;
-        travel(e.key === "ArrowRight" ? 1 : -1);
+        panelArrowRef.current(e.key === "ArrowRight" ? 1 : -1);
         return;
       }
       /* The vertical keys are ALLOWED during a horizontal travel: the axes
@@ -6129,7 +5944,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         cam.vel = 0;
         aimTo(view.layout.maxCam, 0);
       },
-      travel,
       /**
        * A reflection was kept. This is not a celebration animation: one more
        * answered reflection and a touch just now are exactly what the real
