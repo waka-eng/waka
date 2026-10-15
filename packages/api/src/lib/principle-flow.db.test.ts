@@ -329,10 +329,16 @@ describe("principles across personal profiles", () => {
        assertion vacuous: the view is assembled from evidence rows, and the
        bug it guards against is a join that reaches through to
        `inspirations.text` on the way to a statement. */
-    await material(owner, [owner]);
-    await refreshPrinciplesForProfile({ profileId: owner }, { db: t.db as never, modelProvider: provider });
-    const views = await loadPrincipleViews(t.db as never, owner);
-    expect(views.length).toBeGreaterThan(0);
+    /* A FRESH PROFILE, not the shared `owner`. `material()` lands a live
+       top-of-mind, and `owner` already has one from the case above, so
+       reusing it trips `top_of_minds_one_live_per_profile_idx` -- which is
+       the constraint doing its job, not a bug in the subject. The sibling
+       case below seats itself the same way. */
+    const profileId = await person();
+    await material(profileId, [profileId]);
+    await refreshPrinciplesForProfile({ profileId }, { db: t.db as never, modelProvider: provider });
+    const views = await loadPrincipleViews(t.db as never, profileId);
+    expect(views.length, "no principle was served, so the assertion below would pass on an empty page").toBeGreaterThan(0);
     expect(JSON.stringify(views)).not.toContain("PRIVATE RAW TEXT MUST NEVER LEAVE");
     expect(renderPrinciplesMarkdown({ name: 'Test', type: 'human' }, views, new Date()))
       .not.toContain("PRIVATE RAW TEXT MUST NEVER LEAVE");
