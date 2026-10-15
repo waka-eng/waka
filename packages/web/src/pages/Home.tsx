@@ -304,6 +304,10 @@ const DIAL_STOPS = 10;
    a late answer to a question nobody is asking any more is not an answer. */
 let speechEpoch = 0;
 
+/* How long the creature will wait for the weather before saying its own
+   line. Short enough that a press never feels unanswered, long enough that
+   a healthy request answers first and nothing flickers. */
+const SPEAK_GRACE_MS = 220;
 /* HOW LONG THE CREATURE STAYS BRIGHT AFTER A PRESS. Long enough to cover the
    fetch on a normal connection, so the light and the sentence read as one
    event rather than two. */
@@ -1242,7 +1246,20 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      no words and opens no page; `charSay` is what arrives. */
   const [lit, setLit] = useState(false);
   const litTimer = useRef<number | null>(null);
-  useEffect(() => () => { if (litTimer.current !== null) window.clearTimeout(litTimer.current); }, []);
+  /* BOTH OF THE PRESS'S TIMERS, not just the glow's. A press starts two:
+     `litTimer` for the glow, and the grace timer in `sayTheWeather` that
+     speaks the local line if the weather is slow. Only the first was
+     cleared here, so a press followed by an unmount inside 220ms left one
+     pending — measured: exactly one survivor, writing `setCharSay` into a
+     page that has gone. React says nothing about it and the write is
+     invisible, so this is housekeeping rather than a bug; but this file
+     holds itself to clearing its press timers, and that has to mean all of
+     them or the rule is decoration. */
+  const graceTimer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (litTimer.current !== null) window.clearTimeout(litTimer.current);
+    if (graceTimer.current !== null) window.clearTimeout(graceTimer.current);
+  }, []);
   /** The loop's own fallback line, reachable from a press. Assigned inside
       the frame effect, where it is written. */
   const sayLineRef = useRef<(() => string) | null>(null);
@@ -3253,10 +3270,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     return true;
   }, [storageScope?.profileId]);
 
-/* How long the creature will wait for the weather before saying its own
-   line. Short enough that a press never feels unanswered, long enough that
-   a healthy request answers first and nothing flickers. */
-const SPEAK_GRACE_MS = 220;
 const AWAY_LONG_ENOUGH_MS = 30_000;
   useEffect(() => {
     let hiddenAt: number | null = null;
@@ -3384,7 +3397,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        the weather refines it when it lands. The epoch check inside keeps a
        stale press from speaking over a newer one. */
     const graced = window.setTimeout(() => { if (mine()) setCharSay(fallback()); }, SPEAK_GRACE_MS);
-    const settle = () => window.clearTimeout(graced);
+    graceTimer.current = graced;
+    const settle = () => { window.clearTimeout(graced); if (graceTimer.current === graced) graceTimer.current = null; };
     /* The wall says whose day this is. `atWallRef` rather than `atWall`
        because this callback is built once and must read the CURRENT wall,
        not the one that existed when it was made — the same reason every
