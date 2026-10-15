@@ -7,8 +7,8 @@
  * as a safety net, for the error paths a push cannot cover: a job whose
  * backoff outlived the invocation that failed it, a row still locked by a
  * worker that died, an enqueue whose wake-up call never landed.
- * A dev-only recovery event checks overdue work every fifteen minutes, taking
- * one normal pass of five claims after grace; daily and push drains remain.
+ * An explicitly invoked recovery event can inspect overdue work and take one
+ * normal pass of five claims after grace. No periodic recovery poll is deployed.
  *
  * Because no continuous poller drives normal work, this drains until the queue is *dry*
  * rather than running a single batch. The pipeline enqueues as it goes — a

@@ -431,15 +431,9 @@ export default $config({
       function: backgroundWorker.arn,
     });
 
-    // Dev recovery checks metadata at most 96 times/day, not every minute.
-    // Existing leases, due times, account budgets and daily sweep remain.
-    // The worker takes one normal pass of at most five claims when overdue.
-    new sst.aws.Cron("QueueRecovery", {
-      schedule: "rate(15 minutes)",
-      enabled: isDevelopmentDomain,
-      function: backgroundWorker.arn,
-      event: { mode: "recovery" },
-    });
+    // No idle queue polling: the former 15-minute recovery cron woke the
+    // serverless database 96 times/day. Enqueue wakes and the daily sweep
+    // above handle background work; recovery inspection is operator-invoked.
 
     // Console alarms exist without a notification recipient. An explicit SNS
     // topic is required before any alert is sent outside CloudWatch.
@@ -451,12 +445,11 @@ export default $config({
       for (const [name, metricName, comparisonOperator, threshold, treatMissingData] of [
         ["QueueOverdue", "OverdueJobs", "GreaterThanThreshold", 0, "notBreaching"],
         ["QueueExhausted", "ExhaustedLeases", "GreaterThanThreshold", 0, "notBreaching"],
-        ["QueueRecoveryMissing", "RecoveryChecks", "LessThanThreshold", 1, "breaching"],
       ] as const) {
         new aws.cloudwatch.MetricAlarm(name, {
           namespace: "WAKA/QueueRecovery", metricName, dimensions: { Stage: $app.stage },
           comparisonOperator, threshold, period: 900, evaluationPeriods: 2,
-          statistic: metricName === "RecoveryChecks" ? "Sum" : "Maximum", treatMissingData,
+          statistic: "Maximum", treatMissingData,
           alarmActions: topic ? [topic] : [], okActions: topic ? [topic] : [],
         });
       }

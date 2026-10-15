@@ -83,6 +83,7 @@ jobs:
           node scripts/dev-operations-audit.mjs > dev-operations.json
           node scripts/dev-source-policy.mjs > dev-source-policy.json
           node scripts/dev-alert-audit.mjs > dev-alerts.json
+          node scripts/dev-queue-schedule-audit.mjs > dev-queue-schedule.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -91,6 +92,7 @@ jobs:
             dev-operations.json
             dev-source-policy.json
             dev-alerts.json
+            dev-queue-schedule.json
           if-no-files-found: error
           retention-days: 7
   deploy:
@@ -197,6 +199,14 @@ jobs:
 
       - name: Deploy SST development stage
         run: pnpm sst deploy --stage "$SST_STAGE"
+
+      - name: Verify idle queue polling is absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          export WAKA_AUDIT_WORKER_FUNCTION="$(jq -er '.backgroundWorkerFunctionName' .sst/outputs.json)"
+          node scripts/dev-queue-schedule-audit.mjs
+          node scripts/dev-alert-audit.mjs
 
       - name: Verify deployed chat configuration
         shell: bash

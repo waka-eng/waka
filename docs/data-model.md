@@ -324,20 +324,22 @@ applied revision is a no-op. Existing statement history and human locks apply.
 
 ## Operational monitoring
 
-Queue recovery observes counts, not another memory layer. Dev's fifteen-minute
-check uses the claim predicate and a five-minute grace from `run_after` or the
-fifteen-minute lease expiry. It takes at most five overdue claims in one pass,
-retaining normal fairness, account budgets, request identities and attempt
-ceilings. It does not reenqueue jobs, reset attempts or bypass scheduled waits.
-The daily sweep and ordinary immediate wake-ups remain; production's schedule
-does not change. Exhausted stale leases are reported for operator intervention,
-not automatically revived.
+Normal queue work is pushed on enqueue, with bounded asynchronous redelivery
+and a daily safety sweep. The development fifteen-minute recovery timer was
+removed on 2026-10-15 because its idle queries repeatedly woke the serverless
+database. There is no periodic recovery heartbeat or missing-heartbeat alarm.
 
-Raw JSON metrics contain stage-level overdue counts, oldest overdue age,
-exhausted leases and a recovery heartbeat. Dev console alarms watch backlog,
-exhausted work and two missing heartbeat periods. Notifications require an
-explicit SNS topic; no recipient is inferred from account data. The idle cost
-is up to 96 metadata checks per day plus custom metrics and alarms.
+An explicitly invoked recovery inspection can still use the claim predicate
+and a five-minute grace from `run_after` or lease expiry. It takes at most five
+overdue claims in one pass, retaining fairness, account budgets, request
+identities and attempt ceilings. Exhausted stale leases are reported for
+operator intervention rather than automatically revived.
+
+An inspection emits stage-level overdue counts, oldest overdue age, exhausted
+leases and a check count. The two passive backlog/exhausted-work alarms do not
+query the database and treat missing samples as non-breaching. Notifications
+require an explicit SNS topic. The development deployment verifies through
+EventBridge reads that the worker's daily sweep is its only scheduled trigger.
 
 Model transports emit numeric attempt, token and billing metadata without
 prompts, responses, vectors, credentials or account IDs. OpenRouter's returned
