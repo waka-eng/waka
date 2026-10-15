@@ -1361,7 +1361,12 @@ body .login-shell .login-footer {
 .jar-search-results button:hover { background: var(--w-raised); }
 .jar-search-results span { display: block; line-height: 1.5; overflow-wrap: anywhere; }
 .jar-search-results small { display: block; margin-top: var(--sp-4); color: var(--w-muted); font-size: var(--t-ui); }
-.jar-panel-head { grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--sp-8); }
+/* TWO TRACKS, NOT THREE. The third was `.jar-panel-vis`, the Private/Public
+   pair, deleted 2026-10-12. The 600px rule below was corrected at the time and
+   this one was not, so above 601px the row kept a 0px third column AND ITS 8px
+   GAP: the copy-link stopped 8px short of the content edge while the card's
+   foot sat flush. A dead track is invisible; its gap is not. */
+.jar-panel-head { grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-8); }
 .jar-panel-when { min-width:0; overflow-wrap:anywhere; }
 .jar-audience-note { color:var(--w-muted); font-size:var(--t-ui); line-height:1.5; margin:var(--sp-8) 0; }
 .jar-composer-footer > .jar-audience-note { flex-basis:100%; margin-bottom:0; }

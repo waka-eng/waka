@@ -1311,6 +1311,16 @@ export interface GroupProposalToApply {
  * that no longer exists is skipped and not counted: its target left before
  * the decision could land, and inventing a place for it would be worse.
  */
+/* NOTHING CAN WRITE A NEW PROPOSAL ANY MORE. This still reads
+   `group_top_of_mind_proposals`, and the rows already in that table are still
+   applied, but `routes/groups-proposals.ts` was deleted with the rest of the
+   room doors on 2026-10-15 and it was the only writer. So this is a
+   read-only consumer of a table whose contents can now only shrink.
+
+   It is kept, not removed, for the same reason the engine is: the rows exist,
+   and a room mind that refreshes should still honour a proposal somebody made
+   while the door was open. Worth a decision rather than a silent assumption —
+   if those rows are ever cleared, this can go with them. */
 export function applyGroupProposals(
   carried: GroupCarriedEntry[],
   proposals: GroupProposalToApply[],

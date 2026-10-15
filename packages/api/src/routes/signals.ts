@@ -37,7 +37,6 @@ import {
   signalEvidence,
   signalReviewEvidence,
   reviewAnswers,
-  signalShares,
   signalContradictions,
   signalStatusValues,
   signals,
@@ -172,7 +171,12 @@ export interface SignalSummary {
   /** The side that gave way when its owner settled a pair — a state read
       off the resolution, never a deletion. */
   yielded: boolean;
-  sharedGroupIds: string[];
+  /* `sharedGroupIds` LEFT THIS SHAPE on 2026-10-15. It listed the rooms a
+     signal had been shared into, and it cost a `signal_shares` query on every
+     signals read. The web client stopped reading it when rooms came out
+     ("방 없애") and no other client ever did, so the server was paying for a
+     join to serialise a field nobody looked at. `signal_shares` is untouched
+     and still holds every row it ever had. */
   createdAt: string;
 }
 
@@ -251,12 +255,8 @@ async function decorateSignals(
   if (rows.length === 0) return [];
   const ids = rows.map((row) => row.id);
 
-  const [evidenceSnapshot, shareRows, pairRows, verdictRows] = await Promise.all([
+  const [evidenceSnapshot, pairRows, verdictRows] = await Promise.all([
     loadSignalEvidence(db,ownerProfileId,ids),
-    db
-      .select({ signalId: signalShares.signalId, groupId: signalShares.groupId })
-      .from(signalShares)
-      .where(inArray(signalShares.signalId, ids)),
     db
       .select({
         aSignalId: signalContradictions.aSignalId,
@@ -331,13 +331,6 @@ async function decorateSignals(
   const countBySignal = new Map(
     [...evidenceBySignal.entries()].map(([id, list]) => [id, list.length]),
   );
-  const groupsBySignal = new Map<string, string[]>();
-  for (const row of shareRows) {
-    const bucket = groupsBySignal.get(row.signalId);
-    if (bucket) bucket.push(row.groupId);
-    else groupsBySignal.set(row.signalId, [row.groupId]);
-  }
-
   // The SQL pre-sort used the stored snapshots; live values decay
   // independently, so restore the promised order before serializing.
   const ordered = [...rows].sort((a, b) => {
@@ -364,7 +357,6 @@ async function decorateSignals(
     dismissed: row.dismissedAt !== null,
     contested: contestedIds.has(row.id),
     yielded: yieldedIds.has(row.id),
-    sharedGroupIds: groupsBySignal.get(row.id) ?? [],
     createdAt: row.createdAt.toISOString(),
   }));
 }

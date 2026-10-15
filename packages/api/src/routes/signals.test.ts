@@ -52,7 +52,6 @@ const summary: SignalSummary = {
   dismissed: false,
   contested: false,
   yielded: false,
-  sharedGroupIds: [groupId],
   createdAt: "2026-05-01T10:00:00.000Z",
 };
 
@@ -123,7 +122,6 @@ describe("GET /api/signals", () => {
           dismissed: false,
           contested: false,
           yielded: false,
-          sharedGroupIds: [groupId],
           createdAt: "2026-05-01T10:00:00.000Z",
         },
       ],

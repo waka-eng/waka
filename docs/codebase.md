@@ -22,7 +22,6 @@ part assumed.**
 13,663  packages/web/src/pages/Home.tsx     the entire product, one file
  3,043  packages/web/src/styles/global.css   tokens --ink / --rule / --paper
  1,755  packages/web/src/styles/home.css    tokens --jar-*
- 1,710  packages/api/src/routes/groups.ts
  1,684  packages/web/src/lib/api.ts
  1,098  packages/web/src/styles/chrome.css  tokens --w-*, repoints main's
 ```
@@ -65,7 +64,7 @@ Almost all of it lands in two files and their satellites:
 | `packages/web/src/pages/Home.tsx` | 13,600 | the entire product surface |
 | `packages/web/src/styles/home.css` | 1,755 | the world's appearance |
 | `packages/web/src/styles/chrome.css` | 1,098 | the flat screens in the world's light |
-| `packages/api/src/routes/groups.ts` | +174 | rooms: the field, the majority rule |
+| ~~`packages/api/src/routes/groups.ts`~~ | — | rooms: DELETED 2026-10-15 with the rest of the room routes |
 | `packages/web/src/lib/world-data.ts` | 406 | the one canon↔world translation |
 | `packages/api/src/routes/feedback.ts` | +100 | who may answer whose statement |
 

@@ -169,8 +169,10 @@ describe('source writes and their durable learning request', () => {
     expect(after.statement).toBe('Our edited direction');
     expect(after.unsupported_at).not.toBeNull();
     const jobs = await t.sql`SELECT type FROM background_jobs`;
-    expect(jobs.some((row) => row.type === 'derive_signals')).toBe(false);
-    expect(jobs.some((row) => row.type === 'refresh_top_of_mind')).toBe(true);
+    /* EXACT, not `some`. The room used to make this count two, and dropping to
+       `some` to survive that lost the count entirely — an unexpected third job
+       would have passed. One job is the whole claim now. */
+    expect(jobs.map((row) => row.type)).toEqual(['refresh_top_of_mind']);
   });
 
   it('enrichment cache and the derivation job it provokes commit together', async () => {

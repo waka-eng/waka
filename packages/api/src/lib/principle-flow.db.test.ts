@@ -338,9 +338,30 @@ describe("principles across personal profiles", () => {
      only ever mattered because a room let OTHER PEOPLE read a surface built
      from your captures. With the room gone the reader and the owner are the
      same person, and a personal principle serving its owner's own statements
-     is covered by "serves no principle whose material a reader may not see"
-     elsewhere in this suite. What genuinely goes is the cross-member case,
-     and it goes because there are no longer two members.
+     is covered elsewhere in this suite.
+
+     CORRECTION (2026-10-15), in two steps, because the first was also wrong.
+     The note originally claimed coverage by a test called "serves no
+     principle whose material a reader may not see". NO SUCH TEST EXISTED —
+     the name was a promise, not a reference, and the fixture's "PRIVATE RAW
+     TEXT MUST NEVER LEAVE" string had nothing reading it back. So I wrote
+     one. IT FAILED, and it deserved to: a personal principle view
+     DELIBERATELY carries the owner's own captures as
+     `citedSignals[].examples[].text`, scoped by `i.profile_id = profileId`
+     in `loadPrincipleViews`. The owner reading their own words is the
+     feature, not a leak.
+
+     SO THE PRIVACY HALF HAS NO PERSONAL ANALOGUE, and claiming otherwise was
+     the error in both directions. The deleted assertion was about OTHER
+     PEOPLE reading a surface built from your captures — a property that
+     needs two members to even be stated. There are no longer two members, so
+     it goes with the cross-member case rather than being reworded into a
+     personal one that would have to assert the opposite of the design.
+
+     WHAT STILL GUARDS IT if rooms ever return: the scoping predicate itself,
+     `i.profile_id = profileId`. That is the line to write a test against on
+     the day a second reader exists. The fixture keeps the shouty string so
+     the next person has the trap ready to arm.
 
      The trailing block that renewed `other`'s support through the real
      `reviewSignalSupport` / `applySignalSupportReview` writers went with it:

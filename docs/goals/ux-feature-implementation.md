@@ -159,7 +159,10 @@ release journey remain required; these increments are not completion of D or E2.
   its disposable schema, and reran using a separate simulated-user connection.
   API typecheck, report-script typecheck, migration check and diff check pass.
   API unit suite: 654 passed, 3 paid/live benches skipped. No live model calls.
-- C1 impact tooling: `pnpm report:group-input-impact --group-id <uuid>`
+- C1 impact tooling: REMOVED with rooms (2026-10-15). `pnpm
+  report:group-input-impact` and the script behind it are gone; the group
+  tables it read are still there, so a successor could be written if the
+  numbers are ever wanted again.
   (`tools/ops/report-group-input-impact.ts`)
   requires an explicit connection URL and group ID; emits only IDs/counts and
   uncertainty, inside a repeatable-read/read-only transaction. The fixture
