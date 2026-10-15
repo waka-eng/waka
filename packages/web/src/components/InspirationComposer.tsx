@@ -203,7 +203,7 @@ function MediaPreview({ item, recording = false, label }: { item: InspirationDra
   return null;
 }
 export function InspirationComposer(props: {
-  text: string; media: InspirationDraftMedia[]; locale: SupportedLocale; public: boolean;
+  text: string; media: InspirationDraftMedia[]; locale: SupportedLocale;
   linkText: string; onLinkText: (value:string)=>void;
   ready: boolean; fileDraftsAvailable: boolean; busy: boolean; error: string; uploadingId: string | null;
   save: ReturnType<typeof useAuthoredSave>; recording: ReturnType<typeof useAudioRecording>;
@@ -214,7 +214,7 @@ export function InspirationComposer(props: {
   recordingCandidate?: InspirationDraftMedia | null; onChooseRecording: (useNew: boolean) => void;
   onText: (text: string, caret: number) => void; onFiles: (files: File[]) => void;
   onRetryFile: (id: string) => void;
-  onRemove: (id: string) => void; onVisibility: (value: boolean) => void;
+  onRemove: (id: string) => void;
   /* `onPast` IS GONE, AND IT WAS NEVER CALLED. It was the chevron's — "the
      archive this note is about to join" — and the chevron went three
      rounds of being made quieter before the founder removed it outright:

@@ -120,7 +120,6 @@ vi.mock("../src/lib/auth-context", async (importOriginal) => {
 
 /** The key the choice is remembered under. Named once, asserted everywhere. */
 const SCOPE = { accountId: "account-1", profileId: VIEWER_ID };
-const KEY = profileStorageKey(SCOPE, "keepPublic")!;
 const DRAFT_KEY = profileStorageKey(SCOPE, "draft")!;
 
 let layout: MountedWorld | undefined;
@@ -257,7 +256,6 @@ describe("the capture remembers where it last went", () => {
   });
   it("does not assign an unscoped draft or sharing choice to the next account", async () => {
     window.localStorage.setItem("waka.draft", "an unattributed private draft");
-    window.localStorage.setItem("waka.keepPublic", "1");
     layout = await mountWorld(FACTS);
     expect(layout.container.querySelector("textarea")?.value ?? "").not.toContain("an unattributed private draft");
     expect(window.localStorage.getItem("waka.draft")).toBe("an unattributed private draft");
@@ -283,29 +281,23 @@ describe("the capture remembers where it last went", () => {
     expect(window.localStorage.getItem(otherDraftKey)).toBe("a separate account's draft");
   });
 
-  /* THREE CASES ABOUT THE REMEMBERED AUDIENCE STOOD HERE — "starts private
-     when nothing has ever been said", "opens on public when public is what
-     was chosen last", "writes the choice down, and takes it back the same
-     way". All three drove a control that no longer exists.
+  /* ═══ THE SHARING WIRING IS GONE NOW TOO ══════════════════════════════
+     This paragraph used to say the opposite, and the reversal is the point:
+     "THE STORAGE KEY AND ITS STATE HAVE NOT BEEN RIPPED OUT, deliberately —
+     `keepPublic` still rides on every save and the world still reads the
+     key, so if sharing comes back it comes back to a working default rather
+     than to a rewrite. What is gone is the surface that asked."
 
-     THE STORAGE KEY AND ITS STATE HAVE NOT BEEN RIPPED OUT, deliberately:
-     `keepPublic` still rides on every save and the world still reads the key,
-     so if sharing comes back it comes back to a working default rather than
-     to a rewrite. What is gone is the surface that asked. The case below
-     keeps that wiring honest — a remembered `public` still reaches the
-     server — which is the one assertion that does not depend on a control. */
+     That was a reasonable call when only the CONTROL had been removed. The
+     founder has since ruled on the concept rather than the control:
+     "everything regarding public and private should also not be a thing in
+     this new experience." Keeping a frozen value that silently decided the
+     audience of every save is exactly what that sentence forbids.
 
-  it("still stands on public after the memory is kept", async () => {
-    /* THE REGRESSION THIS FILE EXISTS FOR. `setKeepPublic(false)` stood in
-       the success path of the keep, so the choice survived exactly one
-       capture — which is the founder's report word for word. */
-    window.localStorage.setItem(KEY, "1");
-    await worldWithTheMouthOpen();
-    await press(/^save inspiration$/i);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(kept.map((k) => k.visibility)).toEqual(["public"]);
-    expect(window.localStorage.getItem(KEY)).toBe("1");
-  });
+     AND IT WAS NOT A WORKING DEFAULT. `setKeepPublic` was handed to the
+     composer as `onVisibility`, which the composer declares and never
+     calls, so nothing in the product could change the value — the case
+     below could only seed `localStorage` by hand to make it true. A test
+     that reaches past every door to set a flag is testing the flag, not the
+     product. The capability is removed, so the case goes with it. */
 });

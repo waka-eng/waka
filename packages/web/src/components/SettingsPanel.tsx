@@ -52,8 +52,29 @@
  *
  * The things a person changes about themselves, in the order they change
  * them: what they are called, what language they are read in, the agents
- * they keep, whether there is a public page, how to leave, and how to
- * erase the account. Six, where there were eleven.
+ * they keep, how to leave, and how to erase the account. Five, where there
+ * were eleven.
+ *
+ * ── AND THE PUBLIC PAGE WENT TOO (2026-10-12) ───────────────────────────
+ *
+ * Founder: "everything regarding public and private should also not be a
+ * thing in this new experience."
+ *
+ * A handle field and two checkboxes stood here — "Enable public profile"
+ * and "Show top-of-mind notes publicly" — and they were the ONLY way in the
+ * product to switch either flag on. They are gone, which closes the door
+ * without touching what is behind it: `profiles.public_handle` and the two
+ * booleans still hold what anybody already chose, `PATCH /auth/me/profile`
+ * still MERGES all three rather than replacing them (so a rename still
+ * cannot clear a handle, which a security review tested by name), and
+ * `/@handle` still answers for a profile whose flag is already true.
+ *
+ * SO THIS IS REVERSIBLE AND THE NEXT STEP IS NOT. Deleting the columns
+ * would destroy a handle somebody picked; removing the control only means
+ * nobody can pick a new one. If the decision is ever that the public page
+ * itself goes, that is a separate change to `pages/PublicProfile.tsx`, the
+ * `/:handle` route, and `routes/public-profiles.ts` — and it should be
+ * made deliberately, because links to those pages are already in the world.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -80,13 +101,6 @@ export interface SettingsPanelProps {
   busy: boolean;
   /** True when the last write was refused; silence is the success state. */
   failed: boolean;
-  /** The public page's current settings, and a way to change them. */
-  publicPage: {
-    handle: string;
-    profileEnabled: boolean;
-    topOfMindEnabled: boolean;
-    save: (next: { handle: string; profileEnabled: boolean; topOfMindEnabled: boolean }) => Promise<void>;
-  };
   onSignOut: () => void;
   onDeleteAccount: () => Promise<void>;
   /** Called after any press that should put the panel away. */
@@ -94,7 +108,7 @@ export interface SettingsPanelProps {
 }
 
 /** Which group is expanded. One at a time: this is a panel, not a page. */
-type Open = null | "agents" | "public" | "danger";
+type Open = null | "agents" | "danger";
 
 export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(props.locale, key), [props.locale]);
@@ -140,11 +154,6 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const [handle, setHandle] = useState(props.publicPage.handle);
-  const [onPage, setOnPage] = useState(props.publicPage.profileEnabled);
-  const [onReading, setOnReading] = useState(props.publicPage.topOfMindEnabled);
-  const [publicBusy, setPublicBusy] = useState(false);
-
   return (
     <div className="waka-settings" role="group" aria-label={say("worldSettingsOpen")}>
       {/* WHO THIS IS. Not editable, and not a field: the address identifies
@@ -172,10 +181,12 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
         <span className="waka-account-failed" role="alert">{say("profileSaveError")}</span>
       ) : null}
 
-      {/* ═══ THREE DISCLOSURES, ONE OPEN AT A TIME ════════════════════════
+      {/* ═══ TWO DISCLOSURES, ONE OPEN AT A TIME ══════════════════════════
           Everything below is something a person does rarely and reads
-          carefully. Laying all three out would make this panel a page
-          again, which is the thing being removed. */}
+          carefully. Laying both out would make this panel a page again,
+          which is the thing being removed. It said THREE until the public
+          page left; the count is in the comment because the comment is what
+          a reader checks the markup against. */}
       <Group id="agents" open={open} setOpen={setOpen} label={say("profileMemoriesTitle")}>
         {agentTrouble ? <span className="waka-account-failed" role="alert">{agentTrouble}</span> : null}
         {agents === null ? (
@@ -223,34 +234,6 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             {say("profileMemoryCreate")}
           </button>
         </div>
-      </Group>
-
-      <Group id="public" open={open} setOpen={setOpen} label={say("profilePublicTitle")}>
-        <p className="waka-settings-note">{say("profilePublicPrivacyHint")}</p>
-        <label className="waka-account-field">
-          <span>{say("profilePublicHandle")}</span>
-          <input type="text" value={handle} disabled={publicBusy} autoComplete="off"
-            onChange={(event) => setHandle(event.currentTarget.value)} />
-        </label>
-        <label className="waka-settings-toggle">
-          <input type="checkbox" checked={onPage} disabled={publicBusy}
-            onChange={(event) => setOnPage(event.currentTarget.checked)} />
-          <span>{say("profilePublicEnabled")}</span>
-        </label>
-        <label className="waka-settings-toggle">
-          <input type="checkbox" checked={onReading} disabled={publicBusy}
-            onChange={(event) => setOnReading(event.currentTarget.checked)} />
-          <span>{say("profilePublicTopOfMindEnabled")}</span>
-        </label>
-        <button type="button" className="waka-settings-keep" disabled={publicBusy}
-          onClick={() => {
-            setPublicBusy(true);
-            void props.publicPage
-              .save({ handle: handle.trim(), profileEnabled: onPage, topOfMindEnabled: onReading })
-              .finally(() => { if (alive.current) setPublicBusy(false); });
-          }}>
-          {say(publicBusy ? "profileSaving" : "worldSave")}
-        </button>
       </Group>
 
       <button type="button" className="waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
