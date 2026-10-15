@@ -18,7 +18,7 @@
  *   public-profiles.ts           public-profiles.ts  /api/public/profiles
  *   http.ts                      —  the fetch wrapper they all share
  *
- * FIVE ROWS CAME OUT OF THAT TABLE and are listed here rather than silently
+ * SIX ROWS CAME OUT OF THAT TABLE and are listed here rather than silently
  * dropped, because the table is the one place the two sides of the wire are
  * written down together and a reader needs to know these were removed, not
  * forgotten: `sessions.ts`, `keeper-keys.ts`, `agent-grants.ts` and
@@ -33,6 +33,15 @@
  * and could not be edited from that change; it was deleted on 2026-10-15
  * when the loop's group branches came out. There is no `./groups` below any
  * more, and no row in the table above, because there is no route.
+ *
+ * AND `agents.ts` / `/api/agent-keys`, the same day. The whole file went:
+ * the agent-key client -- `fetchAgentKeys`, `createAgentKey`,
+ * `revokeAgentKey` -- plus three graph types, every one with zero callers
+ * once the settings panel's key section came out with the rooms cut.
+ * Unlike `groups.ts` there is nothing left to re-export, so the row is
+ * simply gone. THE ROUTES STAND, and that is deliberate: `DELETE
+ * /api/agent-keys/:id` is the only way to retire the rows minted while
+ * the secret was displayed, so it outlives its client.
  *
  * A TABLE THAT NAMES A DELETED FILE IS WORSE THAN NO TABLE, which is why
  * this is a fix and not a tidy-up: the rows survived the deletion of the
@@ -79,7 +88,6 @@ export * from "./claims";
 export * from "./inspiration-days";
 export * from "./principles";
 export * from "./top-of-mind";
-export * from "./agents";
 export * from "./feedback";
 export * from "./public-profiles";
 export * from "./weather";
