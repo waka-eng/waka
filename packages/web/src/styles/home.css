@@ -998,16 +998,9 @@
   color: var(--jar-muted);
   font-size: var(--t-ui);
 }
-.jar-share-note {
-  margin: var(--sp-8) 0 0;
-  font-size: var(--t-meta);
-  /* READABLE, NOT DECORATIVE. `--jar-faint` measures 2.3:1 on this ground —
-     not dimmer prose, prose you cannot read. `--jar-muted` is 5.5:1 and still
-     plainly quieter than the ink beside it. Same correction as the disabled
-     controls: the ratio is the test, not "looks secondary". */
-  color: var(--jar-muted);
-  max-width: 34ch;
-}
+/* `.jar-share-note` WENT on 2026-10-15 with its only wearer, the line under
+   the agent-naming dialog that said an agent writes its own wall once. That
+   dialog was deleted for being unopenable. Kept nowhere else. */
 
 /* Making or joining a room. A real form, so it is real DOM over the world —
    typed text, an error line and a submit all have to reflow and take focus,
@@ -2491,28 +2484,12 @@
   overflow-y: auto;
 }
 
-/* WHAT REFUSED, BESIDE THE WORD THAT REFUSED.
-   Its own line rather than trailing the verb: three of the four sentences it
-   carries are a whole clause plus a status ("You are still in this room — the
-   server said no (500): …"), and inline they wrapped around the verb and made
-   the verb itself hard to find again — which is the one thing a person needs
-   after reading it, because pressing again is the whole recovery.
-
-   `--jar-muted` and not `--jar-faint`: `jar-panel-warn` is faint because it
-   sits alone in a small card where nothing competes with it, and this sits in
-   a panel with a roll of members and four verbs, where faint is what the
-   furniture already is. One step up the SAME channel — the founder law is that
-   light is the only meaning channel, so a warning earns brightness, not a hue
-   of its own. (The first draft of this rule reached for a `--jar-warm` that
-   does not exist in the palette at all.) */
-.jar-settings-warn {
-  display: block;
-  width: 100%;
-  margin: 0 0 var(--sp-4);
-  font-size: var(--t-meta);
-  line-height: 1.5;
-  color: var(--jar-muted);
-}
+/* `.jar-settings-warn` WENT on 2026-10-15 with its only wearer, the trouble
+   line inside the agent-naming dialog. Note for anyone reading the comments
+   that cite it: `SettingsPanel` has its own trouble line and it wears
+   `waka-account-failed`, not this. The brightness argument above it is worth
+   keeping in mind if a warning line is ever written again — a warning earns
+   brightness on the one channel, never a hue of its own. */
 
 /* THE SHEET HUNG FROM THE OTHER PILL UNTIL IT DIDN'T, and the rule outlived
    the design by long enough to become a lie. It read: "left is where you are,

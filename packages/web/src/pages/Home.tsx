@@ -662,7 +662,10 @@ interface PanelData {
    both of which went with rooms on 2026-10-12. CORRECTION (2026-10-15): this
    said `.jar-settings` "is still WORN — the search sheet and the composer's
    asks use the class". IT IS NOT. Both of those wear `.jar-seek`; no markup
-   in `src` carries the bare class, only `.jar-settings-warn`. Nothing
+   in `src` carries the bare class. (`.jar-settings-warn` was named here as
+   the surviving suffixed one; it has since been deleted with the dialog that
+   wore it — `SettingsPanel`'s own trouble line wears `waka-account-failed`.)
+   Nothing
    registers a dismissal against it either, so a list naming it here would
    have been a guard for no hook on a class with no wearer. */
 const KEEP_PROV = [".jar-prov-room", ".jar-panel"] as const;

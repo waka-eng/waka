@@ -86,15 +86,16 @@ const SHEETS: ReadonlyArray<{ file: string; what: string }> = [
      half-typed name and never opted in; and `space/settings/
      SpaceSettings.tsx`, a room's settings, which DID take press-away and
      had been unable to mount since 2026-10-09. Both files are deleted. */
-  /* THREE IN ONE FILE, so this is the one place the ledger counts rather
-     than naming: `Home.tsx` holds the memory card, the provenance room and
-     the agent's name sheet. One of the three takes press-away, and
+  /* TWO IN ONE FILE, so this is the one place the ledger counts rather
+     than naming: `Home.tsx` holds the memory card and the provenance room.
+     The agent's name sheet was the third until 2026-10-15, when it was
+     deleted for being unopenable. One of the two takes press-away, and
      splitting them apart here would mean identifying a JSX element by line
      number — the thing the note above refuses. It was FOUR until the join
      sheet went with rooms, and that sheet was one of the two covered ones.
      `Home.tsx`'s own split, when it comes, turns this row into named
      rows. */
-  { file: "pages/Home.tsx", what: "the memory card and the agent's name (neither), the provenance room (takes press-away)" },
+  { file: "pages/Home.tsx", what: "the memory card (does not), the provenance room (takes press-away)" },
 ];
 
 /** Every `<DialogSurface …>` opening tag in the tree, as file + whether it

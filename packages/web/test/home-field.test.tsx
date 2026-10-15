@@ -179,7 +179,8 @@ describe("native input inside the world", () => {
 
   /* `jar-roomform` AND `jar-settings` LEFT THIS LIST on 2026-10-15, with the
      two selectors themselves. No markup in `src` wears either bare class any
-     more — only the suffixed `.jar-roomform-box` and `.jar-settings-warn`,
+     more — only the suffixed `.jar-roomform-box` (and `.jar-settings-warn`, which
+     has since been deleted too),
      which `closest()` does not match. These two rows were therefore building
      a node with a class nothing renders and proving the product safe for a
      surface it does not have: the same fault this file already names, nine

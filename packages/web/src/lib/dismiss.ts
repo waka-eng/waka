@@ -10,7 +10,7 @@
  * zero in every component file, and a sheet added tomorrow gets Escape from
  * `DialogSurface` and nothing else. Counted on 2026-10-11: ten modal
  * `DialogSurface` call sites, three of them covered. Re-counted on
- * 2026-10-12, after rooms were removed (founder: "방 없애"): 7 modal call
+ * 2026-10-12, after rooms were removed (founder: "방 없애"): seven modal call
  * sites, ONE of them covered. The three that left were a room's settings
  * (`space/settings/SpaceSettings.tsx`, deleted), the room form
  * (`space-kinds/GroupPanel.tsx`, deleted) and the join sheet (`Home.tsx`).
