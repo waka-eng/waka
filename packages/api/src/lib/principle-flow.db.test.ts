@@ -315,6 +315,29 @@ describe("principles across personal profiles", () => {
     expect(row.statement).toBe("My own words");
   });
 
+  it("serves no principle whose material a reader may not see", async () => {
+    /* THE PRIVACY HALF OF THE DELETED ROOM CASE, kept as a personal one.
+       That case asserted a principles response carries STATEMENTS but never
+       the raw captures underneath them ("PRIVATE RAW TEXT MUST NEVER LEAVE"),
+       and the tombstone below claimed this suite already covered it. It did
+       not — the string was planted by the fixture and nothing read it back,
+       so the fixture was carrying a trap with no spring. This is the test the
+       tombstone was promising.
+
+       The room made it matter because OTHER people read a surface built from
+       your captures. Owner-and-reader being the same person does not make the
+       assertion vacuous: the view is assembled from evidence rows, and the
+       bug it guards against is a join that reaches through to
+       `inspirations.text` on the way to a statement. */
+    await material(owner, [owner]);
+    await refreshPrinciplesForProfile({ profileId: owner }, { db: t.db as never, modelProvider: provider });
+    const views = await loadPrincipleViews(t.db as never, owner);
+    expect(views.length).toBeGreaterThan(0);
+    expect(JSON.stringify(views)).not.toContain("PRIVATE RAW TEXT MUST NEVER LEAVE");
+    expect(renderPrinciplesMarkdown({ name: 'Test', type: 'human' }, views, new Date()))
+      .not.toContain("PRIVATE RAW TEXT MUST NEVER LEAVE");
+  });
+
   it('does not count duplicate wording under different IDs as distinct patterns',async()=>{
     const profileId=await person(),ids=await material(profileId,[profileId]);
     await t.sql`UPDATE signals SET statement='The same repeated wording.' WHERE id IN ${t.sql(ids)}`;
@@ -339,8 +362,12 @@ describe("principles across personal profiles", () => {
      from your captures. With the room gone the reader and the owner are the
      same person, and a personal principle serving its owner's own statements
      is covered by "serves no principle whose material a reader may not see"
-     elsewhere in this suite. What genuinely goes is the cross-member case,
-     and it goes because there are no longer two members.
+     above. CORRECTION (2026-10-15): when this note was written that test did
+     not exist — the name was a promise, not a reference, and the fixture's
+     "PRIVATE RAW TEXT MUST NEVER LEAVE" string had nothing reading it back.
+     The test named here has since been written, so the claim is now true.
+     What genuinely goes is the cross-member case, and it goes because there
+     are no longer two members.
 
      The trailing block that renewed `other`'s support through the real
      `reviewSignalSupport` / `applySignalSupportReview` writers went with it:

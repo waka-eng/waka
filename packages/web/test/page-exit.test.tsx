@@ -115,10 +115,6 @@ vi.mock("../src/lib/api", async (importOriginal) => ({
   listKeptDays: vi.fn(async () => []),
   fetchProfiles: vi.fn(async () => []),
   fetchConnections: vi.fn(async () => []),
-  fetchKeeperKeys: vi.fn(async () => []),
-  fetchAgentKeys: vi.fn(async () => []),
-  fetchAgentGrants: vi.fn(async () => []),
-  fetchConsultations: vi.fn(async () => []),
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

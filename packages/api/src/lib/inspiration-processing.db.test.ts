@@ -169,10 +169,19 @@ describe('source material and its numbered processing request', () => {
      to contribute room material" was a real gate over real bad data — six
      agent-seated rows had reached the dev database, and `docs/data-model.md`
      rule 5 says membership is between people. It gated `groupJobIds` coming
-     back empty for an agent with a seat. No fan-out, no `groupJobIds`, no
-     seat: the rule it enforced is now enforced by there being nowhere to go.
-     NOTE FOR WHOEVER DROPS THE TABLES: those rows are still in the dev
-     database. Nothing here deleted them and nothing here can.
+     back empty for an agent with a seat.
+
+     CORRECTION (2026-10-15): IT WAS NOT DELETED, it was rewritten — see the
+     case below. An earlier version of this note said "the rule it enforced is
+     now enforced by there being nowhere to go." That was wrong. The rule is
+     enforced by a live SQL predicate — `owner.type = 'human'` in
+     `authorizedDestination` and again in `recordInspirationProcessingRequest`
+     — and closing the routes did not remove it. The six agent-seated rows are
+     STILL IN THE DEV DATABASE, nothing here deletes them, and
+     `requestSignalDerivation` still walks a seat it finds. Deleting the only
+     test of a live authorization predicate, over data that really exists,
+     would have left the rule able to regress with the suite green. The case
+     is restored below without the deleted route helper.
 
      "a destination becoming unavailable does not roll back the personal save
      or leave its failed room enqueue behind" pinned the most important
@@ -180,9 +189,38 @@ describe('source material and its numbered processing request', () => {
      the save transaction must cost the room's job and NOT the person's
      capture. It needed a second destination that could fail independently of
      the first. There is one destination now, and if it fails the save fails,
-     which is the correct and much simpler behaviour. The savepoint-and-
-     rollback machinery it exercised comes out with
-     `requestSignalDerivation`'s room branch. */
+     which is the correct and much simpler behaviour.
+
+     CORRECTION (2026-10-15): the savepoint-and-rollback machinery did NOT
+     come out. The nested transaction and its `InspirationProcessingUnavailableError`
+     swallow are still in `lib/inspiration-derivation-requests.ts`, because
+     the room branch they guard is still there for any profile holding a
+     seat. What this case lost is its second independently-failing
+     destination, which no door can create any more — not the machinery. */
+
+  it('does not give a legacy agent membership permission to contribute room material', async () => {
+    /* RESTORED 2026-10-15. This gates a LIVE predicate over data that really
+       exists: six agent-seated `group_members` rows reached the dev database,
+       `docs/data-model.md` rule 5 says membership is between people, and the
+       only thing keeping an agent's material out of a room's ground is the
+       `owner.type = 'human'` join in `authorizedDestination`. The routes are
+       gone; the seats and the code that walks them are not.
+
+       Seated with direct SQL rather than `createGroupForProfile`, which went
+       with the room routes. Writing the rows at the table is also the more
+       honest fixture here — it reproduces the legacy data exactly as it sits
+       in the database, instead of through a door that no longer exists. */
+    const f = await fixture();
+    const [group] = await t.sql`INSERT INTO groups(name, join_code, created_by_profile_id)
+      VALUES ('Legacy seat', ${'legacy-' + Math.random().toString(36).slice(2, 10)}, ${f.profileId}) RETURNING id`;
+    await t.sql`INSERT INTO group_members(group_id, profile_id) VALUES (${group.id}, ${f.profileId})`;
+    await t.sql`UPDATE profiles SET type = 'agent' WHERE id = ${f.profileId}`;
+    await t.sql`UPDATE inspirations SET visibility = 'public' WHERE id = ${f.inspirationId}`;
+    const result = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created', changedSource: 'inspiration' }, tx as never));
+    expect(result.groupJobIds).toEqual([]);
+    expect(await t.sql`SELECT profile_id FROM inspiration_processing`).toEqual([{ profile_id: f.profileId }]);
+    expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(1);
+  });
 
   it('deleting a reflected source removes its revision and processing metadata without orphaning copies', async () => {
     const f = await fixture();

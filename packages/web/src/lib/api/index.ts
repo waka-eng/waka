@@ -46,7 +46,7 @@
  * A TABLE THAT NAMES A DELETED FILE IS WORSE THAN NO TABLE, which is why
  * this is a fix and not a tidy-up: the rows survived the deletion of the
  * modules they pointed at, so the one artefact that claims to map client to
- * route was lying about four of them.
+ * route was lying about the four it still named.
  *
  * The vocabulary throughout is the vocabulary of `docs/data-model.md`, one
  * name per concept: an **account** logs in, a **profile** owns memory, and a

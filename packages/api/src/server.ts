@@ -26,7 +26,7 @@ const fetchApp =
     ? createLocalWebApp(app, process.env.WAKA_WEB_DIST_DIR ?? defaultWebDistDir())
     : app;
 
-/**
+/*
  * NOTHING RUNS AT BOOT ANY MORE, AND THAT IS THE CHANGE.
  *
  * `ensureGroupMinds()` ran here until 2026-10-15. It gave every room that
