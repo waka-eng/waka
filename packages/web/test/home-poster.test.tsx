@@ -665,6 +665,21 @@ describe("what the poster is standing on", () => {
        explanation, and one without the reason is just a list of text */
     expect(rows.filter((r) => /read as sig-(spec|code)/.test(r))).toHaveLength(CHAIN_SIZE);
     expect(rows.some((r) => r.includes("something I kept, 3"))).toBe(true);
+
+    /* AND THE AUDIT AGREES WITH THE DOM. `provenanceCount` exists for one
+       reason, written on its declaration: the map was once WRITTEN under a
+       hand-built key while its only reader asked `spaceKey(w)`, so every
+       room's peek row came back empty and 64 tests stayed green. Both
+       assertions on that field went with the room cases, leaving it untested
+       while `pages/Home` was still hand-spelling its two remaining keys --
+       agreeing with the reader only because the self wall's id happens to be
+       "". The writer now goes through `spaceKey` at both ends; this keeps it
+       there. Asserted here rather than in `home-field`, whose wall cites
+       nothing, because a gate its harness cannot satisfy proves nothing. */
+    expect(
+      layout.audit().provenanceCount,
+      "the DOM found the chain but the provenance map resolved to nothing — the key written and the key read have drifted apart",
+    ).toBe(CHAIN_SIZE);
   });
 });
 

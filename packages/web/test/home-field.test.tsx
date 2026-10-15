@@ -177,7 +177,14 @@ describe("native input inside the world", () => {
     sheet.remove();
   });
 
-  it.each(["jar-roomform", "jar-seek jar-inspiration-composer", "jar-settings", "jar-dial"])(
+  /* `jar-roomform` AND `jar-settings` LEFT THIS LIST on 2026-10-15, with the
+     two selectors themselves. No markup in `src` wears either bare class any
+     more — only the suffixed `.jar-roomform-box` and `.jar-settings-warn`,
+     which `closest()` does not match. These two rows were therefore building
+     a node with a class nothing renders and proving the product safe for a
+     surface it does not have: the same fault this file already names, nine
+     lines above, about `jar-reflect-room`. The two that remain are worn. */
+  it.each(["jar-seek jar-inspiration-composer", "jar-dial"])(
     "leaves wheel scrolling to %s instead of cancelling it for the camera",
     async (className) => {
       const sheet = document.createElement("div");
@@ -213,12 +220,29 @@ describe("the ground under a wall", () => {
      this file mocks `lib/data` rather than the agent roster. Rooms went on
      2026-10-12 (founder: "방 없애").
 
-     WHAT IS LEFT COVERING IT: `home-memory` and `where-it-last-went` both
-     travel to an agent's wall and assert the ground, and the invariant itself
-     — present === active === onScreen — is asserted on opening below and
-     after every pour in `home-light`. If the lateral-travel activation bug
-     ever returns, the first place to re-stage it is here with an AGENT wall,
-     which is a bigger fixture and the honest cost of rooms going. */
+     WHAT IS LEFT COVERING IT: NOTHING. That sentence replaces a claim that
+     was checked and found false on 2026-10-15.
+
+     The claim was that `home-memory` and `where-it-last-went` "both travel to
+     an agent's wall and assert the ground", and that the invariant is asserted
+     "after every pour in `home-light`". Measured: `travelTo` has ZERO callers
+     in the whole suite — its only occurrences are its own declaration and
+     implementation in `helpers/render-home` — and `home-light` asserts only
+     `present > 0`, not the triple. `expectGroundIsWhole` has exactly one call
+     site, "on opening", directly below.
+
+     SO THIS IS AN OPEN HOLE, recorded rather than papered over.
+     `arriveColumn()` is live with five callers in `canvas/simulation.ts`, and
+     the activation bug this suite was written for would not be caught today.
+
+     WHY IT IS STILL OPEN: closing it needs a second wall, an agent's, and
+     this file mocks `lib/data` rather than the agent roster — no suite in the
+     repo stands up an agent bundle. That is a fixture, not an assertion, and
+     it is the honest remaining cost of rooms going. `travelTo` is deliberately
+     KEPT despite having no caller, unlike `standIn` which was deleted beside
+     it: `standIn` pressed a UI row that no longer exists, while `travelTo`
+     travels by command and still works, so it is the tool that closes this
+     hole rather than more dead weight. */
 
 
   /**

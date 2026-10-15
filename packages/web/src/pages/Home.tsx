@@ -660,10 +660,12 @@ interface PanelData {
 
    `KEEP_SHEET` IS GONE WITH ITS TWO SHEETS. It read `[".jar-settings",
    ".jar-seek"]` and guarded the space-settings panel and the join sheet,
-   both of which went with rooms on 2026-10-12. `.jar-settings` is still WORN
-   — the search sheet and the composer's asks use the class — but nothing
-   registers a dismissal against it any more, so a list naming it here would
-   be a guard for no hook. */
+   both of which went with rooms on 2026-10-12. CORRECTION (2026-10-15): this
+   said `.jar-settings` "is still WORN — the search sheet and the composer's
+   asks use the class". IT IS NOT. Both of those wear `.jar-seek`; no markup
+   in `src` carries the bare class, only `.jar-settings-warn`. Nothing
+   registers a dismissal against it either, so a list naming it here would
+   have been a guard for no hook on a class with no wearer. */
 const KEEP_PROV = [".jar-prov-room", ".jar-panel"] as const;
 
 export default function HomePage(): JSX.Element {
@@ -3765,7 +3767,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    */
   useEffect(() => {
     const m = new Map<string, Provenance>();
-    m.set("self:", provenance);
+    /* `spaceKey` AT THE WRITING END TOO -- see the rule below. These were
+       hand-spelled (`"self:"` and `` `agent:${id}` ``), which agreed with the
+       reader only because the self wall's id happens to be "". Give it one and
+       the peek row silently empties. */
+    m.set(spaceKey({ kind: "self", id: "", name: SELF_WALL_NAME, col: 0 }), provenance);
     for (const a of agents ?? []) {
       const prov: Provenance = new Map();
       const byId = new Map(a.inspirations.map((s) => [s.id, s] as const));
@@ -3774,7 +3780,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         const s = byId.get(id);
         if (s) prov.set(id, s.quote);
       }
-      m.set(`agent:${a.agent.id}`, prov);
+      m.set(spaceKey({ kind: "agent", id: a.agent.id, name: a.agent.name, col: 0 }), prov);
     }
     /* A ROOM LIT THE STATEMENTS ITS BOARD WAS BUILT FROM, and one rule from
        that branch is worth keeping where the next person will read it: the
@@ -3783,7 +3789,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        `cached:${w.id}` — two spellings, both wrong, because the only reader
        is `wallProv.get(spaceKey(w))`. A room's provenance was therefore never
        found and its peek row was empty every time. Call `spaceKey` at both
-       ends and the two cannot disagree. */
+       ends and the two cannot disagree -- which, as of 2026-10-15, this
+       finally does. The two surviving entries were still hand-spelled and
+       agreed with the reader only by luck: `"self:"` matches
+       `spaceKey({kind:"self", id:""})` for exactly as long as the self wall's
+       id stays empty. */
     wallProvRef.current = m;
     simApiRef.current?.setProvenance(m);
   }, [provenance, agents, inspirations, walls]);
@@ -6632,10 +6642,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      the live panel state together. A failure said WHY, in the mouth, because
      a privacy control going quiet is not an honest report.
 
-     `panelIsPublic` ITSELF STAYS, and nothing renders it: it is the one
-     remaining reader of `Inspiration.isPublic`, which is the one remaining
-     reader of `inspirations.visibility`. The column is deliberately
-     untouched — see the tombstone at the control's own site. */
+     CORRECTION (2026-10-15): this said "`panelIsPublic` ITSELF STAYS … it is
+     the one remaining reader of `Inspiration.isPublic`". IT DOES NOT STAY.
+     `panelIsPublic` does not exist anywhere in `src` — the only occurrences
+     of the name are these comments, and the tombstone 90 lines above this one
+     already says it "IS GONE TOO". Two tombstones in one file, flatly
+     contradicting each other, and the WRONG one was load-bearing: it was the
+     stated reason `Inspiration.isPublic` is kept alive.
+
+     SO `Inspiration.isPublic` NOW HAS NO READER AT ALL. It is written in
+     `lib/data` (twice) and in the fixtures, and read nowhere — write-only,
+     not "read by the panel". It is left in place for now rather than removed
+     in this pass: it is a derived boolean threaded through ten test fixtures,
+     so taking it out is a mechanical change that deserves its own commit
+     rather than a quiet rider on this one. The COLUMN stays regardless;
+     `inspirations.visibility` is the server's and no migration touches it. */
 
   const inspirationRemovedFromView = useCallback((serverId: string, visualId = serverId) => {
     sourceListMutationRef.current += 1;

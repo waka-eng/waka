@@ -56,7 +56,7 @@ import { describe, expect, it } from "vitest";
 const SRC = resolve(__dirname, "../src");
 
 /** Classes that legitimately carry no declarations of their own. */
-const DRESSED_BY_SOMETHING_ELSE = 15;
+const DRESSED_BY_SOMETHING_ELSE = 14;
 
 function files(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {

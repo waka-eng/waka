@@ -39,6 +39,9 @@ export interface WorldFacts {
    *
    * `isPublic` MARKED THE ONES A ROOM COULD READ, and it is kept because
    * `lib/data`'s `Inspiration.isPublic` is kept: rooms were removed on
+   * CORRECTION (2026-10-15): it is kept, but NOT because anything reads it.
+   * `Inspiration.isPublic` is write-only in `src` — see the corrected
+   * tombstone in `pages/Home`, whose claim that the panel read it was false.
    * 2026-10-12 (founder: "방 없애") but `inspirations.visibility` was
    * deliberately NOT touched, and the founder has an open question about what
    * that axis means with nothing to be public TO. A fixture that stopped

@@ -42,7 +42,11 @@ const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const FORBIDDEN = [
   { word: "capture", use: "inspiration" },
   { word: "pattern", use: "signal" },
-  { word: "room", use: "group" },
+  /* The ADVICE changed on 2026-10-15, not the rule. This used to read
+     `use: "group"`, which after rooms were removed ("방 없애") pointed the next
+     author at a word the codebase no longer has -- a wrong instruction that
+     passed. `room` stays forbidden; there is simply nothing to rename it to. */
+  { word: "room", use: "nothing — rooms were removed from the product" },
   { word: "wow", use: "nothing — the canon removed this concept" },
   { word: "world", use: "home, or a world word naming where it is drawn" },
 ];

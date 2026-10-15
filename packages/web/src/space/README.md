@@ -48,10 +48,13 @@ than left to read as current.
   from that change. The second placed a room's members behind your companion
   and carried the NPC research that gave them four idles, a depth and a
   reaction delay. Both were deleted on 2026-10-15 with the loop's group
-  branches, along with `lib/api/groups.ts`. **So the one upward import below
-  is also gone**: nothing in `space-kinds/` reaches into `space/top-of-mind/`
-  any more, and the layering `docs/codebase.md` planned is accidentally
-  satisfied.
+  branches, along with `lib/api/groups.ts`. **CORRECTION (2026-10-15): the
+  upward import is NOT gone.** This claimed "nothing in `space-kinds/` reaches
+  into `space/top-of-mind/` any more" and that the layering `docs/codebase.md`
+  planned was accidentally satisfied. Neither is true: `space-kinds/agent.ts:16`
+  still does `import { formingWords, type WallChrome } from
+  "../space/top-of-mind/board"`, and always did. Deleting `group.ts` removed
+  one upward import, not the layering violation — which was never `group.ts`'s.
 - **`space/ground-count.ts` is gone.** It answered "how many of a room's pooled
   field belong to the ground currently poured", which was the fix for a real
   defect: the founder stood in a room holding three memories, none of them
@@ -92,8 +95,11 @@ space reading as a machine's in one place and a person's in another.
 
 ## Two things that were true and looked like mistakes
 
-**Both are fixed, and by a deletion rather than by design**, which is worth
-knowing before anyone reintroduces either.
+**One is fixed, by a deletion rather than by design — the other is NOT**
+(corrected 2026-10-15: the upward import from `space-kinds/agent.ts` into
+`space/top-of-mind/board` is still there, and deleting `group.ts` never
+touched it). Worth knowing before anyone reintroduces either, and before
+anyone trusts this file's layering claim.
 
 **`space/settings/` was not a layer.** Every other subdirectory of `space/` is
 named by a canon word; that one was a screen. It was the one place this tree's
