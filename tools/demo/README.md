@@ -3,7 +3,7 @@
 The demo world is the first thing WAKA shows anyone. One command seeds it
 against a fresh local stack — through the public API only, so every frame
 shows the product, never a hand-arranged database — and one command walks
-the six scenes headlessly and proves each is on screen.
+the three scenes headlessly and proves each is on screen.
 
 ## Run it
 
@@ -15,7 +15,7 @@ pnpm dev:local
 # terminal two: the world (a few minutes — derivation is a background pass)
 pnpm tsx tools/demo/seed.ts | tail -1 > /tmp/demo-creds.json
 
-# the verification walk: six scenes, six screenshots into tools/demo/shots/
+# the verification walk: three scenes, three screenshots into tools/demo/shots/
 node tools/demo/walk.mjs /tmp/demo-creds.json
 ```
 
@@ -25,7 +25,7 @@ anyone records anything.
 
 ## The shot list
 
-Six scenes, every one on screen within a minute of login:
+Three scenes, every one on screen within a minute of login:
 
 1. **The poster.** One sentence at headquarters — what currently matters,
    written by the loop from Yunji's own memories.
@@ -35,21 +35,25 @@ Six scenes, every one on screen within a minute of login:
    span that carried it.
 3. **How it reads you.** The ≡ menu's reading: the loop's rules as
    sentences, every one pinned to the code that enforces it.
-4. **The room.** Travel to *the reading circle*: the wall of shared
-   statements with their owners, and the room's own poster — the sentence
-   the room agreed to speak.
-5. **The counted stance.** Bo's open question hangs over the room with one
-   no counted against it — a no is counted, never a veto, and the question
-   stays standing until the room carries or lets it fall.
-6. **The door.** The room's members, and the mark of who passed through —
-   Dee joined and was removed, and the door remembers without keeping
-   anything Dee said.
+
+### Scenes 4, 5 and 6 are gone (2026-10-15)
+
+**The room**, **the counted stance** and **the door** all showed *the reading
+circle* — a room, its wall, an open question with one no counted against it,
+and the membership mark left behind when Dee was removed. Rooms were removed
+from the product (founder: "방 없애"), so there is nothing left to photograph.
+
+**What the demo loses:** its only multi-person story. Scenes 1–3 are one
+person looking at their own memory. Everything that showed WAKA holding more
+than one person at once went with the room.
 
 ## The cast
 
-Yunji founds *the reading circle*; Bo and Cy join; Dee joins and is
-removed (the door mark). Yunji's five captures about walks and depth
-derive real signals; she says one in her own words (the star — locked
-against rewriting). Two statements are shared to the wall; Bo answers one;
-Bo proposes and Cy declines (the counted stance); Yunji proposes and Bo
-carries it (the room first speaks).
+Yunji's five captures about walks and depth derive real signals; she says one
+in her own words (the star — locked against rewriting).
+
+Bo, Cy and Dee are still signed up by the seed, so it still produces four
+real accounts — but only Bo writes anything, and nothing is shared between
+any of them. The founding of *the reading circle*, the joins, Dee's removal,
+the shared statements, Bo's answer, Cy's decline and the room's first
+sentence all went with scenes 4–6.

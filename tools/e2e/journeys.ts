@@ -63,6 +63,7 @@ import { type Browser, type BrowserContext, type Page, type Route } from "playwr
 import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
 import { openTheNotepad, saveAnInspiration } from "./keep";
+import { openAMemory } from "./open-a-memory";
 interface Args {
   baseUrl: string;
   negative: boolean;
@@ -321,7 +322,9 @@ async function countInArchive(page: Page, base: string): Promise<number> {
        next step in two journeys then clicked the cog through an overlay: the
        settings card never opened, `.waka-settings-row` counted zero, and
        `public-page` reported "the account card has no Public profile group"
-       about a group that is there. Caught by running it. */
+       about a group that was there at the time. Caught by running it.
+       (That journey is gone — see its tombstone — and the group with it;
+       the overlay-swallows-the-click defect this guards against is not.) */
     await page
       .locator(".waka-dock-item", { hasText: /^Now$/ })
       .first()
@@ -361,98 +364,9 @@ async function keepInWorld(page: Page, base: string, text: string): Promise<numb
  * with a keep is a separate claim and has its own journey — `first-keep`
  * asserts the orb arrives.
  */
-/**
- * OPENING A MEMORY, BY ASKING THE WORLD FOR IT.
- *
- * ── THIS CLICKED THREE HUNDRED COORDINATES AND COULD NOT GET IN ───────────
- *
- * It pressed `.jar-saved` to descend into the field and then swept a grid of
- * `mouse.click` across the canvas looking for one painted orb. Both halves
- * are gone. `.jar-saved` has no renderer — the only mentions left in
- * `Home.tsx` hand the string to `querySelector` — so the descent could only
- * time out, after which the sweep clicked three hundred times on the world's
- * chrome and reported "no memory would open in the field".
- *
- * MEASURED 2026-10-12, LOOKING FOR THE DOOR RATHER THAN CONCLUDING FROM ITS
- * ABSENCE, because the first conclusion was wrong:
- *
- *   `?view=field` DOES NOT WORK. `view-location.ts` parses the parameter, but
- *   a cold load at that address lands on `/` with it dropped.
- *   `standIn` CALLS `toGround()` and is group-only, so it went with rooms.
- *   FIND DOES WORK. `/` opens the search — `Home.tsx` puts it there on
- *   purpose, "find → the FIELD. It is a verb about memories, so it sits with
- *   them and answers with `/`" — and `openSearchResult` navigates with
- *   `section: 'field'` and the memory's own id, which lands in the ground with
- *   `.jar-panel` already open on it.
- *
- * ── AND THE HARNESS GETS A CLAIM IT COULD NOT MAKE BEFORE ─────────────────
- *
- * The sweep could not aim: whichever orb it happened to hit was the memory
- * that opened, so every caller's claim had to be weakened to "any of them"
- * ("insisting on a particular one would only be insisting the harness can
- * aim"). Asking for a memory BY ITS WORDS opens that one. `phrase` is
- * optional so the old any-of-them callers are unchanged, and the ones that
- * care can now say which.
- *
- * The viewport argument is gone with the sweep. It existed because the grid
- * was in viewport pixels and `the-hand` walks at 390x844, where every x past
- * 390 is off the glass — "a sweep that silently clicked into space for two
- * thirds of its passes and then reported no memory opened as if the product
- * had failed". A search field and a list of results need no coordinates at
- * all, so the whole class of defect goes with the argument.
- */
-async function openAMemory(page: Page, phrase?: string): Promise<boolean> {
-  const panels = async (): Promise<number> =>
-    (await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) as number;
-  try {
-    /* ── A WORD THAT IS REALLY ON THIS WALL, ASKED OF THE WALL ────────────
-       With no phrase given, any memory will do — but the search ignores a
-       query shorter than two characters (`InspirationSearch`: `if
-       (query.length < 2) { setRead(null); … }`), and the first version of
-       this typed `a` and got nothing. It then reported "no memory would open
-       in the field", which is a statement about the product and was a
-       statement about the query. Caught by running it.
-       Guessing a longer word is the same bet one letter longer: the phrases
-       these journeys keep are ordinary English and share almost nothing. So
-       the word is taken FROM the wall — the longest in the newest memory's
-       own preview — which cannot miss unless the archive is empty, and an
-       empty archive is a different finding that the caller already makes. */
-    const want =
-      phrase ??
-      ((await page.evaluate(async () => {
-        const r = await fetch("/api/inspirations?limit=1", { credentials: "include" });
-        if (!r.ok) return "";
-        const body = (await r.json()) as { inspirations?: Array<{ textPreview: string }> };
-        const words = (body.inspirations?.[0]?.textPreview ?? "").split(/[^A-Za-z]+/);
-        let best = "";
-        for (const word of words) if (word.length > best.length) best = word;
-        return best;
-      })) as string);
-    if (want.trim().length < 2) return false;
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-    await page.keyboard.press("/");
-    await page.waitForTimeout(1_500);
-    if ((await page.locator(".jar-inspiration-search").count()) === 0) return false;
-    await page.keyboard.type(want);
-    await page.waitForTimeout(3_500);
-    const result = page
-      .locator(".jar-search-results button", {
-        hasText: new RegExp(want.slice(0, 24).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
-      })
-      .first();
-    if ((await result.count()) === 0) return false;
-    await result.click({ timeout: 8_000 });
-    await page.waitForTimeout(6_000);
-    if ((await panels()) === 0) return false;
-    /* THE "STAYS" IS LOAD-BEARING and is kept from the sweep: a closing card
-       lingers in the DOM for 200ms, so a check that stops at the first
-       `.jar-panel` it sees can catch the tail of one already dismissed. */
-    await page.waitForTimeout(1_200);
-    return (await panels()) > 0;
-  } catch {
-    return false;
-  }
-}
+/* `openAMemory` MOVED TO `./open-a-memory` (2026-10-15). Two other gates
+   had stale copies of the same descent; the reasoning this file worked out
+   went with the function so there is one place to correct it. */
 
 async function archiveHolds(page: Page, phrase: string): Promise<boolean> {
   return (await page.evaluate(async (needle: string) => {
@@ -645,11 +559,37 @@ const JOURNEYS: Journey[] = [
            label the product no longer has does not fail loudly, it times out
            for thirty seconds and reports the journey broken. Kept as the label
            rather than the class BECAUSE the accessible name is the claim: a
-           person using a screen reader has to be told what this field is. */
-        'textarea[aria-label="Capture inspiration"]',
+           person using a screen reader has to be told what this field is.
+
+           ═══ AND `:visible`, BECAUSE TWO TEXTAREAS WEAR THIS NAME ═════════
+           The closed composer slot (`Home.tsx:8307`, `.jar-mouth-rest
+           .jar-keep-box`) and the open composer (`InspirationComposer.tsx:336`,
+           `.jar-composer-text`) BOTH carry `worldCaptureInspiration`. The slot
+           comes first in the DOM and is `visibility: hidden` while the mouth
+           is open, so this filled the invisible one: sixty retries of
+           "element is not visible", thirty seconds, and a journey reported
+           broken on a product that was fine. Two controls sharing one
+           accessible name is arguably the product's bug and is reported as
+           such rather than fixed here; `:visible` is what makes this step
+           ask about the field a person is actually typing into. */
+        'textarea[aria-label="Capture inspiration"]:visible',
         `a lift button that dims once it has heard you ${uniq()}`,
       );
-      await page.keyboard.press("Enter");
+      /* ═══ THE SAVE IS THE DOCK'S CHECK, NOT `Enter` ══════════════════════
+         This pressed `Enter`, which is what the CLOSED slot takes
+         (`Home.tsx:8345`: plain Enter, no shift, calls `keepIt`). The OPEN
+         composer does not: `onMouthKey` returns immediately unless ctrl or
+         meta is held (`Home.tsx:5337`) and stops propagation besides, so
+         `Enter` here saved NOTHING. The journey then waited five seconds and
+         reported `fieldLight 0.07 -> 0.07` — a confident false finding that
+         the product does not light the field on a first keep, for a keep that
+         was never made. A loud timeout would have been kinder.
+
+         `.waka-dock-tool--keep` is the control a person actually presses
+         (founder: "let's just have a save icon"), and it is what
+         `saveAnInspiration` presses for every other journey in this file. */
+      await page.locator(".waka-dock-tool--keep").waitFor({ state: "visible", timeout: 8_000 });
+      await page.locator(".waka-dock-tool--keep").first().click();
       await page.waitForTimeout(5_000);
 
       const after = await fieldLight();
@@ -767,6 +707,17 @@ const JOURNEYS: Journey[] = [
       const askedAt = Date.now();
       let answeredMs: number | null = null;
       for (let i = 0; i < 20 && answeredMs === null; i += 1) {
+        /* ═══ BLUR FIRST, OR THE WORLD NEVER HEARS THE KEY ═══════════════
+           `simulation.ts`'s `onKey` drops every shortcut — slash included —
+           when `isNativeSurface(e.target)` is true, and that selector list
+           covers `[role='dialog']`, `.jar-panel`, `.jar-values-room` and
+           the rest. Whatever this journey pressed last leaves focus on a
+           BUTTON inside one of those, so all twenty presses were swallowed
+           and the journey reported `pressing "/" opened no find line in 20s
+           — focus was on button`. That reads as "find is broken"; find is
+           fine, the key never reached the world. `open-a-memory.ts` learned
+           this already and blurs for the same reason. */
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await page.keyboard.press("/");
         const line = await page.waitForSelector(FIND, { timeout: 1_000 }).catch(() => null);
         if (line) answeredMs = Date.now() - askedAt;
@@ -2031,153 +1982,57 @@ const JOURNEYS: Journey[] = [
     },
   },
 
-  {
-    id: "public-page",
-    name: "what you publish is only what you said to publish",
-    /* J1's public-page half, which `journeys:account` never touched — it
-       proved the display name and stopped there.
- 
-       THIS IS THE HIGHEST-STAKES PRIVACY SURFACE IN THE PRODUCT. The group
-       boundary decides what a handful of invited people can see; this one
-       decides what the open internet can. A raw capture reaching `/:handle`
-       is not a bug that gets reported, it is one that gets discovered.
- 
-       So the leak check is the same shape `groups.ts` uses and for the same
-       reason: capture a phrase that exists nowhere else on the stack, then
-       search the whole published page for it. A field-by-field check only
-       ever finds the leak you thought of.
- 
-       AND IT IS READ AS A STRANGER. Cookies are cleared before every look, so
-       what is measured is what an anonymous visitor gets — not what the owner
-       sees rendered through their own session. */
-    breaks: (ctx) =>
-      breakRoute(ctx, (p, m) => /\/api\/(profiles|auth\/me)/.test(p) && m === "PATCH"),
-    run: async (page, base) => {
-      const me = await signUp(page, base);
-      const secret = `the porcelain kestrel ${uniq()}`;
-      await keepInWorld(page, base, `I keep thinking about ${secret}.`);
+  /* ═══════════════════════════════════════════════════════════════════════
+     `public-page` IS DELETED — "what you publish is only what you said to
+     publish" (2026-10-15)
+     ═══════════════════════════════════════════════════════════════════════
 
-      /* ═══ PUBLISHING IS THE CARD'S `Public profile` GROUP NOW ════════════
-         THIS WENT TO `/profile` AND REACHED FOR FOUR THINGS THAT ARE GONE:
-         the route (it redirects to the world — see `goSurface`), a
-         `make a public page` button, `input[name=publicHandle]`, and
-         `.profile-toggle-row`. None of the last three has a renderer.
+     THE JOURNEY WAS ALREADY A REPOINT, AND THE SURFACE IT WAS REPOINTED TO
+     HAS SINCE GONE. Its own comment records the first move: it used to walk
+     `/profile` and reach for `.profile-toggle-row`, and was brought over to
+     `SettingsPanel`'s `Public profile` group. That group no longer exists.
+     `SettingsPanel.tsx` renders exactly two disclosures — `agents`
+     (`Memories`) and `danger` (`Delete account`) — confirmed by reading the
+     file and by opening the card in a browser on 2026-10-15.
 
-         THE CAPABILITY SURVIVED THE PRUNE AND IS NAMED IN THE RULING.
-         `SettingsPanel.tsx`'s header lists what stayed: "what they are called,
-         what language they are read in, the agents they keep, WHETHER THERE
-         IS A PUBLIC PAGE, how to leave, and how to erase the account." So
-         this is a repoint. The group is opened by its own name rather than by
-         index, because the order of the three disclosures is a design
-         decision — and it has to be OPENED at all: they unmount rather than
-         hide, so every control below is absent from the document until it is.
+     IT WENT ON A FOUNDER RULING, NOT A REFACTOR. `f1e96412`, "public and
+     private stop being a thing you can choose": "everything regarding public
+     and private should also not be a thing in this new experience." That
+     commit names the settings panel's public group as "the single writer of
+     both flags in the entire product" and removes it. There is no writer
+     left, so there is no act for this journey to perform.
 
-         AND THE SAVE IS A BUTTON AGAIN, unlike the display name two journeys
-         up, which debounces. `publicPage.save` is wired to
-         `.waka-settings-keep`, and the panel disables it while the write is
-         in flight. */
-      const handle = `e2e${Date.now().toString(36)}`;
-      const publish = async (on: boolean): Promise<string | null> => {
-        await openSettings(page, base);
-        /* NOT ANCHORED AT BOTH ENDS. The row is `{label}<span
-           aria-hidden>+</span>`, so its text is `Public profile+` while it is
-           folded and `Public profile–` while it is open — an `$` anchor
-           matched neither, and the first run of this reported "the account
-           card has no Public profile group" about a group that was there. */
-        if (!(await openSettingsGroup(page, /^Public profile/i))) {
-          return "the account card has no Public profile group";
-        }
-        const handleField = page.locator(".waka-account-field input[type=text]").last();
-        if ((await handleField.count()) === 0) return "the public group has no handle field";
-        await handleField.fill(handle);
-        /* the first toggle is the page itself; the second is the top of mind */
-        const toggles = page.locator(".waka-settings-toggle input[type=checkbox]");
-        if ((await toggles.count()) < 2) {
-          return `expected two publish toggles, saw ${await toggles.count()}`;
-        }
-        if (on) await toggles.first().check();
-        else await toggles.first().uncheck();
-        await page.locator(".waka-settings-keep").first().click({ timeout: 8_000 });
-        await page.waitForTimeout(3_500);
-        return null;
-      };
-      const trouble = await publish(true);
-      if (trouble) return { ok: false, detail: trouble };
+     WHAT IT ASKED FOR, AND WHY IT COULD NOT ANSWER ANY MORE. Three dead
+     locators in one `reach`: `openSettingsGroup(/^Public profile/i)` returns
+     false, so the journey returned the string "the account card has no
+     Public profile group" — a FAILING journey, every run, whose detail line
+     reads as a product defect ("the account card is missing a group") when
+     what it meant was "this product deliberately has no such group".
+     `.waka-settings-toggle` and `.waka-settings-keep` have no renderer
+     either, so even past that gate there was nothing to press.
 
-      /** Look at the page the way anybody on the internet would. */
-      const asStranger = async (): Promise<{ status: number; text: string }> => {
-        await page.context().clearCookies();
-        const response = await page.goto(`${base}/${handle}`, {
-          waitUntil: "domcontentloaded",
-        });
-        await page.waitForTimeout(2_500);
-        return {
-          status: response?.status() ?? 0,
-          text: await page.evaluate(() => document.body.innerText),
-        };
-      };
+     WHAT COVERAGE WENT, AND IT IS THE LARGEST SINGLE LOSS IN THIS SWEEP.
+     This was, in its own words, "THE HIGHEST-STAKES PRIVACY SURFACE IN THE
+     PRODUCT" — it kept a memory containing a phrase that exists nowhere else
+     on the stack, published a page, and then fetched `/:handle` WITH COOKIES
+     CLEARED to prove the raw capture had not leaked to the open internet.
+     Nothing now checks what `/:handle` serves to an anonymous visitor.
 
-      const problems: string[] = [];
-      const published = await asStranger();
-      if (!/top of mind|탑오브마인드/i.test(published.text) && published.text.trim().length === 0) {
-        problems.push("the published page rendered nothing at all");
-      }
-      if (published.text.includes(secret)) {
-        problems.push("a raw capture is readable on the public page");
-      }
+     AND THE ROUTE IS STILL THERE, WHICH IS WHY THIS IS A GAP AND NOT A
+     NON-ISSUE. `main.tsx` still routes `/:handle` to `PublicProfilePage`,
+     and `f1e96412` deliberately kept `profiles.public_handle` and both flags
+     in the database — "a handle is a name somebody chose and may have
+     shared". So pages published before the control was removed are STILL
+     SERVED, to anyone, and the one gate that read one as a stranger is this
+     one. The door is closed; what is already through it is unwatched.
 
-      /* AND IT GOES AWAY AGAIN. A publish toggle that cannot be un-published
-         is the same failure as one that never published: the person is not in
-         control of it either way. */
-      await page.goto(`${base}/login`, { waitUntil: "domcontentloaded" });
-      await page.waitForTimeout(800);
-      await page.fill("input[name=email]", me.email);
-      await page.fill("input[name=password]", SIGNUP_PASSWORD);
-      await page.click(".btn-doorway");
-      await page.waitForTimeout(4_000);
+     WHAT WOULD RESTORE IT: a journey that needs no writer — set
+     `public_handle` and the flags directly through the API (or a fixture),
+     then do exactly the stranger read this one did. That is a different
+     `reach` against the same claim, and it is worth writing; it is not a
+     selector swap, so it is not smuggled in here. */
 
-      /* AND THE CARD REMEMBERS, which is the half of the old step that said
-         "your page is public". The card reads the handle and the two switches
-         off the session rather than fetching its own copy, so re-opening it
-         after a sign-in is a real check that the write landed — and it is
-         where the un-publish has to happen anyway. */
-      await openSettings(page, base);
-      if (!(await openSettingsGroup(page, /^Public profile/i))) {
-        problems.push("after publishing, the account card has no Public profile group");
-      } else {
-        const remembered = await page.evaluate(() => {
-          const box = document.querySelector<HTMLInputElement>(
-            ".waka-settings-toggle input[type=checkbox]",
-          );
-          const field = [...document.querySelectorAll<HTMLInputElement>(".waka-account-field input[type=text]")].pop();
-          return { on: Boolean(box?.checked), handle: field?.value ?? "" };
-        });
-        if (!remembered.on || remembered.handle !== handle) {
-          problems.push(
-            `after publishing, the card says on=${remembered.on} handle=${JSON.stringify(remembered.handle)}`,
-          );
-        }
-        const stillTrouble = await publish(false);
-        if (stillTrouble) problems.push(stillTrouble);
 
-        const withdrawn = await asStranger();
-        if (withdrawn.text.includes(secret)) {
-          problems.push("a raw capture is still readable after un-publishing");
-        }
-        if (/top of mind|탑오브마인드/i.test(withdrawn.text)) {
-          problems.push("the page is still published after being turned off");
-        }
-      }
-
-      return {
-        ok: problems.length === 0,
-        detail:
-          problems.length === 0
-            ? `published at /${handle} with no capture text on it, and gone again when turned off`
-            : problems.join("; "),
-      };
-    },
-  },
 
   {
     id: "english",

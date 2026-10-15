@@ -25,13 +25,18 @@
  *   3. **Group artifacts that cite this account's signals are deleted
  *      explicitly**, because a cascade cannot reach them: a room's top of mind
  *      belongs to the ROOM, and it can carry a departing member's thinking in
- *      its prose. Fails quietly and permanently: the person is erased and their
- *      sentences are still on somebody else's wall.
+ *      its prose. Fails quietly and permanently.
  *
  *   4. **No room is left without an owner.** Deleting an account is leaving
- *      every room at once, and leaving has always handed the seat on. Fails
- *      quietly: the room still renders, and nobody can rename, remove or close
- *      it ever again.
+ *      every room at once, and leaving has always handed the seat on.
+ *
+ *      NEITHER 3 NOR 4 IS CHECKED HERE ANY MORE (2026-10-15). The steps that
+ *      checked them drove `/api/groups` over HTTP and those routes are gone.
+ *      BOTH PROMISES ARE STILL LIVE: the room rows were never dropped and
+ *      `lib/account-erasure.ts` still deletes them, so this is untested
+ *      behaviour rather than retired behaviour. Setting the state up now
+ *      means seeding `groups`/`group_members` in SQL, which belongs beside
+ *      the erasure code rather than in a browser harness.
  *
  *   5. **Nothing of theirs survives anywhere the others can see.** The
  *      strongest form of the whole contract, and the one worth testing by
@@ -118,15 +123,8 @@ const ONE_PIXEL_PNG = Buffer.from(
   "base64",
 );
 
-/** The room's artifact as `routes/groups.ts` publishes it, field by field. */
-interface GroupBoard {
-  topOfMind: { id: string; version: number; status: string } | null;
-  entries?: Array<{
-    id: string;
-    body: string;
-    contributors?: Array<{ profileId: string; name: string }>;
-  }>;
-}
+/* `GroupBoard` WENT WITH THE ROOM STEPS: it described what
+   `/api/groups/:id/top-of-mind` served, and nothing serves that now. */
 
 /**
  * THIS STACK CANNOT EXERCISE THE CLAIM — WHICH IS NOT THE PRODUCT FAILING.
@@ -263,16 +261,11 @@ async function main(): Promise<void> {
 
   let leaver: Session | undefined;
   let stayer: Session | undefined;
-  let leaverProfileId = "";
-  let groupId = "";
-  /** How many of the room's own statements somebody agreed with — written by
-      the step that grows the room, read by the step that asks it to speak.
-      Declared HERE and not beside `citedBefore`: `let` is not hoisted, so a
-      declaration sitting between the two steps put the writer in the temporal
-      dead zone and the step failed with "cannot access before initialization"
-      — a step that had been passing, now broken by the variable that was
-      supposed to explain it. */
-  let affirmedShared = 0;
+  /* `leaverProfileId`, `groupId` and `affirmedShared` went with the room
+     steps that wrote them. `affirmedShared` carried a seven-line note about a
+     temporal-dead-zone bug between two steps that no longer exist; the lesson
+     survives as one line: `let` is not hoisted, so a declaration placed
+     between a writer and a reader breaks the writer. */
   let attachmentObject = "";
 
   await step("two people keep their own archives, and one of them keeps a picture", async () => {
@@ -323,8 +316,6 @@ async function main(): Promise<void> {
       pictureNote = "no image — this stack has no attachments bucket, so the picture half of this step was not exercised";
     }
 
-    leaverProfileId = leaver.profileId;
-
     return `${LEAVER_ARCHIVE.length} + ${STAYER_ARCHIVE.length} captures, ${pictureNote}`;
   });
 
@@ -339,141 +330,59 @@ async function main(): Promise<void> {
     { skip: storeReachable ? undefined : "ATTACHMENTS_ENDPOINT / ATTACHMENTS_BUCKET are unset" },
   );
 
-  await step("they share a room, and the room grows a statement from both", async () => {
-    const created = await api<{ group: { id: string; joinCode: string } }>(
-      leaver!,
-      "/api/groups",
-      { method: "POST", body: JSON.stringify({ name: "Things that were used" }) },
-    );
-    if (created.status !== 200 && created.status !== 201) {
-      throw new Error(`create room → ${created.status}: ${created.raw.slice(0, 200)}`);
-    }
-    groupId = created.body.group.id;
+  /* ═══ THE ROOM HALF OF THIS HARNESS IS GONE (2026-10-15) ═══════════════
+     Until today this file carried ~245 lines driving `/api/groups`,
+     `/api/groups/join`, `/api/groups/:id/wall`, `/members`, `/top-of-mind`
+     and `/proposals` directly over HTTP. It was the last room coupling in
+     `tools/`, and it was kept deliberately while those routes were live.
+     They are not live any more -- the API half landed on `dev` -- so every
+     one of those steps now fails on a 404, which is a red run for the wrong
+     reason: the harness reporting its own staleness as a product fault.
 
-    const joined = await api(stayer!, "/api/groups/join", {
-      method: "POST",
-      body: JSON.stringify({ joinCode: created.body.group.joinCode }),
-    });
-    if (joined.status !== 200 && joined.status !== 201) {
-      throw new Error(`join → ${joined.status}: ${joined.raw.slice(0, 200)}`);
-    }
+     WHAT COVERAGE GOES WITH IT, said plainly rather than buried. These steps
+     proved that erasing an account also erases what a ROOM held about that
+     person -- their wall contributions, their lines in the room's top of
+     mind, their membership -- while leaving the OTHER member's memory whole.
+     That is the strongest claim this file ever made, because it is the one
+     place erasure crosses a boundary between two people.
 
-    /* Both archives have to become patterns, and the room has to grow one of
-       its own from where they meet — this is the model spend this suite
-       cannot avoid, because a citation is the only thing that makes the
-       room's artifact reachable from the leaver's profile at erasure time.
-       Nobody puts anything up any more (2026-08-24): forming the room asked
-       it to read the ground both members already stood on. */
-    await firstSignal(leaver!, "the leaver's first signal");
+     IT IS NOT MOOT, and that is the part to keep hold of. The room rows
+     still exist in the database (no table was dropped), and
+     `packages/api/src/lib/account-erasure.ts` still deletes them on erasure.
+     So the BEHAVIOUR is live and is now untested. What is gone is only the
+     way to SET THE STATE UP over HTTP, because the doors are closed.
+
+     TO RESTORE IT: seed `groups` and `group_members` with direct SQL the way
+     `inspiration-processing.db.test.ts` now seeds its legacy seat, then erase
+     and assert. That is fixture work, not harness work, and it belongs in
+     `packages/api` beside the erasure code rather than here. */
+
+  await step("the bystander has material of their own", async () => {
+    /* HOISTED out of the deleted room block, where it was incidental setup.
+       The two steps below need the bystander to own a signal as well as
+       memories, or "untouched" is only a claim about inspirations. */
     await firstSignal(stayer!, "the stayer's first signal");
-
-    const wall = await waitFor(
-      async ({ note }) => {
-        const seen = await api<{ wall: Array<{ signalId: string }> }>(
-          stayer!,
-          `/api/groups/${groupId}/wall`,
-        );
-        if (seen.status !== 200) throw new Error(`wall → ${seen.status}`);
-        note(`${seen.body.wall.length} statements the room grew`);
-        return seen.body.wall.length > 0 ? seen.body.wall : null;
-      },
-      { timeoutMs: 240_000, label: "the room's first statement of its own" },
-    );
-
-    /* AND SOMEBODY AGREES WITH THEM, BECAUSE A ROOM DOES NOT SPEAK FIRST ON
-       ITS OWN. `groupDraftMinAffirmed` (top-of-mind-synthesis.ts) holds a
-       room's first generative draft until enough of its shared statements
-       have been affirmed by a member other than their owner — the same shape
-       as `emerging → active`, one level up, so a room never drafts from thin
-       evidence in a slow week. This room has two members, so the bar it is
-       held to is the small-room one (founder ruling, 2026-08-25).
-
-       This suite never affirmed anything, so the room waited forever and the
-       step after this one spent five minutes discovering that. The wait was
-       not the bug; the silence was. Agreeing here is also what a person does,
-       and it is the only way the next step has anything to read. */
-    for (const row of wall) {
-      const said = await api(stayer!, `/api/feedback`, {
-        method: "POST",
-        body: JSON.stringify({ targetType: "signal", targetId: row.signalId, value: "true" }),
-      });
-      if (said.status !== 200 && said.status !== 201) {
-        throw new Error(`agreeing with a room statement → ${said.status}: ${said.raw.slice(0, 160)}`);
-      }
-    }
-    affirmedShared = wall.length;
-
-    return (
-      `room ${groupId.slice(0, 8)}, two members, ${wall.length} statements it grew, ` +
-      `all ${wall.length} agreed with`
-    );
+    return "a signal of their own, which the erasure must not touch";
   });
 
-  let citedBefore = 0;
-  await step("the room reads itself, and what it writes cites the leaver", async () => {
-    const read = await api(stayer!, `/api/groups/${groupId}/top-of-mind/refresh`, {
-      method: "POST",
-    });
-    if (read.status !== 200 && read.status !== 201 && read.status !== 202) {
-      throw new Error(`refresh → ${read.status}: ${read.raw.slice(0, 200)}`);
-    }
 
-    /* `entries` is TOP LEVEL, beside `topOfMind`, and attribution is
-       `contributors`, not citations — the route serializes field by field
-       (routes/groups.ts) rather than handing back a loader's shape. Guessing
-       it cost a five-minute timeout waiting on a path that could never match. */
-    /* A ROOM DOES NOT SPEAK FIRST UNTIL ENOUGH OF IT HAS BEEN AGREED WITH.
-       The count is over SHARED STATEMENTS, not over agreements: a room that
-       grew one of its own can never reach two however many times it is
-       affirmed. This suite grows its room from two members and four
-       captures, so how many it grows is the model's call.
+  /* ═══ RESTORED 2026-10-15, AFTER I DELETED THEM BY ACCIDENT ════════════
+     These three are NOT room steps and should never have gone. Cutting the
+     room block above, I anchored on its first and last line and took
+     everything between — and three non-room steps were sitting inside that
+     span. The result passed: `pnpm e2e:erasure` signed up two accounts,
+     captured, attached an image, waited for a signal, and exited 0 with "4
+     passed" HAVING ERASED NOTHING. `deleteAccount` was still imported and
+     called from nowhere.
 
-       The bar is the SMALL-ROOM one — two — because this room has two
-       members (`groupDraftMinAffirmed`, founder ruling 2026-08-25). It was a
-       flat three until then, which a two-person room could not reach at all;
-       two is reachable here, and this step now fails only when the model
-       genuinely grew fewer than two statements for the pair to agree with.
+     Worse than a lost test: the two steps below are a CONTROL for an
+     erasure, so without it they cannot fail. "the other member's memory is
+     untouched" was never at risk, and "nothing of theirs is anywhere the
+     other member can look" searches as the stayer for a phrase the stayer
+     could never see anyway.
 
-       Waiting five minutes to discover a gate we can read directly is not a
-       test, it is a delay. If the room is holding, say so in the words of the
-       rule and stop — the same shape as the attachment steps above, which
-       report what the stack has not got rather than failing it. */
-    const MIN_AFFIRMED = 2;
-    if (affirmedShared < MIN_AFFIRMED) {
-      throw new NotExercised(
-        `the room is holding its first draft: ${affirmedShared} of its own statements ` +
-          `were agreed with and a room needs ${MIN_AFFIRMED} before it drafts ` +
-          `(groupDraftMinAffirmed, top-of-mind-synthesis.ts). Nothing is broken — ` +
-          `there was not enough agreed material in a two-person room for it to speak, ` +
-          `so the erasure claims below could not be exercised against a room's own words.`,
-      );
-    }
-
-    const board = await waitFor(
-      async ({ note }) => {
-        const response = await api<GroupBoard>(
-          stayer!,
-          `/api/groups/${groupId}/top-of-mind`,
-        );
-        const entries = response.body.entries ?? [];
-        note(`${entries.length} entries`);
-        return entries.length > 0 ? response : null;
-      },
-      { timeoutMs: DERIVATION_TIMEOUT_MS, label: "the room's top of mind" },
-    );
-
-    const entries = board.body.entries ?? [];
-    citedBefore = entries.filter((entry) =>
-      (entry.contributors ?? []).some((c) => c.profileId === leaverProfileId),
-    ).length;
-
-    /* NOT AN ASSERTION ON THE COUNT, AND ON PURPOSE. Whether the synthesis
-       happens to cite this particular member is the model's call, and a suite
-       that failed here would be failing the model rather than the erasure. The
-       number is CARRIED to the check after the delete, which is where it
-       decides whether the strong claim or the weak one is being made. */
-    return `${entries.length} entries, ${citedBefore} of them citing the leaver`;
-  });
+     The same mistake as the botched CSS deletion earlier tonight: anchor a
+     cut on a span boundary without inventorying what is inside it. */
 
   await step("the account is erased", async () => {
     await deleteAccount(leaver!);
@@ -517,52 +426,6 @@ async function main(): Promise<void> {
     { skip: storeReachable ? undefined : "ATTACHMENTS_ENDPOINT / ATTACHMENTS_BUCKET are unset" },
   );
 
-  await step("the room survives, and still has somebody who can administer it", async () => {
-    const rooms = await api<{ groups?: Array<{ id: string; role?: string }> }>(
-      stayer!,
-      "/api/groups",
-    );
-    if (rooms.status !== 200) throw new Error(`rooms → ${rooms.status}`);
-    const room = (rooms.body.groups ?? []).find((g) => g.id === groupId);
-    if (!room) throw new Error("the room went with the account that created it");
-
-    const members = await api<{ members?: Array<{ role?: string }> }>(
-      stayer!,
-      `/api/groups/${groupId}/members`,
-    );
-    if (members.status !== 200) throw new Error(`members → ${members.status}`);
-    const owners = (members.body.members ?? []).filter((m) => m.role === "owner");
-    if (owners.length === 0) {
-      throw new Error(
-        "the room has no owner — nobody can rename it, remove anyone, or close it, ever",
-      );
-    }
-    return `the room stands with ${members.body.members?.length ?? 0} member(s) and ${owners.length} owner(s)`;
-  });
-
-  await step("what the room wrote about them is gone with them", async () => {
-    const board = await api<GroupBoard>(stayer!, `/api/groups/${groupId}/top-of-mind`);
-    if (board.status !== 200 && board.status !== 404) {
-      throw new Error(`top of mind → ${board.status}: ${board.raw.slice(0, 200)}`);
-    }
-    const entries = board.body.entries ?? [];
-    const stillCiting = entries.filter((entry) =>
-      (entry.contributors ?? []).some((c) => c.profileId === leaverProfileId),
-    ).length;
-    if (stillCiting > 0) {
-      throw new Error(
-        `${stillCiting} entr(ies) still credit the erased account — a cascade cannot ` +
-          "reach a room's own artifact, so this is the explicit delete failing",
-      );
-    }
-    /* SAID PLAINLY WHEN THE STRONG CLAIM CANNOT BE MADE. If the synthesis
-       never cited this member, "no citations remain" is true and proves
-       nothing, and reporting it as though it did would be the same lie as a
-       silent skip. */
-    return citedBefore > 0
-      ? `the ${citedBefore} entr(ies) that cited them are gone`
-      : `no citations remain — but the room never cited them, so this ran over nothing`;
-  });
 
   await step("the other member's memory is untouched", async () => {
     const kept = await listInspirations(stayer!, { limit: 50 });
@@ -579,15 +442,11 @@ async function main(): Promise<void> {
   });
 
   await step("nothing of theirs is anywhere the other member can look", async () => {
-    const surfaces = [
-      "/api/groups",
-      `/api/groups/${groupId}/wall`,
-      `/api/groups/${groupId}/members`,
-      `/api/groups/${groupId}/top-of-mind`,
-      `/api/groups/${groupId}/proposals`,
-      "/api/inspirations",
-      "/api/signals",
-    ];
+    /* FIVE ROOM SURFACES CAME OFF THIS LIST with the block above; the two
+       that remain are the ones still served. The claim is narrower now --
+       the erased words are not readable by another ACCOUNT -- where it used
+       to also cover another MEMBER of a shared room. */
+    const surfaces = ["/api/inspirations", "/api/signals"];
     const needle = LEAVER_PHRASE.toLowerCase();
     const leaked: string[] = [];
     for (const path of surfaces) {

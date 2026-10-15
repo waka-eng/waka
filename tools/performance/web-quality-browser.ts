@@ -1,3 +1,28 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   THIS GATE MEASURES A HOME SCREEN THAT NO LONGER EXISTS (2026-10-15)
+   ═══════════════════════════════════════════════════════════════════════
+
+   It drives `.jar-home-activities button` — the old flat home's row of
+   verbs, "Review your inspirations" / "Resume review" / "Talk with WAKA" —
+   and then `.chat-header button` to come back. The flat screens were
+   deleted on 2026-08-25 (`one-product-one-system.md`: "the routes go"), and
+   the world replaced them. `.jar-home-activities` survives as rules in
+   `chrome.css` with no renderer; `.chat-header` is not in the tree at all.
+
+   SO EVERY ITERATION OF THE LOOP BELOW THROWS on its first `.click()`, and
+   all three of its gates — Home readiness, Review readiness, warm return —
+   measure nothing. It is left in place rather than rewritten because it is
+   WIRED TO NOTHING: no `package.json` script runs it and no file imports
+   it, which is also why nobody noticed.
+
+   WHAT WOULD BRING IT BACK: the three timings are still worth having, but
+   against the dock — `.waka-dock-item` rows are what a person presses now —
+   and the fixture's `/perf/scenario` page would have to paint the world
+   rather than the activity list. That is a rewrite of the fixture and the
+   probe together, not a selector swap, and it belongs to whoever next
+   measures readiness. `tools/performance/run.ts` carries the same stale
+   probe and IS wired; its readiness half has been corrected in place.
+   ═══════════════════════════════════════════════════════════════════════ */
 /** Manual current-build readiness gate against the disposable performance fixture. */
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
