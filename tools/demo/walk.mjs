@@ -4,7 +4,7 @@
  * Track D.
  *
  * Reads the seed's credentials JSON from DEMO_CREDS (the seed prints it as
- * its last line) or from a file path in argv[2]. Logs in, walks the six
+ * its last line) or from a file path in argv[2]. Logs in, walks the three
  * scenes of the README's shot list, screenshots each into
  * tools/demo/shots/, and exits non-zero naming any scene whose marker is
  * not on screen. Everything on screen within a minute of login is the
@@ -142,7 +142,15 @@ await scene("the-reading", async () => {
      failed outright rather than reporting a missing door. The reading lives
      behind the account panel now, which is where the world's own
      housekeeping went. */
-  await page.$eval(".jar-account", (el) => el.click());
+  /* AND `.jar-account` WENT THE SAME WAY AS `.jar-flatmenu` BEFORE IT.
+     The pill in the top bar was removed when settings stopped being a page
+     — founder: "I want all setting-related stuff to be only accessible
+     through the drop down and not be its own thing" — so `page.$eval`
+     threw on it exactly as the comment above describes, and this scene
+     failed outright again. The cog in the right corner is the door now;
+     `e2e:first-sixty` presses the same one, by its modifier, because that
+     corner has held two buttons since 2026-10-11. */
+  await page.$eval("button.waka-corner--settings", (el) => el.click());
   await page.waitForTimeout(400);
   await page.getByText("how it reads you", { exact: false }).first().click();
   const ok = await visible("never rewritten", 10_000);
@@ -156,88 +164,35 @@ await scene("the-reading", async () => {
   return ok;
 });
 
-/* Scene 4 — the room's wall: travel to the reading circle; the shared
-   statements stand with their owners, the room's poster speaks. */
-await scene("the-room", async () => {
-  /* the poster ask from scene two folds away before travel */
-  await page.$eval('h1.jar-poster[data-jar-chrome="1"]', (el) => el.click()).catch(() => {});
-  await page.waitForTimeout(400);
-  /* the caret beside the name in the top-left corner is the product's own
-     pointer route to another wall — the strip along the bottom edge that
-     used to be one was removed on 2026-08-24 */
-  const opened = await page.evaluate(() => {
-    const caret = document.querySelector(".jar-here-more");
-    if (!caret) return false;
-    if (caret.getAttribute("aria-expanded") !== "true") caret.click();
-    return true;
-  });
-  if (!opened) return false;
-  /* the list is React state, so it exists a render after the press */
-  await page.waitForSelector(".jar-here-row", { timeout: 5_000 });
-  const clicked = await page.evaluate(() => {
-    const rows = [...document.querySelectorAll(".jar-here-row")];
-    const row = rows.find((el) => (el.textContent ?? "").toLowerCase().includes("the reading circle"));
-    if (!row) return false;
-    row.click();
-    return true;
-  });
-  if (!clicked) return false;
-  /* travel eases, arrival wakes the room, the wall fetch lands */
-  await page.waitForTimeout(5_000);
-  return visible("This circle reads for depth, not for volume", 15_000);
-});
+/* ═══════════════════════════════════════════════════════════════════════
+   SCENES 4, 5 AND 6 ARE DELETED — ALL THREE WERE THE ROOM (2026-10-15)
+   ═══════════════════════════════════════════════════════════════════════
 
-/* THE ROOM'S PANEL, OPENED ONCE.
-   The counted stance and the door's marks both live in it — the open
-   proposal with its one counted no, and the arrivals and departures under
-   "the room so far". Neither is on the wall, and scenes 5 and 6 were both
-   reading the wall. `.jar-here` TOGGLES, so this asks before it presses:
-   two scenes each clicking it would open the panel and then shut it again. */
-const openRoomPanel = async () => {
-  await page.waitForSelector(".jar-here", { timeout: 10_000 });
-  const opened = await page.evaluate(() => {
-    const pill = document.querySelector(".jar-here");
-    if (!pill) return false;
-    if (pill.getAttribute("aria-expanded") !== "true") pill.click();
-    return true;
-  });
-  if (opened) await page.waitForTimeout(1_200);
-  return opened;
-};
+     4. `the-room`        travel to "the reading circle" and read its wall
+     5. `counted-stance`  the open proposal with its one counted no
+     6. `the-door`        who is in the room, and the mark of who passed
+                          through — "Bo", "Dee", "the room so far"
 
-/* Scene 5 — the counted stance: the open question hangs over the room —
-   one no counted, the question still standing. */
-await scene("counted-stance", async () => {
-  if (!(await openRoomPanel())) return false;
-  return visible("We keep choosing walks over meetings", 10_000);
-});
+   Rooms came out of the web in `405ee4aa`, and with them every door these
+   three went through: `.jar-here-more` and `.jar-here-row` (the walls list
+   this used to travel by), `.jar-here` (the name pill `openRoomPanel`
+   toggled), and the whole proposals flow and member ground that scenes 5
+   and 6 read. None of those classes has a renderer.
 
-/* Scene 6 — the door: who is in the room, and the mark of who passed
-   through. Dee joined and was removed; the door remembers.
+   THE DEMO IS WHERE THIS KIND OF ROT LIVES LONGEST, and this file already
+   knew it: the tombstone for `.jar-eyebrow-door` says the demo "has been
+   failing this scene, ten seconds at a time, for four days" because "the
+   demo is not a gate and nobody runs it between demos". Three scenes were
+   about to be in exactly that state again — four failures of ten seconds
+   each, then `3 scene(s) missing`, read by whoever is about to present.
 
-   THE DOOR STOPPED BEING A CONTROL. This scene pressed `.jar-eyebrow-door`
-   until 2026-08-24, when a dead-CSS review removed that class — and nothing
-   told the demo, because the demo is not a gate and nobody runs it between
-   demos. It has been failing this scene, ten seconds at a time, for four
-   days. Found on 2026-08-28 by grepping the tree for selectors no source
-   file can put on an element, which is the same question `e2e:dead-css`
-   asks of the stylesheet.
+   WHAT COVERAGE WENT: the demo no longer shows a room, a shared reading, a
+   counted stance or the door's marks. That is the demo following the
+   product rather than a gap — none of those surfaces exists to be shown.
+   `openRoomPanel` went with them; it had no other caller.
 
-   The marks did not go with the class. They moved INTO the room's panel,
-   told as sentences under "the room so far" — every version the reading
-   moved through and every arrival and departure, one story, newest first.
-   So the way in is the room's own name pill, which is the way into any
-   wall's panel and what `e2e:first-sixty` uses. */
-await scene("the-door", async () => {
-  if (!(await openRoomPanel())) return false;
-  /* the story itself, and then the two names in it: Bo is standing in the
-     room, Dee arrived and was removed and the room still says so */
-  return (
-    (await visible("the room so far", 8_000)) &&
-    (await visible("Bo", 8_000)) &&
-    (await visible("Dee", 4_000))
-  );
-});
+   The first three scenes stand: the poster, the wall you are standing on,
+   and how the reading reads you. */
 
 await browser.close();
 
@@ -245,4 +200,4 @@ if (failures.length > 0) {
   console.error(`\n${failures.length} scene(s) missing: ${failures.join(", ")}`);
   process.exit(1);
 }
-console.log("\nall six scenes on screen — the demo world stands");
+console.log("\nall three scenes on screen — the demo world stands");

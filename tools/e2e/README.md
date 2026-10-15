@@ -34,28 +34,21 @@ pnpm e2e:fixtures              # prints its URL; --port and --host accepted
 Nothing here prints a password, a token, or a connection string; quoted
 response bodies are redacted first.
 
-## Connected personal loop, without model spend
+## Connected personal loop — REMOVED (2026-10-15)
 
-`connected-learning.ts` connects the production-build browser to the real Hono
-app, authentication, disposable Postgres and queue workers. Provider output
-and embeddings are deterministic, and provider network access is blocked.
-It checks capture → three saved answers → owned reading → explicit adoption
-→ reopening without reload → exact cited-answer retraction at desktop/mobile
-sizes. API transport is an in-process bridge, not a deployed-network check.
+`connected-learning.ts` and `pnpm e2e:connected-learning` are gone. The gate
+was a rooms journey end to end — it created group profiles, published through
+`group-public-v1` and read a group wall — and every one of those routes was
+deleted when rooms came out (founder: "방 없애"). It also imported
+`packages/api/src/routes/groups-membership.js` directly, so after that
+deletion it threw on startup rather than failing a check.
 
-Build the web app and serve its production preview on `127.0.0.1:3012`, then
-run with an explicit disposable local database (its name must contain `test`
-or `disposable`):
-
-```bash
-pnpm --filter @waka/web build
-pnpm --filter @waka/web exec vite preview --host 127.0.0.1 --port 3012
-DB_CONNECTION_URL=postgres://agi@127.0.0.1:5432/waka_agent_test pnpm e2e:connected-learning
-```
-
-The harness creates and drops an isolated schema. It never loads an env file,
-refuses remote database URLs and emits only synthetic fixture diagnostics.
-This is a manual gate; it adds no automatic browser Actions runs.
+**What went with it:** the only end-to-end walk of capture → three saved
+answers → owned reading → explicit adoption → reopening without reload →
+exact cited-answer retraction, at both desktop and mobile sizes. The personal
+half of that loop is not covered anywhere else at this depth. Rebuilding it
+without the room parts is worthwhile and is not a rename — it needs its
+fixtures rewritten around a single person.
 
 ## What each step proves
 
