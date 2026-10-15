@@ -265,15 +265,24 @@ const REGISTER: Record<string, string> = {
   createProfile: "deleteProfile",
   deleteProfile: "createProfile",
   renameProfile: "RULED: an edit is its own inverse",
-  createAgentKey: "revokeAgentKey",
-  revokeAgentKey: "createAgentKey",
 
   /* THE KEEPER'S KEYS AND THE SIBLING GRANTS left the register together
      (2026-10-11). Both were tables of credentials on the settings page — a
      developer surface on a consumer product's account screen — and the
      founder's instruction was "remove anything that is not absolutely
-     necessary". `createAgentKey` STAYS, and is still minted when an agent
-     is made; what went is the UI for reading and revoking by hand, and the
+     necessary". `createAgentKey` AND `revokeAgentKey` HAVE NOW LEFT TOO
+     (2026-10-12), and this paragraph said the opposite until today: it
+     claimed the mint "STAYS, and is still minted when an agent is made".
+
+     It stopped being minted when the secret it produced was found to be
+     discarded by the line that produced it, while listing and revoking
+     lived on a panel that could never mount — a credential nobody could
+     hold, see or revoke, that the middleware nonetheless honoured. With
+     no caller left, `verbsOffered` skips both (their only occurrence is
+     their own declaration), so the pair leaves the register the same way
+     `pinConversationInspiration` did. The ROUTES are live and tested, and
+     `DELETE` is the only way to retire the rows minted while the secret
+     WAS displayed; what went is the
      client wrappers that only that UI called. */
 
 
