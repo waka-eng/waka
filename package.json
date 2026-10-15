@@ -54,7 +54,6 @@
     "e2e:snapshot": "tsx tools/e2e/computed-snapshot.ts",
     "e2e:reading-support": "tsx tools/e2e/reading-support.ts",
     "e2e:source-processing": "tsx tools/e2e/source-processing.ts",
-    "e2e:connected-learning": "tsx tools/e2e/connected-learning.ts",
     "e2e:when-it-fails": "tsx tools/e2e/when-it-fails.ts",
     "e2e:first-sixty": "tsx tools/e2e/first-sixty.ts",
     "e2e:at-scale": "tsx tools/e2e/at-scale.ts",
