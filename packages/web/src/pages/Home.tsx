@@ -3653,7 +3653,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                    literally above the poster. It is time-aware too: scrub back
                    past a pattern and it reports what existed then, or says
                    nothing at all. */
-                forming: formingWords(T, null, emerging, localeRef.current),
+                forming: formingWords(T, emerging, localeRef.current),
                 /* Nothing synthesized and nothing kept: the honest empty, and
                    it is the artifact's absence that says so, not a guess. */
                 empty: topOfMind === null && (inspirations?.length ?? 0) === 0,
@@ -3748,7 +3748,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           awayFrom: null,
           formingAlt: topOfMind?.supportChanged ? say("worldReadingSupportChanged") : null,
           asOf: null,
-          forming: formingWords(nowMs, null, emerging, localeRef.current),
+          forming: formingWords(nowMs, emerging, localeRef.current),
           empty: topOfMind === null && (inspirations?.length ?? 0) === 0,
           prevText: null,
         });

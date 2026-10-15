@@ -585,39 +585,6 @@ export async function loadSignal(id: string,signal?:AbortSignal): Promise<Signal
  * needing one shape is exactly what this layer is for, and putting it in
  * either would make the other import it.
  */
-/**
- * One memory a candidate is made of.
- *
- * A PERSONAL candidate resolves its evidence against the captures already
- * loaded and SKIPS anything that is not there — an id with nothing behind it
- * is not a memory, and inventing one would be a lie about what was saved.
- *
- * ROOM EVIDENCE WAS THE OTHER KIND and it stood on its own: it arrived
- * carrying its author and its words, exactly as a room's own orbs did, so a
- * satellite could say whose memory it was without ever fetching another
- * member's signal. Rooms went on 2026-10-12 (founder: "방 없애"). `groupId`
- * stays on this shape, null at every site that builds one, because
- * `canvas/simulation.ts` — owned by a change in flight — reads this type and
- * may not be edited from here.
- */
-export interface EvidenceRef {
-  signalId: string;
-  /** Always null now: the room it came from, when there were rooms. */
-  groupId: string | null;
-  authorUserId: string | null;
-  authorName: string | null;
-  /**
-   * WHY THIS WAS WORTH KEEPING, in one short phrase — the whisper an agent's
-   * satellite carries instead of an author's name. "얘가 이걸 만든 이유가
-   * 이거다", rendered with the element that already exists.
-   */
-  why?: string | null;
-  textPreview: string;
-  quote: string | null;
-  kind: string | null;
-  createdMs: number;
-  /** False when the payload named no date and `createdMs` is only a reference
-      for the light — the panel then prints who, and no when. */
-  dated: boolean;
-  resonance: number;
-}
+/* `EvidenceRef` WENT WITH `Proposal` (2026-10-15), its only user. Its
+   tombstone named the same imaginary blocker — that `canvas/simulation.ts`
+   reads it and may not be edited from here. Simulation never referenced it. */

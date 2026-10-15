@@ -59,7 +59,7 @@ export function deriveAgentChrome(
       held && heldNow && held.ambition !== heldNow.ambition && nowMs - T > 60_000
         ? monthTag(T, locale)
         : null,
-    forming: formingWords(T, null, notes, locale),
+    forming: formingWords(T, notes, locale),
     empty,
     prevText: null,
   };

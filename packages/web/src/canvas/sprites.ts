@@ -21,7 +21,7 @@
  * module has no edge back into the thing it was extracted from.
  */
 
-import { tintRamp, type Ramp } from "../lib/appearance";
+import { type Ramp } from "../lib/appearance";
 import { lerp, TAU } from "../lib/num";
 
 /**
@@ -257,11 +257,15 @@ export function rasterOrbPixel(ramp: Ramp, r: number, dpr: number, tier: number)
  * the frame a combination first appears, and there are at most a handful, so
  * this is a bounded one-off rather than per-frame work.
  */
-export function orbsForHue(pal: HuedPalette, hue: number, pixel: boolean): HTMLCanvasElement[][] {
-  const key = `${hue}:${pixel ? "p" : "s"}`;
+export function orbsForHue(pal: HuedPalette, pixel: boolean): HTMLCanvasElement[][] {
+  /* THE `hue` ARGUMENT WENT on 2026-10-15. Every caller passed a value that
+     could only be -1 once `Ball.hue` lost its last writer with the rooms, so
+     the `hue >= 0` arm — `tintRamp`, and `MEMBER_HUES` behind it — was
+     unreachable. The name is kept because the cache it owns is unchanged. */
+  const key = pixel ? "p" : "s";
   const got = pal.hued.get(key);
   if (got) return got;
-  const ramp = hue >= 0 ? tintRamp(pal.ramp, hue) : pal.ramp;
+  const ramp = pal.ramp;
   const tiers = Array.from({ length: TIERS }, (_, i) => i);
   const bake = pixel ? rasterOrbPixel : rasterOrb;
   const made = SIZE_R.map((r) => tiers.map((t) => bake(ramp, r, pal.dpr, t)));

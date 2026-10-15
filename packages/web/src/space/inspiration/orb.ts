@@ -156,18 +156,11 @@ export interface Ball {
   col?: number;
   /** The raw saved-signal id behind a room orb (its `id` is namespaced). */
   sigId?: string;
-  /** Whose save this is — the whisper attribution in the panel. */
-  authorName?: string;
-  /** The viewer's own save, seen inside a room: detail + reflect stay live. */
-  own?: boolean;
-  /** Titles of the room readings that cited it — the panel's links sentence. */
-  citedBy?: string[];
-  /**
-   * The evidence this was built from named no date of its own (a room
-   * proposal's does not). The panel then says WHO rather than inventing a
-   * when — omitting a fact is honest, guessing at it is not.
-   */
-  noDate?: boolean;
+  /* `authorName`, `own`, `citedBy` and `noDate` CAME OUT on 2026-10-15. All
+     four were room-orb extras — whose save it is, whether it is yours, which
+     room readings cited it, and whether its evidence named a date. With rooms
+     gone each had zero readers AND zero writers, which is the one combination
+     that cannot be defended as "written for later". */
   /* ---- the lens (v10): who kept this ---- */
   /**
    * WHO CHOSE TO KEEP THIS. The field is one field — the owner's — and agents
@@ -187,8 +180,6 @@ export interface Ball {
   /* set only on a wall that holds more than one person's memories */
   ownerProfileId?: string;
   ownerName?: string;
-  /** which member hue this orb is drawn in; -1 is yours, untinted */
-  hue?: number;
   /**
    * What produced it, and why it was worth keeping. The explainability the
    * founder asked for: one short phrase, whispered beside the memory when it
@@ -612,11 +603,16 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
  * the loop's room pour. Their two readers in files this change owns —
  * `canvas/simulation.ts`'s press-to-warm guard and `pages/Home`'s
  * `openReflections` — have been collapsed, each with a tombstone saying why.
- * What remains is `space/inspiration/field-paint.ts`, which still asks
- * `b.col === undefined` before drawing the answered-reflection mark and still
- * routes `b.hue` through `orbsForHue`'s tinted sheets. Removing the fields
- * means touching that file and the orb raster cache behind it, which is a
- * separate and larger change than deleting rooms — so the fields stay, named
- * here, with exactly one reader each and no writer at all. That is the whole
- * remaining residue of the room orb.
+ * `hue` IS NOW GONE TOO (2026-10-15), along with the tinting behind it. It
+ * had a reader in `field-paint.ts` but NO WRITER anywhere — `hueByOwnerRef`
+ * was its only one and went with the rooms — so `b.hue ?? -1` was a constant
+ * dressed as a lookup, and `orbsForHue`'s `hue >= 0` arm could never be
+ * taken. `tintRamp` and `MEMBER_HUES` went with it. `orbsForHue` itself
+ * stays: agent orbs still reach it for the pixel raster, just without a hue.
+ *
+ * `col` REMAINS, with one reader and no writer: `field-paint.ts` asks
+ * `b.col === undefined` before the answered-reflection mark, which is now
+ * always true. Left deliberately — collapsing it changes what is drawn, not
+ * just what is typed, and that wants its own change. It is the last residue
+ * of the room orb.
  */

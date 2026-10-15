@@ -185,11 +185,18 @@ describe("the sheets that close when you press away", () => {
        gets deleted. What must not change silently is the NUMBER and which
        sheets, and the number is asserted above while the files are asserted
        by the ledger. */
+    /* AGAINST `calls.length`, NOT A LITERAL. At one call this cannot fail --
+       one call has one state and a set of one -- so written as `.toBe(1)` it
+       was a line that could only ever pass. Expressed against the count it
+       states the actual invariant (one sheet per call, no repeats) and arms
+       itself the moment a second sheet opts in, instead of needing somebody
+       to notice and rewrite it. Inert today, on purpose, and not pretending
+       otherwise. */
     const states = calls.map((args) => args.split(",")[0]!.trim());
     expect(
       new Set(states).size,
       `${calls.length} calls, fewer sheets than calls: ${states.join(" | ")}. ` +
         "The one covered sheet is the provenance room.",
-    ).toBe(1);
+    ).toBe(calls.length);
   });
 });

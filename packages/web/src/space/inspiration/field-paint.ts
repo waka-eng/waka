@@ -246,8 +246,11 @@ export function paintField(p: FieldPaint) {
          smooth untinted memories are the common case and skip the cache
          entirely. */
       const machine = b.origin === "agent";
-      const hue = b.hue ?? -1;
-      const sheet = hue < 0 && !machine ? pal.orbs : orbsForHue(pal, hue, machine);
+      /* ONE FACT, NOT TWO. This used to resolve a hue and a resolution into
+         one sheet; the hue half had no writer left (see `Ball` in orb.ts), so
+         `hue < 0` was always true and only WHAT KIND OF MIND kept it decides.
+         Your own smooth memories are the common case and skip the cache. */
+      const sheet = machine ? orbsForHue(pal, true) : pal.orbs;
       if (smoothing === machine) {
         smoothing = !machine;
         ctx!.imageSmoothingEnabled = smoothing;
