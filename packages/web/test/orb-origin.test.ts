@@ -14,7 +14,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { makeBall, seedOf, makeGroupInspirationBall, groupInspirationViewId, type Inspiration } from "../src/space/inspiration/orb";
+import { makeBall, seedOf, type Inspiration } from "../src/space/inspiration/orb";
 
 function inspiration(source: "app" | "agent"): Inspiration {
   return {
@@ -30,18 +30,19 @@ function inspiration(source: "app" | "agent"): Inspiration {
   };
 }
 
+/* ONE CASE LEFT THIS FILE ON 2026-10-15: "keeps one public capture distinct
+   across personal and room scenes without changing its API identity". It held
+   the rule that a scene instance is not another API identifier — the same
+   save standing on your wall and in two rooms had to be three objects with
+   one `sigId` — and it tested it through `makeGroupInspirationBall` and
+   `groupInspirationViewId`, which are deleted with rooms. The rule itself is
+   written up in the tombstone those functions left behind in
+   `space/inspiration/orb.ts`, because it will be true again the first time
+   one memory has to appear in two places at once; there is simply nothing in
+   the product that does so now, and a test that constructs its own subject
+   to assert about would be testing the test. The three cases below are about
+   `seedOf`/`makeBall` threading `origin`, which rooms never touched. */
 describe("the self wall's origin", () => {
-  it('keeps one public capture distinct across personal and room scenes without changing its API identity', () => {
-    const capture = { id: 'capture-1', text: 'Public words', kind: 'note' as const, source: 'app' as const,
-      createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z', ownerProfileId: 'owner', ownerName: 'Owner', ownerType: 'human' as const };
-    const one = makeGroupInspirationBall(capture, { id: 'group-1', col: 1 }, 'owner');
-    const two = makeGroupInspirationBall(capture, { id: 'group-2', col: 2 }, 'viewer');
-    expect(new Set([capture.id, one.id, two.id]).size).toBe(3);
-    expect(one.id).toBe(groupInspirationViewId('group-1', capture.id));
-    expect(one).toMatchObject({ col: 1, own: true, sigId: capture.id, ownerProfileId: 'owner', authorName: 'Owner' });
-    expect(two).toMatchObject({ col: 2, own: false, sigId: capture.id });
-    expect(makeGroupInspirationBall(capture, { id: 'group-1', col: 1 }, 'owner').id).toBe(one.id);
-  });
   it("paints an agent-kept row as the machine's, not the person's", () => {
     const seed = seedOf(inspiration("agent"), new Map(), new Map());
     expect(seed.origin).toBe("agent");

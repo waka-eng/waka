@@ -9,8 +9,6 @@ import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.
 import { requestSignalDerivation } from './inspiration-derivation-requests.js';
 import { enqueueDeriveSignals } from './queue.js';
 import { loadInspirationMaterial, assertMaterialCurrent } from './inspiration-material.js';
-import { createGroupForProfile } from '../routes/groups-membership.js';
-import * as processing from './inspiration-processing.js';
 
 let t: TestDatabase;
 let sequence = 0;
@@ -140,39 +138,23 @@ describe('source material and its numbered processing request', () => {
       .toEqual({ derived_at: null, completed_at: null, result: null });
   });
 
-  it('binds public room material independently of private reflection changes', async () => {
-    const f = await fixture();
-    const group = await createGroupForProfile(t.db as never, { profileId: f.profileId, name: 'Shared room' });
-    const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id = ${group.id}`;
-    await t.sql`UPDATE inspirations SET visibility = 'public' WHERE id = ${f.inspirationId}`;
-    await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'edited', changedSource: 'inspiration' }, tx as never));
-    const groupBefore = await t.sql`SELECT id, material_revision, derivation_request_version FROM inspiration_processing WHERE profile_id = ${mind.id}`;
-    await t.sql`INSERT INTO reflections(profile_id, inspiration_id, question, answer) VALUES (${f.profileId}, ${f.inspirationId}, 'Why?', 'PRIVATE_SENTINEL')`;
-    const personal = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'edited', changedSource: 'reflection' }, tx as never));
-    expect(personal.receipt.materialRevision).toBe('3');
-    expect(await t.sql`SELECT id, material_revision, derivation_request_version FROM inspiration_processing WHERE profile_id = ${mind.id}`).toEqual(groupBefore);
-    expect(await versions(f.inspirationId)).toEqual({ personal_revision: '3', public_revision: '2' });
-    expect(JSON.stringify(await t.sql`SELECT row_to_json(p) AS metadata FROM inspiration_processing p`)).not.toContain('PRIVATE_SENTINEL');
-  });
+  /* ── TWO ROOM FAN-OUT CASES, DELETED ──────────────────────────────────
+     Founder: "방 없애". "binds public room material independently of private
+     reflection changes" held the SPLIT: a capture shared into a room carries
+     two revisions, a personal one that a private answer advances and a
+     public one that it must not, so writing something private could never
+     invalidate what a room had already read. One scope is left, so there is
+     no split to bind.
 
-  it.each(['private', 'deleted'] as const)('a %s capture encountered during room backfill does not strand the remaining public material', async (change) => {
-    const f = await fixture();
-    await t.sql`UPDATE inspirations SET visibility = 'public' WHERE id = ${f.inspirationId}`;
-    await t.sql`INSERT INTO inspirations(profile_id, text, visibility) VALUES (${f.profileId}, 'Another public source', 'public')`;
-    let calls = 0;
-    const group = await createGroupForProfile(t.db as never, { profileId: f.profileId, name: 'Backfill race' }, {
-      enqueueDerive: async (profileId, inspirationId, reason, destination) => {
-        if (++calls === 1) {
-          if (change === 'deleted') await t.sql`DELETE FROM inspirations WHERE id = ${inspirationId}`;
-          else await t.sql`UPDATE inspirations SET visibility = 'private' WHERE id = ${inspirationId}`;
-        }
-        return t.db.transaction((tx) => enqueueDeriveSignals(profileId, inspirationId, reason, destination, tx as never));
-      },
-    });
-    expect(calls).toBe(2);
-    expect(await t.sql`SELECT p.id FROM inspiration_processing p JOIN profiles d ON d.id = p.profile_id WHERE d.group_id = ${group.id}`).toHaveLength(1);
-    expect(await t.sql`SELECT id FROM background_jobs WHERE type = 'derive_signals'`).toHaveLength(1);
-  });
+     "a %s capture encountered during room backfill does not strand the
+     remaining public material" (private / deleted) held the backfill
+     `createGroupForProfile` ran on arrival — one derivation per existing
+     public memory, aimed at the room's mind, surviving a capture that turns
+     private or disappears mid-run. Joining is gone, so arriving-with-an-
+     archive is gone, and the loop it protected no longer runs.
+
+     Both were also the only callers of the `enqueueDerive` seam on
+     `createGroupForProfile`. */
 
   it('refuses a foreign destination and rolls back the just-enqueued job', async () => {
     const f = await fixture(), other = await fixture();
@@ -182,37 +164,25 @@ describe('source material and its numbered processing request', () => {
     expect(await t.sql`SELECT id FROM inspiration_processing`).toHaveLength(0);
   });
 
-  it('does not give a legacy agent membership permission to contribute room material', async () => {
-    const f = await fixture();
-    await createGroupForProfile(t.db as never, { profileId: f.profileId, name: 'Legacy seat' });
-    await t.sql`UPDATE profiles SET type = 'agent' WHERE id = ${f.profileId}`;
-    await t.sql`UPDATE inspirations SET visibility = 'public' WHERE id = ${f.inspirationId}`;
-    const result = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created', changedSource: 'inspiration' }, tx as never));
-    expect(result.groupJobIds).toEqual([]);
-    expect(await t.sql`SELECT profile_id FROM inspiration_processing`).toEqual([{ profile_id: f.profileId }]);
-    expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(1);
-  });
+  /* ── TWO MORE ROOM CASES, DELETED ─────────────────────────────────────
+     Founder: "방 없애". "does not give a legacy agent membership permission
+     to contribute room material" was a real gate over real bad data — six
+     agent-seated rows had reached the dev database, and `docs/data-model.md`
+     rule 5 says membership is between people. It gated `groupJobIds` coming
+     back empty for an agent with a seat. No fan-out, no `groupJobIds`, no
+     seat: the rule it enforced is now enforced by there being nowhere to go.
+     NOTE FOR WHOEVER DROPS THE TABLES: those rows are still in the dev
+     database. Nothing here deleted them and nothing here can.
 
-  it('a destination becoming unavailable does not roll back the personal save or leave its failed room enqueue behind', async () => {
-    const f = await fixture();
-    await createGroupForProfile(t.db as never, { profileId: f.profileId, name: 'Room closes during save' });
-    const record = processing.recordInspirationProcessingRequest;
-    // Only the authorization outcome is injected here; the source update,
-    // queue writes, savepoint and rollback are real SQL. Separate cases above
-    // exercise the actual visibility/membership checks and backfill races.
-    vi.spyOn(processing, 'recordInspirationProcessingRequest').mockImplementation((tx, input) => {
-      if (input.profileId !== input.ownerProfileId) throw new processing.InspirationProcessingUnavailableError();
-      return record(tx, input);
-    });
-    const result = await t.db.transaction(async (tx) => {
-      await tx.execute(sql`UPDATE inspirations SET text = 'The personal save survives', visibility = 'public' WHERE id = ${f.inspirationId}::uuid`);
-      return requestSignalDerivation({ ...f, reason: 'edited', changedSource: 'inspiration' }, tx as never);
-    });
-    expect(result.groupJobIds).toEqual([]);
-    expect((await t.sql`SELECT text FROM inspirations WHERE id = ${f.inspirationId}`)[0].text).toBe('The personal save survives');
-    expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(1);
-    expect(await t.sql`SELECT id FROM inspiration_processing`).toHaveLength(1);
-  });
+     "a destination becoming unavailable does not roll back the personal save
+     or leave its failed room enqueue behind" pinned the most important
+     ordering property of the fan-out — that a room's enqueue failing inside
+     the save transaction must cost the room's job and NOT the person's
+     capture. It needed a second destination that could fail independently of
+     the first. There is one destination now, and if it fails the save fails,
+     which is the correct and much simpler behaviour. The savepoint-and-
+     rollback machinery it exercised comes out with
+     `requestSignalDerivation`'s room branch. */
 
   it('deleting a reflected source removes its revision and processing metadata without orphaning copies', async () => {
     const f = await fixture();

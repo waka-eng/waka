@@ -2,9 +2,15 @@
  * Client for `/api/signals` — mirrors `packages/api/src/routes/signals.ts`.
  *
  * Layer 2: what was read out of the archive. A signal is a statement the
- * server distilled and keeps attaching evidence to; the two share verbs at the
- * bottom are how one crosses into a group, and they send the statement only —
- * the captures underneath it never leave the account.
+ * server distilled and keeps attaching evidence to.
+ *
+ * A SIGNAL USED TO BE ABLE TO LEAVE. Two share verbs at the bottom of this
+ * file crossed one into a room, sending the statement alone — the captures
+ * underneath it never left the account, which was the canon's privacy line
+ * and the reason a room could say WHO fed an entry and never WHICH memory
+ * did. The verbs went before rooms did; `sharedGroupIds` went with rooms, on
+ * 2026-10-12 (founder: "방 없애"). Nothing a signal is can now be seen by
+ * anybody but its owner.
  */
 
 import {
@@ -48,7 +54,6 @@ export interface ApiSignal {
   contested: boolean;
   /** Gave way when its owner settled a pair — a state, never a deletion. */
   yielded: boolean;
-  sharedGroupIds: string[];
   createdAt: string;
 }
 

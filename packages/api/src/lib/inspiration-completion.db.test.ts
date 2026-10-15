@@ -1,9 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
-import { enqueueDeriveSignals, enqueueTopOfMindRefresh, enqueueGroupTopOfMindRefresh, postgresBackgroundJobStore, processBackgroundJob } from './queue.js';
+import { enqueueDeriveSignals, enqueueTopOfMindRefresh, postgresBackgroundJobStore, processBackgroundJob } from './queue.js';
 import { setDefaultModelProviderForTests, type ModelProvider, type SignalSupportAssessmentInput, type TopOfMindSynthesisInput } from './model-provider.js';
 import { GeminiEmbeddingHttpClient } from './inspiration-embeddings.js';
-import { createGroupForProfile, joinGroupByCode } from '../routes/groups-membership.js';
 
 let t: TestDatabase;
 let originalUrl: string;
@@ -41,25 +40,6 @@ async function runNext() {
   const result = await processBackgroundJob(job!);
   await postgresBackgroundJobStore.markSucceeded(job!, result ?? null);
   return job!;
-}
-
-async function groupFixture() {
-  const a = await fixture(), b = await fixture();
-  await t.sql`DELETE FROM background_jobs`; // exercise only the room path
-  const group = await createGroupForProfile(t.db as never, { profileId: a.profileId, name: 'Shared processing' });
-  await joinGroupByCode(t.db as never, { profileId: b.profileId, joinCode: group.joinCode });
-  const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id = ${group.id}`;
-  await t.sql`UPDATE inspirations SET visibility = 'public' WHERE id IN (${a.sourceId}, ${b.sourceId})`;
-  const first = await enqueueDeriveSignals(a.profileId, a.sourceId, 'created', mind.id as string);
-  const second = await enqueueDeriveSignals(b.profileId, b.sourceId, 'created', mind.id as string);
-  extract.mockImplementation(async () => ({ statements: [
-    { statement: 'Quiet helps me choose', quote: 'A saved source' },
-    { statement: 'Small experiments help me learn', quote: 'A saved source' },
-  ] }));
-  vi.mocked(GeminiEmbeddingHttpClient.prototype.embed).mockImplementation(async (text) =>
-    [text === 'Small experiments help me learn' ? 0 : 1, text === 'Small experiments help me learn' ? 1 : 0, ...new Array<number>(766).fill(0)]);
-  await runNext(); await runNext(); await runNext();
-  return { a, b, group, mind, first, second };
 }
 
 describe('saved material reaches an actual reading', () => {
@@ -160,30 +140,24 @@ describe('saved material reaches an actual reading', () => {
     expect((await read(next.receipt.id)).reading_job_id).not.toBe(before.reading_job_id);
   });
 
-  it('a room receipt waits for a real shared reading, not merely a successful waiting-for-members job', async () => {
-    const { a, group, mind, first, second } = await groupFixture();
-    expect(await read(second.receipt.id)).toMatchObject({ derived_at: expect.anything(), completed_at: null, result: null });
-    expect(await t.sql`SELECT id FROM top_of_minds WHERE group_id = ${group.id}`).toHaveLength(0);
-    const signals = await t.sql`SELECT id FROM signals WHERE profile_id = ${mind.id}`;
-    expect(signals).toHaveLength(2);
-    for (const signal of signals) await t.sql`INSERT INTO feedback(profile_id, target_type, target_id, value)
-      VALUES (${a.profileId}, 'signal', ${signal.id}, 'true')`;
-    await enqueueGroupTopOfMindRefresh(a.profileId, group.id, 'signals_changed'); await runNext();
-    const [artifact] = await t.sql`SELECT id, version FROM top_of_minds WHERE group_id = ${group.id} AND status = 'live'`;
-    for (const receipt of [first.receipt, second.receipt]) expect(await read(receipt.id))
-      .toMatchObject({ completed_at: expect.anything(), result: { topOfMindId: artifact.id, version: artifact.version } });
-    expect((await read(a.receipt.id)).completed_at).toBeNull();
-  });
+  /* ── THREE ROOM RECEIPTS, DELETED, AND `groupFixture` WITH THEM ────────
+     Founder: "방 없애". What stood here: "a room receipt waits for a real
+     shared reading, not merely a successful waiting-for-members job", and
+     two cases of "does not complete a room contribution after its source is
+     withdrawn / left". All three asked the same question in the room's
+     dialect — when may a CONTRIBUTOR'S receipt be stamped complete by a
+     reading that is not their own? — and that question needs two people
+     pooling into a third mind to even be askable.
 
-  it.each(['withdrawn', 'left'] as const)('does not complete a room contribution after its source is %s', async (change) => {
-    const { a, group, first, second } = await groupFixture();
-    if (change === 'withdrawn') await t.sql`UPDATE inspirations SET visibility = 'private' WHERE id = ${a.sourceId}`;
-    else await t.sql`DELETE FROM group_members WHERE group_id = ${group.id} AND profile_id = ${a.profileId}`;
-    await enqueueGroupTopOfMindRefresh(a.profileId, group.id, 'signals_changed'); await runNext();
-    expect((await read(first.receipt.id)).completed_at).toBeNull();
-    if (change === 'left') expect((await read(first.receipt.id)).result).toBeNull();
-    expect((await read(second.receipt.id)).completed_at).not.toBeNull();
-  });
+     NOT REWRITTEN AS A PERSONAL CASE, deliberately. A person's receipt is
+     completed by their own reading, which is the file's main subject and is
+     already held by "does not publish a reading without its required
+     principle-processing handoff" and the edit-races-synthesis case below.
+     Keeping these three with the rooms taken out would have meant one
+     profile publishing to itself and asserting the stamping worked — true,
+     already covered, and silent about the only thing these tests were for.
+     `enqueueGroupTopOfMindRefresh` and the `visibility = 'public'` fan-in
+     they drove are both being removed from the pipeline. */
 
   it('does not complete either source revision after a source edit races with synthesis', async () => {
     const f = await fixture(); await runNext();

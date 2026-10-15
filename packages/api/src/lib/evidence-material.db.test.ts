@@ -5,7 +5,6 @@ import { deriveSignalsForInspiration } from "./signal-derivation.js";
 import type { ModelProvider } from "./model-provider.js";
 import { ensureInspirationEmbedding } from "./inspiration-embeddings.js";
 import { getProfileSignal } from "../routes/signals.js";
-import { createGroupForProfile } from "../routes/groups-membership.js";
 
 let t: TestDatabase;
 let sequence = 0;
@@ -182,13 +181,23 @@ describe("evidence uses the material that was actually read", () => {
     expect(row).toMatchObject({ quote: "A different surviving answer", quote_reflection_id: other.id, reason: null });
   });
 
-  it("cannot attach a private answer quote to a room signal even through direct SQL", async () => {
+  /* THE ROOM CAME OUT OF THIS ONE; THE CONSTRAINT DID NOT.
+     Founder: "방 없애". This used to stand a room's mind up through
+     `createGroupForProfile` and aim the forbidden insert at a room signal,
+     because a room's mind was the only profile that ever held evidence whose
+     owner was somebody else. `signal_evidence_private_quote_check` does not
+     mention rooms: it says a quoted private answer may only ever sit on a row
+     whose `profile_id` IS its `owner_profile_id`. A second plain profile
+     exercises exactly that, and goes on exercising it after the room writers
+     are gone — which is the point, since the constraint is staying in the
+     schema. Deleting the gate with the feature would have left a live
+     constraint with nothing holding it. */
+  it("cannot attach a private answer quote to another profile's signal even through direct SQL", async () => {
     const f = await fixture();
-    const group = await createGroupForProfile(t.db as never, { profileId: f.profileId, name: "A room" });
-    const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id = ${group.id}`;
-    const [signal] = await t.sql`INSERT INTO signals (profile_id, statement) VALUES (${mind.id}, 'A room pattern') RETURNING id`;
+    const other = await fixture();
+    const [signal] = await t.sql`INSERT INTO signals (profile_id, statement) VALUES (${other.profileId}, 'Someone else pattern') RETURNING id`;
     await expect(t.sql`INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id, quote, quote_source, quote_reflection_id, quote_source_hash)
-      VALUES (${mind.id}, ${f.profileId}, ${signal.id}, ${f.inspirationId}, 'Private answer', 'own', ${f.reflectionId}, 'hash')`)
+      VALUES (${other.profileId}, ${f.profileId}, ${signal.id}, ${f.inspirationId}, 'Private answer', 'own', ${f.reflectionId}, 'hash')`)
       .rejects.toThrow(/private_quote_check/);
   });
 

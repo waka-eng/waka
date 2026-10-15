@@ -2,7 +2,8 @@
  * LAYER 3 — the one artifact, drawn as headquarters.
  *
  * `docs/data-model.md` is blunt about the shape: there is exactly ONE top of
- * mind per profile and one per group. So nothing here is a list of competing
+ * mind per profile — and one per room, until rooms were removed on
+ * 2026-10-12 (founder: "방 없애"). So nothing here is a list of competing
  * boards — it is the entries of the single board, in the server's order, plus
  * the two things the page has to decide about them: which sentence leads, and
  * what to say when none does yet.
@@ -32,7 +33,16 @@ export type JarNote = Entry;
 
 export interface Adopted {
   ambition: string;
-  /** The room whose board this is, or null when it is your own. */
+  /**
+   * Null at every site that builds one, and kept anyway.
+   *
+   * It was the room whose board this is. `canvas/simulation.ts` reads this
+   * type and is owned by a change in flight, so the field cannot come out
+   * from here — and the HEADER above is the reason it would be worth keeping
+   * even if it could: this field is what made the mislabelling visible when
+   * a loop over rooms wrote a room's ambition into your one slot. A reader
+   * who deletes it should know what it caught.
+   */
   groupName: string | null;
   createdMs: number;
 }
@@ -53,7 +63,17 @@ export interface ReflectState {
  */
 export type Provenance = Map<string, string | null>;
 
-/** The room's pending rewrite of the ambition — the one adoptable candidate. */
+/**
+ * THE ROOM'S PENDING REWRITE OF THE AMBITION — the one adoptable candidate,
+ * for a room that no longer exists.
+ *
+ * Nothing constructs this and nothing reads it: `pages/Home`'s `proposal`
+ * state went with rooms on 2026-10-12 (founder: "방 없애"), and its one
+ * consumer — `formingWords`'s `proposalMs` — now receives `null` at both
+ * call sites. The TYPE stays for one turn longer than the state because
+ * `canvas/simulation.ts` is owned by a change in flight and this module is
+ * one of its imports; it goes with the loop's group branches.
+ */
 export interface Proposal {
   groupId: string;
   proposalId: string;

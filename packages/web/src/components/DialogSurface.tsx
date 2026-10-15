@@ -124,8 +124,8 @@ function focusableWithin(root: HTMLElement): HTMLElement[] {
  *
  * Everything that did not move: the notepad and the composer (unsaved words,
  * and the audit's §2.1(d) wants them harder to leave by accident, not
- * easier), `InspirationSearch`, `PrincipleShare`, `ReadingChanges`,
- * `SpaceSettings`, `GroupPanel`, the join sheet, the settings card and the
+ * easier), `InspirationSearch`, `PrincipleShare`, `ReadingChanges`, the
+ * settings card and the
  * card that opens on one kept memory (`jar-panel`, z-70 — it opens INSIDE a
  * destination and genuinely is a thing on top of the thing you are in). A
  * confirmation is the clearest case of all: it exists to be answered, so

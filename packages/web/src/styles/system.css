@@ -495,8 +495,14 @@ body {
    no matter how specific the challenger is. Raising specificity in a lower
    layer can never win. The entry had to leave the register, not be
    out-ranked. */
-.jar-panel-vis,
-.jar-grounds,
+/* `.jar-panel-vis` LEFT THIS REGISTER with the Private/Public pair on an
+   opened memory (2026-10-12, founder: remove the toggle, with rooms).
+   `.jar-grounds` LEFT IT with the band it named — the row of
+   members under a room's wall, which chose whose ground you were standing
+   in. Rooms were removed on 2026-10-12 (founder: "방 없애"), so the eyebrow
+   register has nothing to rule about it. Same reason as the six `.profile-*`
+   names below: a register entry for a class nothing emits is a declaration
+   for nothing. */
 .login-eyebrow,
 .field-label,
 .login-divider,

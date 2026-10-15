@@ -32,11 +32,15 @@
  *     which was always the honest input — and it is computed in
  *     `lib/aliveness.ts` and spent by `space/inspiration/field.ts`, never
  *     here; see the tombstone below for why this file does not own it.
- *   - An inspiration is never shared as itself into another account beyond
- *     the rooms its author's account belongs to, and only when marked public;
- *     an orb in the field has no out-loud/held state to render any more.
- *   - An inspiration cites no group. Groups consume signals, so "where else
- *     this led" is a property of the signal above it, not the memory below.
+ *   - An inspiration is never shared as itself into another account at all,
+ *     and since 2026-10-12 there is nowhere for one to go: rooms were the
+ *     only crossing and the founder removed them ("방 없애"). An orb in the
+ *     field has no out-loud/held state to render.
+ *   - An inspiration cited no room even then. Rooms consumed SIGNALS, so
+ *     "where else this led" was a property of the signal above a memory and
+ *     never of the memory below — which is why `sharedGroupIds` lived on
+ *     `Signal` and not here, and why removing rooms takes nothing off this
+ *     type.
  */
 
 import {
@@ -83,7 +87,13 @@ export interface Inspiration {
   id: string;
   preview: string;
   /**
-   * Whether the groups this account is in can see it.
+   * Whether anything beyond this account can see it.
+   *
+   * WHAT IT MEANT UNTIL 2026-10-12: whether the ROOMS this account belonged
+   * to could see it. Rooms are gone (founder: "방 없애") and the column is
+   * deliberately untouched — the API still stores and returns `visibility`,
+   * and the founder has an open question about whether that axis means
+   * anything now. Nothing in this world renders it either way.
    *
    * A DELIBERATE, LOSSY TRANSLATION. The canon names this `visibility` and
    * types it as an enum (`private` | `public`) precisely so it can grow —
@@ -173,8 +183,12 @@ export interface Signal {
   locked: boolean;
   /** Every inspiration behind it is gone; only the lock is keeping it here. */
   unsupported: boolean;
-  /** The groups this signal is shared into. Inspirations never appear in a group. */
-  sharedGroupIds: string[];
+  /* `sharedGroupIds` IS GONE — the rooms this signal had been shared into.
+     It was the one field that could make a memory's light say "something you
+     said out loud rests on this" (`FIELD_FLOOR_IN_GROUP`, now also gone),
+     and the server no longer computes it: rooms were removed on 2026-10-12
+     (founder: "방 없애"). Inspirations never appeared in a room at all — only
+     the patterns above them crossed. */
 }
 
 /** What a signal rests on, and why it was read that way. */
@@ -281,7 +295,6 @@ export function toSignal(row: ApiSignal): Signal {
     createdMs: ms(row.createdAt),
     locked: Boolean(row.locked),
     unsupported: Boolean(row.unsupported),
-    sharedGroupIds: Array.isArray(row.sharedGroupIds) ? row.sharedGroupIds : [],
   };
 }
 
@@ -577,14 +590,19 @@ export async function loadSignal(id: string,signal?:AbortSignal): Promise<Signal
  *
  * A PERSONAL candidate resolves its evidence against the captures already
  * loaded and SKIPS anything that is not there — an id with nothing behind it
- * is not a memory, and inventing one would be a lie about what was saved. ROOM
- * evidence stands on its own: it arrives carrying its author and its words,
- * exactly as a room's own orbs do, so a satellite can say whose memory it is
- * without ever fetching another member's signal.
+ * is not a memory, and inventing one would be a lie about what was saved.
+ *
+ * ROOM EVIDENCE WAS THE OTHER KIND and it stood on its own: it arrived
+ * carrying its author and its words, exactly as a room's own orbs did, so a
+ * satellite could say whose memory it was without ever fetching another
+ * member's signal. Rooms went on 2026-10-12 (founder: "방 없애"). `groupId`
+ * stays on this shape, null at every site that builds one, because
+ * `canvas/simulation.ts` — owned by a change in flight — reads this type and
+ * may not be edited from here.
  */
 export interface EvidenceRef {
   signalId: string;
-  /** The room it came from, when it came from one. */
+  /** Always null now: the room it came from, when there were rooms. */
   groupId: string | null;
   authorUserId: string | null;
   authorName: string | null;

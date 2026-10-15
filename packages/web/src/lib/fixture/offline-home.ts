@@ -69,10 +69,12 @@ export interface OfflineHome {
    *
    * Signed out there is no profile, so `viewerIdRef` was null and every
    * derivation that asks "is this one mine?" answered no about all of them.
-   * That is not cosmetic on this surface: a room's ground is the members whose
-   * id matches the viewer's (`onThisWall`), so all four fixture rooms stood
-   * empty until you picked somebody out of the corner — the layout this file
-   * exists to let a person LOOK AT was the one thing it could not show.
+   * That was not cosmetic while rooms existed: a room's ground was the
+   * members whose id matched the viewer's (`onThisWall`), so all four
+   * fixture rooms stood empty until you picked somebody out of the corner —
+   * the layout this file exists to let a person LOOK AT was the one thing it
+   * could not show. The rooms went on 2026-10-12 (founder: "방 없애") and the
+   * viewer id still decides whose-is-whose on your own ground.
    *
    * The fixture already invents the member it calls "You". Naming it here is
    * what lets the page treat it as the viewer, so whose-is-whose works
@@ -180,7 +182,6 @@ function offlineReading(
       createdMs: at,
       locked: false,
       unsupported: false,
-      sharedGroupIds: [],
     },
     evidence: evidence.map(([m, quote]) => ({
       signalId: `offline-p${n}`,
@@ -434,11 +435,17 @@ export function offlineHome(): OfflineHome | null {
     signals: readings.map((r) => r.signal),
     citations,
     notes,
-    /* the same id `Home`'s fixture rooms give their "You" member */
+    /* `fx-you` was the id `Home`'s four fixture rooms gave their "You"
+       member, so that scene membership — which matched a room's ground
+       against the viewer — had somebody to match. The rooms went on
+       2026-10-12 (founder: "방 없애"); the id stays because every derivation
+       that asks "is this one mine?" still needs an answer offline, and
+       without one they all answered no. */
     viewerProfileId: "fx-you",
     adopted: {
       ambition: "I am making the surface that shows what I meant, so I stop having to explain it.",
-      /* your own board, so there is no room to name */
+      /* `groupName` is null at every site that builds an `Adopted` — see
+         `space/top-of-mind/board.ts` for why the field is still there. */
       groupName: null,
       createdMs: boardMs,
     },

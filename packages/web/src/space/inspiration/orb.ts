@@ -26,7 +26,6 @@
 import { Inspiration, type Evidence, type Signal } from "../../lib/data";
 import { hashStr, mix32, TAU } from "../../lib/num";
 import { type ApiAgentSignal } from "../../lib/agent-contract";
-import type { ApiGroupFieldInspiration } from '../../lib/api';
 import { FIELD_CARRY_PROMOTION_EVIDENCE } from "../../lib/aliveness";
 import { sizeIdxFor } from "../../canvas/sprites";
 
@@ -53,7 +52,10 @@ export interface Ball {
   /** Nothing rests on this memory yet, and it is old enough that something
       could have. The one place the field points forward instead of back. */
   frontier: boolean;
-  hasGroup: boolean;
+  /* `hasGroup` IS GONE — a pattern resting on this memory had been shared
+     into a room, which bought the orb a floor in the field's light. Rooms
+     were removed on 2026-10-12 (founder: "방 없애") and nothing could set it
+     true, since the server stopped computing `Signal.sharedGroupIds`. */
   textPreview: string;
   /** What kind of capture it was — the reflection question is asked about it. */
   kind: string | null;
@@ -256,9 +258,10 @@ export interface SignalSeed {
   promotion: number;
   onPoster: boolean;
   underPrinciple: boolean;
-  /** True when a pattern citing it is shared to a room. Captures themselves
-      never cross an account boundary — only the patterns above them do. */
-  inGroup: boolean;
+  /* `inGroup` — a pattern citing this memory was shared to a room. The
+     distinction it held is still true of the product and worth keeping: a
+     CAPTURE never crossed an account boundary, only the patterns above one
+     did. There is nothing to cross into now. */
   /** The words a pattern quoted from this memory, when one named them. */
   quote: string | null;
   /** The statements that rest on this memory, in the server's words. */
@@ -320,7 +323,6 @@ export interface SkyOverInspiration {
   onPoster: boolean;
   /** A pattern citing it is cited by a principle. */
   underPrinciple: boolean;
-  inGroup: boolean;
   quote: string | null;
   terms: string[];
 }
@@ -374,10 +376,6 @@ export function skyOf(
     underPrinciple: principleSignalIds
       ? above.some((p) => principleSignalIds.has(p.id))
       : false,
-    /* A memory is never in a room. What can be is a PATTERN resting on it —
-       so this says "something you shared out loud stands on this", which is
-       true, without the memory itself having gone anywhere. */
-    inGroup: above.some((p) => p.sharedGroupIds.length > 0),
     quote: cites.find((e) => e.quote)?.quote ?? null,
     terms: above.map((p) => p.statement),
   };
@@ -421,7 +419,6 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     onPoster: s.onPoster,
     underPrinciple: s.underPrinciple,
     frontier: false,
-    hasGroup: s.inGroup,
     textPreview: s.textPreview,
     kind: s.kind,
     quote: s.quote ?? null,
@@ -530,7 +527,6 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
     onPoster: false,
     underPrinciple: false,
     frontier: false,
-    hasGroup: false,
     textPreview: s.textPreview,
     kind: s.kind,
     quote: s.quote,
@@ -587,20 +583,40 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
   return b;
 }
 
-/** A scene instance is not another API identifier for its inspiration. */
-export function groupInspirationViewId(groupId: string, inspirationId: string) {
-  return `group:${groupId}:inspiration:${inspirationId}`;
-}
-
-export function makeGroupInspirationBall(inspiration: ApiGroupFieldInspiration, group: { id: string; col: number }, viewerProfileId: string | null): Ball {
-  const ball = makeAgentBall({ id: groupInspirationViewId(group.id, inspiration.id), agentId: group.id,
-    origin: inspiration.source === 'agent' || inspiration.ownerType === 'agent' ? 'agent' : 'human',
-    textPreview: inspiration.text, quote: null, kind: inspiration.kind,
-    capturedAt: inspiration.createdAt, updatedAt: inspiration.updatedAt, producedBy: null,
-    ownerProfileId: inspiration.ownerProfileId, ownerName: inspiration.ownerName });
-  ball.col = group.col;
-  ball.sigId = inspiration.id; // Existing field holds the saved inspiration ID, not a signal ID.
-  ball.authorName = inspiration.ownerName;
-  ball.own = viewerProfileId !== null && inspiration.ownerProfileId === viewerProfileId;
-  return ball;
-}
+/**
+ * `groupInspirationViewId` AND `makeGroupInspirationBall` ARE GONE, AND THEY
+ * WERE THE LAST ROOM CODE IN THIS FILE.
+ *
+ * Rooms were removed on 2026-10-12 (founder: "방 없애") and these two survived
+ * three days as a splint, because `canvas/simulation.ts` called the second by
+ * name for every wall of kind `"group"` — of which `pages/Home`'s axis had
+ * emitted none since the day of the removal. That file's group branches came
+ * out on 2026-10-15 and these went with them.
+ *
+ * WHAT THE FIRST ONE WAS FOR, because the rule is general and the room was
+ * only its first subject: a scene instance is not another API identifier for
+ * its inspiration. The same public save could stand on your own wall and in
+ * two different rooms at once, and all three had to be separate objects with
+ * separate drift, separate homes and separate lights — while remaining ONE
+ * row as far as the server was concerned. So the orb got a namespaced id
+ * (`group:<g>:inspiration:<i>`) and `sigId` carried the real one, which is
+ * why `sigId` is read all over this codebase as "the id to send". Any future
+ * surface that shows one memory in two places at once needs exactly this
+ * shape, and it is a trap worth naming: reuse the API id and the two copies
+ * share a `byId` entry, a home and a selection.
+ *
+ * THREE `Ball` FIELDS ARE NOW SET BY NOTHING, AND ARE DELIBERATELY LEFT
+ * DECLARED. `col` (which column an orb lives in), `authorName` (the whisper
+ * attribution) and `own` (whether another member's save was in fact yours)
+ * were only ever written here, and `hue` likewise was only ever written by
+ * the loop's room pour. Their two readers in files this change owns —
+ * `canvas/simulation.ts`'s press-to-warm guard and `pages/Home`'s
+ * `openReflections` — have been collapsed, each with a tombstone saying why.
+ * What remains is `space/inspiration/field-paint.ts`, which still asks
+ * `b.col === undefined` before drawing the answered-reflection mark and still
+ * routes `b.hue` through `orbsForHue`'s tinted sheets. Removing the fields
+ * means touching that file and the orb raster cache behind it, which is a
+ * separate and larger change than deleting rooms — so the fields stay, named
+ * here, with exactly one reader each and no writer at all. That is the whole
+ * remaining residue of the room orb.
+ */

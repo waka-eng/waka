@@ -59,20 +59,26 @@ export async function fetchPrincipleStatements(id:string,profileId:string,signal
   return row;
 }
 
-export async function fetchPrincipleRead(groupId?: string): Promise<{
+/* THE OPTIONAL `groupId` IS GONE FROM BOTH OF THESE. It switched the path
+   onto `/groups/:id/principles` — a room's own philosophies and values,
+   which `goals/room-timeline.md` had ruled every room would eventually grow.
+   Rooms are gone (founder, 2026-10-12: "방 없애"), the route is unmounted,
+   and the only caller passed `undefined` by the end. `retry` is now the
+   first parameter rather than the second, which is the whole change at the
+   one call site in `components/PrincipleRead.tsx`. */
+
+export async function fetchPrincipleRead(): Promise<{
   principles: ApiPrinciple[]; status: ApiPrincipleStatus;
 }> {
-  const path = groupId ? `/groups/${encodeURIComponent(groupId)}/principles` : "/principles";
   const [rows, state] = await Promise.all([
-    getJson<{ principles: ApiPrinciple[] }>(apiPath(path), "Principles could not be loaded"),
-    getJson<{ status: ApiPrincipleStatus }>(apiPath(`${path}/status`), "Principles status could not be loaded"),
+    getJson<{ principles: ApiPrinciple[] }>(apiPath("/principles"), "Principles could not be loaded"),
+    getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded"),
   ]);
   return { principles: rows.principles, status: state.status };
 }
 
-export async function requestPrincipleRead(groupId?: string, retry = false): Promise<void> {
-  const path = groupId ? `/groups/${encodeURIComponent(groupId)}/principles` : "/principles";
-  await postJson(apiPath(`${path}/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started");
+export async function requestPrincipleRead(retry = false): Promise<void> {
+  await postJson(apiPath(`/principles/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started");
 }
 
 /** GET /principles — the acting profile's ranked set. */

@@ -7,8 +7,20 @@
  *
  * The mounts follow the three layers: inspirations are what a person or an
  * agent captures, signals are what WAKA distills from them, and the top of
- * mind is the single artifact those signals synthesize into. Groups pool
- * shared signals and grow an artifact of their own.
+ * mind is the single artifact those signals synthesize into.
+ *
+ * THERE IS NO FOURTH MOUNT. `/api/groups` stood here until 2026-10-15 and
+ * carried the whole room surface — the wall, the field, membership, the
+ * join code, proposals and the artifact members co-edited. Founder:
+ * "방 없애". The web half went first (405ee4aa) after an audit proved rooms
+ * had been joinable and nothing else since 2026-10-09: the only list of
+ * your rooms was deleted with the only opener of their settings panel, so
+ * once you were in one you could never leave it, rename it, remove anyone,
+ * close it, or invite anyone. The tables are NOT dropped and the schema
+ * files are kept deliberately — delete them and the next `drizzle-kit
+ * generate` emits `DROP TABLE`, which is the destructive migration this
+ * work has refused throughout. What people wrote in rooms is still in the
+ * database; what is gone is every door to it.
  */
 
 import { createRecallRoutes } from "./routes/recall.js";
@@ -22,7 +34,6 @@ import { createAdminLoopHealthRoute } from "./routes/admin-loop-health.js";
 import { attachmentsRoutes } from "./routes/attachments.js";
 import { authRoutes } from "./routes/auth.js";
 import { feedbackRoutes } from "./routes/feedback.js";
-import { groupsRoutes } from "./routes/groups.js";
 import { healthRoutes } from "./routes/health.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { createReviewSessionRoutes } from './routes/review-sessions.js';
@@ -131,9 +142,6 @@ app.route("/api/inspiration-days", createInspirationDaysRoutes());
 
 // Layer 3 — the one live artifact per profile, and its version chain.
 app.route("/api/top-of-mind", topOfMindRoutes);
-
-// Group walls of shared signals, and the artifact members co-edit.
-app.route("/api/groups", groupsRoutes);
 
 // Reader verdicts that teach the next regeneration.
 app.route("/api/feedback", feedbackRoutes);

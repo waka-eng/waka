@@ -1,8 +1,46 @@
 // @vitest-environment jsdom
-/** The API seam is scripted to verify loading failures and background completion.
- * WHAT THIS MOCKS, AND WHY: `lib/api/principles` supplies deterministic responses;
- * no server/model is needed to prove the component's refresh and error behavior.
- * Real SQL and room membership are covered by principle-flow.db.test.ts.
+/**
+ * WHAT THIS MOCKS, AND WHY: `lib/api/principles` supplies deterministic
+ * responses; no server or model is needed to prove this component's refresh
+ * and error behaviour. Real SQL is covered by `principle-flow.db.test.ts`.
+ *
+ * ═══ THIS SUITE WAS MOSTLY ABOUT A ROOM, AND ROOMS ARE GONE ═══════════════
+ *
+ * Founder, 2026-10-12: "방 없애" — remove rooms. `PrincipleRead` answered for
+ * two spaces and the room half was the larger one, so eight cases here lost
+ * their subject outright. They are named rather than silently dropped,
+ * because each one pinned a real rule and somebody rebuilding shared values
+ * will want the list:
+ *
+ *   WITHDRAWS CACHED ROOM PRINCIPLES WHEN ACCESS CANNOT BE VERIFIED, and
+ *   EXPIRES THEM IF A BACKGROUND REFRESH NEVER ANSWERS. Together these were
+ *   the strongest pair in the file: a shared read is permission-sensitive, so
+ *   a failed revalidation BLANKED the rows rather than keeping the last good
+ *   answer, and `GROUP_READ_TTL_MS` (30s) expired them even when nothing had
+ *   changed — because a version number cannot tell you access was revoked.
+ *
+ *   EXPLAINS WITHHELD ROOM PRINCIPLES WITHOUT PRETENDING THE ROOM HAS NO
+ *   HISTORY. "Earlier principles are kept, but hidden until their sources are
+ *   verified" — the restricted branch, which refused to render an empty state
+ *   over material that existed and was merely unreadable to you.
+ *
+ *   SHOWS ROOM PROGRESS AND WHAT MEMBERS CAN DO AT EACH EMPTY STAGE, and
+ *   CHECKS IMMEDIATELY WHEN REFRESHED ROOM MATERIAL ARRIVES. The staged empty
+ *   state: three shared patterns, then a reading, then a candidate, with a
+ *   progressbar and a lead-and-detail sentence per stage; plus `refreshKey`,
+ *   which re-read the moment the room's wall or board was refetched.
+ *
+ *   KEEPS PROTECTED WORDS WHILE DISPLAYING UNCONFIRMED SUPPORT. A room's
+ *   values were LISTED by this component; yours are not — `onRead` hands them
+ *   to `pages/Home`, which draws them in the sky. With the room list gone
+ *   there is nowhere here for a protected statement to be shown, so the
+ *   assertion had no element to make. The per-row sentences it checked
+ *   (`worldPrincipleSupportChanged`, `worldPrincipleSupportUnconfirmed`) are
+ *   still rendered, by the sky.
+ *
+ * WHAT REMAINS IS EVERY CASE THAT WAS NEVER ABOUT A ROOM: the support-check
+ * states, the failure ladder, queueing the missing work exactly once, and
+ * refusing to fetch for a wall nobody is standing on.
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -21,18 +59,17 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); });
 const ready = { phase: "ready" as const, eligible: true, signalCount: 3, topOfMindCount: 1 };
-const principle = { id: "room-principle", statement: "Make room for experiments.", type: "maxim" as const,
+const principle = { id: "principle-1", statement: "Make room for experiments.", type: "maxim" as const,
   state: "held" as const, origin: "minted" as const, rank: 1, locked: false, heldSince: null,
-  conflictsWithId: null, createdAt: "2026-09-22", citedSignals: [{ id: "room-signal", statement: "Shared experiments recur." }] };
+  conflictsWithId: null, createdAt: "2026-09-22", citedSignals: [{ id: "signal-1", statement: "Experiments recur." }] };
 
 describe("principle read", () => {
   it('shows queued support without asking for inspirations or generating on mount', async () => {
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
       ...ready, phase: 'pending', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true,
     } });
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     expect(host.textContent).toContain('A support check is queued.');
-    expect(host.querySelector('[role="progressbar"]')).toBeNull();
     expect(requestPrincipleRead).not.toHaveBeenCalled();
   });
 
@@ -41,87 +78,48 @@ describe("principle read", () => {
       ...ready, phase: 'failed', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true,
     } });
     vi.mocked(requestPrincipleRead).mockResolvedValue();
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     expect(host.textContent).toContain("Couldn't confirm current support. Your words are kept.");
     await act(async () => host.querySelector('button')!.click());
-    expect(requestPrincipleRead).toHaveBeenCalledWith('room-1', true);
+    /* THE RETRY FLAG IS THE WHOLE ARGUMENT, and it used to be the SECOND
+       argument because the first was the room id. One parameter now. */
+    expect(requestPrincipleRead).toHaveBeenCalledWith(true);
     expect(host.textContent).toContain('A support check is queued.');
   });
 
-  it('keeps protected words while displaying unconfirmed support', async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [{ ...principle, locked: true, supportChanged: true, citedSignals: [] }], status: ready });
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
-    expect(host.textContent).toContain(principle.statement);
-    expect(host.textContent).toContain('Your words are kept. Their support is not confirmed.');
-    expect(host.textContent).not.toContain('Shared experiments recur.');
-  });
-  it("withdraws cached room principles when access can no longer be verified", async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValueOnce({ principles: [principle], status: ready })
-      .mockRejectedValue(new Error("access withdrawn"));
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
-    expect(host.textContent).toContain(principle.statement);
-    await act(async () => window.dispatchEvent(new Event("focus")));
+  it("hands the rows it read to its owner rather than listing them itself", async () => {
+    /* WHO DRAWS YOUR VALUES: not this component. It reads them and calls
+       `onRead`, and the sky in `pages/Home` renders them — which is why a
+       successful read with rows in hand leaves this subtree silent. That was
+       always true of your own wall and is now true of every wall, because a
+       room was the one space whose values were listed here. */
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [principle], status: ready });
+    const read = vi.fn();
+    await act(async () => root.render(<PrincipleRead active locale="en-US" onRead={read} />));
+    expect(read).toHaveBeenCalledWith([principle]);
     expect(host.textContent).not.toContain(principle.statement);
   });
 
-  it("expires cached room principles if a background refresh never answers", async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValueOnce({ principles: [principle], status: ready })
-      .mockImplementation(() => new Promise(() => {}));
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
-    expect(host.textContent).toContain(principle.statement);
-    await act(async () => vi.advanceTimersByTimeAsync(30_000));
-    expect(host.textContent).not.toContain(principle.statement);
-  });
-  it("explains withheld room principles without pretending the room has no history", async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
-      phase: "waiting", eligible: false, signalCount: 0, topOfMindCount: 0, restricted: true,
-    } });
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
-    expect(host.textContent).toContain("Earlier principles are kept, but hidden until their sources are verified.");
-    expect(host.querySelector('[role="progressbar"]')).toBeNull();
-    expect(requestPrincipleRead).not.toHaveBeenCalled();
-  });
-  it("shows room progress and what members can do at each empty stage", async () => {
-    vi.mocked(fetchPrincipleRead)
-      .mockResolvedValueOnce({ principles: [], status: { ...ready, phase: "waiting", eligible: false, signalCount: 1, topOfMindCount: 0 } })
-      .mockResolvedValueOnce({ principles: [], status: { ...ready, phase: "waiting", eligible: false, signalCount: 3, topOfMindCount: 0 } })
-      .mockResolvedValue({ principles: [], status: ready });
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
-    expect(host.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("1");
-    expect(host.textContent).toContain("1/3 shared patterns ready");
-    expect(host.textContent).toContain("two current members");
-    expect(host.textContent).toContain("At least one must also appear");
-    await act(async () => vi.advanceTimersByTimeAsync(15_000));
-    expect(host.textContent).toContain("The shared patterns are ready");
-    expect(host.textContent).toContain("top of mind");
-    await act(async () => vi.advanceTimersByTimeAsync(15_000));
-    expect(host.textContent).toContain("No room principle has emerged yet");
-    expect(host.textContent).toContain("read the current patterns");
-    expect(requestPrincipleRead).not.toHaveBeenCalled();
-  });
-
-  it("checks immediately when refreshed room material arrives", async () => {
-    vi.mocked(fetchPrincipleRead)
-      .mockResolvedValueOnce({ principles: [], status: { ...ready, phase: "waiting", eligible: false, signalCount: 2, topOfMindCount: 0 } })
-      .mockResolvedValue({ principles: [], status: { ...ready, phase: "waiting", eligible: false, signalCount: 3, topOfMindCount: 0 } });
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" refreshKey={0} />));
-    expect(host.textContent).toContain("2/3 shared patterns ready");
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" refreshKey={1} />));
-    expect(host.textContent).toContain("The shared patterns are ready");
-    expect(fetchPrincipleRead).toHaveBeenCalledTimes(2);
+  it("says your principles will form here while there are none", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: ready });
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    expect(host.textContent).toContain("Your principles will form here.");
   });
 
   it("recovers from one failed first read without showing a retry button", async () => {
     vi.mocked(fetchPrincipleRead).mockRejectedValueOnce(new Error("unavailable"))
       .mockResolvedValue({ principles: [principle], status: ready });
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
-    expect(host.textContent).toContain("Checking the room’s principles");
+    const read = vi.fn();
+    await act(async () => root.render(<PrincipleRead active locale="en-US" onRead={read} />));
+    expect(host.textContent).toContain("Loading principles…");
     expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(host.querySelector("button")).toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(1_000));
-    expect(host.textContent).toContain(principle.statement);
+    expect(read).toHaveBeenCalledWith([principle]);
     expect(host.querySelector('[role="alert"]')).toBeNull();
-    expect(fetchPrincipleRead).toHaveBeenLastCalledWith("room-1");
+    /* NO ARGUMENT AT ALL now: it took the room id, and an absent room id was
+       how the self path was spelled. There is one path. */
+    expect(fetchPrincipleRead).toHaveBeenLastCalledWith();
     expect(requestPrincipleRead).not.toHaveBeenCalled();
   });
 
@@ -130,13 +128,15 @@ describe("principle read", () => {
       .mockRejectedValueOnce(new Error("temporary"))
       .mockRejectedValueOnce(new Error("unavailable"))
       .mockResolvedValue({ principles: [principle], status: ready });
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    const read = vi.fn();
+    await act(async () => root.render(<PrincipleRead active locale="en-US" onRead={read} />));
     await act(async () => vi.advanceTimersByTimeAsync(1_000));
     expect(host.querySelector('[role="alert"]')).toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(2_000));
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain("couldn’t load the room");
+    expect(host.querySelector('[role="alert"]')?.textContent)
+      .toContain("Principles could not be updated. Your saved words are still here.");
     await act(async () => host.querySelector("button")!.click());
-    expect(host.textContent).toContain(principle.statement);
+    expect(read).toHaveBeenCalledWith([principle]);
     expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(fetchPrincipleRead).toHaveBeenCalledTimes(4);
   });
@@ -145,25 +145,26 @@ describe("principle read", () => {
     vi.mocked(requestPrincipleRead).mockResolvedValue();
     vi.mocked(fetchPrincipleRead).mockResolvedValueOnce({ principles: [], status: { ...ready, phase: "pending" } })
       .mockResolvedValue({ principles: [principle], status: ready });
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    const read = vi.fn();
+    await act(async () => root.render(<PrincipleRead active locale="en-US" onRead={read} />));
     expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
-    expect(host.textContent).toContain("Looking for a room principle");
+    expect(host.textContent).toContain("Reading the patterns for principles…");
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
-    expect(host.textContent).toContain(principle.statement);
+    expect(read).toHaveBeenCalledWith([principle]);
     expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
   });
 
-  it("shows an ongoing room read without queueing the same work again", async () => {
+  it("shows an ongoing read without queueing the same work again", async () => {
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "processing" } });
-    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
-    expect(host.textContent).toContain("Looking for a room principle");
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    expect(host.textContent).toContain("Reading the patterns for principles…");
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(fetchPrincipleRead).toHaveBeenCalledTimes(2);
     expect(requestPrincipleRead).not.toHaveBeenCalled();
   });
 
   it("does not fetch an inactive wall", async () => {
-    await act(async () => root.render(<PrincipleRead groupId="room-2" active={false} locale="en-US" />));
+    await act(async () => root.render(<PrincipleRead active={false} locale="en-US" />));
     await act(async () => vi.advanceTimersByTimeAsync(30_000));
     expect(fetchPrincipleRead).not.toHaveBeenCalled();
   });

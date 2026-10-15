@@ -152,7 +152,6 @@ const REGISTER: Record<string, string> = {
     "you say it is not you, and a toggle back through 'held' would be a third state " +
     "that means nothing. The exit is dismissTopOfMindEntry.",
   refreshTopOfMind: "RULED: regeneration is idempotent; there is no prior state to restore",
-  refreshGroupTopOfMind: "RULED: the same, for a room",
   requestPrincipleRead: "RULED: requests deduplicated background generation; existing words remain editable or removable",
 
   // what the machine concluded you hold to. NOTHING DECLARES ONE (founder,
@@ -172,25 +171,30 @@ const REGISTER: Record<string, string> = {
   undoPrincipleDispute: "disputePrinciple",
   reorderPrinciples: "RULED: an ordering is its own inverse — move it back",
 
-  // rooms
-  /* `createGroup` IS GONE, AND SO IS THE SHEET THAT WAS ITS ONLY CALLER.
-     Founder: "get rid of the rooms and agent related stuff for now."
+  /* ═══ ROOMS HAD A SECTION HERE, AND IT IS THE BEST CASE THIS GATE EVER
+     CAUGHT ═══════════════════════════════════════════════════════════════
+     Founder, 2026-10-12: "방 없애" — remove rooms.
 
-     This entry is the reason that deletion had to be one commit rather than
-     two. The pair read as satisfied — create a room, delete a room — but the
-     create half was reachable only from a form NOTHING OPENED, so the
-     register was describing a verb the product does not offer and passing
-     because unreachable code referenced it. That is the exact shape this
-     gate exists to catch, and it was hiding inside the gate.
+     NINE VERBS STOOD HERE: `createGroup` and `deleteGroup`, `joinGroup` and
+     `leaveGroup`, `removeGroupMember`, `renameGroup`, the three proposal
+     verbs, and `refreshGroupTopOfMind`. Every client wrapper behind them is
+     deleted and the nine route files that answered them are gone.
 
-     `deleteGroup` survives and is reachable from a room's own settings. Its
-     way back is not a verb: a room is joined, never made, and the link that
-     joins it still works. */
-  deleteGroup:
-    "RULED: a room is joined, never made — the way back into one you left is " +
-    "the invite link that put you in it, which `?join=<code>` still honours. " +
-    "There is no `createGroup` to pair with: it went with the sheet nobody " +
-    "could open.",
+     WHY IT MATTERS THAT THIS SECTION EXISTED. `createGroup` had already left
+     it, and the reason is the argument the whole room removal rests on: the
+     pair READ as satisfied — create a room, delete a room — but the create
+     half was reachable only from a form NOTHING OPENED, so this register was
+     describing a verb the product did not offer and passing because
+     unreachable code named it. That is the exact shape this gate exists to
+     catch, and it was hiding inside the gate.
+
+     Then `deleteGroup` stood alone with a ruling that read: "a room is
+     joined, never made — the way back into one you left is the invite link
+     that put you in it, which `?join=<code>` still honours." That sentence
+     was true and it was the problem. Joining was the only door left; you
+     could not leave, rename, invite, or close, because `SpaceSettings` — the
+     panel holding all four — could not mount. Shown that, the founder cut
+     rooms rather than rebuild the exits, and `?join=` honours nothing now. */
   // TALKING, AFTER THE SURFACE WAS CUT BACK (2026-10-10). Founder: "So the
   // talk with Waka experience is the most confusing chat experience ever with
   // so many different buttons that I have no idea what its supposed to do."
@@ -215,13 +219,20 @@ const REGISTER: Record<string, string> = {
     "requested once, by sending the message. Asking again is saying something " +
     "again, which is the composer, not a verb of its own.",
   saveConversationMessage: "RULED: authored conversation messages are immutable; confirm deletion of the conversation to erase them, never automatically create a belief",
-  joinGroup: "leaveGroup",
-  leaveGroup: "joinGroup",
-  removeGroupMember: "joinGroup",
-  renameGroup: "RULED: an edit is its own inverse",
-  createGroupProposal: "declineGroupProposal",
-  affirmGroupProposal: "declineGroupProposal",
-  declineGroupProposal: "affirmGroupProposal",
+  /* EIGHT ROOM VERBS LEFT THIS REGISTER ON 2026-10-12. Founder: "방 없애" —
+     remove rooms. `joinGroup`/`leaveGroup` were each other's way back,
+     `removeGroupMember` pointed at `joinGroup`, `renameGroup` was ruled its
+     own inverse, `createGroupProposal`/`affirmGroupProposal` both faced
+     `declineGroupProposal`, and `refreshGroupTopOfMind` was ruled
+     idempotent "the same, for a room". Every one of those pairings was
+     honest and every client wrapper behind them is deleted.
+
+     THE REGISTER'S OWN LESSON ABOUT ROOMS, worth keeping because it is why
+     this gate exists: `createGroup` once satisfied its pairing with
+     `deleteGroup` only because an UNREACHABLE sheet referenced it — a
+     register describing a verb the product did not offer, passing because
+     dead code named it. A pairing is only as true as the door in front of
+     it, which is the whole argument the room removal rests on. */
 
   // you, and what can speak as you
   signup: "RULED: the account's own end is deleteAccount, behind a typed confirmation",

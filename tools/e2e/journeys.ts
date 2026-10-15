@@ -2,10 +2,25 @@
 /**
  * THE JOURNEYS, DRIVEN THE WAY A PERSON PERFORMS THEM.
  *
- * Six harnesses already prove this product over HTTP — `organic`, `signals`,
- * `top-of-mind`, `groups`, `cold-start`, `principles`. Between them they show
- * that a client calling the API gets a memory system back, and on 2026-08-22
- * they ran 45 steps green.
+ * Five harnesses already prove this product over HTTP — `organic`, `signals`,
+ * `top-of-mind`, `cold-start`, `principles`. Between them they show that a
+ * client calling the API gets a memory system back, and on 2026-08-22 they
+ * ran 45 steps green.
+ *
+ * IT WAS SIX, AND TWO WENT ON 2026-10-12 (founder: "방 없애" — remove rooms).
+ * `e2e:groups` proved what CROSSES between people while everyone is still in
+ * the room — the wall, the account boundary, the proposal that materialises —
+ * and `e2e:rooms` proved the EXITS, which is the half nobody had checked
+ * until `every-workflow-works.md` carried G4 as "partial" with no reason
+ * attached. The best thing either of them established, and the thing worth
+ * carrying into whatever shares material next: REMOVAL RE-KEYS THE DOOR AND
+ * LEAVING DOES NOT. A join code did not expire and joining asked only whether
+ * the code matched, so deleting a membership row ended nobody's access —
+ * anyone removed who still had the link, or a screenshot of it, walked
+ * straight back in and the room could not tell that from a normal join.
+ * Removal was the one exit that means "not you, not again", so it was the one
+ * that rotated the code. Both scripts and both `package.json` entries are
+ * gone, with the nine route files they drove.
  *
  * Not one of them opens a browser. So on the same day, against the same green
  * stack, a signed-in person whose network could not reach a font CDN got `/`

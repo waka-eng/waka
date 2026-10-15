@@ -5,7 +5,6 @@ import { Hono } from "hono";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { createInspirationsRoutes } from "./inspirations.js";
 import { createAttachmentRoutes } from "./attachments.js";
-import { createGroupForProfile } from "./groups-membership.js";
 import { enqueueTopOfMindRefresh, postgresBackgroundJobStore } from "../lib/queue.js";
 import { enrichAttachment } from "../lib/signal-enrichment.js";
 import type { AuthEnv } from "../lib/middleware.js";
@@ -95,26 +94,15 @@ describe('source writes and their durable learning request', () => {
       .toMatchObject({ status: 'pending', attempts: 0, rerun_requested: false, last_error: null });
   });
 
-  it('public saves fan out durably, but saved answers remain personal', async () => {
-    const f = await fixture();
-    const group = await createGroupForProfile(t.db as never, { profileId: f.profileId, name: 'Shared room' });
-    const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id = ${group.id}`;
-    const response = await f.app.request('/api/inspirations', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: 'A public thought', visibility: 'public' }) });
-    expect(response.status).toBe(201);
-    const saved = await response.json() as { inspiration: { id: string } };
-    const jobs = await t.sql`SELECT profile_id, payload FROM background_jobs WHERE type = 'derive_signals'`;
-    expect(jobs).toHaveLength(2);
-    expect(jobs.every((job) => job.profile_id === f.profileId)).toBe(true);
-    expect(jobs.map((job) => job.payload.deriveIntoProfileId ?? null).sort()).toEqual([null, mind.id].sort());
-    await t.sql`DELETE FROM background_jobs`;
-    const answer = await f.app.request(`/api/inspirations/${saved.inspiration.id}/reflections`, { method: 'POST',
-      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: 'Why?', answer: 'PRIVATE_SENTINEL' }) });
-    expect(answer.status).toBe(201);
-    expect((await t.sql`SELECT payload FROM background_jobs`).map((row) => row.payload)).toEqual([
-      { inspirationId: saved.inspiration.id, reason: 'edited' },
-    ]);
-  });
+  /* ── "PUBLIC SAVES FAN OUT DURABLY, BUT SAVED ANSWERS REMAIN PERSONAL",
+     DELETED ────────────────────────────────────────────────────────────
+     Founder: "방 없애". A public save used to enqueue TWO `derive_signals`
+     jobs — one for the person, one aimed at each room's mind through
+     `deriveIntoProfileId` — both billed to the saver, and a saved ANSWER had
+     to enqueue only the first, because an answer is private and a room never
+     reads one. The asymmetry was the whole test. One destination remains, so
+     both halves collapse to "a save enqueues its job", which the first case
+     in this file already holds revision by revision. */
 
   it('a held older pass cannot postpone a newer manual reread', async () => {
     const f = await fixture();
@@ -128,33 +116,23 @@ describe('source writes and their durable learning request', () => {
     expect(row).toMatchObject({ attempts: 0, rerun_requested: false, payload: { reason: 'manual' } });
   });
 
-  it('turning a public inspiration private requests a room reread, not private derivation', async () => {
-    const f = await fixture();
-    const group = await createGroupForProfile(t.db as never, { profileId: f.profileId, name: 'Shared room' });
-    await t.sql`UPDATE inspirations SET visibility = 'public' WHERE id = ${f.inspirationId}`;
-    const response = await f.app.request(`/api/inspirations/${f.inspirationId}`, { method: 'PATCH',
-      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ visibility: 'private' }) });
-    expect(response.status).toBe(200);
-    const jobs = await t.sql`SELECT type, payload FROM background_jobs`;
-    expect(jobs).toHaveLength(2);
-    expect(jobs.find((row) => row.type === 'refresh_group_top_of_mind')?.payload).toEqual({ groupId: group.id, reason: 'signals_changed' });
-    expect(jobs.filter((row) => row.type === 'derive_signals').map((row) => row.payload)).toEqual([{ inspirationId: f.inspirationId, reason: 'edited' }]);
-  });
+  /* ── TWO MORE ROOM FAN-OUT CASES, DELETED ────────────────────────────
+     Founder: "방 없애". "turning a public inspiration private requests a room
+     reread, not private derivation" pinned the WITHDRAWAL direction: making
+     a shared memory private must ask every room that read it to read again
+     without it, and must NOT pretend the memory itself changed. There is
+     nothing to withdraw from. `inspirations.visibility` is still stored,
+     still returned and still accepted by PATCH — the founder has not ruled
+     on the data — but no reader is left for it to mean anything to.
 
-  it('a failed room fan-out rolls back the save and the already-inserted personal request', async () => {
-    const f = await fixture();
-    await createGroupForProfile(t.db as never, { profileId: f.profileId, name: 'Shared room' });
-    await t.sql`CREATE FUNCTION reject_group_request() RETURNS trigger AS $$ BEGIN
-      IF NEW.payload ? 'deriveIntoProfileId' THEN RAISE EXCEPTION 'group queue unavailable'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`;
-    await t.sql`CREATE TRIGGER reject_group_request BEFORE INSERT ON background_jobs FOR EACH ROW EXECUTE FUNCTION reject_group_request()`;
-    try {
-      const response = await f.app.request('/api/inspirations', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: 'New public thought', visibility: 'public' }) });
-      expect(response.status).toBe(500);
-      expect((await t.sql`SELECT text FROM inspirations WHERE profile_id = ${f.profileId}`).map((row) => row.text)).toEqual(['Original words']);
-      expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
-    } finally { await t.sql`DROP TRIGGER reject_group_request ON background_jobs`; await t.sql`DROP FUNCTION reject_group_request()`; }
-  });
+     "a failed room fan-out rolls back the save and the already-inserted
+     personal request" was the strongest durability claim in the file: the
+     personal job is inserted FIRST, so a room enqueue failing after it must
+     take the whole save down rather than commit a capture whose learning was
+     half-requested. It needed a second enqueue that could fail on its own,
+     and there is one enqueue now — if it fails the save fails, which is the
+     same guarantee with nothing left to coordinate. `withQueueUnavailable`
+     below still holds exactly that for the single-enqueue shape. */
 
   it('attachment finalization cannot lose its enrichment request', async () => {
     const f = await fixture();
@@ -167,14 +145,22 @@ describe('source writes and their durable learning request', () => {
     });
   });
 
-  it('deleting a public source reconciles every citing room and cancels obsolete source jobs', async () => {
+  it('deleting a source retires what cited it and cancels its obsolete jobs', async () => {
+    /* THE ROOM CAME OUT; THE RECONCILIATION DID NOT. Founder: "방 없애".
+       This used to make the citing signal a ROOM's — minted into the room's
+       mind, stamped `group-public-v1`, cited at the member's public
+       revision — and assert that deleting the member's capture both retired
+       the room's statement and woke `refresh_group_top_of_mind`. Aimed at
+       the owner's own signal the two claims that survive are the same two,
+       and they are the ones that matter after a delete: a locked statement
+       is NOT rewritten or removed (it is the person's words), it is marked
+       unsupported, and the `derive_signals` job that was queued for the
+       now-deleted source is cancelled rather than left to fail. */
     const f = await fixture();
-    const group = await createGroupForProfile(t.db as never, { profileId: f.profileId, name: 'Shared room' });
-    const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id = ${group.id}`;
-    const [signal] = await t.sql`INSERT INTO signals(profile_id, statement, input_policy, locked_at)
-      VALUES (${mind.id}, 'Our edited direction', 'group-public-v1', now()) RETURNING id`;
+    const [signal] = await t.sql`INSERT INTO signals(profile_id, statement, locked_at)
+      VALUES (${f.profileId}, 'Our edited direction', now()) RETURNING id`;
     await t.sql`INSERT INTO signal_evidence(profile_id, owner_profile_id, signal_id, inspiration_id)
-      VALUES (${mind.id}, ${f.profileId}, ${signal.id}, ${f.inspirationId})`;
+      VALUES (${f.profileId}, ${f.profileId}, ${signal.id}, ${f.inspirationId})`;
     await t.sql`INSERT INTO background_jobs(profile_id, type, payload)
       VALUES (${f.profileId}, 'derive_signals', ${JSON.stringify({ inspirationId: f.inspirationId, reason: 'edited' })}::jsonb)`;
     const response = await f.app.request(`/api/inspirations/${f.inspirationId}`, { method: 'DELETE' });
@@ -182,16 +168,19 @@ describe('source writes and their durable learning request', () => {
     const [after] = await t.sql`SELECT statement, unsupported_at FROM signals WHERE id = ${signal.id}`;
     expect(after.statement).toBe('Our edited direction');
     expect(after.unsupported_at).not.toBeNull();
-    const jobs = await t.sql`SELECT type, payload FROM background_jobs`;
-    expect(jobs).toHaveLength(2);
+    const jobs = await t.sql`SELECT type FROM background_jobs`;
     expect(jobs.some((row) => row.type === 'derive_signals')).toBe(false);
-    expect(jobs.find((row) => row.type === 'refresh_group_top_of_mind')?.payload.groupId).toBe(group.id);
+    expect(jobs.some((row) => row.type === 'refresh_top_of_mind')).toBe(true);
   });
 
-  it('enrichment cache and personal/room derivation jobs commit together', async () => {
+  it('enrichment cache and the derivation job it provokes commit together', async () => {
+    /* Was "personal/room derivation jobs commit together": the room made the
+       count TWO, which is what made "together" visible. Founder: "방 없애" —
+       one job now, and the atomicity claim is unchanged. The first attempt
+       runs with the queue refusing inserts and must leave the attachment
+       `pending` rather than cached-but-unlearned; the retry caches and
+       enqueues in one commit. */
     const f = await fixture();
-    await createGroupForProfile(t.db as never, { profileId: f.profileId, name: 'Shared room' });
-    await t.sql`UPDATE inspirations SET visibility = 'public' WHERE id = ${f.inspirationId}`;
     const [attachment] = await t.sql`INSERT INTO attachments(profile_id, inspiration_id, type, url, enrichment_status)
       VALUES (${f.profileId}, ${f.inspirationId}, 'link', 'https://example.test', 'pending') RETURNING id`;
     const enrich = () => enrichAttachment(attachment.id as string, { db: t.db as never,
@@ -201,7 +190,7 @@ describe('source writes and their durable learning request', () => {
       expect((await t.sql`SELECT enrichment_status FROM attachments WHERE id = ${attachment.id}`)[0].enrichment_status).toBe('pending');
     });
     expect((await enrich()).status).toBe('ready');
-    expect(await t.sql`SELECT id FROM background_jobs WHERE type = 'derive_signals'`).toHaveLength(2);
+    expect(await t.sql`SELECT id FROM background_jobs WHERE type = 'derive_signals'`).toHaveLength(1);
   });
 
   it('an attachment changed during fetching cannot receive the old content', async () => {

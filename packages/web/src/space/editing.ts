@@ -58,8 +58,8 @@
  * A field belongs here if and only if it is part of the one gesture above AND
  * more than one of the page's blocks touches it. That excludes state that
  * looks like a neighbour and is not: `more` and `forget` in the reading panel,
- * `sharing` and `dropAsk` in the sky, `posterAsk` and `groupForm` in the ready
- * field. Every one of those is transient state belonging to a SINGLE block,
+ * `sharing` and `dropAsk` in the sky, and `posterAsk` in the ready field.
+ * (`groupForm` was the fourth and went with rooms.) Every one of those is transient state belonging to a SINGLE block,
  * and folding them in would make this "state in Home.tsx that happens to be
  * temporary", which answers no question and would not survive its first
  * reader.

@@ -173,8 +173,9 @@ export const ORB_PAD = 2;
  * SMALLEST discs, blown up three to five times: a soft blob where the sphere's
  * rim and specular used to be. The six larger bakes were never reached at all.
  *
- * That is every orb on a wall you are not standing on, every orb in a room's
- * ground, and every orb in the beat between arriving and the next fit — which
+ * That was every orb on a wall you are not standing on, every orb in a
+ * room's ground while rooms existed, and every orb in the beat between
+ * arriving and the next fit — which
  * is exactly the set the founder saw and asked about ("why are some balls
  * blurry? they should all be sharp").
  *

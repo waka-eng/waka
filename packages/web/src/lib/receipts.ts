@@ -57,12 +57,11 @@ export const RECEIPTS = {
     text: "Steps far back in the choosing — never erased",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
-  /** an answer on a room's shared statement */
-  verdictGroup: {
-    messageKey: "worldReceiptVerdictGroup",
-    text: "Answered — the room reads who stands where",
-    enforcedBy: "packages/api/src/routes/room-reactions.db.test.ts",
-  },
+  /* `verdictGroup` IS GONE — "Answered — the room reads who stands where",
+     the receipt for an answer on a ROOM'S shared statement. Rooms were
+     removed on 2026-10-12 (founder: "방 없애") and so was the test that
+     enforced its wording, `routes/room-reactions.db.test.ts`. This register
+     only keeps a receipt whose claim something can still check. */
   /** Keep this one up */
   pinned: {
     messageKey: "worldReceiptPinned",

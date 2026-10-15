@@ -139,11 +139,14 @@ const EXEMPT: Record<string, string> = {
      not be its own thing"; the five sections those lines belonged to did
      not survive the prune. An exemption that excuses nothing is worse than
      none, because the next reader trusts it. */
-  worldPrinciplesRoomProgress:
-    "rendered as `{n}/3 shared patterns ready` (`PrincipleRead.tsx`). The " +
-    "count is the head of that line, so the words after it are mid-sentence " +
-    "— and the aria-label on the same bar reads the identical string, so " +
-    "there is no casing that serves both halves.",
+  /* `worldPrinciplesRoomProgress` LEFT THIS LIST with the string it excused
+     (2026-10-12, founder: "방 없애" — remove rooms). It rendered as `{n}/3
+     shared patterns ready` under a room's progress bar, so the count was the
+     head of the line and the words after it were mid-sentence — and the
+     aria-label on the same bar read the identical string, so no casing
+     served both halves. The staged room empty-state is gone and so is the
+     key; the exemption went in the same change, which is the half of this
+     ratchet the case below enforces. */
 };
 
 describe("every string a person reads begins with a capital", () => {
@@ -171,14 +174,19 @@ describe("every string a person reads begins with a capital", () => {
     /* And it has to be reading real copy, not a file of placeholders: the
        product's strings overwhelmingly start with a letter, so a run where
        almost nothing does means the parse, not the catalogue, is wrong. */
-    /* 600 -> 540 on 2026-10-11. The settings page was deleted — founder:
-       "I want all setting-related stuff to be only accessible through the
-       drop down and not be its own thing" — and 121 strings went with the
-       five sections that did not survive the prune. This is a TRIPWIRE for
-       a broken parse, not a ratchet on the catalogue's size, so it is set
-       below the real figure rather than at it; what it is watching for is
-       a run that suddenly reads almost nothing. */
-    expect(values.filter((value) => /^[A-Za-z]/.test(value)).length).toBeGreaterThanOrEqual(540);
+    /* 600 -> 540 on 2026-10-11, 540 -> 440 on 2026-10-12. The first move was
+       the settings page — founder: "I want all setting-related stuff to be
+       only accessible through the drop down and not be its own thing" — and
+       121 strings went with the five sections that did not survive. The
+       second was rooms — founder: "방 없애" — and 114 strings went with them,
+       measured: 648 keys before, 534 after, both catalogues at exact parity.
+       This is a TRIPWIRE for a broken parse, not a ratchet on the
+       catalogue's size, so it is set well below the real figure rather than
+       at it; what it is watching for is a run that suddenly reads almost
+       nothing. Lowering it on an honest deletion is the correct move and the
+       note above says why: a tripwire that fails on honest subtraction
+       teaches people to edit the tripwire. */
+    expect(values.filter((value) => /^[A-Za-z]/.test(value)).length).toBeGreaterThanOrEqual(440);
   });
 
   it("starts no en-US value with a lowercase letter", () => {

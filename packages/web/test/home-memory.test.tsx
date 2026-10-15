@@ -618,42 +618,22 @@ describe("deleting a memory", () => {
     ).toBeNull();
   });
 
-  /* THE SAME ASK, THE OTHER WAY OUT OF A ROOM (founder, 2026-08-27: "similar
-     warning should occur when changing what was public to private as well").
-     Un-publishing does not delete anything, but for a signal that was read
-     from this memory while it stood in a room, the ground goes just the same
-     — so the fact deserves the same sentence in the same place. */
-  it("says the same thing when a public memory is taken private", { timeout: 30_000 }, async () => {
-    await layout.toField();
-    const panel = await openMemory("something I kept, 0");
-    const goPrivate = [...panel.querySelectorAll<HTMLElement>(".jar-panel-vis button")].find(
-      (b) => (b.textContent ?? "").trim() === "Private",
-    );
-    expect(goPrivate, "a public memory offers the way back to private").toBeTruthy();
-    await act(async () => goPrivate!.click());
-    await layout.step(10);
+  /* ═══ `says the same thing when a public memory is taken private` ═══════
+     GONE WITH THE CONTROL IT PRESSED (founder, 2026-10-12: remove the
+     memory's private/public toggle, with rooms).
 
-    const ask = layout.container.querySelector(".jar-panel-askrow");
-    expect(ask, "a signal stands on this one — taking it private costs that ground").not.toBeNull();
-    const said = (ask?.textContent ?? "").toLowerCase();
-    expect(said).toContain("private");
-    expect(said).toContain("no longer point back");
-    expect(
-      layout.container.querySelector(".jar-panel")?.contains(ask!),
-      "and it is the card's own state, not a sheet over it",
-    ).toBe(true);
+     It was the mirror of the delete ask, and the founder had asked for it by
+     name (2026-08-27: "similar warning should occur when changing what was
+     public to private as well"). The argument was exact: un-publishing
+     deletes nothing, but for a pattern that was read from this memory WHILE
+     IT STOOD IN A ROOM, the ground goes just the same — so the fact deserved
+     the same sentence in the same place, in the card's own state rather than
+     in a sheet over it, with "keep it public" as the lit half.
 
-    const keep = [...(ask?.querySelectorAll<HTMLElement>("button") ?? [])].find(
-      (b) => (b.textContent ?? "").trim() === "Keep it public",
-    );
-    expect(keep?.className, "keeping it public is the lit half").toContain("jar-where-on");
-    await act(async () => keep!.click());
-    await layout.step(10);
-    expect(
-      layout.container.querySelector(".jar-panel-askrow"),
-      "and the question goes away when the answer is no",
-    ).toBeNull();
-  });
+     WHAT STILL COVERS THE RULE IT WAS REALLY ABOUT: the case above this one.
+     Deleting a memory a pattern stands on still asks, still asks IN THE
+     CARD, and still says what the pattern loses. The ask is not gone — the
+     second way of reaching it is. */
 });
 
 /**

@@ -1,5 +1,5 @@
 /**
- * THREE SHEETS OF TEN CLOSE BOTH WAYS, AND THIS IS THE HOOK THEY OPT INTO.
+ * ONE SHEET OF SEVEN CLOSES BOTH WAYS, AND THIS IS THE HOOK IT OPTS INTO.
  *
  * ── WHAT THIS HEADER USED TO SAY, AND WHY IT HAD TO STOP ──────────────────
  *
@@ -9,7 +9,13 @@
  * file reaches a sheet that has not called it, `grep -c useDismissAway` is
  * zero in every component file, and a sheet added tomorrow gets Escape from
  * `DialogSurface` and nothing else. Counted on 2026-10-11: ten modal
- * `DialogSurface` call sites, three of them covered.
+ * `DialogSurface` call sites, three of them covered. Re-counted on
+ * 2026-10-12, after rooms were removed (founder: "방 없애"): 7 modal call
+ * sites, ONE of them covered. The three that left were a room's settings
+ * (`space/settings/SpaceSettings.tsx`, deleted), the room form
+ * (`space-kinds/GroupPanel.tsx`, deleted) and the join sheet (`Home.tsx`).
+ * Two of those three were covered, which is why the coverage count fell
+ * further than the sheet count.
  *
  * That is worse than an uncovered sheet, because the file holding the rule
  * was the one place anybody auditing dismissal would look, and it reported
@@ -39,22 +45,27 @@
  * here does. So the two halves do not overlap, and the `[data-jar-surface]`
  * check below is this hook standing aside for the half that is not its own.
  *
- * ── THE THREE THAT TAKE IT ────────────────────────────────────────────────
+ * ── THE ONE THAT TAKES IT ─────────────────────────────────────────────────
  *
- * All three are driven from `pages/Home.tsx:13389-13391`: a room's settings
- * (`space/settings/SpaceSettings.tsx`), the join sheet (`Home.tsx`'s
- * `.jar-settings`), and a statement's provenance room (`.jar-prov-room`).
- * The list was longer and got shorter without a line of this file changing,
- * which is the argument for the hook: the account sheet became a card under
- * the settings cog and closes itself from inside `components/Menu.tsx`,
- * because it belongs to that bar rather than opening over the world; the
- * antechamber moved to the settings page and owns its own dismissal there.
- * Each took its way out with it.
+ * A statement's provenance room (`.jar-prov-room`), driven from
+ * `pages/Home.tsx`. It was five, then three, and the list has got shorter
+ * every time without a line of this file changing, which is the whole
+ * argument for the hook: each surface takes its way out with it. The account
+ * sheet became a card under the settings cog and closes itself from inside
+ * `components/Menu.tsx`, because it belongs to that bar rather than opening
+ * over the world. The antechamber moved to the settings page and owns its
+ * dismissal there. A ROOM'S SETTINGS and THE JOIN SHEET went on 2026-10-12
+ * with rooms themselves (founder: "방 없애") — the first had been unable to
+ * mount since 2026-10-09, and the second was the way into a place with no
+ * way out. `KEEP_SHEET`, the list that held `.jar-settings` out of "outside"
+ * for those two, went with them.
  *
  * ── THE SEVEN THAT DO NOT, EACH FOR A STATED REASON ───────────────────────
  *
  * Grouped, because they are three different situations and only one of them
- * is a decision:
+ * is a decision. (It was seven with rooms in the product; the room form is
+ * struck below rather than renumbered, because the count is what a reader
+ * checks the list against.)
  *
  *   REFUSED ON PURPOSE, AND MUST STAY REFUSED — the notepad and the
  *   composer, `components/InspirationComposer.tsx`. `DialogSurface`'s own
@@ -67,9 +78,10 @@
  *   opt-OUT in the same change.
  *
  *   HOLDING WORDS SOMEBODY IS PARTWAY THROUGH TYPING — the agent's name
- *   sheet (`Home.tsx`, `.jar-seek` + `.jar-roomform-box`), the room form
- *   (`space-kinds/GroupPanel.tsx`) and the archive's search
- *   (`components/InspirationSearch.tsx`). Same class of harm as the notepad
+ *   sheet (`Home.tsx`, `.jar-seek` + `.jar-roomform-box`) and the archive's
+ *   search (`components/InspirationSearch.tsx`). The room form
+ *   (`space-kinds/GroupPanel.tsx`) was the third and is gone with rooms.
+ *   Same class of harm as the notepad
  *   and a smaller amount of it: a half-typed name or query is cheap to
  *   retype and still annoying to lose. Unanswered rather than decided —
  *   nobody has ruled on these three, and the honest state of the product is
@@ -118,8 +130,9 @@
  *
  * AND WHY IT ASKS WHERE THE KEY WAS PRESSED FIRST. Capture runs before
  * anything the target could do, so the first version of this ate the Escape
- * belonging to every field inside a sheet — a room's name box, an agent's
- * name, the reflect answer, each of which handles the key itself because
+ * belonging to every field inside a sheet — an agent's name, the reflect
+ * answer, and while rooms existed a room's name box, each of which handles
+ * the key itself because
  * leaving a half-typed name is not the same act as leaving the sheet. The
  * comment here claimed fields kept their key; they did not, and a test
  * written to say so failed the moment it existed. A press inside an editable

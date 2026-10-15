@@ -77,11 +77,17 @@
  *   UNLAYERED, AND THEREFORE BEATING ALL OF THE ABOVE — 32 rules, down from
  *   350:
  *
- *     home.css           30 rules — lines 4431-4557 (`.jar-where-*`,
- *                       `.jar-when*`, `.jar-here*`) and 5153-5339
- *                       (`.jar-drift-*`, `.waka-over--talk*`, `.jar-up*`,
- *                       `.jar-group-ground-status`). Not a decision anybody
- *                       made: an append past a closing brace.
+ *     home.css           30 rules — the `.jar-where-*` / `.jar-when*` /
+ *                       `.jar-here*` run and the `.jar-drift-*` /
+ *                       `.waka-over--talk*` / `.jar-up*` run. Not a decision
+ *                       anybody made: an append past a closing brace. (The
+ *                       line numbers are dropped and `.jar-group-ground-
+ *                       status` is gone from the list — it was a room's
+ *                       "whose ground is under you" line, removed with rooms
+ *                       on 2026-10-12. Counting the rules again after that
+ *                       deletion is work for whoever next moves a layer;
+ *                       what this paragraph is for is the SHAPE of the bug,
+ *                       which is unchanged.)
  *     layers.css          2 rules — `:focus-visible` and `.jar
  *                       :focus-visible`, and they are DELIBERATE. The
  *                       argument is below and the unlayered position IS the

@@ -13,8 +13,6 @@ import { BackgroundJobHeldError } from './background-job-hold.js';
 import { loadPrincipleStatus, requestPrincipleRefresh } from './principle-status.js';
 import { deriveSignalsForInspiration } from './signal-derivation.js';
 import { writeSignalEmbedding } from './signal-embeddings.js';
-import { createGroupForProfile, joinGroupByCode } from '../routes/groups-membership.js';
-import { loadGroupTopOfMind } from '../routes/groups-top-of-mind.js';
 
 const state = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('./db.js', () => ({ getDb: () => state.db }));
@@ -240,38 +238,24 @@ describe('pending support is not current proof', () => {
     expect(await t.sql`SELECT id FROM signals WHERE profile_id = ${f.profileId}`).toHaveLength(1);
   });
 
-  it('private answers leave room proof current, while public source edits require a fresh check', async () => {
-    const f = await fixture();
-    const [account] = await t.sql`INSERT INTO accounts(email) VALUES (${`room-other-${++sequence}@example.test`}) RETURNING id`;
-    const [other] = await t.sql`INSERT INTO profiles(account_id, type, name) VALUES (${account.id}, 'human', 'Other') RETURNING id`;
-    const group = await createGroupForProfile(t.db as never, { profileId: f.profileId, name: 'Current support' });
-    await joinGroupByCode(t.db as never, { profileId: other.id as string, joinCode: group.joinCode });
-    const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id = ${group.id}`;
-    await t.sql`UPDATE inspirations SET visibility = 'public' WHERE id = ${f.sourceId}`;
-    const [second] = await t.sql`INSERT INTO inspirations(profile_id, text, visibility) VALUES (${other.id}, 'Quiet space helps me choose', 'public') RETURNING id`;
-    const [signal] = await t.sql`INSERT INTO signals(profile_id, statement, input_policy) VALUES (${mind.id}, 'We value quiet spaces', 'group-public-v1') RETURNING id`;
-    for (const [owner, id] of [[f.profileId, f.sourceId], [other.id as string, second.id as string]]) {
-      const material = await loadInspirationMaterial(t.db as never, owner!, id!, 'public');
-      await t.sql`INSERT INTO signal_evidence(profile_id, owner_profile_id, signal_id, inspiration_id, material)
-        VALUES (${mind.id}, ${owner}, ${signal.id}, ${id}, ${JSON.stringify(material!.identity)}::jsonb)`;
-    }
-    const [artifact] = await t.sql`INSERT INTO top_of_minds(group_id) VALUES (${group.id}) RETURNING id`;
-    const [entry] = await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id, type, body, input_policy)
-      VALUES (${artifact.id}, 'hypothesis', 'Quiet space is a shared thread', 'group-public-v1') RETURNING id`;
-    await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id, signal_id) VALUES (${entry.id}, ${signal.id})`;
-    const read = () => loadGroupTopOfMind(t.db as never, group.id);
-    expect((await read()).entries).toHaveLength(1);
-    await t.sql`INSERT INTO reflections(profile_id, inspiration_id, question, answer)
-      VALUES (${f.profileId}, ${f.sourceId}, 'Why?', 'PRIVATE_ANSWER')`;
-    expect((await read()).entries).toHaveLength(1);
-    await t.sql`UPDATE inspirations SET text = 'A quiet walk still helps me decide' WHERE id = ${f.sourceId}`;
-    expect((await read()).entries).toEqual([]);
-    const report = await reviewSignalSupport(t.db as never, { ownerProfileId: f.profileId, inspirationId: f.sourceId,
-      deriveIntoProfileId: mind.id as string, maxCalls: 1, provider: { assessSignalSupport: async (input) => {
-        expect(input.sources.some((source) => source.kind === 'reflection')).toBe(false);
-        return supported.assessSignalSupport(input);
-      } } });
-    await applySignalSupportReview(t.db as never, report);
-    expect((await read()).entries).toHaveLength(1);
-  });
+  /* ── "PRIVATE ANSWERS LEAVE ROOM PROOF CURRENT, WHILE PUBLIC SOURCE
+     EDITS REQUIRE A FRESH CHECK", DELETED ───────────────────────────────
+     Founder: "방 없애". The asymmetry this pinned is a room's asymmetry and
+     only a room's. A room reads its members' PUBLIC material; a private
+     answer written afterwards is material the room never read, so it must
+     NOT invalidate the room's standing proof — while an edit to the public
+     capture itself must, because that is material the room did read and no
+     longer matches. Two kinds of change to one person's archive, one of
+     which a second reader can see.
+
+     THERE IS NO ONE-READER VERSION OF THAT. A personal reading reads
+     everything its owner wrote, private answers included, so the "invisible
+     to the reader" half of the pair has no instance left — the first
+     assertion would become a restatement of the second. The currency rule
+     that remains, that editing read material withdraws what stood on it,
+     is held personally above by the cases around `f.review()`.
+
+     It went with `loadGroupTopOfMind`, the route loader it called, and with
+     `loadInspirationMaterial(..., 'public')`, the only `public` scope read
+     left in this file. */
 });

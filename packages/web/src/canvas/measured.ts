@@ -91,8 +91,9 @@ export interface Measured {
   readonly grain: RefObject<HTMLDivElement>;
 
   /* ---- the ready field (463 lines): headquarters and the companion ---- */
-  /** Headquarters' camera-riding layer — it rides BOTH axes, because rooms are
-      columns of the same page. */
+  /** Headquarters' camera-riding layer — it rides BOTH axes, because every
+      wall is a column of the same page. (It said "because rooms are" until
+      rooms were removed; the agents' columns work the same way.) */
   readonly hq: RefObject<HTMLDivElement>;
   /** The CONTENT block inside headquarters, not `.jar-hq` itself: its height is
       what the companion's slot is solved against, and observing the outer

@@ -20,7 +20,6 @@ import {
   FIELD_DECAY_HALF_LIFE_DAYS,
   FIELD_FLOOR_ANSWERED,
   FIELD_FLOOR_CITED,
-  FIELD_FLOOR_IN_GROUP,
   FIELD_FRONTIER_DAYS,
   FIELD_REFLECTION_SATURATION,
   FIELD_REFLECTION_WEIGHT,
@@ -112,8 +111,12 @@ export function colorBall(b: Ball, T: number): void {
         FIELD_ATTENTION_SPAN *
           (Math.min(b.reflections, FIELD_REFLECTION_SATURATION) /
             FIELD_REFLECTION_SATURATION)
-      : 0) +
-    (b.hasGroup ? FIELD_FLOOR_IN_GROUP : 0);
+      : 0);
+  /* A THIRD FLOOR STOOD HERE: `b.hasGroup ? FIELD_FLOOR_IN_GROUP : 0`, a
+     tenth of the range for a memory with a shared pattern resting on it.
+     Rooms went on 2026-10-12 (founder: "방 없애"), `Signal.sharedGroupIds`
+     with them, and the flag could no longer be true. Cited and answered are
+     the two floors there are. */
   /* RECENCY IS CAPPED; THE CARRY RIDES ABOVE EVERYTHING. A memory kept this
      morning used to hit the max and clamp the whole young field to one flat
      top band (see FIELD_RECENCY_MAX). Now freshness can only carry a memory

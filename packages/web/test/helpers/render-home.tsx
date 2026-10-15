@@ -34,20 +34,24 @@ import { MemoryRouter } from "react-router-dom";
 import type { FieldAudit } from "../../src/pages/Home";
 
 export interface WorldFacts {
-  /** the viewer's own memories; `isPublic` marks the ones a room can read */
+  /**
+   * The viewer's own memories.
+   *
+   * `isPublic` MARKED THE ONES A ROOM COULD READ, and it is kept because
+   * `lib/data`'s `Inspiration.isPublic` is kept: rooms were removed on
+   * 2026-10-12 (founder: "방 없애") but `inspirations.visibility` was
+   * deliberately NOT touched, and the founder has an open question about what
+   * that axis means with nothing to be public TO. A fixture that stopped
+   * being able to express the flag would quietly decide that question.
+   */
   inspirations: Array<{ id: string; text: string; daysAgo: number; isPublic?: boolean }>;
-  /** groups the viewer belongs to, and whose memories stand in each */
-  groups: Array<{
-    id: string;
-    name: string;
-    field: Array<{ id: string; ownerProfileId: string; ownerName: string; daysAgo: number }>;
-  }>;
 }
 
-export const VIEWER_ID = "profile-viewer";
+/* `groups` IS GONE FROM THE FACTS, and with it `DECIDED` — the lead entry of
+   a room's board, which every room suite matched against. A world fact is
+   something this product can have; rooms are not one. */
 
-/** what the group decided together — the lead entry of its board */
-export const DECIDED = "We ask the owner when the spec and the code disagree.";
+export const VIEWER_ID = "profile-viewer";
 
 /**
  * MIDDAY, NOT MIDNIGHT. Every fixture moment is a whole number of days off
@@ -109,99 +113,34 @@ export function dataMockFrom(facts: WorldFacts) {
   };
 }
 
-/** The group reads still go through `lib/api`, so those are mocked there. */
-export function apiMockFrom(facts: WorldFacts) {
+/**
+ * WHAT STILL GOES THROUGH `lib/api` AND HAS TO BE MOCKED HERE.
+ *
+ * ── THIS FUNCTION WAS ALMOST ENTIRELY ROOMS (2026-10-12) ─────────────────
+ *
+ * Founder: "방 없애" — remove rooms. What stood here: `fetchGroups`,
+ * `fetchGroupField`, `fetchGroupMembers`, `fetchGroupTopOfMind`,
+ * `fetchGroupWall` and `fetchGroupProposals`. Two of them carried fixture
+ * reasoning worth keeping on the record, because both were learned from a
+ * suite that passed while proving nothing:
+ *
+ *   THE BOARD AND THE WALL WERE NEEDED TOGETHER. The loop built a room's
+ *   provenance by matching `evidence.citedBy` against the lead entry's body,
+ *   so a board with no entries and a wall with no signals gave zero and
+ *   proved nothing — an innocent-looking empty that read as a pass.
+ *
+ *   THE WALL WAS ROOM-GROWN (2026-08-24): one statement standing on every
+ *   member as its contributors, which was also the smallest wall that
+ *   satisfied the serve gate's two-voices rule.
+ *
+ * Three verbs remain and all three answer with nothing, which is what the
+ * world needs them to do: a mounted world asks for them on boot and a
+ * fixture that left them undefined would fail on a missing function rather
+ * than on anything a test is about.
+ */
+export function apiMockFrom(_facts: WorldFacts) {
   const none = async () => [];
   return {
-    fetchGroups: async () =>
-      facts.groups.map((g) => ({
-        id: g.id,
-        name: g.name,
-        role: "owner",
-        joinCode: null,
-        createdAt: iso(60),
-      })),
-    fetchGroupField: async (groupId: string) => {
-      const g = facts.groups.find((x) => x.id === groupId);
-      const field = (g?.field ?? []).map((f) => ({
-        id: f.id,
-        text: `memory ${f.id}`,
-        kind: "note",
-        source: "app",
-        createdAt: iso(f.daysAgo),
-        updatedAt: iso(f.daysAgo),
-        ownerProfileId: f.ownerProfileId,
-        ownerName: f.ownerName,
-        ownerType: "human",
-      }));
-      /* like the personal field above: what came, and what there is. A room in
-         a fixture holds exactly what it hands over. */
-      return { field, total: field.length };
-    },
-    fetchGroupMembers: async (groupId: string) => {
-      const g = facts.groups.find((x) => x.id === groupId);
-      const seen = new Map<string, string>();
-      for (const f of g?.field ?? []) seen.set(f.ownerProfileId, f.ownerName);
-      return [...seen].map(([profileId, name]) => ({
-        id: `m-${profileId}`,
-        profileId,
-        name,
-        type: "human",
-        role: profileId === VIEWER_ID ? "owner" : "member",
-        joinedAt: iso(30),
-      }));
-    },
-    /**
-     * A group that has decided something, and the shared signals that fed it.
-     *
-     * Both are needed together or provenance stays empty for an innocent
-     * reason: the loop builds it by matching `evidence.citedBy` against the
-     * lead entry's body, so a board with no entries and a wall with no
-     * signals would give zero and prove nothing.
-     */
-    fetchGroupTopOfMind: async (groupId: string) => {
-      const g = facts.groups.find((x) => x.id === groupId);
-      if (!g || g.field.length === 0) return null;
-      return {
-        id: `tom-${groupId}`,
-        groupId,
-        entries: [
-          {
-            id: `entry-${groupId}`,
-            body: DECIDED,
-            pinnedAt: iso(1),
-            createdAt: iso(1),
-            contributors: [...new Set(g.field.map((f) => f.ownerProfileId))].map((profileId) => ({
-              profileId,
-              name: g.field.find((f) => f.ownerProfileId === profileId)?.ownerName ?? "",
-            })),
-          },
-        ],
-        createdAt: iso(1),
-        updatedAt: iso(1),
-      };
-    },
-    fetchGroupWall: async (groupId: string) => {
-      const g = facts.groups.find((x) => x.id === groupId);
-      /* the wall is ROOM-GROWN now (2026-08-24): one statement standing on
-         every member as its contributors, which is also the smallest wall
-         that satisfies the serve gate's two-voices rule */
-      const contributors = [
-        ...new Map(
-          (g?.field ?? []).map((f) => [f.ownerProfileId, f.ownerName]),
-        ).entries(),
-      ].map(([profileId, name]) => ({ profileId, name }));
-      return (g?.field ?? []).map((f, i) => ({
-        signalId: `sig-${f.id}`,
-        statement: `a statement the room grew near ${f.ownerName}`,
-        confidenceAsWritten: 50,
-        locked: false,
-        contributors,
-        sharedAt: iso(f.daysAgo + i),
-        reactions: [],
-      }));
-    },
-    fetchGroupProposals: none,
     fetchProfiles: none,
     fetchTopOfMindVersions: none,
   };
@@ -226,8 +165,14 @@ export interface MountedWorld {
    * down here or it is describing the wrong place.
    */
   toField(): Promise<void>;
-  /** click one of the "whose ground" rows */
-  standIn(name: RegExp): Promise<void>;
+  /* `standIn(name)` IS GONE. It clicked one of the "whose ground" rows —
+     `.jar-grounds-row` — and stepped sixty frames while the ground re-solved.
+     The band of names was a room's, deleted on 2026-10-12; the audit fields
+     it was asserted against (`ground`, `company`) were deleted on 2026-10-15
+     with the loop's group branches, and this is the third leg of the same
+     tripod. A test helper that drives a selector nothing renders is worse
+     than no helper: it compiles, it is discoverable, and the first person to
+     reach for it gets a timeout instead of an answer. */
   unmount(): void;
 }
 
@@ -438,17 +383,17 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
       /*
        * TRAVEL BY COMMAND, BECAUSE THE DOORS KEEP MOVING.
        *
-       * This has now chased three of them: a wall-names strip along the
-       * bottom, then the caret beside the name in the top-left, then a
-       * "Rooms and agents" row in the menu. Each was the route a person
-       * actually had at the time, and each was removed by a ruling — rooms
-       * and agents are set aside entirely for now, so at the moment there is
-       * no door at all.
+       * This chased three of them: a wall-names strip along the bottom, then
+       * the caret beside the name in the top-left, then a "Rooms and agents"
+       * row in the menu. Each was the route a person actually had at the
+       * time, and each was removed by a ruling. Rooms themselves went on
+       * 2026-10-12 (founder: "방 없애"), so the axis is agents, then you, and
+       * the only lateral travel left is between those two.
        *
-       * A suite about what a ROOM holds should not keep breaking because the
-       * way in moved. So it goes through `wakaSim`, the same dev seam the
-       * ground uses, and finds its wall by asking where it landed: columns
-       * are signed with the owner at zero, so walking outward from there and
+       * A suite about what a WALL holds should not break because the way in
+       * moved. So it goes through `wakaSim`, the same dev seam the ground
+       * uses, and finds its wall by asking where it landed: columns are
+       * signed with the owner at zero, so walking outward from there and
        * checking `audit().wallId` arrives without knowing the layout.
        */
       const sim = (window as unknown as {
@@ -461,13 +406,12 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
       const api = sim();
       if (!api) throw new Error("the simulation is not running");
 
+      /* THE NAME LOOKUP WENT WITH ROOMS. It resolved a wall id to the
+         fixture's own room name so that a regexp written against what a
+         person READS still selected the right wall. The walls left are yours
+         — matched on kind — and your agent's, whose id the caller has. */
       const wanted = (id: string, kind: string) =>
-        name.test("Me") ? kind === "self" : name.test(id) || name.test(nameOfWall(id));
-
-      /* The fixture's own names, so a regexp written against what a person
-         reads still selects the right wall. */
-      const nameOfWall = (id: string): string =>
-        (facts.groups ?? []).find((group) => group.id === id)?.name ?? "";
+        name.test("Me") ? kind === "self" : name.test(id);
 
       /**
        * WAIT FOR THE CROSSING, DO NOT GUESS AT ITS LENGTH.
@@ -487,9 +431,11 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
        * PRODUCT as broken when what was wrong was this helper's assumption
        * about which side rooms live on.
        *
-       * Asking `navigationState().moving` removes the assumption entirely.
-       * The seam already exists and the world's own URL canonicaliser already
-       * polls it for exactly this reason.
+       * THE ROOMS ARE GONE AND THIS STAYS. Asking `navigationState().moving`
+       * removes the assumption entirely, which is why it survived the thing
+       * it was written for: a helper that knows which columns exist is a
+       * helper that breaks the next time the axis changes, and the axis has
+       * now changed three times.
        */
       const settle = async () => {
         for (let turn = 0; turn < 40; turn += 1) {
@@ -511,7 +457,7 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
       const here = audit();
       throw new Error(
         `travelTo(${name}) did not arrive — standing on ${here.wallKind} "${here.wallId}". ` +
-          `If the wall is missing, the group fetch mock is wrong.`,
+          `If the wall is missing, the agent roster mock is wrong.`,
       );
     },
     async toField() {
@@ -528,9 +474,11 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
       /* `toGround` REFUSES WHILE A WALL TRIP IS IN FLIGHT, by design — two
          travels at once is how a camera ends up between places. A test that
          crosses to a room and then asks for its ground is asking inside
-         exactly that window, and the command is dropped silently. So ask
-         until it takes, rather than guessing at a wait long enough to cover
-         it: a fixed delay is either flaky or slow, and usually both. */
+         exactly that window, and the command is dropped silently. (The case
+         that taught this was crossing to a ROOM and then asking for its
+         ground; the same window opens on any crossing.) So ask until it
+         takes, rather than guessing at a wait long enough to cover it: a
+         fixed delay is either flaky or slow, and usually both. */
       for (let attempt = 0; attempt < 14; attempt += 1) {
         await act(async () => api.toGround());
         await step(30);
@@ -543,10 +491,6 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
         const where = audit();
         if (Math.abs(where.camY - where.fieldRest) < 1) break;
       }
-    },
-    async standIn(name) {
-      await clickByText(".jar-grounds-row", name);
-      await step(60);
     },
     unmount() {
       act(() => root.unmount());

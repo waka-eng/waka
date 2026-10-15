@@ -14,18 +14,25 @@
  *   claims.ts                    claims.ts        /api/claims         (layer 2, unanswered)
  *   principles.ts                principles.ts    /api/principles     (layer 4)
  *   top-of-mind.ts               top-of-mind.ts   /api/top-of-mind    (layer 3)
- *   groups.ts                    groups.ts        /api/groups
  *   feedback.ts                  feedback.ts      /api/feedback
  *   public-profiles.ts           public-profiles.ts  /api/public/profiles
  *   http.ts                      —  the fetch wrapper they all share
  *
- * FOUR ROWS CAME OUT OF THAT TABLE and are listed here rather than silently
+ * FIVE ROWS CAME OUT OF THAT TABLE and are listed here rather than silently
  * dropped, because the table is the one place the two sides of the wire are
  * written down together and a reader needs to know these were removed, not
  * forgotten: `sessions.ts`, `keeper-keys.ts`, `agent-grants.ts` and
  * `consultations.ts`. Their surfaces went with the settings cut — see
  * `SettingsPanel`'s header for which five sections did not survive it — and
  * the route files they named are gone too.
+ *
+ * AND `groups.ts` / `/api/groups`, on 2026-10-12. Founder: "방 없애" —
+ * remove rooms. Nine route files on the server and twelve verbs on this side
+ * went then. The module itself outlived them by three days as three types
+ * with no client, re-exported here because `canvas/simulation.ts` named them
+ * and could not be edited from that change; it was deleted on 2026-10-15
+ * when the loop's group branches came out. There is no `./groups` below any
+ * more, and no row in the table above, because there is no route.
  *
  * A TABLE THAT NAMES A DELETED FILE IS WORSE THAN NO TABLE, which is why
  * this is a fix and not a tidy-up: the rows survived the deletion of the
@@ -72,7 +79,6 @@ export * from "./claims";
 export * from "./inspiration-days";
 export * from "./principles";
 export * from "./top-of-mind";
-export * from "./groups";
 export * from "./agents";
 export * from "./feedback";
 export * from "./public-profiles";

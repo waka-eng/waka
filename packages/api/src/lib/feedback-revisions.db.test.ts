@@ -5,7 +5,6 @@ import type { ModelProvider, TopOfMindRecentFeedback, TopOfMindSynthesisInput } 
 import { createFeedbackForProfile, listFeedbackForProfile } from '../routes/feedback.js';
 import { feedbackWordingCurrent } from './feedback-revisions.js';
 import { feedback } from '../db/index.js';
-import { createGroupForProfile, joinGroupByCode } from '../routes/groups-membership.js';
 import postgres from 'postgres';
 import { Hono } from 'hono';
 import { createFeedbackRoutes } from '../routes/feedback.js';
@@ -188,18 +187,20 @@ describe('feedback stays with its words, not just its ID', () => {
     expect(new Date(job.run_after).getTime()).toBeLessThanOrEqual(Date.now() + 1000);
   });
 
-  it.each(['true', 'not_true'] as const)('durably rereads a room-grown %s reaction, not an unrelated personal reading', async (value) => {
-    const a = await fixture(), b = await fixture();
-    const group = await createGroupForProfile(t.db as never, { profileId: a.profileId, name: 'Room' });
-    await joinGroupByCode(t.db as never, { profileId: b.profileId, joinCode: group.joinCode });
-    const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id=${group.id} AND type='group'`;
-    const [signal] = await t.sql`INSERT INTO signals(profile_id,statement,input_policy)
-      VALUES (${mind.id},'Room words','group-public-v1') RETURNING id`;
-    await t.sql`DELETE FROM background_jobs`;
-    const saved = await createFeedbackForProfile(t.db as never, { profileId: b.profileId, targetType: 'signal', targetId: signal.id as string, value });
-    expect(saved).toMatchObject({ targetRevision: '1' });
-    expect(await t.sql`SELECT type,payload FROM background_jobs`).toEqual([
-      { type: 'refresh_group_top_of_mind', payload: { groupId: group.id, reason: 'shares_changed' } },
-    ]);
-  });
+  /* ── A ROOM-GROWN REACTION, DELETED ────────────────────────────────────
+     Founder: "방 없애". Two cases lived here — `true` and `not_true` on a
+     statement a room's mind had grown — and both existed to pin that
+     answering a room's sentence wakes `refresh_group_top_of_mind` for that
+     room and NOT the answerer's own reading. Every noun in that sentence is
+     being removed: the room, its mind, `input_policy = 'group-public-v1'`,
+     and the job type itself.
+
+     IT WAS NOT FOLDED INTO A PERSONAL CASE, and that is the argued part. The
+     thing it gated was the DISCRIMINATION — that a reaction aimed at a room's
+     statement must not be mistaken for a reaction aimed at your own. With one
+     kind of statement left there is nothing to discriminate, and a test that
+     keeps the shape while losing the distinction is the gate-by-existence
+     this whole pass was opened to kill. The personal half of the behaviour is
+     already held, immediately above, by "queues an explicit personal
+     correction without the passive daily floor". */
 });

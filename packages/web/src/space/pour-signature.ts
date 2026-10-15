@@ -1,6 +1,16 @@
 /**
  * WHEN THE WORLD MUST BE BUILT AGAIN — and the one case that read as "never".
  *
+ * "POUR" IN THIS FILE MEANS THE BUILD, AND NOT AN ANIMATION. It meant both
+ * once: the field was staged into the world with a staggered fall, and the
+ * signature below decided when that happened. The fall is deleted (2026-10-11
+ * — the tombstone and the founder's words are at `POUR_MS` in
+ * `canvas/simulation.ts`), and nothing in this file changes because of it: a
+ * rebuild is still a rebuild, it is still catastrophic to miss one, and the
+ * empty-string hole below is still the bug it always was. The name stays
+ * because renaming it reaches `Home.tsx` and this file's own test, and because
+ * every word of what follows is about the BUILD.
+ *
  * The frame loop is set up by an effect that needs the archive, the agents and
  * a canvas before it can do anything: it builds the field, starts the rAF, and
  * attaches every listener the world has — `/`, the arrows, Escape, the drag,

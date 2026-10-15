@@ -3,49 +3,73 @@
  *
  * A **space** is the thing that owns a full set of three layers —
  * inspirations, signals, one top of mind. Yours is one, each of your agents
- * has one, each group has one. `docs/architecture.md` calls it the one word
- * this frontend invents, for a real reason: the backend has `profiles` and it
- * has `groups`, and no single noun for "the thing whose three layers these
- * are". Every space renders identically and differs only in whose material it
- * holds, which is what this module is for.
+ * has one. `docs/architecture.md` calls it the one word this frontend
+ * invents, for a real reason: the backend has `profiles` and no single noun
+ * for "the thing whose three layers these are". Every space renders
+ * identically and differs only in whose material it holds, which is what
+ * this module is for.
  *
- * THE NAMES CHANGED HERE, and this is why the rename had to wait for the
- * split. It was `Wall` / `WallKind` / `wallKey` with a kind called `"room"`.
- * The backend says `groups`, `group_members`, `group_top_of_mind_proposals` —
- * one word at both ends — so the code says `group`. Doing that inside a
- * 13,000-line file means a scripted find-and-replace over 300-odd matches;
- * doing it inside seventy lines is something the compiler checks and a person
- * can read. "Room" survives in what a person sees on screen, which is a
- * different register and deliberately unchanged.
+ * ── ROOMS WERE THE THIRD KIND, AND THEY ARE GONE (2026-10-12) ───────────
  *
- * `docs/codebase.md` names the bug this exists to end: "how does an agent's
- * space differ" is answered independently in at least six places, and they
- * have disagreed in production — a body hashed from a group id, typography
- * and motion wired separately, one space reading as a machine's in one place
- * and a person's in another. A fourth kind of space should be a new entry
- * here, not a hunt.
+ * Founder: "방 없애" — remove rooms.
+ *
+ * THIS FILE'S OLD HEADER ARGUED THE OPPOSITE AT LENGTH, and the argument was
+ * sound at the time, which is why the ruling is written here rather than the
+ * paragraphs simply disappearing. It said the backend's one word was
+ * `groups`, so the code should say `group`; it said every space has a sky
+ * because "every room will eventually have its own philosophies and values"
+ * (founder, 2026-08-27); it said the dial winds a room's board because a
+ * room's board is one chain and therefore one history. None of that was
+ * wrong. It was all downstream of rooms existing.
+ *
+ * WHAT MADE THEM GO. An audit on 2026-10-12 established that the deletion of
+ * `.jar-here-list` on 2026-10-09 had removed, in one commit, both the ONLY
+ * list of the rooms you belong to and the ONLY opener of `SpaceSettings` —
+ * the panel that held leave, rename, remove-member, close and the invite
+ * link. The proof was not a grep but a closed set: `setSettingsFor` had three
+ * call sites and all three passed `null`, so the panel could never mount.
+ * Creating a room had already gone. What shipped, therefore, was a room you
+ * could be let into by a link made before the cut and could then never leave,
+ * rename, invite into, or close — a one-way door. Offered the choice between
+ * rebuilding the exits and finishing the removal, the founder removed rooms.
+ *
+ * `"group"` LEFT THE UNION ON 2026-10-15, three days after the rooms it
+ * named. It stayed that long as an explicit compile-time splint:
+ * `canvas/simulation.ts` compared `w.kind === "group"` in eight places and
+ * TypeScript rejects a comparison against a literal the union does not
+ * contain, so dropping the member would have broken the build in a file that
+ * change was not allowed to touch. Nothing had constructed a `Space` with
+ * that kind since the removal — `pages/Home`'s axis is agents, then you, and
+ * stops — so for three days the type system was describing a kind of space
+ * that could not exist, purely to keep eight unreachable branches legal.
+ *
+ * THE SPLINT IS WHY THIS WENT WELL AND IS WORTH COPYING. A half-finished
+ * removal is dangerous in proportion to how hard it is to tell apart from a
+ * finished one, and every surviving piece here carried a note saying what it
+ * was, which file was holding it up, and what event would release it. When
+ * the loop was finally free, the remaining work was reading eight tombstones
+ * and following them, not re-deriving what rooms had been.
  *
  * THIS DIRECTORY AND `space/` ARE NOT THE SAME AXIS, and the names do not say
  * so. `space/` is split by LAYER — one subdirectory per canon layer, the code
  * every space runs. `space-kinds/` is split by KIND — what differs between
- * yours, an agent's and a group's. The trap is that reading the two names cold
- * suggests the reverse, a general `space/` with its variants in `space-kinds/`:
- * in fact the `Space` type is the one declared right here, and `space/` has no
- * type by that name. `space/README.md` states the rule, the file that most
- * embarrasses it (`space/settings/SpaceSettings.tsx` importing `Space` from
- * this file), and why the directories were not simply renamed.
+ * yours and an agent's. The trap is that reading the two names cold suggests
+ * the reverse, a general `space/` with its variants in `space-kinds/`: in
+ * fact the `Space` type is the one declared right here, and `space/` has no
+ * type by that name. `space/README.md` states the rule and why the
+ * directories were not simply renamed.
  */
 
-/** The three kinds, in the axis order they stand in: agents ← you → groups. */
-export type SpaceKind = "self" | "group" | "agent";
+/** The kinds, in the axis order they stand in: agents ← you. */
+export type SpaceKind = "self" | "agent";
 
 export interface Space {
   kind: SpaceKind;
-  /** the group id, the agent id, or "" for your own */
+  /** the agent id, or "" for your own */
   id: string;
   /** the eyebrow, and the name a neighbouring column's edge says */
   name: string;
-  /** where it stands: agents negative, you at the origin, groups positive */
+  /** where it stands: agents negative, you at the origin */
   col: number;
 }
 
@@ -53,42 +77,25 @@ export interface Space {
 export const spaceKey = (s: Space): string => `${s.kind}:${s.id}`;
 
 /**
- * EVERY SPACE HAS A SKY. This rule has now been decided three times, and the
- * history is kept because it is the argument:
- *
- * First: every space, including a group's — members share SIGNALS in, and
- * what hangs there is exactly that: statements, other people's, not yet
- * agreed. Then narrowed to your own column (founder, 2026-08-25): the sky is
- * where YOUR philosophies and values form, and this world did not claim to
- * hold a room's. Then opened again (founder, 2026-08-27: "i should be able
- * to move to the sky and ground per every room ... every room will
- * eventually have its own philosophies and values").
- *
- * So the shape is the same everywhere, which was the first ruling's point —
- * and what each sky HOLDS stays honest per space: a room's says in the
- * room's own name that its timeless half has not formed yet. An empty place
- * you can stand in beats a door that refuses, which is the same reasoning
- * the way up has carried since the strip of wall names went.
+ * EVERY SPACE HAS A SKY, and with rooms gone there is nothing left for this
+ * to decide. It was ruled three times — every space including a room's, then
+ * your own column alone (founder, 2026-08-25), then opened again when the
+ * founder said every room would grow its own philosophies and values
+ * (2026-08-27). Yours and your agent's both have one, which is the answer the
+ * third ruling landed on for the two kinds that remain. The function stays
+ * because `hasDial` beside it stays, and a space asking the two questions
+ * through the same shape is what keeps a fourth kind a new entry here rather
+ * than a hunt.
  */
 export const hasSky = (_k: SpaceKind): boolean => true;
 
 /**
- * THE DIAL WINDS EVERY SPACE, INCLUDING A ROOM — AND IN A ROOM IT WINDS THE
- * BOARD, NOT THE GROUND.
+ * THE DIAL WINDS EVERY SPACE.
  *
- * It used to stay out of a group, and the reason written here was that a
- * group is several people's statements arriving on their own clocks so there
- * is no single history to scrub. That is true of a room's FIELD and it was
- * never true of the thing the dial actually governs. A room's board is one
- * chain — version one superseded by version two superseded by version three,
- * each with a reason — hung on one door ledger of arrivals and departures.
- * That is a single history, and it is the room's own.
- *
- * The founder's line in `goals/room-timeline.md` is "scrubber before dial":
- * the flat surface's rail came first, the world's dial second. This is the
- * second one. What it winds is the sentence over the room and the marks on
- * its door; the ground below stays your own memories at present time, because
- * whose memories those are is a ruling and not a matter of when.
+ * It used to stay out of a room, then it wound a room's BOARD — one chain of
+ * versions on one door ledger, which is a single history and was the room's
+ * own. The founder's line in `goals/room-timeline.md` was "scrubber before
+ * dial". Both the board and the ledger went with rooms; what the dial winds
+ * now is your own wall and your agent's, which is what it wound first.
  */
 export const hasDial = (_k: SpaceKind): boolean => true;
-

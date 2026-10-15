@@ -27,9 +27,6 @@ import {
 import { CONFIDENCE_RECENCY_HALF_LIFE_DAYS } from "./signal-derivation-thresholds.js";
 import {
   COMEBACK_MIN_DORMANT_DAYS,
-  GROUP_DRAFT_MIN_AFFIRMED,
-  GROUP_DRAFT_MIN_AFFIRMED_SMALL,
-  GROUP_DRAFT_SMALL_MAX_MEMBERS,
   SELECTION_DISPUTED_MULTIPLIER,
   TOP_OF_MIND_MIN_SHIFT_HOURS,
   TOP_OF_MIND_MIN_SIGNALS,
@@ -171,45 +168,29 @@ export const READING_LINES: ReadingLine[] = [
       wordsKo: "멀찍이",
     },
   },
-  {
-    sentence:
-      "A room first speaks only after three shared statements have been affirmed by someone besides their owner.",
-    sentenceKo:
-      "방은 주인 아닌 누군가가 함께 실어 준 공유 문장이 셋은 되어야 처음 말해요.",
-    backing: {
-      kind: "constant",
-      constant: "GROUP_DRAFT_MIN_AFFIRMED",
-      value: GROUP_DRAFT_MIN_AFFIRMED,
-      words: "three",
-      wordsKo: "셋",
-    },
-  },
-  {
-    sentence:
-      "A room of three people or fewer is held to a smaller bar, because three statements is most of everything a pair has ever said.",
-    sentenceKo:
-      "세 명 이하의 방은 기준이 더 낮아요. 두 사람이 나눈 말의 거의 전부가 문장 셋이니까요.",
-    backing: {
-      kind: "constant",
-      constant: "GROUP_DRAFT_SMALL_MAX_MEMBERS",
-      value: GROUP_DRAFT_SMALL_MAX_MEMBERS,
-      words: "three people or fewer",
-      wordsKo: "세 명 이하",
-    },
-  },
-  {
-    sentence:
-      "That smaller bar is two, and it never falls to one: one person agreeing once is not a room agreeing.",
-    sentenceKo:
-      "그 낮은 기준은 둘이에요. 하나까지 내려가지는 않아요 — 한 사람이 한 번 동의한 걸 방이 동의했다고 할 수는 없으니까요.",
-    backing: {
-      kind: "constant",
-      constant: "GROUP_DRAFT_MIN_AFFIRMED_SMALL",
-      value: GROUP_DRAFT_MIN_AFFIRMED_SMALL,
-      words: "two",
-      wordsKo: "둘",
-    },
-  },
+  /* ── FOUR SENTENCES ABOUT ROOMS CAME OUT HERE (2026-10-15) ─────────────
+     Founder: "방 없애". Three pinned the draft bar — "a room first speaks
+     only after three shared statements have been affirmed by someone
+     besides their owner", the smaller bar for rooms of three or fewer, and
+     that the smaller bar is two and never one. The fourth, further down,
+     pinned the majority rule and the counted no.
+
+     THEY HAD TO GO FOR THIS FILE'S OWN REASON, not merely because the
+     feature did. Every sentence here is registered with a backing and the
+     whole point is that a sentence cannot outlive its mechanism: the
+     fourth's contract test (`routes/room-decline.db.test.ts`) was deleted
+     in this same pass and `the-reading.test.ts` failed on it immediately,
+     which is the gate working exactly as designed. The other three are
+     still backed by live constants — `GROUP_DRAFT_MIN_AFFIRMED` and its two
+     companions have not been removed from `top-of-mind-synthesis.ts` yet —
+     so they would have stayed GREEN while describing something a reader can
+     no longer do. That is worse than a red build, and it is why they are
+     leaving by hand rather than waiting for a test to notice.
+
+     A reading that says "a room first speaks after three" to somebody with
+     no rooms is the vague-explanation failure this file was built against
+     (docs/craft/the-legible-loop.md, finding 8): an explanation
+     disconnected from mechanism reads as less trustworthy than silence. */
   {
     sentence: "A sentence you have written yourself is never rewritten.",
     sentenceKo: "내 손으로 쓴 문장은 절대 다시 쓰이지 않아요.",
@@ -257,16 +238,6 @@ export const READING_LINES: ReadingLine[] = [
     },
   },
   {
-    sentence:
-      "A room's top of mind changes only when more than half the room carries the change — a no is counted, never a veto.",
-    sentenceKo:
-      "방의 톱 오브 마인드는 방의 절반 넘는 사람이 실어 줘야 바뀌어요. 아니오는 세어질 뿐, 거부권이 아니에요.",
-    backing: {
-      kind: "contract",
-      testPath: "packages/api/src/routes/room-decline.db.test.ts",
-    },
-  },
-  {
     sentence: "Every reading of your memory is itself on the record.",
     sentenceKo: "기억을 읽는 일은 그 자체로 기록에 남아요.",
     backing: {
@@ -278,11 +249,12 @@ export const READING_LINES: ReadingLine[] = [
      add legend somewhere to explain why balls are different colors").
 
      The world has two channels and only one of them was ever unexplained.
-     COLOUR already legends itself where it carries meaning: in a room, the
-     rows at the bottom-left name whose ground each hue belongs to, and on
-     your own wall there is one voice, so there is nothing to key. What had
-     no words anywhere was BRIGHTNESS — the channel that is the whole reason
-     the field is not a uniform scatter.
+     COLOUR carried meaning in a room, where the rows at the bottom-left
+     named whose ground each hue belonged to; on your own wall there is one
+     voice, so there is nothing to key, and since the rooms came out
+     (2026-10-15) that is the only case left. What had no words anywhere was
+     BRIGHTNESS — the channel that is the whole reason the field is not a
+     uniform scatter.
 
      It belongs here rather than in a key floating over the world: a legend
      pinned to the frame is chrome that must be read before the world makes

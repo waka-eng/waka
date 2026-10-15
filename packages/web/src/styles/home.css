@@ -220,8 +220,13 @@
 .jar-dial-stop {
   --t-label-size: var(--t-meta);
 }
-.jar-panel-vis,
-.jar-grounds,
+/* TWO NAMES LEFT THIS LABEL SIZE (2026-10-12). `.jar-panel-vis` was the
+   Private/Public pair on an opened memory, and the size mattered: the pair
+   sat in the same label voice as the date beside it but a step larger,
+   because private and public are controls that have to be readable before
+   they are used. `.jar-grounds` was the band of member names under a room's
+   wall. The founder removed rooms ("방 없애") and the toggle with them, so
+   `.jar-capture-shortcut` is the only thing asking for this step now. */
 .jar-capture-shortcut {
   --t-label-size: var(--t-ui);
 }
@@ -652,24 +657,60 @@
   margin: var(--sp-12) 0 0;
   animation: jar-arrive 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.jar-room-shape {
-  display: block;
-  width: fit-content;
-  margin: var(--sp-8) auto 0;
-  padding: var(--sp-8);
-  min-height: 36px;
-  border: 0;
-  background: none;
-  font: inherit;
-  font-size: var(--t-ui);
-  color: var(--jar-ink);
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  cursor: pointer;
-  pointer-events: auto;
-}
-.jar-room-shape:hover,
-.jar-room-shape:focus-visible { text-shadow: 0 0 12px var(--jar-ink); }
+
+/* ═══ 69 BLOCKS WENT OUT OF THIS SHEET WITH ROOMS (2026-10-12) ═══════════
+   Founder: "방 없애" — remove rooms.
+
+   This is the one tombstone for all of them rather than 69 small ones,
+   because they are one feature and the argument is the same at every site.
+   WHAT A ROOM WORE, by family and by what the family was FOR:
+
+     .jar-room-shape, .jar-room-shape-note, .jar-room-primary — the door
+     into the room's own panel, reading "Shape together" or, when something
+     was waiting on you, "This room needs an answer".
+
+     .jar-settings-* (fifteen: --at-left, -head, -x, -name, -note, -verb,
+     -sub, -key, -key-name, -minted, -secret, -danger, -roll, -member,
+     -rename) — `SpaceSettings`, the panel that could not mount. Its opener
+     went with `.jar-here-list` on 2026-10-09 and `setSettingsFor` had three
+     call sites all passing `null`. `.jar-settings` ITSELF STAYS: the search
+     sheet and the composer's asks wear it.
+
+     .jar-proposal, -body, -who, .jar-roomform--group, .jar-group-panel-
+     heading — proposing a change to what a room believed, and answering
+     one.
+
+     .jar-said, .jar-not-said, .jar-said-no, .jar-was — the whole-room
+     stance row: who had said yes, who had not said anything, who had said
+     no, and what the room had believed before.
+
+     .jar-group-moment, -compare, -words — the before-and-after of a room's
+     board moving.
+
+     .jar-principles-empty, -lead, -count, -detail, .jar-principles-progress
+     — the staged empty state for a room's philosophies and values: three
+     shared patterns, then a reading, then a candidate, with a progress bar.
+
+     .jar-grounds, --lit, -row, -row--here, -dot, -dot--agent — the band of
+     member names that chose WHOSE ground you were standing in, and
+     .jar-group-ground-status, the line that said so.
+
+     .jar-when-story, .jar-dial-stop-story — the room's door ledger read
+     back under a date on the dial.
+
+     .jar-panel-cited, .jar-share-hint, .jar-wall-hold — a room orb's
+     cited-by sentence, the invite hint, and "this room is unreachable".
+
+   THREE EMPTY `@media` WRAPPERS WENT WITH THEM, which is the only part of
+   this deletion that was mechanical: a breakpoint holding nothing but a
+   room's overrides is not a breakpoint.
+
+   WHY NONE OF IT COMES BACK AS A COMMENTED BLOCK. `e2e:dead-css` asks a
+   browser which rules nothing matches, and the audit of 2026-10-12 found
+   this sheet carrying a comment that actively DEFENDED a dead family
+   (".jar-here-row is still worn — the container died and its contents did
+   not", which was false). A kept-warm rule is the same hazard with better
+   manners. `git log -S` has every one of these. */
 
 /* ---------- the forming line IS GONE ----------
    Three rules and two paragraphs of argument about a control nothing renders.
@@ -957,19 +998,6 @@
   color: var(--jar-muted);
   font-size: var(--t-ui);
 }
-
-
-/* ---------- rooms ----------
-   `.jar-share` AND `.jar-share-row` WENT OUT HERE. They were the list of
-   rooms a statement is out loud in, as rows rather than chips because a room
-   has a name of arbitrary length. Founder: "We're going to get rid of the
-   rooms and agent related stuff for now" — the list went, the rules did not.
-   `.jar-share-hint` below is NOT part of that: `SpaceSettings.tsx` still
-   wears it, and the other `.jar-share-*` names belong to the principle-share
-   sheet in `chrome.css`, which is a different component with a shared stem. */
-/* out loud: the statement is on that wall, and the row wears the page's one
-   light rather than a tick or a colour */
-.jar-share-hint { font-size: var(--t-meta); opacity: 0.55; }
 .jar-share-note {
   margin: var(--sp-8) 0 0;
   font-size: var(--t-meta);
@@ -1350,42 +1378,6 @@
   margin: 0 0 var(--sp-24);
   color: var(--jar-faint);
 }
-.jar-principles-empty { max-width: 430px; margin: 0 auto; text-align: center; }
-.jar-principles-empty-lead {
-  margin: 0 0 var(--sp-24);
-  font-family: var(--waka-face);
-  font-size: clamp(20px, 2.1vw, 28px);
-  font-weight: 300;
-  line-height: 1.3;
-  color: var(--jar-ink);
-}
-.jar-principles-progress {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--sp-8);
-  max-width: 240px;
-  margin: 0 auto var(--sp-8);
-}
-.jar-principles-progress span {
-  height: 2px;
-  background: color-mix(in srgb, var(--jar-ink) 18%, transparent);
-}
-.jar-principles-progress span.ready {
-  background: var(--jar-ink);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--jar-ink) 28%, transparent);
-}
-.jar-principles-empty-count {
-  margin: 0 0 var(--sp-24);
-  font-size: var(--t-label);
-  color: var(--jar-muted);
-}
-.jar-principles-empty-detail {
-  max-width: 42ch;
-  margin: 0 auto var(--sp-12);
-  font-size: var(--t-ui);
-  line-height: 1.55;
-  color: var(--jar-muted);
-}
 .jar-values-held {
   margin: 0;
 }
@@ -1718,24 +1710,6 @@
 .jar-attach:hover { color: var(--jar-ink); }
 .jar-attach input { display: none; }
 
-/* A proposal waiting on the room: somebody's sentence, who is behind it so
-   far, and your answer. Prose, because it is a claim about all of you. */
-.jar-proposal {
-  margin-top: var(--sp-16);
-  padding-top: var(--sp-14);
-  border-top: 1px solid var(--jar-panel-edge);
-}
-.jar-proposal-body {
-  margin: 0;
-  font-family: var(--waka-face);
-  font-weight: 300;
-  font-size: var(--t-lead);
-  line-height: 1.4;
-  color: var(--jar-ink);
-  text-wrap: balance;
-}
-.jar-proposal-who { margin: var(--sp-8) 0 0; }
-
 
 .jar-roomform {
   /* FIXED, NOT ABSOLUTE (founder, 2026-08-27: "why does it open so weirdly").
@@ -1759,72 +1733,6 @@
      paint is GPU work per frame that no eye can see */
   pointer-events: auto;
 }
-.jar-roomform--group {
-  max-height: min(78vh, 720px);
-  overflow-y: auto;
-}
-.jar-group-panel-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-16);
-}
-.jar-group-panel-heading p { margin: 0; }
-.jar-group-panel-heading button {
-  border: 0;
-  padding: 0;
-  background: none;
-  color: var(--jar-muted);
-  cursor: pointer;
-}
-.jar-group-panel-heading button:hover,
-.jar-group-panel-heading button:focus-visible { color: var(--jar-ink); }
-.jar-room-shape-note {
-  margin: var(--sp-14) 0;
-  max-width: 38ch;
-  font-size: var(--t-ui);
-  line-height: 1.5;
-  color: var(--jar-muted);
-}
-.jar-roomform .jar-room-primary {
-  color: var(--jar-ink);
-  font-size: var(--t-ui);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.jar-roomform--group .jar-ask button {
-  min-height: 32px;
-  padding: 6px var(--sp-4);
-  font-size: var(--t-ui);
-}
-.jar-roomform .jar-room-primary:disabled {
-  color: var(--jar-faint);
-  text-decoration: none;
-  cursor: default;
-}
-.jar-group-moment {
-  margin: var(--sp-18) 0;
-  padding-top: var(--sp-16);
-  border-top: 1px solid var(--jar-panel-edge);
-}
-.jar-group-moment-compare {
-  display: grid;
-  gap: var(--sp-16);
-  margin-top: var(--sp-18);
-}
-.jar-group-moment-compare > div + div {
-  padding-top: var(--sp-14);
-  border-top: 1px solid var(--jar-panel-edge);
-}
-.jar-group-moment-words {
-  list-style: none;
-  margin: var(--sp-8) 0 0;
-  padding: 0;
-  font-size: var(--t-ui);
-  line-height: 1.5;
-  color: var(--jar-ink);
-}
-.jar-group-moment-words li + li { margin-top: var(--sp-8); }
 /* THE READING. A scroll bound, and nothing else left: what it bound is gone.
 
    `.jar-reading-line` AND `.jar-reading-coda` WENT ON 2026-10-12. The
@@ -1885,8 +1793,7 @@
    element looks like to a reader.
    It belongs where the poster it stands in for belongs: same column, same
    centre, one step down the luminance channel. */
-.jar-wall-empty,
-.jar-wall-hold {
+.jar-wall-empty {
   max-width: 22ch;
   margin: var(--sp-18) auto 0;
   text-align: center;
@@ -2584,45 +2491,6 @@
   overflow-y: auto;
 }
 
-.jar-settings-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-12);
-  margin-bottom: var(--sp-14);
-}
-
-.jar-settings-x {
-  border: 0;
-  background: none;
-  padding: 0;
-  font: inherit;
-  font-size: var(--t-meta);
-  color: var(--jar-faint);
-  cursor: pointer;
-}
-.jar-settings-x:hover {
-  color: var(--jar-ink);
-}
-
-.jar-settings-name {
-  margin: 0 0 var(--sp-14);
-  font-size: var(--t-lead);
-  line-height: 1.35;
-  color: var(--jar-ink);
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-12);
-}
-
-.jar-settings-note {
-  margin: 0 0 var(--sp-16);
-  font-size: var(--t-ui);
-  line-height: 1.5;
-  color: var(--jar-muted);
-}
-
 /* WHAT REFUSED, BESIDE THE WORD THAT REFUSED.
    Its own line rather than trailing the verb: three of the four sentences it
    carries are a whole clause plus a status ("You are still in this room — the
@@ -2644,115 +2512,6 @@
   font-size: var(--t-meta);
   line-height: 1.5;
   color: var(--jar-muted);
-}
-
-.jar-settings-verb {
-  border: 0;
-  background: none;
-  padding: 0;
-  font: inherit;
-  font-size: var(--t-meta);
-  color: var(--jar-faint);
-  cursor: pointer;
-  text-decoration: none;
-  white-space: nowrap;
-}
-/* ═══ AN AGENT'S CREDENTIALS, IN ITS OWN SHEET ═══
-   The three key verbs came home from the flat `/agents` screen on 2026-08-25.
-   Nothing here invents a register: the sub-heading is the label register every
-   other eyebrow in the product wears, the rows are the sheet's own note tier,
-   and the verbs are `.jar-settings-verb` exactly as `open your account` is.
-   A new surface that brings its own type is how a product ends up with
-   thirty-four prefixes. */
-.jar-settings-sub {
-  display: block;
-  margin: var(--sp-18) 0 var(--sp-8);
-  color: var(--jar-faint);
-}
-.jar-settings-key {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-12);
-  margin: 0 0 var(--sp-8);
-  font-size: var(--t-ui);
-  color: var(--jar-muted);
-}
-.jar-settings-key-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* THE ONE TIME THE SECRET IS ON SCREEN. It is set apart because it is the
-   only thing in this sheet a person must ACT on before closing it — every
-   other line here can be read again tomorrow. */
-.jar-settings-minted {
-  display: block;
-  margin: var(--sp-12) 0 0;
-  padding: var(--sp-12);
-  border-radius: var(--sp-12);
-  background: var(--jar-row);
-}
-/* EVERY CHILD OF THE MINTED BOX IS ITS OWN LINE. `.jar-settings-note` is a
-   <span>, so `I have it` set itself down immediately after the full stop of
-   "gone for good." and read as part of the sentence rather than as the thing
-   you press when you have copied the key. */
-.jar-settings-minted > * {
-  display: block;
-}
-.jar-settings-minted .jar-settings-verb {
-  margin-top: var(--sp-10);
-}
-.jar-settings-secret {
-  display: block;
-  margin: var(--sp-8) 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--t-meta);
-  line-height: 1.5;
-  color: var(--jar-ink);
-  word-break: break-all;
-  user-select: all;
-  -webkit-user-select: all;
-}
-.jar-settings-verb:hover {
-  color: var(--jar-ink);
-}
-
-/* THE ONE IRREVERSIBLE WORD IN HERE. It is not red — there is no red in this
-   product, because temperature is how a memory says it is alive. It is the
-   brightest thing in the panel instead, which in a world whose only meaning
-   channel is light is the same sentence said in the page's own language. */
-.jar-settings-danger {
-  border: 0;
-  background: none;
-  padding: 0;
-  font: inherit;
-  color: var(--jar-ink);
-  cursor: pointer;
-}
-
-.jar-settings-roll {
-  list-style: none;
-  margin: 0 0 var(--sp-16);
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-
-.jar-settings-member {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-10);
-  font-size: var(--t-ui);
-  color: var(--jar-ink);
-}
-.jar-settings-member > span:first-child {
-  flex: 1;
-}
-
-.jar-settings-rename {
-  margin-bottom: var(--sp-14);
 }
 
 /* THE SHEET HUNG FROM THE OTHER PILL UNTIL IT DIDN'T, and the rule outlived
@@ -2840,14 +2599,6 @@
   white-space: nowrap;
   color: var(--jar-muted);
   transition: color 0.18s ease, background-color 0.18s ease;
-}
-.jar-dial-stop-story {
-  max-width: min(34ch, calc(100vw - 100px));
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: var(--t-ui);
-  line-height: 1.3;
-  color: var(--jar-faint);
 }
 .jar-dial-stop:hover {
   color: var(--jar-ink);
@@ -2953,31 +2704,27 @@
   color: var(--jar-faint);
   cursor: default;
 }
-.jar-panel-vis {
-  /* in the row now, not floated over it */
-  margin: 0;
-  justify-content: flex-end;
-  /* Still in the shared label voice, but larger than the passive date:
-     private/public are controls that must be readable before they are used. */
-  gap: 5px;
-}
-.jar-panel-vis button {
-  font-size: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  font-weight: 500;
-  min-height: 30px;
-  padding: 5px var(--sp-4);
-}
-.jar-panel-vis--busy {
-  opacity: 0.5;
-  pointer-events: none;
-}
+/* ═══ `.jar-panel-vis` AND `--busy` ARE GONE WITH THE TOGGLE ═════════════
+   Founder, 2026-10-12: remove the memory's private/public toggle, with
+   rooms. Three rules and a breakpoint override: the pair sat IN the panel's
+   head row rather than floated over it, in the shared label voice but a step
+   larger than the passive date beside it — "private/public are controls that
+   must be readable before they are used" — and `--busy` dimmed the pair and
+   took its presses while the PATCH was in flight. On a phone the two words
+   grew from 11px to a 44px row, with 17px of padding rather than 16 because
+   16 landed on 43 and the touch-target gate reported it one short, which is
+   the gate doing its job.
+
+   `.jar-panel-head` KEEPS ITS GRID. The head is a two-column row — the date
+   on the left, the copy-link on the right — and the pair was a third cell
+   that the 600px breakpoint moved under the date. That breakpoint rule goes
+   with the cell; the two that remain are unchanged. */
 
 /* THE ASK ON THE CARD'S OWN FOOT (founder, 2026-08-27: "dont do hover card
-   on a hover card"). The ask before a delete — and before un-publishing —
-   used to borrow the seek card's shape and float over the reading. It is a
-   state of the card now: the sentence takes the verbs' row, and nothing
+   on a hover card"). The ask before a delete — and, until 2026-10-12, before
+   un-publishing — used to borrow the seek card's shape and float over the
+   reading. It is a state of the card now: the sentence takes the verbs' row,
+   and nothing
    covers the words being decided about. */
 .jar-panel-askrow {
   margin: var(--sp-14) 0 0;
@@ -3160,7 +2907,6 @@
 
    Written after the shared block on purpose — same specificity, later wins,
    which is the rule this file has been bitten by three times. */
-.jar-settings--at-left,
 .jar-settings--at-right {
   /* clear of the chrome row, which ends at 40px, by the same 8 the buttons
      themselves keep from the left edge */
@@ -3169,10 +2915,6 @@
   /* on a narrow screen it stays inside the glass rather than hanging off the
      side it is anchored to */
   max-width: calc(100vw - 16px);
-}
-.jar-settings--at-left {
-  left: 8px;
-  right: auto;
 }
 .jar-settings--at-right {
   /* 8, measured off the account pill itself: it sits x 1300..1432 in a 1440
@@ -3298,10 +3040,6 @@
   font-size: var(--t-ui);
   color: var(--jar-faint);
 }
-/* a room orb's collapsed links sentence: which readings cited this save */
-.jar-panel-cited {
-  margin: var(--sp-14) 0 0;
-}
 /* ---------- marks inside the memory ----------
    Not a highlighter and not a pull-quote: the way a person underlines their
    own book. Two tiers — the passage that fed a reading carries a wash as well
@@ -3404,8 +3142,6 @@
 @keyframes jar-reflection-compose {
   0%, 60%, 100% { opacity: 0.28; transform: translateY(0); }
   30% { opacity: 0.9; transform: translateY(-3px); }
-}
-@media (prefers-reduced-motion: reduce) {
 }
 
 
@@ -3810,15 +3546,10 @@
     padding-top: var(--sp-14);
     padding-bottom: var(--sp-14);
   }
-  /* the verbs under it: 11px -> 44px. The row grows, and on a phone that is
-     the right trade — these decide who may read a memory and whether it is
-     kept at all. */
-  .jar-panel-vis button {
-    /* 17, not 16: the words are 11px tall, so 16 each side lands on 43 and the
-       gate reports it one pixel short — which is the gate doing its job */
-    padding-top: 17px;
-    padding-bottom: 17px;
-  }
+  /* THE PHONE'S 44px ROW FOR THE PRIVATE/PUBLIC PAIR went with the pair
+     (2026-10-12). The note with it is kept at the pair's own tombstone,
+     because the 17-not-16 arithmetic applies to every 11px word this sheet
+     ever grows into a touch target. */
   /* the two signposts on the vertical axis: 21px -> 27px, past WCAG's 24 */
   .jar-values,
   .jar-saved {
@@ -4117,23 +3848,6 @@
   border-left-color: var(--jar-muted, var(--jar-muted));
   outline: none;
 }
-/* THE PATTERN'S SENTENCE, OPEN. Measured the same way the memory's editor is:
-   every metric that decides where a glyph lands is the resting line's, so the
-   words do not shift by a pixel when the caret arrives. */
-/* WHAT A PRINCIPLE GREW FROM WAS `.jar-was-roots` / `.jar-was-root`, AND IT
-   IS NOT DRAWN ANY MORE — four rules across three places in this file, two of
-   them riding in selector lists whose other halves are still live, which is
-   why this took a sweep rather than a glance. The shape is worth keeping on
-   record: indented, dimmer, each root on its own line, the same three things
-   `.jar-prov` still does to say "this is underneath that". */
-
-/* THE VERBS ARE THEIR OWN LINE UNDER THE SENTENCE. `.jar-ask` is inline by
-   default, so the row set itself down immediately after `aspirational` and the
-   band read "…aspirationalsay it in my words". Caught by walking it. */
-.jar-was .jar-ask {
-  display: block;
-  margin-top: var(--sp-6);
-}
 
 .jar-ground-edit {
   display: block;
@@ -4287,143 +4001,6 @@
   opacity: 0.75;
 }
 
-/* ---------- the legend: who is which colour ----------
-   Bottom-left, opposite the time rail, above the axis of walls — the three
-   pieces of chrome each own a different edge and never meet. It is set in the
-   label register and sits at the same weight as the axis marks: this is a key
-   to the ground, not a control, and nothing here is pressable. */
-/* WHOSE GROUND — a choice, where a colour key used to be.
-   Same corner, same quiet register: what changed is that these rows now DO
-   something, so unlike the key they take pointer events and one of them is
-   always lit as the ground you are standing in.
-
-   IT IS `.jar-grounds`, PLURAL, AND THE PLURAL IS LOAD-BEARING.
-   This block was called `.jar-ground` — the same name the poster's evidence
-   sentence carries 255 lines above under `A GROUND THE POSTER STANDS ON`
-   (230 at the moment of the rename; this note has grown since). Two
-   different components, one class, and the whole file is one cascade: this
-   block is later, so it won, and it won for BOTH. Every time somebody pressed
-   the claim on their own wall, the memory it stands on was handed
-   `position: absolute`, `left: 18px`, `bottom: 46px`, `display: flex` and —
-   through the label register in `system.css`, which also named `.jar-ground`
-   — SET IN CAPITALS. A quotation, uppercased and thrown out of its own
-   container into the bottom-left corner of whatever happened to be the
-   nearest positioned ancestor.
-
-   Reported by the founder on 2026-09-08 from a phone: "when clicking on the
-   text that was formed, this weird thing appears at the bottom. It doesn't
-   happen in desktop." It happened on the desktop too — measured at 1100x780,
-   the sentence landed at x18 spanning the full 1100px — but at that width it
-   lands beside the column and reads as a stray line. On a 393px phone the
-   column is only 270px tall, so `bottom: 46px` puts it straight through the
-   claim's own last line. Same defect, two legibilities.
-
-   The lesson is not "check the cascade". It is that a class name is a NAME:
-   two things cannot share one and stay two things.
-   `packages/web/test/one-class-one-thing.test.ts` now fails the build — in
-   `pnpm test`, on every run — when two unconditional blocks in one cascade
-   layer name the same bare class and disagree about the value of a layout
-   property they both set. */
-.jar-grounds {
-  position: absolute;
-  /* it arrives with the ground rather than appearing: the same fade the rest
-     of the chrome uses, so nothing in this world ever pops into existence */
-  animation: jar-panel-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
-  left: 18px;
-  bottom: calc(46px + env(safe-area-inset-bottom));
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-2);
-}
-.jar-grounds-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  white-space: nowrap;
-  /* a button, wearing nothing a button brings with it */
-  border: 0;
-  background: none;
-  padding: var(--sp-4) var(--sp-6);
-  min-height: var(--sp-44);
-  margin: 0 0 0 -var(--sp-6);
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  cursor: pointer;
-  border-radius: 5px;
-  color: var(--jar-muted);
-  /* Light still marks whose ground is selected. Other members must remain
-     legible too: this is the only persistent sign that the room is shared. */
-  opacity: 0.82;
-  transition: opacity 0.28s ease, background-color 0.2s ease;
-}
-/* JUST ARRIVED: every ground lit, for as long as an arrival lasts. Dropping
-   the class is the whole settle — the transition above is already the curve. */
-.jar-grounds--lit .jar-grounds-row {
-  opacity: 1;
-}
-.jar-grounds-row:hover,
-.jar-grounds-row:focus-visible {
-  opacity: 1;
-}
-.jar-grounds-row--here {
-  opacity: 1;
-  color: var(--jar-ink);
-}
-/* the swatch is the orb, small: same circle, same soft edge, so the name and
-   the ground it switches to are visibly the same material */
-.jar-grounds-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  /* yours has no hue set, so it falls to the world's own warm white */
-  background: var(--jar-live);
-  flex: 0 0 auto;
-}
-/* AN AGENT'S MEMORY IS PIXELATED, HERE TOO.
-   The name has to be made of the same stuff as the ground it opens, so an
-   agent's swatch loses its curve exactly as its orbs do — a stepped square
-   rather than a disc, at the same size and the same hue. */
-.jar-grounds-dot--agent {
-  border-radius: 0;
-  width: 6px;
-  height: 6px;
-}
-
-/* the capture's destination line: under the words, in the same quiet register
-   as every other row of choices, and present only once there is something to
-   send anywhere */
-
-
-/* WHO HAS SAID YES, WHO HAS SAID NO, AND WHO HAS NOT — the room read as
-   people rather than as a score. Agreed is full ink; not yet is the same
-   name at the weight of something still waiting; a recorded no is the
-   dimmest ink and struck through — the same register a disagreed statement
-   keeps, still there because an answer is not an absence. No count is
-   printed anywhere: the arithmetic is visible because the members are. */
-.jar-said {
-  color: var(--jar-ink);
-}
-.jar-not-said {
-  color: var(--jar-faint);
-}
-.jar-said-no {
-  color: var(--jar-faint);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-}
-
-/* WHEN THIS SENTENCE LAST CHANGED. Dates, in the register the world keeps for
-   meta — the poster's own history, which existed in the database from the
-   start and had never been readable anywhere. */
-.jar-was {
-  margin: 0 0 var(--sp-4);
-  font-size: var(--t-ui);
-  color: var(--jar-faint);
-}
-
 }
 
 /* WHERE THIS ONE IS GOING — both words, the chosen one in full ink and the
@@ -4475,26 +4052,6 @@
 .jar-when-place {
   position: relative;
   pointer-events: none;
-}
-.jar-when-story {
-  position: absolute;
-  top: 100%;
-  left: var(--sp-10);
-  width: max-content;
-  max-width: min(42ch, calc(100vw - 32px));
-  pointer-events: none;
-  font-size: var(--t-ui);
-  line-height: 1.4;
-  color: var(--jar-muted);
-}
-.jar-when-story button {
-  all: unset;
-  pointer-events: auto;
-  margin-left: var(--sp-8);
-  cursor: pointer;
-  color: var(--jar-ink);
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 .jar-when:hover,
 .jar-when:focus-visible {
@@ -5330,11 +4887,6 @@
 /* Spatial shortcuts remain reachable above the stable personal navigation. */
 .jar-up--personal { bottom:calc(76px + env(safe-area-inset-bottom)); }
 .jar-up { min-height:var(--sp-44); min-width:var(--sp-44); }
-.jar-group-ground-status { position:absolute; z-index:5; top:calc(64px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); width:min(440px,calc(100vw - var(--sp-44))); text-align:center; pointer-events:none; color:var(--jar-muted); font-size:var(--t-ui); }
-.jar-group-ground-status p { margin:0; }
-.jar-group-ground-status p:first-child { color:var(--jar-ink); }
-.jar-grounds { max-height:35vh; max-width:calc(100vw - var(--sp-44)); overflow:auto; }
 @media (max-width:560px) {
   .jar-up:not(.jar-up--down) { top:calc(56px + env(safe-area-inset-top)); }
-  .jar-group-ground-status { top:calc(112px + env(safe-area-inset-top)); }
 }

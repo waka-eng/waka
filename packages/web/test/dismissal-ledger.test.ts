@@ -16,7 +16,10 @@ import { withoutComments } from "./helpers/code-only";
  *
  * `lib/dismiss.ts` used to open with "EVERY SHEET CLOSES THE SAME TWO WAYS …
  * one hook, so a sheet added later gets both without anyone remembering to."
- * Three of ten modal sheets had opted in. The sentence was not a lie when it
+ * Three of ten modal sheets had opted in. After rooms were removed on
+ * 2026-10-12 it is one of seven, and the fall is itself the argument for
+ * this gate: two of the three covered sheets were a room's, so a prose
+ * claim of "three" would have survived the deletion untouched. The sentence was not a lie when it
  * was written — it was a description of an intention — and it became one
  * quietly, which is the whole problem: the file holding a rule is where
  * anybody auditing that rule looks, so a stale claim there is worse than no
@@ -78,17 +81,20 @@ const SHEETS: ReadonlyArray<{ file: string; what: string }> = [
   { file: "components/InspirationSearch.tsx", what: "the archive's search — holds a typed query" },
   { file: "components/PrincipleShare.tsx", what: "sharing a principle — never opted in" },
   { file: "components/ReadingChanges.tsx", what: "what changed in the reading — never opted in" },
-  { file: "space-kinds/GroupPanel.tsx", what: "the room form — holds a half-typed name" },
-  { file: "space/settings/SpaceSettings.tsx", what: "a room's settings — takes press-away" },
-  /* FOUR IN ONE FILE, so this is the one place the ledger counts rather than
-     naming: `Home.tsx` holds the memory card, the provenance room, the
-     agent's name sheet and the join sheet. Two of the four take press-away
-     (`Home.tsx:13389-13391` wires three sheets in total, one of which is
-     `SpaceSettings` above), and splitting them apart here would mean
-     identifying a JSX element by line number — the thing the note above
-     refuses. `Home.tsx`'s own split, when it comes, turns this row into
-     named rows. */
-  { file: "pages/Home.tsx", what: "the memory card and the agent's name (neither), provenance and the join sheet (both)" },
+  /* TWO ROWS LEFT THIS LEDGER ON 2026-10-12 (founder: "방 없애" — remove
+     rooms): `space-kinds/GroupPanel.tsx`, the room form, which held a
+     half-typed name and never opted in; and `space/settings/
+     SpaceSettings.tsx`, a room's settings, which DID take press-away and
+     had been unable to mount since 2026-10-09. Both files are deleted. */
+  /* THREE IN ONE FILE, so this is the one place the ledger counts rather
+     than naming: `Home.tsx` holds the memory card, the provenance room and
+     the agent's name sheet. One of the three takes press-away, and
+     splitting them apart here would mean identifying a JSX element by line
+     number — the thing the note above refuses. It was FOUR until the join
+     sheet went with rooms, and that sheet was one of the two covered ones.
+     `Home.tsx`'s own split, when it comes, turns this row into named
+     rows. */
+  { file: "pages/Home.tsx", what: "the memory card and the agent's name (neither), the provenance room (takes press-away)" },
 ];
 
 /** Every `<DialogSurface …>` opening tag in the tree, as file + whether it
@@ -139,18 +145,21 @@ describe("the sheets that close when you press away", () => {
 
   it("agrees with lib/dismiss.ts about how many sheets there are", () => {
     /* THE COUNT IS IN THE PROSE, so the prose is held to it. `dismiss.ts`
-       says "ten modal `DialogSurface` call sites, three of them covered" —
-       a sentence a reader will trust, which is the reason the first version
-       of that header was a problem. */
+       says how many modal `DialogSurface` call sites there are and how many
+       are covered — sentences a reader will trust, which is the reason the
+       first version of that header was a problem. The number is matched as
+       a numeral rather than as a word now: it was spelled "ten", and
+       spelling it meant this assertion had to know English number names to
+       stay green through a removal. */
     const header = readFileSync(resolve(SRC, "lib/dismiss.ts"), "utf8");
     const sheets = surfaces().filter((one) => one.modal).length;
     expect(header, `the tree holds ${sheets} modal sheets and the header does not say so`)
-      .toContain(`${sheets === 10 ? "ten" : String(sheets)} modal`);
+      .toContain(`${sheets} modal`);
     const callers = sources(SRC)
       .filter((path) => !path.endsWith("lib/dismiss.ts"))
       .flatMap((path) => [...withoutComments(readFileSync(path, "utf8")).matchAll(/\buseDismissAway\(/g)]);
-    expect(callers.length, "the number of sheets opting into useDismissAway changed; the header says three")
-      .toBe(3);
+    expect(callers.length, "the number of sheets opting into useDismissAway changed; the header says one")
+      .toBe(1);
   });
 
   it("gives press-away to exactly the sheets the ledger says take it", () => {
@@ -160,23 +169,27 @@ describe("the sheets that close when you press away", () => {
        nothing wires would otherwise read as covered for ever. */
     const wired = withoutComments(readFileSync(resolve(SRC, "pages/Home.tsx"), "utf8"));
     const calls = [...wired.matchAll(/useDismissAway\(([^)]*)\)/g)].map((hit) => hit[1]!.trim());
-    expect(calls.length, "Home.tsx no longer wires the three covered sheets").toBe(3);
-    /* THREE DIFFERENT SHEETS, so that three calls for the SAME one cannot
-       satisfy the count above — which is the vacuous pass available to any
-       assertion that only counts.
+    expect(calls.length, "Home.tsx no longer wires the one covered sheet").toBe(1);
+    /* ONE CALL, ONE SHEET — and the distinctness check below is what stops
+       N calls for the SAME surface satisfying a count, which is the vacuous
+       pass available to any assertion that only counts. It mattered when
+       there were three; it is kept at one so that the second sheet to opt
+       in cannot do it by repeating the first.
 
        THE STATES ARE NOT SPELLED OUT, deliberately. They were, in the first
-       draft: `settingsFor !== null`, `pendingJoin !== null`, `prov !== null`.
-       That reds the build when somebody renames a state variable, which is
-       not a change in dismissal coverage, and a gate that fails for reasons
-       unrelated to its subject is a gate that gets deleted. What must not
-       change silently is the NUMBER and which sheets, and the number is
-       asserted above while the files are asserted by the ledger. */
+       draft: `settingsFor !== null`, `pendingJoin !== null`, `prov !== null`
+       — and two of those three names no longer exist, which is exactly the
+       failure the note predicted: it reds the build when a state variable is
+       renamed or removed, which is not a change in dismissal coverage, and a
+       gate that fails for reasons unrelated to its subject is a gate that
+       gets deleted. What must not change silently is the NUMBER and which
+       sheets, and the number is asserted above while the files are asserted
+       by the ledger. */
     const states = calls.map((args) => args.split(",")[0]!.trim());
     expect(
       new Set(states).size,
-      `three calls, fewer than three sheets: ${states.join(" | ")}. ` +
-        "They should be the room settings, the join sheet and the provenance room.",
-    ).toBe(3);
+      `${calls.length} calls, fewer sheets than calls: ${states.join(" | ")}. ` +
+        "The one covered sheet is the provenance room.",
+    ).toBe(1);
   });
 });

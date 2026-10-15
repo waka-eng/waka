@@ -31,15 +31,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
-import {
-  createGroupForProfile,
-  joinGroupByCode,
-} from "../routes/groups-membership.js";
-import {
-  affirmGroupProposal,
-  createGroupProposal,
-  declineGroupProposal,
-} from "../routes/groups-proposals.js";
 import { eraseAccount } from "./account-erasure.js";
 
 let t: TestDatabase;
@@ -55,20 +46,132 @@ async function seedPerson(name: string): Promise<{ accountId: string; profileId:
   return { accountId: account.id as string, profileId: p.id as string };
 }
 
-/** Ari founds the room, Bo joins — through the real membership functions. */
+/**
+ * ── THE SEED IS HAND-WRITTEN NOW, AND THIS IS WHAT THAT COST ───────────────
+ *
+ * Founder: "방 없애" — remove rooms. The web half went first (405ee4aa); this
+ * file is the first thing the API half had to touch, because until today
+ * every room row below arrived through `createGroupForProfile`,
+ * `joinGroupByCode`, `createGroupProposal`, `affirmGroupProposal` and
+ * `declineGroupProposal`, and all five are being deleted. The header of this
+ * suite used to be able to say the seed went "through the real membership and
+ * proposal functions, so the rows are the ones the product actually writes".
+ * It cannot say that any more, and pretending otherwise would be the exact
+ * class of gate this whole pass was opened to kill — one that passes by
+ * asserting a shape rather than a fact.
+ *
+ * WHAT WAS TRADED. The seed used to be a composition of product writers: if a
+ * writer started stamping a new column, or writing a row in a sixth table,
+ * the seed picked it up for free and the sweep below swept it. Now the seed
+ * is this file's BELIEF about what those writers wrote, frozen on 2026-10-15,
+ * and a belief cannot notice that it has gone stale. A column added to
+ * `group_members` tomorrow is a column this seed will never populate, and an
+ * unpopulated column passes the sweep for nothing.
+ *
+ * WHY IT IS STILL THE RIGHT TRADE, AND NOT MERELY THE ONLY ONE LEFT. The
+ * guarantee that was lost had already stopped existing: there is no longer
+ * any product code that writes these rows, so "the rows the product writes"
+ * has no referent to be faithful to. The five tables are KEPT — nothing is
+ * dropped, no migration is written, and people's rows stand — so erasure must
+ * go on working over them, and a test of erasure over kept tables has to seed
+ * them from the only authority still standing, which is the schema. Reading
+ * `src/db/schema-groups.ts` and `src/db/schema-group-coedit.ts` and writing
+ * the inserts straight at them keeps this suite alive past the deletion
+ * instead of dying with it.
+ *
+ * AND THE STALENESS IS NOT UNGUARDED. Two floors below do the work the lost
+ * composition used to: `refs.length >= 15` fails if the discovery query stops
+ * finding person-linked columns, and `populated.length >= 6` fails if this
+ * hand-written seed stops reaching them. A new not-null column breaks these
+ * inserts loudly at the database. What genuinely is not covered any more is a
+ * new NULLABLE column on a room table holding a person's id — write that, and
+ * add it here.
+ *
+ * WHAT ALSO WENT, DELIBERATELY. The old seed asserted on its way through that
+ * a join succeeded, that two of three carried a proposal, and that one no left
+ * a three-seat room's question open. Those were assertions about
+ * `joinGroupByCode`, `carriesMajority` and `fallsToDeclines` riding along in
+ * an erasure suite, and their own gates went with their code. What is left
+ * here asserts only erasure, which is what this file is for. The shapes they
+ * produced — one accepted proposal carrying two yeses, one open proposal
+ * carrying a yes and a live no — are reproduced exactly, because those shapes
+ * are the doctrine's input.
+ */
+
+/** Door marks are ordered by `occurred_at`; stamp them rather than race the
+    clock, so the ledger assertion reads the arrivals in arrival order. */
+let doorTick = 0;
+async function markDoor(
+  groupId: string,
+  profileId: string,
+  kind: "joined" | "left" | "removed",
+): Promise<void> {
+  doorTick += 1;
+  await t.sql`
+    INSERT INTO group_membership_events (group_id, profile_id, kind, occurred_at)
+    VALUES (${groupId}, ${profileId}, ${kind},
+            now() - interval '1 day' + (${doorTick} * interval '1 second'))`;
+}
+
+/** What `createGroupForProfile` wrote: the room, the owner's seat, the
+    arrival mark, and — in the same transaction — the room's own mind, an
+    account-less profile that must outlive its founder's erasure. */
+async function foundGroup(profileId: string, name: string): Promise<string> {
+  seq += 1;
+  const [group] = await t.sql`
+    INSERT INTO groups (name, join_code, created_by_profile_id)
+    VALUES (${name}, ${`SEEDROOM${seq}`}, ${profileId}) RETURNING id`;
+  const groupId = group!.id as string;
+  await t.sql`
+    INSERT INTO group_members (group_id, profile_id, role)
+    VALUES (${groupId}, ${profileId}, 'owner')`;
+  await markDoor(groupId, profileId, "joined");
+  await t.sql`
+    INSERT INTO profiles (account_id, type, name, group_id)
+    VALUES (NULL, 'group', ${name}, ${groupId})`;
+  return groupId;
+}
+
+/** What `joinGroupByCode` wrote for a genuine arrival. */
+async function seatMember(groupId: string, profileId: string): Promise<void> {
+  await t.sql`
+    INSERT INTO group_members (group_id, profile_id, role)
+    VALUES (${groupId}, ${profileId}, 'member')`;
+  await markDoor(groupId, profileId, "joined");
+}
+
+/** What a proposal and its answers looked like once the room had settled —
+    or not settled — them. `resolved_at` is stamped exactly when the status
+    is terminal, the way `affirmGroupProposal` stamped it. */
+async function seedProposal(input: {
+  groupId: string;
+  proposedBy: string;
+  body: string;
+  status: "open" | "accepted" | "declined";
+  stances: Array<{ profileId: string; stance: "affirmed" | "declined" }>;
+}): Promise<string> {
+  const [proposal] = await t.sql`
+    INSERT INTO group_top_of_mind_proposals
+      (group_id, proposed_by_profile_id, kind, status, body, resolved_at)
+    VALUES (${input.groupId}, ${input.proposedBy}, 'add_entry', ${input.status},
+            ${input.body}, ${input.status === "open" ? null : new Date().toISOString()})
+    RETURNING id`;
+  const proposalId = proposal!.id as string;
+  for (const stance of input.stances) {
+    await t.sql`
+      INSERT INTO group_top_of_mind_affirmations (proposal_id, profile_id, stance)
+      VALUES (${proposalId}, ${stance.profileId}, ${stance.stance})`;
+  }
+  return proposalId;
+}
+
+/** Ari founds the room, Bo joins. */
 async function seedGroup() {
   const ari = await seedPerson("Ari");
   const bo = await seedPerson("Bo");
-  const group = await createGroupForProfile(t.db as never, {
-    profileId: ari.profileId,
-    name: "the room",
-  });
-  const joined = await joinGroupByCode(t.db as never, {
-    profileId: bo.profileId,
-    joinCode: group.joinCode,
-  });
-  expect(joined.ok).toBe(true);
-  return { groupId: group.id, ari, bo };
+  const groupId = await foundGroup(ari.profileId, "the room");
+  await seatMember(groupId, bo.profileId);
+  return { groupId, ari, bo };
 }
 
 /** One live version whose single entry cites Ari's signal. */
@@ -109,44 +212,32 @@ describe("the gate: a member's erasure and the room's record, side by side", () 
     // A third seat, so one no is a live hand rather than the answer that
     // settles a two-person room (the 0c arithmetic).
     const cy = await seedPerson("Cy");
-    const [{ join_code }] = await t.sql`SELECT join_code FROM groups WHERE id = ${g.groupId}`;
-    expect(
-      (await joinGroupByCode(t.db as never, {
-        profileId: cy.profileId,
-        joinCode: join_code as string,
-      })).ok,
-    ).toBe(true);
+    await seatMember(g.groupId, cy.profileId);
     const cited = await seedCitedVersion(g.groupId, g.ari.profileId);
 
-    // A settled decision carried (Ari proposes, Bo's yes makes two of
-    // three), and Bo's open ask that Ari has a live no on.
-    const settled = await createGroupProposal(t.db as never, {
+    // A settled decision carried (Ari proposed, Bo's yes made two of three,
+    // so the room accepted it), and Bo's open ask that Ari has a live no on
+    // (one no in a room of three leaves a yes-majority still reachable).
+    const settledId = await seedProposal({
       groupId: g.groupId,
-      profileId: g.ari.profileId,
-      kind: "add_entry",
+      proposedBy: g.ari.profileId,
       body: "what we decided",
+      status: "accepted",
+      stances: [
+        { profileId: g.ari.profileId, stance: "affirmed" },
+        { profileId: g.bo.profileId, stance: "affirmed" },
+      ],
     });
-    if (!settled.ok) throw new Error("seed proposal did not open");
-    const carried = await affirmGroupProposal(t.db as never, {
+    const openAskId = await seedProposal({
       groupId: g.groupId,
-      proposalId: settled.proposal.id,
-      profileId: g.bo.profileId,
-    });
-    expect(carried.ok && carried.accepted).toBe(true);
-
-    const openAsk = await createGroupProposal(t.db as never, {
-      groupId: g.groupId,
-      profileId: g.bo.profileId,
-      kind: "add_entry",
+      proposedBy: g.bo.profileId,
       body: "still being decided",
+      status: "open",
+      stances: [
+        { profileId: g.bo.profileId, stance: "affirmed" },
+        { profileId: g.ari.profileId, stance: "declined" },
+      ],
     });
-    if (!openAsk.ok) throw new Error("seed open proposal did not open");
-    const liveNo = await declineGroupProposal(t.db as never, {
-      groupId: g.groupId,
-      proposalId: openAsk.proposal.id,
-      profileId: g.ari.profileId,
-    });
-    expect(liveNo.ok && liveNo.proposal.status).toBe("open");
 
     await erase(g.ari.accountId);
 
@@ -177,13 +268,13 @@ describe("the gate: a member's erasure and the room's record, side by side", () 
     // anonymous; both stances stay, one of them anonymous.
     const [settledRow] = await t.sql`
       SELECT status, proposed_by_profile_id FROM group_top_of_mind_proposals
-      WHERE id = ${settled.proposal.id}`;
+      WHERE id = ${settledId}`;
     expect(settledRow, "erasure unmade a settled decision").toBeTruthy();
     expect(settledRow!.status).toBe("accepted");
     expect(settledRow!.proposed_by_profile_id).toBeNull();
     const settledStances = await t.sql`
       SELECT profile_id, stance FROM group_top_of_mind_affirmations
-      WHERE proposal_id = ${settled.proposal.id}`;
+      WHERE proposal_id = ${settledId}`;
     expect(
       settledStances,
       "the record of who carried an accepted decision lost rows to erasure",
@@ -196,7 +287,7 @@ describe("the gate: a member's erasure and the room's record, side by side", () 
     // Ari's live no on it is gone, the way a removed member's would be.
     const openStances = await t.sql`
       SELECT profile_id FROM group_top_of_mind_affirmations
-      WHERE proposal_id = ${openAsk.proposal.id}`;
+      WHERE proposal_id = ${openAskId}`;
     expect(
       openStances.map((row) => row.profile_id),
       "the erased member kept a live hand in a decision they no longer exist to hold",
@@ -222,18 +313,18 @@ describe("the gate: a member's erasure and the room's record, side by side", () 
 
   it("withdraws the erased member's own open ask — an unanswered proposal leaves with its asker", async () => {
     const g = await seedGroup();
-    const openAsk = await createGroupProposal(t.db as never, {
+    const openAskId = await seedProposal({
       groupId: g.groupId,
-      profileId: g.ari.profileId,
-      kind: "add_entry",
+      proposedBy: g.ari.profileId,
       body: "still being decided",
+      status: "open",
+      stances: [{ profileId: g.ari.profileId, stance: "affirmed" }],
     });
-    if (!openAsk.ok) throw new Error("seed open proposal did not open");
 
     await erase(g.ari.accountId);
 
     expect(
-      await t.sql`SELECT id FROM group_top_of_mind_proposals WHERE id = ${openAsk.proposal.id}`,
+      await t.sql`SELECT id FROM group_top_of_mind_proposals WHERE id = ${openAskId}`,
       "an unanswered ask outlived the person asking it",
     ).toHaveLength(0);
   });
@@ -322,6 +413,14 @@ describe("erasure, swept from the schema rather than from memory", () => {
     return rows.map((r) => ({ table: String(r.table), column: String(r.column) }));
   }
 
+  /* 60s, not the suite's 20s. The discovery query below joins three
+     `information_schema` views and costs ~8s on its own against a
+     schema-isolated test database; both cases here were already running
+     11-13s at baseline, which left no headroom at all — under a loaded
+     machine they tip over and report a TIMEOUT, which reads exactly like
+     erasure breaking. Raising the budget does not weaken either gate: the
+     floors they assert (>= 15 person-linked columns found, >= 6 of them
+     populated by the seed) are unchanged. */
   it("finds the references it claims to sweep", async () => {
     /* THE SWEEP'S OWN FLOOR. A discovery query that silently returned nothing
        would sweep an empty list and report a spotless erasure — the most
@@ -331,13 +430,14 @@ describe("erasure, swept from the schema rather than from memory", () => {
     const refs = await columnsPointingAtPeople();
     expect(refs.length).toBeGreaterThanOrEqual(15);
     expect(refs.map((r) => `${r.table}.${r.column}`)).toContain("reflections.profile_id");
-  });
+  }, 60_000);
 
   it("leaves no column anywhere still holding an erased person's id", async () => {
-    /* Seeded through the real membership and proposal functions, so the rows
-       are the ones the product actually writes — plus three the doctrine
-       suite never reaches and a person would most mind being left behind:
-       their reflections, their agents' credentials, and their sessions. */
+    /* Seeded against the schema rather than through the room writers, which
+       are gone — see the long note above `markDoor` for what that traded and
+       why. Plus three columns the doctrine suite never reaches and a person
+       would most mind being left behind: their reflections, their agents'
+       credentials, and their sessions. */
     const founder = await seedGroup();
     const ids = [founder.ari.accountId, founder.ari.profileId];
 
@@ -392,7 +492,7 @@ describe("erasure, swept from the schema rather than from memory", () => {
         "to survive the way a room's approved text does — the id must be set null " +
         "so what remains is no longer attributable to them.",
     ).toEqual([]);
-  });
+  }, 60_000);
 });
 
 /**

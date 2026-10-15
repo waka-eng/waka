@@ -72,7 +72,6 @@ import { useViewNavigation } from '../lib/use-view-navigation';
 import { EMPTY_VIEW, resolveViewWall, viewHref, type ViewLocation, type ViewOpen } from '../lib/view-location';
 import { InspirationSearch } from '../components/InspirationSearch';
 
-import { hueCss } from "../lib/appearance";
 import { useDismissAway } from "../lib/dismiss";
 import { isEditableTarget } from "../lib/surface-input";
 import { profileStorageKey, readProfileText, writeProfileText, type ProfileStorageScope } from "../lib/profile-storage";
@@ -104,13 +103,6 @@ import { GRAIN_PX, GRAIN_TILE } from "../canvas/sprites";
 import { renderScale } from "../canvas/scale";
 import { useEditing } from "../space/editing";
 import { deriveAgentChrome } from "../space-kinds/agent";
-import {
-  deriveGroupChrome,
-  groupWallOrbs,
-  GROUP_READ_TTL_MS,
-  groupReadingRestricts,
-  groupReadingChanged,
-} from "../space-kinds/group";
 import { buildPalette, type Palette } from "../canvas/palette";
 import { SavesOverlay } from "../components/SavesOverlay";
 import { DOCK_SLOT } from "../components/NoteTools";
@@ -125,27 +117,25 @@ import type { ApiConversation } from "../lib/api/conversations";
 import { useMeasured } from "../canvas/measured";
 /* THE CANVAS SIDE OF `SimApi`, which used to be 5,637 lines of this file.
    `startSimulation` is the loop; `SimApi` and `FieldAudit` are its published
-   surfaces and moved with it because they ARE its export list. `Carry` and
-   `GroupCacheEntry` are two shapes that used to be written twice — once as an
-   inline type on a `useRef` here and once in the loop's own teardown. See the
-   header of `canvas/simulation.ts` for why the cut is here and nowhere else in
-   this file. */
+   surfaces and moved with it because they ARE its export list. `Carry` is a
+   shape that used to be written twice — once as an inline type on a `useRef`
+   here and once in the loop's own teardown. (`GroupCacheEntry` was the
+   second such shape and is gone with rooms: the loop declared it, this file
+   imported it back to type a map that nothing ever filled, and the whole
+   round trip existed to keep one `w.kind === "group"` branch compiling.) See
+   the header of `canvas/simulation.ts` for why the cut is here and nowhere
+   else in this file. */
 import {
   startSimulation,
   SELF_WALL_NAME,
   UNWIND_MS,
   type Carry,
   type FieldAudit,
-  type GroupCacheEntry,
   type SimApi,
 } from "../canvas/simulation";
 import { setStanding as publishStanding } from "../lib/standing";
-import { GroupPanel } from "../space-kinds/GroupPanel";
-import { eventsAtStop, groupHistoryCaption, groupHistoryEvents, type HistoryGrain } from "../space-kinds/group-history";
-import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSettings";
 import { whyFailed as sayWhyFailed, whyOf } from "../lib/why-failed";
 import { spaceKey, type Space } from "../space-kinds";
-import { groundCount } from "../space/ground-count";
 import { pourSignature } from "../space/pour-signature";
 import { posterWords } from "../space/top-of-mind/poster";
 import {
@@ -153,14 +143,11 @@ import {
   formingWords,
   type Adopted,
   type JarNote,
-  type Proposal,
   type WallChrome,
   type Provenance,
 } from "../space/top-of-mind/board";
 import { colorBall } from "../space/inspiration/field";
 import {
-  groupInspirationViewId,
-  makeGroupInspirationBall,
   makeBall,
   seedOf,
   skyOf,
@@ -181,7 +168,6 @@ import { offlineHome, type OfflineHome } from "../lib/fixture/offline-home";
 import {
   asSentence,
   dateStamp,
-  citedWords,
   dateWords,
   dialMonth,
   dialYear,
@@ -191,54 +177,35 @@ import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 import type { MessageKey, SupportedLocale } from "../lib/locales";
 
 import {
-  affirmGroupProposal,
-  declineGroupProposal,
   fetchPrinciples,
   createProfile,
-  fetchGroupProposals,
-  createGroupProposal,
-  fetchGroupMembers,
-  fetchGroupTimeline,
-  type ApiGroupTimeline,
-  type ApiGroupTopOfMind,
-  leaveGroup,
-  removeGroupMember,
-  renameGroup,
-  deleteGroup,
-  fetchGroupTopOfMind,
-  refreshGroupTopOfMind,
-  fetchGroups,
-  fetchGroupField,
-  fetchGroupInspiration,
-  fetchGroupWall,
   finalizeAttachment,
   presignAttachment,
   uploadToPresignedUrl,
-  joinGroup,
   deleteInspiration,
   createFeedback,
   releaseSignal,
   dismissTopOfMindEntry,
   restoreTopOfMindEntry,
   releaseTopOfMindEntry,
-  updateInspiration,
+  /* `updateInspiration` HAD TWO CALLERS and now has none in this file: the
+     memory's own editor (which sends `text`) and `togglePublic` (which sent
+     `visibility`). The editor is still here — it goes through
+     `lib/data`'s `saveInspiration` — and the route still accepts
+     `visibility`. What is gone is this page asking it to. */
   fetchProfiles,
-  type ApiGroupProposal,
-  type ApiGroupMember,
-  type ApiGroupSummary,
-  createAgentKey,
-  fetchAgentKeys,
-  revokeAgentKey,
-  type ApiAgentKey,
-  type ApiMintedKey,
+  /* `ApiGroupMember` and `ApiGroupSummary` STOOD HERE and were the last two
+     room shapes this file named; `ApiGroupFieldInspiration` was the third,
+     below. All three were imported solely to TYPE EMPTY REFS the simulation
+     declared as required options. With the loop's group branches out, the
+     refs are gone, the types are gone, and `lib/api/groups.ts` — which had no
+     other reader and no route behind it — goes with them. */
   deletePrinciple,
   disputePrinciple,
   undoPrincipleDispute,
   reorderPrinciples,
   updatePrinciple,
   type ApiPrinciple,
-  type ApiGroupFieldInspiration,
-  type ApiGroupWallSignal,
   fetchTheWeather,
   ApiError,
 } from "../lib/api";
@@ -336,23 +303,6 @@ const NAME_SETTLE_MS = 700;
  * words over the back of its head.
  */
 const FORM_HUSH_MS = UNWIND_MS;
-/**
- * ARRIVING IN A ROOM, WHOSE GROUNDS ARE HERE IS LIT THIS LONG.
- *
- * A room pours ONE member's memories — yours, until you move to somebody
- * else's (see `standingOk`, and the note above it for why a heap of five
- * grounds is not evidence for anything). That decision is right and it has a
- * cost nobody had paid for: standing in a room with four other people looks
- * exactly like standing on your own wall. Every other ground was already on
- * screen, in the corner, at the dim end of the one channel this world has —
- * which is the correct RESTING state for a control and the wrong arrival.
- *
- * So travelling into a room lights all of them, and they settle back to the
- * quiet register on their own. The world moved because you moved to it, and
- * what the motion explains is that this ground is one of several.
- */
-const GROUNDS_LIT_MS = 1600;
-
 /**
  * WHAT IS LEFT OF THE SKY'S NUMBERS.
  *
@@ -706,8 +656,14 @@ interface PanelData {
  */
 /* What is NOT "outside" for each sheet: the sheet, and the control that
    opens it — pressing that again is the control's own toggle, not a
-   dismissal, and treating it as one closes and reopens in the same press. */
-const KEEP_SHEET = [".jar-settings", ".jar-seek"] as const;
+   dismissal, and treating it as one closes and reopens in the same press.
+
+   `KEEP_SHEET` IS GONE WITH ITS TWO SHEETS. It read `[".jar-settings",
+   ".jar-seek"]` and guarded the space-settings panel and the join sheet,
+   both of which went with rooms on 2026-10-12. `.jar-settings` is still WORN
+   — the search sheet and the composer's asks use the class — but nothing
+   registers a dismissal against it any more, so a list naming it here would
+   be a guard for no hook. */
 const KEEP_PROV = [".jar-prov-room", ".jar-panel"] as const;
 
 export default function HomePage(): JSX.Element {
@@ -1104,17 +1060,18 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     return()=>{controller.abort();window.clearTimeout(timer);};
   },[evidenceKey,signals,topOfMind?.id,topOfMind?.generationRevision]);
 
-  /** room id → the statements hanging on its wall, with whose they are. */
-  const wallSignalsRef = useRef<Map<string, ApiGroupWallSignal[]>>(new Map());
+  /* `wallSignalsRef` — room id → the statements hanging on its wall, with
+     whose they were — is gone with rooms. */
   const [adopted, setAdopted] = useState<Adopted | null>(null);
   /** What the adopted ambition was built from: signal id → its quote. */
   const [provenance, setProvenance] = useState<Provenance>(new Map());
-  /**
-   * The room's pending proposal: a whole ambition trying to replace the
-   * adopted one. It is the only candidate that can actually be adopted, so it
-   * carries the ids the adopt call needs.
-   */
-  const [proposal, setProposal] = useState<Proposal | null>(null);
+  /* `proposal` IS GONE, AND IT HAD ALREADY STOPPED BEING SET. It was the
+     room's pending proposal — a whole ambition trying to replace the adopted
+     one, and the only candidate that could actually BE adopted, which is why
+     it carried the ids the adopt call needed. Its one writer was the dev
+     fixture, writing `null`. Everything that read it fed
+     `formingWords(…, proposalMs, …)`, which now receives `null` at both call
+     sites; see `space/top-of-mind/board.ts` for why that parameter stays. */
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /* parked at now? then the date label and the return button say nothing */
   const [atNow, setAtNow] = useState(true);
@@ -1515,9 +1472,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       .catch(() => undefined).finally(finish);
   }, [undrop]);
   /* ---- walls (v10): the columns either side of the owner's own ---- */
-  /** The rooms, newest first: the columns to the RIGHT. */
-  const [groups, setGroups] = useState<ApiGroupSummary[]>([]);
-  const [groupRosterReady, setGroupRosterReady] = useState(false);
+  /* `groups` and `groupRosterReady` are gone with the axis's right-hand
+     side. The axis is agents, then you, and it stops there. */
   /* Layer 4's state is declared UP with the sky, because the field's light
      reads it: see `principles` there, and `carryOf` for why. Its surface —
      the quiet line under the top of mind — is far below. */
@@ -1529,25 +1485,27 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [agents, setAgents] = useState<AgentBundle[] | null>(null);
   /** The axis of agent walls — identities only; memories load on approach. */
   const [agentRoster, setAgentRoster] = useState<AgentRosterEntry[] | null>(null);
-  /** Rooms that have woken this session: their words exist, whole. */
-  const [wokenGroups, setWokenGroups] = useState<ReadonlySet<string>>(() => new Set());
-  /* the ref's change signal: the ball list is rebuilt when a room's ground lands */
-  const [groupFieldTick, setGroupFieldTick] = useState(0);
-  const setMembersRef = useRef<(m: Map<string, ApiGroupMember[]>) => void>(() => {});
-  /** Rooms whose data could not be fetched: the column says so, quietly. */
-  const [failedGroups, setFailedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  /* `wokenGroups`, `groupFieldTick` and `failedGroups` are gone: the three
+     pieces of state a room's asynchronous arrival needed — its words exist
+     now, its ground just landed, its data could not be fetched. `setMembersRef`
+     went with them in the same pass as the loop's group branches: it was a
+     setter declared above the state it set, crossing a declaration-order
+     boundary that only existed because a room's members were fetched far
+     below and drawn by a frame loop installed far above. */
   /** Which wall the camera is standing on. Discrete, pushed from the loop. */
   const [atWall, setAtWall] = useState<Space>({ kind: "self", id: "", name: SELF_WALL_NAME, col: 0 });
   /**
    * WHERE YOU ARE STANDING, KEPT OUTSIDE THE LOOP.
    *
-   * The simulation is rebuilt whenever its inputs change — and one of those,
-   * `groupFieldTick`, fires exactly when a group's memories arrive. So the
-   * data you travelled to fetch was itself what cancelled the journey: the
+   * The simulation is rebuilt whenever its inputs change, and the case that
+   * made this necessary is worth keeping even though its cause is gone:
+   * `groupFieldTick` fired exactly when a room's memories arrived, so the
+   * data you travelled to fetch was itself what cancelled the journey — the
    * effect tore down mid-glide and the new one started at `col = 0`, walking
-   * you home. First visits to a group were the only ones affected, because a
-   * second visit is served from cache and ticks nothing, which is why this
-   * read as "some rooms never load" rather than as a travel bug.
+   * you home. First visits were the only ones affected, because a second
+   * visit was served from cache and ticked nothing, which is why it read as
+   * "some rooms never load" rather than as a travel bug. The agents' bundles
+   * arrive the same way.
    *
    * A ref survives the rebuild, so the new loop starts where the old one was.
    */
@@ -2415,30 +2373,38 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const offlineViewerRef = useRef<string | null>(null);
   const viewerIdRef = useRef<string | null>(null);
   viewerIdRef.current = auth?.profile?.id ?? offlineViewerRef.current;
-  /**
-   * A room's member lists, where the SIM can read them. The state itself
-   * lives far below (it is fetched with the rest of a room's chrome); this
-   * ref is declared here, above the sim's effect, because the frame loop
-   * draws the room's company from it — one small being per member, behind
-   * yours. Same pattern as `setMembersRef`: the ref is the one honest way
-   * across a declaration-order boundary.
-   */
-  const [members, setMembers] = useState<Map<string, ApiGroupMember[]>>(() => new Map());
-  const membersRef = useRef<Map<string, ApiGroupMember[]>>(new Map());
-  const openGroupMemberRef = useRef<(profileId: string | null) => void>(() => undefined);
-  /* the hue map the legend reads — written where the orbs are tinted, so the
-     two can never disagree about who is which colour */
-  const hueByOwnerRef = useRef<Map<string, number>>(new Map());
-  const groupsRef = useRef<ApiGroupSummary[]>([]);
-  groupsRef.current = groups;
+  /* ═══ THE NINE SPLINTS ARE OUT (2026-10-15) ═══════════════════════════
+     `members` / `setMembers` / `membersRef` (a room's member lists, where the
+     sim could read them, for the company it drew behind your companion),
+     `openGroupMemberRef`, `hueByOwnerRef` (the map a room's legend decoded,
+     written by the loop at the one place the orbs were tinted so a name and
+     its orbs could not disagree), `groupsRef`, `loadGroupRef`, `pushWokenRef`,
+     `groupCacheRef`, `groupFieldRef`, `groupBallsRef` and `groupVisitedRef`.
+
+     EVERY ONE OF THEM CARRIED THE SAME SENTENCE, which is the thing to read
+     before writing another: "this survives because `canvas/simulation.ts`
+     declares it required and that file may not be edited from here." They
+     were not state, and they were not even unused state — they were an empty
+     container, a no-op function or a write-only map, wired into a frame loop
+     so a type would check across a boundary nobody could cross that day.
+     Stopping at a green build was the right call then and this is the other
+     half of it. When a removal has to stop mid-way, the splints are the
+     deliverable: each one named what it was, who held it up, and what event
+     would release it, and that is what made this pass a deletion rather than
+     an investigation. */
 
   /**
-   * THE WALLS, LEFT TO RIGHT — agents, then you, then rooms.
+   * THE WALLS, LEFT TO RIGHT — agents, then you.
    *
    * Column numbers are signed and the owner keeps the origin, so camX stays
    * zero at home and every existing piece of travel arithmetic is unchanged.
-   * Newest agent nearest you, newest room nearest you: the axis grows outward
-   * from where you stand.
+   * Newest agent nearest you: the axis grows outward from where you stand.
+   *
+   * ROOMS WERE THE POSITIVE COLUMNS and this is where they entered the world
+   * — `groups.forEach` pushing one wall per room, newest nearest you. With
+   * them gone the axis has no positive side, so a person with no agent has
+   * `walls.length === 1` and `canvas/simulation.ts` refuses lateral travel
+   * outright, which is the honest answer for a world with one place in it.
    */
   const walls = useMemo<Space[]>(() => {
     const out: Space[] = [];
@@ -2447,11 +2413,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     });
     out.reverse(); /* leftmost first, so the array is the axis in order */
     out.push({ kind: "self", id: "", name: SELF_WALL_NAME, col: 0 });
-    groups.forEach((g, i) => {
-      out.push({ kind: "group", id: g.id, name: g.name, col: i + 1 });
-    });
     return out;
-  }, [agentRoster, groups]);
+  }, [agentRoster]);
   /* The one agent this account has, if it has one. Only its existence and
      its column are needed here — the creature's form switch is a toggle
      between your own wall and that one. */
@@ -2467,43 +2430,21 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * ones rise into its peek row.
    */
   const wallProvRef = useRef<Map<string, Provenance>>(new Map());
-  /** Short-lived permission-checked room snapshots, shared with the simulation. */
-  /* `GroupCacheEntry` is declared in `canvas/simulation.ts`, beside the loop
-     that reads it, rather than spelled out here and inferred there. */
-  const groupCacheRef = useRef<Map<string, GroupCacheEntry>>(new Map());
-  const groupRequestsRef = useRef(new Map<string, { token: symbol; promise: Promise<boolean>; controller: AbortController; timer: number }>());
-  const groupLeaseTimersRef = useRef(new Map<string, number>());
-  const groupReadsAliveRef = useRef(true);
-  const [groupReadTick, setGroupReadTick] = useState(0);
-  const groupChromeRef = useRef<Map<string, WallChrome>>(new Map());
-  /* a room's ground, by group id, filled when the room wakes */
-  const groupFieldRef = useRef<Map<string, ApiGroupFieldInspiration[]>>(new Map());
-  /* and how much of that ground the ceiling did not let through, by group id —
-     zero for every room under it, which is nearly every room */
-  const groupBeyondRef = useRef<Map<string, number>>(new Map());
-  /** Namespaced room-orb id → ball, for the panel and relight lookups. */
-  const groupBallsRef = useRef<Map<string, Ball>>(new Map());
-  /** Rooms whose orbs have already poured this session: no re-pour on return. */
-  const groupVisitedRef = useRef<Set<string>>(new Set());
-  /**
-   * THE ROOM'S OWN BECOMING, so the dial has something to wind.
-   *
-   * The chain of boards with their reasons, and the door's ledger of arrivals
-   * and departures. `groupTimelines` (below, where the room's other arrival
-   * fetches live) is the state that owns this; this ref is its mirror, and it
-   * exists because the dial and the poster are derived far above that
-   * declaration and cannot reach forward to it.
-   */
-  const groupTimelineRef = useRef<Map<string, ApiGroupTimeline>>(new Map());
-  /**
-   * Historical row identity is immutable; permission to display it is not.
-   * Keyed `groupId:version`, invalidated whenever this room is revalidated.
-   */
-  const groupBoardAtRef = useRef<Map<string, ApiGroupTopOfMind>>(new Map());
-  /** Token ownership also prevents invalidated historical reads landing late. */
-  const groupBoardPendingRef = useRef(new Map<string, { token: symbol; controller: AbortController }>());
-  /** Both refs' change signal — they are filled from promises. */
-  const [groupPastTick, setGroupPastTick] = useState(0);
+  /* ═══ THE ROOM CACHES ARE GONE, AND FOUR OF THEM ARE SPLINTS ═══════════
+     Founder, 2026-10-12: "방 없애" — remove rooms.
+
+     What stood here: the permission-checked snapshot cache and its in-flight
+     map, its lease timers and its alive flag, the per-room chrome, the
+     per-room ground and the remainder the server's ceiling held back, the
+     room's own becoming (the chain of boards with their reasons, and the
+     door's ledger of arrivals and departures), the historical boards keyed
+     `groupId:version` with their own tokens so an invalidated read could not
+     land late, and the two ticks that told React any of it had changed.
+
+     FOUR REFS SURVIVED THIS CUT, EMPTY AND ONLY FOR THE COMPILER —
+     `groupCacheRef`, `groupFieldRef`, `groupBallsRef`, `groupVisitedRef` —
+     and they came out on 2026-10-15 with the loop's group branches. See the
+     splint tombstone above the walls for what all nine of them were. */
   /**
    * IS THE RAIL SHOWING? (founder, 2026-08-25: "i don't want the line to
    * always be there. can we have a button called timeline and when user
@@ -2534,10 +2475,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * asks. `minted` holds the one response that carries a secret, and nothing
    * writes it to storage — see the sheet for why that sentence matters.
    */
-  const [agentKeys, setAgentKeys] = useState<ApiAgentKey[]>([]);
-  const [minted, setMinted] = useState<ApiMintedKey | null>(null);
-  const [revoking, setRevoking] = useState<string | null>(null);
-  const [keysBusy, setKeysBusy] = useState(false);
+  /* `agentKeys`, `minted`, `revoking` and `keysBusy` are gone with the panel
+     that was their only reader — see the tombstone at the mount site. */
   /**
    * THE DATES OPEN UNDER A PRESS, AND UNDER A HOVER.
    *
@@ -2606,166 +2545,33 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     return () => window.removeEventListener("pointerdown", away, true);
   }, [timeOpen]);
 
-  /**
-   * Fetch one room's jar — its readings' evidence plus its direction —
-   * starting the moment travel toward it begins, so arrival usually finds it
-   * ready. The room wakes only when the character has arrived AND this has
-   * resolved: a room never renders half-poured. Shared snapshots expire and
-   * are checked again on return/focus; failed verification clears stale data.
-   */
-  const clearGroupHistory = useCallback((groupId: string) => {
-    for (const key of groupBoardAtRef.current.keys()) if (key.startsWith(`${groupId}:`)) groupBoardAtRef.current.delete(key);
-    for (const [key, request] of groupBoardPendingRef.current) if (key.startsWith(`${groupId}:`)) {
-      request.controller.abort(); groupBoardPendingRef.current.delete(key);
-    }
-    setGroupPastTick((value) => value + 1);
-    setGroupReadTick((value) => value + 1);
-  }, []);
+  /* ═══ `loadGroup` AND THE WHOLE SHARED-READ MACHINERY ARE GONE ═════════
+     Founder, 2026-10-12: "방 없애" — remove rooms.
 
-  const clearGroupDisplay = useCallback((groupId: string) => {
-    window.clearTimeout(groupLeaseTimersRef.current.get(groupId));
-    groupLeaseTimersRef.current.delete(groupId);
-    groupCacheRef.current.delete(groupId);
-    groupChromeRef.current.delete(groupId);
-    groupFieldRef.current.delete(groupId);
-    groupBeyondRef.current.delete(groupId);
-    wallSignalsRef.current.delete(groupId);
-    posterSaidRef.current.delete(groupId);
-    clearGroupHistory(groupId);
-    if (atWallRef.current.kind === "group" && atWallRef.current.id === groupId) {
-      setChrome({ text: null, awayFrom: null, formingAlt: null, asOf: null, forming: null, empty: false, prevText: null });
-      setSelectedId(null); setPanel(null); setPanelOpen(false);
-      setDetachedInspiration(null); setReflectOpen(false);
-      setProv(null); setProvFull(null); setProvPick(null);
-    }
-    setGroupFieldTick((value) => value + 1);
-  }, [clearGroupHistory]);
+     This was the largest single thing rooms owned in this file, and it was
+     not a fetch — it was a LEASE. Four requests in parallel (the board, the
+     wall of shared statements, the open proposals, the pooled ground), raced
+     against a thirty-second deadline, written into a cache under a token,
+     and then swept: `GROUP_READ_TTL_MS` expired the snapshot even when its
+     version had not changed, because a shared read is permission-sensitive
+     and a version number cannot tell you that access was revoked. On
+     expiry, on a failed verification, or on a restriction appearing in a
+     re-read, `clearGroupDisplay` tore down everything derived from it —
+     chrome, ground, wall signals, the poster's memory of what it last said,
+     the open panel, the selection — and `clearGroupHistory` aborted every
+     in-flight historical board read for that room and dropped the versions
+     it had already resolved.
 
-  useEffect(() => {
-    groupReadsAliveRef.current = true;
-    return () => {
-      groupReadsAliveRef.current = false;
-      for (const request of groupRequestsRef.current.values()) { request.controller.abort(); window.clearTimeout(request.timer); }
-      groupRequestsRef.current.clear();
-      for (const request of groupBoardPendingRef.current.values()) request.controller.abort();
-      groupBoardPendingRef.current.clear();
-      for (const timer of groupLeaseTimersRef.current.values()) window.clearTimeout(timer);
-      groupLeaseTimersRef.current.clear();
-    };
-  }, []);
+     THE RULE IN IT THAT SHOULD SURVIVE ROOMS: a read somebody else's
+     permission governs may not be cached by version alone. Nothing left in
+     this product reads across an account boundary, so nothing left needs
+     this — and if something ever does, the shape is here in the history
+     rather than having to be rediscovered.
 
-  const loadGroup = useCallback((groupId: string, force = false): Promise<boolean> => {
-    const cache = groupCacheRef.current;
-    const inFlight = groupRequestsRef.current.get(groupId);
-    if (inFlight && !force) return inFlight.promise;
-    if (inFlight) inFlight.controller.abort();
-    const got = cache.get(groupId);
-    if (!force && got?.status === "ready" && Date.now() - (got.checkedAt ?? 0) < GROUP_READ_TTL_MS) return Promise.resolve(true);
-    const token = Symbol(groupId);
-    const controller = new AbortController();
-    const requestedAt = Date.now();
-    const current = () => groupReadsAliveRef.current && groupRequestsRef.current.get(groupId)?.token === token;
-    cache.set(groupId, { ...got, status: "pending", data: got?.data ?? null });
-    setFailedGroups((prev) => {
-      if (!prev.has(groupId)) return prev;
-      const next = new Set(prev);
-      next.delete(groupId);
-      return next;
-    });
-    let timer = 0;
-    const deadline = new Promise<never>((_resolve, reject) => {
-      timer = window.setTimeout(() => {
-        controller.abort(); reject(new Error("Room verification timed out"));
-      }, GROUP_READ_TTL_MS);
-    });
-    const promise = Promise.race([Promise.all([
-      fetchGroupTopOfMind(groupId, undefined, controller.signal).then((top) => {
-        if (current() && groupReadingRestricts(got?.data?.top ?? null, top)) clearGroupDisplay(groupId);
-        return top;
-      }),
-      fetchGroupWall(groupId, controller.signal),
-      fetchGroupProposals(groupId, controller.signal),
-      /* THE ROOM'S GROUND. Its members' public memories — the reason a room
-         had a sky full of statements and nothing underneath them. A room
-         never generates a signal: every statement here was formed on some
-         member's own wall out of their own inspirations and then shared in,
-         so the ground was always real and simply never fetched. */
-      fetchGroupField(groupId, controller.signal),
-    ]), deadline])
-      .then(([top, wall, proposals, ground]) => {
-        if (!current()) return false;
-        const fieldFingerprint = JSON.stringify(ground);
-        const fieldChanged = got?.fieldFingerprint !== fieldFingerprint;
-        const fieldIds = new Set(ground.field.map((row) => row.id));
-        const signalIds = new Set(wall.map((row) => row.signalId));
-        if ((groupFieldRef.current.get(groupId) ?? []).some((row) => !fieldIds.has(row.id)) ||
-          (wallSignalsRef.current.get(groupId) ?? []).some((row) => !signalIds.has(row.signalId))) clearGroupDisplay(groupId);
-        wallSignalsRef.current.set(groupId, wall);
-        groupFieldRef.current.set(groupId, ground.field);
-        /* the same remainder the personal field keeps, per room: what its
-           ground holds beyond what the ceiling let through */
-        groupBeyondRef.current.set(groupId, Math.max(0, ground.total - ground.field.length));
-        const evidence = groupWallOrbs(wall, top);
-        const open = proposals.find((p) => p.status === "open");
-        const openMs = open ? Date.parse(open.createdAt) || 0 : null;
-        groupChromeRef.current.set(
-          groupId,
-          deriveGroupChrome(top, openMs, evidence, localeRef.current),
-        );
-        const entry = { status: "ready" as const, data: { evidence, top }, checkedAt: requestedAt, fieldFingerprint, leaseToken: token };
-        cache.set(groupId, entry);
-        setFailedGroups((prev) => {
-          if (!prev.has(groupId)) return prev;
-          const next = new Set(prev); next.delete(groupId); return next;
-        });
-        window.clearTimeout(groupLeaseTimersRef.current.get(groupId));
-        groupLeaseTimersRef.current.set(groupId, window.setTimeout(() => {
-          if (!groupReadsAliveRef.current || cache.get(groupId)?.leaseToken !== token) return;
-          clearGroupDisplay(groupId);
-          cache.set(groupId, { status: "failed", data: null });
-          setFailedGroups((prev) => new Set(prev).add(groupId));
-        }, Math.max(0, GROUP_READ_TTL_MS - (Date.now() - requestedAt))));
-        clearGroupHistory(groupId);
-        if (fieldChanged) setGroupFieldTick((n) => n + 1);
-        simApiRef.current?.wake();
-        return true;
-      })
-      .catch(() => {
-        if (!current()) return false;
-        clearGroupDisplay(groupId);
-        cache.set(groupId, { status: "failed", data: null });
-        setFailedGroups((prev) => new Set(prev).add(groupId));
-        simApiRef.current?.wake();
-        return false;
-      })
-      .finally(() => {
-        window.clearTimeout(timer);
-        if (current()) groupRequestsRef.current.delete(groupId);
-      });
-    groupRequestsRef.current.set(groupId, { token, promise, controller, timer });
-    return promise;
-  }, [clearGroupDisplay, clearGroupHistory]);
-  const loadGroupRef = useRef(loadGroup);
-  loadGroupRef.current = loadGroup;
-
-  // Revalidate on return/focus, and renew only the visible room's lease.
-  // Unchanged snapshots do not rebuild the field or replay its animation.
-  useEffect(() => {
-    if (atWall.kind !== "group" || offlineRef.current) return;
-    const groupId = atWall.id;
-    const refresh = () => {
-      if (!document.hidden) void loadGroup(groupId, true);
-    };
-    refresh();
-    const timer = window.setInterval(refresh, GROUP_READ_TTL_MS - 5_000);
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, [atWall.kind, atWall.id, loadGroup]);
+     `loadGroupRef` remained as a no-op while `canvas/simulation.ts` still
+     declared it required, calling it as travel toward a room began. There
+     were no rooms to travel to; it came out with the loop's group branches
+     on 2026-10-15. */
 
   /**
    * THE GROUND AN ARRIVAL FINDS IS CURRENT. An agent's memories change while
@@ -2841,17 +2647,18 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   );
 
   /**
-   * Warm a wall, whatever kind it is. A room fetches its pooled field; an
-   * agent refetches its own layers; your own wall has nothing to warm. The
-   * loop calls this the moment travel toward a wall begins, so arrival
-   * usually finds it ready — and current.
+   * Warm a wall, whatever kind it is. An agent refetches its own layers; your
+   * own wall has nothing to warm. The loop calls this the moment travel
+   * toward a wall begins, so arrival usually finds it ready — and current.
+   *
+   * A ROOM WAS THE THIRD ARM and it fetched its pooled field here. Gone with
+   * rooms (founder, 2026-10-12: "방 없애").
    */
   const loadWall = useCallback(
     (w: Space) => {
-      if (w.kind === "group") loadGroup(w.id);
       if (w.kind === "agent") loadAgentWall(w.id);
     },
-    [loadGroup, loadAgentWall],
+    [loadAgentWall],
   );
   const loadWallRef = useRef(loadWall);
   loadWallRef.current = loadWall;
@@ -2886,12 +2693,13 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   // The route-restoration bridge below handles initial links and every POP,
   // not a one-shot latch tied to the first wall name.
 
-  /** A room woke: its words may exist now. Discrete, pushed from the loop. */
-  const pushWoken = useCallback((groupId: string) => {
-    setWokenGroups((prev) => (prev.has(groupId) ? prev : new Set(prev).add(groupId)));
-  }, []);
-  const pushWokenRef = useRef(pushWoken);
-  pushWokenRef.current = pushWoken;
+  /* `pushWoken` AND `wokenGroups` ARE GONE. The loop pushed a room id the
+     first time that room's orbs poured — "its words exist now, whole" — and
+     four memos depended on the set so that a room's poster appeared the
+     moment its board was KNOWN rather than at whatever render happened next.
+     `pushWokenRef` survived as a no-op while `canvas/simulation.ts` still
+     declared it required; it came out with that file's group branches on
+     2026-10-15. */
 
   /* ---------------- data: all four fetches in parallel ---------------- */
   useEffect(() => {
@@ -2917,85 +2725,17 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       setCitations(layout.citations);
       setTopOfMind(null);
       latestReadingRef.current = null;
-      /* THE FIXTURE DESCRIBES THE WHOLE WORLD, NOT JUST YOUR WALL.
-         This set no groups and no agents, so the dev fixture rendered exactly
-         one column — which meant every wall-specific behaviour in this layout
-         (a room's ground, the per-member hues, the legend, pixelated agent
-         memories, the machine hand, the crossing quantization) could only
-         ever be seen by signing in. Every one of those shipped unobserved,
-         and several shipped broken.
-
-         So the fixture now builds the same four rooms the product was
-         designed around: one with only you, one with you and an agent, one of
-         people, one of machines. It stays dev-gated — `offlineHome()` returns
-         null unless `showsDebug()` — so nothing here can reach a real
-         visitor. Its purpose is that the layout can be LOOKED AT without a
-         session. */
-      const iso = (t: number) => new Date(t).toISOString();
-      const fixtureGroups: ApiGroupSummary[] = [
-        { id: "fx-alone", name: "Just me", joinCode: "FIXTURE1", role: "owner", memberCount: 1, createdAt: iso(Date.now()) },
-        { id: "fx-pair", name: "Me and my agent", joinCode: "FIXTURE2", role: "owner", memberCount: 2, createdAt: iso(Date.now()) },
-        { id: "fx-people", name: "The four of us", joinCode: "FIXTURE3", role: "member", memberCount: 5, createdAt: iso(Date.now()) },
-        { id: "fx-agents", name: "Our agents", joinCode: "FIXTURE4", role: "member", memberCount: 6, createdAt: iso(Date.now()) },
-      ];
-      const mem = (
-        profileId: string,
-        name: string,
-        type: "human" | "agent",
-      ): ApiGroupMember => ({
-        profileId,
-        name,
-        initials: name.slice(0, 2).toUpperCase(),
-        type,
-        role: "member",
-        joinedAt: iso(Date.now()),
-      });
-      const you = mem("fx-you", "You", "human");
-      const yours = mem("fx-your-agent", "Your agent", "agent");
-      const people = ["Jae Gyu", "Sora", "Minho", "Hana"].map((n, i) =>
-        mem(`fx-p${i}`, n, "human"),
-      );
-      const bots = ["Jae Gyu's agent", "Sora's agent", "Minho's agent", "Hana's agent"].map(
-        (n, i) => mem(`fx-a${i}`, n, "agent"),
-      );
-      setMembersRef.current(
-        new Map<string, ApiGroupMember[]>([
-          ["fx-alone", [you]],
-          ["fx-pair", [you, yours]],
-          ["fx-people", [you, ...people]],
-          ["fx-agents", [you, yours, ...bots]],
-        ]),
-      );
-      /* each room's ground: the members' public memories, so the hues, the
-         legend and the pixelated agent orbs all have something to render */
-      for (const group of fixtureGroups) {
-        const who =
-          group.id === "fx-alone"
-            ? [you]
-            : group.id === "fx-pair"
-              ? [you, yours]
-              : group.id === "fx-people"
-                ? [you, ...people]
-                : [you, yours, ...bots];
-        const field = who.flatMap((m, mi) =>
-          Array.from({ length: 3 + (mi % 3) }, (_, k) => ({
-            id: `${group.id}-${m.profileId}-${k}`,
-            text: `${m.name} kept this ${k + 1}: a sentence long enough to read as prose rather than as a label.`,
-            kind: "note" as const,
-            source: m.type === "agent" ? ("agent" as const) : ("app" as const),
-            createdAt: iso(Date.now() - (3 + k * 6 + mi * 2) * 86400000),
-            updatedAt: iso(Date.now() - (3 + k * 6 + mi * 2) * 86400000),
-            ownerProfileId: m.profileId,
-            ownerName: m.name,
-            ownerType: m.type,
-          })),
-        );
-        groupFieldRef.current.set(group.id, field);
-      }
-      setGroupFieldTick((n) => n + 1);
-      setGroups(fixtureGroups);
-      setGroupRosterReady(true);
-      setProposal(null);
+      /* THE FIXTURE'S FOUR ROOMS ARE GONE (founder, 2026-10-12: "방 없애").
+         It built one room with only you, one with you and an agent, one of
+         people and one of machines, each with a pooled ground, so that the
+         per-member hues, the legend, the pixelated agent memories, the
+         machine hand and the crossing quantization could all be LOOKED AT
+         without a session. That argument was sound and is the reason the
+         fixture exists at all — "every one of those shipped unobserved, and
+         several shipped broken" — but the four rooms described a capability
+         this product no longer has, and a fixture that invents a feature is
+         worse than one that is small. What it still describes: your own
+         wall, whole. */
       setAdopted(layout.adopted);
       setProvenance(layout.provenance);
       setInspirations(layout.inspirations);
@@ -3150,30 +2890,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           setAgents([]);
         }
       });
-    /* THE ROOMS — the columns to the RIGHT.
-       A room is a WALL OF STATEMENTS. Members share signals, never inspirations,
-       so what hangs on a room's wall is other people's signals with their
-       names on them; the raw memories behind them never leave the account
-       they were saved in. That is the canon's privacy line and it is why a
-       room's orbit can say WHO fed an entry but never WHICH memory did. */
-    (async () => {
-      // PrincipleRead owns loading and errors separately for the selected wall.
-
-      const rows = await fetchGroups();
-      if (offlineRef.current) return;
-      /* The map (v8): rooms line up to the right of your own wall,
-         newest room first. This is the horizontal axis. */
-      if (!dead) {
-        setGroupRosterReady(true);
-        setGroups(
-          [...rows].sort(
-            (a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0),
-          ),
-        );
-      }
-    })().catch(() => {
-      /* no rooms; your own wall is the whole axis */
-    });
+    /* THE ROOMS WERE THE COLUMNS TO THE RIGHT, and `GET /groups` filled
+       them, newest first. Gone, with the route (founder, 2026-10-12: "방
+       없애"). The canon's privacy line is the thing to carry forward out of
+       this block: a room was a WALL OF STATEMENTS — members shared signals,
+       never inspirations — so what hung there was other people's signals
+       with their names on them, and the raw memories behind them never left
+       the account they were saved in. That is why a room's orbit could say
+       WHO fed an entry and never WHICH memory did. */
     return () => {
       dead = true;
       controller.abort();
@@ -3692,8 +3416,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * direction the rail hung, and the direction an archive is drawn in.
    */
   const dialStops = useCallback((moments: readonly number[], end: number) => {
+    /* `HistoryGrain` came from `space-kinds/group-history`, which is gone
+       with rooms — the door ledger was the only thing that needed to know
+       which grain a stop stood at, so the three words live here now, beside
+       the only code left that rolls between them. */
     const roll = (
-      grain: HistoryGrain,
+      grain: "day" | "month" | "year",
       key: (d: Date) => string,
       last: (d: Date) => number,
       label: (ms: number) => string,
@@ -3741,34 +3469,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     );
   }, []);
 
-  const groupHistory = useMemo(() => {
-    if (atWall.kind !== "group") return [];
-    const timeline = groupTimelineRef.current.get(atWall.id);
-    return timeline ? groupHistoryEvents(timeline, locale) : [];
-  }, [atWall, groupPastTick, locale]);
-
   const dial = useMemo(() => {
     /* EVERY WALL'S DATES ARE THAT WALL'S OWN LIFE, NOT YOURS.
        The dial winds the wall you are standing on, so the moments it offers
-       are that wall's. A ROOM's are the days its door moved and its readings
-       were written. AN AGENT's are the days it kept something — the ruling
-       from #283, kept here verbatim because it is right and this rewrite
-       would have silently dropped it: "standing on Scout's wall the rail
-       spanned YOUR years — and the scrub (scene-scoped since
-       one-wall-one-scene) wound Scout's ground against a stranger's
-       timeline. The wall's rail is the wall's memories, exactly as a room's
-       is the room's." Their fix was about WHOSE moments; this change is about
-       how they are offered, and the two are the same wall seen from two
-       sides. Null until the bundle lands, like everything else behind the
-       wake. */
+       are that wall's. AN AGENT's are the days it kept something — the
+       ruling from #283, kept here verbatim because it is right and the
+       rewrite that moved this code would have silently dropped it:
+       "standing on Scout's wall the rail spanned YOUR years — and the scrub
+       (scene-scoped since one-wall-one-scene) wound Scout's ground against a
+       stranger's timeline. The wall's rail is the wall's memories, exactly as
+       a room's is the room's." Their fix was about WHOSE moments; the move
+       was about how they are offered, and the two are the same wall seen
+       from two sides. Null until the bundle lands, like everything else
+       behind the wake.
+
+       A ROOM'S OWN DATES WERE THE THIRD BRANCH — the days its door moved and
+       its readings were written, read out of the timeline the room's fetch
+       filled. They went with rooms (founder, 2026-10-12: "방 없애"). */
     /* now — and `now` moves when something is kept now (see clockMs) */
     const end = clockMs;
     const moments: number[] = [];
-    if (atWall.kind === "group") {
-      const timeline = groupTimelineRef.current.get(atWall.id);
-      if (!timeline) return null;
-      for (const event of groupHistory) moments.push(event.at);
-    } else if (atWall.kind === "agent") {
+    if (atWall.kind === "agent") {
       const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
       const caps = a?.inspirations ?? [];
       if (caps.length === 0) return null;
@@ -3792,19 +3513,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        handle on a thing there is none of here. */
     if (stops.length === 0) return null;
     return { end, stops };
-    /* `groupPastTick` is the timeline ref's change signal: the room's history
-       lands a request after arrival, and the dates must re-read when it does.
-       `agents` is here for the same reason on an agent's wall: its bundle
-       lands after arrival too. */
-  }, [inspirations, agents, clockMs, atWall, groupHistory, dialStops]);
+    /* `agents` is a dependency because an agent's bundle lands after
+       arrival, so its dates must re-read when it does. `groupPastTick` was
+       here for the same reason on a room's wall and went with rooms. */
+  }, [inspirations, agents, clockMs, atWall, dialStops]);
 
-  const selectedGroupStop = atWall.kind === "group" && parkedAt !== null
-    ? dial?.stops.find((row) => row.at === parkedAt) ?? null : null;
-  const selectedGroupHistory = selectedGroupStop
-    ? groupHistoryCaption(eventsAtStop(groupHistory, selectedGroupStop.at, selectedGroupStop.grain), locale) : null;
-  const currentGroupHistory = atWall.kind === "group" && dial
-    ? groupHistoryCaption(eventsAtStop(groupHistory, dial.end, "day"), locale, 1) : null;
-
+  /* `selectedGroupStop`, `selectedGroupHistory` and `currentGroupHistory`
+     are gone: the three captions a room's dial wore — what happened at the
+     stop you parked on, and what happened today — read out of the door
+     ledger `groupHistoryEvents` built. A date on your own wall is a date. */
   /* ------------- palette: resolve vars once, re-raster sprites ------------- */
   useEffect(() => {
     const root = measured.root.current;
@@ -3867,88 +3584,26 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   );
 
   /* ------------- HQ chrome derived from time T (discrete facts only) ------------- */
-  /**
-   * THE ROOM AS IT STOOD AT T.
-   *
-   * The one thing a history must never do is print today's sentence over a
-   * month that had a different one — or over a month that had none at all. So
-   * this never falls back to the live board: if the version that was up at T
-   * is not in hand yet, the wall says the room's name and waits, and if the
-   * room had no board at T it says so honestly with the month beside it.
-   *
-   * Winding within a verified snapshot reuses the version. Revalidating the
-   * room clears that cache: the version can survive while access changes.
-   */
-  const groupChromeAt = useCallback(
-    (groupId: string, T: number, nowMs: number): WallChrome => {
-      const live = groupChromeRef.current.get(groupId) ?? null;
-      const blank = (asOf: string | null): WallChrome => ({
-        text: null,
-        awayFrom: null,
-        formingAlt: asOf === null ? null : say("worldNothingReadTogether"),
-        asOf,
-        forming: null,
-        empty: false,
-        prevText: null,
-      });
-      const timeline = groupTimelineRef.current.get(groupId);
-      /* At now, or before the room's history is in hand, the room is simply
-         itself: the live chrome, forming line and all. */
-      if (!timeline || nowMs - T < DAY_MS / 2) return live ?? blank(null);
+  /* ═══ `groupChromeAt` IS GONE — THE ROOM AS IT STOOD AT T ══════════════
+     Founder, 2026-10-12: "방 없애" — remove rooms.
 
-      /* Newest first, as the endpoint serves them. */
-      const then = timeline.versions.find((v) => (Date.parse(v.createdAt) || 0) <= T);
-      if (!then) return blank(monthTag(T, localeRef.current));
+     THE RULE IT EXISTED TO HOLD IS WORTH KEEPING IN WRITING, because your
+     own wall obeys the same one and nothing else states it this plainly: a
+     history must never print today's sentence over a month that had a
+     different one, or over a month that had none at all. So this never fell
+     back to the live board — if the version standing at T was not in hand it
+     said the room's name and waited, and if the room had no board at T it
+     said so with the month beside it. It stamped `asOf` only when the past
+     sentence DIFFERED from the one up now, because a date on an unchanged
+     sentence reports a change that did not happen. And nothing was ever
+     "forming" in the past: an open proposal is a thing on its way to
+     becoming what a room believes, and in March it either became it or it
+     did not.
 
-      const latest = timeline.versions[0];
-      const stillStanding = latest !== undefined && then.version === latest.version;
-      if (stillStanding && live) {
-        /* The board has not moved since T, so what is up now is what was up
-           then — and there is nothing to date-stamp, because nothing changed. */
-        return { ...live, forming: null, asOf: null };
-      }
-
-      const key = `${groupId}:${then.version}`;
-      const held = groupBoardAtRef.current.get(key);
-      if (!held) {
-        if (!groupBoardPendingRef.current.has(key)) {
-          const token = Symbol(key);
-          const controller = new AbortController();
-          groupBoardPendingRef.current.set(key, { token, controller });
-          fetchGroupTopOfMind(groupId, then.version, controller.signal)
-            .then((board) => {
-              if (!groupReadsAliveRef.current || groupBoardPendingRef.current.get(key)?.token !== token) return;
-              groupBoardAtRef.current.set(key, board);
-              setGroupPastTick((n) => n + 1);
-            })
-            .catch(() => undefined)
-            .finally(() => {
-              if (groupBoardPendingRef.current.get(key)?.token === token) groupBoardPendingRef.current.delete(key);
-            });
-        }
-        return blank(monthTag(T, localeRef.current));
-      }
-
-      const lead = held.entries.find((e) => e.pinnedAt) ?? held.entries[0] ?? null;
-      const text = lead?.body ?? null;
-      return {
-        text,
-        awayFrom: null,
-        formingAlt: text ? null : say(held.restricted ? "worldRoomReadRestricted" : "worldNothingReadTogether"),
-        /* WHEN THIS WAS THE ROOM. Stamped only when the sentence differs from
-           the one up now, exactly as your own wall stamps its own past: a date
-           on an unchanged sentence would report a change that did not happen. */
-        asOf: text && text !== (live?.text ?? null) ? monthTag(T, localeRef.current) : null,
-        /* NOTHING IS FORMING IN THE PAST. An open proposal is a thing on its
-           way to becoming what the room believes, and in March it either
-           became it or it did not — either way it is not still on its way. */
-        forming: null,
-        empty: false,
-        prevText: null,
-      };
-    },
-    [],
-  );
+     It also carried the one caching subtlety of the whole room surface:
+     winding inside a verified snapshot reused the version, and revalidating
+     the room cleared that cache, because a version can survive while access
+     to it changes. */
 
   const applyChrome = useCallback(
     (T: number) => {
@@ -3969,23 +3624,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               nowMs,
               localeRef.current,
             )
-          : /* A ROOM'S BOARD IS THE ROOM'S, AND IT LIVES WHERE THE ROOM PUT IT.
-               There was no `room` branch here at all: standing in a room fell
-               through to `deriveAmbition`, which reads YOUR adopted ambition
-               and YOUR notes. A room wall therefore never had a poster of its
-               own, and the boot loop's `setAdopted` was covering for that by
-               writing the room's sentence into your slot — which is why
-               deleting it left the room blank. The cover-up and the hole were
-               one bug wearing two faces.
-               `groupChromeRef` is the same map `wallChromeNow` reads for every
-               room you are NOT standing on, filled by `loadGroup` on arrival,
-               so this makes the wall you are on agree with the walls beside
-               it instead of borrowing from you. Until it arrives the room is
-               honestly blank — it says its own name and nothing else, rather
-               than showing someone else's ambition under it. */
-            atWall.kind === "group"
-            ? groupChromeAt(atWall.id, T, nowMs)
-            : (() => {
+          : /* A ROOM'S BOARD USED TO BE THE THIRD BRANCH, and the bug it
+               fixed is the reason this comment survives the branch. There was
+               no room branch at all once: standing in a room fell through to
+               `deriveAmbition`, which reads YOUR adopted ambition and YOUR
+               notes — so a room wall never had a poster of its own, and the
+               boot loop's `setAdopted` was covering for that by writing the
+               room's sentence into your slot. Deleting the cover-up left the
+               room blank, which is how one bug wearing two faces gets found.
+               Rooms are gone (founder, 2026-10-12: "방 없애"); the lesson is
+               that a wall must derive its own claim from its own material,
+               and the two walls left both do. */
+            (() => {
               const current = deriveAmbition(nowMs, adopted, notes);
               const at = deriveAmbition(T, adopted, notes);
               return {
@@ -4001,7 +3651,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                    literally above the poster. It is time-aware too: scrub back
                    past a pattern and it reports what existed then, or says
                    nothing at all. */
-                forming: formingWords(T, proposal ? proposal.createdMs : null, emerging, localeRef.current),
+                forming: formingWords(T, null, emerging, localeRef.current),
                 /* Nothing synthesized and nothing kept: the honest empty, and
                    it is the artifact's absence that says so, not a guess. */
                 empty: topOfMind === null && (inspirations?.length ?? 0) === 0,
@@ -4022,13 +3672,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             { ...next, prevText: posterSaidRef.current.get(atWall.id) ?? null },
       );
     },
-    /* `wokenGroups` is here because a room's board arrives asynchronously into
-       `groupChromeRef`, which is a ref and so cannot itself trigger anything.
-       `loadGroup` adds the room to this set in the same breath as filling that
-       map, so depending on it is what makes the poster appear on arrival
-       rather than at whatever unrelated render happens next. `wallChromeNow`
-       already depends on it for the same reason. */
-    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, inspirations, wokenGroups, groupFieldTick, groupReadTick],
+    /* `wokenGroups`, `groupFieldTick` and `groupReadTick` were here because a
+       room's board arrived asynchronously into refs, which cannot trigger
+       anything themselves, and depending on the ticks is what made a room's
+       poster appear on arrival rather than at some unrelated later render.
+       All three went with rooms. */
+    [dial, adopted, notes, atWall, agents, emerging, topOfMind, inspirations],
   );
   /* AND THE WALL REMEMBERS WHAT IT SAID, once it is on screen saying it.
      After the commit, not inside the updater: the sentence has to be recorded
@@ -4073,19 +3722,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * that went blank the moment you stepped off it would be a thing popping
    * out of existence.
    *
-   * Rooms come from the ref the fetch fills. `groupFieldTick` is in the deps
-   * because that is the state the FETCH bumps, and `wokenGroups` because that
-   * is the state ARRIVAL bumps — both, so the read is never stale from either
-   * direction.
-   *
-   * `groupFieldTick` was missing, and that was half of a defect the founder
-   * reported twice: "dont make the text be there and reload when character
-   * goes to the room. keep it rendered and dont rerender when character
-   * arrives." The fetch filled `groupChromeRef` and bumped its tick, but this
-   * map did not listen to that tick, so a room's words could not be read out
-   * of the ref until arrival happened to re-derive it. The sentence therefore
-   * could not exist before the character got there, however early the fetch
-   * had landed.
+   * A ROOM CAME FROM A REF THE FETCH FILLED, and the deps were the argument:
+   * `groupFieldTick` for the state the FETCH bumped and `wokenGroups` for the
+   * state ARRIVAL bumped, both, so the read could not be stale from either
+   * direction. The first was MISSING once, and that was half of a defect the
+   * founder reported twice: "dont make the text be there and reload when
+   * character goes to the room. keep it rendered and dont rerender when
+   * character arrives." Rooms are gone; the rule they taught — a wall's words
+   * must be derivable before you arrive, not because you arrived — is what
+   * this memo is still for.
    */
   const wallChromeNow = useMemo(() => {
     const nowMs = dial ? dial.end : Date.now();
@@ -4094,9 +3739,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (w.kind === "agent") {
         const a = (agents ?? []).find((x) => x.agent.id === w.id);
         if (a) m.set(spaceKey(w), deriveAgentChrome(a, nowMs, nowMs));
-      } else if (w.kind === "group") {
-        const rc = groupChromeRef.current.get(w.id);
-        if (rc) m.set(spaceKey(w), rc);
       } else {
         const at = deriveAmbition(nowMs, adopted, notes);
         m.set(spaceKey(w), {
@@ -4104,14 +3746,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           awayFrom: null,
           formingAlt: topOfMind?.supportChanged ? say("worldReadingSupportChanged") : null,
           asOf: null,
-          forming: formingWords(nowMs, proposal ? proposal.createdMs : null, emerging, localeRef.current),
+          forming: formingWords(nowMs, null, emerging, localeRef.current),
           empty: topOfMind === null && (inspirations?.length ?? 0) === 0,
           prevText: null,
         });
       }
     }
     return m;
-  }, [walls, agents, wokenGroups, groupFieldTick, groupReadTick, dial, adopted, notes, proposal, emerging, topOfMind, inspirations]);
+  }, [walls, agents, dial, adopted, notes, emerging, topOfMind, inspirations]);
 
   /**
    * WHAT EACH WALL'S CLAIM RESTS ON.
@@ -4134,33 +3776,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       }
       m.set(`agent:${a.agent.id}`, prov);
     }
-    /* AND A ROOM LIGHTS THE STATEMENTS ITS BOARD WAS BUILT FROM.
-       Rooms were the one wall kind that got an empty band here, so travelling
-       into a room left the peek row dark and the board looked like it had
-       come from nowhere. A room's ground is its shared statements, so those
-       are what light — the same rule as everywhere else (what this wall's
-       claim rests on), applied to the material a room actually has. */
-    for (const w of walls) {
-      if (w.kind !== "group") continue;
-      const cached = groupCacheRef.current.get(w.id);
-      const lead = cached?.data?.top?.entries?.[0];
-      const prov: Provenance = new Map();
-      if (lead)
-        for (const ev of cached?.data?.evidence ?? [])
-          if (ev.citedBy.includes(lead.body)) prov.set(ev.signalId, ev.quote);
-      /* KEYED BY THE FUNCTION THAT READS IT, not by a hand-built string.
-         This said `room:${w.id}`, then a mechanical rename made it
-         `cached:${w.id}` — two different spellings, both wrong, because the
-         only reader is `wallProv.get(spaceKey(w))` and spaceKey is
-         `${kind}:${id}`, which for these walls is always `group:`. A group's
-         provenance was never found, so the peek row under its poster was
-         empty every time. Calling spaceKey here makes the two ends the same
-         expression rather than two strings that have to agree. */
-      m.set(spaceKey(w), prov);
-    }
+    /* A ROOM LIT THE STATEMENTS ITS BOARD WAS BUILT FROM, and one rule from
+       that branch is worth keeping where the next person will read it: the
+       map is KEYED BY THE FUNCTION THAT READS IT. The room's entry was
+       hand-spelled `room:${w.id}`, then a mechanical rename made it
+       `cached:${w.id}` — two spellings, both wrong, because the only reader
+       is `wallProv.get(spaceKey(w))`. A room's provenance was therefore never
+       found and its peek row was empty every time. Call `spaceKey` at both
+       ends and the two cannot disagree. */
     wallProvRef.current = m;
     simApiRef.current?.setProvenance(m);
-  }, [provenance, agents, inspirations, walls, wokenGroups, groupFieldTick, groupReadTick]);
+  }, [provenance, agents, inspirations, walls]);
 
   /* The field's own invariant, reachable from the console — see SimApi.audit
      for why counting it beats looking at it. Dev-gated with the page itself. */
@@ -4209,7 +3835,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         measured,
         inspirations,
         agents,
-        walls,
         setDialAway,
         setInField,
         setInSky,
@@ -4224,28 +3849,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         dialRef,
         fieldLoadingRef,
         foundRef,
-        groupBallsRef,
-        groupCacheRef,
-        groupFieldRef,
-        groupsRef,
-        groupVisitedRef,
         headingRef,
-        hueByOwnerRef,
         inspirationsRef,
         lastGoRef,
         loadDetailRef,
-        loadGroupRef,
         loadWallRef,
         localeRef,
-        membersRef,
-        openGroupMemberRef,
         openSeekRef,
         paletteRef,
         panelArrowRef,
         panelOpenRef,
         parkedRef,
         pushArrivedRef,
-        pushWokenRef,
         readingLitRef,
         sayLineRef,
         selectedIdRef,
@@ -4253,18 +3868,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         skyRef,
         slotH,
         TRef,
-        viewerIdRef,
         wallsRef,
       }),
-    [pourSig, agents, walls, groupFieldTick],
+    [pourSig, agents, walls],
   );
 
   /**
    * AND WHEN THE SKY LANDS, THE GROUND IS LIT AGAIN — IN PLACE.
    *
-   * The pour above bakes `hasNotes` / `hasGroup` / `quote` / `terms` into every
-   * ball at construction, and `colorBall` reads them to decide the cited floor,
-   * the cited lift, the in-a-room floor and the frontier. But the sky is two
+   * The pour above bakes `hasNotes` / `quote` / `terms` into every ball at
+   * construction, and `colorBall` reads them to decide the cited floor, the
+   * cited lift and the frontier. (There was a fourth, `hasGroup`, and a floor
+   * under it: a memory glowed a little more when a pattern resting on it had
+   * been shared into a room. It went with rooms — founder, 2026-10-12: "방
+   * 없애" — along with `FIELD_FLOOR_IN_GROUP` and `Signal.sharedGroupIds`,
+   * which was the only thing that could ever set it true.) But the sky is two
    * requests deep — `loadSignals`, then a `loadSignal` per signal, in sequence
    * — so on any real page load `citations` arrives AFTER the archive, the
    * agents and the walls have all settled, which is after the last pour. Every
@@ -4323,7 +3941,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       b.promotion = above.promotion;
       b.onPoster = above.onPoster;
       b.underPrinciple = above.underPrinciple;
-      b.hasGroup = above.inGroup;
       b.quote = above.quote;
       b.terms = above.terms;
       colorBall(b, TRef.current);
@@ -4433,16 +4050,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const id = window.setTimeout(() => setPanel(null), 200);
       return () => window.clearTimeout(id);
     }
-    /* A room orb that belongs to another member: the 180ch preview/quote is
-       the WHOLE panel — the full text of someone else's save is not ours to
-       fetch, so nothing is missing and nothing loads. One appearance. */
-    const selectedBall = ballsRef.current?.byId.get(selectedId);
-    const groupBall = selectedBall?.col !== undefined ? selectedBall : groupBallsRef.current.get(selectedId);
-    if (groupBall && !groupBall.own) {
-      setPanel({ id: selectedId, detail: null, partial: false });
-      setPanelOpen(true);
-      return undefined;
-    }
+    /* A ROOM ORB BELONGING TO ANOTHER MEMBER TOOK THE FIRST BRANCH HERE, and
+       the rule was that the 180-character preview WAS the whole panel: the
+       full text of somebody else's save is not ours to fetch, so nothing was
+       missing and nothing loaded. Gone with rooms (founder, 2026-10-12: "방
+       없애"). Every orb this can select is now this account's own, so every
+       path below fetches for real. */
     const detached = detachedRef.current;
     if (detached?.ball.id === selectedId && detached.wall === spaceKey(atWallRef.current)) {
       setPanel({ id: selectedId, detail: detached.detail, partial: false }); setPanelOpen(true);
@@ -4468,9 +4081,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setPanelOpen(true);
       return undefined;
     }
-    /* the viewer's OWN save seen in a room fetches by its real signal id —
-       and so does one kept here, whose ball keeps the id it was born under */
-    const fetchId = groupBall?.sigId ?? ownBall?.sigId ?? selectedId;
+    /* a save kept in this session fetches by its real signal id — the ball
+       keeps the id it was born under. (A room orb of your own resolved
+       through the same `sigId` and was the other half of this line.) */
+    const fetchId = ownBall?.sigId ?? selectedId;
     /* Already in hand (the background sweep, or the warm-up fired on
        pointerdown): the panel appears in the same commit as the selection —
        no wait at all, and still one single appearance. */
@@ -4549,106 +4163,61 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (!posterAsk) setGroundAsk(null);
   }, [posterAsk]);
 
-  /**
-   * WHOSE GROUND YOU COULD STAND IN — not a key to a mixture.
-   *
-   * This was a legend: five hues poured into one field and a colour key beside
-   * it. The mixture asked the reader to separate five people's memories before
-   * they could read any of them, and it could not repay that work — a group's
-   * ground is structurally incapable of explaining its sky, because the wall
-   * query stops at shares (`loadGroupField`, routes/groups.ts) and a member
-   * sees the pattern someone arrived at, never the captures behind it.
-   *
-   * So the ground is ONE person's, yours by default, and this is the way to
-   * change whose. You are first and have no swatch: you are the warm white the
-   * whole world is drawn in, and giving yourself a colour chip would imply you
-   * are one option among five rather than the ground everything else is read
-   * against.
-   *
-   * Hues come from `hueByOwnerRef`, written where the sprites are tinted, so
-   * a name and the orbs it switches to are physically incapable of disagreeing.
-   */
-  const grounds = useMemo<
-    Array<{ id: string; name: string; hue: number; agent: boolean; mine: boolean }>
-  >(() => {
-    if (atWall.kind !== "group") return [];
-    const caps = groupFieldRef.current.get(atWall.id) ?? [];
-    const seen = new Map<
-      string,
-      { id: string; name: string; hue: number; agent: boolean; mine: boolean }
-    >();
-    // Members without public inspirations still have a reachable, honest empty view.
-    for (const member of members.get(atWall.id) ?? []) {
-      const mine = member.profileId === viewerIdRef.current;
-      seen.set(member.profileId, {
-        id: member.profileId, name: mine ? say("worldYou") : member.name,
-        hue: mine ? -1 : hueByOwnerRef.current.get(member.profileId) ?? -1,
-        agent: member.type === "agent", mine,
-      });
-    }
-    for (const c of caps) {
-      if (seen.has(c.ownerProfileId)) continue;
-      const mine = c.ownerProfileId === viewerIdRef.current;
-      seen.set(c.ownerProfileId, {
-        id: c.ownerProfileId, name: mine ? say("worldYou") : c.ownerName,
-        hue: mine ? -1 : hueByOwnerRef.current.get(c.ownerProfileId) ?? -1,
-        agent: c.ownerType === "agent", mine,
-      });
-    }
-    const rows = [...seen.values()];
-    /* one ground is not a choice, it is a label nobody asked for */
-    if (rows.length < 2) return [];
-    /* you first, always: it is the ground everything else is read against */
-    return rows.sort((a, b) =>
-      a.mine ? -1 : b.mine ? 1 : a.hue - b.hue || a.name.localeCompare(b.name),
-    );
-  }, [atWall, groupFieldTick, wokenGroups, members, say, locale]);
+  /* A DOC COMMENT FOR `grounds` STOOD HERE AND IS DELETED, which is a note
+     about tombstones rather than about rooms. The deletion on 2026-10-12
+     replaced the CODE with the tombstone just below and left the original
+     doc block above it untouched, so the file carried the same argument
+     twice: once in the present tense, saying the row of names is how you
+     change whose ground you are on, and once immediately underneath saying
+     it is gone. A reader scanning for whether a feature exists reads the
+     first one. When code goes, its doc comment goes with it or it becomes
+     the most convincing possible lie about the file. Everything the block
+     said is in the tombstone below, in the past tense, where it belongs. */
+  /* ═══ WHOSE GROUND YOU ARE STANDING IN — GONE WITH THE ROOM ════════════
+     Founder, 2026-10-12: "방 없애" — remove rooms.
 
-  /**
-   * Whose ground is under you right now — null is yours, and travelling to
-   * another wall puts you back in your own, because standing in someone
-   * else's ground is a thing you did here and does not follow you.
-   */
-  const [standing, setStanding] = useState<string | null>(null);
-  const wallKey = spaceKey(atWall);
-  useEffect(() => {
-    /* the label only. The LOOP resets its own ground in arriveColumn, because
-       this effect fires while the column is still sliding and a settle at that
-       moment leaves the whole field inactive. */
-    setStanding(null);
-  }, [wallKey]);
-  const standIn = useCallback((ownerProfileId: string | null) => {
-    const sim = simApiRef.current, wall = sim?.navigationState().wall;
-    if (!sim || wall?.kind !== 'group') return;
-    sim.release();
-    setStanding(ownerProfileId);
-    sim.standIn(ownerProfileId);
-    sim.toGround();
-    // The painted wall may arrive before the route observer's debounce.
-    viewNavigationRef.current.write({ ...EMPTY_VIEW, wallId: wall.id, label: wall.name, at: parkedRef.current,
-      section: 'field', memberId: ownerProfileId }, { observed: true });
-  }, []);
-  openGroupMemberRef.current = standIn;
-  /**
-   * Whether the grounds have just been arrived at. True for GROUNDS_LIT_MS
-   * after travelling onto a shared wall, and the class it drives is removed
-   * rather than animated out: the rows carry an opacity transition already, so
-   * dropping the class IS the settle, on the same curve everything else here
-   * uses.
-   */
-  const [groundsLit, setGroundsLit] = useState(false);
-  useEffect(() => {
-    if (grounds.length === 0) {
-      setGroundsLit(false);
-      return;
-    }
-    setGroundsLit(true);
-    const id = window.setTimeout(() => setGroundsLit(false), GROUNDS_LIT_MS);
-    return () => window.clearTimeout(id);
-    /* `wallKey` and not `grounds`: the identity of that array changes whenever
-       a room's field is refetched, and re-lighting the corner because a
-       background request landed is the world moving on its own. */
-  }, [wallKey, grounds.length]);
+     `grounds` built the row of names under a room's wall, and its own header
+     recorded the decision it replaced: this was a LEGEND once — five hues
+     poured into one field and a colour key beside it — and the mixture asked
+     a reader to separate five people's memories before they could read any
+     of them. It could not repay that work, because a room's ground is
+     structurally incapable of explaining its sky: the wall query stopped at
+     shares, so a member saw the pattern somebody arrived at and never the
+     captures behind it. So the ground became ONE person's, yours by default,
+     and this was how you changed whose. You were always first and had no
+     swatch — you are the warm white the whole world is drawn in, and a
+     colour chip for yourself would have implied you were one option among
+     five rather than the ground the others are read against.
+
+     Hues came from `hueByOwnerRef`, written where the sprites are tinted so
+     that a name and the orbs it switched to could not disagree. That ref
+     survived empty while `canvas/simulation.ts` still wrote it; both the
+     write and the ref went on 2026-10-15. */
+
+  /* `standing` IS GONE: whose ground was under you, null meaning yours.
+     Travelling to another wall put you back in your own, because standing in
+     someone else's ground was a thing you did in a room and did not follow
+     you out of it. The effect that reset it ran on `wallKey` and reset THE
+     LABEL only — the loop resets its own ground in `arriveColumn`, because
+     this fired while the column was still sliding and a settle at that
+     moment left the whole field inactive. All of it goes with rooms
+     (founder, 2026-10-12: "방 없애"); there is one ground on every wall left
+     and it is that wall's own. */
+  /* `standIn` IS GONE. It was the press on one of those names: release the
+     focus, remember whose ground this is, tell the loop to stand in it, drop
+     to the ground, and write the member into the address so the view was
+     bookmarkable. `openGroupMemberRef` stayed as a no-op while the loop
+     declared it and called it from a pressed avatar — a press on company
+     that no longer existed — and went on 2026-10-15, along with the loop's
+     own `SimApi.standIn`, which by then was a verb with no caller on either
+     side of the boundary. */
+  /* `groundsLit` AND `GROUNDS_LIT_MS` ARE GONE WITH THE BAND THEY LIT. The
+     class was removed rather than animated out — the rows carried an opacity
+     transition already, so dropping the class WAS the settle, on the curve
+     everything else here uses. Its effect keyed on `wallKey` and not on the
+     array, deliberately: the array's identity changed whenever a room's
+     field was refetched, and re-lighting a corner because a background
+     request landed is the world moving on its own. */
   /**
    * WHAT THE POSTER RESTS ON — THE SAME QUESTION, ONE LAYER UP.
    *
@@ -4696,34 +4265,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       }
       return out;
     }
-    if (atWall.kind === "group") {
-      /* A ROOM'S CHAIN STOPS AT THE STATEMENT, AND THAT IS THE POINT.
-         Sharing into a room sends the statement and nothing under it — the
-         memories stay on their author's own wall. So a room's board can
-         honestly name the shared statements that fed it and WHO said each
-         one, and it cannot name anyone's raw inspirations. That is a privacy
-         boundary rendered as a shorter chain, not a missing feature: a room
-         that could show you the memories behind someone else's statement
-         would be breaking the promise the share note makes. */
-      const group = groupCacheRef.current.get(atWall.id);
-      const lead = group?.data?.top?.entries?.[0];
-      if (!lead) return out;
-      for (const ev of group?.data?.evidence ?? []) {
-        if (!ev.citedBy.includes(lead.body) || seen.has(ev.signalId)) continue;
-        seen.add(ev.signalId);
-        out.push({
-          signalId: "",
-          inspirationId: ev.signalId,
-          preview: ev.textPreview,
-          quote: ev.quote,
-          quoteSource: null,
-          /* whose sentence this is — in a room the author IS the provenance */
-          reason: ev.authorName ? `said by ${ev.authorName}` : null,
-          createdMs: ev.createdMs,
-        });
-      }
-      return out;
-    }
+    /* A ROOM'S CHAIN STOPPED AT THE STATEMENT, AND THAT WAS THE POINT.
+       Sharing into a room sent the statement and nothing under it — the
+       memories stayed on their author's own wall. So a room's board could
+       honestly name the shared statements that fed it and WHO said each one,
+       and it could not name anyone's raw inspirations. That was a privacy
+       boundary rendered as a shorter chain, not a missing feature: a room
+       that could show you the memories behind someone else's statement would
+       have broken the promise the share note made. Gone with rooms (founder,
+       2026-10-12: "방 없애"). */
     /* your own wall */
     const board = notes ?? [];
     const lead = board.find((e) => e.pinned) ?? board[0];
@@ -4735,7 +4285,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         out.push(e);
       }
     return out;
-  }, [atWall, agents, notes, wokenGroups, citations]);
+  }, [atWall, agents, notes, citations]);
 
   /**
    * THE GROUNDS THEMSELVES, AND WHOSE LIGHT EACH HOLDS.
@@ -4868,33 +4418,24 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * the ground per wall"). Not hardcoded, but wrong in the way that matters:
    * a number beside a door has to describe what is behind the door.
    *
-   * Each wall's ground has its own source, and they are the three the loop
-   * itself pours from — your archive, the agent's own captures, and the
-   * room's field of its members' public memories. `groupFieldTick` is in the
-   * deps because that last one lives in a ref the fetch fills.
+   * Each wall's ground has its own source, and they are the two the loop
+   * itself pours from — your archive and the agent's own captures. There was
+   * a third, a room's pooled field, and the number over its door was the
+   * subject of one of this file's better corrections: see the tombstone in
+   * the branch below.
    */
   const wallCount = useMemo<number>(() => {
     if (atWall.kind === "agent") {
       const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
       return a?.inspirations.length ?? 0;
     }
-    if (atWall.kind === "group") {
-      /* THE GROUND BENEATH THIS DOOR IS ONE MEMBER'S, so the door counts one
-         member's. It counted the room's whole pooled field until 2026-08-28,
-         when the founder stood in a room holding three memories, none of them
-         theirs, and read "3 INSPIRATIONS" over an empty ground.
-         `ground-count.ts` carries the whole argument. */
-      return groundCount(groupFieldRef.current.get(atWall.id), standing, viewerIdRef.current);
-    }
+    /* A ROOM'S DOOR COUNTED ONE MEMBER'S GROUND, not the room's. It counted
+       the whole pooled field until 2026-08-28, when the founder stood in a
+       room holding three memories, none of them theirs, and read "3
+       INSPIRATIONS" over an empty ground. `space/ground-count.ts` carried
+       that argument and is deleted with rooms. */
     return inspirations?.length ?? 0;
-    /* `groupFieldTick` is the ref's change signal — a room's memories arrive
-       into `groupFieldRef` from a fetch, and this is how React is told. The
-       ref itself is stable and is deliberately not a dependency.
-       (This carried an `eslint-disable-next-line` until 2026-08-25. There is
-       no eslint in this repo, so it silenced nothing and told a reader a rule
-       was being held off when no rule exists — a line that looks like a guard
-       and guards nothing, which `measure-groups.mjs` argues against by name.) */
-  }, [atWall, agents, inspirations, groupFieldTick, standing, auth?.profile?.id]);
+  }, [atWall, agents, inspirations, auth?.profile?.id]);
 
   /* `wallTotal` went with the door that printed it. It existed so that
      "N inspirations" could say both the number in the ground and the number
@@ -5070,20 +4611,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         .sort((x, y) => Date.parse(y.capturedAt) - Date.parse(x.capturedAt))
         .map((m) => ({ id: m.id, label: clean(m.textPreview) }));
     }
-    if (atWall.kind === "group") {
-      return (groupFieldRef.current.get(atWall.id) ?? [])
-        .filter((row) => row.ownerProfileId === (standing ?? viewerIdRef.current))
-        .slice()
-        .sort((x, y) => Date.parse(y.createdAt) - Date.parse(x.createdAt))
-        /* whose memory it is, said out loud — on a room's ground that is the
-           fact the per-member hue carries, and a hue is not readable aloud */
-        .map((m) => ({ id: groupInspirationViewId(atWall.id, m.id), label: `${m.ownerName}: ${clean(m.text)}` }));
-    }
+    /* A ROOM'S GROUND WAS REACHABLE TOO, and the rule it followed is worth
+       keeping: each row said WHOSE memory it was out loud, because on a
+       room's ground that fact was carried by a per-member hue and a hue is
+       not readable aloud. Gone with rooms. */
     return (inspirations ?? [])
       .slice()
       .sort((x, y) => y.capturedMs - x.capturedMs)
       .map((m) => ({ id: m.id, label: `${clean(m.preview)}${m.reflectionCount > 0 ? `, ${say("worldReflected")}` : ""}` }));
-  }, [atWall, agents, inspirations, groupFieldTick, standing, locale, say]);
+  }, [atWall, agents, inspirations, locale, say]);
 
   /**
    * Where the reach is standing. Null until a key is pressed or an orb is
@@ -5376,7 +4912,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const birthInspiration = (id: string, text: string, atMs: number, serverId?: string) => {
     const seed: BornSeed = { id, ...(serverId ? { sigId: serverId } : {}), capturedMs: atMs, updatedMs: atMs,
       textPreview: text, kind: "note", quote: null, reflectionCount: 0,
-      cited: false, roots: 0, promotion: 0, onPoster: false, underPrinciple: false, inGroup: false, terms: [] };
+      cited: false, roots: 0, promotion: 0, onPoster: false, underPrinciple: false, terms: [] };
     bornRef.current = [...bornRef.current, seed]; simApiRef.current?.born(seed);
     if (serverId) bornIdsRef.current.add(serverId);
     setClockMs(atMs);
@@ -5856,15 +5392,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     el.setSelectionRange(at, at);
   }, [mouthPage, mouthOpen]);
 
+  /* `?? groupBallsRef.current.get(panelId)` stood between these two: a room's
+     orbs lived in their own index, built per run of the loop and cleared in
+     its teardown, so the pour's `byId` genuinely did not hold them. One index
+     and one detached fallback now. */
   const panelBall = panelId
-    ? ballsRef.current?.byId.get(panelId) ?? groupBallsRef.current.get(panelId)
+    ? ballsRef.current?.byId.get(panelId)
       ?? (detachedInspiration?.ball.id === panelId ? detachedInspiration.ball : null)
     : null;
-  /** A room orb's panel: whisper attribution, cited-by, and — for another
-      member's save — no reflect action at all. */
-  const panelIsGroup = panelBall !== null && panelBall.col !== undefined;
-  const panelCanReflect = !panelIsGroup || panelBall?.own === true;
-  const panelHasReflection = panelCanReflect && (panel?.detail
+  /* `panelIsGroup` AND `panelCanReflect` ARE GONE, AND THEY WERE THE SAME
+     QUESTION. A room orb opened a different card: whisper attribution
+     instead of a date, a cited-by sentence, and — for another member's save
+     — no reflect, no edit, no delete, no step-to-the-next-memory, because
+     none of those are yours to do to somebody else's memory. The test was
+     `panelBall.col !== undefined`, and `col` is only ever set by
+     `makeGroupInspirationBall`. Nothing calls that from this file now
+     (founder, 2026-10-12: "방 없애"), so every orb this panel can open is
+     one of your own and every branch resolved the same way. Fourteen sites
+     collapsed; the eight the room branch owned are deleted outright. */
+  const panelHasReflection = (panel?.detail
     ? panel.detail.reflections.some((item) => !item.skipped && item.answer)
     : (panelBall?.reflections ?? 0) > 0);
   /* WHETHER ANYTHING WAS READ OUT OF THIS MEMORY. `roots` is the count of
@@ -5918,7 +5464,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, [caretLit]);
 
   const panelNeighbours = useMemo<{ prev: string | null; next: string | null }>(() => {
-    if (!panelId || panelIsGroup) return { prev: null, next: null };
+    if (!panelId) return { prev: null, next: null };
     const here = (inspirations ?? []).filter((c) => c.capturedMs <= TRef.current);
     if (here.length < 2) return { prev: null, next: null };
     const order = [...here].sort(
@@ -5932,7 +5478,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     };
     /* `panelId` and the archive are the whole of it: the neighbours change
        when the archive does or when you step, and nothing else. */
-  }, [panelId, panelIsGroup, inspirations]);
+  }, [panelId, inspirations]);
 
   /**
    * WHICHEVER ROUTE MOVED THE CARD, THE CARET THAT MEANS IT LIGHTS.
@@ -5989,7 +5535,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * travel to somebody else's wall.
    */
   panelArrowRef.current = (dir) => {
-    if (!panelId || panelIsGroup) return false;
+    if (!panelId) return false;
     const id = dir === -1 ? panelNeighbours.prev : panelNeighbours.next;
     /* lit even at the ends, where there is no neighbour to step to and
        `stepToMemory` never runs: the press happened, and a control that
@@ -5999,7 +5545,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (id) stepToMemory(id);
     return true;
   };
-  const panelStepCarets = panelIsGroup ? null : (
+  const panelStepCarets = (
     <>
       {panelNeighbours.prev ? (
         <button
@@ -6223,9 +5769,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       /* the receipt: what this answer taught the loop, said where the act
          happened, worded only as strongly as its enforcing test allows —
          goals/the-legible-loop.md Phase 2 */
-      const receipt = targetId
-        ? say(RECEIPTS.verdictGroup.messageKey)
-        : value === "not_true"
+      /* `RECEIPTS.verdictGroup` — "the room reads who stands where" — was
+         what a `targetId` meant: an answer on a room's SHARED statement
+         rather than on one of your own patterns. Rooms are gone (founder,
+         2026-10-12: "방 없애") and so is that receipt; a `targetId` now only
+         ever names a statement of your own reached through the provenance
+         room, which is the same act as answering it in place. */
+      const receipt = value === "not_true"
           ? say(RECEIPTS.verdictNo.messageKey)
           : say(RECEIPTS.verdictKept.messageKey);
       if (offlineRef.current) return null;
@@ -6298,17 +5848,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     id: null,
     step: "rest",
   });
-  /** THE SAME ASK BEFORE UN-PUBLISHING (founder, 2026-08-27: "similar
-      warning should occur when changing what was public to private as
-      well"). Armed only when the memory is public AND a signal stands on
-      it — the mirror of delete's rule: a warning with nothing to warn
-      about is friction wearing a safety costume. */
-  const [unpublishAsk, setUnpublishAsk] = useState(false);
-  const [publishAsk, setPublishAsk] = useState(false);
+  /* `unpublishAsk` AND `publishAsk` ARE GONE with the Private/Public pair —
+     see the tombstone at the pair's own site. Both were per-card state and
+     both were reset on every change of card, which is the one line that
+     survives: opening a different memory must not inherit the last one's
+     half-answered question. */
   useEffect(() => {
     setForget({ id: null, step: "rest" });
-    setUnpublishAsk(false);
-    setPublishAsk(false);
   }, [panelId]);
 
   /* ============================ ROOMS ============================
@@ -6383,100 +5929,37 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       .catch(() => setReleasingGround(null));
   }, []);
 
-  /** Making a room, joining one, and the state of asking about either. */
-  /* `groupForm` AND `submitGroup` ARE GONE WITH THE SHEET THEY DROVE.
-     Nothing opened that sheet — see the note where it used to render — so
-     this state could only ever be set from inside itself. `createGroup` went
-     with it, and so did the `createGroup: "deleteGroup"` entry in
-     `test/verb-pairs.test.ts` that only passed because this unreachable
-     handler referenced the verb. `joinGroup` survives on the `?join=<code>`
-     path, which never came through here. */
+  /* ═══ WHO IS IN HERE, WHETHER IT IS A ROOM OF MACHINES, AND THE PANEL ══
+     Founder, 2026-10-12: "방 없애" — remove rooms.
 
-  /**
-   * WHO IS IN HERE — and it is the same act as inviting.
-   *
-   * Seeing who is in a room and adding to it are one surface, because they
-   * are one question: who is this with. Loaded when you arrive on a room's
-   * wall, not before — the axis can hold many rooms and none of them owes a
-   * request until you are standing in it.
-   */
-  /* Membership arrives from the frame loop; keep the state setter available
-     across that boundary. */
-  setMembersRef.current = setMembers;
-  /* `membersRef` is declared up beside `viewerIdRef`, above the sim's
-     effect, because the frame loop now reads it too — the room's company is
-     drawn from it. The mirror is written here, where the state lives. */
-  membersRef.current = members;
-  /**
-   * ROOMS THAT ARE MACHINES' ROOMS.
-   *
-   * A room wore the human body and moved on the human's continuous clock no
-   * matter who was in it — so "Our agents", a room of five agents, was
-   * indistinguishable from a room of five people. The whole grammar the world
-   * spent this session learning (a machine hand, quantized position, a
-   * stepped tick, pixelated memories) stopped at the room's door.
-   *
-   * YOU DO NOT COUNT TOWARD THE ANSWER. You are in every room you can see, so
-   * counting yourself would mean no room could ever read as a machine's. What
-   * decides a room's character is who ELSE is standing in it.
-   */
-  const machineGroupsRef = useRef<Set<string>>(new Set());
-  const machineGroups = useMemo(() => {
-    const out = new Set<string>();
-    for (const [groupId, list] of members) {
-      const others = list.filter((m) => m.profileId !== viewerIdRef.current);
-      if (others.length > 0 && others.every((m) => m.type === "agent")) out.add(groupId);
-    }
-    return out;
-  }, [members]);
-  machineGroupsRef.current = machineGroups;
-  const [groupPanel, setGroupPanel] = useState<string | null>(null);
+     `groupForm` and `submitGroup` were already a tombstone here: the
+     make-or-join sheet they drove was never opened by anything, so that
+     state could only be set from inside itself, and `createGroup` went with
+     it. `machineGroups` and `machineGroupsRef` go now, and they are worth a
+     sentence because of what they fixed: a room wore the HUMAN body and
+     moved on the human's continuous clock no matter who was in it, so "Our
+     agents", a room of five agents, was indistinguishable from a room of
+     five people — the whole grammar this world had learned (a machine hand,
+     quantized position, a stepped tick, pixelated memories) stopped at the
+     room's door. The rule was that YOU do not count toward the answer, since
+     you are in every room you can see; what decided a room's character was
+     who ELSE was standing in it. `groupPanel` goes with the panel it opened.
 
-  /**
-   * THIS SPACE'S SETTINGS — keyed by the space, opened from its name.
-   *
-   * Not a modal and not a route: it is a fact about where you are standing, so
-   * it opens beside the name that opened it and closes when you travel. The
-   * key is `spaceKey(space)` rather than a group id because every kind of space
-   * has settings — yours sends you to the account screen, an agent's names
-   * what it is, a group's is the real one.
-   */
-  const [settingsFor, setSettingsFor] = useState<string | null>(null);
+     `setMembersRef` stayed as a setter nothing called, for the same
+     simulation-owns-it reason as `membersRef`; both went on 2026-10-15 when
+     the loop stopped declaring them. */
 
-  /**
-   * A ROOM'S BOARD, ASKED TO READ ITSELF AGAIN.
-   *
-   * `refreshGroupTopOfMind` was the last verb on the flat surface with no way
-   * in from the world. Your own wall has had `Read it again` since the board
-   * existed; a room's board could only go stale and stay stale.
-   *
-   * It is a SEPARATE block rather than the self wall's toolbar opened up to
-   * rooms. Those other verbs — hold this one up, say it in my words, not this
-   * — act on a self entry's id and its `pinned`/`locked` facts; a room's
-   * entries are a different row with a different shape, and letting the whole
-   * strip render for a group would have offered three verbs that would fail
-   * on press. One verb that works beats four that look right.
-   */
-  const [groupReading, setGroupReading] = useState<"rest" | "asking" | "working">("rest");
-  const rereadGroupBoard = useCallback(
-    (groupId: string) => {
-      setGroupReading("working");
-      refreshGroupTopOfMind(groupId)
-        .then(() => {
-          /* The reading is started, not finished — the server writes a new
-             version in the background and the wall picks it up on its own
-             sweep. Saying "reading" rather than "read" is the difference
-             between a receipt and a lie. */
-          setCharSay(say("worldRoomRereading"));
-          setGroupReading("rest");
-        })
-        .catch((err) => {
-          setCharSay(whyFailed(err, say("worldReadingNotStarted")));
-          setGroupReading("rest");
-        });
-    },
-    [whyFailed],
-  );
+
+  /* `rereadGroupBoard` AND `groupReading` ARE GONE. `POST
+     /groups/:id/top-of-mind/refresh` was the last verb on the flat surface
+     with no way in from the world, and this was the way in: one block of its
+     own, deliberately NOT the self wall's toolbar opened up to rooms,
+     because those other verbs — hold this one up, say it in my words, not
+     this — act on a self entry's id and its pinned/locked facts, and a
+     room's entries were a different row with a different shape. One verb
+     that works beat four that look right. The route is gone with rooms
+     (founder, 2026-10-12: "방 없애"); `Read it again` on your own wall is
+     untouched, which is where it started. */
 
   /* ── THE FIVE ACTS ON A PRINCIPLE ──────────────────────────────────────
      Each reloads from the server rather than patching state by hand: rank is
@@ -6569,434 +6052,90 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     [pBusy, principles, whyFailed],
   );
 
-  /* Fetched when the sheet opens, on the wall it is about. A failure is
-     quiet: no keys is a real state, and a banner over a settings sheet for a
-     list nobody asked to see is noise. */
-  useEffect(() => {
-    if (!settingsFor || atWall.kind !== "agent" || offlineRef.current) return;
-    let dead = false;
-    fetchAgentKeys()
-      .then((rows) => {
-        if (!dead) setAgentKeys(rows);
-      })
-      .catch(() => undefined);
-    return () => {
-      dead = true;
-    };
-  }, [settingsFor, atWall]);
+  /* ═══ THE AGENT-KEY EFFECTS AND VERBS ARE GONE — THEY COULD NOT FIRE ══
+     Two effects and two callbacks stood here and every one of them was
+     gated on `settingsFor`, which was permanently `null` (see the tombstone
+     where `SpaceSettings` used to mount for the proof). The fetch that
+     filled the key list never ran; the effect that forgot the minted secret
+     on close never ran; `issueKey` and `revokeKey` had one call site each
+     and it was inside the panel that could not mount.
 
-  /* CLOSING THE SHEET FORGETS THE SECRET. It is shown once by the server's
-     design; holding it in state after the surface that shows it has gone is
-     keeping a credential around for no one to read. */
-  useEffect(() => {
-    if (settingsFor) return;
-    setMinted(null);
-    setRevoking(null);
-  }, [settingsFor]);
+     MINTING HAD ALREADY STOPPED two commits before this one, on the same
+     proof — "stop minting a key nobody can hold, see or revoke" — so what
+     these administered was a credential nothing creates. The routes stand:
+     `POST`, `GET` and `DELETE /agent-keys`, and `lib/middleware.ts` still
+     accepts the keys that exist. The day an agent is reachable from outside
+     again, the listing comes back WITH the minting and WITH a revoke, in
+     one change, which is the whole lesson. */
 
-  const issueKey = useCallback(
-    (profileId: string) => {
-      if (keysBusy) return;
-      setKeysBusy(true);
-      createAgentKey(profileId)
-        .then((key) => {
-          setMinted(key);
-          return fetchAgentKeys().then((rows) => setAgentKeys(rows));
-        })
-        .catch((err) => setCharSay(whyFailed(err, say("worldKeyNotIssued"))))
-        .finally(() => setKeysBusy(false));
-    },
-    [keysBusy, whyFailed],
-  );
+  /* ═══ THE ROLL, THE RENAME BOX AND THE ROOM SO FAR ════════════════════
+     Founder, 2026-10-12: "방 없애" — remove rooms.
 
-  const revokeKey = useCallback(
-    (keyId: string) => {
-      if (keysBusy) return;
-      setKeysBusy(true);
-      revokeAgentKey(keyId)
-        .then(() => {
-          setRevoking(null);
-          return fetchAgentKeys().then((rows) => setAgentKeys(rows));
-        })
-        .catch((err) => setCharSay(whyFailed(err, say("worldKeyStillLive"))))
-        .finally(() => setKeysBusy(false));
-    },
-    [keysBusy, whyFailed],
-  );
+     Three things stood here, all three keyed on standing in a room. The
+     MEMBER FETCH, which loaded the roll on arrival and not before, because
+     the axis could hold many rooms and none of them owed a request until you
+     were in it. The RENAME BOX's state, whose only surface was the panel
+     that could not mount. And THE ROOM SO FAR — a per-room timeline fetched
+     by the same trigger as the roll, because they answered one question at
+     two depths: who is here, and how the room came to hold them. It was
+     refetched on every re-arrival, since a timeline that never moves is a
+     timeline nobody trusts.
 
-  /**
-   * The account drop, top right — the mirror of the space settings top left.
-   * They are mutually exclusive: opening one closes the other, because two
-   * panels hanging off the same bar is a menu bar, which this world does not
-   * have.
-   */
-  /** The rename box, while it is open: null when nobody is renaming. */
-  const [renaming, setRenaming] = useState<{ id: string; text: string; busy: boolean } | null>(
-    null,
-  );
-  /** Two-step confirmations, so a destructive word is never beside its own yes. */
-  useEffect(() => {
-    if (atWall.kind !== "group" || members.has(atWall.id)) return;
-    let dead = false;
-    fetchGroupMembers(atWall.id)
-      .then((rows) => {
-        if (!dead) setMembers((prev) => new Map(prev).set(atWall.id, rows));
-      })
-      .catch(() => undefined);
-    return () => {
-      dead = true;
-    };
-  }, [atWall, members]);
+     `members` and `setMembers` SURVIVED as empty, and only because
+     `canvas/simulation.ts` declared `membersRef` as a required option and
+     drew a room's company from it. Nothing filled it, and it went on
+     2026-10-15 when that file's group branches did. */
+  /* ═══ PROPOSING TO A ROOM, AND WAITING FOR IT TO AGREE ════════════════
+     Founder, 2026-10-12: "방 없애" — remove rooms.
 
-  /**
-   * THE ROOM SO FAR. Fetched with the same trigger as the member list —
-   * standing on the wall — because they answer the same question at two
-   * depths: who is here, and how the room came to hold them. Kept per group
-   * and refetched on re-arrival, since a timeline that never moves is a
-   * timeline nobody trusts.
-   */
-  const [groupTimelines, setGroupTimelines] = useState<Map<string, ApiGroupTimeline>>(
-    () => new Map(),
-  );
-  useEffect(() => {
-    if (atWall.kind !== "group") return;
-    let dead = false;
-    const wallGroupId = atWall.id;
-    fetchGroupTimeline(wallGroupId)
-      .then((timeline) => {
-        if (dead) return;
-        /* the mirror the dial reads: it is derived hundreds of lines above
-           this declaration and cannot reach forward to the state */
-        groupTimelineRef.current.set(wallGroupId, timeline);
-        setGroupPastTick((n) => n + 1);
-        setGroupTimelines((prev) => new Map(prev).set(wallGroupId, timeline));
-      })
-      .catch(() => undefined);
-    return () => {
-      dead = true;
-    };
-  }, [atWall]);
+     A room's board was never edited; it was PROPOSED to and affirmed. That
+     was the canon's rule and it was the only honest one for a shared
+     sentence — one member rewriting what a group believes would be editing
+     other people's minds. So the verb was "put it to them", and the board
+     moved when the room agreed. `propose`, `openProposals`, `proposalRead`,
+     `proposalReceipt`, `proposalTrouble`, `pendingProposalId`,
+     `acceptedVersion`, `loadOpenProposals`, `placeProposal`,
+     `watchAcceptedVersion`, `sendProposal`, `answerProposal`, and the two
+     pollers — one waiting for an accepted proposal to become a version, one
+     refreshing other members' answers while the question was on screen —
+     are all gone, with the five routes that answered them.
 
-  /**
-   * CHANGING WHAT A ROOM BELIEVES.
-   *
-   * A room's board is not edited; it is PROPOSED to and affirmed. That is the
-   * canon's rule and it is the only honest one for a shared statement — one
-   * member rewriting what a group believes would be editing other people's
-   * minds. So the verb here is "put it to them", and the board moves when the
-   * room agrees.
-   */
-  const [propose, setPropose] = useState<{ text: string; busy: boolean } | null>(null);
-  /**
-   * WHAT THE ROOM IS BEING ASKED, AND YOUR ANSWER TO IT.
-   *
-   * A room's board moves by affirmation, so an open proposal is the one thing
-   * in this world that is waiting on OTHER PEOPLE. It is not a notification
-   * and it does not chase you: it sits on that room's wall, and you find it by
-   * being there. Affirming is adding your name; the board changes when the
-   * room's rule for that is met, not when you press.
-   */
-  const [openProposals, setOpenProposals] = useState<Map<string, ApiGroupProposal[]>>(
-    () => new Map(),
-  );
-  const [proposalRead, setProposalRead] = useState<{ groupId: string; phase: "loading" | "ready" | "failed" } | null>(null);
-  const [proposalReceipt, setProposalReceipt] = useState<{ groupId: string; text: string } | null>(null);
-  const [proposalTrouble, setProposalTrouble] = useState<{ groupId: string; text: string } | null>(null);
-  const [pendingProposalId, setPendingProposalId] = useState<string | null>(null);
-  const [acceptedVersion, setAcceptedVersion] = useState<{
-    groupId: string; previousVersion: number | null; acceptedAt: number;
-  } | null>(null);
-  const proposalReadSequence = useRef(0);
-  const loadOpenProposals = useCallback((groupId: string, silent = false) => {
-    const sequence = ++proposalReadSequence.current;
-    if (!silent) setProposalRead({ groupId, phase: "loading" });
-    fetchGroupProposals(groupId)
-      .then((rows) => {
-        if (sequence !== proposalReadSequence.current) return;
-        setOpenProposals((prev) => new Map(prev).set(groupId, rows.filter((row) => row.status === "open")));
-        setProposalRead({ groupId, phase: "ready" });
-      })
-      .catch(() => {
-        if (!silent && sequence === proposalReadSequence.current) setProposalRead({ groupId, phase: "failed" });
-      });
-  }, []);
-  const placeProposal = useCallback((groupId: string, proposal: ApiGroupProposal) => {
-    setOpenProposals((prev) => {
-      const next = (prev.get(groupId) ?? []).filter((row) => row.id !== proposal.id);
-      if (proposal.status === "open") next.unshift(proposal);
-      return new Map(prev).set(groupId, next);
-    });
-  }, []);
-  const watchAcceptedVersion = useCallback((groupId: string) => {
-    const cachedVersion = groupCacheRef.current.get(groupId)?.data?.top?.topOfMind?.version;
-    const timelineVersion = groupTimelines.get(groupId)?.versions[0]?.version;
-    groupCacheRef.current.delete(groupId);
-    setAcceptedVersion({ groupId, previousVersion: cachedVersion ?? timelineVersion ?? null, acceptedAt: Date.now() });
-    setProposalReceipt({ groupId, text: say("worldRoomProposalAccepted") });
-  }, [groupTimelines, locale]);
-  useEffect(() => {
-    if (atWall.kind !== "group") return;
-    loadOpenProposals(atWall.id);
-  }, [atWall, groupPanel, loadOpenProposals]);
+     IT WAS THE ONLY PLACE IN THIS PRODUCT THAT WAITED ON OTHER PEOPLE, and
+     that is worth recording rather than losing: an open proposal was not a
+     notification and did not chase you, it sat on the room's wall and you
+     found it by being there. If the pulse ever needs that shape again, this
+     is what it looked like — affirming was adding your name, and the board
+     changed when the room's rule for that was met, not when you pressed. */
 
-  const sendProposal = useCallback((groupId: string) => {
-    if (!propose || propose.busy) return;
-    const body = propose.text.trim();
-    if (body === "") return;
-    setProposalTrouble(null);
-    setPropose({ ...propose, busy: true });
-    createGroupProposal(groupId, { kind: "add_entry", body })
-      .then((proposal) => {
-        placeProposal(groupId, proposal);
-        setProposalRead({ groupId, phase: "ready" });
-        if (proposal.status === "accepted") watchAcceptedVersion(groupId);
-        else setProposalReceipt({ groupId, text: say("worldRoomProposalWaiting") });
-        setPropose(null);
-      })
-      .catch((err: unknown) => {
-        setProposalTrouble({ groupId, text: whyFailed(err, say("worldRoomProposalActionFailed")) });
-        setPropose((current) => current ? { ...current, busy: false } : current);
-      });
-  }, [propose, placeProposal, watchAcceptedVersion, whyFailed, locale]);
 
-  const answerProposal = useCallback(async (groupId: string, id: string, yes: boolean) => {
-    if (pendingProposalId === id) return;
-    setPendingProposalId(id);
-    setProposalTrouble(null);
-    try {
-      let proposal: ApiGroupProposal;
-      let accepted = false;
-      if (yes) {
-        const result = await affirmGroupProposal(groupId, id);
-        proposal = result.proposal;
-        accepted = result.accepted;
-      } else proposal = await declineGroupProposal(groupId, id);
-      placeProposal(groupId, proposal);
-      if (accepted) watchAcceptedVersion(groupId);
-      else setProposalReceipt({ groupId, text: say("worldRoomAnswerSaved") });
-    } catch (err) {
-      setProposalTrouble({ groupId, text: whyFailed(err, say("worldRoomProposalActionFailed")) });
-    } finally {
-      setPendingProposalId(null);
-    }
-  }, [pendingProposalId, placeProposal, watchAcceptedVersion, whyFailed, locale]);
+  /* ═══ THE FOUR VERBS ON A ROOM, AND THE PANEL THAT HELD THEM ══════════
+     Founder, 2026-10-12: "방 없애" — remove rooms.
 
-  useEffect(() => {
-    if (!acceptedVersion) return;
-    let disposed = false;
-    let timer: number | undefined;
-    let checks = 0;
-    const check = async () => {
-      checks += 1;
-      try {
-        const top = await fetchGroupTopOfMind(acceptedVersion.groupId);
-        if (disposed) return;
-        const version = top.topOfMind;
-        const arrived = version && (acceptedVersion.previousVersion !== null
-          ? version.version > acceptedVersion.previousVersion
-          : Date.parse(version.createdAt) >= acceptedVersion.acceptedAt);
-        if (arrived) {
-          groupCacheRef.current.delete(acceptedVersion.groupId);
-          const loaded = await loadGroupRef.current(acceptedVersion.groupId, true);
-          if (disposed) return;
-          if (loaded) {
-            applyChromeRef.current(TRef.current);
-            fetchGroupTimeline(acceptedVersion.groupId).then((timeline) => {
-              groupTimelineRef.current.set(acceptedVersion.groupId, timeline);
-              setGroupPastTick((value) => value + 1);
-              setGroupTimelines((prev) => new Map(prev).set(acceptedVersion.groupId, timeline));
-            }).catch(() => undefined);
-            setProposalReceipt({ groupId: acceptedVersion.groupId, text: say("worldRoomVersionArrived") });
-            setAcceptedVersion(null);
-            return;
-          }
-        }
-      } catch { /* the accepted proposal remains; another read can recover */ }
-      if (disposed) return;
-      if (checks < 24) timer = window.setTimeout(() => void check(), 5_000);
-      else {
-        setProposalReceipt({ groupId: acceptedVersion.groupId, text: say("worldRoomVersionDelayed") });
-        setAcceptedVersion(null);
-      }
-    };
-    timer = window.setTimeout(() => void check(), 2_000);
-    return () => { disposed = true; window.clearTimeout(timer); };
-  }, [acceptedVersion, locale]);
+     `leaving` / `closing` / `removing` / `renaming`, `groupTrouble`,
+     `leaveThisGroup`, `renameThisGroup`, `closeThisGroup` and `removeMember`
+     all stood here, every one of them correct and every one of them
+     unreachable. They were reached only through `SpaceSettings`, and that
+     panel could never mount — `setSettingsFor` had three writers and all
+     three wrote `null`, because its opener went with `.jar-here-list` on
+     2026-10-09.
 
-  /* While the room's question is open on screen, other members' answers can
-     arrive without this viewer moving. Refresh the answers quietly and bring
-     a newly written version into the same wall; the panel does not flash back
-     through loading on every check. */
-  useEffect(() => {
-    if (!groupPanel || atWall.kind !== "group" || atWall.id !== groupPanel || selectedGroupStop) return;
-    let disposed = false;
-    let timer: number | undefined;
-    const refresh = async () => {
-      loadOpenProposals(groupPanel, true);
-      try {
-        const top = await fetchGroupTopOfMind(groupPanel);
-        if (disposed) return;
-        const cachedTop = groupCacheRef.current.get(groupPanel)?.data?.top ?? null;
-        const knownVersion = cachedTop?.topOfMind?.version
-          ?? groupTimelineRef.current.get(groupPanel)?.versions[0]?.version ?? null;
-        if (groupReadingChanged(cachedTop, top)) {
-          groupCacheRef.current.delete(groupPanel);
-          if (groupReadingRestricts(cachedTop, top)) clearGroupDisplay(groupPanel);
-          const loaded = await loadGroupRef.current(groupPanel, true);
-          if (disposed) return;
-          if (loaded) {
-            applyChromeRef.current(TRef.current);
-            fetchGroupTimeline(groupPanel).then((timeline) => {
-              groupTimelineRef.current.set(groupPanel, timeline);
-              setGroupPastTick((value) => value + 1);
-              setGroupTimelines((prev) => new Map(prev).set(groupPanel, timeline));
-            }).catch(() => undefined);
-            if (knownVersion !== null && top.topOfMind && top.topOfMind.version > knownVersion) {
-              setProposalReceipt({ groupId: groupPanel, text: say("worldRoomVersionArrived") });
-            }
-          }
-        }
-      } catch { /* last known reading stays in place */ }
-      if (!disposed) timer = window.setTimeout(() => void refresh(), 10_000);
-    };
-    timer = window.setTimeout(() => void refresh(), 10_000);
-    return () => { disposed = true; window.clearTimeout(timer); };
-  }, [groupPanel, atWall, selectedGroupStop?.at, loadOpenProposals, locale, clearGroupDisplay]);
+     WHAT IS WORTH KEEPING FROM THE ARGUMENT, since it is the one part of
+     this that generalises. `e2e:when-it-fails` had pressed each of these
+     verbs against a 500 on the route it rests on and asked whether anything
+     on screen said so. Three of the four said nothing: rename was
+     byte-identical before and after, and leave and close MURMURED — their
+     armed confirm collapsed back to its resting word, which is exactly what
+     pressing `stay` does. A collapsing confirm is worse than silence: it is
+     the shape of a successful cancel. The cure was prose beside the verb,
+     keyed BY VERB so it lands where the press did, since an error at the top
+     of a panel with four destructive words in it does not say which one
+     refused. That rule outlives rooms — it is why the memory panel's delete
+     says what is still true — and `whyFailed` is still how every surface
+     here does it.
 
-  /** Leaving is destructive and irreversible, so it asks once, in words. */
-  const [leaving, setLeaving] = useState<string | null>(null);
-  const [closing, setClosing] = useState<string | null>(null);
-  const [removing, setRemoving] = useState<string | null>(null);
-  /**
-   * WHAT THE ROOM'S PANEL SAYS WHEN THE SERVER REFUSES.
-   *
-   * Found by `e2e:when-it-fails`, which presses each act against a 500 on the
-   * one route it rests on and asks whether anything on screen said so. Three
-   * of this panel's four verbs said nothing at all:
-   *
-   *   rename   SILENT   — the screen was byte-identical before and after.
-   *   leave    MURMURS  — the confirm collapsed back to `leave this room`,
-   *                       which is exactly what pressing `stay` does.
-   *   close    MURMURS  — the same, back to `close this room`.
-   *
-   * A collapsing confirm is worse than silence: it is the shape of a
-   * successful cancel. The person pressed the yes, watched the panel agree,
-   * and the room is still there — with nothing anywhere to say which of those
-   * two things happened.
-   *
-   * The cure is the one the memory panel already proved: prose beside the
-   * verb, saying what is still true. Keyed by verb so it lands where the
-   * press did — an error at the top of a panel with four destructive words in
-   * it does not tell you which one refused.
-   */
-  const [groupTrouble, setGroupTrouble] = useState<GroupTrouble | null>(null);
-  const leaveThisGroup = useCallback(
-    (groupId: string) => {
-      setGroupTrouble(null);
-      leaveGroup(groupId)
-        .then(() => {
-          setGroups((prev) => prev.filter((g) => g.id !== groupId));
-          setGroupPanel(null);
-          setLeaving(null);
-          simApiRef.current?.travel(-1);
-        })
-        .catch((err: unknown) => {
-          /* DISARM AND SAY WHY, IN THAT ORDER. Leaving the confirm armed would
-             be the friendlier-looking choice and the wrong one: the armed word
-             is `leave — your statements come down`, and a person who reads the
-             failure and presses it again should be re-arming deliberately
-             rather than finding their finger already on the yes. */
-          setLeaving(null);
-          setGroupTrouble({ verb: "leave", text: whyFailed(err, say("worldStillInRoomYou")) });
-        });
-    },
-    [whyFailed],
-  );
-
-  /**
-   * MAINTAINING A ROOM — three verbs the server has always answered.
-   *
-   * `PATCH /groups/:id`, `DELETE /groups/:id` and
-   * `DELETE /groups/:id/members/:profileId` are implemented and owner-gated on
-   * the server, and the client had a function for none of them: the only group
-   * verb it could perform was leaving. So a room could be made and joined and
-   * then never renamed, never tidied and never closed.
-   *
-   * Each one is optimistic in the direction that is safe. A rename shows
-   * immediately because the worst case is a word reverting. Closing a room and
-   * removing a member are SERVER-FIRST — the inverse — because the light must
-   * not go out until the database has agreed, which is the same rule the
-   * memory panel's delete already follows.
-   */
-  const renameThisGroup = useCallback(
-    (groupId: string, name: string) => {
-      const trimmed = name.trim();
-      if (!trimmed) return;
-      setGroupTrouble(null);
-      setRenaming((cur) => (cur ? { ...cur, busy: true } : cur));
-      renameGroup(groupId, trimmed)
-        .then((updated) => {
-          setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, ...updated } : g)));
-          setRenaming(null);
-        })
-        .catch((err: unknown) => {
-          /* THE FORM STAYS OPEN AND KEEPS THE TYPED WORDS. This one measured
-             as SILENT — not "quiet", byte-identical — because clearing `busy`
-             is the whole of what used to happen and `busy` is invisible on a
-             request that fails in under a second. The words are still in the
-             box, so the recovery is one press; what was missing was any way to
-             know a press was needed. */
-          setRenaming((cur) => (cur ? { ...cur, busy: false } : cur));
-          setGroupTrouble({ verb: "rename", text: whyFailed(err, say("worldNameDidNotStick")) });
-        });
-    },
-    [whyFailed],
-  );
-
-  const closeThisGroup = useCallback(
-    (groupId: string) => {
-      setGroupTrouble(null);
-      deleteGroup(groupId)
-        .then(() => {
-          setGroups((prev) => prev.filter((g) => g.id !== groupId));
-          setClosing(null);
-          setSettingsFor(null);
-          /* the column is gone, so stop standing in it */
-          simApiRef.current?.travel(-1);
-        })
-        .catch((err: unknown) => {
-          setClosing(null);
-          setGroupTrouble({ verb: "close", text: whyFailed(err, say("worldRoomStillOpen")) });
-        });
-    },
-    [whyFailed],
-  );
-
-  const removeMember = useCallback(
-    (groupId: string, profileId: string) => {
-      setGroupTrouble(null);
-      removeGroupMember(groupId, profileId)
-        .then(async () => {
-          const fresh = await fetchGroupMembers(groupId).catch(() => null);
-          if (fresh) {
-            membersRef.current.set(groupId, fresh);
-            setMembers(new Map(membersRef.current));
-          }
-          setRemoving(null);
-        })
-        .catch((err: unknown) => {
-          /* NOT WALKED by `e2e:when-it-fails` — a second member is a second
-             account and an invite round trip, which the walk does not do. It
-             is fixed here anyway because it is the same handler shape as the
-             three that WERE measured, written by the same hand on the same
-             day, and leaving it silent on the strength of not having been
-             looked at is how the other three got this way. */
-          setRemoving(null);
-          setGroupTrouble({ verb: "remove", text: whyFailed(err, say("worldStillInRoomThey")) });
-        });
-    },
-    [whyFailed],
-  );
+     The routes are gone too: `PATCH /groups/:id`, `DELETE /groups/:id` and
+     `DELETE /groups/:id/members/:profileId` were implemented, owner-gated,
+     and are no longer served. */
 
   /** read by the loop, which is created once and must not close over stale state */
 
@@ -7223,51 +6362,41 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   useEffect(() => {
     simApiRef.current?.wake();
   }, [readingLit]);
-  /** The invite link for a room, and whether it has just been copied. */
-  const [copied, setCopied] = useState<string | null>(null);
-  const copyInvite = useCallback((g: ApiGroupSummary) => {
-    /* THE LINK IS THE INVITE. No email to send, no pending state to track and
-       no notification channel we do not have — you copy it and put it wherever
-       you already talk to these people. Anyone holding it can walk in, which
-       is the one thing to know about it. */
-    const url = `${publicWebOrigin()}/?join=${encodeURIComponent(g.joinCode)}`;
-    navigator.clipboard
-      ?.writeText(url)
-      .then(() => {
-        setCopied(g.id);
-        window.setTimeout(() => setCopied((c) => (c === g.id ? null : c)), 2600);
-      })
-      .catch(() => undefined);
-  }, []);
+  /* `copied` AND `copyInvite` ARE GONE. The invite WAS the link — no email
+     to send, no pending state to track, no notification channel this product
+     has — you copied it and put it wherever you already talk to these
+     people, and anyone holding it could walk in, which was the one thing to
+     know about it. Its only control was on `SpaceSettings`, which could not
+     mount, so by the end the one reader of `ApiGroupSummary.joinCode` in the
+     whole product was the dev fixture. Gone with rooms (founder,
+     2026-10-12: "방 없애"). */
 
-  /**
-   * ARRIVING ON A LINK — AND BEING ASKED, WHICH IS NEW.
-   *
-   * This used to join outright. The reasoning was sound as far as it went:
-   * someone sent you a link, you opened it, and you should be in the room
-   * rather than looking at a form asking you to paste what you just clicked.
-   *
-   * What it missed is what joining DOES. A group's ground is its members'
-   * public inspirations and its wall is their shared signals, so being in one
-   * is a disclosure — your public memories become visible to everyone in it,
-   * and your name joins its roll. Clicking a link is not consent to that. Any
-   * page, any redirect, any message containing that URL could enrol you, and
-   * the first you would know is finding yourself in a room.
-   *
-   * So the link still does the work — you never type a code — but you are
-   * asked before anything is disclosed. One tap, and it is yours rather than
-   * the sender's.
-   *
-   * The code leaves the URL immediately either way, so a reload cannot re-ask
-   * and the code does not sit in history or in a referrer header.
-   */
-  const [pendingJoin, setPendingJoin] = useState<string | null>(null);
-  useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get("join");
-    if (!code) return;
-    window.history.replaceState({}, "", window.location.pathname);
-    setPendingJoin(code);
-  }, []);
+  /* ═══ `?join=<code>` NO LONGER OPENS ANYTHING ═════════════════════════
+     Founder, 2026-10-12: "방 없애" — remove rooms.
+
+     This read the code out of the query, wiped it from the URL immediately
+     so a reload could not re-ask and so it could not sit in history or in a
+     referrer header, and put up a consent sheet.
+
+     THE REASONING FOR THAT SHEET IS THE BEST THING ROOMS PRODUCED and it is
+     kept here deliberately, because the rule generalises to anything this
+     product ever does with a link. Joining used to happen OUTRIGHT: someone
+     sent you a link, you opened it, and you were in the room rather than
+     looking at a form asking you to paste what you had just clicked. What
+     that missed is what joining DOES — a room's ground was its members'
+     public inspirations and its wall their shared signals, so being in one
+     was a DISCLOSURE: your public memories became visible to everyone in it
+     and your name joined its roll. Clicking a link is not consent to that.
+     Any page, any redirect, any message containing that URL could enrol
+     you, and the first you would know of it was finding yourself in a room.
+     So the link still did the work and you were still asked before anything
+     was disclosed.
+
+     WHY THE DOOR CLOSES ANYWAY. There was nothing on the other side of it to
+     leave. Rooms kept their way in and lost every way out when
+     `.jar-here-list` went on 2026-10-09 — see the tombstone at the sheet's
+     old render site for the proof — and a consent sheet for a one-way door
+     is a politeness, not a choice. */
 
   /* ═══ EVERY SHEET CLOSES THE SAME TWO WAYS ═══
      The founder ruled it about the make-another-place sheet ("if click
@@ -7277,28 +6406,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      the way out of this one is. See `lib/dismiss.ts` for why pointerdown and
      why Escape stops propagating.
 
-     IT WAS FIVE AND IT IS THREE, which is the useful part of this note now.
-     The account sheet became a card under the settings cog that closes from
-     inside the top bar, and the antechamber moved to `pages/Profile` as a
-     `DialogSurface` that owns its own dismissal. Both left WITHOUT this
-     comment noticing, which is the argument for the hook rather than against
-     it: each surface took its way out with it, and nothing had to be
-     remembered here. The three that remain are a room's settings, the join
-     sheet, and a statement's provenance. */
-  const closeSettings = useCallback(() => setSettingsFor(null), []);
-  const closeJoin = useCallback(() => setPendingJoin(null), []);
+     IT WAS FIVE, THEN THREE, AND IT IS ONE — and the count keeps falling for
+     the reason that argues FOR the hook rather than against it: each surface
+     takes its own way out with it and nothing has to be remembered here. The
+     account sheet became a card under the settings cog that closes from
+     inside the top bar; the antechamber moved to `pages/Profile` as a
+     `DialogSurface` that owns its dismissal; both left without this comment
+     noticing. A ROOM'S SETTINGS AND THE JOIN SHEET went on 2026-10-12 with
+     rooms themselves (founder: "방 없애") — the first could never mount, and
+     the second was the way into a place with no way out. What remains is a
+     statement's provenance, which is reached from the poster and dismissed
+     by pressing away from it. */
   const closeProv = useCallback(() => setProv(null), []);
-  useDismissAway(settingsFor !== null, closeSettings, KEEP_SHEET);
-  useDismissAway(pendingJoin !== null, closeJoin, KEEP_SHEET);
   useDismissAway(prov !== null, closeProv, KEEP_PROV);
-  const acceptJoin = useCallback(() => {
-    if (!pendingJoin) return;
-    const code = pendingJoin;
-    setPendingJoin(null);
-    joinGroup(code)
-      .then((r) => setGroups((prev) => [r.group, ...prev.filter((x) => x.id !== r.group.id)]))
-      .catch(() => undefined);
-  }, [pendingJoin]);
 
   /**
    * EDITING, AND THE ONE RULE THAT GOVERNS ALL THREE LAYERS.
@@ -7419,20 +6539,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * The orb does not pop: it leaves the way anything leaves this world, and
    * the panel closes with it.
    */
-  /**
-   * Open a memory to the rooms this account is in, or close it again.
-   *
-   * Optimistic on the way out and corrected on failure: the light under a
-   * memory should answer a press immediately, and the only cost of being
-   * briefly wrong is a word that flips back. The server is the authority on
-   * what other people can see either way — nothing here filters anything.
-   */
-  /* the detail is authoritative once it lands; until then the field's own
-     copy carries it, so the word is right from the first frame it is shown */
-  const panelIsPublic =
-    panel?.detail?.isPublic ??
-    (inspirations ?? []).find((c) => c.id === (panelBall?.sigId ?? panelId))?.isPublic ??
-    false;
+  /* `panelIsPublic` IS GONE TOO. It resolved whether this memory was open to
+     the rooms this account was in, preferring the detail once it landed and
+     falling back to the archive's own copy so the word was right from the
+     first frame — and it was the last reader in the product of
+     `Inspiration.isPublic`, which is the last reader of
+     `inspirations.visibility`. The control it fed was removed on 2026-10-12
+     with rooms; the column and everything stored in it are deliberately
+     untouched. See the tombstone at the control's site in the card's head. */
   /**
    * THE MEMORY'S OWN WORDS ARE THE EDITOR.
    *
@@ -7469,7 +6583,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
   const beginPanelEdit = useCallback(
     (ev: ReactMouseEvent<HTMLParagraphElement>) => {
-      if (!panelId || panelIsGroup || !panelCanReflect || editing.open) return;
+      if (!panelId || editing.open) return;
       /* THE CARET GOES WHERE THE FINGER WENT. Without this the press lands
          you at the end of a page of text and you scroll back to the sentence
          you meant — which is the same "find your place again" cost the
@@ -7498,53 +6612,30 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         panel?.detail ? panel.detail.text : panelBall?.textPreview ?? "",
       );
     },
-    [panelId, panelIsGroup, panelCanReflect, editing, panel, panelBall],
+    [panelId, editing, panel, panelBall],
   );
 
-  const [publishing, setPublishing] = useState(false);
-  const togglePublic = useCallback(() => {
-    const id = panelBall?.sigId ?? panelId;
-    if (!id || publishing) return;
-    const next = panelIsPublic ? "private" : "public";
-    setPublishing(true);
-    updateInspiration(id, { visibility: next })
-      .then(() => {
-        sourceListMutationRef.current += 1;
-        const isPublic = next === "public";
-        setInspirations((cur) =>
-          (cur ?? []).map((c) => (c.id === id ? { ...c, isPublic } : c)),
-        );
-        /* AND THE DETAIL, WHICH IS WHAT THE WORD ACTUALLY READS.
-           `panelIsPublic` takes `panel.detail.isPublic` FIRST and falls back
-           to the archive — "the detail is authoritative once it lands", which
-           it is, and nothing here updated it. So the request went out, the
-           server changed the row, the archive was corrected, and the word did
-           not move, because the stale detail kept winning (founder,
-           2026-08-25: "private doesn't switch to public"). The detail lands
-           the instant the card opens, so this was every press after the first
-           frame — which is every press.
+  /* ═══ `togglePublic` AND `publishing` ARE GONE ══════════════════════════
+     Founder, 2026-10-12: remove the memory's private/public toggle with
+     rooms.
 
-           Both copies, because both are read: the ref is what a re-open
-           serves from, and the state is what this render is showing. */
-        const cached = detailsRef.current.get(id);
-        if (cached) detailsRef.current.set(id, { ...cached, isPublic });
-        setPanel((cur) =>
-          cur && cur.id === panelId && cur.detail
-            ? { ...cur, detail: { ...cur.detail, isPublic } }
-            : cur,
-        );
-        /* it went out to people, or it came home */
-        simApiRef.current?.acknowledge(isPublic ? "shared" : "touch");
-      })
-      .catch((err: unknown) => {
-        /* left as it was: the word is the state, so an unchanged word is an
-           honest report that nothing moved — but silence about WHY is not,
-           and this one is a privacy control */
-        setMouthNote(whyFailed(err, say("worldVisibilityUnchanged")));
-        if (showsDebug()) console.error("[waka] visibility change failed:", err);
-      })
-      .finally(() => setPublishing(false));
-  }, [panelBall, panelId, panelIsPublic, publishing]);
+     It PATCHed `visibility` and then corrected three copies of the flag, and
+     the reason it had to correct three is worth keeping where the next
+     optimistic write will be written: `panelIsPublic` read
+     `panel.detail.isPublic` FIRST and fell back to the archive. So an earlier
+     version sent the request, the server changed the row, the archive was
+     corrected — and the word on screen did not move, because the stale DETAIL
+     kept winning (founder, 2026-08-25: "private doesn't switch to public").
+     The detail lands the instant a card opens, so that was every press after
+     the first frame, which is every press. The fix was to write the archive,
+     the cached detail (`detailsRef`, which is what a re-open serves from) and
+     the live panel state together. A failure said WHY, in the mouth, because
+     a privacy control going quiet is not an honest report.
+
+     `panelIsPublic` ITSELF STAYS, and nothing renders it: it is the one
+     remaining reader of `Inspiration.isPublic`, which is the one remaining
+     reader of `inspirations.visibility`. The column is deliberately
+     untouched — see the tombstone at the control's own site. */
 
   const inspirationRemovedFromView = useCallback((serverId: string, visualId = serverId) => {
     sourceListMutationRef.current += 1;
@@ -7591,8 +6682,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   /** Open the answers already on this save. A read, with nothing to write. */
   const openReflections = useCallback(() => {
     if (!panelId || !panelBall) return;
-    /* another member's save is theirs, and so are its answers */
-    if (panelBall.col !== undefined && !panelBall.own) return;
+    /* `if (panelBall.col !== undefined && !panelBall.own) return;` STOOD HERE
+       — another member's save is theirs, and so are its answers. `col` and
+       `own` are set by nothing now (the room orb went on 2026-10-12; see the
+       tombstone in `space/inspiration/orb.ts`), so the first half read
+       `undefined !== undefined` on every orb and the guard could never fire.
+       Every save this panel can open is yours or your agent's. */
     setReflectOpen(true);
     viewNavigationRef.current.write({ ...observedRef.current, inspirationId: panelBall.sigId ?? panelId, reflectionId: 'open' }, { observed: true });
   }, [panelId, panelBall]);
@@ -7696,14 +6791,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       viewNavigation.own.current = null; appliedViewKey.current = viewNavigation.key; restoringViewRef.current = false; return;
     }
     const target = desired && (desired.wallId === storageScope?.profileId ? walls.find((wall) => wall.kind === 'self') : resolveViewWall(desired, walls));
-    if (!target && desired?.wallId && (agentRoster === null || !groupRosterReady)) return;
+    if (!target && desired?.wallId && agentRoster === null) return;
     if (!target || !desired) { setNavigationProblem('unavailable'); appliedViewKey.current = viewNavigation.key; restoringViewRef.current = false; return; }
     const serial = ++viewRequest.current, key = viewNavigation.key, controller = new AbortController();
     let timer = 0, stage = 'wall', loading = false, canceled = false;
     const current = () => !canceled && !controller.signal.aborted && viewRequest.current === serial && latestViewKey.current === key;
     setNavigationProblem(null);
     linkedReflectionRef.current = null;
-    setReflectOpen(false); setSelectedId(null); setDetachedInspiration(null); setGroupPanel(null);
+    setReflectOpen(false); setSelectedId(null); setDetachedInspiration(null);
     setSeek(desired.find ? viewNavigation.query : null);
     setPick(desired.principleId);
     setMouthOpen(desired.compose);
@@ -7718,7 +6813,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         stage = 'section';
         sim.windTo(desired.at ?? Date.now()); parkedRef.current = desired.at; setParkedAt(desired.at); setAtNow(desired.at === null);
         applyChromeRef.current(desired.at ?? Date.now());
-        if (target.kind === 'group') { setStanding(desired.memberId); sim.standIn(desired.memberId); }
       }
       if (actual.section !== desired.section) {
         if (desired.section === 'field') sim.toGround(); else if (desired.section === 'sky') sim.toSky(); else sim.toTop();
@@ -7729,24 +6823,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       loading = true;
       try {
         let detail: InspirationDetail | null = null, ball: Ball;
-        if (target.kind === 'group') {
-          if (!await loadGroupRef.current(target.id, true)) throw new Error('Room unavailable');
-          if (!current()) return;
-          const lease = groupCacheRef.current.get(target.id)?.leaseToken;
-          const row = await fetchGroupInspiration(target.id, desired.inspirationId, controller.signal);
-          if (!current()) return;
-          if (groupCacheRef.current.get(target.id)?.leaseToken !== lease) throw new Error('Room changed');
-          ball = makeGroupInspirationBall(row, target, viewerIdRef.current);
-          setStanding(row.ownerProfileId === viewerIdRef.current ? null : row.ownerProfileId);
-          sim.standIn(row.ownerProfileId === viewerIdRef.current ? null : row.ownerProfileId);
-          if (ball.own) detail = await loadInspiration(row.id, storageScope?.profileId, controller.signal);
-          else if (desired.reflectionId) throw new Error('Private reflection');
-        } else {
-          detail = await loadInspiration(desired.inspirationId, target.kind === 'agent' ? target.id : storageScope?.profileId, controller.signal);
-          if (!current()) return;
-          ball = makeBall(seedOf(detail, skyRef.current.citations, skyRef.current.signals, skyRef.current.posterSignalIds, skyRef.current.principleSignalIds));
-          ball.sigId = detail.id;
-        }
+        /* A ROOM WAS THE OTHER BRANCH, and it was the careful one: it forced
+           a fresh verified read, remembered that read's LEASE TOKEN, fetched
+           the one memory, and threw `Room changed` if the token had moved
+           underneath it — because resolving a link into somebody else's
+           ground must not succeed against a snapshot whose permission has
+           since been revoked. It also refused a `?reflection=` on a memory
+           that was not yours, since a reflection is private even where the
+           memory it hangs on is shared. Both are gone with rooms (founder,
+           2026-10-12: "방 없애"), and with them the only path in this file
+           that ever resolved a link to a memory this account does not own. */
+        detail = await loadInspiration(desired.inspirationId, target.kind === 'agent' ? target.id : storageScope?.profileId, controller.signal);
+        if (!current()) return;
+        ball = makeBall(seedOf(detail, skyRef.current.citations, skyRef.current.signals, skyRef.current.posterSignalIds, skyRef.current.principleSignalIds));
+        ball.sigId = detail.id;
         if (!current()) return;
         if (desired.reflectionId && desired.reflectionId !== 'open' && !detail?.reflections.some((row) => row.id === desired.reflectionId && !row.skipped)) throw new Error('Reflection unavailable');
         if (detail) detailsRef.current.set(detail.id, detail);
@@ -7759,7 +6849,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     };
     void run();
     return () => { canceled = true; controller.abort(); window.clearTimeout(timer); };
-  }, [viewNavigation.key, phase, walls, agentRoster, groupRosterReady]);
+  }, [viewNavigation.key, phase, walls, agentRoster]);
   useEffect(() => {
     const linked = linkedReflectionRef.current;
     if (!linked || linked.panelId !== panelId) return;
@@ -7769,7 +6859,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const selectedViewBall = selectedId ? ballsRef.current?.byId.get(selectedId) ?? (detachedInspiration?.ball.id === selectedId ? detachedInspiration.ball : null) : null;
   const observedView: ViewLocation = { ...EMPTY_VIEW, wallId: atWall.kind === 'self' ? null : atWall.id,
     label: atWall.kind === 'self' ? undefined : (walls.find((wall) => wall.id === atWall.id)?.name ?? atWall.name),
-    section: inSky ? 'sky' : inField ? 'field' : 'top', at: parkedAt, memberId: atWall.kind === 'group' ? standing : null,
+    /* `memberId` was whose ground you were standing in on a room's wall, so
+       the address was bookmarkable down to the member. There are no rooms
+       and no members; `lib/view-location.ts` still parses the field, which
+       is deliberate — see its own note on reading old links. */
+    section: inSky ? 'sky' : inField ? 'field' : 'top', at: parkedAt, memberId: null,
     inspirationId: selectedViewBall?.sigId ?? selectedId,
     reflectionId: reflectOpen ? (requestedViewRef.current?.inspirationId === (selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
     find: seek !== null, compose: mouthOpen,
@@ -7878,59 +6972,39 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                other wall shows what it holds NOW */
             const c = here ? chrome : wallChromeNow.get(key) ?? null;
             /*
-             * A ROOM'S WORDS APPEAR WHEN THEY ARE KNOWN, NOT WHEN YOU ARRIVE.
+             * AN AGENT WAITS FOR ITS BUNDLE — #281's ruling, kept whole.
+             * Memory is fetched per wall, so an agent's wall genuinely has
+             * nothing to draw until its bundle lands. Your own is always
+             * ready: its material is the archive this page is built from.
              *
-             * The room's half read `wokenGroups.has(w.id)`, and the only thing
-             * that ever adds to that set runs on ARRIVAL. So a room's whole
-             * headquarters — eyebrow, claim, forming line — could not exist
-             * until the character got there, and then appeared. Founder,
-             * twice: "if new content, then have it ready before i get there"
-             * (2026-08-27) and "dont make the text be there and reload when
-             * character goes to the room. keep it rendered and dont rerender
-             * when character arrives" (2026-08-30) — the second time prefaced
-             * with "i think i already asked u to fix this", and they had. The
-             * first fix answered which words ANIMATE on a return; this is
-             * whether the block is there at all while you walk.
-             *
-             * It is the same ruling already made for the two things beside it.
-             * The sky's sentence stands in the wall's own column so travelling
-             * up only brings it into frame; a room's company pre-exists arrival
-             * for the same reason. The world never materialises because you
-             * looked at it. The room's claim was the last thing still doing so.
-             *
-             * `c` is that wall's chrome — `wallChromeNow` for any wall you are
-             * not standing on, filled from the ref the room's fetch writes, and
-             * that fetch starts the moment travel toward the room begins. So
-             * the words are usually there well before the character is, which
-             * is exactly what was asked for. Until they are, there is nothing
-             * to draw, which is honest: the room has not said anything yet.
-             *
-             * AND AN AGENT WAITS FOR ITS BUNDLE — #281's ruling, kept whole.
-             * Memory is fetched per wall now, so an agent's wall genuinely has
-             * nothing to draw until its bundle lands, and that is a different
-             * question from the room's. This line carries both: self is always
-             * ready, a room is ready when its words are KNOWN, an agent when
-             * its memory has arrived. An earlier draft of this merge said
+             * A ROOM USED TO BE THE THIRD ANSWER, and it was the hard one.
+             * Its half read `c !== null && !failedGroups.has(w.id)` — the
+             * room is ready when its WORDS ARE KNOWN — and that wording was
+             * fought for twice. The founder: "if new content, then have it
+             * ready before i get there" (2026-08-27), then "dont make the
+             * text be there and reload when character goes to the room"
+             * (2026-08-30), prefaced with "i think i already asked u to fix
+             * this", and they had. An earlier draft of that merge said
              * `w.kind !== "group"` and would have called every agent ready
-             * before it had anything — my rewrite silently undoing theirs.
+             * before it had anything. The ruling survives for the two kinds
+             * that remain; the room it was written about does not (founder,
+             * 2026-10-12: "방 없애").
              *
              * THE GROUND IS NOT THIS. It still pours on arrival, and should:
              * a ground filling as you get there is the world answering a move
              * you made. A sentence appearing because you looked is not.
              */
             const ready =
-              w.kind === "self" ||
-              (w.kind === "group" ? c !== null && !failedGroups.has(w.id) : (agents ?? []).some((a) => a.agent.id === w.id));
+              w.kind === "self" || (agents ?? []).some((a) => a.agent.id === w.id);
             return (
               <div
                 key={key}
                 className="jar-wallcol"
-                /* a room of machines is set in the machine hand too — the
-                   typography and the body must never disagree about what
-                   kind of mind you are standing in */
-                data-kind={
-                  w.kind === "group" && machineGroups.has(w.id) ? "agent" : w.kind
-                }
+                /* `data-kind` was once a question — a room of nothing but
+                   machines was set in the machine hand, so the typography and
+                   the body could never disagree about what kind of mind you
+                   were standing in. With rooms gone the kind IS the answer. */
+                data-kind={w.kind}
                 style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col})` }}
               >
                 {/* THE SKY'S SENTENCE LIVES IN THE SKY (founder, 2026-08-27,
@@ -7948,7 +7022,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 {ready ? (
                   <div
                     className={
-                      w.kind === "self" || w.kind === "group"
+                      w.kind === "self"
                         ? "jar-values-room jar-values-room--live"
                         : "jar-values-room"
                     }
@@ -7967,17 +7041,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         could hold anything). Your own wall's sky only:
                         another wall's keeps the forming words until sharing
                         values is designed on purpose. */}
-                    {w.kind !== "agent" ? <PrincipleRead
+                    {w.kind === "self" ? <PrincipleRead
                       key={`${auth?.profile?.id}:${spaceKey(w)}`}
-                      groupId={w.kind === "group" ? w.id : undefined}
                       active={here && !offlineRef.current}
                       locale={locale}
-                      refreshKey={w.kind === "group" ? groupReadTick : undefined}
-                      /* A room's principle count had one reader: the
-                         top-centre pill that is gone. Counting them to feed
-                         nothing would be work done for a control that no
-                         longer exists. */
-                      onRead={w.kind === "self" ? acceptPrinciples : undefined}
+                      onRead={acceptPrinciples}
                     /> : null}
                     {w.kind==='self'&&pick&&principlesRead&&!principles.some(row=>row.id===pick)?<p role="status" className="jar-values-sub">
                       {say('worldPrincipleUnavailable')} <button type="button" onClick={()=>{setPick(null);viewNavigation.write({...EMPTY_VIEW,section:'sky'},{replace:true});}}>{say('worldPrinciplesBack')}</button>
@@ -8452,15 +7520,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         home page holds the reading, the character and the box
                         and nothing else. Neither feature was removed; both are
                         rows in `menuItems` below. */}
-                    {here && w.kind === "group" && atNow ? <button
-                      type="button"
-                      className="jar-room-shape"
-                      data-jar-chrome="1"
-                      onClick={() => setGroupPanel(w.id)}
-                    >
-                      {((openProposals.get(w.id) ?? []).some((item) => item.viewerStance === null))
-                        ? say("worldRoomNeedsAnswer") : say("worldShapeTogether")}
-                    </button> : null}
                     {/* WHAT IT RESTS ON. The same chain the sky shows under a
                         pattern, one layer up: the memories this sentence was
                         built from, each with the span that carried it at full
@@ -8701,44 +7760,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           <p className="jar-prov-lead jar-label">{say("worldWrittenByHand")}</p>
                         </div>
                       )
-                    ) : null}
-                    {/* A ROOM'S BOARD ASKS TO BE READ AGAIN, in its own words
-                        and its own block — see `rereadGroupBoard` for why this is
-                        not the self wall's strip opened up to groups. */}
-                    {here && w.kind === "group" && lead && !editing.open && posterAsk ? (
-                      <div className="jar-board-acts" data-jar-chrome="1">
-                        {groupReading === "asking" ? (
-                          <>
-                            <span className="jar-board-warn">
-                              {say("worldRoomRereadWarn")}
-                            </span>
-                            <button
-                              type="button"
-                              className="jar-board-act"
-                              onClick={() => rereadGroupBoard(w.id)}
-                            >
-                              {say("worldReadAgain")}
-                            </button>
-                            <button
-                              type="button"
-                              className="jar-board-act"
-                              onClick={() => setGroupReading("rest")}
-                            >
-                              {say("worldLeaveItCap")}
-                            </button>
-                          </>
-                        ) : groupReading === "working" ? (
-                          <span className="jar-board-act">{say("worldReadingNow")}</span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="jar-board-act"
-                            onClick={() => setGroupReading("asking")}
-                          >
-                            {say("worldReadItAgain")}
-                          </button>
-                        )}
-                      </div>
                     ) : null}
                     {/* THE WAY UP IS NOT UNDER THE THING YOU ARE READING.
                         This line used to sit here, beneath the ambition —
@@ -9117,11 +8138,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 {ready && c?.empty && !c?.formingAlt && w.kind === "agent" ? (
                   <p className="jar-wall-empty">
                     {say("worldAgentEmptyGive")}
-                  </p>
-                ) : null}
-                {w.kind === "group" && failedGroups.has(w.id) && !ready ? (
-                  <p className="jar-wall-hold jar-label">{say("worldRoomUnreachable")}{" "}
-                    <button type="button" onClick={() => void loadGroup(w.id, true)}>{say("worldRoomHistoryRetry")}</button>
                   </p>
                 ) : null}
                 {/* THE EDGE OF THE WORLD, AND WHAT IS BEYOND IT.
@@ -10202,16 +9218,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               with the length of the date. They are one grid now, centred
               against each other, and neither knows where the other ends. */}
           <div className="jar-panel-head">
-          {panelIsGroup ? (
-            /* whisper attribution: whose save this is, and when — where the
-               evidence named no date of its own, who alone. Leaving a fact
-               out is honest; guessing at it is not. */
-            <span className="jar-panel-when jar-label">
-              {panelBall.noDate
-                ? panelBall.authorName ?? ""
-                : `${panelBall.authorName ?? ""} · ${dateWords(panelBall.capturedMs, Date.now(), locale)}`}
-            </span>
-          ) : (
+          {/* THE WHISPER ATTRIBUTION IS GONE WITH ROOMS. A room orb's card
+              headed with whose save it was — the author's name, and the date
+              only where the evidence carried one, because leaving a fact out
+              is honest and guessing at it is not. Every orb is yours now, so
+              the date alone is the whole head. */}
+          {(
             <span className="jar-panel-when jar-label">
               {/* the date alone, with its year — "Two days ago · Aug 24" said
                   one fact twice, and the relative half goes stale while the
@@ -10220,57 +9232,60 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               {panelHasReflection ? <span className="jar-panel-reflected"> · {say("worldReflected")}</span> : null}
             </span>
           )}
-          {!panelIsGroup ? (
-            /* WHO MAY SEE THIS, AT THE TOP RIGHT (founder, 2026-08-25:
-               "top right should have option to switch between Private •
-               Public. also call it private and public everywhere"). The
-               same lit/dim pair the mouth wears while writing: both words
-               always present, the standing one lit, pressing the other one
-               moves it. Private remains the state you get by touching
-               nothing. */
-            <p
-              className={`jar-ask jar-ask--row jar-panel-vis${
-                publishing ? " jar-panel-vis--busy" : ""
-              }`}
-            >
-              <button
-                type="button"
-                className={panelIsPublic ? "jar-where-off" : "jar-where-on"}
-                aria-pressed={!panelIsPublic}
-                onClick={() => {
-                  if (!panelIsPublic) return;
-                  /* un-publishing a memory a signal stands on gets the same
-                     one ask deleting it does, in the same place — the card's
-                     own foot (founder, 2026-08-27) */
-                  if (panelPowersSignal) setUnpublishAsk(true);
-                  else togglePublic();
-                }}
-              >
-                {say("worldPrivate")}
-              </button>
-              <span aria-hidden="true">/</span>
-              <button
-                type="button"
-                className={panelIsPublic ? "jar-where-on" : "jar-where-off"}
-                aria-pressed={panelIsPublic}
-                onClick={() => { if (!panelIsPublic) setPublishAsk(true); }}
-              >
-                {say("worldPublic")}
-              </button>
-            </p>
-          ) : null}
+          {/* ═══ `PRIVATE / PUBLIC` IS GONE FROM THIS CARD ═══════════════════
+              Founder, 2026-10-12, asked directly: remove it, with rooms.
+
+              WHAT STOOD HERE AND WORKED. A lit/dim pair at the top right —
+              the same shape the mouth wears while writing, both words always
+              present, the standing one lit, pressing the other one moving it
+              — with `aria-pressed` on each and Private as the state you got
+              by touching nothing. It was the founder's own design (2026-08-25:
+              "top right should have option to switch between Private ·
+              Public. also call it private and public everywhere"), and
+              un-publishing a memory a pattern stood on asked first, in the
+              card's own foot, exactly as deleting does (2026-08-27: "similar
+              warning should occur when changing what was public to private as
+              well").
+
+              WHY IT GOES WITH ROOMS RATHER THAN SEPARATELY. `public` on this
+              column never meant the internet. `inspirations.visibility`'s own
+              schema comment says it means THE ROOMS THIS PROFILE'S ACCOUNT
+              BELONGS TO, and a room's ground was exactly that query: every
+              current member's public captures. With rooms gone the control
+              offered a choice between two states that are now identical, and
+              its confirmation promised an audience that cannot exist — the
+              sheet read "People in your rooms can read it and its
+              attachments", about rooms there are none of. Shipping the room
+              removal while leaving a control that says that would be the
+              worst of both.
+
+              IT WAS ALSO THE THIRD OF THREE. The settings panel's public
+              group and the composer's frozen `onVisibility` switch went on
+              2026-10-12 under "everything regarding public and private should
+              also not be a thing in this new experience"; this one was left
+              behind on the argument that its column means rooms rather than
+              the internet, and filed as a question for the founder. They have
+              now answered it.
+
+              THE COLUMN IS NOT TOUCHED, AND THAT IS DELIBERATE — the same
+              ruling made for `profiles.public_handle` on the same day, for
+              the same reason. `inspirations.visibility` still stores what
+              anybody already chose, `PATCH /inspirations/:id` still accepts
+              it, and `lib/data`'s `Inspiration.isPublic` still carries it to
+              this page. Closing the door is reversible; rewriting stored
+              audience data is not, and nobody has asked for it. What IS now
+              true and belongs in a report rather than in a comment: with the
+              room routes gone, nothing in the product reads `visibility` to
+              decide who may see a memory — the only remaining readers are the
+              column itself and the flag this page no longer renders. */}
           <button type="button" className="jar-copy-link" title={say('worldCopyInspirationLink')}
             aria-label={say('worldCopyInspirationLink')} onClick={() => void copyInspirationLink()}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m10 14 4-4m-7 3-2 2a4 4 0 0 0 6 6l4-4m-4-10 2-2a4 4 0 0 1 6 6l-4 4" /></svg>
           </button>
           </div>
-          {publishAsk&&!panelIsPublic?<div className="jar-panel-askrow" role="group" aria-label={say('worldAudience')}>
-            <p className="jar-panel-warn">{say('worldPublishConfirm')}</p>
-            <div className="jar-ask jar-ask--row">
-              <button type="button" autoFocus onClick={()=>setPublishAsk(false)}>{say('worldKeepPrivate')}</button>
-              <button type="button" disabled={publishing} onClick={()=>{setPublishAsk(false);togglePublic();}}>{say('worldMakePublic')}</button>
-            </div>
-          </div>:null}
+          {/* THE "MAKE THIS PUBLIC?" SHEET WENT WITH THE PAIR ABOVE. It was
+              a warning and two words — keep private, make public — and the
+              warning named rooms as the audience. */}
           {editing.open?.kind === "memory" && editing.open.id === panelId ? (
             /* THE SAME SLOT, THE SAME MEASURE, THE SAME FACE. It is the words
                you were just reading, with a caret in them — see
@@ -10316,12 +9331,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <p
               ref={panelTextRef}
               className={
-                panelCanReflect && !panelIsGroup
+                true
                   ? "jar-panel-text jar-panel-text--yours"
                   : "jar-panel-text"
               }
               style={markStyle}
-              onClick={panelCanReflect && !panelIsGroup ? beginPanelEdit : undefined}
+              onClick={beginPanelEdit}
             >
               {markPassages(
                 panel.detail ? panel.detail.text || panel.detail.preview : panelBall.textPreview,
@@ -10333,10 +9348,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <p className="jar-panel-note">{say("worldCouldntLoadRest")}</p>
           ) : null}
           {panel.detail?.attachments.length ? <InspirationAttachments items={panel.detail.attachments} locale={locale} /> : null}
-          {panelIsGroup && panelBall.citedBy && panelBall.citedBy.length > 0 ? (
-            /* the collapsed links sentence, adapted: what read this save */
-            <p className="jar-panel-cited jar-label">{citedWords(panelBall.citedBy, locale)}</p>
-          ) : null}
+          {/* THE CITED-BY SENTENCE WENT WITH THE ROOM THAT NEEDED IT. On a
+              room's ground it said which of the room's readings had cited
+              this save — attribution by reading, the finest grain a room was
+              allowed to know about somebody else's memory. `citedWords` in
+              `lib/words.ts` is gone with it; your own wall says what rests on
+              a memory through the field's light and the provenance room. */}
 
           {/* Public capture cards are not signal statements. Room pattern
               reactions live in Shape together and never post a capture ID. */}
@@ -10346,8 +9363,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               apparatus: it made a person ask what each list was instead of
               reading what they saved. */}
 
-          {panelCanReflect&&!panelIsGroup&&panel.detail?.conversationOrigin?<p className="jar-review-context">{say(panel.detail.conversationOrigin.authorship==='adopted'?'worldChatAdoptedOrigin':'worldChatUserOrigin')}</p>:null}
-          {reflectOpen && panelCanReflect && !panel.detail ? <p role="status">{say('worldOpeningAttachment')}</p> : null}
+          {panel.detail?.conversationOrigin?<p className="jar-review-context">{say(panel.detail.conversationOrigin.authorship==='adopted'?'worldChatAdoptedOrigin':'worldChatUserOrigin')}</p>:null}
+          {reflectOpen && !panel.detail ? <p role="status">{say('worldOpeningAttachment')}</p> : null}
           {/* WHAT YOU ALREADY WROTE ABOUT THIS SAVE, READ BACK.
               `ReflectionFlow` stood here — 297 lines that generated a
               follow-up question, took an answer, kept a draft on the device,
@@ -10366,7 +9383,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               borrowed rather than invented so the type ladder stays one
               ladder. Skipped questions never counted as reflected and still
               do not appear. */}
-          {reflectOpen && panelCanReflect && panel.detail ? (
+          {reflectOpen && panel.detail ? (
             <div className="jar-reflection-flow">
               {(panel.detail.reflections ?? [])
                 .filter((item) => !item.skipped && item.answer)
@@ -10545,36 +9562,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 </button>
               </p>
             </div>
-          ) : unpublishAsk ? (
-            <div className="jar-panel-askrow">
-              <p className="jar-panel-warn">{say("worldUnpublishWarn")}</p>
-              <p className="jar-ask jar-ask--row">
-                <button
-                  type="button"
-                  className="jar-where-on"
-                  onClick={() => setUnpublishAsk(false)}
-                >
-                  {say("worldKeepItPublic")}
-                </button>
-                <span aria-hidden="true"> · </span>
-                <button
-                  type="button"
-                  className="jar-where-off"
-                  onClick={() => {
-                    setUnpublishAsk(false);
-                    togglePublic();
-                  }}
-                >
-                  {say("worldMakePrivateAnyway")}
-                </button>
-              </p>
-            </div>
           ) : null}
-          {panelCanReflect &&
-          !reflectOpen &&
+          {/* AND THE ASK BEFORE UN-PUBLISHING. It was armed only when the
+              memory was public AND a pattern stood on it — the mirror of
+              delete's rule, because a warning with nothing to warn about is
+              friction wearing a safety costume. That rule is still live for
+              DELETING, which is the branch above this one. */}
+          {!reflectOpen &&
           !editing.open &&
-          !(forget.step === "asking" && forget.id === panelId) &&
-          !unpublishAsk ? (
+          !(forget.step === "asking" && forget.id === panelId) ? (
             <p className={`jar-ask jar-ask--after jar-panel-foot${panelHasReflection ? " jar-panel-foot--reflected" : ""}`}>
               {/* THE VERB IS `READ`, AND ONLY WHEN THERE IS SOMETHING TO
                   READ (2026-10-10). This cell used to offer `Reflect` on a
@@ -10595,7 +9591,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               </span>
               <span className="jar-panel-foot-c">{panelStepCarets}</span>
               <span className="jar-panel-foot-r">
-              {!panelIsGroup ? (
+              {(
                 <>
                   {/* DELETING ASKS ONLY WHEN THERE IS SOMETHING TO SAY
                       (founder, 2026-08-25: "delete it without warning if
@@ -10628,7 +9624,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     </button>
                   )}
                 </>
-              ) : null}
+              )}
               </span>
             </p>
           ) : null}
@@ -10824,18 +9820,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               history is read at all — removing the handle there would strand
               the whole dial, which is what trying it proved: 24 of its own
               tests went red in one run. */}
-          {/* NOT ON AN AGENT'S WALL. Founder: "why does the agent one have
-              now? I want to make it exactly the same as my other pages."
-              The handle appeared on every wall that was not your own, which
-              bundled two different cases under one condition. A ROOM needs
-              it: a room's board is one chain and winding it is how its
-              history is read at all, which is why removing it there stranded
-              the whole dial and turned 24 of its tests red. An agent's wall
-              needs nothing of the kind — it reads like your own wall and
-              should look like it.
-              It also still appears on your own wall once you have wound away
-              from now, which is the one case where it is the way back. */}
-          {dial && phase === "ready" && !dialAway && (atWall.kind === "group" || parkedAt !== null) ? (
+          {/* ONLY ONCE YOU HAVE WOUND AWAY FROM NOW. Founder: "why does the
+              agent one have now? I want to make it exactly the same as my
+              other pages." The handle used to appear on every wall that was
+              not your own, which bundled two unlike cases under one
+              condition — and the case that justified it was A ROOM: a room's
+              board was one chain, winding it was the only way its history
+              could be read, and removing the handle there once turned 24 of
+              the dial's own tests red. Rooms are gone (founder, 2026-10-12:
+              "방 없애"), so that half of the condition goes with them and the
+              honest one is left: the word appears when it is the way back. */}
+          {dial && phase === "ready" && !dialAway && parkedAt !== null ? (
             <span className="jar-when-place">
             <button
               type="button"
@@ -10869,12 +9864,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             >
               {parkedAt === null ? say("worldNow") : dateWords(parkedAt, dial.end, locale)}
             </button>
-            {selectedGroupHistory && atWall.kind === "group" ? <span className="jar-when-story" role="status">
-              {selectedGroupHistory}
-              <button type="button" onClick={() => setGroupPanel(atWall.id)}>
-                {say("worldRoomHistoryDetails")}
-              </button>
-            </span> : null}
             </span>
           ) : null}
         </div>
@@ -10914,64 +9903,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           The signals it counted are still derived and still write the poster —
           they are simply not somewhere a person goes. */}
 
-      {/* AT EVERY HEIGHT, NOT JUST DOWN IN THE FIELD.
-          It was gated on `inField`, so it was not even mounted at the height
-          you ARRIVE at — the one moment a person needs telling that this
-          ground is one of several. It is a fact about the wall you are
-          standing on, so like the offline line it holds still while you
-          descend. Only the sky is exempt: up there you are reading patterns,
-          and whose ground is under you is not the question. */}
-      {grounds.length > 0 && phase === "ready" && !inSky ? (
-        <div
-          className={groundsLit ? "jar-grounds jar-grounds--lit" : "jar-grounds"}
-          data-jar-chrome="1"
-          role="radiogroup"
-          data-jar-surface="group-members"
-          aria-label={say("worldWhoseGround")}
-          onKeyDown={(event) => {
-            if (event.metaKey || event.ctrlKey || event.altKey || event.nativeEvent.isComposing) return;
-            const direction = event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1
-              : event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : 0;
-            if (!direction && event.key !== 'Home' && event.key !== 'End') return;
-            const rows = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
-            const index = rows.indexOf(event.target as HTMLButtonElement);
-            if (index < 0) return;
-            event.preventDefault();
-            const next = rows[event.key === 'Home' ? 0 : event.key === 'End' ? rows.length - 1 : (index + direction + rows.length) % rows.length];
-            next.focus(); next.click();
-          }}
-        >
-          {grounds.map((m) => {
-            const here = m.mine ? standing === null : standing === m.id;
-          
-  return (
-              <button
-                key={m.id}
-                type="button"
-                role="radio"
-                tabIndex={here ? 0 : -1}
-                aria-checked={here}
-                className={here ? "jar-grounds-row jar-grounds-row--here" : "jar-grounds-row"}
-                onClick={() => standIn(m.mine ? null : m.id)}
-              >
-                <i
-                  className={m.agent ? "jar-grounds-dot jar-grounds-dot--agent" : "jar-grounds-dot"}
-                  style={m.hue >= 0 ? { background: hueCss(m.hue) } : undefined}
-                  aria-hidden="true"
-                />
-                {m.name}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      {/* ═══ THE BAND OF NAMES UNDER A ROOM'S WALL IS GONE ════════════════
+          Founder, 2026-10-12: "방 없애" — remove rooms.
 
-      {phase === "ready" && inField && atWall.kind === "group" ? (
-        <div className="jar-group-ground-status" data-jar-chrome="1" role="status">
-          <p>{grounds.find(member => member.id === (standing ?? viewerIdRef.current))?.name ?? say("worldYou")}</p>
-          <p>{say(wallCount > 0 ? "worldMemberPublicInspirations" : "worldMemberNoPublicInspirations")}</p>
-        </div>
-      ) : null}
+          A radiogroup of the room's members: press a name and the ground
+          below became that person's memories. Two rulings are worth keeping
+          out of it, because both outlived the control and neither is written
+          down anywhere else. It was mounted AT EVERY HEIGHT rather than
+          gated on `inField` — it had been gated, which meant it was not
+          mounted at the height you ARRIVE at, the one moment a person needs
+          telling that this ground is one of several. And the SKY was exempt:
+          up there you are reading patterns, and whose ground is under you is
+          not the question. It also carried full arrow/Home/End roving focus,
+          which is the standard this product holds radio groups to. */}
+
 
       {dial && phase === "ready" && timeOpen ? (
         <div
@@ -11006,12 +9951,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               onClick={() => windTo(dial.end)}
             >
               <span className="jar-dial-stop-date">{say("worldNow")}</span>
-              {currentGroupHistory ? <span className="jar-dial-stop-story">{currentGroupHistory}</span> : null}
             </button>
+            {/* NO CAPTION UNDER A DATE ANY MORE. A room's stop carried one —
+                "Jina joined · the board changed" — read out of its door
+                ledger by `groupHistoryCaption`. Your own wall and your
+                agent's never had one: a date is the whole of what they are
+                offering. The ledger went with rooms. */}
             {dial.stops.map((stop) => {
-              const caption = atWall.kind === "group"
-                ? groupHistoryCaption(eventsAtStop(groupHistory, stop.at, stop.grain), locale, 1)
-                : null;
               return <button
                 key={stop.at}
                 type="button"
@@ -11022,7 +9968,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 onClick={() => windTo(stop.at)}
               >
                 <span className="jar-dial-stop-date">{stop.label}</span>
-                {caption ? <span className="jar-dial-stop-story">{caption}</span> : null}
               </button>;
             })}
           </div>
@@ -11899,7 +10844,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         hidden={Boolean(panelOpen||mouthOpen||savedNoteOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
-          query={seek} locale={locale} label={atWall.kind === 'group' ? say('worldFindYourInspirations') : undefined}
+          /* the label said "find YOUR inspirations" on a room's wall, where
+             the search still only ever reached your own archive and the
+             surrounding ground was other people's. One wall kind, one
+             meaning, no label. */
+          query={seek} locale={locale}
           onQuery={setSeek} onClose={() => setSeek(null)} onPick={openSearchResult} />
       ) : null}
       {storageScope&&viewNavigation.view?.principleId&&viewNavigation.view.sharePrinciple?<PrincipleShare
@@ -12139,76 +11088,39 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </div>;
       })():null}
 
-      {/* MAKING OR JOINING A ROOM BY TYPING IS GONE — IT WAS UNREACHABLE.
-          Founder: "get rid of the rooms and agent related stuff for now",
-          and later: "remove all unused and deadcode across the codebase."
+      {/* ═══ THE ROOM, AND EVERY WAY INTO ONE, IS GONE ═══════════════════
+          Founder, 2026-10-12: "방 없애" — remove rooms.
 
-          A sheet with two tabs — make a room, join one by code — and NOTHING
-          EVER OPENED IT. Every `setGroupForm` call was inside the sheet or
-          its own submit handler, so the only way to reach it was to already
-          be in it. It had survived three cleanliness passes because it looks
-          alive from the inside: real state, a real submit, honest error
-          handling, a 401 branch someone had carefully fixed.
+          THREE SURFACES STOOD HERE and they went together because they were
+          one capability wearing three faces. `GroupPanel` — who is in the
+          room, the whole-room stance row, propose / affirm / decline /
+          counter, and the room-so-far history. The make-or-join sheet, which
+          was already a tombstone here: nothing ever opened it, so the only
+          way to reach it was to be in it. And the JOIN SHEET, which was the
+          last live door — `?join=<code>` set `pendingJoin`, this rendered
+          "Someone invited you", and one press put your name on a roll.
 
-          It was also holding a gate hostage. `test/verb-pairs.test.ts`
-          required `createGroup` to have a way back, and the pair was
-          satisfied only because this dead handler called it — a register
-          describing a verb the product does not offer, passing because
-          unreachable code referenced it. Both go in this commit; that is why
-          they are one change and not two.
+          WHY JOINING WENT TOO, which is the part that needs the argument.
+          Joining worked. It was measured working on 2026-10-12 at 16:09 PDT
+          against a signed-in account, and it survived the signed-out case as
+          well — `RequireAuth` kept the query in `state.from`, so a stranger
+          with a link signed up, onboarded, and landed on the sheet with the
+          code intact. That was the whole problem. The audit established that
+          `.jar-here-list`, deleted on 2026-10-09, had been at once the only
+          list of your rooms AND the only opener of `SpaceSettings` — leave,
+          rename, remove a member, close, copy the invite. Creating a room had
+          gone before that. So the one door left was INWARD: a room you could
+          be let into by a link somebody made before the cut, and then never
+          leave, never invite into, never close. There is no point joining a
+          room you cannot leave, so the door closed rather than the exits
+          being rebuilt. The founder was shown both options and chose this.
 
-          JOINING BY LINK IS UNTOUCHED, which is the whole reason this is a
-          deletion and not a capability loss. A `?join=<code>` address still
-          sets `pendingJoin` and still opens the join sheet below — that path
-          never went through here. What is gone is typing a code into a form
-          nobody could open. */}
+          WHAT A REVIVAL WOULD COST, said plainly so nobody assumes it is a
+          revert: the client for `/api/groups` is three types with no verbs,
+          the nine route files behind them are gone, and the five tables they
+          wrote are still in the database holding what people actually said in
+          rooms. Rooms come back as a feature with exits, or not at all. */}
 
-      {/* THE ROOM, OPENED. Who is in it, how to bring somebody, what you can
-          put to them, and the way out — one surface, because they are all the
-          same question: who is this with and what do we say together. */}
-      {groupPanel && atWall.kind === "group" && atWall.id === groupPanel ? (
-        <GroupPanel
-          groupId={groupPanel}
-          readingRestricted={failedGroups.has(groupPanel) || groupCacheRef.current.get(groupPanel)?.data?.top?.restricted}
-          signals={wallSignalsRef.current.get(groupPanel) ?? []}
-          onSignalResponse={async (signalId, value, targetRevision) => {
-            await createFeedback({ targetType: 'signal', targetId: signalId, value, targetRevision });
-          }}
-          onRefreshSignals={async () => {
-            const ready = await loadGroupRef.current(groupPanel, true);
-            if (ready) setGroupReadTick((value) => value + 1);
-            return ready;
-          }}
-          readRevision={groupReadTick}
-          members={members}
-          space={atWall}
-          openProposals={openProposals}
-          timeline={groupTimelines.get(groupPanel) ?? null}
-          selectedStop={atWall.kind === "group" && atWall.id === groupPanel ? selectedGroupStop : null}
-          proposalState={proposalRead?.groupId === groupPanel ? proposalRead.phase : "loading"}
-          onRetryProposals={() => loadOpenProposals(groupPanel)}
-          pendingProposalId={pendingProposalId}
-          receipt={proposalReceipt?.groupId === groupPanel ? proposalReceipt.text : null}
-          trouble={proposalTrouble?.groupId === groupPanel ? proposalTrouble.text : null}
-          propose={propose}
-          setPropose={setPropose}
-          sendProposal={sendProposal}
-          answerProposal={answerProposal}
-          onClose={() => setGroupPanel(null)}
-        />
-      ) : null}
-
-      {/* THIS SPACE'S SETTINGS.
-          Opened by the space's own name, top left, and scoped to the space you
-          are standing in — because everything in here is a fact about THIS
-          space and nothing in here is a fact about the product. A room is the
-          rich case; the other two kinds say what they are and point at the one
-          screen that can actually change them.
-
-          It is deliberately flat inside: labels, words and two-step
-          confirmations. The layout's register is for material — memories,
-          statements, the poster — and administering a room is not material,
-          it is paperwork. Paperwork gets to look like paperwork. */}
       {/* THE ACCOUNT, DROPPED. The mirror of the space settings on the left,
           and deliberately the same object: same panel, same flat register,
           anchored to the pill that opened it.
@@ -12233,63 +11145,36 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           antechamber, the gardener's question — went with it. They are
           diagnostics, not settings, and they were living behind a gear
           because a gear was the nearest unlocked door. */}
-      {pendingJoin && phase === "ready" ? (
-        <DialogSurface
-          className="jar-settings"
-          onClose={closeJoin}
-          data-jar-chrome="1"
-          role="dialog"
-          aria-label={say("worldJoinThisRoom")}
-        >
-          <div className="jar-settings-head">
-            <span className="jar-label">{say("worldSomeoneInvited")}</span>
-          </div>
-          <p className="jar-settings-note">{say("worldJoinExplain")}</p>
-          <p className="jar-ask">
-            <button type="button" className="jar-settings-verb" onClick={acceptJoin}>
-              {say("worldJoinThisRoom")}
-            </button>
-            <span aria-hidden="true"> · </span>
-            <button type="button" onClick={() => setPendingJoin(null)}>
-              {say("worldNotNow")}
-            </button>
-          </p>
-        </DialogSurface>
-      ) : null}
+      {/* ═══ `SpaceSettings` IS GONE, AND IT COULD NEVER MOUNT ═══════════
+          481 lines: a room's roll, its invite link, rename, leave, close,
+          remove-a-member, and an agent's credentials. Its one JSX site stood
+          here, gated on `settingsFor === spaceKey(atWall)` — and this is not
+          a grep, it is a closed set: `settingsFor` initialised to `null` and
+          had exactly three writers, all three writing `null`. `spaceKey()`
+          returns `${kind}:${id}` and never the empty string, so that equality
+          was false for the lifetime of the page. The opener was a per-row cog
+          on the `.jar-here-list` wall picker, deleted on 2026-10-09 in the
+          same commit that removed the only list of your rooms.
 
-      {settingsFor === spaceKey(atWall) && phase === "ready" ? (
-        <SpaceSettings
-          space={atWall}
-          members={members}
-          groups={groups}
-          leaving={leaving}
-          setLeaving={setLeaving}
-          closing={closing}
-          setClosing={setClosing}
-          removing={removing}
-          setRemoving={setRemoving}
-          renaming={renaming}
-          setRenaming={setRenaming}
-          trouble={groupTrouble}
-          clearTrouble={() => setGroupTrouble(null)}
-          viewerProfileId={auth?.profile?.id ?? null}
-          copied={copied}
-          copyInvite={copyInvite}
-          onClose={() => setSettingsFor(null)}
-          leaveThisGroup={leaveThisGroup}
-          renameThisGroup={renameThisGroup}
-          closeThisGroup={closeThisGroup}
-          removeMember={removeMember}
-          agentKeys={agentKeys}
-          minted={minted}
-          setMinted={setMinted}
-          issueKey={issueKey}
-          revoking={revoking}
-          setRevoking={setRevoking}
-          revokeKey={revokeKey}
-          keysBusy={keysBusy}
-        />
-      ) : null}
+          SO DELETING IT TAKES NOTHING AWAY — it stops the code pretending six
+          capabilities are there. What went with it from this file: the
+          `settingsFor` state and its dismiss wiring, the agent-keys fetch
+          effect and the forget-the-secret effect (neither could ever fire),
+          `issueKey`, `revokeKey`, `agentKeys` / `minted` / `revoking` /
+          `keysBusy`, `renaming`, `leaving` / `closing` / `removing`,
+          `groupTrouble`, `leaveThisGroup`, `renameThisGroup`,
+          `closeThisGroup`, `removeMember`, `copied` / `copyInvite`, and the
+          `GroupVerb` / `GroupTrouble` types the panel declared. The agent-key
+          half was already defanged two commits earlier — minting stopped on
+          sight of the same proof — so what is lost there is a listing of
+          credentials nothing creates any more.
+
+          THE SERVER IS NOT TOUCHED HERE. `POST`, `GET` and `DELETE
+          /agent-keys` all stand, and `lib/middleware.ts` still accepts those
+          keys. If an agent becomes reachable from outside again, the listing
+          comes back WITH the minting, on the same day, which is the lesson
+          the audit actually taught. */}
+
 
       {phase === "loading" ? (
         <div className="jar-skel jar-skel-line">{say("worldPouring")}</div>
