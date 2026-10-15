@@ -269,7 +269,8 @@ describe("the ground under a wall", () => {
    time this was built, and it read as working." A room's ground belonged to
    one person at a time and the band of names was how you chose whose; both
    are deleted, along with `MountedWorld.standIn` and the audit's `ground`
-   field having anything to report. */
+   field — which on 2026-10-15 stopped having anything to report and was
+   removed from the published shape rather than left reading null forever. */
 
 
 /* ═══ WHAT THE CLAIM IS STANDING ON — GONE WITH THE ROOM ════════════════

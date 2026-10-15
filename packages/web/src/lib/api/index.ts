@@ -28,10 +28,11 @@
  *
  * AND `groups.ts` / `/api/groups`, on 2026-10-12. Founder: "방 없애" —
  * remove rooms. Nine route files on the server and twelve verbs on this side
- * are gone. The module is still re-exported below because it still holds
- * THREE TYPES and nothing else: `canvas/simulation.ts` names them and is
- * owned by a change in flight. Read its own header before assuming there is
- * a client behind it; there is not.
+ * went then. The module itself outlived them by three days as three types
+ * with no client, re-exported here because `canvas/simulation.ts` named them
+ * and could not be edited from that change; it was deleted on 2026-10-15
+ * when the loop's group branches came out. There is no `./groups` below any
+ * more, and no row in the table above, because there is no route.
  *
  * A TABLE THAT NAMES A DELETED FILE IS WORSE THAN NO TABLE, which is why
  * this is a fix and not a tidy-up: the rows survived the deletion of the
@@ -78,7 +79,6 @@ export * from "./claims";
 export * from "./inspiration-days";
 export * from "./principles";
 export * from "./top-of-mind";
-export * from "./groups";
 export * from "./agents";
 export * from "./feedback";
 export * from "./public-profiles";

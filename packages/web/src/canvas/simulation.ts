@@ -96,8 +96,6 @@ import type { Measured } from "./measured";
 import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, FACE_R, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
-import type { GroupData } from "../space-kinds/group";
-import { groupCompanyPlaces, noticeLight, NOTICE_MS, type CompanyPlace } from "../space/group-company";
 import { paintField } from "../space/inspiration/field-paint";
 import {
   colorBall,
@@ -113,7 +111,6 @@ import {
   bornBall,
   makeAgentBall,
   makeBall,
-  makeGroupInspirationBall,
   seedOf,
   type Ball,
   type BornSeed,
@@ -126,12 +123,30 @@ import { formatMessage, t, type MessageKey, type SupportedLocale } from "../lib/
 import { monthTag } from "../lib/words";
 import type { AgentBundle } from "../lib/agent-contract";
 import type { Evidence, Inspiration, Signal } from "../lib/data";
-import type {
-  ApiGroupFieldInspiration,
-  ApiGroupMember,
-  ApiGroupSummary,
-} from "../lib/api";
 /**
+ * ── THE LOOP IMPORTED SIX ROOM SHAPES AND NOW IMPORTS NONE (2026-10-15) ──
+ *
+ * Founder, 2026-10-12: "방 없애" — remove rooms. The web half came out in
+ * `405ee4aa` and stopped at this file's door, because another change held it
+ * open; `packages/api` followed. What stood here were the last six names:
+ * `GroupData` from `space-kinds/group`, the four from `space/group-company`
+ * (`groupCompanyPlaces`, `noticeLight`, `NOTICE_MS`, `CompanyPlace`),
+ * `makeGroupInspirationBall` from `space/inspiration/orb`, and the three API
+ * shapes `ApiGroupFieldInspiration` / `ApiGroupMember` / `ApiGroupSummary`.
+ *
+ * THE REASON THIS IS WRITTEN DOWN RATHER THAN SIMPLY GONE. Every one of those
+ * modules carried a tombstone saying, in its own words, "this file survives
+ * only because `canvas/simulation.ts` imports it and may not be edited from
+ * here." That is a chain of four files each held up by the next, and the only
+ * load at the far end was a `w.kind === "group"` comparison in a loop whose
+ * axis — `pages/Home`'s — has emitted agents, then you, and nothing else
+ * since the day rooms went. The code compiled, ran sixty times a second, and
+ * could not reach a single one of its branches. A feature that is deleted is
+ * finished; a feature that is unreachable but compiles is a trap, because the
+ * next reader cannot tell the difference without proving the axis empty, and
+ * three of the four tombstones above are somebody having had to prove exactly
+ * that. Cutting the import is what lets the other three files go.
+ *
  * MOONLIGHT — the surface, chosen.
  *
  * Three committed directions were built and judged by eye in motion (ember,
@@ -656,12 +671,15 @@ type Moment = "touch" | "kept" | "answered" | "arrived" | "shared" | "let-go";
 
 export interface SimApi {
   navigationState: () => { wall: Space; section: 'top' | 'field' | 'sky'; moving: boolean };
-  /**
-   * Whose ground to stand in on a group's wall — a member's profile id, or
-   * null for your own. Yours is the default everywhere and the only ground on
-   * a wall that has one owner.
-   */
-  standIn: (ownerProfileId: string | null) => void;
+  /* `standIn` IS GONE, AND IT WAS THE LAST VERB ON THIS SURFACE WITH NO
+     CALLER. It took a member's profile id — or null for your own — and swapped
+     whose memories were standing on the ground in front of you, without moving
+     the camera. The press that drove it was a row of names under a room's
+     wall, deleted with the rest of the room chrome on 2026-10-12; after that
+     `pages/Home` kept a tombstone where the caller had been and this
+     declaration kept answering a question nobody could ask. A wall has exactly
+     one ground now and it is that wall's own, which is what it was on every
+     wall but a room's from the beginning. */
   /** Wind this wall to a moment. The dial's dates are the only callers. */
   windTo: (T: number) => void;
   select: (id: string) => void;
@@ -781,8 +799,6 @@ export interface FieldAudit {
   /** which wall the LOOP thinks it is standing on — not what React thinks */
   wallKind: string;
   wallId: string;
-  /** whose ground, null being the viewer's own */
-  ground: string | null;
   /**
    * How many memories this wall's claim is standing on.
    *
@@ -792,8 +808,16 @@ export interface FieldAudit {
    * smallest thing that would have gone to zero.
    */
   provenanceCount: number;
-  /** Painted group-avatar hit areas in screen coordinates, for interaction QA. */
-  company: Array<{ id: string; x: number; y: number; r: number }>;
+  /* `ground` AND `company` ARE GONE FROM THE PUBLISHED SHAPE. `ground` named
+     whose memories were standing in front of you and was null — yours — on
+     every wall that was not a room's; `company` listed the painted member
+     avatars so interaction QA could ask the geometry rather than guess at it.
+     Neither can be anything but a constant now: there is one ground per wall
+     and there are no avatars to paint. They are removed rather than reported
+     as `null` and `[]` forever, because a published audit field that cannot
+     vary is an instrument reading zero with nothing attached, and this file
+     has already paid for one of those (see `provenanceCount` above, which
+     exists because an empty peek row went unnoticed through 64 green tests). */
   /** which column the loop is standing on, and whether it is mid-glide */
   col: number;
   travelling: boolean;
@@ -875,14 +899,16 @@ export interface Carry {
   balls: Map<string, { x: number; y: number }>;
 }
 
-/** One room's fetched board, as `pages/Home`'s cache holds it. */
-export interface GroupCacheEntry {
-  status: "pending" | "ready" | "failed";
-  data: GroupData | null;
-  checkedAt?: number;
-  fieldFingerprint?: string;
-  leaseToken?: symbol;
-}
+/* `GroupCacheEntry` IS GONE. One room's fetched board and the lease that
+   governed it: a status, the data, when it was last checked, a fingerprint of
+   the ground so an unchanged refetch did not re-pour, and a `leaseToken`
+   symbol so a read invalidated mid-flight could not land late. The lease was
+   the interesting part and the rule in it outlives rooms — a read somebody
+   else's permission governs may not be cached by version alone — but nothing
+   left in this product reads across an account boundary, so there is nothing
+   for it to govern. `pages/Home` held the map; it was empty from the day the
+   routes went, and the shape was declared here only so that file could import
+   it back. Both ends go together. */
 
 /**
  * THE SKY, AS THE POUR READS IT — and the one capture in here whose staleness
@@ -955,12 +981,16 @@ export interface SimulationOptions {
    * the loop's second build guard. Its live twin is `agentsRef`.
    */
   agents: AgentBundle[] | null;
-  /**
-   * The axis: which walls exist and at which columns. A snapshot, in the
-   * dependency array by name. Its live twin is `wallsRef`, which is what the
-   * loop reads 9 times while running — this value is read at setup only.
-   */
-  walls: Space[];
+  /* THE AXIS SNAPSHOT IS NO LONGER AN INPUT, AND `walls` STAYS IN THE
+     DEPENDENCY ARRAY. It was read at setup in exactly two places, both of
+     them the room pour: the `w.kind === "group"` filter that built a room's
+     orbs, and the loop beside it that numbered the hues. With those gone the
+     loop reads the axis only through `wallsRef`, live, eight times a frame.
+     `pages/Home` still lists `walls` in `useEffect`'s dependencies — it must,
+     because a changed axis must rebuild the loop — so the rebuild trigger is
+     untouched; what is removed is the second, stale copy that was passed in
+     beside it. Keeping an unread snapshot would be keeping the exact hazard
+     the comment it replaces was warning about. */
 
   /* ---- the four discrete facts the loop pushes back into React ---------- */
 
@@ -996,14 +1026,17 @@ export interface SimulationOptions {
   fieldLoadingRef: MutableRefObject<boolean>;
   /** The memories a search matched; everything else sinks. Read 1x per frame. */
   foundRef: MutableRefObject<ReadonlySet<string> | null>;
-  /** One room's fetched ground, by group id. Read 2x. */
-  groupFieldRef: MutableRefObject<Map<string, ApiGroupFieldInspiration[]>>;
-  /** One room's fetched board and its lease. Read 1x. The loop never writes it; `loadGroupRef` is how it asks for one. */
-  groupCacheRef: MutableRefObject<Map<string, GroupCacheEntry>>;
-  /** The rooms this account is in, in axis order. Read 4x. */
-  groupsRef: MutableRefObject<ApiGroupSummary[]>;
-  /** A room's current members, for the company avatars and the ground filter. Read 2x. */
-  membersRef: MutableRefObject<Map<string, ApiGroupMember[]>>;
+  /* FOUR ROOM REFS ARE GONE FROM THIS SURFACE: `groupFieldRef` (one room's
+     fetched ground, by group id), `groupCacheRef` (its board and the lease
+     over it), `groupsRef` (the rooms this account is in, in axis order) and
+     `membersRef` (a room's members, for the company avatars and the ground
+     filter). Their docs claimed 2, 1, 4 and 2 reads; every one of those reads
+     sat behind a `kind === "group"` test or inside the room pour, so the true
+     count against a real account has been zero since 2026-10-12. `pages/Home`
+     declared all four as permanently-empty containers with a comment saying
+     they existed for this file's compiler and nothing else — which is the
+     clearest statement available that the surface, not the data, was what was
+     keeping them alive. The surface is the thing that goes. */
   /** The whole archive, live — this is what the pour is actually built from. Read 1x, at setup. See `inspirations`. */
   inspirationsRef: MutableRefObject<Inspiration[] | null>;
   /** Which language the loop's own sentences are in. Read 3x. */
@@ -1020,8 +1053,18 @@ export interface SimulationOptions {
    * note at the foot of `startSimulation`.
    */
   skyRef: MutableRefObject<PouredSky>;
-  /** Whose eyes: the viewer's own profile id, or null when offline. Read 6x. */
-  viewerIdRef: MutableRefObject<string | null>;
+  /* `viewerIdRef` IS GONE, AND THIS IS THE SURPRISE OF THE PASS. "Whose eyes:
+     the viewer's own profile id, or null when offline", read six times — and
+     all six were room reads. Two built a room's orbs and numbered their hues,
+     one was the ground filter that asked whether a ball's owner was the
+     person whose ground you were standing in, and three were the company's
+     seat cache deciding whether the placement it held was still yours. The
+     loop never needed to know who you are anywhere else, because on your own
+     wall every memory is yours by construction and on an agent's wall the
+     wall id is the identity that matters. `pages/Home` keeps its own
+     `viewerIdRef` — the search still scopes by it — so nothing about the
+     product's sense of who you are changed; what went is the loop's copy of
+     a question it had stopped asking. */
   /** The axis, live. Read 9x. `walls` is the snapshot twin. */
   wallsRef: MutableRefObject<Space[]>;
 
@@ -1036,20 +1079,25 @@ export interface SimulationOptions {
   creatureSpeaksRef: MutableRefObject<() => void>;
   /** Warm one memory's full reading so a tap has nothing to wait for. */
   loadDetailRef: MutableRefObject<(id: string) => Promise<unknown>>;
-  /** Fetch a room's board and ground. Called as travel toward it begins. */
-  loadGroupRef: MutableRefObject<(groupId: string) => unknown>;
   /** Warm whatever kind of wall this is. Called as travel toward it begins. */
   loadWallRef: MutableRefObject<(wall: Space) => void>;
-  /** Open one member's ground on a room's wall, from a pressed avatar. */
-  openGroupMemberRef: MutableRefObject<(profileId: string | null) => void>;
   /** Open the search. Called from the loop's own keyboard handler. */
   openSeekRef: MutableRefObject<() => void>;
   /** Offer an arrow key to the open reading panel first; true if it took it. */
   panelArrowRef: MutableRefObject<(dir: -1 | 1) => boolean>;
   /** The camera came to rest on a wall — the loop's opinion, pushed to React. */
   pushArrivedRef: MutableRefObject<(wall: Space) => void>;
-  /** A room's words exist now. Pushed once, the first time its orbs pour. */
-  pushWokenRef: MutableRefObject<(groupId: string) => void>;
+  /* THREE OF THE NINE THINGS THE LOOP ASKED SOMEBODY ELSE TO DO WERE ABOUT
+     ROOMS, AND ALL THREE ARE GONE. `loadGroupRef` fetched a room's board and
+     ground as travel toward it began; `openGroupMemberRef` opened one
+     member's ground from a pressed avatar; `pushWokenRef` told React a room's
+     words existed, once, the first time its orbs poured. `pages/Home` kept
+     all three as `() => undefined` with a note on each saying it survived
+     only because this file declared it required — three no-ops wired into a
+     frame loop so that a type would check. The declared surface was supposed
+     to be "a thing somebody can argue with"; a required callback that can
+     only ever be a no-op is the opposite, so it comes out here and the no-ops
+     come out there. Six remain, and every one of them does something. */
 
   /* ---- live, WRITTEN BY THE LOOP: its outputs, and its memory ----------- */
   /* These are the answer to "how many writers does this have". Inside this
@@ -1065,14 +1113,19 @@ export interface SimulationOptions {
    * its first frame.
    */
   carryRef: MutableRefObject<Carry | null>;
-  /** A room's orbs for this run of the loop. Cleared in the teardown; the DATA cache survives. */
-  groupBallsRef: MutableRefObject<Map<string, Ball>>;
-  /** Rooms whose orbs have already poured this session: no re-pour on return. Added to as each pours. */
-  groupVisitedRef: MutableRefObject<Set<string>>;
   /** Which column travel is bound for, so a rebuild mid-stride still arrives. Written 2x. */
   headingRef: MutableRefObject<number | null>;
-  /** Who is which colour on a room's wall. Written 1x, where the orbs are tinted, so the legend cannot disagree. */
-  hueByOwnerRef: MutableRefObject<Map<string, number>>;
+  /* AND THREE OF THE LOOP'S OWN OUTPUTS GO WITH THEM. `groupBallsRef` held a
+     room's orbs for one run of the loop (the DATA cache outlived it, which is
+     why it was cleared in the teardown rather than kept); `groupVisitedRef`
+     remembered which rooms had already poured so returning to one did not
+     pour it again; `hueByOwnerRef` recorded who was which colour, written at
+     the one place the orbs were tinted so that a legend and the orbs it
+     decoded were physically incapable of disagreeing. That last one is worth
+     a sentence of regret: it is a good pattern — derive a mapping once, at
+     the site that spends it, and let every other reader ask — and it is being
+     deleted because its only reader, the legend under a room's wall, is gone,
+     not because it was wrong. */
   /** Why the last `goToWall` did or did not move. Written 4x. Dev diagnosis only. */
   lastGoRef: MutableRefObject<string>;
   /** The baked sprites for this skin and DPR. Written 1x, read 3x. */
@@ -1116,7 +1169,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     measured,
     inspirations,
     agents,
-    walls,
     setDialAway,
     setInField,
     setInSky,
@@ -1131,28 +1183,18 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     dialRef,
     fieldLoadingRef,
     foundRef,
-    groupBallsRef,
-    groupCacheRef,
-    groupFieldRef,
-    groupsRef,
-    groupVisitedRef,
     headingRef,
-    hueByOwnerRef,
     inspirationsRef,
     lastGoRef,
     loadDetailRef,
-    loadGroupRef,
     loadWallRef,
     localeRef,
-    membersRef,
-    openGroupMemberRef,
     openSeekRef,
     paletteRef,
     panelArrowRef,
     panelOpenRef,
     parkedRef,
     pushArrivedRef,
-    pushWokenRef,
     readingLitRef,
     sayLineRef,
     selectedIdRef,
@@ -1160,7 +1202,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     skyRef,
     slotH,
     TRef,
-    viewerIdRef,
     wallsRef,
   } = o;
 
@@ -1228,37 +1269,23 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     const agentBalls = (agents ?? []).flatMap((a) =>
       a.inspirations.map((cap) => makeAgentBall(cap)),
     );
-    /* A room's ground is its members' PUBLIC memories, each still owned by
-       the person who kept it — `ownerProfileId` is what the per-member hue
-       will read, and it is carried from here rather than re-derived. */
-    const groupBalls = walls
-      .filter((w) => w.kind === "group")
-      .flatMap((w) =>
-        (groupFieldRef.current.get(w.id) ?? []).map((cap) =>
-          makeGroupInspirationBall(cap, w, viewerIdRef.current),
-        ),
-      );
-    /* WHOSE HUE IS WHOSE, DECIDED ONCE.
-       Assigned from each room's own member ordering rather than from a hash
-       of the profile id: a hash is stable but arbitrary, and two members
-       could collide onto the same hue in the one place the distinction has
-       to hold. Ordering by the member list means the nth person in a room
-       always gets the nth hue, the legend reads the same map, and your own
-       memories are excluded so they stay the warm white they are at home. */
-    const hueOf = new Map<string, number>();
-    for (const w of walls) {
-      if (w.kind !== "group") continue;
-      let next = 0;
-      for (const cap of groupFieldRef.current.get(w.id) ?? []) {
-        if (cap.ownerProfileId === viewerIdRef.current) continue;
-        if (hueOf.has(cap.ownerProfileId)) continue;
-        hueOf.set(cap.ownerProfileId, next++);
-      }
-    }
-    hueByOwnerRef.current = hueOf;
-    for (const b of groupBalls) {
-      b.hue = b.ownerProfileId ? hueOf.get(b.ownerProfileId) ?? -1 : -1;
-    }
+    /* A ROOM'S GROUND WAS POURED HERE, AND IT WAS THE THIRD OF THREE.
+       `groupBalls` filtered the axis for `kind === "group"` and turned each
+       room's fetched ground into orbs, each carrying the `ownerProfileId` of
+       the person who kept it; a loop beside it numbered the hues from the
+       room's own member ordering — the nth person got the nth hue, rather
+       than a hash of the profile id, because a hash is stable but arbitrary
+       and two members colliding onto one colour would have broken the single
+       place the distinction had to hold — and your own memories were excluded
+       so they stayed the warm white they are at home.
+
+       THE PARAGRAPH ABOVE STILL STANDS and is worth reading before anyone
+       builds a shared ground again: the reason the pour has three sources
+       rather than one is that agent walls and room walls both read as "has
+       signals, no inspirations under them" while their memories were fetched
+       and dropped. Two sources remain, and `agentBalls` is the surviving
+       proof of that fix. What went with rooms is the hue map and its only
+       reader, a legend under a wall nobody can reach. */
     const list = [
       ...poured.map((c) =>
         makeBall(
@@ -1272,7 +1299,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         ),
       ),
       ...agentBalls,
-      ...groupBalls,
       ...kept.map(bornBall),
     ].sort((a, b) => a.capturedMs - b.capturedMs);
     const byId = new Map(list.map((b) => [b.id, b] as const));
@@ -1405,13 +1431,20 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
        carried: the mote arrays are rebuilt with the loop, so skipping the
        scatter would leave the dust stacked at the origin. See `carryRef`. */
     if (carryRef.current) view.primed = carryRef.current.primed;
-    /* ---- the horizontal axis (v8): columns of jars, one room each ----
-       Column zero is the personal jar; column c ≥ 1 is groupsRef[c-1]. The
-       camera gains cam.x = column × view.w with the same snap discipline as
-       the vertical: velocity-biased, one column per gesture, never resting
+    /* ---- the horizontal axis (v8): one column per wall ----
+       The camera gains cam.x = column × view.w with the same snap discipline
+       as the vertical: velocity-biased, one column per gesture, never resting
        between. The COMPANION leads every transition — it sets off first and
        the layout eases after it, which is how the page explains where the
-       rooms are. */
+       other walls are.
+
+       THIS USED TO READ "columns of jars, one room each / Column zero is the
+       personal jar; column c ≥ 1 is `groupsRef[c-1]`", and that sentence
+       outlived both the rooms and the ref by three days. Column zero is you;
+       agents stand to the LEFT at negative columns, which is the opposite
+       direction from the one the old sentence described, so the comment was
+       not merely stale — it pointed the wrong way down the axis. `wallAt`
+       below is the only honest answer to "what is at column c". */
 
     /**
      * WHERE THE WORLD IS BEING LOOKED AT FROM.
@@ -1580,35 +1613,25 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
      * different kind of mind" said in the only grammar this world has.
      */
     let mech = 0;
-    /**
-     * THE ROOM'S COMPANY, AS PRESENCE. 0 on any wall that is not a room's,
-     * easing to 1 while you stand in one — the same spring `mech` rides, so
-     * the members fade in on the same clock the machine-ness would. It is a
-     * presence channel, not a count: what it scales is alpha.
-     */
-    let company = 0;
-    /** Where each drawn member sits on screen this frame, so the pointer can
-        find them: canvas pixels answer to nothing else. */
-    const companySeats: Array<{ id: string; x: number; y: number; r: number }> = [];
-    /** Each room's company, in painting order, held on the member list's own
-        identity — see `seatedFor` in the draw. */
-    const companyPlacesCache = new Map<
-      string,
-      { from: ApiGroupMember[] | undefined; viewer: string | null; seated: CompanyPlace[] }
-    >();
-    /** The member being noticed, and until when — a beat, not a state: light
-        that stayed would be a selection nobody made. */
-    const companyNear = { id: "", until: 0 };
-    /** each member's form, derived once from their id and then held */
-    const memberBeings = new Map<string, Being>();
-    const beingOf = (id: string): Being => {
-      let b = memberBeings.get(id);
-      if (!b) {
-        b = agentBeing(id);
-        memberBeings.set(id, b);
-      }
-      return b;
-    };
+    /* ─ SIX PIECES OF PER-FRAME STATE BELONGED TO THE ROOM'S COMPANY ─────
+       `company` was the presence channel — 0 on any wall that was not a
+       room's, easing to 1 on the same spring `mech` rides, scaling alpha
+       rather than counting anybody. `companySeats` was where each member had
+       actually been painted this frame, so the pointer could ask the geometry
+       instead of re-deriving it. `companyPlacesCache` held the placement on
+       the member list's own identity, because `groupCompanyPlaces` was
+       allocating an array and seven objects twice a frame for a seven-person
+       room. `companyNear` was who was being noticed and until when — a beat,
+       never a state, because light that stayed would have been a selection
+       nobody made. `memberBeings` and `beingOf` derived each member's form
+       once from their id and then held it.
+
+       THE CACHE IS THE ONE TO REMEMBER. It was added after a 133ms frame
+       landed in the middle of a travel glide, and the rule it encodes is
+       general: who stands where is a fact about the data, not about the
+       frame, so it is keyed on the identity of the list it was derived from
+       and recomputed on the one frame that list changes. Nothing else in this
+       loop currently needs that shape. Something will. */
     /* the eased body-turn toward whatever it is attending to */
     const mechAt = (x: number): number => {
       const here = x / Math.max(view.w, 1);
@@ -1886,26 +1909,34 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
      * mind you are in.
      */
     /**
-     * WHOSE GROUND YOU ARE STANDING ON — null means your own.
+     * `ground` AND `standingOk` ARE GONE, AND FIVE CALL SITES COLLAPSED.
      *
-     * A group's ground used to be every member's public inspirations poured
-     * into one field, with a legend beside it decoding five hues. That asked
-     * the reader to do the work of separation before they could read anything,
-     * and it bought nothing: a group's ground CANNOT explain its sky. The wall
-     * query stops at shares by design (`loadGroupField` in routes/groups.ts) —
-     * a member sees the pattern someone arrived at, never the captures it was
-     * distilled from. So a mixture of five people's memories under five shared
-     * statements is not evidence for them; it is five grounds in a heap.
+     * `ground` held whose memories were standing in front of you, null being
+     * your own, and `standingOk` was the filter that spent it:
      *
-     * One person at a time, yours first. Whose ground this is becomes
+     *     w.kind !== "group" ||
+     *     (b.ownerProfileId ?? "") === (ground ?? viewerIdRef.current ?? "")
+     *
+     * READ THE FIRST LINE AGAIN. The predicate was unconditionally true on
+     * every wall that was not a room's — which, since 2026-10-12, is every
+     * wall there is. It was being evaluated five times per pass (the presence
+     * rule, `presentBalls`, the scrub's `want`, and twice in the audit) on a
+     * question whose answer could not be no. Removing the call is not a
+     * behaviour change; it is deleting a `&& true`.
+     *
+     * WHY IT EXISTED, because the argument was good and someone will want it
+     * again. A room's ground was once every member's public inspirations
+     * poured into one field with a legend beside it decoding five hues, and
+     * that asked a reader to separate five people's memories before they
+     * could read any of them. It could not repay the work: the wall query
+     * stopped at shares by design, so a member saw the pattern somebody
+     * arrived at and never the captures it was distilled from — five grounds
+     * in a heap under five statements none of them evidenced. The fix was one
+     * person's ground at a time, yours by default, and whose it was became
      * something you MOVED to, which is the only way this world says anything.
+     * That last sentence is the part to keep: the mechanism is gone, the
+     * ruling about what motion is for is not.
      */
-    let ground: string | null = null;
-    /* on a group's wall the ground belongs to exactly one member; every
-       other wall's scene is wholly its own */
-    const standingOk = (b: Ball, w: Space): boolean =>
-      w.kind !== "group" ||
-      (b.ownerProfileId ?? "") === (ground ?? viewerIdRef.current ?? "");
     /**
      * THE ONE OWNER OF PRESENCE. At rest, what is lit IS what the rules say:
      * the current wall's scene, time-gated, standing-gated — and nothing
@@ -1927,7 +1958,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         const here = wallId === w.id;
         for (const b of bag) {
           const present =
-            here && b.capturedMs <= TRef.current && standingOk(b, w);
+            here && b.capturedMs <= TRef.current;
           if (!present) {
             b.active = false;
             b.spawnAt = -1;
@@ -2340,8 +2371,13 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       return lo < 0 ? [lo, 0, view.layout.maxCam] : [0, view.layout.maxCam];
     };
 
+    /* ONE INDEX, NOT TWO. This fell through to `groupBallsRef` because a
+       room's orbs lived outside the pour's own index — they were built per
+       run of the loop and cleared in the teardown while their DATA cache
+       survived, so the pour's `byId` genuinely did not contain them. There is
+       one index now and the fallback could only ever return undefined. */
     function findBall(id: string): Ball | undefined {
-      return byId.get(id) ?? groupBallsRef.current.get(id);
+      return byId.get(id);
     }
 
     /**
@@ -2475,19 +2511,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     function tryWakeWall() {
       if (trip.active) return;
       const w = curWall();
-      if (w.kind === "group") {
-        const entry = groupCacheRef.current.get(w.id);
-        if (!entry || entry.status === "pending") {
-          trip.awaitingWake = true;
-          return;
-        }
-        trip.awaitingWake = false;
-        if (entry.status === "failed" || !entry.data) return; /* React whispers it */
-        if (!groupVisitedRef.current.has(w.id)) {
-          groupVisitedRef.current.add(w.id);
-          pushWokenRef.current(w.id);
-        }
-      } else if (w.kind === "agent") {
+      /* A ROOM'S BRANCH STOOD FIRST HERE AND IT IS GONE. It asked the board
+         cache whether this room's data had landed: pending meant hold the
+         column still and set `awaitingWake`, failed meant give up silently
+         because React whispered the failure elsewhere, and a first success
+         pushed the room id back so its headquarters could render its words.
+         An agent's wall was given the same shape afterwards — "its wall wakes
+         the way a room's does" — and that shape is what survives, which is
+         the useful thing to notice: the room taught the agent wall how to
+         wait, and then stopped existing. */
+      if (w.kind === "agent") {
         /* an agent's memory now loads on approach, so its wall wakes the way
            a room's does: blank until its own bundle has landed */
         const has = agentsRef.current.some((a) => a.agent.id === w.id);
@@ -2524,7 +2557,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       const w = curWall();
       const out: Ball[] = [];
       for (const b of sceneBalls(w.id))
-        if (b.capturedMs <= TRef.current && standingOk(b, w)) out.push(b);
+        if (b.capturedMs <= TRef.current) out.push(b);
       out.sort((a, b) => a.capturedMs - b.capturedMs);
       return out;
     }
@@ -2538,14 +2571,15 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       gesture.wheelXUntil = performance.now() + 120;
       pushArrivedRef.current(curWall());
       headingRef.current = null; /* landed; there is nowhere still to get to */
-      /* YOU ARRIVE IN YOUR OWN GROUND, ALWAYS.
-         Standing in someone else's ground is a thing you did on THAT wall and
-         it does not follow you to the next one. This is reset here, at the
-         loop's own arrival, rather than from a React effect watching the wall
-         change: that effect fires while the column is still in flight, and the
-         settle it triggered mid-travel left every ball inactive because the
-         re-activation below had already run against the old column. */
-      ground = null;
+      /* `ground = null` STOOD HERE: you arrived in your own ground, always,
+         because standing in somebody else's was a thing you did on THAT wall
+         and did not carry to the next one. The reason it lived at the loop's
+         own arrival rather than in a React effect watching the wall change is
+         the part worth keeping — that effect fires while the column is still
+         in flight, and the settle it triggered mid-travel left every ball
+         inactive because the re-activation below had already run against the
+         old column. The loop owns the moment of arrival; React finds out
+         afterwards. */
       /* THE GROUND IS RE-SOLVED FOR WHOEVER'S WALL THIS IS.
          Arriving changes which memories are standing on it, so the layout has
          to run again — without this the previous wall's homes stay assigned
@@ -3857,7 +3891,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            was absent and re-enter it a second time. No ball is ever staged
            now (tombstone at `POUR_MS`), so the race it guarded against cannot
            happen and the branch could only ever be false. */
-        const want = b.capturedMs <= T && standingOk(b, w);
+        const want = b.capturedMs <= T;
         const present = b.active && !b.leaving;
         if (want !== present) {
           changed = true;
@@ -4099,298 +4133,55 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            third of the screen, still bobbing. */
         const charSX = cam.x + view.w / 2 + companion.off;
 
-        /* ---------------- THE ROOM'S COMPANY ----------------
+        /* ──────── THE ROOM'S COMPANY STOOD HERE: 292 LINES ────────
            founder, 2026-08-27: "if room is group, show the character as many
            times as number of members are there. but the character should feel
            like its behind mine, and more small and subtle."
 
-           One being per member, standing behind yours. Drawn BEFORE your
-           aura and body, so yours occludes them and its emitted light washes
-           over them — that wash is the depth cue, not a painted shadow.
+           One being per member, standing behind yours, drawn before your aura
+           and body so that yours occluded them and its emitted light washed
+           over them — that wash was the depth cue, never a painted shadow.
+           Each wore the form its own id derived, at half your size, in cool
+           light, because raster.ts's invariant is that your companion is the
+           warmest body on any wall and a crowd must not break it.
 
-           Each wears the form its own id derives (`agentBeing` is "a being,
-           from an id and nothing else" — the owner's median proportions are
-           punched out of its ladders, so none of them can wear yours), at
-           half your size, in COOL light: raster.ts's invariant that your
-           companion is the warmest body on any wall holds in a crowd too.
-           Humans first, in the room's own member order — the same order the
-           legend and the hues are numbered from — so the company reads in
-           the same sequence everywhere the room is named.
+           WHAT THIS BLOCK LEARNED, WHICH IS THE ONLY PART WORTH MOURNING.
+           The first version was three grey blobs in a row and the founder
+           photographed it; the research that answered ("look at how games use
+           npcs and characters around the main") was written up in
+           `space/group-company.ts`, deleted in this same pass. Four
+           findings landed here as code: a crowd sharing one idle loop breaks
+           immersion, so a member drew one of FOUR ways of standing — breathe,
+           sway, shift, wait — phased by its own id, rather than one bob at
+           different speeds, which is the same behaviour wearing a different
+           clock. Depth is cued by light and focus, not alpha alone, so every
+           member carried a `depth` spent at once on size, tier and alpha,
+           with the far ones painted first so the near ones overlapped them
+           the way standing people do. Reaction states are the most neglected
+           and the most missed, so a member looked at your companion, and at
+           whatever your companion was attending to, after its own delay — and
+           blinked raggedly, because a room blinking in unison is a chorus
+           line. And an answer has two speeds: the body turned in the member's
+           own time and the NAME appeared at once, because the name is the
+           answer to the question the gesture asked and waits for nobody.
 
-           Size is ONE constant for all of them. A being's identity is shape,
-           never size (body.ts: mass is constant), and a row of members at
-           assorted sizes would read as a ranking nobody made. */
-        /* EVERY ROOM IN FRAME, NOT ONLY THE ONE YOU STAND IN. During a
-           crossing both columns are on screen at once — the room you are
-           leaving and the room you are arriving at — and drawing only the
-           current wall's company is what made a room look like it populated
-           itself on arrival. */
-        const companyCols: number[] = [];
-        if (wallAt(trip.col)?.kind === "group") companyCols.push(trip.col);
-        if (trip.active && trip.dest !== trip.col && wallAt(trip.dest)?.kind === "group") {
-          companyCols.push(trip.dest);
-        }
-        /* the seats under the pointer, rebuilt each frame the company is
-           drawn — hovering a member names it (see `companyHitRef`) */
-        companySeats.length = 0;
-        for (const col of company > 0.015 ? companyCols : []) {
-          const colWall = wallAt(col)!;
-          /* WHO STANDS WHERE IS A FACT, NOT A FRAME — and this loop was
-             recomputing it sixty times a second. `groupCompanyPlaces` maps a
-             room's members into fresh objects and the depth pass sorts a
-             fresh copy on top, so a seven-person room was allocating an array
-             and seven objects, twice, every frame it was on screen. Nothing
-             in it can change without the member list changing, and that list
-             arrives once per room.
+           THREE ENGINEERING RULINGS IN IT OUTLIVE ROOMS. (1) The company was
+           drawn for EVERY room in frame, not only the one you stood in —
+           drawing only the current column made a room look like it populated
+           itself on arrival. (2) The members were anchored to the ROOM's
+           column, not to `charSX`: hung off the companion they travelled with
+           you like luggage, and your companion is the one who moves. (3) ONE
+           BAKE PER FRAME — a bake is four 240px rasters and seven arriving at
+           once put a 133ms frame in the middle of the travel glide, so a
+           member whose turn had not come simply waited, hidden by the alpha
+           ease that was already covering the arrival.
 
-             Found reviewing my own work rather than by a slow frame, but the
-             precedent is why it matters: the last thing built into this exact
-             loop put a 133ms frame in the middle of a travel glide. Cached on
-             the member list's own identity, so a room that gains a member
-             recomputes on the frame the new list lands and never again. */
-          const seatedFor = (): CompanyPlace[] => {
-            const from = membersRef.current.get(colWall.id);
-            const held = companyPlacesCache.get(colWall.id);
-            if (held && held.from === from && held.viewer === viewerIdRef.current) {
-              return held.seated;
-            }
-            /* FAR ONES FIRST, so the near ones overlap them. A row painted in
-               member order overlaps by accident; painted by depth it overlaps
-               the way standing people do, and the overlap is most of what
-               says "a group" rather than "a line". */
-            const seated = groupCompanyPlaces(from, viewerIdRef.current).sort(
-              (x, y) => y.depth - x.depth,
-            );
-            companyPlacesCache.set(colWall.id, {
-              from,
-              viewer: viewerIdRef.current,
-              seated,
-            });
-            return seated;
-          };
-          /* the same light tier your own body wears: the first version baked
-             them a tier dimmer AND cool AND at half alpha, and three
-             subtlety channels stacked read as flat grey stone. Cool and
-             alpha carry the "behind"; the bake keeps its gradient.
-             AND THEN THE TIER LEARNED DEPTH (founder, 2026-08-27: "higher
-             quality craft"; the research is written up in
-             `group-company.ts`): one tier for everybody is what made three
-             members read as three copies of one card. A member's own depth
-             spends itself here, so the near ones stand in your light and the
-             far ones fall a tier back — which is how a photograph separates
-             planes, and the reason the group now has a front and a back. */
-          const nearTier = Math.round(bodyLit * (BODY_TIERS - 1));
-          const seated = seatedFor();
-          /**
-           * ONE BAKE PER FRAME. A bake is four 240px rasters, and a room of
-           * seven arriving all at once put a 133ms frame in the middle of the
-           * travel glide (measured live, this machine, dpr 1 — a retina
-           * screen bakes four times the pixels). The company's alpha eases in
-           * from zero over the same arrival, so members joining the frame one
-           * at a time is not even visible: the ease IS the stagger's cover.
-           * A member whose bake has not had its turn yet simply waits a
-           * frame; nothing is skipped, only deferred.
-           */
-          let bakedThisFrame = false;
-          for (const seat of seated) {
-            const be = beingOf(seat.profileId);
-            /* an agent member shares the bake its own wall uses — same key,
-               same params — so the same creature is the same pixels */
-            const key = seat.agent ? `agent:${seat.profileId}` : `member:${seat.profileId}`;
-            if (!pal.beings.has(key)) {
-              if (bakedThisFrame) continue;
-              bakedThisFrame = true;
-            }
-            const sprites = bakeBeing(pal, key, be, true, seat.agent);
-            /* further back is smaller: the arc's own perspective, and the
-               half-size the founder asked for is the NEAREST member's size */
-            const ms = companion.size * (0.5 - seat.depth * 0.07);
-            const companyTier = Math.max(0, nearTier - (seat.depth > 0.55 ? 1 : 0));
-            /**
-             * FOUR WAYS OF STANDING (research, `group-company.ts`: a crowd
-             * sharing one idle "breaks immersion immediately"; 3–5 variants
-             * with staggered starts is the working number).
-             *
-             * Every member used to breathe on the same sine at its own rate,
-             * which is one behaviour wearing different clocks — and at a
-             * glance that reads as copies. These are four different things a
-             * body does while waiting, each phased by the member's own id:
-             *   0 breathes — the old hover, slowest and smallest
-             *   1 sways — the weight drifts side to side as well as up
-             *   2 shifts — mostly still, then settles onto the other foot
-             *   3 waits — barely moves at all; its life is in the head turn
-             * Reduced motion keeps every one of them at rest.
-             */
-            const ph = seat.phase * 6.283;
-            let mbob = 0;
-            let mswy = 0;
-            if (!view.reduced) {
-              const slow = t * 0.9 * be.bobRate + ph;
-              if (seat.idle === 0) {
-                mbob = Math.sin(slow) * 2.4 * stir.amp;
-              } else if (seat.idle === 1) {
-                mbob = Math.sin(slow) * 1.8 * stir.amp;
-                mswy = Math.sin(slow * 0.6 + 1.1) * 2.6 * stir.amp;
-              } else if (seat.idle === 2) {
-                /* a long dwell, then a settle: `sin^7` is flat for most of
-                   its period and moves quickly through the middle, which is
-                   what shifting your weight looks like from across a room */
-                const s = Math.sin(t * 0.32 * be.bobRate + ph);
-                mswy = Math.sign(s) * Math.abs(s) ** 7 * 3.4 * stir.amp;
-                mbob = Math.sin(slow) * 1.1 * stir.amp;
-              } else {
-                mbob = Math.sin(slow * 0.8) * 0.9 * stir.amp;
-              }
-            }
-            const seatX =
-              col * view.w + view.w / 2 + seat.dx * companion.size + mswy;
-            const seatY = companion.y + seat.dy * companion.size + mbob;
-            /* WHO THIS IS, WHEN YOU REACH FOR THEM (founder, 2026-08-27:
-               "hovering/clicking on characters in the background should show
-               the name of the person above the character temporarily and
-               character should also brighten up temporarily"). The seats are
-               canvas pixels, so the pointer needs the geometry the draw pass
-               already knows; the hit list is rebuilt here rather than
-               guessed at anywhere else. */
-            const named = membersRef.current
-              .get(colWall.id)
-              ?.find((m) => m.profileId === seat.profileId);
-            companySeats.push({
-              id: seat.profileId,
-              /* screen x (the draw is in world space, the pointer is not) and
-                 world y, which is the space `onHover` already works in */
-              x: seatX - cam.x,
-              y: seatY,
-              r: companion.size * 0.32,
-            });
-            /* NOTICED — the body answers in its own time, the NAME answers
-               at once. The body's delay is the member's own (`notice`), so a
-               room of seven turns to you raggedly instead of snapping round
-               in unison, which is the difference between people and a chorus
-               line; the name is the answer to the question the gesture asked
-               and waits for nobody (founder, 2026-09-08). Both halves are
-               computed in `noticeLight`, where the arithmetic can be tested
-               without frames to run. */
-            const since =
-              companyNear.id === seat.profileId
-                ? (performance.now() - (companyNear.until - NOTICE_MS)) / 1000
-                : -1;
-            const answer = noticeLight(
-              since,
-              seat.notice,
-              companyNear.until - performance.now(),
-            );
-            const lit = answer.body;
-            ctx!.save();
-            /* ANCHORED TO THE ROOM, NOT TO YOU. `charSX` is the companion's
-               screen-anchored x — the world slides under it, which is what
-               makes it the traveller — and the first version hung the whole
-               company off it, so leaving a room dragged the members along
-               like luggage. They stand at the ROOM's own column: travelling
-               away, the world slides them away with the wall they belong to
-               while your companion alone moves. Their y is the resting
-               anchor, not `cyC` — your bob and your lift are yours, and a
-               chorus that breathes in sync with you reads as puppetry. */
-            ctx!.translate(seatX, seatY);
-            /* noticed, it comes up toward your own strength and settles back —
-               light is the only meaning channel, so being seen IS more light.
-               Depth is the other half: the far ones sit lower in the frame's
-               range, which is what "falls into softer light" means when you
-               have no depth of field to spend. */
-            ctx!.globalAlpha = company * ((0.84 - seat.depth * 0.26) + lit * 0.16);
-            /* A PRESENCE OF ITS OWN, and it is the difference between a being
-               standing in a dark room and a sticker on it. The bake has
-               always made each creature its own aura layers — the company
-               simply never spent them, so members had no light around them
-               at all and read as cut-outs on black. One layer, small and
-               faint, and dimmer the further back it stands: enough to say
-               something alive is there, never enough to compete with the
-               warm bloom that is yours. */
-            const halo = sprites.aura[0];
-            if (halo) {
-              ctx!.globalAlpha = company * (0.2 - seat.depth * 0.08 + lit * 0.16);
-              const hs = ms * 2.6;
-              ctx!.drawImage(halo, -hs / 2, -hs / 2, hs, hs);
-              ctx!.globalAlpha = company * ((0.84 - seat.depth * 0.26) + lit * 0.16);
-            }
-            /* NO NUBS ON THE SMALL ONES (founder, 2026-08-27: "remove hands").
-               They were added as anatomy in the quality pass and at half size
-               they read as detached dots floating beside each silhouette —
-               static circles cannot do what the companion's live nubs do,
-               which is protrude from a turning form. A clean silhouette with
-               a face is a creature; a silhouette with two loose beads is a
-               diagram of one. */
-            ctx!.drawImage(sprites.body[companyTier], -ms / 2, -ms / 2, ms, ms);
-            /* THE FACE, AND IT IS NOT AT REST ANY MORE.
-               It used to be two eyes, front-facing, no blink and no glance —
-               written up as "a creature present rather than performing", and
-               that reading was wrong in the way the founder photographed:
-               present without any behaviour at all is a mask. Two cheap
-               channels put life in it without giving it a performance.
-
-               ONE: WHERE IT IS LOOKING. Games call this the reaction set,
-               and the research calls it the most neglected and most missed
-               part of an ambient character. A member looks at YOUR
-               companion, and when your companion is attending to something
-               (a memory you tapped) it looks that way instead, after its own
-               delay — noticing what somebody near you is looking at is the
-               most human thing a bystander does. It is a look, never a turn:
-               the body stays put, which is what keeps this a room of people
-               standing together rather than a crowd staring.
-
-               TWO: BLINKING. Rare, slow, and out of step by id — a blink in
-               unison would be the chorus line again. */
-            bodyPath(ctx!, ms, ms, be);
-            ctx!.clip();
-            /* The same ink the companion's own eyes use — a member is the
-               same species, and the literal was written out twice. */
-            ctx!.fillStyle = EYE_INK;
-            const er = ms * be.eyeR * 1.35;
-            const eyY = ms * be.eyeLat;
-            /* toward you, or toward what you are looking at — in the member's
-               own local pixels, and never far enough to leave the face */
-            const gazeAt = charSX + companion.eyeX * 8;
-            const gaze = clamp((gazeAt - seatX) / (companion.size * 2), -1, 1);
-            const gx = gaze * er * 0.5;
-            /* the lid: `notice` doubles as the blink's offset, so the room
-               blinks raggedly; ~5.5s apart, ~140ms closed */
-            const bt = (t + seat.notice * 9 + seat.phase * 5.5) % 5.5;
-            const lid = view.reduced ? 1 : bt < 0.14 ? Math.abs(bt / 0.07 - 1) : 1;
-            for (const lon of [-be.eyeLon, be.eyeLon]) {
-              const ca = Math.cos(lon);
-              ctx!.beginPath();
-              ctx!.ellipse(
-                Math.sin(lon) * ms * FACE_R + gx,
-                eyY,
-                er * Math.max(ca, 0.2),
-                er * Math.max(lid, 0.08),
-                0,
-                0,
-                TAU,
-              );
-              ctx!.fill();
-            }
-            ctx!.restore();
-            /* and the name, above them, for as long as the light lasts. It is
-               the only place a member's name is written in the world, so it
-               is written in the label register the rest of the chrome uses. */
-            if (answer.name > 0.01 && named?.name) {
-              ctx!.save();
-              ctx!.globalAlpha = answer.name;
-              ctx!.fillStyle = "#d6deea";
-              ctx!.font = '500 11px Pretendard, -apple-system, "Segoe UI", sans-serif';
-              ctx!.textAlign = "center";
-              ctx!.letterSpacing = "0.14em";
-              ctx!.fillText(
-                named.name.toUpperCase(),
-                seatX,
-                seatY - companion.size * 0.34,
-              );
-              ctx!.restore();
-            }
-            ctx!.globalAlpha = 1;
-          }
-        }
+           It is deleted rather than disabled because every input it had is
+           gone: `members` is empty, `groupCompanyPlaces` has no list to
+           place, and `company` could not leave zero. None of the three
+           rulings above depend on this code existing to be rediscovered —
+           they are statements about travel, anchoring and bake cost, and the
+           loop still does all three. */
 
         /* Squash-stretch coupled to the bob — and to the climb. Ascending it
            stretches a few percent and descending it compresses, which is the
@@ -4847,20 +4638,17 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          for this frame either way by the time we get here, which is what
          the paragraph above was always asking for. */
       mech = view.reduced ? mechAt(cam.x) : lerp(mech, mechAt(cam.x), kd(2e-3, dt));
-      /* THEY ARE ALREADY THERE (founder, 2026-08-27, video: "text and
-         characters should already be there, not reload when my character
-         arrives"). The company used to fade out for the whole crossing and
-         greet you on arrival, which read as a room loading itself the moment
-         you looked at it. A room's members stand at their room whether or
-         not anyone is visiting: the alpha now holds for the wall you are on
-         AND the wall you are travelling to, so arriving is arriving at
-         people already standing there. Leaving still slides them away with
-         their own column, which was the earlier ruling and still holds. */
-      const companyAt =
-        curWall().kind === "group" || (trip.active && wallAt(trip.dest)?.kind === "group")
-          ? 1
-          : 0;
-      company = view.reduced ? companyAt : lerp(company, companyAt, kd(2e-3, dt));
+      /* THE COMPANY'S ALPHA WAS SOLVED HERE AND THE RULING SURVIVES IT
+         (founder, 2026-08-27, video: "text and characters should already be
+         there, not reload when my character arrives"). The target held for
+         the wall you were on AND the wall you were travelling to, so arriving
+         was arriving at people already standing there rather than watching a
+         room populate itself the moment you looked at it; leaving still slid
+         them away with their own column, because they belong to the room and
+         not to you. Applied to nothing now — there is no company — but the
+         rule "a destination is already furnished before you reach it" is what
+         `loadWallRef` and the agent wall's own warm-on-approach are for, and
+         it was learned here. */
       /* ATTENTION EASES IN AND LETS GO. The target is the lean while the
          attention is live and zero once it lapses; both directions run
          through the same spring, so noticing and losing interest are the
@@ -5335,32 +5123,17 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     }
 
     /** Is the pointer over the companion? It sits in front of the field. */
-    /**
-     * WHICH MEMBER THE POINTER IS ON, IF ANY (founder, 2026-08-27).
-     *
-     * The seats are rebuilt by the draw pass every frame it paints company,
-     * so this asks the geometry that was actually painted rather than
-     * re-deriving it — the same rule the orb hit test follows, and the reason
-     * the pointer never lies about which being it would take.
-     */
-    function memberAt(cx: number, wy: number): string | null {
-      // Match the painter: nearer avatars receive overlapping taps first.
-      for (let index = companySeats.length - 1; index >= 0; index--) {
-        const seat = companySeats[index];
-        const dx = cx - seat.x;
-        const dy = wy - seat.y;
-        if (dx * dx + dy * dy <= seat.r * seat.r) return seat.id;
-      }
-      return null;
-    }
-
-    /** Notice a member: it comes up in light and says its name, then lets go. */
-    function noticeMember(id: string) {
-      if (companyNear.id === id && companyNear.until > performance.now() + 500) return;
-      companyNear.id = id;
-      companyNear.until = performance.now() + NOTICE_MS;
-      wake();
-    }
+    /* `memberAt` AND `noticeMember` ARE GONE WITH THE COMPANY THEY HIT-TESTED
+       (founder, 2026-08-27: "hovering/clicking on characters in the background
+       should show the name of the person above the character temporarily and
+       character should also brighten up temporarily"). `memberAt` walked
+       `companySeats` BACKWARDS, so nearer avatars took overlapping taps first
+       — the same reverse-of-the-painting-order rule `hitAt` follows below, and
+       the reason the pointer never lied about which being it would take.
+       `noticeMember` lit one for a beat, refusing to re-arm a notice that
+       still had half a second left on it so that a wandering cursor could not
+       hold a member permanently bright. Both read state the draw pass built;
+       with nothing painted there is nothing to ask. */
 
     function overChar(cx: number, wy: number): boolean {
       const dx = cx - (view.w / 2 + companion.off);
@@ -5417,14 +5190,13 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         wake();
         return;
       }
-      /* Open only this member's public inspirations within the current room. Record the
-         destination immediately so Back returns to the room, even mid-glide. */
-      const member = memberAt(cx, cy + cam.y);
-      if (member) {
-        noticeMember(member);
-        openGroupMemberRef.current(member);
-        return;
-      }
+      /* A TAP ON A MEMBER STOOD HERE, BEFORE THE ORB TEST. It noticed them,
+         then opened only that member's public inspirations inside the current
+         room, writing the destination immediately so Back returned to the
+         room even mid-glide. The ORDER was the ruling: company is painted in
+         front of the field, so a press that lands on both must resolve to the
+         thing on top. The orb test is first now because it is the only test
+         left. */
       const ball = hitAt(cx, cy);
       if (ball) {
         select(ball.id);
@@ -5518,11 +5290,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       gesture.snapAt = 0;
       /* Warm the reading while the finger is still down: it buys the whole
          press-to-release interval, and it is free when the background sweep
-         has already been here. Another member's room orb is never fetched —
-         its preview is all that is ours to show. */
+         has already been here.
+         THE GUARD WAS `warm.col === undefined || warm.own` — another member's
+         room orb was never fetched, because its preview was all that was ours
+         to show. `col` and `own` are set by nothing since the room orb went
+         (see the tombstone in `space/inspiration/orb.ts`), so the test read
+         `undefined === undefined` on every orb in the world. Every orb a
+         press can land on is one of your own or your agent's, and both are
+         yours to read. */
       const warm = hitAt(e.clientX, e.clientY);
-      if (warm && (warm.col === undefined || warm.own))
-        void loadDetailRef.current(warm.sigId ?? warm.id);
+      if (warm) void loadDetailRef.current(warm.sigId ?? warm.id);
       /* AND THE LIGHT ANSWERS AT TOUCHDOWN. The whole contact term was built
          and then never armed — `pressId` was declared, read once in the loop
          and written nowhere, so `press` sat at zero forever and a press still
@@ -5637,11 +5414,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          lives on the ROOT: the canvas is pointer-events:none, so it is never
          the element the cursor resolves from. */
       if ((gesture.hoverTick++ & 1) === 0 && !gesture.dragging) {
-        /* a member under the pointer says who it is, for a beat */
-        const member = memberAt(e.clientX, e.clientY + cam.y);
-        if (member) noticeMember(member);
+        /* a member under the pointer used to say who it was, for a beat, and
+           counted toward the cursor the same way the companion and an orb do */
         const over =
-          member !== null ||
           overChar(e.clientX, e.clientY + cam.y) ||
           hitAt(e.clientX, e.clientY) !== null;
         const want = over ? "pointer" : "";
@@ -5705,11 +5480,14 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             companion.unwindAt = 0;
           }
         }
-        /* travel toward a room begins at swipe start: fetch it now */
-        if (off > 20 && hasNext && groupsRef.current[trip.col])
-          loadGroupRef.current(groupsRef.current[trip.col].id);
-        else if (off < -20 && trip.col - 1 > 0 && groupsRef.current[trip.col - 2])
-          loadGroupRef.current(groupsRef.current[trip.col - 2].id);
+        /* A ROOM WAS PREFETCHED FROM 20px OF DRAG. Travel toward a room began
+           at swipe start, not at commit, so the board and ground were in
+           flight while the glide was still deciding whether to happen — the
+           same "already there when you arrive" ruling the company's alpha
+           obeyed. `loadWallRef` keeps the idea for the walls that remain; what
+           went is the room-only branch and the `groupsRef[col-1]` indexing
+           that translated a column into a room, an axis that is now agents
+           then you and holds no rooms to index. */
         gesture.lastT = nowT;
         wake();
         return;
@@ -6006,29 +5784,29 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
        needs its ground solved, poured and woken exactly as a glide would. */
     if (resumedAt !== null) arriveColumn();
     /*
-     * A ROOM THAT HAS NOT WOKEN YET HAS TO KEEP TRYING.
+     * A WALL THAT HAS NOT WOKEN YET HAS TO KEEP TRYING, AND THE ROOM IS THE
+     * REASON THIS LINE EXISTS AT ALL.
      *
-     * `ready` gates the ENTIRE headquarters block — eyebrow, poster, forming
-     * line — on `wokenGroups.has(id)`, and the only thing that ever adds to
-     * that set is `tryWakeWall`. It is reached from exactly two places:
-     * `arriveColumn`, and the tick while `trip.awaitingWake` is true.
-     *
-     * Both are lost in the same instant. Arriving in a room whose field is
-     * still in flight sets `awaitingWake` and returns; the fetch then resolves
-     * and calls `setGroupFieldTick`, which rebuilds this effect — so `trip` is
-     * replaced by a fresh one with `awaitingWake` false, and `headingRef` was
-     * already cleared by the arrival, so the `resumedAt` branch above does not
-     * run either. Nothing asks again. The room stays unwoken and its
-     * headquarters renders NOTHING: no name, no sentence, not even the
-     * "Forming — nothing read together yet" that `deriveGroupChrome` prepared
-     * for exactly this case. It stays blank until you travel away and back.
+     * The bug it fixes was a room's: `ready` gated the entire headquarters
+     * block on `wokenGroups.has(id)`, the only writer was `tryWakeWall`, and
+     * `tryWakeWall` was reached from exactly two places — `arriveColumn`, and
+     * the tick while `trip.awaitingWake` is true. Both were lost in the same
+     * instant. Arriving at a wall whose data is still in flight sets the flag
+     * and returns; the fetch then resolves and triggers a rebuild, so `trip`
+     * is replaced by a fresh one with the flag false, and `headingRef` was
+     * already cleared by the arrival, so the `resumedAt` branch above does
+     * not run either. Nothing asks again, and the wall renders nothing until
+     * you travel away and come back.
      *
      * The rebuild that loses the flag is the same event that makes the answer
      * available, so setting it on setup is not a retry loop — it is one
-     * question asked at the only moment it can now be answered. `tryWakeWall`
-     * clears the flag itself, and `groupVisitedRef` keeps the wake to once.
+     * question asked at the only moment it can now be answered.
+     *
+     * The room's own branch is deleted; the agent wall's, below, was written
+     * to match it and keeps the fix. Note what that means: the only wall kind
+     * that can still arrive before its data does is an agent's, so this guard
+     * now has exactly one subject where it used to have two.
      */
-    else if (curWall().kind === "group") trip.awaitingWake = true;
     else if (
       curWall().kind === "agent" &&
       !agentsRef.current.some((a) => a.agent.id === curWall().id)
@@ -6102,33 +5880,23 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       navigationState: () => ({ wall: curWall(), section: cam.y < view.layout.minCam * 0.5 ? 'sky' : cam.y > view.layout.maxCam * 0.5 ? 'field' : 'top', moving: trip.active || cam.aiming }),
       /* the timeline re-hangs under the word, whose width the reading sets */
       hangRail,
-      /**
-       * STAND IN SOMEONE ELSE'S GROUND — or back in your own, with null.
-       *
-       * The field re-solves and the orbs arrive where the new fit puts them.
-       * The CAMERA does not move: you asked to see a different ground, not to
-       * be taken somewhere, and the world only moves when you moved it.
-       */
-      standIn: (ownerProfileId: string | null) => {
-        if (ground === ownerProfileId) return;
-        ground = ownerProfileId;
-        /* THE GROUND THAT LEFT GOES DARK AND THE ONE THAT ARRIVED IS SIMPLY
-           THERE. It used to pour in, "so a swap reads as a ground filling
-           rather than as a screen being replaced" — and the camera does not
-           move for a `standIn`, which means the camera is wherever it already
-           was, which is above the ground: the filling it described was
-           happening below the fold. The swap reads as a swap from the one
-           place it is legible, standing down in the field, and there a ground
-           appearing in place is exactly what has happened. */
-        assignHomes();
-        applyPresence();
-        const here = presentBalls();
-        /* elect, then settle — same order and same reason as `arriveColumn`:
-           the row has to be known before an orb can be placed in it */
-        electPeek(here);
-        settleInstantly();
-        wake();
-      },
+      /* `standIn` IS GONE. It swapped whose ground you were standing on
+         without moving the camera — you asked to see a different ground, not
+         to be taken somewhere, and the world only moves when you moved it.
+         Its body was the five-step sequence every ground change in this file
+         runs: `assignHomes`, `applyPresence`, `presentBalls`, `electPeek`,
+         `settleInstantly` — elect before settle, same order and same reason
+         as `arriveColumn`, because the peek row has to be known before an orb
+         can be placed in it. That sequence survives at its other two call
+         sites; what goes is the one entry point that no longer has a caller.
+
+         ONE CORRECTION IT RECORDED IS WORTH KEEPING. The swap used to POUR,
+         "so a swap reads as a ground filling rather than as a screen being
+         replaced" — and since the camera deliberately does not move for a
+         `standIn`, the camera was above the ground and the filling was
+         happening below the fold, where nobody could see it. Motion that
+         explains something has to happen where the explanation is being
+         read. */
       windTo: (T: number) => {
         if (trip.active) return; /* the dial is the personal jar's alone */
         TRef.current = T;
@@ -6375,9 +6143,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         for (const b of list) {
           if (b.id === inspirationId || b.sigId === inspirationId) matches.add(b);
         }
-        for (const b of groupBallsRef.current.values()) {
-          if (b.id === inspirationId || b.sigId === inspirationId) matches.add(b);
-        }
+        /* a second sweep over `groupBallsRef` stood here, because a room's
+           orbs were a separate index and an answer saved on one of your own
+           memories had to light it in both places at once. One index now. */
         for (const b of matches) {
           const from = b.alive;
           b.reflections = Math.max(0, b.reflections + delta);
@@ -6729,8 +6497,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
              a full viewport above the band. An audit that grades a population
              the layout never placed reports a break that is not there, which
              is worse than no audit: it was the instrument, not the field. */
-          if ((b.agentId ?? "") !== curWall().id || !standingOk(b, curWall()))
-            continue;
+          if ((b.agentId ?? "") !== curWall().id) continue;
           if (b.capturedMs > TRef.current) continue;
           present++;
           const home = b.peek ? lerp(b.homeY, b.peekY, peekLift()) : b.homeY;
@@ -6763,7 +6530,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           bandBottom,
           wallKind: curWall().kind,
           wallId: curWall().id,
-          ground,
           provenanceCount: poster.provenance.size,
           col: trip.col,
           travelling: trip.active,
@@ -6792,8 +6558,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             let dimmed = 0;
             let glowing = 0;
             for (const b of list) {
-              if ((b.agentId ?? "") !== curWall().id || !standingOk(b, curWall()))
-                continue;
+              if ((b.agentId ?? "") !== curWall().id) continue;
               if (b.active) active++;
               rMin = Math.min(rMin, b.r);
               rMax = Math.max(rMax, b.r);
@@ -6813,7 +6578,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
               glowing,
             };
           })(),
-          company: companySeats.map(seat => ({ ...seat, y: seat.y - cam.y })),
           /* the same question asked upward: how far the sky has leaned into
              headquarters. There is nothing IN it to elect any more, so the
              scalar is the whole answer — and it still tells a rip-out from a
@@ -6881,8 +6645,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       };
       simApiRef.current = null;
       ballsRef.current = null;
-      /* room orbs belong to this run of the loop; the DATA cache stays */
-      groupBallsRef.current.clear();
+      /* a `groupBallsRef.current.clear()` stood here: a room's orbs belonged
+         to one run of the loop while the DATA they were built from outlived
+         it, so the orbs were dropped and the cache was not. That asymmetry is
+         why the ref existed separately at all. */
     };
     /* The field is what you kept AND what your agents kept, so the loop waits
        for both before it builds anything — one pour, never a second one. */

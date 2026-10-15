@@ -165,8 +165,14 @@ export interface MountedWorld {
    * down here or it is describing the wrong place.
    */
   toField(): Promise<void>;
-  /** click one of the "whose ground" rows */
-  standIn(name: RegExp): Promise<void>;
+  /* `standIn(name)` IS GONE. It clicked one of the "whose ground" rows —
+     `.jar-grounds-row` — and stepped sixty frames while the ground re-solved.
+     The band of names was a room's, deleted on 2026-10-12; the audit fields
+     it was asserted against (`ground`, `company`) were deleted on 2026-10-15
+     with the loop's group branches, and this is the third leg of the same
+     tripod. A test helper that drives a selector nothing renders is worse
+     than no helper: it compiles, it is discoverable, and the first person to
+     reach for it gets a timeout instead of an answer. */
   unmount(): void;
 }
 
@@ -485,10 +491,6 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
         const where = audit();
         if (Math.abs(where.camY - where.fieldRest) < 1) break;
       }
-    },
-    async standIn(name) {
-      await clickByText(".jar-grounds-row", name);
-      await step(60);
     },
     unmount() {
       act(() => root.unmount());

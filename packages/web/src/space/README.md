@@ -40,13 +40,18 @@ than left to read as current.
   2026-10-09 — the same commit that removed the only list of your rooms. **That
   also ends the bend below**: every subdirectory of `space/` is now named by a
   canon word, which is what the rule always said it should be.
-- **`space-kinds/group.ts` is two interfaces and no code.** It held
-  `groupWallOrbs`, `deriveGroupChrome`, the two shared-read predicates and
-  `GROUP_READ_TTL_MS`. What is left is `GroupData` and `GroupEvidence`, kept
-  only because `canvas/simulation.ts` — owned by another change in flight —
-  imports the first by name. **So the one upward import below is also gone**:
-  nothing in `space-kinds/` reaches into `space/top-of-mind/` any more, and the
-  layering `docs/codebase.md` planned is accidentally satisfied.
+- **`space-kinds/group.ts` is gone**, and so is **`space/group-company.ts`**.
+  The first held `groupWallOrbs`, `deriveGroupChrome`, the two shared-read
+  predicates and `GROUP_READ_TTL_MS`; by 2026-10-12 it was down to the two
+  interfaces `GroupData` and `GroupEvidence`, kept alive only because
+  `canvas/simulation.ts` imported the first by name and could not be edited
+  from that change. The second placed a room's members behind your companion
+  and carried the NPC research that gave them four idles, a depth and a
+  reaction delay. Both were deleted on 2026-10-15 with the loop's group
+  branches, along with `lib/api/groups.ts`. **So the one upward import below
+  is also gone**: nothing in `space-kinds/` reaches into `space/top-of-mind/`
+  any more, and the layering `docs/codebase.md` planned is accidentally
+  satisfied.
 - **`space/ground-count.ts` is gone.** It answered "how many of a room's pooled
   field belong to the ground currently poured", which was the fix for a real
   defect: the founder stood in a room holding three memories, none of them
@@ -98,9 +103,9 @@ than about any one of its layers. It went with rooms on 2026-10-12.
 **`space-kinds/` imported back up into `space/`, once.** `space-kinds/group.ts`
 reached into `space/top-of-mind/` for `formingWords` and `WallChrome`, and
 `docs/codebase.md` plans a one-way layering that the import did not obey. That
-file is two interfaces now and imports nothing. The standing advice survives
-both repairs: trust the imports when tracing a dependency, not the documented
-layering.
+file was down to two interfaces importing nothing, and is now deleted
+outright. The standing advice survives both repairs: trust the imports when
+tracing a dependency, not the documented layering.
 
 It was a true CYCLE until 2026-08-25, and much wider: `space/signal/sky-engine.ts`
 reached down for `makeGroupBall`, which reached back up for `colorBall`,

@@ -117,18 +117,20 @@ import type { ApiConversation } from "../lib/api/conversations";
 import { useMeasured } from "../canvas/measured";
 /* THE CANVAS SIDE OF `SimApi`, which used to be 5,637 lines of this file.
    `startSimulation` is the loop; `SimApi` and `FieldAudit` are its published
-   surfaces and moved with it because they ARE its export list. `Carry` and
-   `GroupCacheEntry` are two shapes that used to be written twice — once as an
-   inline type on a `useRef` here and once in the loop's own teardown. See the
-   header of `canvas/simulation.ts` for why the cut is here and nowhere else in
-   this file. */
+   surfaces and moved with it because they ARE its export list. `Carry` is a
+   shape that used to be written twice — once as an inline type on a `useRef`
+   here and once in the loop's own teardown. (`GroupCacheEntry` was the
+   second such shape and is gone with rooms: the loop declared it, this file
+   imported it back to type a map that nothing ever filled, and the whole
+   round trip existed to keep one `w.kind === "group"` branch compiling.) See
+   the header of `canvas/simulation.ts` for why the cut is here and nowhere
+   else in this file. */
 import {
   startSimulation,
   SELF_WALL_NAME,
   UNWIND_MS,
   type Carry,
   type FieldAudit,
-  type GroupCacheEntry,
   type SimApi,
 } from "../canvas/simulation";
 import { setStanding as publishStanding } from "../lib/standing";
@@ -192,18 +194,18 @@ import {
      `lib/data`'s `saveInspiration` — and the route still accepts
      `visibility`. What is gone is this page asking it to. */
   fetchProfiles,
-  /* `ApiGroupMember` and `ApiGroupSummary` are the last two room shapes this
-     file names, and both are only here to TYPE THE EMPTY REFS the simulation
-     requires — see the cache tombstone below. Nothing fills either. */
-  type ApiGroupMember,
-  type ApiGroupSummary,
+  /* `ApiGroupMember` and `ApiGroupSummary` STOOD HERE and were the last two
+     room shapes this file named; `ApiGroupFieldInspiration` was the third,
+     below. All three were imported solely to TYPE EMPTY REFS the simulation
+     declared as required options. With the loop's group branches out, the
+     refs are gone, the types are gone, and `lib/api/groups.ts` — which had no
+     other reader and no route behind it — goes with them. */
   deletePrinciple,
   disputePrinciple,
   undoPrincipleDispute,
   reorderPrinciples,
   updatePrinciple,
   type ApiPrinciple,
-  type ApiGroupFieldInspiration,
   fetchTheWeather,
   ApiError,
 } from "../lib/api";
@@ -1485,8 +1487,11 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [agentRoster, setAgentRoster] = useState<AgentRosterEntry[] | null>(null);
   /* `wokenGroups`, `groupFieldTick` and `failedGroups` are gone: the three
      pieces of state a room's asynchronous arrival needed — its words exist
-     now, its ground just landed, its data could not be fetched. */
-  const setMembersRef = useRef<(m: Map<string, ApiGroupMember[]>) => void>(() => {});
+     now, its ground just landed, its data could not be fetched. `setMembersRef`
+     went with them in the same pass as the loop's group branches: it was a
+     setter declared above the state it set, crossing a declaration-order
+     boundary that only existed because a room's members were fetched far
+     below and drawn by a frame loop installed far above. */
   /** Which wall the camera is standing on. Discrete, pushed from the loop. */
   const [atWall, setAtWall] = useState<Space>({ kind: "self", id: "", name: SELF_WALL_NAME, col: 0 });
   /**
@@ -2368,25 +2373,25 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const offlineViewerRef = useRef<string | null>(null);
   const viewerIdRef = useRef<string | null>(null);
   viewerIdRef.current = auth?.profile?.id ?? offlineViewerRef.current;
-  /**
-   * A room's member lists, where the SIM can read them. The state itself
-   * lives far below (it is fetched with the rest of a room's chrome); this
-   * ref is declared here, above the sim's effect, because the frame loop
-   * draws the room's company from it — one small being per member, behind
-   * yours. Same pattern as `setMembersRef`: the ref is the one honest way
-   * across a declaration-order boundary.
-   */
-  const [members, setMembers] = useState<Map<string, ApiGroupMember[]>>(() => new Map());
-  const membersRef = useRef<Map<string, ApiGroupMember[]>>(new Map());
-  const openGroupMemberRef = useRef<(profileId: string | null) => void>(() => undefined);
-  /* the hue map a room's legend read — written by the loop where the orbs
-     were tinted, so a name and the orbs it switched to could not disagree
-     about who was which colour. Nothing reads it now; `canvas/simulation.ts`
-     declares it required and writes it, which is why it stands. */
-  const hueByOwnerRef = useRef<Map<string, number>>(new Map());
-  /* `groupsRef` — the rooms this account is in, in axis order — is empty for
-     the same reason: the loop declares it and reads it four times. */
-  const groupsRef = useRef<ApiGroupSummary[]>([]);
+  /* ═══ THE NINE SPLINTS ARE OUT (2026-10-15) ═══════════════════════════
+     `members` / `setMembers` / `membersRef` (a room's member lists, where the
+     sim could read them, for the company it drew behind your companion),
+     `openGroupMemberRef`, `hueByOwnerRef` (the map a room's legend decoded,
+     written by the loop at the one place the orbs were tinted so a name and
+     its orbs could not disagree), `groupsRef`, `loadGroupRef`, `pushWokenRef`,
+     `groupCacheRef`, `groupFieldRef`, `groupBallsRef` and `groupVisitedRef`.
+
+     EVERY ONE OF THEM CARRIED THE SAME SENTENCE, which is the thing to read
+     before writing another: "this survives because `canvas/simulation.ts`
+     declares it required and that file may not be edited from here." They
+     were not state, and they were not even unused state — they were an empty
+     container, a no-op function or a write-only map, wired into a frame loop
+     so a type would check across a boundary nobody could cross that day.
+     Stopping at a green build was the right call then and this is the other
+     half of it. When a removal has to stop mid-way, the splints are the
+     deliverable: each one named what it was, who held it up, and what event
+     would release it, and that is what made this pass a deletion rather than
+     an investigation. */
 
   /**
    * THE WALLS, LEFT TO RIGHT — agents, then you.
@@ -2436,17 +2441,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      `groupId:version` with their own tokens so an invalidated read could not
      land late, and the two ticks that told React any of it had changed.
 
-     FOUR REFS SURVIVE, EMPTY, AND ONLY FOR THE COMPILER: `groupCacheRef`,
-     `groupFieldRef`, `groupBallsRef` and `groupVisitedRef`.
-     `canvas/simulation.ts` is owned by a change in flight and may not be
-     edited from here; it declares all four as required options and reads
-     them every frame. They are filled by nothing. They come out the moment
-     that file's group branches do, and so does `GroupCacheEntry`, which the
-     loop declares and this file imports. */
-  const groupCacheRef = useRef<Map<string, GroupCacheEntry>>(new Map());
-  const groupFieldRef = useRef<Map<string, ApiGroupFieldInspiration[]>>(new Map());
-  const groupBallsRef = useRef<Map<string, Ball>>(new Map());
-  const groupVisitedRef = useRef<Set<string>>(new Set());
+     FOUR REFS SURVIVED THIS CUT, EMPTY AND ONLY FOR THE COMPILER —
+     `groupCacheRef`, `groupFieldRef`, `groupBallsRef`, `groupVisitedRef` —
+     and they came out on 2026-10-15 with the loop's group branches. See the
+     splint tombstone above the walls for what all nine of them were. */
   /**
    * IS THE RAIL SHOWING? (founder, 2026-08-25: "i don't want the line to
    * always be there. can we have a button called timeline and when user
@@ -2570,10 +2568,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      this — and if something ever does, the shape is here in the history
      rather than having to be rediscovered.
 
-     `loadGroupRef` remains as a no-op because `canvas/simulation.ts` is
-     owned by a change in flight and declares it required, calling it as
-     travel toward a room begins. There are no rooms to travel to. */
-  const loadGroupRef = useRef<(groupId: string) => unknown>(() => undefined);
+     `loadGroupRef` remained as a no-op while `canvas/simulation.ts` still
+     declared it required, calling it as travel toward a room began. There
+     were no rooms to travel to; it came out with the loop's group branches
+     on 2026-10-15. */
 
   /**
    * THE GROUND AN ARRIVAL FINDS IS CURRENT. An agent's memories change while
@@ -2699,9 +2697,9 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      first time that room's orbs poured — "its words exist now, whole" — and
      four memos depended on the set so that a room's poster appeared the
      moment its board was KNOWN rather than at whatever render happened next.
-     `pushWokenRef` survives as a no-op because `canvas/simulation.ts` is
-     owned by a change in flight and declares it required. */
-  const pushWokenRef = useRef<(groupId: string) => void>(() => undefined);
+     `pushWokenRef` survived as a no-op while `canvas/simulation.ts` still
+     declared it required; it came out with that file's group branches on
+     2026-10-15. */
 
   /* ---------------- data: all four fetches in parallel ---------------- */
   useEffect(() => {
@@ -3837,7 +3835,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         measured,
         inspirations,
         agents,
-        walls,
         setDialAway,
         setInField,
         setInSky,
@@ -3852,28 +3849,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         dialRef,
         fieldLoadingRef,
         foundRef,
-        groupBallsRef,
-        groupCacheRef,
-        groupFieldRef,
-        groupsRef,
-        groupVisitedRef,
         headingRef,
-        hueByOwnerRef,
         inspirationsRef,
         lastGoRef,
         loadDetailRef,
-        loadGroupRef,
         loadWallRef,
         localeRef,
-        membersRef,
-        openGroupMemberRef,
         openSeekRef,
         paletteRef,
         panelArrowRef,
         panelOpenRef,
         parkedRef,
         pushArrivedRef,
-        pushWokenRef,
         readingLitRef,
         sayLineRef,
         selectedIdRef,
@@ -3881,7 +3868,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         skyRef,
         slotH,
         TRef,
-        viewerIdRef,
         wallsRef,
       }),
     [pourSig, agents, walls],
@@ -4177,25 +4163,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (!posterAsk) setGroundAsk(null);
   }, [posterAsk]);
 
-  /**
-   * WHOSE GROUND YOU COULD STAND IN — not a key to a mixture.
-   *
-   * This was a legend: five hues poured into one field and a colour key beside
-   * it. The mixture asked the reader to separate five people's memories before
-   * they could read any of them, and it could not repay that work — a group's
-   * ground is structurally incapable of explaining its sky, because the wall
-   * query stops at shares (`loadGroupField`, routes/groups.ts) and a member
-   * sees the pattern someone arrived at, never the captures behind it.
-   *
-   * So the ground is ONE person's, yours by default, and this is the way to
-   * change whose. You are first and have no swatch: you are the warm white the
-   * whole world is drawn in, and giving yourself a colour chip would imply you
-   * are one option among five rather than the ground everything else is read
-   * against.
-   *
-   * Hues come from `hueByOwnerRef`, written where the sprites are tinted, so
-   * a name and the orbs it switches to are physically incapable of disagreeing.
-   */
+  /* A DOC COMMENT FOR `grounds` STOOD HERE AND IS DELETED, which is a note
+     about tombstones rather than about rooms. The deletion on 2026-10-12
+     replaced the CODE with the tombstone just below and left the original
+     doc block above it untouched, so the file carried the same argument
+     twice: once in the present tense, saying the row of names is how you
+     change whose ground you are on, and once immediately underneath saying
+     it is gone. A reader scanning for whether a feature exists reads the
+     first one. When code goes, its doc comment goes with it or it becomes
+     the most convincing possible lie about the file. Everything the block
+     said is in the tombstone below, in the past tense, where it belongs. */
   /* ═══ WHOSE GROUND YOU ARE STANDING IN — GONE WITH THE ROOM ════════════
      Founder, 2026-10-12: "방 없애" — remove rooms.
 
@@ -4214,8 +4191,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
      Hues came from `hueByOwnerRef`, written where the sprites are tinted so
      that a name and the orbs it switched to could not disagree. That ref
-     survives, empty, because `canvas/simulation.ts` declares it and writes
-     it; nothing reads it now. */
+     survived empty while `canvas/simulation.ts` still wrote it; both the
+     write and the ref went on 2026-10-15. */
 
   /* `standing` IS GONE: whose ground was under you, null meaning yours.
      Travelling to another wall put you back in your own, because standing in
@@ -4229,10 +4206,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   /* `standIn` IS GONE. It was the press on one of those names: release the
      focus, remember whose ground this is, tell the loop to stand in it, drop
      to the ground, and write the member into the address so the view was
-     bookmarkable. `openGroupMemberRef` stays as a no-op because the loop
-     declares it and calls it from a pressed avatar — a press on company that
-     no longer exists. `setStanding` survives for the loop's benefit and is
-     written nowhere else; `standing` reads as null forever. */
+     bookmarkable. `openGroupMemberRef` stayed as a no-op while the loop
+     declared it and called it from a pressed avatar — a press on company
+     that no longer existed — and went on 2026-10-15, along with the loop's
+     own `SimApi.standIn`, which by then was a verb with no caller on either
+     side of the boundary. */
   /* `groundsLit` AND `GROUNDS_LIT_MS` ARE GONE WITH THE BAND THEY LIT. The
      class was removed rather than animated out — the rows carried an opacity
      transition already, so dropping the class WAS the settle, on the curve
@@ -5414,8 +5392,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     el.setSelectionRange(at, at);
   }, [mouthPage, mouthOpen]);
 
+  /* `?? groupBallsRef.current.get(panelId)` stood between these two: a room's
+     orbs lived in their own index, built per run of the loop and cleared in
+     its teardown, so the pour's `byId` genuinely did not hold them. One index
+     and one detached fallback now. */
   const panelBall = panelId
-    ? ballsRef.current?.byId.get(panelId) ?? groupBallsRef.current.get(panelId)
+    ? ballsRef.current?.byId.get(panelId)
       ?? (detachedInspiration?.ball.id === panelId ? detachedInspiration.ball : null)
     : null;
   /* `panelIsGroup` AND `panelCanReflect` ARE GONE, AND THEY WERE THE SAME
@@ -5963,10 +5945,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      you are in every room you can see; what decided a room's character was
      who ELSE was standing in it. `groupPanel` goes with the panel it opened.
 
-     `setMembersRef` stays as a setter nothing calls, for the same
-     simulation-owns-it reason as `membersRef` above. */
-  setMembersRef.current = setMembers;
-  membersRef.current = members;
+     `setMembersRef` stayed as a setter nothing called, for the same
+     simulation-owns-it reason as `membersRef`; both went on 2026-10-15 when
+     the loop stopped declaring them. */
 
 
   /* `rereadGroupBoard` AND `groupReading` ARE GONE. `POST
@@ -6100,11 +6081,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      refetched on every re-arrival, since a timeline that never moves is a
      timeline nobody trusts.
 
-     `members` and `setMembers` SURVIVE as empty, and only because
-     `canvas/simulation.ts` — owned by a change in flight and not editable
-     from here — declares `membersRef` as a required option and draws a
-     room's company from it. Nothing fills it. It goes when that file's group
-     branches do. */
+     `members` and `setMembers` SURVIVED as empty, and only because
+     `canvas/simulation.ts` declared `membersRef` as a required option and
+     drew a room's company from it. Nothing filled it, and it went on
+     2026-10-15 when that file's group branches did. */
   /* ═══ PROPOSING TO A ROOM, AND WAITING FOR IT TO AGREE ════════════════
      Founder, 2026-10-12: "방 없애" — remove rooms.
 
@@ -6702,8 +6682,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   /** Open the answers already on this save. A read, with nothing to write. */
   const openReflections = useCallback(() => {
     if (!panelId || !panelBall) return;
-    /* another member's save is theirs, and so are its answers */
-    if (panelBall.col !== undefined && !panelBall.own) return;
+    /* `if (panelBall.col !== undefined && !panelBall.own) return;` STOOD HERE
+       — another member's save is theirs, and so are its answers. `col` and
+       `own` are set by nothing now (the room orb went on 2026-10-12; see the
+       tombstone in `space/inspiration/orb.ts`), so the first half read
+       `undefined !== undefined` on every orb and the guard could never fire.
+       Every save this panel can open is yours or your agent's. */
     setReflectOpen(true);
     viewNavigationRef.current.write({ ...observedRef.current, inspirationId: panelBall.sigId ?? panelId, reflectionId: 'open' }, { observed: true });
   }, [panelId, panelBall]);

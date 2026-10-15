@@ -33,15 +33,22 @@
  * rename, invite into, or close — a one-way door. Offered the choice between
  * rebuilding the exits and finishing the removal, the founder removed rooms.
  *
- * WHY `"group"` IS STILL IN THE UNION BELOW, which is the one thing here a
- * reader will think is an oversight. `canvas/simulation.ts` is owned by
- * another change in flight and may not be edited from this one. It compares
- * `w.kind === "group"` in eight places, and TypeScript rejects a comparison
- * against a literal the union does not contain — so dropping the member now
- * would break the build in a file this change is not allowed to touch.
- * Nothing constructs a `Space` with that kind any more: `pages/Home`'s axis
- * is agents, then you, and stops. The member is a compile-time splint, and it
- * comes out the moment the loop's group branches do.
+ * `"group"` LEFT THE UNION ON 2026-10-15, three days after the rooms it
+ * named. It stayed that long as an explicit compile-time splint:
+ * `canvas/simulation.ts` compared `w.kind === "group"` in eight places and
+ * TypeScript rejects a comparison against a literal the union does not
+ * contain, so dropping the member would have broken the build in a file that
+ * change was not allowed to touch. Nothing had constructed a `Space` with
+ * that kind since the removal — `pages/Home`'s axis is agents, then you, and
+ * stops — so for three days the type system was describing a kind of space
+ * that could not exist, purely to keep eight unreachable branches legal.
+ *
+ * THE SPLINT IS WHY THIS WENT WELL AND IS WORTH COPYING. A half-finished
+ * removal is dangerous in proportion to how hard it is to tell apart from a
+ * finished one, and every surviving piece here carried a note saying what it
+ * was, which file was holding it up, and what event would release it. When
+ * the loop was finally free, the remaining work was reading eight tombstones
+ * and following them, not re-deriving what rooms had been.
  *
  * THIS DIRECTORY AND `space/` ARE NOT THE SAME AXIS, and the names do not say
  * so. `space/` is split by LAYER — one subdirectory per canon layer, the code
@@ -54,7 +61,7 @@
  */
 
 /** The kinds, in the axis order they stand in: agents ← you. */
-export type SpaceKind = "self" | "group" | "agent";
+export type SpaceKind = "self" | "agent";
 
 export interface Space {
   kind: SpaceKind;

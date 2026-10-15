@@ -215,9 +215,10 @@ it('keeps a one-press way out of the sky and of the ground on your own wall',asy
      AND THE SAME VIEW OPENED BY NAME, surviving Back and Forward — the
      bookmarkable `?member=` half of `/w/:wall/:label`.
 
-   `audit().ground`, `audit().company` and `MountedWorld.standIn` all exist
-   only for these, and `canvas/simulation.ts` still publishes the first two
-   because that file is owned by a change in flight. */
+   `audit().ground`, `audit().company` and `MountedWorld.standIn` existed
+   only for these. All three are gone: the first two on 2026-10-15, when
+   `canvas/simulation.ts`'s group branches came out and the two fields could
+   no longer report anything but a constant, and the helper with them. */
 
 it('keeps the selected principle and its route after editing, so Back returns to the prior view',async()=>{
   principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'declared',rank:0,locked:true,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[]}];
