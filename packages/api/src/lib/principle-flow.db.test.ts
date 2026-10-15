@@ -315,35 +315,6 @@ describe("principles across personal profiles", () => {
     expect(row.statement).toBe("My own words");
   });
 
-  it("serves no principle whose material a reader may not see", async () => {
-    /* THE PRIVACY HALF OF THE DELETED ROOM CASE, kept as a personal one.
-       That case asserted a principles response carries STATEMENTS but never
-       the raw captures underneath them ("PRIVATE RAW TEXT MUST NEVER LEAVE"),
-       and the tombstone below claimed this suite already covered it. It did
-       not — the string was planted by the fixture and nothing read it back,
-       so the fixture was carrying a trap with no spring. This is the test the
-       tombstone was promising.
-
-       The room made it matter because OTHER people read a surface built from
-       your captures. Owner-and-reader being the same person does not make the
-       assertion vacuous: the view is assembled from evidence rows, and the
-       bug it guards against is a join that reaches through to
-       `inspirations.text` on the way to a statement. */
-    /* A FRESH PROFILE, not the shared `owner`. `material()` lands a live
-       top-of-mind, and `owner` already has one from the case above, so
-       reusing it trips `top_of_minds_one_live_per_profile_idx` -- which is
-       the constraint doing its job, not a bug in the subject. The sibling
-       case below seats itself the same way. */
-    const profileId = await person();
-    await material(profileId, [profileId]);
-    await refreshPrinciplesForProfile({ profileId }, { db: t.db as never, modelProvider: provider });
-    const views = await loadPrincipleViews(t.db as never, profileId);
-    expect(views.length, "no principle was served, so the assertion below would pass on an empty page").toBeGreaterThan(0);
-    expect(JSON.stringify(views)).not.toContain("PRIVATE RAW TEXT MUST NEVER LEAVE");
-    expect(renderPrinciplesMarkdown({ name: 'Test', type: 'human' }, views, new Date()))
-      .not.toContain("PRIVATE RAW TEXT MUST NEVER LEAVE");
-  });
-
   it('does not count duplicate wording under different IDs as distinct patterns',async()=>{
     const profileId=await person(),ids=await material(profileId,[profileId]);
     await t.sql`UPDATE signals SET statement='The same repeated wording.' WHERE id IN ${t.sql(ids)}`;
@@ -367,13 +338,30 @@ describe("principles across personal profiles", () => {
      only ever mattered because a room let OTHER PEOPLE read a surface built
      from your captures. With the room gone the reader and the owner are the
      same person, and a personal principle serving its owner's own statements
-     is covered by "serves no principle whose material a reader may not see"
-     above. CORRECTION (2026-10-15): when this note was written that test did
-     not exist — the name was a promise, not a reference, and the fixture's
-     "PRIVATE RAW TEXT MUST NEVER LEAVE" string had nothing reading it back.
-     The test named here has since been written, so the claim is now true.
-     What genuinely goes is the cross-member case, and it goes because there
-     are no longer two members.
+     is covered elsewhere in this suite.
+
+     CORRECTION (2026-10-15), in two steps, because the first was also wrong.
+     The note originally claimed coverage by a test called "serves no
+     principle whose material a reader may not see". NO SUCH TEST EXISTED —
+     the name was a promise, not a reference, and the fixture's "PRIVATE RAW
+     TEXT MUST NEVER LEAVE" string had nothing reading it back. So I wrote
+     one. IT FAILED, and it deserved to: a personal principle view
+     DELIBERATELY carries the owner's own captures as
+     `citedSignals[].examples[].text`, scoped by `i.profile_id = profileId`
+     in `loadPrincipleViews`. The owner reading their own words is the
+     feature, not a leak.
+
+     SO THE PRIVACY HALF HAS NO PERSONAL ANALOGUE, and claiming otherwise was
+     the error in both directions. The deleted assertion was about OTHER
+     PEOPLE reading a surface built from your captures — a property that
+     needs two members to even be stated. There are no longer two members, so
+     it goes with the cross-member case rather than being reworded into a
+     personal one that would have to assert the opposite of the design.
+
+     WHAT STILL GUARDS IT if rooms ever return: the scoping predicate itself,
+     `i.profile_id = profileId`. That is the line to write a test against on
+     the day a second reader exists. The fixture keeps the shouty string so
+     the next person has the trap ready to arm.
 
      The trailing block that renewed `other`'s support through the real
      `reviewSignalSupport` / `applySignalSupportReview` writers went with it:
