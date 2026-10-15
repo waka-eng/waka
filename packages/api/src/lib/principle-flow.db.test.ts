@@ -1,18 +1,13 @@
-/** Real SQL proves room history, privacy and queue identity. Only the model is scripted. */
+/** Real SQL proves principle history, privacy and queue identity. Only the model is scripted. */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {randomUUID,createHash} from 'node:crypto';
-import { Hono } from "hono";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
-import { createGroupForProfile } from "../routes/groups-membership.js";
-import { createGroupsRoutes } from "../routes/groups.js";
 import { loadPrincipleViews, renderPrinciplesMarkdown, undoPrincipleDispute } from "../routes/principles.js";
 import { createFeedbackForProfile } from "../routes/feedback.js";
 import { loadPrincipleMaterial, promoteIfDemonstrated, refreshPrinciplesForProfile, reconcilePrinciplesAfterSignalLoss } from "./principle-generation.js";
 import { requestPrincipleRefresh, loadPrincipleStatus } from "./principle-status.js";
 import {principleMaterialKey} from './principle-material-key.js';
 import type { ModelProvider } from "./model-provider.js";
-import { reviewSignalSupport } from './signal-support-review.js';
-import { applySignalSupportReview } from './signal-support-apply.js';
 import {createReviewSession} from './review-sessions.js';
 import {loadReviewAnswerMaterial} from './review-answer-material.js';
 import {writeReviewEvidence} from './review-evidence.js';
@@ -25,8 +20,6 @@ import {acceptPrincipleGroundingForFixture} from '../../test/helpers/principle-g
 let t: TestDatabase;
 let owner: string;
 let other: string;
-let groupId: string;
-let mindId: string;
 let sequence = 0;
 
 async function person() {
@@ -35,11 +28,17 @@ async function person() {
   return p.id as string;
 }
 
-async function material(profileId: string, owners: string[], targetGroupId?: string) {
+/* `targetGroupId` and the `owners` fan-out went with the rooms (founder:
+   "방 없애"). They let this helper aim three signals at a room's mind and
+   spread their evidence over two members; the `input_policy` and
+   `top_of_minds(group_id)` branches existed only for that. `owners` stays a
+   list because the personal cases still pass a single-entry one and the
+   shape reads the same at every call site. */
+async function material(profileId: string, owners: string[]) {
   const ids: string[] = [];
   for (let n = 0; n < 3; n++) {
-    const [s] = await t.sql`INSERT INTO signals(profile_id,statement,input_policy)
-      VALUES (${profileId},${`Pattern ${n}`},${targetGroupId ? "group-public-v1" : null}) RETURNING id`;
+    const [s] = await t.sql`INSERT INTO signals(profile_id,statement)
+      VALUES (${profileId},${`Pattern ${n}`}) RETURNING id`;
     for (let i = 0; i < 3; i++) {
       const author = owners[i % owners.length]!;
       const [inspirationRow] = await t.sql`INSERT INTO inspirations(profile_id,text,visibility)
@@ -50,11 +49,9 @@ async function material(profileId: string, owners: string[], targetGroupId?: str
     await t.sql`UPDATE signals SET status='active' WHERE id=${s.id}`;
     ids.push(s.id as string);
   }
-  const [tom] = targetGroupId
-    ? await t.sql`INSERT INTO top_of_minds(group_id) VALUES (${targetGroupId}) RETURNING id`
-    : await t.sql`INSERT INTO top_of_minds(profile_id) VALUES (${profileId}) RETURNING id`;
-  const [entry] = await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,input_policy)
-    VALUES (${tom.id},'pattern','A present focus',${targetGroupId ? "group-public-v1" : null}) RETURNING id`;
+  const [tom] = await t.sql`INSERT INTO top_of_minds(profile_id) VALUES (${profileId}) RETURNING id`;
+  const [entry] = await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body)
+    VALUES (${tom.id},'pattern','A present focus') RETURNING id`;
   for (const id of ids) await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES (${entry.id},${id})`;
   return ids;
 }
@@ -74,15 +71,10 @@ beforeAll(async () => {
   process.env.DB_CONNECTION_URL = url.toString();
   process.env.WAKA_BACKGROUND_JOB_AUTODRAIN = "0";
   owner = await person(); other = await person();
-  const group = await createGroupForProfile(t.db as never, { profileId: owner, name: "Principle test" });
-  groupId = group.id;
-  await t.sql`INSERT INTO group_members(group_id,profile_id) VALUES (${groupId},${other})`;
-  const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id=${groupId}`;
-  mindId = mind.id as string;
 });
 afterAll(async () => { await getDb().$client.end();await t?.cleanup(); });
 
-describe("principles across personal and room profiles", () => {
+describe("principles across personal profiles", () => {
   it('resumes through the real queue without resetting paid-step receipts',async()=>{
     const profileId=await person(),ids=await material(profileId,[profileId]);
     await t.sql`INSERT INTO principles(profile_id,statement,origin,rank,locked_at) SELECT ${profileId},'Standing ' || n,'declared',n,now() FROM generate_series(1,80) n`;
@@ -333,41 +325,27 @@ describe("principles across personal and room profiles", () => {
     expect(await t.sql`SELECT id FROM principles WHERE profile_id=${profileId}`).toHaveLength(0);
   });
 
-  it("uses room history, serves only room signal statements and withdraws unsupported room principles", async () => {
-    await material(mindId, [owner, other], groupId);
-    const before = await loadPrincipleMaterial(t.db as never, mindId);
-    expect(before.eligibility.tomAppearances).toBe(1);
-    expect(before.eligibility.eligible).toBe(true);
-    expect((await refreshPrinciplesForProfile({ profileId: mindId }, { db: t.db as never, modelProvider: provider })).minted).toBe(1);
-    const app = new Hono();
-    app.route("/groups", createGroupsRoutes({ getDatabase: () => t.db as never,
-      authMiddleware: async (c, next) => {
-        c.set("session", { sessionId: "test", account: { id: "test", email: "test@example.test" },
-          profile: { id: owner, accountId: "test", type: "human", name: "Test", preferredLocale: "en-US" } });
-        await next();
-      },
-    }));
-    const response = await app.request(`/groups/${groupId}/principles`);
-    expect(response.status).toBe(200);
-    const body = await response.json() as { principles: Array<{ citedSignals: unknown[] }> };
-    expect(body.principles).toHaveLength(1);
-    expect(body.principles[0]!.citedSignals).toHaveLength(3);
-    expect(JSON.stringify(body)).not.toContain("PRIVATE RAW TEXT");
-    await t.sql`UPDATE inspirations SET visibility='private' WHERE profile_id=${other}`;
-    expect((await loadPrincipleMaterial(t.db as never, mindId)).eligibility.eligible).toBe(false);
-    expect(await (await app.request(`/groups/${groupId}/principles`)).json()).toEqual({ principles: [] });
-    await t.sql`UPDATE inspirations SET visibility='public' WHERE profile_id=${other}`;
-    // Returning to public advances the source revision. Renew its proof through
-    // the real review writer before later cases expect eligible room material.
-    const sources = await t.sql`SELECT id FROM inspirations WHERE profile_id = ${other}`;
-    for (const source of sources) {
-      const report = await reviewSignalSupport(t.db as never, { ownerProfileId: other, inspirationId: source.id as string,
-        deriveIntoProfileId: mindId, maxCalls: 1, provider: { assessSignalSupport: async (input) => ({
-          assessments: input.claims.map((claim) => ({ signalId: claim.signalId, verdict: 'supported', sourceIds: [input.sources[0]!.id] })),
-        }) } });
-      await applySignalSupportReview(t.db as never, report);
-    }
-  });
+  /* ── "USES ROOM HISTORY, SERVES ONLY ROOM SIGNAL STATEMENTS AND
+     WITHDRAWS UNSUPPORTED ROOM PRINCIPLES", DELETED ─────────────────────
+     Founder: "방 없애". This was the only test in the repo that drove
+     `GET /groups/:id/principles` end to end, and it was three gates in one:
+     a room's principles are eligible on the ROOM's top-of-mind history, the
+     response carries statements but never the members' raw captures
+     ("PRIVATE RAW TEXT MUST NEVER LEAVE"), and one member turning their
+     memories private withdraws the room's principles on the next read.
+
+     THE PRIVACY HALF IS NOT LOST, and that is the part worth arguing. It
+     only ever mattered because a room let OTHER PEOPLE read a surface built
+     from your captures. With the room gone the reader and the owner are the
+     same person, and a personal principle serving its owner's own statements
+     is covered by "serves no principle whose material a reader may not see"
+     elsewhere in this suite. What genuinely goes is the cross-member case,
+     and it goes because there are no longer two members.
+
+     The trailing block that renewed `other`'s support through the real
+     `reviewSignalSupport` / `applySignalSupportReview` writers went with it:
+     its whole purpose was to leave eligible ROOM material for the case
+     after it, and that case is gone too. */
 
   it("undoes only the owner's selected dispute, without changing locked words or model conflicts", async () => {
     const [principle] = await t.sql`SELECT id FROM principles WHERE profile_id=${owner} LIMIT 1`;
@@ -394,21 +372,21 @@ describe("principles across personal and room profiles", () => {
     expect((await loadPrincipleViews(t.db as never, owner)).find((row) => row.id === principle.id)!.disputeId).toBeNull();
   });
 
-  it("deduplicates completed requests and charges room generation to a member account", async () => {
-    await requestPrincipleRefresh(t.db as never, mindId);
-    const keyPrefix=`refresh_principles:${mindId}:%`;
-    const [job] = await t.sql`SELECT id,profile_id FROM background_jobs WHERE type='refresh_principles' AND idempotency_key LIKE ${keyPrefix}`;
-    expect([owner, other]).toContain(job.profile_id);
-    await t.sql`UPDATE background_jobs SET status='succeeded' WHERE id=${job.id}`;
-    await requestPrincipleRefresh(t.db as never, mindId);
-    const rows = await t.sql`SELECT status FROM background_jobs WHERE type='refresh_principles' AND idempotency_key LIKE ${keyPrefix}`;
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.status).toBe("succeeded");
-    expect((await loadPrincipleStatus(t.db as never, mindId)).phase).toBe("ready");
-    await t.sql`UPDATE background_jobs SET status='failed',attempts=3 WHERE id=${job.id}`;
-    await requestPrincipleRefresh(t.db as never, mindId);
-    expect((await loadPrincipleStatus(t.db as never, mindId)).phase).toBe("failed");
-    await requestPrincipleRefresh(t.db as never, mindId, true);
-    expect((await loadPrincipleStatus(t.db as never, mindId)).phase).toBe("processing");
-  });
+  /* ── "DEDUPLICATES COMPLETED REQUESTS AND CHARGES ROOM GENERATION TO A
+     MEMBER ACCOUNT", DELETED ────────────────────────────────────────────
+     Founder: "방 없애". Two things were pinned here and they part ways.
+
+     The BILLING half — a room's mind has no account, so its principle job is
+     charged to a current member, "expect([owner, other]).toContain(...)" —
+     describes `enqueueRefreshPrinciples`'s room branch, which is being
+     removed. There is nothing left to charge to somebody else.
+
+     The DEDUPLICATION half — a completed `refresh_principles` key stays
+     completed, a failed one reports failed, and an explicit retry moves it
+     to processing — is NOT room-specific and is NOT being dropped: it is
+     held for a personal profile by "resumes through the real queue without
+     resetting paid-step receipts" at the top of this file and by
+     `queue-recovery` / `job-request-version`. Rewriting this one with a
+     person substituted for the mind would have duplicated that, while
+     quietly losing the only thing it uniquely said. */
 });

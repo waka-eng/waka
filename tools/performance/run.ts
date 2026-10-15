@@ -41,12 +41,11 @@ const importStart=performance.now();const {app}=await import('../../packages/api
 const {signSessionToken,buildSessionCookie}=await import('../../packages/api/src/lib/auth.js');
 const {createSessionRow}=await import('../../packages/api/src/lib/session.js');
 const {getDb}=await import('../../packages/api/src/lib/db.js');
-const {createGroupForProfile}=await import('../../packages/api/src/routes/groups-membership.js');
 const {readConversationContext}=await import('../../packages/api/src/lib/conversation-context.js');
 const {createReviewSession,completeReviewSession,readActiveReview,chooseReviewItem}=await import('../../packages/api/src/lib/review-sessions.js');
 const {drainBackgroundJobs}=await import('../../packages/api/src/lib/queue.js');
 const {loadInspirationMaterial,assertMaterialCurrent}=await import('../../packages/api/src/lib/inspiration-material.js');
-const db=getDb();const fixtures=new Map<number,{id:string;token:string;firstId:string;signalId:string;groups:string[];signals:number;principles:number;conversationId?:string}>();
+const db=getDb();const fixtures=new Map<number,{id:string;token:string;firstId:string;signalId:string;signals:number;principles:number;conversationId?:string}>();
 stopDatabase=()=>db.$client.end();
 for(const count of sizes){
   const [account]=await fixture.sql`INSERT INTO accounts(email,onboarding_completed_at) VALUES (${`performance-${count}@example.test`},now()) RETURNING id`;
@@ -89,11 +88,15 @@ for(const count of sizes){
   const [reading]=await fixture.sql`INSERT INTO top_of_minds(profile_id) VALUES (${profile.id}) RETURNING id`;
   const [entry]=await fixture.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,sort_order) VALUES (${reading.id},'pattern','Synthetic reading: leave space for thoughtful experiments.',0) RETURNING id`;
   await fixture.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id,statement_revision,entry_body_revision) VALUES (${entry.id},${signalRows[0].id},1,1)`;
-  const groups:string[]=[];
-  if(count===2000)for(let i=0;i<12;i++)groups.push((await createGroupForProfile(fixture.db as never,{profileId:profile.id,name:`Synthetic room ${i+1}`})).id);
+  /* Twelve synthetic rooms were seeded onto the largest fixture here, so the
+     baseline measured a heavy account's reads with a realistic room count
+     behind them. Founder: "방 없애" — there is no room to seed and no room
+     read to slow anything down, so the baseline's `rooms` column goes with
+     them. Numbers measured before 2026-10-15 are not comparable on any
+     query that touched `group_members`. */
   const token=await signSessionToken({profileId:profile.id,email:`performance-${count}@example.test`});await createSessionRow({profileId:profile.id,token});
   const [first]=await fixture.sql`SELECT id FROM inspirations WHERE profile_id=${profile.id} ORDER BY created_at DESC LIMIT 1`;
-  fixtures.set(count,{id:profile.id,token,firstId:first.id,signalId:signalRows[0].id,groups,signals:signalCount,principles:principleCount});
+  fixtures.set(count,{id:profile.id,token,firstId:first.id,signalId:signalRows[0].id,signals:signalCount,principles:principleCount});
 }
 if(chatScenario)for(const f of fixtures.values()){
   const [reading]=await fixture.sql`SELECT id FROM top_of_minds WHERE profile_id=${f.id}`;
@@ -186,7 +189,7 @@ let explain:unknown=null;
 if(reviewQuery){const result=await db.$client.unsafe('EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) '+reviewQuery.query,reviewQuery.params as never);explain=result[0]?.['QUERY PLAN'];}
 const assets=[];
 for(const name of await readdir(resolve('packages/web/dist/assets'))){const bytes=await readFile(resolve('packages/web/dist/assets',name));assets.push({name,raw:bytes.length,gzip:gzipSync(bytes).length,brotli:brotliCompressSync(bytes).length});}
-const results={kind:'local synthetic production-build baseline',createdAt:new Date().toISOString(),apiImportMs:round(apiImportMs),database:'disposable loopback only',modelCalls:0,searchCorpus,fixtures:[...fixtures].map(([size,f])=>({size,signals:f.signals,principles:f.principles,rooms:f.groups.length})),measured,assets,reviewSelectionExplain:explain};
+const results={kind:'local synthetic production-build baseline',createdAt:new Date().toISOString(),apiImportMs:round(apiImportMs),database:'disposable loopback only',modelCalls:0,searchCorpus,fixtures:[...fixtures].map(([size,f])=>({size,signals:f.signals,principles:f.principles})),measured,assets,reviewSelectionExplain:explain};
 await writeFile(resolve(outputDir,'api.json'),JSON.stringify({...results,samples,poolMax:process.env.WAKA_DB_POOL_MAX??5},null,2));
 console.log(JSON.stringify({origin,schema:fixture.schemaName,apiImportMs:round(apiImportMs),results:resolve(outputDir,'api.json')}));
 let activeSize=sizes[0]!,delayMs=0,readingDelayMs=0,fault:string|null=null;

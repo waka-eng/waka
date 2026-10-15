@@ -4,7 +4,6 @@ import { setDefaultModelProviderForTests, type ModelProvider } from "./model-pro
 import { enqueueTopOfMindRefresh, postgresBackgroundJobStore, processBackgroundJob, runBackgroundJobWorker } from "./queue.js";
 import { loadTopOfMindRefreshStatus } from "./top-of-mind-refresh-status.js";
 import { ShiftFloorHeldError } from "./top-of-mind-synthesis.js";
-import { createGroupForProfile, joinGroupByCode } from "../routes/groups-membership.js";
 
 let t: TestDatabase;
 let seq = 0;
@@ -18,18 +17,21 @@ async function person() {
   const [p] = await t.sql`INSERT INTO profiles (account_id, type, name) VALUES (${a.id}, 'human', 'Owner') RETURNING id`;
   return p.id as string;
 }
-async function material({ active = false, destinationId = profileId, owners = [profileId] } = {}) {
+/* The `destinationId` / `owners` parameters went with the rooms (founder:
+   "방 없애"). They existed so this helper could aim material at a room's mind
+   and spread its evidence across two members; there is one destination now,
+   the person, and one owner, the same person. */
+async function material({ active = false } = {}) {
   const ids: string[] = [];
   for (let i = 0; i < 3; i++) {
-    const [signal] = await t.sql`INSERT INTO signals (profile_id, statement, input_policy)
-      VALUES (${destinationId}, 'Small steps recur', ${destinationId === profileId ? null : 'group-public-v1'}) RETURNING id`;
+    const [signal] = await t.sql`INSERT INTO signals (profile_id, statement)
+      VALUES (${profileId}, 'Small steps recur') RETURNING id`;
     ids.push(signal.id as string);
     for (let j = 0; j < (active ? 3 : 1); j++) {
-      const owner = owners[j % owners.length]!;
       const [inspiration] = await t.sql`INSERT INTO inspirations (profile_id, text, visibility)
-        VALUES (${owner}, 'A fixture', ${destinationId === profileId ? 'private' : 'public'}) RETURNING id`;
+        VALUES (${profileId}, 'A fixture', 'private') RETURNING id`;
       await t.sql`INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id)
-        VALUES (${destinationId}, ${owner}, ${signal.id}, ${inspiration.id})`;
+        VALUES (${profileId}, ${profileId}, ${signal.id}, ${inspiration.id})`;
     }
     if (active) await t.sql`UPDATE signals SET status = 'active' WHERE id = ${signal.id}`;
   }
@@ -58,31 +60,27 @@ beforeEach(async () => {
 afterAll(async () => { setDefaultModelProviderForTests(null); await t?.cleanup(); });
 
 describe("top of mind completion receipts", () => {
-  it.each(['group', 'principles'] as const)('a reclaimed %s worker cannot persist generated output', async (target) => {
-    let groupId: string | null = null;
-    let destinationId = profileId;
-    let owners = [profileId];
-    if (target === 'group') {
-      const other = await person();
-      const group = await createGroupForProfile(t.db as never, { profileId, name: 'Lease fixture' });
-      await joinGroupByCode(t.db as never, { profileId: other, joinCode: group.joinCode });
-      groupId = group.id;
-      destinationId = (await t.sql`SELECT id FROM profiles WHERE group_id = ${groupId}`)[0].id as string;
-      owners = [profileId, other];
-    }
-    const ids = await material({ active: true, destinationId, owners });
-    const [artifact] = await t.sql`INSERT INTO top_of_minds(profile_id, group_id) VALUES (${groupId ? null : profileId}, ${groupId}) RETURNING id`;
-    const [entry] = await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id, type, body, input_policy)
-      VALUES (${artifact.id}, 'pattern', 'A current reading', ${groupId ? 'group-public-v1' : null}) RETURNING id`;
+  /* ONE TARGET NOW, NOT TWO. This was `it.each(['group', 'principles'])`:
+     the same lease argument run once against a room's synthesis and once
+     against principles, because those were the two workers that could be
+     reclaimed mid-generation. Founder: "방 없애" — the room arm stood up a
+     room, a second member, a room's mind as the derivation destination and a
+     `refresh_group_top_of_mind` row, and all four are gone. The principles
+     arm is the whole test now. The ARGUMENT it carries is untouched: a worker
+     whose lease was stolen while the provider was thinking must not persist
+     what came back, however good it is. */
+  it('a reclaimed principles worker cannot persist generated output', async () => {
+    const ids = await material({ active: true });
+    const [artifact] = await t.sql`INSERT INTO top_of_minds(profile_id) VALUES (${profileId}) RETURNING id`;
+    const [entry] = await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id, type, body)
+      VALUES (${artifact.id}, 'pattern', 'A current reading') RETURNING id`;
     for (const id of ids) await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id, signal_id) VALUES (${entry.id}, ${id})`;
     const [job] = await t.sql`INSERT INTO background_jobs(profile_id, type, payload)
-      VALUES (${profileId}, ${groupId ? 'refresh_group_top_of_mind' : 'refresh_principles'},
-        ${JSON.stringify(groupId ? { groupId, reason: 'manual' } : { profileId })}::jsonb) RETURNING id`;
+      VALUES (${profileId}, 'refresh_principles', ${JSON.stringify({ profileId })}::jsonb) RETURNING id`;
     const claimed = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
     expect(claimed?.id).toBe(job.id);
     const steal = async () => { await t.sql`UPDATE background_jobs SET locked_at = now() + interval '2 seconds', attempts = attempts + 1 WHERE id = ${job.id}`; };
     setDefaultModelProviderForTests({
-      synthesizeTopOfMind: async () => { await steal(); return { entries: [{ type: 'pattern', body: 'A stale group reading', citedSignalIds: ids }] }; },
       distillPrinciples: async () => { await steal(); return { candidates: [{ type: 'maxim', statement: 'A stale principle', citedSignalIds: ids }] }; },
     } as unknown as ModelProvider);
     await expect(processBackgroundJob(claimed!)).rejects.toThrow(/ownership changed/i);

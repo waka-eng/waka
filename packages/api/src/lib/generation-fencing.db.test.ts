@@ -2,11 +2,9 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { sql } from "drizzle-orm";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
-import { refreshTopOfMindForProfile, refreshTopOfMindForGroup } from "./top-of-mind-synthesis.js";
+import { refreshTopOfMindForProfile } from "./top-of-mind-synthesis.js";
 import { refreshPrinciplesForProfile } from "./principle-generation.js";
 import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
-import { createGroupForProfile, joinGroupByCode } from "../routes/groups-membership.js";
-import { createFeedbackForProfile } from "../routes/feedback.js";
 import type { ModelProvider } from "./model-provider.js";
 import {acceptPrincipleGroundingForFixture} from '../../test/helpers/principle-grounding.js';
 type RelationInput=Parameters<ModelProvider['judgePrincipleRelation']>[0];
@@ -42,34 +40,11 @@ const synthesizer = (ids: string[], change?: () => Promise<unknown>, body = 'A s
   synthesizeTopOfMind: async () => { await change?.(); return { entries: [{ type: 'pattern', body, citedSignalIds: ids }] }; },
 }) as unknown as ModelProvider;
 
-async function groupFixture() {
-  const f = await fixture();
-  const [account] = await t.sql`INSERT INTO accounts(email) VALUES (${`fence-other-${++sequence}@example.test`}) RETURNING id`;
-  const [other] = await t.sql`INSERT INTO profiles(account_id, type, name) VALUES (${account.id}, 'human', 'Other') RETURNING id`;
-  const group = await createGroupForProfile(t.db as never, { profileId: f.profileId, name: 'Shared room' });
-  await joinGroupByCode(t.db as never, { profileId: other.id as string, joinCode: group.joinCode });
-  const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id = ${group.id}`;
-  await t.sql`UPDATE inspirations SET visibility = 'public' WHERE profile_id = ${f.profileId}`;
-  const [source] = await t.sql`INSERT INTO inspirations(profile_id, text, visibility) VALUES (${other.id}, 'Other public material', 'public') RETURNING id`;
-  const ids: string[] = [];
-  for (let i = 0; i < 3; i++) {
-    const [signal] = await t.sql`INSERT INTO signals(profile_id, statement, input_policy) VALUES (${mind.id}, ${`Shared pattern ${i}`}, 'group-public-v1') RETURNING id`;
-    ids.push(signal.id as string);
-    for (const [owner, inspirationId] of [[f.profileId, f.sourceIds[0]!], [other.id, source.id], [f.profileId, f.sourceIds[1]!]]) {
-      await t.sql`INSERT INTO signal_evidence(profile_id, owner_profile_id, signal_id, inspiration_id, material_revision)
-        VALUES (${mind.id}, ${owner}, ${signal.id}, ${inspirationId},
-          (SELECT public_revision FROM inspiration_revisions WHERE inspiration_id = ${inspirationId}))`;
-    }
-    await t.sql`UPDATE signals SET status = 'active' WHERE id = ${signal.id}`;
-  }
-  const [artifact] = await t.sql`INSERT INTO top_of_minds(group_id, version) VALUES (${group.id}, 1) RETURNING id`;
-  const [entry] = await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id, type, body, input_policy)
-    VALUES (${artifact.id}, 'pattern', 'Our current reading', 'group-public-v1') RETURNING id`;
-  for (const id of ids) await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id, signal_id) VALUES (${entry.id}, ${id})`;
-  const [reflection] = await t.sql`INSERT INTO reflections(profile_id, inspiration_id, question, answer)
-    VALUES (${f.profileId}, ${f.sourceIds[0]!}, 'Why?', 'PRIVATE_SENTINEL') RETURNING id`;
-  return { ...f, groupId: group.id, mindId: mind.id as string, groupSignalIds: ids, reflectionId: reflection.id as string };
-}
+/* `groupFixture` went with the rooms (founder: "방 없애"). It stood up two
+   people, a room, the room's mind, three `group-public-v1` signals whose
+   evidence spanned both members at their PUBLIC revisions, a live room
+   artifact, and one private answer — the whole apparatus the two room
+   fencing cases below needed, and nothing else used it. */
 
 describe('generation commit fences', () => {
   it('a final-commit race retries generation without aborting a human principle edit', async () => {
@@ -152,12 +127,20 @@ describe('generation commit fences', () => {
     } finally { await other.end(); }
   });
   it('does not fetch another profile’s now-private statement through old feedback', async () => {
+    /* THE ROOM CAME OUT; THE LEAK GATE DID NOT, AND IT GOT STRICTER.
+       Founder: "방 없애". This used to earn its cross-profile feedback row
+       honestly — share B's signal into a room A is in, call the real
+       `createFeedbackForProfile`, then revoke the share. Answering someone
+       else's statement is only reachable through a room, so the honest route
+       is gone. The ROW is not: `feedback` has no foreign key saying the
+       target must be yours, rows written before today are still there, and
+       `loadRecentFeedback` still joins them into a personal synthesis.
+       So the row is now written straight at the table — which is also the
+       stronger test, because it no longer depends on a door to produce the
+       adversarial state and would catch a row that arrived any other way. */
     const a = await fixture(), b = await fixture();
-    const group = await createGroupForProfile(t.db as never, { profileId: a.profileId, name: 'Once shared' });
-    await joinGroupByCode(t.db as never, { profileId: b.profileId, joinCode: group.joinCode });
-    await t.sql`INSERT INTO signal_shares(profile_id, signal_id, group_id) VALUES (${b.profileId}, ${b.signalIds[0]!}, ${group.id})`;
-    expect(await createFeedbackForProfile(t.db as never, { profileId: a.profileId, targetType: 'signal', targetId: b.signalIds[0]!, value: 'not_true' })).not.toBeNull();
-    await t.sql`DELETE FROM signal_shares WHERE signal_id = ${b.signalIds[0]!}`;
+    await t.sql`INSERT INTO feedback(profile_id, target_type, target_id, value)
+      VALUES (${a.profileId}, 'signal', ${b.signalIds[0]!}, 'not_true')`;
     await t.sql`UPDATE signals SET statement = 'PRIVATE_SENTINEL changed after revocation' WHERE id = ${b.signalIds[0]!}`;
     await refreshTopOfMindForProfile({ profileId: a.profileId, reason: 'manual' }, { db: t.db as never,
       modelProvider: { synthesizeTopOfMind: async (input: unknown) => {
@@ -176,30 +159,23 @@ describe('generation commit fences', () => {
       .rejects.toThrow(/inputs changed/i);
   });
 
-  it('does not invalidate a room read when only a private answer changes', async () => {
-    const f = await groupFixture();
-    const before = await readGenerationRevision(t.db, { groupId: f.groupId });
-    const personalBefore = await readGenerationRevision(t.db, { profileId: f.profileId });
-    const provider = synthesizer(f.groupSignalIds, async () => {
-      await t.sql`UPDATE reflections SET answer = 'A different PRIVATE_SENTINEL' WHERE id = ${f.reflectionId}`;
-      expect(await readGenerationRevision(t.db, { groupId: f.groupId })).toEqual(before);
-      expect((await readGenerationRevision(t.db, { profileId: f.profileId }))!.revision).toBeGreaterThan(personalBefore!.revision);
-    }, 'Our current public reading');
-    expect((await refreshTopOfMindForGroup({ groupId: f.groupId, reason: 'manual' }, { db: t.db as never, modelProvider: provider })).status).toBe('versioned');
-  });
+  /* ── TWO ROOM FENCING CASES, DELETED ──────────────────────────────────
+     Founder: "방 없애". "does not invalidate a room read when only a private
+     answer changes" pinned the two-revision fence: writing a private answer
+     advances a person's PERSONAL generation revision and must leave the
+     PUBLIC one — the one a room's synthesis is fenced on — exactly where it
+     was, so somebody journalling mid-synthesis could not abort a room's
+     regeneration. One revision matters now; the personal fence that remains
+     is held by the cases above.
 
-  it.each(['public_source', 'public_delete', 'member_name', 'feedback'] as const)('rejects room output after %s changes', async (changed) => {
-    const f = await groupFixture();
-    const provider = synthesizer(f.groupSignalIds, async () => {
-      if (changed === 'public_source') await t.sql`UPDATE inspirations SET text = 'New public material' WHERE id = ${f.sourceIds[0]!}`;
-      else if (changed === 'public_delete') await t.sql`DELETE FROM inspirations WHERE id = ${f.sourceIds[0]!}`;
-      else if (changed === 'member_name') await t.sql`UPDATE profiles SET name = 'A corrected name' WHERE id = ${f.profileId}`;
-      else await t.sql`INSERT INTO feedback(profile_id, target_type, target_id, value) VALUES (${f.profileId}, 'signal', ${f.groupSignalIds[0]!}, 'not_true')`;
-    });
-    await expect(refreshTopOfMindForGroup({ groupId: f.groupId, reason: 'manual' }, { db: t.db as never, modelProvider: provider }))
-      .rejects.toThrow(/inputs changed/i);
-    expect(await t.sql`SELECT id FROM top_of_minds WHERE group_id = ${f.groupId}`).toHaveLength(1);
-  });
+     "rejects room output after %s changes" (public_source, public_delete,
+     member_name, feedback) was the matching positive: four ways a room's
+     inputs can move under a model call, each of which must throw
+     "inputs changed" and leave the live version standing. Three of the four
+     are inputs only a room reads — another member's public capture, its
+     deletion, a MEMBER'S NAME (a room's prompt carries who is in it). The
+     fourth, feedback, is held personally by `top-of-mind-synthesis` and by
+     the personal fencing cases here. */
 
   it('rolls back the revision as well as an aborted source edit', async () => {
     const f = await fixture();

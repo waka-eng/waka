@@ -8,7 +8,7 @@
  * passes — it IS the human profile. Each of the nine therefore read a standing
  * credential sitting in an MCP config file and waved it through to an account
  * decision: mint a memory, rename one, delete one, list every live connection,
- * end any of them, leave with the whole archive, take a seat in a room, merge
+ * end any of them, leave with the whole archive, merge
  * the person's signals.
  *
  * `keeperKeyMayPass` in `requireAuth` is why none of that was reachable, and
@@ -102,7 +102,6 @@ function stubDb(): any {
 vi.mock("../lib/db.js", () => ({ getDb: () => stubDb() }));
 
 const { createExportRoute } = await import("./export.js");
-const { createGroupsRoutes } = await import("./groups.js");
 const { createSignalDuplicatesRoutes } = await import("./signal-duplicates.js");
 const { profilesRoutes } = await import("./profiles.js");
 const { sessionsRoutes } = await import("./sessions.js");
@@ -112,8 +111,11 @@ const authMiddleware = (async (c: any, next: () => Promise<void>) => {
   await next();
 }) as never;
 
-/** Any dependency that would read or write content, wired to record the breach. */
-const records = () => vi.fn(async () => { reached.handler = true; return undefined as never; });
+/* `records()` — a stub dependency that set `reached.handler` when a handler
+   ran rather than throwing — went with the two `/api/groups` rows. It was
+   only ever passed to `createGroupsRoutes`, whose injected loaders were the
+   one place this suite needed a recording seam; every other router here
+   reaches `reached.handler` through the module-level `stubDb`. */
 
 function app(): Hono {
   const hono = new Hono();
@@ -123,17 +125,6 @@ function app(): Hono {
   hono.route(
     "/api/signal-duplicates",
     createSignalDuplicatesRoutes({ authMiddleware, getDatabase: stubDb }),
-  );
-  hono.route(
-    "/api/groups",
-    createGroupsRoutes({
-      authMiddleware,
-      getDatabase: stubDb,
-      listGroups: records() as never,
-      createGroup: records() as never,
-      joinGroup: records() as never,
-      loadMembership: records() as never,
-    }),
   );
   return hono;
 }
@@ -165,8 +156,13 @@ describe("a keeper key may not make an account decision", () => {
       `/api/signal-duplicates/${TARGET}/resolve`,
       { method: "POST", ...body({ act: "merge" }) },
     ],
-    ["take a seat in a room", "/api/groups", { method: "GET" }],
-    ["join one", "/api/groups/join", { method: "POST", ...body({ joinCode: "ABCD2345" }) }],
+    /* "take a seat in a room" and "join one" stood here. Founder: "방 없애" —
+       `/api/groups` is unmounted, so a keeper key reaching those two paths now
+       gets a 404 from the router rather than a 403 from `humanSessionsOnly`,
+       and a 404 is not the refusal this suite exists to pin. The REST of the
+       list is the point and is untouched: a keeper key is a read key, and
+       every act that decides something about the account still has to be
+       refused by the gate rather than by the absence of a route. */
   ])("cannot %s", async (label, path, init) => {
     const res = await app().request(path, init as RequestInit);
 

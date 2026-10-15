@@ -43,9 +43,12 @@ const WORDED_FOR: Record<string, { value: number; words: string; wordsKo: string
   TOP_OF_MIND_MIN_SHIFT_HOURS: { value: 24, words: "once a day", wordsKo: "하루에 한 번" },
   TOP_OF_MIND_SIGNAL_LIMIT: { value: 12, words: "twelve", wordsKo: "열두" },
   SELECTION_DISPUTED_MULTIPLIER: { value: 0.4, words: "far back", wordsKo: "멀찍이" },
-  GROUP_DRAFT_MIN_AFFIRMED: { value: 3, words: "three", wordsKo: "셋" },
-  GROUP_DRAFT_SMALL_MAX_MEMBERS: { value: 3, words: "three people or fewer", wordsKo: "세 명 이하" },
-  GROUP_DRAFT_MIN_AFFIRMED_SMALL: { value: 2, words: "two", wordsKo: "둘" },
+  /* The three `GROUP_DRAFT_*` rows came out with the room sentences they
+     worded (founder: "방 없애", 2026-10-15). The table is checked for exact
+     parity against the registry in both directions — every worded constant
+     registered, every registered constant worded — so a row left behind
+     here would have failed as loudly as a sentence left behind there. That
+     symmetry is the reason this table is worth keeping by hand. */
 };
 
 describe("the reading", () => {

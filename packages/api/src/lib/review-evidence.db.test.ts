@@ -11,7 +11,6 @@ import {getProfileSignal} from '../routes/signals.js';
 import {loadPrincipleMaterial} from './principle-generation.js';
 import {assembleProfileExport} from './profile-export.js';
 import {readGenerationRevision,assertGenerationRevision} from './generation-revision.js';
-import {createGroupForProfile} from '../routes/groups-membership.js';
 import {loadPrincipleViews} from '../routes/principles.js';
 let t:TestDatabase,sequence=0;
 beforeAll(async()=>{t=await createTestDatabase();});beforeEach(async()=>{await t.truncateAll();});afterAll(async()=>{await t?.cleanup();});
@@ -124,7 +123,16 @@ it('enforces tenant and group boundaries, exports metadata without copied text, 
     VALUES (${f.profileId},${f.signalId},${other.sessionId},${b},1,1,3,true)`).rejects.toMatchObject({code:'23503'});
   await expect(t.sql`INSERT INTO signal_review_evidence_sources(profile_id,signal_id,answer_id,inspiration_id,material_revision,referenced)
     VALUES (${f.profileId},${f.signalId},${a},${other.ids[0]},1,true)`).rejects.toMatchObject({code:'23503'});
-  const group=await createGroupForProfile(t.db as never,{profileId:f.profileId,name:'Review boundary'});const [mind]=await t.sql`SELECT id FROM profiles WHERE group_id=${group.id}`;
+  /* A `type='group'` profile, written straight at the schema now that
+     `createGroupForProfile` is gone (founder: "방 없애"). The room writers
+     went; the DATABASE TRIGGER did not — `assert_review_evidence_private`
+     (migration 0057) still raises 23514 for any review-support row whose
+     profile is a group's mind, because no migration was written and none
+     will be. A trigger that is still armed needs a gate that still fires it,
+     so the two rows it needs are written by hand rather than conjured by a
+     deleted route. */
+  const [group]=await t.sql`INSERT INTO groups (name,join_code) VALUES ('Review boundary',${`RVB${randomUUID().slice(0,5).toUpperCase()}`}) RETURNING id`;
+  const [mind]=await t.sql`INSERT INTO profiles (account_id,type,name,group_id) VALUES (NULL,'group','Review boundary',${group.id}) RETURNING id`;
   await expect(t.sql`INSERT INTO signal_review_evidence(profile_id,signal_id,session_id,answer_id,statement_revision,answer_revision,source_count,question_context_included)
     VALUES (${mind.id},${f.signalId},${f.sessionId},${a},1,1,3,true)`).rejects.toMatchObject({code:'23514'});
   const exported=await assembleProfileExport(t.db as never,f.profileId);expect(exported.signalReviewEvidence).toHaveLength(1);expect(exported.signalReviewEvidenceSources).toHaveLength(3);

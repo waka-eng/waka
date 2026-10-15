@@ -3,7 +3,6 @@ import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import * as schema from "../db/index.js";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
-import { createGroupForProfile } from "../routes/groups-membership.js";
 import { reviewSignalSupport } from "./signal-support-review.js";
 import { applySignalSupportReview } from "./signal-support-apply.js";
 import { dismissProfileSignal } from "../routes/signals.js";
@@ -18,28 +17,23 @@ let sequence = 0;
 beforeEach(async () => { t ??= await createTestDatabase(); await t.truncateAll(); });
 afterAll(async () => { await t?.cleanup(); });
 
-async function fixture(group = false) {
+/* The `group` flag went with the rooms (founder: "방 없애"). It swapped the
+   derivation destination from the person to a room's mind and stamped the
+   claim `group-public-v1`, so the four room cases could ask the public-scope
+   questions. One destination now, and it is the owner. */
+async function fixture() {
   const [account] = await t.sql`INSERT INTO accounts (email) VALUES (${`support-${++sequence}@example.test`}) RETURNING id`;
   const [profile] = await t.sql`INSERT INTO profiles (account_id, type, name) VALUES (${account.id}, 'human', 'Owner') RETURNING id`;
   const [inspiration] = await t.sql`INSERT INTO inspirations (profile_id, text, visibility)
     VALUES (${profile.id}, 'I enjoy a quiet morning', 'public') RETURNING id`;
   const [reflection] = await t.sql`INSERT INTO reflections (profile_id, inspiration_id, question, answer)
     VALUES (${profile.id}, ${inspiration.id}, 'Why?', 'PRIVATE_SENTINEL I need quiet before decisions') RETURNING id`;
-  let destination = profile.id;
-  let groupId: string | undefined;
-  if (group) {
-    const created = await createGroupForProfile(t.db as never, { profileId: profile.id as string, name: "Shared room" });
-    groupId = created.id;
-    const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id = ${created.id}`;
-    destination = mind.id;
-  }
-  const [signal] = await t.sql`INSERT INTO signals (profile_id, statement, input_policy, locked_at)
-    VALUES (${destination}, 'I choose quiet before making decisions', ${group ? "group-public-v1" : null}, now()) RETURNING id`;
+  const [signal] = await t.sql`INSERT INTO signals (profile_id, statement, locked_at)
+    VALUES (${profile.id}, 'I choose quiet before making decisions', now()) RETURNING id`;
   await t.sql`INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id)
-    VALUES (${destination}, ${profile.id}, ${signal.id}, ${inspiration.id})`;
+    VALUES (${profile.id}, ${profile.id}, ${signal.id}, ${inspiration.id})`;
   return { ownerProfileId: profile.id as string, inspirationId: inspiration.id as string,
-    reflectionId: reflection.id as string, signalId: signal.id as string,
-    deriveIntoProfileId: group ? destination as string : undefined, groupId };
+    reflectionId: reflection.id as string, signalId: signal.id as string };
 }
 function provider(verdict: "supported" | "unsupported" | "unresolved") {
   return { assessSignalSupport: vi.fn(async (input: SignalSupportAssessmentInput) => ({
@@ -118,40 +112,23 @@ describe("read-only evidence support assessment", () => {
     expect(report.items[0]).toMatchObject({ verdict: "unresolved", issue: "inputs_changed" });
   });
 
-  it("keeps private answers and legacy room wording out of a public review", async () => {
-    const f = await fixture(true);
-    const [legacy] = await t.sql`INSERT INTO signals (profile_id, statement)
-      VALUES (${f.deriveIntoProfileId!}, 'LEGACY_PRIVATE_SENTINEL') RETURNING id`;
-    await t.sql`INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id)
-      VALUES (${f.deriveIntoProfileId!}, ${f.ownerProfileId}, ${legacy.id}, ${f.inspirationId})`;
-    const model = provider("supported");
-    const report = await reviewSignalSupport(t.db as never, { ...f, provider: model, maxCalls: 1 });
-    expect(report.status).toBe("current");
-    expect(report.restrictedClaimCount).toBe(1);
-    expect(report.items).toHaveLength(1);
-    expect(JSON.stringify(model.assessSignalSupport.mock.calls)).not.toContain("PRIVATE_SENTINEL");
-    expect(JSON.stringify(report)).not.toContain("PRIVATE_SENTINEL");
-    const before = report.material.hash;
-    await t.sql`UPDATE reflections SET answer = 'PRIVATE_SENTINEL a different private answer' WHERE id = ${f.reflectionId}`;
-    const next = await reviewSignalSupport(t.db as never, { ...f, provider: model, maxCalls: 1 });
-    expect(next.material.hash).toBe(before);
-    expect(model.assessSignalSupport.mock.calls[1]).toEqual(model.assessSignalSupport.mock.calls[0]);
-  });
+  /* ── TWO PUBLIC-SCOPE ROOM CASES, DELETED ─────────────────────────────
+     Founder: "방 없애". "keeps private answers and legacy room wording out
+     of a public review" was the privacy gate on the room's review: the model
+     saw the public capture and never the owner's private answer, legacy
+     claims without `group-public-v1` were counted as restricted rather than
+     reviewed, and editing a private answer left the public material hash
+     untouched so no re-review was provoked. Every clause of that is a
+     statement about a review run for SOMEBODY ELSE'S eyes. A personal review
+     is the owner's own, private answers included, so there is no second
+     audience to keep anything from, and `restrictedClaimCount` has nothing
+     to count.
 
-  it("invalidates a room review if the member leaves during the call", async () => {
-    const f = await fixture(true);
-    const model = provider("unsupported");
-    const original = model.assessSignalSupport.getMockImplementation()!;
-    model.assessSignalSupport.mockImplementation(async (input) => {
-      await t.sql`DELETE FROM group_members WHERE group_id = ${f.groupId!} AND profile_id = ${f.ownerProfileId}`;
-      return original(input);
-    });
-    const report = await reviewSignalSupport(t.db as never, { ...f, provider: model, maxCalls: 1 });
-    expect(report.status).toBe("stale");
-    expect(report.items[0]?.verdict).toBe("unresolved");
-    await expect(reviewSignalSupport(t.db as never, { ...f, provider: model, maxCalls: 1 })).rejects.toThrow(/not_authorized/);
-    expect(model.assessSignalSupport).toHaveBeenCalledTimes(1);
-  });
+     "invalidates a room review if the member leaves during the call" pinned
+     the membership re-read: the seat is checked before the model call and
+     again after, so leaving mid-call makes the report stale rather than
+     applicable, and the next attempt refuses outright. No seats, no leaving,
+     nothing to re-read. */
 
   it("an unavailable attachment cannot be used as evidence of absence", async () => {
     const f = await fixture();
@@ -364,22 +341,22 @@ describe("applying explicit support decisions", () => {
     }
   });
 
-  it.each(["visibility", "membership"])("rejects a group report after a %s change", async (change) => {
-    const f = await fixture(true);
-    const negative = await review(f, "unsupported");
-    if (change === "visibility") await t.sql`UPDATE inspirations SET visibility = 'private' WHERE id = ${f.inspirationId}`;
-    else await t.sql`DELETE FROM group_members WHERE group_id = ${f.groupId!} AND profile_id = ${f.ownerProfileId}`;
-    await expect(applySignalSupportReview(t.db as never, negative)).rejects.toThrow(/changed/);
-    expect(await t.sql`SELECT id FROM signal_evidence WHERE signal_id = ${f.signalId}`).toHaveLength(1);
-  });
+  /* ── THE APPLY-SIDE ROOM CASES, DELETED ───────────────────────────────
+     Founder: "방 없애". "rejects a group report after a %s change"
+     (visibility / membership) guarded the gap between reviewing and
+     applying: a report assembled while a capture was public and its owner
+     seated must be refused if either changed before the write landed, so a
+     withdrawn memory or a departed member could never retire a room's
+     evidence. Both conditions are room conditions.
 
-  it("persists group refresh work with the member as billing owner", async () => {
-    const f = await fixture(true);
-    const outcome = await applySignalSupportReview(t.db as never, await review(f, "unsupported"));
-    expect((await t.sql`SELECT type, profile_id, payload FROM background_jobs WHERE id = ${outcome.jobId!}`)[0])
-      .toMatchObject({ type: "refresh_group_top_of_mind", profile_id: f.ownerProfileId,
-        payload: { groupId: f.groupId, reason: "signals_changed" } });
-  });
+     THE GENERAL RULE SURVIVES, in `applySignalSupportReview` itself and in
+     the cases above it here: a report whose material moved under it is
+     refused. What goes is the pair of room-shaped ways material could move.
+
+     "persists group refresh work with the member as billing owner" pinned
+     that a room's regeneration is billed to a PERSON, because a room's mind
+     has no account to charge. With `refresh_group_top_of_mind` retired there
+     is no job to bill and no mind to bill it for. */
 
   it.each(["held", "contested"])("preserves edited %s principles and recovers their support", async (state) => {
     const f = await fixture();

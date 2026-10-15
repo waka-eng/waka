@@ -27,26 +27,27 @@ const fetchApp =
     : app;
 
 /**
- * Rooms that predate the room's mind get one now.
+ * NOTHING RUNS AT BOOT ANY MORE, AND THAT IS THE CHANGE.
  *
- * The mind is written with the room from 2026-08-24 on; older rooms were
- * meant to be settled by migration 0025, and cannot be — writing a row whose
- * `type` is 'group' resolves an enum value added in that same uncommitted
- * transaction, which PostgreSQL refuses. A separate transaction is the only
- * fix, and startup is the honest place for it: idempotent, cheap, and never
- * on an operator's checklist.
+ * `ensureGroupMinds()` ran here until 2026-10-15. It gave every room that
+ * predated 2026-08-24 the account-less `type = 'group'` profile that newer
+ * rooms were born with — work that physically could not live in migration
+ * 0025, because writing a row whose `type` is 'group' resolves an enum value
+ * 0024 added in the same uncommitted transaction and PostgreSQL refuses. A
+ * separate transaction was the only fix and startup was the honest place for
+ * it.
  *
- * It must not stop the server. A room without a mind reads as a room with
- * nothing on its wall, which is recoverable on the next boot; an API that
- * refuses to start is not.
+ * Founder: "방 없애". No room can be created now, so no room can be born
+ * mindless, so there is nothing for a boot-time backfill to find. It is NOT
+ * kept "just in case": it was a single `INSERT ... SELECT ... WHERE NOT
+ * EXISTS` over `groups`, and running it on every boot forever to repair a
+ * population that cannot grow is a startup cost paid to a dead feature.
+ *
+ * THE ROWS IT ALREADY WROTE STAY. Every mind it ever created is still in
+ * `profiles`, still joined to its room by `group_id`, and still cascades
+ * with that room. Nothing here deletes one, and no migration is written —
+ * same ruling as the five tables.
  */
-const { ensureGroupMinds } = await import("./routes/groups-membership.js");
-await ensureGroupMinds().catch((err: unknown) => {
-  console.error(
-    "[api] could not give older rooms their minds:",
-    err instanceof Error ? err.message : String(err),
-  );
-});
 
 const port = Number(process.env.PORT ?? 3001);
 /**

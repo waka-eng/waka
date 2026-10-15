@@ -191,9 +191,18 @@ export async function eraseAccount(
      * Erasing an account deletes its profiles, which cascades away their
      * `group_members` rows — and if one of those carried `role: 'owner'`, the
      * room is left with members and nobody able to rename it, remove anyone,
-     * or close it. Leaving a room has always handed the seat on
-     * (`promoteSuccessorOwner` in routes/groups.ts); deleting an account is
-     * leaving every room at once and owes the same courtesy.
+     * or close it. Leaving a room always handed the seat on
+     * (`promoteSuccessorOwner`, which lived in `routes/groups-membership.ts`
+     * until the rooms came out on 2026-10-15); deleting an account is leaving
+     * every room at once and owes the same courtesy.
+     *
+     * THIS STAYS, EVEN THOUGH NOBODY CAN REACH A ROOM ANY MORE. Founder:
+     * "방 없애" — the doors are gone and the writers with them, but the five
+     * tables are KEPT and so are their rows: real `group_members` with
+     * `role = 'owner'` are still in the database, and the heir hand-off is
+     * still the difference between a surviving room and an unadministrable
+     * one. Erasure has to keep working over these tables for exactly as long
+     * as they exist, which is the whole reason no migration was written.
      *
      * This is the second half of the fix for the cascade that used to take the
      * whole room: `groups.created_by_profile_id` is now `ON DELETE SET NULL`
