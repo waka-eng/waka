@@ -1,42 +1,3 @@
-/* ═══════════════════════════════════════════════════════════════════════
-   THIS GATE CANNOT REACH ITS SUBJECT: WRITING A REFLECTION IS GONE
-   (measured 2026-10-15)
-   ═══════════════════════════════════════════════════════════════════════
-
-   It stops at line ~165 on
-   `getByRole('button', { name: 'Capture inspiration' })`, after 10s. That
-   is not a flake and not a renamed button:
-
-     - `Capture inspiration` (`worldCaptureInspiration`) is still in the
-       catalogue, but it is the TEXTAREA's accessible name now, not a
-       button's. The composer is opened from the dock's plus — see
-       `keep.ts`, which is where that door is written down once.
-     - `Save and reflect on this inspiration` IS NOT IN THE CATALOGUE AT
-       ALL. Neither is the dialog name this gate waits on next, `reflect on
-       what you just kept`.
-
-   BOTH MISSING STRINGS BELONG TO THE SAME CAPABILITY, and it is the one
-   `when-it-fails.ts` also lost an act to: a person can no longer WRITE an
-   answer to a memory. `Home.tsx` names its callback `openReflections` and
-   documents it as "Open the answers already on this save. A read, with
-   nothing to write", and nothing in `packages/web/src` posts to
-   `/api/inspirations/:id/reflections`. So capture → reflection → adoption
-   is a three-step journey whose middle step was removed.
-
-   WHAT IS LEFT WORTH HAVING: the first third — capture, the queued notice
-   (`Kept. Waiting to be read.`, which IS still rendered) and the poster's
-   own re-read — is real and still in the product. Rewriting this gate down
-   to that is a job for whoever owns source processing; it needs a new
-   capture flow through `keep.ts` and the reflect steps cut, which is more
-   than a selector sweep and is deliberately not attempted here.
-
-   WHAT WAS FIXED HERE, because both were selectors that LIED rather than
-   timed out: the `.jar-saved` descent near the end (no renderer; it is
-   `open-a-memory` now) and the failure dump's `.jar-reflect-room`, which
-   printed `dialog: undefined` beside every failure. Neither is verified by
-   running, because the run stops earlier than both — said plainly rather
-   than left to be assumed.
-   ═══════════════════════════════════════════════════════════════════════ */
 /** Manual rendered check of capture → reflection → explicit reading adoption.
  * All API traffic is synthetic and non-local resources are blocked. This is
  * UI evidence, not proof of a deployed worker or a live-model result.
@@ -48,7 +9,6 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchChromium } from './browser.js';
-import { openAMemory } from './open-a-memory.js';
 
 const origin = 'http://127.0.0.1:3012';
 const output = mkdtempSync(join(tmpdir(), 'waka-source-processing-'));
@@ -175,6 +135,7 @@ try {
       if (path === `/signals/${signal.id}`) return send({ signal: { ...signal, evidence: inspirations.slice(0, 3).map((item) => ({
         inspirationId: item.id, preview: item.text, quote: item.text, quoteSource: 'own', reason: null, createdAt: date,
       })) } });
+      if (path === '/groups') return send({ groups: [] });
       if (path === '/experiences') return send({ experiences: [] });
       if (path === '/principles') return send({ principles: [] });
       if (path === '/principles/status') return send({ status: { phase: 'waiting', eligible: false, signalCount: 0, topOfMindCount: 0 } });
@@ -217,14 +178,7 @@ try {
     const bounds = await dialog.boundingBox();
     assert.ok(bounds && bounds.y >= 0 && bounds.y + bounds.height <= viewport.height, 'Following an answer must not clip the dialog');
     assert.equal(await page.locator('.jar').evaluate((element) => element.scrollTop), 0, 'Only the dialog scrolls, never the world');
-    /* ASKED OF THE DIALOG, NOT A DEAD CLASS. This read
-       `document.querySelector('.jar-reflect-room').contains(...)`, and
-       `.jar-reflect-room` has had no renderer since the standalone reflect
-       sheet went (`Home.tsx:10259` is its tombstone; only CSS rules survive).
-       So it was `null.contains(...)` -- a TypeError inside `page.evaluate`,
-       not a soft miss. Unreached today only because the gate aborts earlier.
-       The dialog is already located above; ask it. */
-    assert.equal(await dialog.evaluate((node) => node.contains(document.activeElement)), true, 'Changing progress must retain dialog focus');
+    assert.equal(await page.evaluate("document.querySelector('.jar-reflect-room').contains(document.activeElement)"), true, 'Changing progress must retain dialog focus');
     const action = await dialog.getByRole('button', { name: 'See reading', exact: true }).evaluate((element) => ({
       height: element.getBoundingClientRect().height, width: element.getBoundingClientRect().width, size: parseFloat(getComputedStyle(element).fontSize),
     }));
@@ -357,15 +311,7 @@ try {
     await dialog.getByRole('button', { name: 'done for now', exact: true }).click();
     await page.reload();
     unavailableLookups.delete(answerRequest.requestId);
-    /* ═══ `.jar-saved` WAS THE DESCENT AND HAS NO RENDERER ═══════════════
-       It was the archive door at the bottom edge of the world and the way
-       down into the ground; `Home.tsx` keeps the string alive only inside
-       `querySelector` calls. An unguarded `.click()` on it throws, so this
-       recovery case — reload, find the memory again, confirm the answer
-       survived — could not run at all. `./open-a-memory` is the door now,
-       shared with five other gates, and it lands in the ground, which is
-       where the listbox below is. */
-    if (!(await openAMemory(page))) throw new Error('no memory would open after the reload');
+    await page.locator('.jar-saved').click();
     const ground = page.getByRole('listbox');
     await ground.waitFor(); await ground.focus(); await ground.press('End');
     const card = page.getByRole('dialog', { name: 'a saved inspiration', exact: true });
@@ -387,14 +333,7 @@ try {
       console.log('Failure surface:', (await page.locator('body').innerText()).slice(0, 2500), 'Unknown routes:', [...unknown], 'Page errors:', pageErrors);
       console.log('Focus and scroll:', await page.evaluate(`({ active: document.activeElement?.outerHTML.slice(0, 350),
         scroll: [window.scrollY, document.querySelector('.jar')?.scrollTop],
-        /* NO BACKTICKS HERE: this comment is inside a template literal, and
-           measure.ts keeps a case for exactly this mistake — which is how
-           this very line was caught. .jar-reflect-room HAS NO RENDERER: it
-           was the room's reflect sheet and went with rooms. It reported
-           dialog: undefined beside every failure, which reads as "the
-           dialog had no box" rather than "this selector matches nothing".
-           The card's own panel is the dialog this gate actually opens. */
-        dialog: document.querySelector('.jar-panel')?.getBoundingClientRect().toJSON() })`));
+        dialog: document.querySelector('.jar-reflect-room')?.getBoundingClientRect().toJSON() })`));
       throw error;
     }
     await context.close();

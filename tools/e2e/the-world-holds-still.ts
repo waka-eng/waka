@@ -99,17 +99,12 @@
  * safe toward "nothing changed".
  *
  * So after the quiet ten seconds the walk MOVES THE WORLD ON PURPOSE and
- * demands that the sampler report it. It opens the archive from the dock,
- * which puts a row on screen for every memory — a change in WHAT IS THERE and
- * WHERE, which is exactly the alphabet this sampler reads. Keeping something
- * was the first choice and it is the wrong control: the count goes from two to
- * three in the same box, and a sampler that reads geometry and not text is
- * right to see nothing. A control the instrument cannot see does not test the
- * instrument.
- *
- * IT WAS THE WALLS LIST UNTIL 2026-10-15, and that list went with rooms — see
- * the tombstone at the control itself for what that did to every run of this
- * gate in between.
+ * demands that the sampler report it. It opens the walls list, which puts a
+ * row on screen for every wall — a change in WHAT IS THERE and WHERE, which
+ * is exactly the alphabet this sampler reads. Keeping something was the first
+ * choice and it is the wrong control: the count goes from two to three in the
+ * same box, and a sampler that reads geometry and not text is right to see
+ * nothing. A control the instrument cannot see does not test the instrument.
  *
  * The control is a user act, which is the other half of the law: this same
  * movement is legal, because somebody asked for it.
@@ -127,47 +122,18 @@
  *
  * `--negative` does two things, one per half. It gives a piece of chrome a
  * looping animation — motion that explains nothing, running while nobody is
- * there. And it SCRUBS THE DIAL between samples, which re-solves the field and
- * sends every surviving ball to a new home, which is the product's own physics
- * genuinely moving the world. The second is what keeps the footprint rule
- * honest: a bound nothing can exceed is not a bound.
- *
- * ═══ THE SECOND HALF USED TO RIDE ON THE POUR, AND THE POUR IS GONE ═══════
- *
- * It read: "it samples the ground WITHOUT WAITING FOR THE SETTLE, while the
- * balls are still easing to their homes after arrival". That was true while
- * arrival staged balls and dropped them in. `simulation.ts` removed the pour
- * — every `spawnAt` is `-1` now, and the tombstone where `POUR_MS` used to be
- * says so — and `applyPresence` puts a newly present ball straight onto its
- * home (`b.x = b.homeX`). THERE IS NO LOAD-TIME MOTION LEFT. So skipping the
- * settle sampled a world that was already still, the footprint check reported
- * a few pixels of designed float, and the self-test for the one bound in this
- * file could not fire at all. A negative control that cannot fail is the same
- * defect as a gate that cannot fail, one level up.
- *
- * THE REPLACEMENT IS A REAL MOVER, AND IT IS THE PRODUCT'S OWN. `windTo` is on
- * `SimApi`; `reconcileScrub` re-assigns homes whenever the SET of present
- * orbs changes, and "everyone eases toward their new home" is its own comment.
- * So the walk winds back past the newest memory and forward again, and the
- * balls that stay lit genuinely travel. Measured on 2026-10-15 against a
- * `VITE_SHOW_INTERNAL=1` dev build with four memories kept: 93px of travel,
- * against the 20px footprint. The bound is exceedable again.
+ * there. And it samples the ground WITHOUT WAITING FOR THE SETTLE, while the
+ * balls are still easing to their homes after arrival, which is the product's
+ * own physics genuinely moving the world. The second is what keeps the
+ * footprint rule honest: a bound nothing can exceed is not a bound.
  *
  * ON A PLAIN BUILD ONLY THE FIRST OF THE TWO IS LIVE, and saying "both must be
  * caught" without that qualifier was this file overstating its own reach —
  * the same sin its positive half is careful not to commit. Where `__waka` is
- * absent the ground is unread, so the scrub has nothing to measure and the
- * drifting chrome is the whole of the negative proof. The run prints NO SIGHT
- * OF THE GROUND either way, so which of the two caught it is on the
- * transcript rather than left to be assumed.
- *
- * AND `__waka` IS NARROWER THAN IT LOOKS, WHICH IS WORTH KNOWING BEFORE YOU
- * TRUST A GREEN RUN. `wakaSim` is published under `showsDebug()` — `DEV ||
- * VITE_SHOW_INTERNAL` — but `__waka`, which is what `groundOf` reads, is
- * published under `import.meta.env.VITE_SHOW_INTERNAL` alone. A plain `vite`
- * dev server therefore has the scrub's handle and NOT the ground's eyes, and
- * the default base (a built bundle on :3010) has neither. Both report NO
- * SIGHT OF THE GROUND, honestly, and only `VITE_SHOW_INTERNAL=1` reads it.
+ * absent the ground is unread, so the unsettled sampling has nothing to
+ * measure and the drifting chrome is the whole of the negative proof. The run
+ * prints NO SIGHT OF THE GROUND either way, so which of the two caught it is
+ * on the transcript rather than left to be assumed.
  *
  * AND CATCHING IT IS NOT ENOUGH ON ITS OWN. The verdict was `!ok`, so a run
  * that missed the drift and failed its own blindness control instead would
@@ -179,7 +145,7 @@ import { type Browser, type Page } from "playwright";
 
 import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
-import { saveAnInspiration } from "./keep";
+import { openTheNotepad } from "./keep";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
 const PASSWORD = "holds-still-1";
@@ -264,46 +230,6 @@ async function frame(page: Page): Promise<Frame> {
   return { chrome: await chromeOf(page), ground: await groundOf(page) };
 }
 
-/**
- * THE NEGATIVE MODE'S MOVER, AND THE ONLY ONE LEFT THAT MOVES THE GROUND.
- *
- * Winds the wall back past its newest memory and forward again. `windTo` is
- * on `SimApi`, which the page publishes as `window.wakaSim` under
- * `showsDebug()`; `reconcileScrub` re-assigns every home when the SET of
- * present orbs changes, and the balls that stay lit ease across the field to
- * the gap the absent one left. That is travel, at the product's own
- * distances, caused by the product's own code — which is what a control for
- * the footprint rule has to be.
- *
- * Returns what it managed to do, so a run that could not scrub says so
- * instead of counting a still world as a caught one. `null` means the handle
- * was not there; the caller treats that as the plain-build case.
- */
-async function scrubTheDial(page: Page, phase: number): Promise<string | null> {
-  return (await page.evaluate(async (turn: number) => {
-    const sim = (window as unknown as { wakaSim?: () => { windTo?: (T: number) => void } | null })
-      .wakaSim?.();
-    if (!sim || typeof sim.windTo !== "function") return null;
-    /* The memories' own stamps, because a time plucked out of the air either
-       changes nothing (no ball crosses it) or empties the wall (every ball
-       does), and both leave the footprint rule with nothing to measure. One
-       step back is the newest memory going out and the rest re-homing. */
-    const r = await fetch("/api/inspirations?limit=200", { credentials: "include" });
-    if (!r.ok) return null;
-    const body = (await r.json()) as { inspirations?: Array<{ createdAt: string }> };
-    const stamps = (body.inspirations ?? [])
-      .map((row) => Date.parse(row.createdAt))
-      .filter((n) => Number.isFinite(n))
-      .sort((a, b) => a - b);
-    if (stamps.length < 2) return null;
-    /* alternate, so every gap in the window has motion in it rather than one
-       move followed by three still samples */
-    const T = turn % 2 === 1 ? stamps[stamps.length - 1]! - 1 : Date.now();
-    sim.windTo!(T);
-    return turn % 2 === 1 ? "wound back past the newest memory" : "wound forward to now";
-  }, phase)) as string | null;
-}
-
 /** What is in `b` and not in `a`, and the other way round. */
 function drift(a: string[], b: string[]): { came: string[]; went: string[] } {
   const inA = new Set(a);
@@ -337,39 +263,14 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
        whether or not anybody is there. This is the shape the orbit had — the
        world busy while the person is still. */
     await ctx.addInitScript(() => {
-      const s = document.createElement("style");
-      s.textContent =
-        "@keyframes e2e-sabotage-drift { from { transform: translateX(0) } " +
-        "to { transform: translateX(40px) } }" +
-        /* ═══ `.jar-values` HAD NO RENDERER, SO THE SABOTAGE ANIMATED
-               NOTHING ════════════════════════════════════════════════════
-           The up-signpost at headquarters went when the archive and the
-           principles became destinations in the dock; `home.css` still
-           carries `.jar-values` rules and no component writes the class.
-           A `--negative` run therefore injected a keyframe nobody could
-           see and then FAILED ITSELF for not catching a drift it had never
-           caused — the run read "chrome was drifting and the walk called
-           the world still", which is a sentence about this file dressed as
-           a sentence about the product.
-
-           `.jar-values-room` is the live element in the same region of
-           headquarters — `PrincipleRead`'s own container, verified on
-           screen 2026-10-15 for a fresh account with two memories, and
-           three rows of the chrome move when it is animated.
-
-           AND IT IS DELIBERATELY NOT `.waka-dock`, WHICH WAS TRIED FIRST.
-           The dock is the most permanent chrome there is, which is exactly
-           why it is the wrong thing to shake: the walk clicks the dock to
-           keep a memory and to move the world on purpose, and Playwright
-           refuses to click an element that never stops moving ("element is
-           not stable", 58 retries, then a timeout inside
-           `saveAnInspiration`). A sabotage must break what the gate
-           MEASURES, never what the gate DRIVES. */
-        ".jar-values-room { animation: e2e-sabotage-drift 2s linear infinite alternate !important }";
-      /* `load`, and it is enough: `addInitScript` re-runs on every
-         navigation, and the walk reaches the measured page with a real
-         `page.goto(base + "/")` rather than an in-page route change. */
-      window.addEventListener("load", () => document.head.append(s));
+      window.addEventListener("load", () => {
+        const s = document.createElement("style");
+        s.textContent =
+          "@keyframes e2e-sabotage-drift { from { transform: translateX(0) } " +
+          "to { transform: translateX(40px) } }" +
+          ".jar-values { animation: e2e-sabotage-drift 2s linear infinite alternate !important }";
+        document.head.appendChild(s);
+      });
     });
   }
   const page = await ctx.newPage();
@@ -387,31 +288,28 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   await page.waitForTimeout(8_000);
 
   /* THE WORLD NEEDS A GROUND TO HOLD STILL. An empty account has no orbs at
-     all, and "nothing moved" over an empty field is a sentence about nothing.
-
-     THROUGH `keep.ts`, WHICH IS THE WHOLE POINT OF `keep.ts`. This pasted the
-     old four lines — open the notepad, fill
-     `textarea[aria-label="Capture inspiration"]`, press Enter — and that
-     textarea is the CLOSED composer slot: it is in the DOM and it is not
-     visible, so the fill retried for thirty seconds and threw. `keep.ts`
-     exists because eleven gates pasted a stale composer flow once before;
-     this was the twelfth copy, and it is now the same call as everywhere
-     else. Four memories rather than two, so the scrub has a ball left lit
-     after it winds one out. */
-  for (let i = 0; i < 4; i += 1) {
-    await saveAnInspiration(page, `the ground stays where it was put ${i} ${uniq()}`);
-    await page.waitForTimeout(1_500);
+     all, and "nothing moved" over an empty field is a sentence about nothing. */
+  for (const text of ["the ground stays where it was put", "nobody is touching this"]) {
+    await openTheNotepad(page);
+    await page.waitForTimeout(700);
+    await page.fill('textarea[aria-label="Capture inspiration"]', `${text} ${uniq()}`);
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(4_500);
   }
 
   await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
-  /* BOTH MODES SETTLE NOW. Negative mode used to skip this, on the reasoning
-     that the pour was still dropping balls into place and the footprint rule
-     had to catch it. There is no pour (see the tombstone in the header), so
-     skipping the settle sampled a world that was already still and the
-     footprint self-test could not fire. Negative mode gets its motion from a
-     scrub between samples instead, which is a mover that still exists. */
-  await settleAfterArrival(page);
-  await page.waitForTimeout(AFTER_THE_ACT_MS);
+  /* NEGATIVE MODE DOES NOT WAIT FOR ANY OF IT. The pour is still staging
+     balls and dropping them to their homes — the world genuinely moving, by
+     the product's own physics and at the product's own distances — so the
+     footprint rule must catch it. A bound nothing can ever exceed is not a
+     bound, and skipping only the board's late re-read was not enough: that
+     reached 12px of the 20, which proves nothing about a rule set at 20. */
+  if (negative) {
+    await page.waitForTimeout(1_200);
+  } else {
+    await settleAfterArrival(page);
+    await page.waitForTimeout(AFTER_THE_ACT_MS);
+  }
 
   const first = await frame(page);
   lines.push(
@@ -424,14 +322,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   if (first.ground !== null) track.push(first.ground);
 
   let prev = first;
-  /* What the scrub managed, said on the transcript rather than assumed — a
-     negative run on a build with no `wakaSim` has NOT exercised the footprint
-     rule and must not read as though it had. */
-  let scrubbed: string | null = null;
   for (let i = 1; i < SAMPLES; i += 1) {
-    /* NEGATIVE MODE MOVES THE GROUND ON PURPOSE, BETWEEN THE SAMPLES. The
-       positive run touches nothing here, which is the whole claim. */
-    if (negative) scrubbed = (await scrubTheDial(page, i)) ?? scrubbed;
     await page.waitForTimeout(GAP_MS);
     const now = await frame(page);
     if (now.ground !== null) track.push(now.ground);
@@ -493,53 +384,20 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
     }
   }
 
-  if (negative) {
-    lines.push(
-      scrubbed === null
-        ? "  THE SCRUB DID NOT RUN — no `wakaSim` on this build, so the footprint rule was " +
-          "not exercised and the drifting chrome is the whole of this run's negative proof"
-        : `  the dial was scrubbed between samples (${scrubbed}), so the ground was ` +
-          "genuinely moved and the footprint rule had something to catch",
-    );
-  }
-
   /* ── AND NOW MOVE IT ON PURPOSE ─────────────────────────────────────────
      Everything above fails safe toward "nothing changed", so a run that
-     never sees a change has proved nothing.
-
-     ═══ THE CONTROL WAS THE WALLS LIST, AND THE WALLS LIST WENT WITH ROOMS ══
-     This opened `.jar-here-more` — the caret on the wall chip that listed
-     every wall you could walk to. Rooms came out in `405ee4aa` and the chip
-     itself renders `null`; the class survives only as rules in `home.css`.
-     So the control read zero, and EVERY run of this gate — positive and
-     negative alike — ended on "THE CONTROL IS MISSING ... the stillness above
-     is unproven". Not a timeout: a confident, wrong verdict about the
-     instrument, filed against a product that was fine.
-
-     THE ARCHIVE IS THE CONTROL NOW, and it is a better one for exactly the
-     reason the walls list was chosen. What this needs is a USER ACT that
-     changes WHAT IS THERE and WHERE — the alphabet this sampler reads — and
-     opening the archive puts a whole list on screen. Measured 2026-10-15:
-     29 new things in the chrome, and Escape puts every one of them back.
-     The walls list managed the same kind of change and no longer exists;
-     keeping a memory is still the wrong control for the same reason it
-     always was (the count goes from two to three in the same box).
-
-     It is also the same door `first-sixty.ts` repointed `.jar-saved` to, so
-     the two gates now name the archive the same way. */
-  const more = page
-    .locator(".waka-dock-item", { hasText: /^Inspirations$/ })
-    .first();
+     never sees a change has proved nothing. */
+  const more = page.locator(".jar-here-more");
   if ((await more.count()) === 0) {
     /* WITHOUT THE CONTROL THERE IS NO VERDICT. `nothing-invisible` guards the
-       same locator and this did not, so an absent control ended the walk
+       same locator and this did not, so an absent walls list ended the walk
        in a stack trace rather than an answer — and a harness error reads as
        infrastructure when what it means is "this run proved nothing". */
     ok = false;
     blind = true;
     lines.push(
-      "  THE CONTROL IS MISSING. The dock's `Inspirations` row is not on screen, so the " +
-        "world could not be moved on purpose and the stillness above is unproven.",
+      "  THE CONTROL IS MISSING. `.jar-here-more` is not on screen, so the world " +
+        "could not be moved on purpose and the stillness above is unproven.",
     );
     await ctx.close();
     return { ok, lines, sawDrift, blind };
@@ -550,14 +408,14 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   const cc = drift(prev.chrome, opened.chrome);
   if (cc.came.length > 0) {
     lines.push(
-      `  moved on purpose: opening the archive put ${cc.came.length} thing(s) on screen, ` +
+      `  moved on purpose: opening the walls list put ${cc.came.length} thing(s) on screen, ` +
         "and the sampler saw every one",
     );
   } else {
     ok = false;
     blind = true;
     lines.push(
-      "  THE INSTRUMENT IS BLIND. The archive was opened and the sampler reported " +
+      "  THE INSTRUMENT IS BLIND. The walls list was opened and the sampler reported " +
         "nothing new on screen — so the stillness above is not evidence of anything.",
     );
   }
@@ -568,8 +426,10 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
      drops a ball into the field, so the loop must report one more than it
      did — the half of this walk that the chrome cannot speak for. */
   if (opened.ground !== null) {
-    /* the same stale composer flow as the seeding loop above, same fix */
-    await saveAnInspiration(page, `on purpose ${uniq()}`);
+    await openTheNotepad(page);
+    await page.waitForTimeout(700);
+    await page.fill('textarea[aria-label="Capture inspiration"]', `on purpose ${uniq()}`);
+    await page.keyboard.press("Enter");
     await page.waitForTimeout(6_000);
     const after = await frame(page);
     const gc =

@@ -46,6 +46,7 @@ try {
       if (path === '/inspirations') return send({ inspirations, total: inspirations.length });
       if (path.startsWith('/inspirations/')) return send({ inspiration: inspirations.find((item) => item.id === path.split('/')[2]) });
       if (path === '/signals') return send({ signals: [] });
+      if (path === '/groups') return send({ groups: [] });
       if (path === '/experiences') return send({ experiences: [] });
       if (path === '/principles') return send({ principles: [principle] });
       if (path === '/principles/status') return send({ status: { phase: 'waiting', eligible: false, signalCount: 0, topOfMindCount: 0 } });
@@ -128,38 +129,7 @@ try {
     await page.goto(`${origin}/@preview`);
     await page.getByText('Kept here; its supporting patterns have changed.', { exact: true }).waitFor();
     await page.screenshot({ path: join(output, `public-${viewport.width}.png`), fullPage: true });
-    /* ═══ REPOINTED FROM THE `nc-` FAMILY, WHICH NO LONGER EXISTS ════════
-       These three pairs read `.nc-title`/`.nc-canvas` and
-       `.nc-note-body`/`.nc-note-support` on `.nc-note` — the post-it
-       language of the flat screens. `PublicProfile.tsx` was rewritten onto
-       the product's own material and its header says what happened: those
-       classes were "the language of the FLAT SCREENS, the ones deleted a
-       week before this pass", and this page "was the last living reference
-       to them in the entire tree". Nothing renders an `nc-` class now; three
-       orphan selectors survive in the stylesheets and that is all.
-
-       THE CLAIM IS UNCHANGED AND THE SURFACE IS THE SAME ONE. This asks
-       whether the page a stranger reads has readable contrast, `/@preview`
-       is still that page, and each old pair has an exact counterpart:
-       the heading on the page's ground, the entry's words on the entry, and
-       the support sentence on the entry. Only the names moved.
-
-       IT WAS NOT A TIMEOUT, and it was not a silent pass either. CORRECTED
-       2026-10-15: this said `measureText` on a missing element "returns a
-       reading taken from nothing, so these three assertions were passing".
-       It does not. `getComputedStyle`'s parameter is non-nullable, so
-       `getComputedStyle(null)` throws a TypeError and the gate THREW. The
-       distinction matters for the next reader: other unguarded `measureText`
-       calls in this file are crashes waiting to happen, not weak checks. */
-    /* ALL THREE MEASURE AGAINST `.waka-public`, which is the only one of
-       these that paints. `.waka-public-said` is `display: grid; gap:` and
-       nothing else, so `getComputedStyle(...).backgroundColor` returns
-       `rgba(0,0,0,0)`; the helper fills a transparent canvas and reads it as
-       luminance 0, i.e. PURE BLACK. Both pairs then score ~1.x against a
-       ground that does not exist and fail a page that is perfectly readable.
-       A transparent backdrop is not a colour, it is the absence of one --
-       the ground is whatever paints behind it. */
-    for (const [selector, backdrop] of [['.waka-public-title', '.waka-public'], ['.waka-public-body', '.waka-public'], ['.waka-public-aside', '.waka-public']]) {
+    for (const [selector, backdrop] of [['.nc-title', '.nc-canvas'], ['.nc-note-body', '.nc-note'], ['.nc-note-support', '.nc-note']]) {
       const text = await measureText(selector!, backdrop!);
       console.log(selector, text);
       assert.ok(text.contrast >= 4.5, `${selector} must have readable contrast`);

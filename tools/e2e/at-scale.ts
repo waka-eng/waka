@@ -43,7 +43,6 @@
  */
 import { type Browser, type Route } from "playwright";
 import { launchChromium } from "./browser";
-import { openAMemory } from "./open-a-memory";
 
 import postgres from "postgres";
 
@@ -282,37 +281,21 @@ async function measure(browser: Browser, base: string, sql: postgres.Sql, count:
     let groundFps = 0;
     let reachOptions = 0;
     try {
-      /* ═══ THE DESCENT IS A SEARCH NOW, NOT A DOOR AT THE BOTTOM EDGE ═══
-         This pressed `.jar-saved`, which was two things at once: the archive
-         door AND the way down into the ground. `Home.tsx` reads it as the
-         descent in its own focus-restore — `inSky ? ".jar-up--down" :
-         inField ? ".jar-reach" : ".jar-saved"` — and both meanings are gone.
-         The archive is `SavesOverlay`, reached from the dock; the class has
-         no renderer at all, kept alive only by `querySelector` calls looking
-         for it.
-
-         SO THE WHOLE BLOCK MEASURED NOTHING, AND SAID SO QUIETLY. The click
-         threw after 10s, the `catch` set `reachable = false`, and
-         `groundFps` and `reachOptions` stayed at their initialised ZERO.
-         Those zeros are reported as measurements: a scale walk whose entire
-         point is "what does the ground cost with thousands of memories in
-         it" was printing 0 fps and 0 reach options for every size, and a
-         reader would take that for a product that renders nothing rather
-         than for a walk that never descended.
-
-         `openAMemory` IS THE DOOR NOW, and `journeys.ts` says so in as many
-         words — "the ground: `/` and a word, via `openAMemory`, which is the
-         door into the field now". It lands IN the ground with the card
-         already open, so the grid sweep that used to hunt for `.jar-panel`
-         goes with it: the thing the sweep was proving is this function's
-         return value. */
-      reachable = await openAMemory(page);
-      if (reachable) {
-        await page.waitForTimeout(3_000);
-        reachOptions = (await page.evaluate(
-          () => document.querySelectorAll('.jar-reach [role="option"]').length,
-        )) as number;
-        groundFps = ((await page.evaluate(SAMPLER)) as { fps: number }).fps;
+      await page.locator(".jar-saved").first().click({ timeout: 10_000 });
+      await page.waitForTimeout(3_000);
+      reachOptions = (await page.evaluate(
+        () => document.querySelectorAll('.jar-reach [role="option"]').length,
+      )) as number;
+      groundFps = ((await page.evaluate(SAMPLER)) as { fps: number }).fps;
+      outer: for (const y of [390, 350, 430, 310, 470]) {
+        for (let i = 0; i < 30; i += 1) {
+          await page.mouse.click(160 + i * 28, y);
+          await page.waitForTimeout(160);
+          if ((await page.locator(".jar-panel").count()) > 0) {
+            reachable = true;
+            break outer;
+          }
+        }
       }
     } catch {
       reachable = false;

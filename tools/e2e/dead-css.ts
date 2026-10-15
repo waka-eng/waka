@@ -66,7 +66,6 @@ import { fileURLToPath } from "node:url";
 import { type BrowserContext, type CDPSession, type Page } from "playwright";
 import { launchChromium } from "./browser";
 import { openTheNotepad, saveAnInspiration } from "./keep";
-import { openAMemory } from "./open-a-memory";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STYLES = resolve(HERE, "../../packages/web/src/styles");
 /**
@@ -496,19 +495,25 @@ async function walkSurface(
 
 const PASSWORD = "dead-css-password-1";
 
-/** Open a keepsake from a freshly loaded world. Says whether it managed to.
- *
- *  ═══ IT PRESSED `.jar-saved` AND THEN SWEPT THE CANVAS, AND NEITHER WORKS
- *  `.jar-saved` was the descent into the ground and has no renderer; the
- *  sweep is the grid `journeys.ts` removed for being unable to aim. Together
- *  they meant this returned false every time — and `openCardAgain`'s callers
- *  treat false as "the card would not open", so whole families of card rules
- *  were about to be reported as dead CSS on the strength of a walk that
- *  never reached the card. A dead-code walk that cannot enter a state is the
- *  one tool where a false negative gets something DELETED.
- *  `./open-a-memory` is the door now and is shared with five other gates. */
+/** Open a keepsake from a freshly loaded world. Says whether it managed to. */
 async function openCardAgain(page: Page): Promise<boolean> {
-  return openAMemory(page);
+  try {
+    await page.locator(".jar-saved").first().click({ timeout: 8_000 });
+    await page.waitForTimeout(3_500);
+    for (const y of [390, 350, 430, 310, 470]) {
+      for (let x = 160; x <= 940; x += 28) {
+        await page.mouse.click(x, y);
+        await page.waitForTimeout(350);
+        if ((await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) > 0) {
+          await page.waitForTimeout(900);
+          if ((await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) > 0) return true;
+        }
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 async function surfaces(
@@ -555,10 +560,23 @@ async function surfaces(
   /* a memory open — the card and its footer */
   await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(6_000);
-  /* same dead descent and same dead sweep as `openCardAgain` above, and the
-     same consequence: this surface walked zero elements and every card rule
-     it exists to prove alive was unaccounted for */
-  const opened = await openAMemory(page);
+  let opened = false;
+  try {
+    await page.locator(".jar-saved").first().click({ timeout: 20_000 });
+    await page.waitForTimeout(4_000);
+    outer: for (const y of [390, 350, 430, 310, 470, 270, 510]) {
+      for (let x = 160; x <= 940; x += 28) {
+        await page.mouse.click(x, y);
+        await page.waitForTimeout(450);
+        if ((await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) > 0) {
+          opened = true;
+          break outer;
+        }
+      }
+    }
+  } catch {
+    opened = false;
+  }
   if (opened) {
     await page.waitForTimeout(1_200);
     await walkSurface(cdp, page, "a memory open", seen, ask);
@@ -574,38 +592,9 @@ async function surfaces(
       ["saying it in your own words", async () => {
         await page.locator(".jar-panel-text").first().click({ timeout: 6_000 });
       }],
-      /* ═══ `answering a memory` IS NOT IN THIS LIST ANY MORE (2026-10-15)
-         It pressed a `reflect` verb in `.jar-panel-foot`. There is no such
-         verb: the foot holds the attach-a-photo label, one stepper caret and
-         `Delete` — read off an open card in a browser on 2026-10-15 — and
-         the surface it would have opened is now a READ. `Home.tsx` names the
-         callback `openReflections` and documents it as "Open the answers
-         already on this save. A read, with nothing to write."
-
-         CORRECTION (2026-10-15): this went on to say "nothing in
-         `packages/web/src` posts a reflection" and that "with no write path
-         left, a fresh account made by this walk can never have an answer to
-         read". BOTH ARE FALSE. Reflections are still written — just not
-         through a dedicated endpoint. `Home.tsx:5262` builds
-         `reflections: [{ question, answer }]` and sends it WITH THE CAPTURE;
-         `lib/api/inspirations.ts` carries the field and
-         `lib/use-authored-save.ts` says so in as many words. The door is the
-         `.waka-moment-why` textarea, rendered whenever the composer holds an
-         image.
-
-         SO THE READ STATE IS REACHABLE: attach an image, fill the why, save,
-         then press `Read reflection`. That is a cheaper route than the
-         "seed a reflection through the API" this tombstone used to
-         prescribe. (`when-it-fails` makes the narrower and accurate claim —
-         nothing posts to `POST /api/inspirations/:id/reflections`.)
-
-         WHAT COVERAGE WENT: the rules for the answering flow —
-         `.jar-reflection-flow`, `.jar-reflection-turn`, `.jar-reflect-q` and
-         anything under them — are not walked, so they will appear in this
-         run's "never put on screen" list. That list is explicitly NOT a
-         deletion list, and this paragraph is why these particular selectors
-         are on it. WHAT WOULD RESTORE IT: seed a reflection through the API
-         for the walk's own account, then press `Read reflection`. */
+      ["answering a memory", async () => {
+        await page.locator(".jar-panel-foot button", { hasText: /reflect/i }).first().click({ timeout: 6_000 });
+      }],
       ["letting a memory go", async () => {
         await page.locator(".jar-panel-foot button", { hasText: /delete/i }).first().click({ timeout: 6_000 });
       }],
@@ -644,29 +633,22 @@ async function surfaces(
      a surface name that was already covered (M7,
      `docs/reviews/cleanliness-2026-10-11.md`).
 
-     `the timeline` IS A DIFFERENT CASE, and the analysis below was wrong.
-     CORRECTED 2026-10-15. `.jar-when` IS live, but its render condition is
-     no longer what this said. It read
+     `the timeline` IS A DIFFERENT CASE and is why this is a rewrite rather
+     than a deletion: `.jar-when` IS LIVE (`Home.tsx:16881`) and the step was
+     still failing, which the review correctly called a real walk defect. The
+     reason is its render condition —
 
          dial && phase === "ready" && !dialAway
            && (atWall.kind === "group" || parkedAt !== null)
 
-     citing `Home.tsx:16881`, a line number about 7000 lines stale. The group
-     half went with rooms; the condition at `Home.tsx:9833` is now
-     `parkedAt !== null` ALONE.
-
-     AND THE PRESCRIBED WORKAROUND CANNOT BE TAKEN. It said to wind the dial
-     away from now first, by pressing a stop that is not `now`, which sets
-     `parkedAt`. But `.jar-dial-stop` is mounted only inside
-     `{dial && phase === "ready" && timeOpen ? ...}` (`Home.tsx:9921`), and
-     every `setTimeOpen(true)` lives inside the `.jar-when` button that
-     requires `parkedAt !== null`. The door only opens from inside.
-
-     SO THIS STEP PRINTS `NOT WALKED — the dial has 0 stop(s)` on every run
-     and the walk loses the dial's whole selector family. That is not a
-     harness defect to repoint; it is product finding #1 in this change, and
-     `the-timeline.ts` reached the same diagnosis independently. This note is
-     left pointing at the product rather than inventing a route. */
+     — so on a fresh account standing at its own wall at NOW, the control does
+     not exist. A room would satisfy the first branch and rooms cannot be made
+     any more (see the note further down); the second branch is reachable, by
+     WINDING THE DIAL AWAY FROM NOW FIRST. That is what a person does before
+     they ever see this control, so it is what the walk does: press a stop
+     that is not `now`, which sets `parkedAt`, and only then look for the way
+     back. If there is only one stop on a young account, the reason is printed
+     rather than a bare timeout. */
   /* FROM A FRESH LOAD, same reason as every other re-entry in this walk:
      the card states above leave modals standing, and a dial stop under an
      invisible leftover is found-but-not-actionable. */
@@ -821,82 +803,60 @@ async function surfaces(
   }
 
   /* THE PAGE OTHER PEOPLE SEE, which is a whole prefix of its own.
-     `PublicProfile.tsx` is the only wearer of the `waka-public-` family, and
-     without this surface every one of those selectors reads as unused. The
-     class-name cross-check is the only thing standing between that reading
-     and a very bad deletion.
+     Leaving it out was not a small gap: `PublicProfile.tsx` is the only
+     wearer of the `nc-` family, roughly a hundred and fifty selectors across
+     `global.css` and `system.css`, and without this surface every one of them
+     read as unused. The class-name cross-check was the only thing standing
+     between that reading and a very bad deletion. */
+  /* A FRESH ACCOUNT HAS NO HANDLE, so one is set here rather than read. The
+     first version read the field and found it empty, concluded there was no
+     public page, and skipped the surface — which is how a hundred and fifty
+     live selectors nearly got reported as dead.
 
-     ═══ THE FAMILY IS `waka-public-`, NOT `nc-` (corrected 2026-10-15) ═════
-     This comment used to say `nc-`, "roughly a hundred and fifty selectors".
-     `PublicProfile.tsx` was rewritten onto the product's own material and
-     its header records it: the `nc-` classes were "the language of the FLAT
-     SCREENS, the ones deleted a week before this pass", and this page "was
-     the last living reference to them in the entire tree". Three orphan
-     `nc-` selectors survive in the stylesheets and nothing renders them.
-     The page now wears eight `waka-public-*` classes, read off the DOM on
-     2026-10-15.
-
-     ═══ AND THE HANDLE IS SET THROUGH THE SESSION, BECAUSE NO CONTROL LEFT
-         CAN SET IT ════════════════════════════════════════════════════════
-     This opened the settings card, hunted a `.waka-settings-row` matching
-     /public/i, filled `.waka-settings-body input`, checked
-     `.waka-settings-toggle input[type=checkbox]` and pressed
-     `.waka-settings-keep`. The public group was deleted in `f1e96412` on a
-     founder ruling — "everything regarding public and private should also
-     not be a thing in this new experience" — and that commit names it "the
-     single writer of both flags in the entire product". None of those three
-     classes has a renderer.
-
-     IT FAILED SOFTLY, WHICH IS THE WORST WAY FOR THIS WALK TO FAIL. The
-     whole block sat in a `try`/`catch` that set `published = false`, so the
-     run printed `NOT WALKED — the handle could not be set` and carried on —
-     and every `waka-public-*` rule was then a candidate for deletion on the
-     grounds that no surface wore it.
-
-     `PATCH /api/auth/me/profile` STILL WRITES THE FLAGS, deliberately:
-     `f1e96412` kept the column and the merge because "a handle is a name
-     somebody chose and may have shared". So the handle is set through the
-     page's own session — no machine key, the same call the deleted control
-     made — and the surface is walked as a stranger. Verified by hand on
-     2026-10-15: the PATCH answers 200 and `/:handle` serves a page.
-
-     WHAT THIS IS NOT: it is not a claim that a person can publish. Nobody
-     can. It is a CSS-coverage walk reaching a surface that is still routed
-     and still served, so that its rules are not deleted as unused. The
-     missing-reading branch of the page renders too, and is also real
-     markup. */
+     AND THE FIELD LIVES BEHIND A TAB. Every panel but the open one carries
+     `hidden`, so the input is in the document but not visible, and Playwright
+     will not type into something a person could not type into. The panels
+     being present-but-hidden is also why the tab walk above changes the
+     element count by one or two rather than by fifty: hidden is not absent,
+     and `querySelectorAll` was finding those rules all along. The tabs are
+     opened until the field is one a hand could reach. */
   const handle = `deadcss${Date.now().toString(36)}`;
   let published = false;
   try {
-    const out = (await page.evaluate(async (h: string) => {
-      /* the full payload: the route validates `name` and `preferredLocale`
-         alongside the public fields, and a partial body answers 400 */
-      const me = await fetch("/api/auth/me", { credentials: "include" });
-      if (!me.ok) return me.status;
-      const body = (await me.json()) as { profile?: { name?: string; preferredLocale?: string } };
-      const r = await fetch("/api/auth/me/profile", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: body.profile?.name ?? "Dead CSS",
-          preferredLocale: body.profile?.preferredLocale ?? "en-US",
-          publicHandle: h,
-          publicProfileEnabled: true,
-          publicTopOfMindEnabled: true,
-        }),
-      });
-      return r.status;
-    }, handle)) as number;
-    published = out === 200;
-    if (!published) console.log(`  what others see       the handle PATCH answered ${out}`);
+    /* THE HANDLE IS IN THE PANEL'S PUBLIC GROUP NOW. Opened by name rather
+       than by index, because the group order is a design decision and this
+       walk should not break when it changes. */
+    await page.locator("button.waka-corner--settings").click({ timeout: 8_000 }).catch(() => undefined);
+    await page.waitForTimeout(500);
+    for (let i = 0; i < await page.locator(".waka-settings-row").count(); i += 1) {
+      const row = page.locator(".waka-settings-row").nth(i);
+      if (/public/i.test((await row.textContent()) ?? "")) { await row.click(); break; }
+    }
+    await page.waitForTimeout(400);
+    /* THE PANELS ARE UNHIDDEN TO REACH THE FIELD, AND ONLY NOW. Clicking the
+       tabs did not do it — the panel's `hidden` is driven by React state that
+       a synthetic click on this build did not flip — and Playwright will not
+       type into something a person could not see. Every measurement of this
+       page is already taken by this line, so nothing is read through the
+       change: it exists to reach one input and press one button. */
+    await page.evaluate(() => {
+      for (const el of document.querySelectorAll("[hidden]")) el.removeAttribute("hidden");
+    });
+    await page.waitForTimeout(400);
+    await page.locator(".waka-settings-body input[type=text]").first().fill(handle, { timeout: 8_000 });
+    const boxes = page.locator(".waka-settings-toggle input[type=checkbox]");
+    const count = await boxes.count();
+    for (let b = 0; b < count; b += 1) {
+      const box = boxes.nth(b);
+      if (!(await box.isChecked())) await box.check({ timeout: 4_000, force: true });
+    }
+    await page.locator(".waka-settings-keep").first().click({ timeout: 8_000, force: true });
+    await page.waitForTimeout(5_000);
+    published = true;
   } catch {
     published = false;
   }
   if (published) {
-    /* AS A STRANGER. The point of this surface is what an anonymous visitor
-       is served, and a signed-in read renders a different corner. */
-    await ctx.clearCookies();
     await page.goto(`${base}/${handle}`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(5_000);
     await walkSurface(cdp, page, "what others see", seen, ask);

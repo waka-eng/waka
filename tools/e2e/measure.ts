@@ -413,16 +413,9 @@ const FIXTURE = `<!doctype html>
   <div class="jar-mouth-slot">
   </div>
 
-  <!-- ═══ THE WALL'S SETTINGS SHEET IS NOT IN HERE ANY MORE (2026-10-15) ══
-       NO BACKTICKS IN THIS COMMENT, AND THAT IS NOT A STYLE CHOICE: this
-       fixture is a template literal, and the case two above this one exists
-       because four gates have been killed by a backtick inside one.
-       .jar-settings was SpaceSettings, and SpaceSettings.tsx was DELETED in
-       405ee4aa when rooms came out. The tombstone above
-       every-modal-is-one-modal already recorded that the sheet had a
-       renderer and no door; it now has neither. The drift check caught this
-       on the first run after the deletion and named it — which is the gate
-       working, and the markup going is the answer to it. -->
+  <div class="jar-settings" data-jar-chrome="1" role="dialog">
+    <div class="jar-settings-head"><span class="jar-label">this wall</span></div>
+  </div>
   <div class="jar-prov-room" data-jar-chrome="1" role="dialog">
     <p class="jar-prov-room-lead">Where this came from.</p>
   </div>
@@ -430,15 +423,11 @@ const FIXTURE = `<!doctype html>
   <div class="jar-panel" data-jar-chrome="1" role="dialog">
     <div class="jar-panel-head">
       <span class="jar-panel-when jar-label">today &middot; aug 23</span>
-      <!-- ═══ AND THE PRIVATE/PUBLIC PAIR IS NOT IN HERE EITHER ═══════════
-           .jar-panel-vis and its two buttons went with rooms in the same
-           commit, and the commit says why rather than leaving it to be
-           guessed: the confirm read "people in your rooms can read it", so
-           with rooms gone it offered a choice between two identical states
-           and promised an audience that cannot exist. The card head is a
-           date and a copy-link button now — verified on screen 2026-10-15,
-           .jar-panel-head holds span.jar-panel-when and button.jar-copy-link
-           and nothing else. -->
+      <p class="jar-ask jar-ask--row jar-panel-vis">
+        <button type="button" class="jar-where-on">private</button>
+        <span aria-hidden="true"> &middot; </span>
+        <button type="button" class="jar-where-off">public</button>
+      </p>
     </div>
     <p class="jar-panel-text">A card is one object with a middle, not three things stacked on each other with the spacing left to chance.</p>
     <p class="jar-ask jar-ask--after jar-panel-foot">
@@ -528,7 +517,7 @@ const BOXES = `(() => {
   return {
     vw: window.innerWidth, vh: window.innerHeight,
     dial: box(".jar-dial"), nowWord: box(".jar-when"),
-    when: box(".jar-panel-when"),
+    when: box(".jar-panel-when"), vis: box(".jar-panel-vis"),
     text: box(".jar-panel-text"),
     footL: box(".jar-panel-foot-l"), footC: box(".jar-panel-foot-c"), footR: box(".jar-panel-foot-r"),
     footVerb: box(".jar-panel-foot-l button"), footCaret: box(".jar-panel-foot-c .jar-caret"),
@@ -536,9 +525,8 @@ const BOXES = `(() => {
        THEM (2026-10-12) — see the tombstone above \`verb-rows-one-register\`.
        \`.jar-caret\` is still read, down in the card's foot, by
        \`the-edit-offers-one-act\`. */
-    /* the rows of quiet verbs the card really has. \`typeVis\` stood here
-       and read \`.jar-panel-vis button\` — the private/public pair, gone with
-       rooms. */
+    /* the three rows of quiet verbs the card really has */
+    typeVis: ink(".jar-panel-vis button"),
     typeWhen: ink(".jar-panel-when"),
     typeAsk: ink(".jar-panel-askrow .jar-ask--row button"),
   };
@@ -805,12 +793,8 @@ const CASES: Case[] = [
   {
     id: "verb-rows-one-register",
     name: "every row of quiet verbs is set in the label register",
-    needs: ["jar-panel-askrow", "jar-ask--row"],
-    /* THE SABOTAGE MOVED TO THE ROW THAT IS LEFT. It was
-       `.jar-panel-vis button { font-size: 13px; text-transform: none; }` —
-       breaking the pair this case no longer reads, which would have made
-       `--negative` pass on a case that cannot fail. */
-    sabotage: ".jar-panel-askrow .jar-ask--row button { font-size: 13px; text-transform: none; }",
+    needs: ["jar-panel-vis", "jar-panel-askrow", "jar-ask--row", "jar-where-on"],
+    sabotage: ".jar-panel-vis button { font-size: 13px; text-transform: none; }",
     run: async (page) => {
       /* THE MISS THIS CASE EXISTS FOR. `private/public` was brought to the
          label register on the CARD and left at `.jar-ask`'s 13px prose in the
@@ -819,27 +803,17 @@ const CASES: Case[] = [
          type only, not colour: these rows sit on different grounds and are
          allowed different ink.
 
-         ═══ AND PRIVATE/PUBLIC — THE PAIR THAT MISS WAS ABOUT — IS GONE ════
-         It went with rooms (`405ee4aa`): the confirm promised "people in your
-         rooms can read it", so with no rooms it offered a choice between two
-         identical states. `.jar-panel-vis` has no renderer, the drift check
-         named it, and this case was reading it against the EMPTY STRING and
-         reporting "2 registers — the card's private/public: " — a register
-         mismatch invented by a probe returning null for a row that is not on
-         any screen. That is the exact failure mode this file's own header
-         warns about, committed by this file.
-
-         WHAT IS LEFT IS TWO ROWS, AND TWO IS STILL A COMPARISON. The date and
-         the ask strip are both really on the card, and the claim — one label
-         register across every quiet row — is unchanged; it is held over a
-         smaller set. WHAT COVERAGE WENT: nothing now checks that a row of
-         verbs in a MODAL agrees with the same row on the card, because the
-         pair that appeared in both places is the thing that was deleted. If a
-         second surface ever prints the same verbs again, it belongs here. */
+         AND THE THIRD ROW IS THE CARD'S ASK STRIP NOW, NOT THE MOUTH'S.
+         The read was `b.typeMouth`, which the probe stopped producing when
+         the mouth's verb row left the fixture and nobody took the read out
+         with it — so for as long as that was true this case compared two
+         real registers against the empty string and failed on a correct
+         page. See the fixture note at `.jar-panel-askrow`. */
       const b = (await page.evaluate(BOXES)) as Boxes;
       const typeOf = (s: string) => (s ?? "").split(" | ").slice(0, 4).join(" | ");
       const rows = {
         "the card's date": typeOf(b.typeWhen as string),
+        "the card's private/public": typeOf(b.typeVis as string),
         "the card's ask row": typeOf(b.typeAsk as string),
       };
       const distinct = [...new Set(Object.values(rows))];
@@ -847,7 +821,7 @@ const CASES: Case[] = [
         ok: distinct.length === 1,
         detail:
           distinct.length === 1
-            ? `both: ${distinct[0]}`
+            ? `all three: ${distinct[0]}`
             : `${distinct.length} registers — ` +
               Object.entries(rows).map(([k, v]) => `${k}: ${v}`).join(" / "),
       };
@@ -1049,24 +1023,11 @@ const CASES: Case[] = [
        and it is in this list for the same reason the surfaces are: it is a
        class this case reads, so the drift check has to see it. That is the
        hole the tombstone above this case describes, closed. */
-    needs: ["jar-panel", "jar-seek", "jar-prov-room", "jar-dial", "jar-when"],
-    /* ═══ AND `.jar-settings` IS OUT OF BOTH LISTS NOW (2026-10-15) ═══════
-       The tombstone above says the sheet was `SpaceSettings`, with a
-       renderer and no door. `405ee4aa` DELETED `SpaceSettings.tsx` when
-       rooms came out, so it has no renderer either — the drift check named
-       `jar-settings` on the first run after that commit, which is the gate
-       doing its job. The arm, the fixture markup and this half of the
-       sabotage all go together; what is left is three surfaces and one
-       anchored sheet.
-
-       WHAT COVERAGE WENT: one of the four surfaces that had to agree with
-       the card is no longer there to disagree. The claim "every modal wears
-       one surface" is unchanged and is now held over `.jar-panel`,
-       `.jar-seek`, `.jar-prov-room` and `.jar-dial`. */
-    /* one of the three given its old surface back — the exact drift this
+    needs: ["jar-panel", "jar-seek", "jar-settings", "jar-prov-room", "jar-dial", "jar-when"],
+    /* one of the four given its old surface back — the exact drift this
        case exists to notice */
     sabotage:
-      ".jar-prov-room { top: 58px !important; left: 20px !important; transform: none !important;" +
+      ".jar-settings { top: 58px !important; left: 20px !important; transform: none !important;" +
       " border-radius: 14px !important; background: #0a0d14 !important; box-shadow: none !important; }" +
       /* THE `--at-left` HALF OF THIS SABOTAGE WENT WITH THE ARM IT BROKE
          (2026-10-12): it sent an anchored sheet back to the middle, which is
@@ -1105,7 +1066,7 @@ const CASES: Case[] = [
           return o;
         };
         return { card: one(".jar-panel"), seek: one(".jar-seek"),
-                 prov: one(".jar-prov-room"),
+                 settings: one(".jar-settings"), prov: one(".jar-prov-room"),
                  dates: anchored(".jar-dial", ".jar-when", "left") };
       })()`;
       type M = { skin: string; offX: number; offY: number; below?: number; edge?: number };
@@ -1113,7 +1074,7 @@ const CASES: Case[] = [
       const missing = Object.entries(m).filter(([, v]) => !v).map(([k]) => k);
       if (missing.length) return { ok: false, detail: `not in the fixture at all: ${missing.join(", ")}` };
       const card = m.card as M;
-      const others = ["seek", "prov", "dates"] as const;
+      const others = ["seek", "settings", "prov", "dates"] as const;
 
       /* AND THE PLACEMENT RULING NARROWED, 2026-08-28: "when clicking on the
          top left and top right button, those cards should just appear right
@@ -1123,7 +1084,7 @@ const CASES: Case[] = [
          belongs to the WORLD takes the middle, because that is where your
          eyes already are. A modal that belongs to a BUTTON hangs off that
          button, because it is that button's contents. */
-      const centred = ["card", "seek", "prov"] as const;
+      const centred = ["card", "seek", "settings", "prov"] as const;
       const offCentre = centred.filter(
         (k) => !near((m[k] as M).offX, 0, 1) || !near((m[k] as M).offY, 0, 1),
       );
@@ -1188,32 +1149,24 @@ const CASES: Case[] = [
     },
   },
 
-  /* ═══ `card-head-is-a-row` IS GONE, AND THE ROW IT MEASURED WENT FIRST ═══
-     It read `the date sits Npx off the visibility pair's centre — they are
-     not in one row`, comparing `.jar-panel-when` against `.jar-panel-vis`.
-     The visibility pair was deleted with rooms in `405ee4aa`, so the probe
-     returned null for it, `b.vis.midY` was `undefined`, and `when.midY -
-     undefined` is `NaN`. `near(NaN, 0)` is false, so THE CASE FAILED EVERY
-     RUN with a sentence about the card's head being broken — on a card whose
-     head is fine. A gate reporting a product defect that is really its own
-     dead probe is the worst output this file can produce, and it produced it.
-
-     WHY IT IS NOT REPOINTED. The claim was about TWO things sharing a centre,
-     and the head now has a date and a copy-link button (verified on screen
-     2026-10-15). Pointing the case at those two would be inventing a claim
-     nobody made about a pair nobody designed as a row — "an adjacent surface
-     to manufacture coverage", which this file's own tombstones refuse
-     elsewhere and which is refused here.
-
-     WHAT COVERAGE WENT, SAID RATHER THAN ABSORBED: nothing now checks that
-     the card's head lays its contents out on one baseline. `card-foot-is-a-row`
-     still holds the same claim for the foot, which is where the real defect
-     was found (a caret aligned by its bottom edge against an x-height), so
-     the SHAPE of the claim is still measured — just not at the top of the
-     card. WHAT WOULD RESTORE IT: a case comparing `.jar-panel-when` against
-     `.jar-copy-link`, with fixture markup for the copy button, written by
-     whoever is measuring that head. */
-
+  {
+    id: "card-head-is-a-row",
+    name: "the card's head is one row, centred against itself",
+    needs: ["jar-panel-head", "jar-panel-when", "jar-panel-vis"],
+    sabotage: ".jar-panel-vis { position: absolute; top: 14px; }",
+    run: async (page) => {
+      const b = (await page.evaluate(BOXES)) as Boxes;
+      const when = b.when as { midY: number; left: number };
+      const vis = b.vis as { midY: number; right: number };
+      const d = when.midY - vis.midY;
+      return {
+        ok: near(d, 0),
+        detail: near(d, 0)
+          ? `the date and who-may-see share a centre (${r1(d)}px apart)`
+          : `the date sits ${r1(d)}px off the visibility pair's centre — they are not in one row`,
+      };
+    },
+  },
 
   {
     id: "card-foot-is-a-row",
@@ -1324,16 +1277,7 @@ const CASES: Case[] = [
   {
     id: "card-words-have-air",
     name: "the card's words have air above and below",
-    /* `jar-panel-when` IS BACK IN THIS LIST (2026-10-15). It appeared in
-       exactly one `needs` anywhere -- the deleted `card-head-is-a-row`'s --
-       so removing that case left the class WATCHED BY NOTHING while two
-       surviving cases still measure it: this one reads `b.when.bottom`,
-       and `verb-rows-one-register` reads its ink. `fixture-is-honest`
-       derives its watch list purely from `CASES.flatMap(c => c.needs)`,
-       so a rename -- exactly the `jar-panel-head` -> `jar-panel-headline`
-       incident this file records -- would leave the fixture measuring a
-       page the product no longer has, with the drift gate green. */
-    needs: ["jar-panel-text", "jar-panel-when"],
+    needs: ["jar-panel-text"],
     sabotage: ".jar-panel-text { margin: 0; }",
     run: async (page) => {
       const b = (await page.evaluate(BOXES)) as Boxes;

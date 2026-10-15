@@ -48,8 +48,12 @@ async function api<T>(
   return raw ? (JSON.parse(raw) as T) : (undefined as T);
 }
 
-/* `WallSignal` WENT with the room block: it described what
-   `/api/groups/:id/wall` served, and nothing serves that now. */
+/** What the wall serves: the room's own statement, and who stands under it. */
+interface WallSignal {
+  signalId: string;
+  statement: string;
+  contributors: Array<{ profileId: string; name: string }>;
+}
 
 async function firstSignal(session: Session, label: string) {
   return waitFor(
@@ -71,11 +75,8 @@ async function main() {
     email: `yunji.demo.${Date.now()}@example.test`,
   });
   const bo = await signUp({ baseUrl: BASE, name: "Bo", password });
-  /* Cy and Dee are still signed up -- four real accounts is what this seed
-     is for -- but nothing binds them now that the room they joined is gone.
-     Bo keeps a binding because Bo still writes their own memories below. */
-  await signUp({ baseUrl: BASE, name: "Cy", password });
-  await signUp({ baseUrl: BASE, name: "Dee", password });
+  const cy = await signUp({ baseUrl: BASE, name: "Cy", password });
+  const dee = await signUp({ baseUrl: BASE, name: "Dee", password });
 
   /* Yunji's archive — coherent enough that the live model mints a pattern.
      PUBLIC, because since 2026-08-24 a room reads its members' public
@@ -108,12 +109,8 @@ async function main() {
   }
 
   const yunjiSignal = await firstSignal(yunji, "Yunji's first signal");
-  /* BO'S SIGNAL STILL FORMS, for a smaller reason than before. This waited
-     up to 120s so Bo's layer 2 existed before the ROOM read anything, or the
-     room's read raced his derivation. There is no room to race now. It is
-     kept because the demo's point is that these are real accounts with real
-     derived memory, and Bo is the only other person who writes — but if this
-     seed ever needs to be faster, this is the two minutes to reclaim. */
+  /* Awaited but unused: the demo needs Bo's own layer 2 to have formed before
+     the room is asked for anything, or the room's read races his derivation. */
   await firstSignal(bo, "Bo's first signal");
 
   // The star: Yunji says it in her own words — the edit locks.
@@ -125,20 +122,72 @@ async function main() {
   // Her own poster.
   await api(yunji, "/api/top-of-mind/refresh", { method: "POST", body: {} });
 
-  /* THE ROOM WENT OUT OF THE DEMO SEED (2026-10-15). Everything from here
-     drove `/api/groups`, `/join`, `/members`, `/wall`, `/proposals` and
-     `/top-of-mind/versions` to stage a four-person reading circle: a
-     declined ask, an affirmed one, and the room's first board version.
-     Those routes are gone, so the seed threw partway through and left a
-     half-built demo account behind rather than failing cleanly.
+  // The room.
+  const created = await api<{ group: { id: string; joinCode: string } }>(yunji, "/api/groups", {
+    body: { name: "the reading circle" },
+  });
+  const groupId = created.group.id;
+  for (const person of [bo, cy, dee]) {
+    await api(person, "/api/groups/join", { body: { joinCode: created.group.joinCode } });
+  }
+  // Dee passes through — a removal mark on the door.
+  await api(yunji, `/api/groups/${groupId}/members/${dee.profileId}`, { method: "DELETE" });
 
-     WHAT THE DEMO LOSES: the only scripted multi-person story in the repo.
-     Bo, Cy and Dee are still signed up, and only Bo keeps anything, so
-     this still produces four real accounts -- what it no longer produces is
-     anything they share. If a group story is wanted again it has to be
-     seeded in SQL, the same note as `erasure.ts`. */
+  /* THE WALL FILLS ITSELF. Nobody puts a statement up any more: forming the
+     room asked it to read the ground its members already stood on, and the
+     room mints its own statements from where Yunji's memories and Bo's meet.
+     A statement is served once two members stand under it, so this waits for
+     the model to get there rather than asserting it instantly. */
+  const wall = await waitFor(
+    async ({ note }) => {
+      const seen = await api<{ wall: WallSignal[] }>(yunji, `/api/groups/${groupId}/wall`);
+      note(`${seen.wall.length} statements the room grew`);
+      return seen.wall.length > 0 ? seen.wall : null;
+    },
+    { timeoutMs: 240_000, label: "the room's first statement of its own" },
+  );
+
+  // Bo answers a statement the room grew — a named reaction, lit on the wall.
+  await api(bo, "/api/feedback", {
+    body: { targetType: "signal", targetId: wall[0]!.signalId, value: "true" },
+  });
+
+  // Bo puts a sentence to the room; Cy says no — one counted stance of
+  // three, and the question stays open on the panel.
+  const boAsk = await api<{ proposal: { id: string } }>(bo, `/api/groups/${groupId}/proposals`, {
+    body: { kind: "add_entry", body: "We keep choosing walks over meetings." },
+  });
+  await api(cy, `/api/groups/${groupId}/proposals/${boAsk.proposal.id}/decline`, {
+    method: "POST",
+    body: {},
+  });
+
+  // Yunji puts one up and Bo carries it — the room first speaks.
+  const carried = await api<{ proposal: { id: string } }>(
+    yunji,
+    `/api/groups/${groupId}/proposals`,
+    { body: { kind: "add_entry", body: "This circle reads for depth, not for volume." } },
+  );
+  await api(bo, `/api/groups/${groupId}/proposals/${carried.proposal.id}/affirm`, {
+    method: "POST",
+    body: {},
+  });
+
+  // Wait until the room's version exists — the walk expects a spoken room.
+  await waitFor(
+    async ({ note }) => {
+      const versions = await api<{ versions: unknown[] }>(
+        yunji,
+        `/api/groups/${groupId}/top-of-mind/versions`,
+      );
+      note(`${versions.versions.length} versions`);
+      return versions.versions.length > 0 ? versions : null;
+    },
+    { timeoutMs: 60_000, label: "the room's first version" },
+  );
+
   console.log(
-    JSON.stringify({ email: yunji.email, password, yunjiSignalId: yunjiSignal.id }),
+    JSON.stringify({ email: yunji.email, password, groupId, yunjiSignalId: yunjiSignal.id }),
   );
 }
 

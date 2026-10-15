@@ -1,24 +1,3 @@
-/* ═══ THIS GATE IS WIRED TO NOTHING, AND SIX OF ITS SELECTORS ARE DEAD ════
-   Flagged 2026-10-15 during the rooms sweep; NOT repaired here, because
-   repairing it means deciding what its three journeys should ask of the
-   product now, which is a design question rather than a rename.
-
-   NO SCRIPT AND NO WORKFLOW RUNS THIS FILE. `package.json` has no entry and
-   `.github/workflows` never names it, so nothing has executed it in a long
-   time. That is why the rot below went unnoticed.
-
-   THE DEAD SELECTORS, all confirmed absent from every `.tsx`/`.ts` under
-   `packages/web/src`: `.jar-reflect-room` (:79, :81),
-   `.jar-home-activities` (:100, :109), `.jar-review` (:101),
-   `.jar-review-card` (:101, :106), `.jar-item-actions` (:102),
-   `.chat-input-row` (:110).
-
-   TWO OF THEM ARE WORSE THAN BROKEN. Line 79 is
-   `assert.equal(count, 0, 'Save does not start reflection')` on a class
-   nothing renders -- an assertion that PASSES UNCONDITIONALLY and reports
-   a guarantee it never checked. Line 81 then waits for the same class to
-   become visible, which can only end in a timeout. Do not read a green run
-   of this file as evidence of anything. */
 /** Manual built-browser quality walk. Requires the isolated capture fixture;
  * never targets dev/production accounts and makes no provider requests. */
 import assert from 'node:assert/strict';

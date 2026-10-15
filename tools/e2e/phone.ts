@@ -65,8 +65,7 @@ import { type Browser, type Page } from "playwright";
 import { settleAfterArrival } from "./arrival";
 import { aimAt, maybeOrbs, readBlobs, readOrbs } from "./orbs";
 import { launchChromium } from "./browser";
-import { openTheNotepad, saveAnInspiration } from "./keep";
-import { openAMemory } from "./open-a-memory";
+import { saveAnInspiration } from "./keep";
 interface View {
   name: string;
   width: number;
@@ -165,20 +164,7 @@ const PROBE = `(() => {
      presses meant for the world while showing no reason. So a candidate has
      to actually put ink on the screen to count as a sheet, and with none open
      every control on the page is back in scope. */
-  /* NO BACKTICKS IN THIS COMMENT: it sits inside the probe's template
-     literal, and measure.ts keeps a case called no-backtick-inside-a-probe
-     because four gates have been killed by exactly that character here.
-
-     .jar-settings AND .jar-roomform ARE OUT OF THIS LIST (2026-10-15). The
-     first was SpaceSettings, whose file was deleted with rooms in 405ee4aa;
-     the second was the make-a-room form, gone with it. Neither can be on
-     screen, so neither can ever exempt anything — a dead name in an
-     exemption list is harmless until somebody reads the list to find out
-     what the product's sheets are. .waka-settings is the account card and
-     is NOT added in their place: it is reached from the cog, this walk
-     never opens it, and adding an exemption for a surface the walk cannot
-     raise would be widening the rule for nothing. */
-  const SHEETS = ".jar-panel, .jar-seek, .jar-prov-room, .jar-dial";
+  const SHEETS = ".jar-panel, .jar-seek, .jar-settings, .jar-prov-room, .jar-roomform, .jar-dial";
   const paints = (n) => {
     const c = getComputedStyle(n);
     if (c.backgroundImage !== "none") return true;
@@ -358,37 +344,21 @@ async function openCard(page: Page, view: View): Promise<boolean> {
      and I shipped a comment claiming Escape was enough before checking: the
      list came back on the very next run. It says whether it is open, so ask
      it rather than assuming. */
-  /* THE WALLS-LIST HALF OF `putAway` IS GONE. It re-tapped
-     `.jar-here-more[aria-expanded="true"]` because Escape does not close
-     that list. The list went with rooms and the class has no renderer, so
-     the `if` was always false; Escape is the whole of it now. The reasoning
-     above is kept because it is still true of any toggle that reports
-     `aria-expanded`, and the next one to need it should not have to
-     re-learn it the way this file did. */
   const putAway = async (): Promise<void> => {
     await page.keyboard.press("Escape");
     await page.waitForTimeout(300);
+    const caret = page.locator('.jar-here-more[aria-expanded="true"]');
+    if (await caret.count()) {
+      await caret.first().tap();
+      await page.waitForTimeout(300);
+    }
   };
-  /* ═══ THE DESCENT WAS `.jar-saved`, WHICH HAS NO RENDERER ═══════════════
-     A 20-second tap at a class nobody draws, then `catch { return false }`
-     — so this returned false and the caller printed its "no memory could be
-     opened" line, which this file's own comment three paragraphs down calls
-     out as "a sentence about the walk, printed where a reader looks for a
-     sentence about the product". It was that again, for a new reason.
-
-     `./open-a-memory` IS USED ONLY TO GET DOWN THERE, AND THE CARD IT OPENS
-     IS PUT STRAIGHT BACK. That matters: this walk's claim is that a THUMB
-     can open a memory, as its own comment below insists — "Only this says a
-     THUMB can open a memory". Letting the search keep the card open would
-     answer the question the walk is asking, with the wrong instrument, and
-     report a pass for a tap that never landed. So the search is the lift
-     down to the field and nothing more; the rounds below still have to find
-     a lit orb and hit it. */
-  if (!(await openAMemory(page))) return false;
-  await page.waitForTimeout(2_000);
-  await putAway();
-  await page.waitForTimeout(1_500);
-  if ((await panels()) > 0) return false; /* the card would not close; a tap below would prove nothing */
+  try {
+    await page.locator(".jar-saved").first().tap({ timeout: 20_000 });
+  } catch {
+    return false;
+  }
+  await page.waitForTimeout(4_000);
 
   /* LOOK FIRST, THEN TAP — the walk no longer hunts.
      This aimed a hundred and seventeen taps along nine horizontal bands and
@@ -461,12 +431,7 @@ async function walk(browser: Browser, view: View, negative: boolean): Promise<Fi
       window.addEventListener("load", () => {
         const s = document.createElement("style");
         s.textContent =
-          /* `.jar-values` WAS THE CENTRED SIGNPOST AND HAS NO RENDERER, so
-             this line of the sabotage moved nothing and the defect it claims
-             to put back was not put back. `.jar-values-room` is the live
-             element in that region of headquarters — the same substitution
-             `the-world-holds-still.ts` made, and for the same reason. */
-          ".jar-values-room { top: 10px !important; }" +
+          ".jar-values { top: 10px !important; }" +
           "input, textarea { font-size: 15px !important; }" +
           ".jar-mouth-rest { padding-top: 0 !important; padding-bottom: 0 !important; }" +
           /* and the card's foot as it shipped: 18x14 carets a thumb's width
@@ -503,24 +468,7 @@ async function walk(browser: Browser, view: View, negative: boolean): Promise<Fi
   await page.waitForTimeout(2_000);
   found.push(...(await read(page, view.name, "the world")));
 
-  /* ═══ `.jar-mouth-rest` IS NOT A DOOR, AND `keep.ts` SAYS SO ═══════════
-     It is the CLOSED composer slot: `opacity: 0` and `inert`, with the
-     world's own canvas in front of it. Playwright refused the tap —
-     "<div class=\"jar\"> intercepts pointer events", forty-two retries,
-     then a 30-second timeout that killed the whole walk before a single
-     phone surface was read. That refusal is correct: a person cannot tap it
-     either. `keep.ts`'s header is explicit about this and
-     `openTheNotepad` is the door, through the dock's plus. This is the
-     twelfth copy of the stale composer flow that header predicted.
-
-     CORRECTED 2026-10-15: this said the door honours `tap` for touch. It
-     does not. `openTheNotepad` takes no `touch` option and always
-     `.click()`s; only `saveAnInspiration` accepts one, and this same walk
-     passes it twelve lines above. So on the one gate whose entire claim is
-     that a thumb can reach things, this door is opened with a mouse. Worth
-     closing — `openTheNotepad` should take the same option — but that is a
-     change to `keep.ts`'s contract and its other callers, not a comment. */
-  await openTheNotepad(page);
+  await page.locator(".jar-mouth-rest").first().tap();
   await page.waitForTimeout(900);
   found.push(...(await read(page, view.name, "the mouth open")));
 

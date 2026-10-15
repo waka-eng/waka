@@ -109,7 +109,7 @@ import postgres from "postgres";
 
 import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
-import { openTheNotepad, saveAnInspiration } from "./keep";
+import { openTheNotepad } from "./keep";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
 const PASSWORD = "nothing-invisible-1";
@@ -463,18 +463,15 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   /* THE WORLD NEEDS SOMETHING IN IT. An empty account has no count, no
      memories and no word to wind back from, so most of the chrome this walk
      exists to look at is not mounted at all. */
-  /* THROUGH `keep.ts`, LIKE EVERY OTHER GATE. This pasted the old composer
-     flow — open the notepad, fill `textarea[aria-label="Capture
-     inspiration"]`, press Enter — and that textarea is the CLOSED composer
-     slot: present in the DOM, not visible, so the fill retried for thirty
-     seconds and threw before a single surface was photographed.
-     `keep.ts` is the one place this is written down. */
   for (const text of [
     "a press that lands on nothing is a press taken",
     "the ink is the promise that something is there",
   ]) {
-    await saveAnInspiration(page, `${text} ${uniq()}`);
-    await page.waitForTimeout(1_500);
+    await openTheNotepad(page);
+    await page.waitForTimeout(700);
+    await page.fill('textarea[aria-label="Capture inspiration"]', `${text} ${uniq()}`);
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(4_500);
   }
   await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
   await settleAfterArrival(page);
@@ -487,40 +484,11 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   await page.keyboard.press("Escape");
   await page.waitForTimeout(800);
 
-  /* ═══ THE WALLS LIST IS NOT A SURFACE ANY MORE ═══════════════════════
-     `.jar-here-more` went with rooms (`405ee4aa`) and has no renderer, so
-     this `if` has been silently false ever since and "the walls list open"
-     has not been audited. Guarded, so it cost no time and threw nothing —
-     which is exactly why it went unnoticed: the run printed one fewer
-     surface and said nothing about why.
-
-     THE ARCHIVE TAKES ITS PLACE, because what this walk needs from a
-     surface is a STACKED BOX over the world — something mounted on top
-     that a press could be swallowed by. The dock's archive overlay is that:
-     it covers the world with `.waka-over` and is the biggest stacked
-     surface the product has left. Measured 2026-10-15: opening it puts 29
-     things on screen and Escape takes them all away again.
-
-     WHAT COVERAGE WENT: nothing, in kind — one stacked overlay is swapped
-     for another. What is not covered is the walls list itself, which no
-     longer exists to cover. */
-  /* AND IT SAYS SO WHEN IT CANNOT FIND IT. The guard this replaced was
-     silently false and printed nothing, which is why nobody noticed for
-     months -- and writing the replacement with no `else` would have
-     reproduced exactly that. `Inspirations` is `worldDockSaves`, which is
-     "영감" under ko-KR, so a non-en-US profile drops this surface; the walk
-     now reports the drop instead of swallowing it. */
-  const more = page.locator(".waka-dock-item", { hasText: /^Inspirations$/ });
-  if ((await more.count()) === 0) {
-    console.log(
-      "  NOT WALKED — no dock item reads `Inspirations`. The label is " +
-        "`worldDockSaves`; under a non-en-US profile locale it reads " +
-        "differently and this surface is skipped.",
-    );
-  } else {
+  const more = page.locator(".jar-here-more");
+  if ((await more.count()) > 0) {
     await more.first().click();
     await page.waitForTimeout(1_200);
-    await take("the archive open");
+    await take("the walls list open");
     await page.keyboard.press("Escape");
     await page.waitForTimeout(800);
   }
