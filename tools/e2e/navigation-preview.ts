@@ -50,7 +50,7 @@ await fixture.sql`INSERT INTO inspirations(profile_id,text,created_at)
 /* `publicSource` IS NO LONGER BOUND: its only reader was the deleted
    `publicInspirationUrl`. The row is still INSERTed -- a public inspiration
    is ordinary fixture data for search QA -- it just has no name now. */
-await await fixture.sql`INSERT INTO inspirations(profile_id,text,visibility)
+await fixture.sql`INSERT INTO inspirations(profile_id,text,visibility)
   VALUES (${peer.id},'Walking without a destination gives me time to notice.','public') RETURNING id`;
 const token = await signSessionToken({ profileId: profile.id, email: 'navigation@example.test' });
 await createSessionRow({ profileId: profile.id, token });
