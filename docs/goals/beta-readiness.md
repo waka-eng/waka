@@ -634,3 +634,20 @@ with editor/owner/admin access and potential overages during roughly ten minutes
 of billing delay. Google keys inherit project billing settings; separate keys
 alone do not establish independent environment caps. No budget alert is
 relabeled as dollar enforcement, and no administrative access was expanded.
+
+### 2026 10 15 remove idle recovery polling
+
+The owner requested removing the fifteen-minute development recovery timer
+because it wakes the serverless database while idle. The read-only audit of
+2026-10-15 observed four recovery checks in one hour, all with zero overdue jobs
+and zero exhausted leases. Removed the QueueRecovery cron and its missing-check
+alarm. Enqueue-driven work, bounded retries and the existing daily sweep remain.
+Manual recovery inspection remains available without a scheduled trigger.
+
+The alert audit now expects the two passive backlog alarms and rejects a leftover
+heartbeat alarm. A read-only deployment check enumerates EventBridge rules that
+target the exact development worker, rejects incomplete discovery or any leftover
+recovery timer, and verifies that the daily sweep is the only enabled schedule.
+It makes no database queries or worker invocations. API typechecking and all 50
+targeted worker, recovery, alarm, deployment-contract and audit checks pass.
+Live schedule/alarm removal is a required step in the development deployment.

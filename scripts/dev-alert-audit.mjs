@@ -2,7 +2,7 @@ import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {devAuditReadFailure} from './dev-operations-audit.mjs';
-const metrics=new Set(['OverdueJobs','ExhaustedLeases','RecoveryChecks']);
+const metrics=new Set(['OverdueJobs','ExhaustedLeases']);
 const states=new Set(['OK','ALARM','INSUFFICIENT_DATA']);
 /** Only stage-dimensioned queue alarms. External notification actions are
  * refused before an optional state exercise, and original states are restored. */
@@ -10,10 +10,11 @@ export function auditDevAlerts({awsRead,exercise=false}){
   const report={stage:'development',readOnly:!exercise,failures:[],alarms:[],complete:false,consoleStatesVerified:false,externalDeliveryVerified:false};
   let rows;try{const page=awsRead(['cloudwatch','describe-alarms','--max-records','100']);
     if(page.NextToken){report.failures.push('alarm_page_incomplete');return report;}
-    rows=(page.MetricAlarms??[]).filter(row=>row.Namespace==='WAKA/QueueRecovery'&&metrics.has(row.MetricName)&&
+    rows=(page.MetricAlarms??[]).filter(row=>row.Namespace==='WAKA/QueueRecovery'&&(metrics.has(row.MetricName)||row.MetricName==='RecoveryChecks')&&
       row.Dimensions?.length===1&&row.Dimensions[0].Name==='Stage'&&row.Dimensions[0].Value==='development');
   }catch(error){report.failures.push('alarm_read_'+devAuditReadFailure(error));return report;}
-  if(rows.length!==3||new Set(rows.map(row=>row.MetricName)).size!==3){report.failures.push('expected_alarm_set_missing');return report;}
+  if(rows.some(row=>row.MetricName==='RecoveryChecks')){report.failures.push('retired_heartbeat_alarm_present');return report;}
+  if(rows.length!==metrics.size||new Set(rows.map(row=>row.MetricName)).size!==metrics.size){report.failures.push('expected_alarm_set_missing');return report;}
   for(const row of rows){
     if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$/.test(row.AlarmName)||!states.has(row.StateValue)){
       report.failures.push('untrusted_alarm_identity');return report;}
@@ -34,7 +35,7 @@ export function auditDevAlerts({awsRead,exercise=false}){
       const restored=awsRead(['cloudwatch','describe-alarms','--alarm-names',row.AlarmName]);if(restored.MetricAlarms?.[0]?.StateValue!==row.StateValue)report.failures.push('alarm_restore_not_observed');
     }catch(error){report.failures.push('alarm_restore_'+devAuditReadFailure(error));}}
   }
-  report.consoleStatesVerified=checked===3&&report.failures.length===0;return report;
+  report.consoleStatesVerified=checked===metrics.size&&report.failures.length===0;return report;
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const report=auditDevAlerts({exercise:process.env.WAKA_EXERCISE_CONSOLE_ALARMS==='1',awsRead:args=>{
