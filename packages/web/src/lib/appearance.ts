@@ -81,46 +81,16 @@ export interface Ramp {
  * aliveness. They are also picked to stay apart under the common forms of
  * colour blindness — no red/green pair carries a distinction alone.
  */
-/* NOT EXPORTED ANY MORE. `tintRamp` below is the only thing that reads it,
-   and it is in this file; `test/reachable.test.ts`'s ratchet counts an export
-   nothing outside its own file names, which this became when the room legend
-   that printed these colours as dots went with rooms (2026-10-12, founder:
-   "방 없애"). The sprite tinting is untouched — an agent's ground still asks
-   for a ramp and still gets one. */
-const MEMBER_HUES: Array<{ name: string; rgb: [number, number, number] }> = [
-  { name: "blue", rgb: [126, 168, 224] },
-  { name: "amber", rgb: [224, 176, 108] },
-  { name: "green", rgb: [128, 200, 166] },
-  { name: "violet", rgb: [176, 154, 224] },
-  { name: "rose", rgb: [226, 148, 164] },
-];
 
 /* `hueCss` IS GONE. It returned the css for the LEGEND'S DOT — "the same
    value the sprite is tinted with", which was the point: one function so a
    name in the room's ground-switcher and the orbs it switched to could not
    disagree about whose colour was whose. The switcher went with rooms. */
 
-/**
- * A member's ramp: the live end pulled toward their hue, the dormant end left
- * exactly as it was. `k` is deliberately partial — a fully replaced colour
- * would make the orb read as a coloured dot rather than as this world's light
- * with somebody's name on it.
- */
-export function tintRamp(ramp: Ramp, i: number): Ramp {
-  const h = MEMBER_HUES[i % MEMBER_HUES.length]!.rgb;
-  const mixOne = (c: [number, number, number], k: number): [number, number, number] => [
-    Math.round(c[0] + (h[0] - c[0]) * k),
-    Math.round(c[1] + (h[1] - c[1]) * k),
-    Math.round(c[2] + (h[2] - c[2]) * k),
-  ];
-  return {
-    ...ramp,
-    live: mixOne(ramp.live, 0.5),
-    liveEdge: mixOne(ramp.liveEdge, 0.5),
-    liveBloom: mixOne(ramp.liveBloom, 0.42),
-    /* half as much at the midpoint: the hue fades out as the memory does */
-    fade: mixOne(ramp.fade, 0.26),
-    /* and `dorm` is untouched — see the note above */
-  };
-}
+/* `tintRamp` AND `MEMBER_HUES` WENT on 2026-10-15. They tinted an orb by
+   which member kept it, inside a room. `Ball.hue` was their only route in and
+   it lost its last writer when rooms came out, so `orbsForHue`'s `hue >= 0`
+   arm became unreachable and these two were never called again. The palette
+   mixing weights (0.5 live, 0.42 bloom, 0.26 fade, `dorm` untouched) are in
+   the history if a per-owner tint is ever wanted again. */
 

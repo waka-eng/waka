@@ -356,15 +356,9 @@ export function dialYear(ms: number, locale: WordsLocale = "en-US"): string {
   return locale === "ko-KR" ? `${y}년` : `${y}`;
 }
 
-/**
- * The name a whisper says: the given name alone. The first whitespace-
- * separated part, which is the given name in a Western name and the whole of
- * a Korean one, since those are written without a space.
- */
-export function givenName(full: string): string {
-  const first = full.trim().split(/\s+/)[0];
-  return first || full.trim();
-}
+/* `givenName` WENT on 2026-10-15: zero references repo-wide. Its last
+   callers were the deleted `GroupPanel` and `group-history`. Its neighbour
+   `citedWords` was removed for exactly this reason and this one was missed. */
 /**
  * WHO IS IN THIS ROOM — said in words, then drawn, then not at all.
  *

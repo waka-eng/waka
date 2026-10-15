@@ -20,9 +20,9 @@
  * "4". The count is legible because the words are.
  */
 
-import { formatMessage, t, type SupportedLocale } from "../../lib/locales";
+import { formatMessage, type SupportedLocale } from "../../lib/locales";
 import { numWords } from "../../lib/words";
-import type { Entry, EvidenceRef } from "../../lib/data";
+import type { Entry } from "../../lib/data";
 
 /**
  * One statement of the artifact headquarters stands on. There is exactly one
@@ -63,27 +63,12 @@ export interface ReflectState {
  */
 export type Provenance = Map<string, string | null>;
 
-/**
- * THE ROOM'S PENDING REWRITE OF THE AMBITION — the one adoptable candidate,
- * for a room that no longer exists.
- *
- * Nothing constructs this and nothing reads it: `pages/Home`'s `proposal`
- * state went with rooms on 2026-10-12 (founder: "방 없애"), and its one
- * consumer — `formingWords`'s `proposalMs` — now receives `null` at both
- * call sites. The TYPE stays for one turn longer than the state because
- * `canvas/simulation.ts` is owned by a change in flight and this module is
- * one of its imports; it goes with the loop's group branches.
- */
-export interface Proposal {
-  groupId: string;
-  proposalId: string;
-  ambition: string;
-  changeSummary: string | null;
-  createdMs: number;
-  evidence: EvidenceRef[];
-  /** The span the server declared across that evidence; its orbit reads it. */
-  spanMs: number | null;
-}
+/* `Proposal` IS GONE (2026-10-15), and its tombstone was wrong about why it
+   could not go sooner. It said `canvas/simulation.ts` reads this type and so
+   the interface had to outlive the state. It does not: simulation imports
+   `Provenance` and `Evidence, Inspiration, Signal`, and never referenced
+   `Proposal` or `Adopted` at any point. Nothing constructed it and nothing
+   read it; the blocker was imaginary and it cost the type four extra weeks. */
 
 export function deriveAmbition(
   T: number,
@@ -112,13 +97,16 @@ export function deriveAmbition(
  * proposal is a whole new ambition and outranks the readings; provisional
  * top-of-mind notes are counted, never listed, and never as a digit.
  */
+/* `proposalMs` CAME OUT on 2026-10-15, with the only branch it fed. It
+   announced that a ROOM's new ambition was forming; all three call sites have
+   passed a literal `null` since rooms were removed, so the branch could never
+   fire and `worldNewAmbitionForming` was reachable from nowhere. A parameter
+   with one possible value is a question nobody is asking. */
 export function formingWords(
   T: number,
-  proposalMs: number | null,
   forming: Array<{ createdMs: number }> | null,
   locale: SupportedLocale = "en-US",
 ): string | null {
-  if (proposalMs !== null && proposalMs <= T) return t(locale, "worldNewAmbitionForming");
   let n = 0;
   for (const f of forming ?? []) if (f.createdMs <= T) n++;
   if (n === 0) return null;
