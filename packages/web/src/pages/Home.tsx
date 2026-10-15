@@ -178,7 +178,6 @@ import type { MessageKey, SupportedLocale } from "../lib/locales";
 
 import {
   fetchPrinciples,
-  createProfile,
   finalizeAttachment,
   presignAttachment,
   uploadToPresignedUrl,
@@ -6149,72 +6148,30 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
   /** read by the loop, which is created once and must not close over stale state */
 
-  /**
-   * MAKING AN AGENT — which is making a PROFILE, not a setting.
-   *
-   * The canon is blunt about this: a profile is the unit that owns memory, and
-   * an agent's is a full inspiration → signal → top-of-mind stack of its own,
-   * structurally separate from yours rather than a filter over it. So making
-   * one is the same act as a room appearing on the axis, in the other
-   * direction: a new column to your left, with nothing in it yet, waiting for
-   * the agent to start keeping things.
-   *
-   * It cannot write there until it logs in as itself — that credential is
-   * minted by the CLI's consent step, bound to this profile. The wall exists
-   * from the moment you name it, and stands honestly empty until then.
-   */
-  const [agentName, setAgentName] = useState<string | null>(null);
-  /**
-   * WHY GIVING AN AGENT A WALL DID NOT HAPPEN.
-   *
-   * `e2e:when-it-fails --only make-agent` read SILENT: the catch cleared
-   * `agentName`, which is what CLOSES the form, so a refusal and pressing
-   * `not now` were the same gesture — the dialog folded, no wall appeared,
-   * and nothing anywhere said which of those two things had happened. The
-   * same shape as the room's confirms, in the other half of the same dialog.
-   *
-   * Its sibling one row up — `submitGroup`, reached by choosing `a room`
-   * instead of `an agent` — has carried an `error` on its form state all
-   * along. This is that, kept as its own value rather than folded into
-   * `agentName`, because `agentName` is also the form's OPEN/CLOSED flag and
-   * an error must outlive neither more nor less than the form does.
-   */
-  const [agentTrouble, setAgentTrouble] = useState<string | null>(null);
-  const makeAgent = useCallback(() => {
-    const name = (agentName ?? "").trim();
-    if (name === "") return;
-    /* main's endpoint mints an AGENT profile by definition — only a
-       human-bound session may call it and there is nothing else to create —
-       so the kind is no longer passed, and the server caps how many an
-       account may hold */
-    setAgentTrouble(null);
-    createProfile(name)
-      .then((p) => {
-        /* the roster gains the wall; the empty bundle IS a newborn's memory,
-           so it counts as loaded rather than waiting on a fetch */
-        setAgentRoster((prev) => [
-          ...(prev ?? []),
-          { id: p.id, name: p.name, createdAt: p.createdAt ?? "" },
-        ]);
-        setAgents((prev) => [
-          ...(prev ?? []),
-          {
-            agent: { id: p.id, name: p.name, kind: "agent" as const, createdAt: "" },
-            direction: { current: null, history: [] },
-            topOfMind: { notes: [] },
-            inspirations: [],
-          },
-        ]);
-        setAgentName(null);
-      })
-      .catch((err: unknown) => {
-        /* THE FORM STAYS OPEN AND KEEPS THE NAME. Clearing `agentName` was
-           the whole of the old handler, and clearing it is what shuts the
-           dialog — so the one recovery available (press it again) required
-           first re-opening a form that had closed for no stated reason. */
-        setAgentTrouble(whyFailed(err, say("worldAgentNoWall")));
-      });
-  }, [agentName, whyFailed]);
+  /* ═══ NAMING AN AGENT LIVES IN SETTINGS, AND ONLY THERE ════════════════
+     `agentName`, `agentTrouble` and `makeAgent` came out on 2026-10-15,
+     with the one-field dialog they drove.
+
+     THE DIALOG HAD BEEN UNREACHABLE FOR MONTHS. `agentName` doubled as the
+     form's OPEN/CLOSED flag, and the only thing that ever opened it was a
+     `.jar-newplace-row` button in the new-place sheet, deleted in
+     `f918b62f` when the top-left became a switch between me and my agent.
+     After that every `setAgentName` call passed `null` except the field's
+     own `onChange`, which cannot run until the field is already on screen.
+     Nothing could open it, so nothing did.
+
+     IT IS DELETED RATHER THAN REOPENED because the product already has
+     this verb and has it in one place: `SettingsPanel`'s Memories group,
+     reached from the cog, with its own field and its own `addAgent`. A
+     second door to the same act would be fixing an absence nobody has felt
+     by adding a duplicate.
+
+     WHAT GOES WITH IT, worth not losing twice: the reason `agentTrouble`
+     existed. `e2e:when-it-fails --only make-agent` read SILENT because the
+     catch cleared `agentName`, which CLOSED the form — so a refusal and
+     pressing `not now` were the same gesture, and nothing said which had
+     happened. `SettingsPanel` keeps its own `agentTrouble` for exactly that
+     reason; the lesson is held there. */
 
   /**
    * KEEPING A PICTURE, OR A LINK.
@@ -10000,37 +9957,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           happens when a sentence is put through it. */}
       {/* NAMING AN AGENT. One field, because that is all a profile needs to
           exist — what it becomes is written by the agent itself, working. */}
-      {agentName !== null ? (
-        <DialogSurface className="jar-seek" data-jar-chrome="1"
-          aria-label={say("worldAgentNamePlaceholder")} onClose={() => setAgentName(null)}>
-          <input
-            className="jar-roomform-box"
-            autoFocus
-            value={agentName}
-            placeholder={say("worldAgentNamePlaceholder")}
-            onChange={(e) => setAgentName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") makeAgent();
-              if (e.key === "Escape") setAgentName(null);
-            }}
-          />
-          <p className="jar-ask">
-            <button type="button" onClick={makeAgent}>
-              {say("worldGiveItAWall")}
-            </button>
-            <span aria-hidden="true"> · </span>
-            <button type="button" onClick={() => setAgentName(null)}>
-              {say("worldNotNow")}
-            </button>
-          </p>
-          {agentTrouble ? (
-            <p className="jar-settings-warn" role="status">
-              {agentTrouble}
-            </p>
-          ) : null}
-          <p className="jar-share-note">{say("worldAgentWritesOnce")}</p>
-        </DialogSurface>
-      ) : null}
 
       {/* ================= THE AXIS, ALONG THE BOTTOM EDGE =================
           You could travel sideways forever and never know how far the layout
