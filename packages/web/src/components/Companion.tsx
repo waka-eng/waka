@@ -94,7 +94,7 @@ export function Companion({ size = 72 }: { size?: number }): JSX.Element {
        alive in your field — a reading of your material. A page is not a
        reading of anything, so a dim companion there would be saying
        something untrue about you. */
-    restPose(g, size, rampFromCss(document.documentElement), OWNER_BEING, 1);
+    restPose(g, size, rampFromCss(document.documentElement), OWNER_BEING, 1, dpr);
   }, [size]);
 
   /* The element is the padded box too, so the drawing is not squashed back

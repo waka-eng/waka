@@ -228,9 +228,38 @@ function rasterDot(
  * reads as the material.
  */
 function rasterGrain(cast: [number, number, number]): HTMLCanvasElement | null {
-  /* CSS pixels, NOT device pixels. Sized in device px, the texture's scale
-     was an accident of the viewer's hardware — the same emulsion looked twice
-     as fine on a retina screen. A tile in CSS px is the same film everywhere. */
+  /* ═══ THE FILM STAYS AT CSS RESOLUTION, AND THE REASON IS MEASURED ═══
+     An attempt on 2026-10-12 baked this at `GRAIN_PX * dpr` to stop the
+     browser magnifying it 3x on a phone. The magnification is real — a
+     128px tile in a 128 CSS px box, measured at exactly 3.00x — and
+     sharpening it measured +15% on the film in isolation. It was still
+     wrong, and a review measured why.
+
+     IT CANNOT BE THE BLUR ANYBODY SEES. The layer is `opacity: 0.035` at
+     normal blend: composited over the ground it is a 9-out-of-255
+     perturbation. A 96.5%-transparent additive dither cannot soften an
+     edge beneath it. `claims.css` already names the threshold — "over
+     ~0.05 it becomes texture" — so this is tuned below perceptibility on
+     purpose.
+
+     AND SHARPENING IT BREAKS WHAT IT IS FOR. This film exists to dissolve
+     8-bit contour banding in the companion's glow. A hard 6-device-px cell
+     guarantees six identical adjacent pixels, where the magnified cell's
+     ramped edge broke a run almost every pixel: measured over 6 trials x
+     24 scanlines, mean flat runs grew 2.21 -> 3.05 at dpr 3 and 1.69 ->
+     2.36 at dpr 2 — a 38-40% WORSE dither at identical amplitude. The
+     blurry tile was, by accident, the better one.
+
+     It also coarsened the creature's matte — which `rasterBody` lays at
+     14% over a light body, the one place this grain is actually visible —
+     by 45-61% of its fine texture, and took the tile's backing store from
+     64KB to 576KB.
+
+     THE SELF-REFUTING PART, which is the lesson worth keeping: the
+     sharpening was measured in Chromium at dpr 3, while the defect it
+     claimed to fix does not reproduce in Chromium at dpr 3. Both cannot be
+     true of one cause. ANY CANDIDATE THAT REPRODUCES HERE IS NOT THE
+     FOUNDER'S SYMPTOM — four attempts have now died on that sentence. */
   const cell = GRAIN_PX;
   const cells = GRAIN_TILE;
   const D = cell * cells;

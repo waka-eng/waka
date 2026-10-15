@@ -3832,6 +3832,34 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     function draw(now: number) {
       const pal = paletteRef.current;
       ctx!.setTransform(view.dpr, 0, 0, view.dpr, -cam.x * view.dpr, -cam.y * view.dpr);
+      /* ═══ NO FILTER HINT HERE, AND THE MEASUREMENT IS WHY ═════════════
+         `ctx.imageSmoothingQuality = "high"` was set here on 2026-10-12 to
+         answer the founder's "케릭터 화질 왜이래 휴대폰으로 볼때?". A review
+         measured it and it is reverted.
+
+         IT CHANGED ZERO PIXELS. Compared byte for byte on the product's
+         real configuration — a visible full-viewport canvas at the real
+         backing-store size with detached sprite canvases — "low" and
+         "high" produce identical output in BOTH Chromium and WebKit, at
+         every ratio this loop draws: 0.5x for a body, 0.21x for seated
+         company, 0.10x for an orb, at dpr 2 and dpr 3. The only
+         configuration where the hint does anything is a
+         `willReadFrequently` software raster, which this product never
+         asks for.
+
+         AND IT COST 0.6-1.8ms A FRAME once the draw mix saturates — all of
+         it on the UPSCALES it was never aimed at: the aura at 1.6-2.4x,
+         the nebulae, and the vignette stretched 512 -> 2880. A downscale
+         filter cannot help a magnification, and in Chromium "high" also
+         CHANGED those pixels, which nobody had reviewed.
+
+         THE REASONING THAT PRODUCED IT WAS SOUND IN FORM AND WRONG IN
+         FACT: the geometry is identical on desktop and phone, so the
+         filter looked like the only variable left. It was not the
+         variable; the premise that one had to remain was. Four attempts
+         died here, and the sentence that kills them all is that this
+         defect does not reproduce in Chromium — so anything measurable in
+         Chromium, as this was, is not it. */
       ctx!.clearRect(cam.x, cam.y, view.w, view.h);
       if (!pal) return;
       const t = now / 1000;

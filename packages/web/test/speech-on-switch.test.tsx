@@ -268,9 +268,18 @@ it('drops the away-window line when the form changed before it spoke', async () 
  *
  * HELD OPEN RATHER THAN MADE SLOW, the same trick the race cases above use:
  * a deferred promise turns "sometimes, on a bad connection" into "every
- * run". The weather here never resolves at all, which is the worst case and
- * also a real one — the generation queue was returning 402 on this machine
- * the day this was written.
+ * run". The weather here never resolves at all, and that is a real shape
+ * rather than a convenient one: THIS FETCH HAS NO TIMEOUT AND NO
+ * `AbortController`, so a hung connection never resolves OR rejects, and
+ * nothing else would ever write the bubble.
+ *
+ * A FAILING REQUEST WAS NEVER THE CAUSE, and an earlier draft of this note
+ * said it was — it blamed a generation queue returning 402. Two things are
+ * wrong with that. `/api/weather` calls no model at all (`the-weather.ts`:
+ * "nothing is written to tell the weather, no model is called"), so that
+ * queue cannot reach it; and a request that FAILS rejects, which the
+ * `.catch` has always answered with the same local line. Only a request
+ * that neither answers nor fails produces the silence the founder saw.
  *
  * WHAT IT MUST NOT BECOME: a test that passes because the creature says the
  * weather quickly. The promise is never resolved, so the only thing that can

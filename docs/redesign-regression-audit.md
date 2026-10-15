@@ -382,7 +382,7 @@ header. I have not re-argued them; I have only gathered them.
 | what went | where | the stated reason |
 |---|---|---|
 | The `/profile` page | `5df201f6`, `main.tsx:182`, `SettingsPanel.tsx` header | "a settings page is not a destination in a product whose destinations are what you kept, what it is thinking, and what has endured" |
-| **Keys** and **Agent keys** (mint / copy / revoke) | `5df201f6` | "a developer surface on a consumer product's settings screen". `createAgentKey` stays and still fires when an agent is made |
+| **Keys** and **Agent keys** (mint / copy / revoke) | `5df201f6` | "a developer surface on a consumer product's settings screen". `createAgentKey` stayed and still fired when an agent is made — **no longer true as of 2026-10-12**, minting removed |
 | **What agents may read** (grants) | `5df201f6` | "with no key listing there is nothing to grant against" |
 | **Connections** and **The read record** | `5df201f6` | "the product has no people-to-people surface since rooms were removed" |
 | **How WAKA works** — the three machinery doors | `5df201f6` | *the commit's own words: "the one removal worth arguing with"*. Restored in the working tree today |
