@@ -182,11 +182,17 @@ const run = async (base: string): Promise<number> => {
       console.log("");
       console.log("  NOT MEASURED — this account has no poster yet. The held-words readout is");
       console.log("  about a generated sentence, so this gate needs one on the wall before it");
-      console.log("  can ask whether returning to the wall re-reads it. Nothing here is a");
-      console.log("  statement about the product.");
+      console.log("  can ask whether returning to the wall re-reads it.");
+      console.log("");
+      console.log("  THIS IS STILL A FAILURE, and returning 0 here was wrong (corrected");
+      console.log("  2026-10-15). The walk makes its own account and keeps its own memories");
+      console.log("  against a stack booted with a model key, so a wall with no poster is a");
+      console.log("  regression or a timeout, not a normal state. Exiting 0 on it turned the");
+      console.log("  previous FAIL into a silent green and would hide the poster going away");
+      console.log("  entirely — which is the one thing this gate exists to notice.");
       console.log("");
       await ctx.close();
-      return 0;
+      return 1;
     }
 
     /* A FRESH ACCOUNT HAS ONE WALL, so there is nothing to travel to and a

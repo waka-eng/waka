@@ -361,6 +361,14 @@ async function main(): Promise<void> {
     /* HOISTED out of the deleted room block, where it was incidental setup.
        The two steps below need the bystander to own a signal as well as
        memories, or "untouched" is only a claim about inspirations. */
+    /* BOTH ACCOUNTS GET A SIGNAL, and the leaver's is the one that matters.
+       It was lost with the room block (restored 2026-10-15): the two steps
+       after the erasure check that the BYSTANDER keeps theirs, which says
+       nothing unless the person erased had one of their own to lose. With
+       only the stayer seeded, erasure's layer-2 cascade was being exercised
+       against an empty set for the leaver — it could have deleted nothing
+       and still looked right. */
+    await firstSignal(leaver!, "the leaver's first signal");
     await firstSignal(stayer!, "the stayer's first signal");
     return "a signal of their own, which the erasure must not touch";
   });
@@ -441,11 +449,26 @@ async function main(): Promise<void> {
     return `${kept.inspirations.length} memories and ${signals.length} signal(s) still theirs`;
   });
 
-  await step("nothing of theirs is anywhere the other member can look", async () => {
-    /* FIVE ROOM SURFACES CAME OFF THIS LIST with the block above; the two
-       that remain are the ones still served. The claim is narrower now --
-       the erased words are not readable by another ACCOUNT -- where it used
-       to also cover another MEMBER of a shared room. */
+  await step("another account cannot read the erased words (TENANCY, not erasure)", async () => {
+    /* RENAMED 2026-10-15, BECAUSE THE OLD NAME WAS A LIE OF SCOPE. This read
+       "nothing of theirs is anywhere the other member can look", which sounds
+       like the strongest claim in the file. IT IS NOT, AND CANNOT BE.
+
+       Five room surfaces came off this list with the room block. The two that
+       remain -- `/api/inspirations` and `/api/signals` -- are HARD-SCOPED TO
+       THE CALLER'S OWN PROFILE, so the leaver's phrase was never reachable on
+       the stayer's token, before the erasure or after it. This step would pass
+       identically if `deleteAccount` were deleted again, which is exactly the
+       failure the restored steps above exist to prevent.
+
+       It is kept because tenancy is worth asserting and nothing else here
+       asserts it. What it can no longer pretend to be is a check on erasure.
+
+       WHAT WOULD ACTUALLY PROVE THE CLAIM: a direct read of the database for
+       the leaver's rows, or a surface that serves another account's material.
+       This harness is HTTP-only against `--base-url` and there is no such
+       surface, so the real check belongs beside `account-erasure.ts` in
+       `packages/api`, seeded in SQL. Same conclusion as the room steps. */
     const surfaces = ["/api/inspirations", "/api/signals"];
     const needle = LEAVER_PHRASE.toLowerCase();
     const leaked: string[] = [];
@@ -456,7 +479,7 @@ async function main(): Promise<void> {
     if (leaked.length > 0) {
       throw new Error(`the erased account's words are still readable at: ${leaked.join(", ")}`);
     }
-    return `${surfaces.length} surfaces searched, the phrase is on none of them`;
+    return `${surfaces.length} surfaces searched as another account, the phrase is on none of them (tenancy)`;
   });
 
   const failed = results.filter((r) => !r.ok).length;

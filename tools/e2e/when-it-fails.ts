@@ -362,8 +362,12 @@ const ACTS: Act[] = [
       /* `/i`, AND IT IS A REAL FIX NOT A TIDY. The product's word is
          `Delete` (`worldDelete`), and `hasText: /^delete$/` is
          case-SENSITIVE, so this matched nothing and the press timed out
-         after 8 seconds — the `forget` CONTROL reporting NOT WALKED, which
-         aborts the run and takes every other act's finding with it. */
+         after 8 seconds — the `forget` CONTROL reporting NOT WALKED.
+         (That was said to "abort the run and take every other act's finding
+         with it". It did not: the abort below fires only when every control
+         produces a SILENT READING, and a thrown act produces no reading at
+         all, so it fell out of the counts entirely and out of the exit code
+         with them. Corrected 2026-10-15 — a thrown act now fails the run.) */
       await page.locator(".jar-panel button", { hasText: /^delete$/i }).first().click({
         timeout: 8_000,
       });
@@ -459,10 +463,14 @@ const ACTS: Act[] = [
      ── `make-room` — and it was a CONTROL, which made this worse ────────
      Broke `POST /api/groups`. Room CREATION was gone before the removal pass
      even started, so this had been unwalkable for longer than the others.
-     Being a control is the sharp part: a control that cannot be reached does
-     not fail quietly, it aborts the whole run on the reasoning that "the
-     instrument is broken" — so one dead act was taking the other acts'
-     findings with it.
+     Being a control is the sharp part — though not for the reason this
+     said. It claimed an unreachable control "aborts the whole run on the
+     reasoning that the instrument is broken". IT DID THE OPPOSITE: the abort
+     fires only when every control yields a SILENT reading, and a control
+     that cannot be reached yields NO reading, so it was dropped from every
+     count and from the exit code. One dead act was not taking the others'
+     findings with it; it was vanishing. Corrected 2026-10-15 — a thrown act
+     is now counted and fails the run.
      WHAT COVERAGE WENT: the file is down to TWO controls, `keep` and
      `forget`. The header's "Three acts in the table below are known to
      speak" is corrected to two where it is written.
@@ -644,6 +652,16 @@ async function main(): Promise<void> {
     process.exit(3);
   }
 
+  /* AN ACT THAT THREW IS A FAILURE, NOT AN ABSENCE. `all` filters on
+     `reading !== null`, so until 2026-10-15 a thrown control fell out of
+     every count below and out of the exit code with it — and `mute` above
+     only counts controls that produced a SILENT reading, so a throw does not
+     reach that abort either. With this file down to three acts, all three
+     throwing printed "0 acts pressed against a refusal" and exited 0: the
+     exact shape of the defect this whole file exists to catch, in the
+     instrument rather than the product. */
+  const broke = results.filter((r) => r.reading === null);
+
   const all = results.filter((r) => r.reading !== null);
   /* AN ACT THAT NEVER REACHED ITS ROUTE IS NOT A FINDING ABOUT THE PRODUCT.
      It is this walk failing to press the thing it names, and folding it in
@@ -664,6 +682,12 @@ async function main(): Promise<void> {
         `were not asked at all: ${unpressed.map((r) => r.act.id).join(", ")}`,
     );
   }
+  if (broke.length > 0) {
+    console.log(
+      `                ${broke.length} threw before producing a reading, so the ` +
+        `instrument never asked them: ${broke.map((r) => r.act.id).join(", ")}`,
+    );
+  }
   if (lying.length > 0) {
     console.log(
       `                ${lying.length} took the thing off screen anyway: ${lying
@@ -671,7 +695,9 @@ async function main(): Promise<void> {
         .join(", ")}`,
     );
   }
-  process.exit(silent.length + murmur.length + lying.length + unpressed.length > 0 ? 1 : 0);
+  process.exit(
+    silent.length + murmur.length + lying.length + unpressed.length + broke.length > 0 ? 1 : 0,
+  );
 }
 
 main().catch((err) => {

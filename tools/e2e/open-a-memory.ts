@@ -107,7 +107,20 @@ export async function openAMemory(page: Page, phrase?: string): Promise<boolean>
        `.jar-panel` it sees can catch the tail of one already dismissed. */
     await page.waitForTimeout(1_200);
     return (await panels()) > 0;
-  } catch {
+  } catch (err) {
+    /* A THROW IS NOT "NO MEMORIES", AND SAYING SO MATTERS. Six gates route
+       through this helper, and in `dead-css` a `false` puts the card's whole
+       selector family on the "never on screen" list — which that file says
+       itself gets rules DELETED. A page error, a timeout, a 500 and an empty
+       archive all returned the same bare `false`, so the most alarming of
+       those four was indistinguishable from the most ordinary. The return
+       stays `false` (every caller handles it), but the reason is printed so
+       a caller's "not walked" can be read against what actually happened. */
+    console.log(
+      `  [open-a-memory] threw rather than finding nothing: ${
+        err instanceof Error ? err.message.split("\n")[0] : String(err)
+      }`,
+    );
     return false;
   }
 }
