@@ -156,7 +156,7 @@ function focusableWithin(root: HTMLElement): HTMLElement[] {
  * there is no HTML element for one.
  */
 /** How long the drop-out takes; `claims.css` `waka-modal-out` is the same. */
-export const MODAL_LEAVE_MS = 180;
+const MODAL_LEAVE_MS = 180;
 
 /**
  * CLOSE A RAISED PAGE THE WAY IT OPENED: it drops back out, then `then` runs.
