@@ -2490,8 +2490,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      what you have kept — and an agent says it has formed nothing. The poster
      chose between exactly these; the bubble is the poster's new seat, so it
      makes the same choice from the same facts rather than a simpler one. */
-  /** What an agent's wall holds up: its own reading, never yours. */
-  const agentSays = standingAsAgent ? chrome.text : null;
   const restingWord = standingAsAgent
     ? chrome.formingAlt ?? say("worldFormingNothingAdopted")
     : say(inspirations?.length || fieldBeyond ? "worldPersonalReadingNotReady" : "worldPersonalReadingEmpty");
@@ -2744,9 +2742,20 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      reading the server had already returned (screenshot check, 2026-10-16).
      Standing on that wall is the same "at rest" arrival is, so it lands. */
   const [agentLanded, setAgentLanded] = useState(0);
+  /* AT REST, NOT MERELY LAST ARRIVED. `atWallRef` only moves on ARRIVAL, so
+     it still names this agent after you have started travelling away — and
+     a bump then would drain every pending bundle mid-crossing, the very
+     shear the pending map exists to prevent (code review, 2026-10-16). The
+     loop's own `navigationState()` says whether a crossing (or a camera aim)
+     is running and which wall it is on; only when nothing is moving and that
+     wall is this agent does the bundle land now. Otherwise the next arrival
+     lands it, as before. */
   const landIfStandingOn = useCallback((agentId: string) => {
+    const nav = simApiRef.current?.navigationState();
+    if (!nav || nav.moving) return;
     const w = atWallRef.current;
-    if (w.kind === "agent" && w.id === agentId) setAgentLanded((n) => n + 1);
+    if (nav.wall.kind === "agent" && nav.wall.id === agentId && w.kind === "agent" && w.id === agentId)
+      setAgentLanded((n) => n + 1);
   }, []);
   /** Whether an agent wall's FIRST load is underway or has failed. Success
       needs no entry here — the bundle's presence in `agents` is readiness. */
@@ -3874,6 +3883,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     }
     return m;
   }, [walls, agents, dial, adopted, notes, emerging, topOfMind, inspirations]);
+  /** What an agent's wall holds up: its own reading, never yours.
+      FROM ITS OWN BUNDLE AT NOW, NOT FROM `chrome`. `chrome` is written by
+      `applyChrome` in an effect AFTER `atWall` changes, so the first render on
+      the agent's wall still held YOUR sentence — under "This is what's on my
+      mind right now." And `chrome.text` is the reading at the dial's T, which
+      is not "right now" once the dial is wound back (code review,
+      2026-10-16). `wallChromeNow` is derived in render from the agent's own
+      bundle at `nowMs`, so the frame and the sentence cannot disagree. */
+  const agentSays = standingAsAgent ? wallChromeNow.get(spaceKey(atWall))?.text ?? null : null;
 
   /**
    * WHAT EACH WALL'S CLAIM RESTS ON.
@@ -9149,20 +9167,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                            with a reading fell through to `restingWord`, so it
                            said "nothing adopted yet" over a top of mind the
                            server had returned (screenshot check, 2026-10-16).
-                           Its line is the wall's chrome — the same
-                           `deriveAgentChrome` reading the dial winds — framed
-                           in its own first person, because the creature is
-                           wearing its form. */
+                           Its line is the agent's own `deriveAgentChrome`
+                           reading at now (see `agentSays`), framed in its own
+                           first person, because the creature is wearing its
+                           form.
+
+                           NO "LET'S CHAT ABOUT IT" HERE, on purpose.
+                           `talkAbout` opens YOUR chat with the text as YOUR
+                           opening message (`createConversation(profileId, …,
+                           { content: kept.text })`), so the agent's "I keep
+                           the version that…" would arrive as words you said.
+                           Until a chat can quote a subject rather than speak
+                           it, the honest bubble here has no act (code
+                           review, 2026-10-16). */
                         <>
                           <span className="jar-char-bubble-of">{say('worldBubbleActAgentMine')}</span>
                           <span className="jar-char-bubble-reading">{agentSays}</span>
-                          <span className="jar-char-bubble-acts">
-                            <button type="button" className="jar-char-bubble-act"
-                              disabled={talking}
-                              onClick={() => { void talkAbout({ id: '', text: agentSays }); }}>
-                              {say('worldTalkAboutThis')}
-                            </button>
-                          </span>
                         </>
                       ) : (
                         /* ═══ AND THE EMPTY LINE IS A DOOR AFTER ALL ═════

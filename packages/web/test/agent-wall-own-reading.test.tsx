@@ -77,7 +77,26 @@ it("holds up the agent's own reading on its wall, never the owner's", async () =
 
   const toAgent = face('My agent');
   expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
+  /* NO RENDER IN BETWEEN MAY PUT YOUR SENTENCE IN ITS FRAME. `chrome` is
+     written in an effect after the wall changes, so a bubble that read it
+     showed the owner's line under the agent's "on my mind" for a frame. The
+     switch is watched in small steps, and every one of them is checked.
+     A LIMIT, MEASURED: `act` flushes the effect in the same turn as the
+     render it follows, so that one stale commit never reaches the DOM here —
+     pointing `agentSays` back at `chrome` still passes. The guard against it
+     is structural (`agentSays` reads `wallChromeNow`, derived in render);
+     these checks hold the observable half: no settled step mislabels. */
+  const mislabelled = () => {
+    const b = bubble();
+    return b?.querySelector('.jar-char-bubble-of')?.textContent?.trim() === 'This is what’s on my mind right now.'
+      && (b.textContent ?? '').includes(OWNER_SAYS);
+  };
   await act(async () => { toAgent!.click(); });
+  expect(mislabelled(), 'the switch rendered the owner\'s sentence in the agent\'s frame').toBe(false);
+  for (let turn = 0; turn < 60; turn += 1) {
+    await world.step(5); await act(async () => { await vi.advanceTimersByTimeAsync(20); });
+    expect(mislabelled(), `the owner's sentence sat in the agent's frame at step ${turn}`).toBe(false);
+  }
   await settle();
   expect(world.audit().wallKind).toBe('agent');
 
