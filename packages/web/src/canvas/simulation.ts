@@ -488,6 +488,11 @@ const THINK_SQUINT = 0.74;
 const THINK_EASE = 0.004;
 const THINK_FLARE = 0.45;
 const GLASS_DROP = 0.5;
+/* The thinking head: a cocked tilt (radians, toward the gaze) and a slow sway
+   on top of it — ±0.035 rad over a ~7s breath (sin period 2π·1100ms). */
+const THINK_TILT = 0.07;
+const THINK_SWAY = 0.035;
+const THINK_SWAY_MS = 1100;
 /** easeOutBack: arrives with a small overshoot and settles — glasses landing. */
 const landing = (t: number): number => {
   const c1 = 1.70158, c3 = c1 + 1;
@@ -4171,11 +4176,20 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            direction of the thing it is looking at. The attend term eases in
            and out on its own clock so the turn reads as a decision rather
            than as a snap to a target. */
+        /* THINKING TILTS THE HEAD, AND THE THOUGHT SWAYS. Founder,
+           2026-10-15: "other than wearing glasses, can we add a bit more
+           motion to the character itself so it moves a bit more." While it
+           reviews with you it cocks its head toward its gaze (the eyes look
+           up and to the right, so it leans that way) and the tilt drifts on a
+           slow breath, so it is never a still picture while you swipe. Rides
+           `thinkNow`, so it eases in with the glasses and out with them. */
+        const thinkLean = companion.thinkNow * (THINK_TILT + Math.sin(now / THINK_SWAY_MS) * THINK_SWAY);
         const lean = view.reduced
           ? 0
           : clamp(companion.off / DRAG_LEAD_PX, -1, 1) * 0.045 +
             clamp(companion.pitch, -1, 1) * 0.02 +
-            companion.attendHold;
+            companion.attendHold +
+            thinkLean;
         if (lean !== 0) ctx!.rotate(lean);
 
         /* The two soft nubs: not limbs — they swell with the glow, and they
@@ -4777,6 +4791,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           companion.thinkNow = lerp(companion.thinkNow, goal, 1 - Math.pow(THINK_EASE, dt));
           easing = true;
         }
+        /* The thinking sway is continuous (see `thinkLean`), so the loop stays
+           awake for as long as the sitting lasts — or it would freeze the head
+           mid-tilt the moment nothing else moved. */
+        if (companion.thinking && !view.reduced) easing = true;
       }
       /* THE GATHER, AND THE RELEASE AT THE END OF IT. The compression eases IN
          (u·u) so the body sinks rather than snapping down, and the flare it is
@@ -5756,6 +5774,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         if (on && !view.reduced) {
           companion.antAt = performance.now();
           companion.antFlare = THINK_FLARE;
+          /* and the gather releases into a little hop — settling in eagerly */
+          companion.hopNext = true;
         }
         wake();
       },
