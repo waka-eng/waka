@@ -14,9 +14,13 @@
  * copy (no sentence is thrown from here — see `PhotoRefused` for why).
  */
 
-export const MAX_ATTACHMENT_FILE_BYTES = 25 * 1024 * 1024;
+/* NOT EXPORTED, EITHER OF THESE TWO (2026-10-16). Nothing outside this file
+   needs the cap or the list as values — every caller asks
+   `inspectAttachmentFile` or reads `FILE_ACCEPT` — and an export only its
+   own file reads is the leftover `reachable.test.ts` counts. */
+const MAX_ATTACHMENT_FILE_BYTES = 25 * 1024 * 1024;
 
-export const FILE_ATTACHMENT_CONTENT_TYPES = [
+const FILE_ATTACHMENT_CONTENT_TYPES = [
   "application/pdf",
   "text/plain",
   "text/markdown",
@@ -90,4 +94,19 @@ export function inspectAttachmentFile(file: File): { file: File; contentType: Fi
   const contentType = attachmentFileContentType(file);
   if (!contentType) throw new FileRefused("unsupported");
   return { file, contentType, kind: contentType.startsWith("image/") ? "image" : "file" };
+}
+
+/**
+ * HOW BIG, IN THE WORDS A FILE TILE SHOWS UNDER ITS NAME. Founder, 2026-10-15:
+ * a file in a note or a chat shows as "icon + name + size". A photo is its
+ * own label; a PDF is not, and its size is the one fact that tells a
+ * two-page letter from a two-hundred-page report before it is opened.
+ * Whole kilobytes under a megabyte, one decimal above; units are the same in
+ * both languages, so this takes no locale.
+ */
+export function fileSizeWords(bytes: number | null | undefined): string {
+  if (!bytes || !Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  const mb = bytes / (1024 * 1024);
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
 }

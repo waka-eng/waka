@@ -36,6 +36,7 @@ import { NotePage } from './NotePage';
 import { AuthoredSaveNotice } from './AuthoredSaveNotice';
 import {inspirationWithPendingLink} from '../lib/inspiration-input';
 import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
+import { fileSizeWords } from '../lib/api/file-accept';
 import { formatMessage, t, type SupportedLocale } from '../lib/locales';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { useAuthoredSave } from '../lib/use-authored-save';
@@ -163,6 +164,19 @@ function MediaTile({
             {clock ? <span className="jar-tile-clock">{clock}</span> : null}
           </button>
         </>
+      ) : item.type === 'file' ? (
+        /* ═══ A FILE IS ITS NAME AND ITS SIZE (2026-10-16) ════════════════
+           Founder: a file shows "as a small tile (icon + name + size) where
+           image thumbnails show". A PDF has no picture to stand in for it,
+           so the tile says what it is — the page glyph, the name, and how
+           big — which is the one place the size note above is overruled:
+           for a photo the size was storage trivia; for a document it is
+           the difference between a letter and a report. */
+        <span className="jar-tile-face jar-tile-file">
+          <HomeActionIcon kind="file" />
+          <span className="jar-tile-file-name">{item.name}</span>
+          {item.blob?.size ? <span className="jar-tile-clock">{fileSizeWords(item.blob.size)}</span> : null}
+        </span>
       ) : item.type === 'link' && item.url ? (
         <a className="jar-tile-face jar-tile-link" href={item.url} target="_blank" rel="noreferrer">
           {item.name}

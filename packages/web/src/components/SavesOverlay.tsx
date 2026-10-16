@@ -69,6 +69,7 @@ import { ShareSheet, inspirationShareTarget, type ShareTarget } from "./ShareShe
 import { loadInspirations, type Inspiration } from "../lib/data";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { inspectInspirationPhoto } from "../lib/inspiration-photo";
+import { inspectAttachmentFile } from "../lib/api/file-accept";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -561,7 +562,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
      the button that opens it, and that button is in the bar now — see
      `NoteTools`, which owns both. */
-  const attach = useCallback(async (chosen: File, came: "photo" | "recording" = "photo") => {
+  const attach = useCallback(async (chosen: File, came: "photo" | "recording" | "file" = "photo") => {
     const note = open;
     if (!note) return;
     setAttaching(true);
@@ -594,7 +595,19 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
          THE DEFAULT IS THE SAFE SIDE. `came` defaults to "photo", so a
          future caller that forgets the argument gets sniffed and refused
          rather than trusted. */
-      const file = came === "photo" ? await inspectInspirationPhoto(chosen) : chosen;
+      /* ═══ AND A THIRD DOOR: "ADD FILE" (2026-10-16) ══════════════════════
+         The ＋'s second row. `inspectAttachmentFile` is its lock — the
+         server's list and the 25 MB cap, read before anything is sent — and
+         its verdict's type is the one every later step uses, so the blob is
+         re-wrapped with it (a `.md` arrives with no type at all). A photo
+         chosen through "Add file" is still a photo and goes through the
+         sniffer like any other. `POST /attachments` with an `inspirationId`
+         takes `type: "file"`; nothing on the server is new for this. */
+      const verdict = came === "file" ? inspectAttachmentFile(chosen) : null;
+      const asFile = verdict?.kind === "file";
+      const file = verdict && asFile
+        ? (chosen.type === verdict.contentType ? chosen : new File([chosen], chosen.name, { type: verdict.contentType, lastModified: chosen.lastModified }))
+        : came === "recording" ? chosen : await inspectInspirationPhoto(chosen);
       const pre = await presignAttachment(
         { filename: file.name, contentType: file.type || "application/octet-stream", size: file.size },
         undefined,
@@ -605,7 +618,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
         /* A STATEMENT ABOUT BYTES THAT WERE READ, on the photo side: the
            sniffer returns one of seven image types or throws, so there is
            no third answer left to guess at. */
-        type: came === "photo" ? "image" : "file",
+        type: came === "recording" || asFile ? "file" : "image",
         inspirationId: note.id,
         key: pre.key,
         name: file.name,
@@ -1147,7 +1160,9 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           uploading={say("worldComposerUploading")}
           recordLabel={say("worldComposerRecord")}
           stopLabel={say("worldComposerStop")}
-          photoLabel={say("worldComposerPhoto")}
+          addLabel={say("worldAddMenu")}
+          photoLabel={say("worldAddPhoto")}
+          fileLabel={say("worldAddFile")}
           /* THE NOTEPAD'S OWN WORDS, not a second string meaning the same
              thing. One act, one name — and `worldSaveInspiration` is already
              what a screen reader hears for this on the other note page. A
@@ -1182,7 +1197,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           /* Only a note with words has a card to make. */
           shareLabel={(draft.trim() || open.preview.trim()) ? say("worldShareInspirationTitle") : undefined}
           onShare={() => setShareOf(inspirationShareTarget(locale, { text: draft.trim() || open.preview, capturedMs: open.capturedMs, attachments: open.attachments }))}
-          onFile={(file) => void attach(file)}
+          onFile={(file, door) => void attach(file, door)}
         /> : null}
         {open ? (
           /* ═══ IT IS A NOTE, NOT A RECORD WITH AN EDIT MODE ═══════════════

@@ -167,9 +167,21 @@ const MODAL_LEAVE_MS = 180;
 export function leaveAsModal(then: () => void, from?: Element | null): void {
   const node = (from ?? document.querySelector('[data-motion="modal"]')) as HTMLElement | null;
   const still = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (!node || still || typeof node.getAnimations !== "function" || node.dataset.leaving) { then(); return; }
+  if (!node || still || typeof node.getAnimations !== "function") { then(); return; }
+  /* ONE CLOSE PER LEAVE. A second Escape or a double-pressed Close inside
+     the drop-out used to run the close twice (once now, once from the
+     timer); it is the same leave, so it is ignored. */
+  if (node.dataset.leaving) return;
   node.dataset.leaving = "1";
-  window.setTimeout(then, MODAL_LEAVE_MS);
+  window.setTimeout(() => {
+    then();
+    /* AND IF THE PAGE IS STILL HERE AFTERWARDS — a close that waits on
+       something that failed — it comes back rather than staying on screen
+       invisible and unpressable with no way out. */
+    /* 1.5s, not one more drop-out: a draft's close waits on the recorder
+       stopping, and the page must not flicker back while it does. */
+    window.setTimeout(() => { if (node.isConnected) delete node.dataset.leaving; }, 1500);
+  }, MODAL_LEAVE_MS);
 }
 
 export const DialogSurface = forwardRef<HTMLDivElement, DialogSurfaceProps>(function DialogSurface(

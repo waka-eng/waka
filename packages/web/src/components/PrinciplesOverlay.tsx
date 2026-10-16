@@ -267,7 +267,10 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
           pull.current = null;
           if (!start || start.id !== event.pointerId) return;
           const dx = event.clientX - start.x, dy = event.clientY - start.y;
-          if (-dx >= PULL_HOME && Math.abs(dy) < -dx) onClose();
+          /* A drag that left text selected was a selection — of a principle
+             someone wanted to copy — not a pull home. */
+          const selected = typeof window.getSelection === "function" && (window.getSelection()?.toString().length ?? 0) > 0;
+          if (!selected && -dx >= PULL_HOME && Math.abs(dy) < -dx) onClose();
         }}
         onPointerCancel={() => { pull.current = null; }}
         >

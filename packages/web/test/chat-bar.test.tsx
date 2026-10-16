@@ -16,7 +16,14 @@ import { mountWorld, dataMockFrom, apiMockFrom, barShape, chatField, VIEWER_ID, 
 import { createConversation, fetchConversation, fetchConversationReply, listConversations, type ApiConversation } from '../src/lib/api/conversations';
 
 /**
- * ═══ A CHAT'S BAR IS ITS DOOR AND ITS CLOSE (2026-10-15) ═══════════════
+ * ═══ A CHAT'S BAR IS ITS DOOR, ITS TOOLS AND ITS CLOSE (2026-10-16) ═══
+ *
+ * Founder, 2026-10-16: "bar becomes All chats │ dictate · ＋ │ Close. The
+ * dictate button and ＋ move OUT of the chat box INTO the bar's middle group
+ * (the box keeps the text field and Send)." So the bar lends the panel an
+ * empty group (`CHAT_TOOLS_SLOT`) and the panel portals its mic and its ＋
+ * into it; the field and Send stay on the page. The 2026-10-15 ruling below
+ * still holds for the field — the composer did not come back into the bar.
  *
  * The chat-in-the-bar composer was tried and reverted the same day. Founder:
  * "lets just make the bottom be All chats | close and bring back the chat box
@@ -81,14 +88,18 @@ async function aNewChat(): Promise<void> {
   await chatField(world.container);
 }
 
-describe('a chat\'s bar is All chats │ Close, and the page keeps its own composer', () => {
-  it('gives a chat the bar exactly All chats │ Close, with nothing to type into in it', async () => {
+describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page keeps its own field and Send', () => {
+  it('gives a chat the bar All chats │ ＋ │ Close, with nothing to type into in it', async () => {
     await aNewChat();
-    expect(barShape(world!.container), 'a chat\'s bar is not exactly its door, one rule, Close').toEqual(['All chats', '│', 'Close']);
+    expect(barShape(world!.container), 'a chat\'s bar is not its door, its tools, Close').toEqual(['All chats', '│', 'Add photo or file', '│', 'Close']);
     expect(world!.container.querySelectorAll('nav.waka-dock span.waka-dock-sep[aria-hidden="true"]'),
-      'the one rule is not hidden from a screen reader').toHaveLength(1);
+      'the two rules are not hidden from a screen reader').toHaveLength(2);
     const bar = world!.container.querySelector('nav.waka-dock')!;
-    expect(bar.querySelector('textarea, .chat-send, .chat-dictate'), 'the chat\'s field, mic or Send is in the bar again').toBeNull();
+    expect(bar.querySelector('textarea, .chat-send'), 'the chat\'s field or Send is in the bar again').toBeNull();
+    expect(bar.querySelector('#waka-chat-tools.waka-dock-making[role="group"] button.waka-dock-tool[aria-haspopup="menu"]'),
+      'the ＋ is not in the bar\'s lent group').toBeTruthy();
+    expect(world!.container.querySelector('footer.chat-composer button[aria-haspopup="menu"], footer.chat-composer .chat-dictate'),
+      'the ＋ or the mic is still in the page\'s box as well').toBeNull();
     expect(world!.container.querySelector('#waka-chat-composer, .waka-dock-chat'), 'the chat-in-the-bar slot came back').toBeNull();
     expect(world!.container.querySelector('.waka-dock .waka-dock-item[aria-current="page"]'), 'a chat lights a bar row, as if it were the list').toBeNull();
     /* AND NOTHING IN THE CORNER. */
@@ -109,14 +120,14 @@ describe('a chat\'s bar is All chats │ Close, and the page keeps its own compo
     expect(world!.container.textContent, 'the bar\'s old invitation is still on screen').not.toContain('Let’s chat');
   });
 
-  it('offers the mic in the page\'s composer, not the bar, where the browser can listen', async () => {
+  it('offers the mic in the bar, not the page\'s box, where the browser can listen', async () => {
     class StubRecognition { start(): void {} stop(): void {} abort(): void {} }
     (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition = StubRecognition;
     try {
       await aNewChat();
-      expect(world!.container.querySelector('footer.chat-composer button.chat-dictate'), 'the page\'s composer has no mic').toBeTruthy();
-      expect(world!.container.querySelector('nav.waka-dock .chat-dictate'), 'the mic is in the bar').toBeNull();
-      expect(barShape(world!.container)).toEqual(['All chats', '│', 'Close']);
+      expect(world!.container.querySelector('nav.waka-dock button.waka-dock-tool.chat-dictate'), 'the bar has no mic').toBeTruthy();
+      expect(world!.container.querySelector('footer.chat-composer .chat-dictate'), 'the mic is still in the page\'s box').toBeNull();
+      expect(barShape(world!.container)).toEqual(['All chats', '│', 'Speak', 'Add photo or file', '│', 'Close']);
     } finally {
       delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
     }
@@ -138,7 +149,20 @@ describe('a chat\'s bar is All chats │ Close, and the page keeps its own compo
     expect(world!.container.querySelector('.chat-message[data-role="user"]')?.textContent).toContain('What has changed in how I think?');
     expect(location.pathname, 'the chat did not take its id once it was created').toMatch(/^\/chat\/(?!new$)/);
     expect((await chatField(world!.container)).value, 'the page\'s field kept what was sent').toBe('');
-    expect(barShape(world!.container), 'the bar changed shape once the chat had an id').toEqual(['All chats', '│', 'Close']);
+    expect(barShape(world!.container), 'the bar changed shape once the chat had an id').toEqual(['All chats', '│', 'Add photo or file', '│', 'Close']);
+  });
+
+  it('opens the ＋ in the bar as a menu of Add photos and Add file', async () => {
+    await aNewChat();
+    const plus = world!.container.querySelector<HTMLButtonElement>('nav.waka-dock button[aria-haspopup="menu"]')!;
+    await act(async () => plus.click());
+    const menu = world!.container.querySelector('nav.waka-dock [role="menu"]');
+    expect(menu, 'the ＋ in the bar opened no menu').toBeTruthy();
+    expect([...menu!.querySelectorAll('[role="menuitem"]')].map((row) => row.textContent?.trim())).toEqual(['Add photos', 'Add file']);
+    expect(document.activeElement, 'the first row did not take focus').toBe(menu!.querySelector('[role="menuitem"]'));
+    await act(async () => { menu!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }); await settle();
+    expect(world!.container.querySelector('nav.waka-dock [role="menu"]'), 'Escape left the menu open').toBeNull();
+    expect(location.pathname, 'Escape on the menu closed the chat under it').toBe('/chat/new');
   });
 
   it('goes home from a chat on Close, and to the chats list on All chats', async () => {

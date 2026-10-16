@@ -2,7 +2,8 @@ import { profileStorageKey, type ProfileStorageScope } from './profile-storage';
 
 export interface InspirationDraftMedia {
   id: string;
-  type: 'image' | 'audio' | 'link';
+  /** 'file' since 2026-10-16: a document chosen through the note's ＋ → Add file. */
+  type: 'image' | 'audio' | 'link' | 'file';
   name: string;
   url?: string;
   blob?: Blob;

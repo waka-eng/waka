@@ -1,26 +1,18 @@
 /**
- * A GREETING MAY TAKE BACK ITS OWN GESTURE, AND NOTHING ELSE.
+ * A GREETING OPENS NO CARD.
  *
- * The world greets a returning person by gliding to the newest memory,
- * opening it, and then — 2.6 seconds later — letting it go and walking back
- * to headquarters. That undo used to release WHATEVER WAS SELECTED at the
- * moment the timer fired, not what the greeting itself had selected. Anyone
- * who pressed a caret, walked the reach or tapped a different orb inside
- * those 2.6 seconds watched their own card close and the camera leave, with
- * nothing on screen to explain it.
+ * The world used to greet a returning person by gliding to the newest memory,
+ * opening its card, and 2.6 seconds later letting it go and walking back to
+ * headquarters — an undo that had already needed a guard (2026-08-27) so it
+ * only ever took back its own gesture. Founder, 2026-10-16: "once in a while
+ * the inspiration card keeps coming up in the main page but dont have that."
+ * So the gesture is gone, guard and all: coming back is the creature's
+ * whisper alone, and a card opens only when the person opens one.
  *
- * It read exactly like paging being broken, which is how it was found (live,
- * 2026-08-27, chasing "the caret closes the card"): the step succeeded, the
- * panel followed, and a second later a timer from the arrival took it all
- * away.
- *
- * WHY THIS IS A SOURCE-LEVEL GATE. The behaviour needs a returning visitor
- * (`waka.seen` in the past), a fresh archive, and four real seconds of
- * wall-clock inside one case — the harness fakes `performance.now` and the
- * frame clock but not `setTimeout`, so a behavioural version would be four
- * seconds of sleeping and a race for its trouble. What can be held exactly
- * is the rule the fix states: before the greeting releases, it compares what
- * is selected NOW against the id it selected itself.
+ * WHY THIS IS A SOURCE-LEVEL GATE, as before: the behaviour needs a returning
+ * visitor, a fresh archive and real seconds of `setTimeout`; what can be held
+ * exactly is what the greeting's effect commits to — it selects nothing and
+ * moves no camera. (home-navigation.test.tsx holds the behaviour too.)
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): nothing — the page is read as text,
  * because the claim is about what the source commits to.
@@ -36,41 +28,25 @@ const SRC = readFileSync(
   "utf8",
 );
 
-/** The greeting's own block: from the newest memory it picks to its timers. */
+/** The greeting's own block: from its no-card note to the end of its effect. */
 function greetingBlock(): string {
-  const from = SRC.indexOf("const newest = fresh.reduce");
-  expect(from, "the greeting still glides to the newest memory").toBeGreaterThan(-1);
+  const from = SRC.indexOf("THE GREETING NO LONGER OPENS A CARD");
+  expect(from, "the greeting's note is where it was").toBeGreaterThan(-1);
   const to = SRC.indexOf("}, [inspirations, phase]);", from);
   expect(to, "the greeting effect still ends where it did").toBeGreaterThan(from);
   return SRC.slice(from, to);
 }
 
-describe("the greeting undoes itself and nothing else", () => {
-  it("checks what is selected before letting go", () => {
+describe("the greeting opens no card", () => {
+  it("selects nothing and moves no camera — it only speaks", () => {
     const block = greetingBlock();
-    expect(
-      block.includes("simApiRef.current?.release()"),
-      "the greeting still lets its own memory go — that part was never wrong",
-    ).toBe(true);
-    /* the guard: what is selected right now, against what the greeting chose */
-    expect(
-      /selectedIdRef\.current\s*!==\s*newest\.id/.test(block),
-      "a greeting that releases without asking whose selection it is will " +
-        "close a card the person opened themselves. Compare against the id " +
-        "the greeting selected before releasing.",
-    ).toBe(true);
+    expect(block.includes(".select("), "the greeting is selecting a memory again").toBe(false);
+    expect(block.includes(".release("), "the greeting is releasing a selection it should never have made").toBe(false);
+    expect(block.includes(".toTop("), "the greeting is moving the camera").toBe(false);
+    expect(/setTimeout\(tell,/.test(block), "the greeting no longer tells").toBe(true);
   });
 
-  it("leaves the camera where the person put it, for the same reason", () => {
-    const block = greetingBlock();
-    const guardAt = block.search(/selectedIdRef\.current\s*!==\s*newest\.id/);
-    const topAt = block.indexOf("simApiRef.current?.toTop()");
-    expect(topAt, "the greeting still walks back to headquarters").toBeGreaterThan(-1);
-    expect(
-      guardAt !== -1 && guardAt < topAt,
-      "walking the camera home is part of the same undo: if the person has " +
-        "taken over, neither the selection nor the camera is the greeting's " +
-        "to move.",
-    ).toBe(true);
+  it("has no glide to the newest memory left anywhere", () => {
+    expect(SRC.includes("const newest = fresh.reduce"), "the greeting's glide to the newest memory is back").toBe(false);
   });
 });

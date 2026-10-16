@@ -80,6 +80,7 @@
  * saying which. A quiet surface is not the same as a quiet failure.
  */
 import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import {createConversation,fetchConversation,listConversations,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
 import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage';
 import {useConversationReply} from '../lib/use-conversation-reply';
@@ -91,11 +92,64 @@ import {timeOf} from '../lib/words';
 import {dictationAvailable,useDictation} from '../lib/use-dictation';
 import {fetchPrinciples,type ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
-import {readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft as Draft,type StoredConversationDraft} from '../lib/conversation-drafts';
+import {readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft as Draft,type ConversationDraftAttachment,type StoredConversationDraft} from '../lib/conversation-drafts';
+import {AddMenu} from './AddMenu';
+import {MessageAttachments} from './MessageAttachments';
+import {fetchAttachmentUrl,uploadMessageAttachment} from '../lib/api/attachments';
+import {FileRefused,fileSizeWords,inspectAttachmentFile} from '../lib/api/file-accept';
+import {inspectInspirationPhoto,PhotoRefused} from '../lib/inspiration-photo';
+import {formatMessage,type MessageKey} from '../lib/locales';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,agent=null}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;
+/** The id `Home` gives the bar's middle group on a chat; see `toolsSlot`. */
+export const CHAT_TOOLS_SLOT='waka-chat-tools';
+/** Per message — the server's `MAX_MESSAGE_ATTACHMENTS`. */
+const MOST_ATTACHED=6;
+
+/* ═══ ONE PHOTO OR FILE ON ITS WAY INTO A MESSAGE ═════════════════════════
+   A chip above the field. `file` is set while this tab holds the bytes (an
+   upload in flight, or one it uploaded) so the chip can draw a photo without
+   a round trip; a chip restored from a saved draft has only its id and asks
+   the server for a short-lived look. Soft rather than bordered — a low fill
+   and a round corner, the founder's 몽글몽글 — because a row of boxed chips
+   above a bordered field is three edges stacked. */
+function Chip({type,name,size,file,attachmentId,state,locale,onRemove,onRetry}:{type:'image'|'file';name:string;size:number|null;file?:File;attachmentId?:string;
+  state:'ready'|'uploading'|'failed';locale:SupportedLocale;onRemove:()=>void;onRetry?:()=>void}){
+  const [url,setUrl]=useState('');
+  useEffect(()=>{
+    if(type!=='image')return;
+    if(file){if(typeof URL.createObjectURL!=='function')return;const value=URL.createObjectURL(file);setUrl(value);return()=>URL.revokeObjectURL(value);}
+    if(!attachmentId)return;const stop=new AbortController();
+    fetchAttachmentUrl(attachmentId,stop.signal).then(setUrl,()=>undefined);return()=>stop.abort();
+  },[type,file,attachmentId]);
+  const say=(key:MessageKey)=>t(locale,key);
+  return <li className={state==='uploading'?'chat-chip chat-chip--uploading':state==='failed'?'chat-chip chat-chip--failed':'chat-chip chat-chip--ready'} title={name}>
+    {type==='image'?(url?<img className="chat-chip-thumb" src={url} alt={name}/>:<span className="chat-chip-thumb" aria-hidden="true"><HomeActionIcon kind="photo"/></span>)
+      :<span className="chat-chip-file"><HomeActionIcon kind="file"/><span className="chat-chip-name">{name}</span>{size?<span className="chat-chip-size">{fileSizeWords(size)}</span>:null}</span>}
+    {state==='uploading'?<span className="chat-chip-state" role="status">{say('worldComposerUploading')}</span>
+      :state==='failed'?<span className="chat-chip-state" role="alert">{say('worldAttachFailed')}</span>:null}
+    {state==='failed'&&onRetry?<button type="button" className="chat-chip-act" aria-label={formatMessage(locale,'worldComposerRetryFile',{name})} onClick={onRetry}>↻</button>:null}
+    <button type="button" className="chat-chip-act" aria-label={formatMessage(locale,'worldComposerRemoveFile',{name})} onClick={onRemove}>×</button>
+  </li>;
+}
+/** An upload this tab started and has not finished, or that failed. */
+interface Upload{key:string;file:File;type:'image'|'file';contentType:string;name:string;failed:boolean}
+/* WHAT A PICK BECOMES, OR WHY IT WAS REFUSED. "Add photos" is sniffed;
+   "Add file" is read against the server's list — and a photo that arrives
+   by "Add file" is a photo, so it is sniffed too and sent as one. Each
+   refusal is a key, said in the reader's language on the status line. */
+async function checkPick(file:File,door:'photo'|'file'):Promise<{file:File;type:'image'|'file';contentType:string}>{
+  if(door==='file'){const verdict=inspectAttachmentFile(file);if(verdict.kind==='file')return {file:verdict.file,type:'file',contentType:verdict.contentType};}
+  const photo=await inspectInspirationPhoto(file);return {file:photo,type:'image',contentType:photo.type};
+}
+const refusalOf=(reason:unknown):MessageKey=>reason instanceof PhotoRefused?reason.reason
+  :reason instanceof FileRefused?(reason.reason==='too_large'?'worldAttachTooLarge':reason.reason==='empty'?'worldPhotoEmpty':'worldAttachUnsupported'):'worldAttachFailed';
+
+export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,agent=null,toolsSlot}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;
   /** The account's agent, when it has one: a new chat may talk with it, or with both. */
-  agent?:{id:string;name:string}|null}){
+  agent?:{id:string;name:string}|null;
+  /** The id of an element the page's bar lends for the mic and the ＋ (`CHAT_TOOLS_SLOT`).
+      Absent, both stay in this panel's own footer, as a panel standing alone has them. */
+  toolsSlot?:string}){
   /* ═══ WHO YOU ARE TALKING WITH ═══════════════════════════════════════
      Founder, 2026-10-15: "new chat should also let you select if you want
      to chat with me vs my agent or both perspectives." Chosen before the
@@ -119,6 +173,22 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const root=useRef<HTMLElement>(null),body=useRef<HTMLDivElement>(null),editor=useRef<HTMLTextAreaElement>(null),nearBottom=useRef(true);
   const restoredScroll=useRef<{top:number;nearBottom:boolean;messageWindowStart?:number}|null>(null),scrollKey=profileStorageKey(scope,`conversationScroll:${journal}`)!;
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
+  /* ═══ PHOTOS AND FILES ON THE WAY IN (2026-10-16) ══════════════════════
+     Founder: "＋ menu rows: 'Add photos' and 'Add file' … upload
+     immediately … show them as CHIPS above the text field". Uploaded ones
+     live in the draft (`attachments`, written to storage with it); ones in
+     flight or failed live here, because their bytes cannot be written down.
+     `localFiles` remembers the bytes of what this tab uploaded, so its own
+     chips draw at once instead of asking the server for a look. */
+  const [uploads,setUploads]=useState<Upload[]>([]),uploadsRef=useRef<Upload[]>([]);
+  const localFiles=useRef(new Map<string,File>());
+  const [attachNote,setAttachNote]=useState<MessageKey|null>(null);
+  const track=(next:(rows:Upload[])=>Upload[])=>{uploadsRef.current=next(uploadsRef.current);setUploads(uploadsRef.current);};
+  /* THE BAR'S SLOT IS FOUND AFTER PAINT, as `NoteTools` finds its own: `Home`
+     mounts it in the same commit this first renders in, and two siblings'
+     effects are not an order to rely on. */
+  const [toolsHost,setToolsHost]=useState<HTMLElement|null>(null);
+  useEffect(()=>{if(toolsSlot)setToolsHost(document.getElementById(toolsSlot));});
   useEffect(()=>{const media=window.matchMedia?.('(max-width:760px)');if(!media)return;const change=()=>setMobile(media.matches);media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
   useLayoutEffect(()=>{const viewport=window.visualViewport,node=root.current;if(!viewport||!node)return;const update=()=>{if(!Number.isFinite(viewport.height)||viewport.height<=0||!Number.isFinite(viewport.offsetTop))return;node.style.setProperty('--chat-height',`${viewport.height}px`);node.style.setProperty('--chat-top',`${viewport.offsetTop}px`);if(nearBottom.current&&body.current)body.current.scrollTop=body.current.scrollHeight;};update();viewport.addEventListener('resize',update);viewport.addEventListener('scroll',update);return()=>{viewport.removeEventListener('resize',update);viewport.removeEventListener('scroll',update);};},[]);
   /* THE TEXTAREA SIZES ITSELF, AND ONLY ONE THING DECIDES HOW. Four
@@ -251,7 +321,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     void refresh();return()=>lifecycle.current.abort();
   },[scope.accountId,scope.profileId,id,initialPrincipleId]);
   const save=async()=>{
-    if(working.current||loading||generationEnabled===null||awaitingReply||!draftRef.current?.content.trim()||storageFailed||focusFailed||id&&!conversation)return;
+    if(working.current||loading||generationEnabled===null||awaitingReply||!draftRef.current?.content.trim()&&!draftRef.current?.attachments?.length||uploadsRef.current.length||storageFailed||focusFailed||id&&!conversation)return;
     /* A draft kept before its agent was recorded waits for the agent to load,
        rather than starting a chat on your own memory instead. */
     if(!id&&draftRef.current.talkWith&&!draftRef.current.agentId&&!agent)return;
@@ -260,14 +330,77 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     try{
       /* The agent the draft was started with; a draft kept before that was recorded falls back to the one shown. */
       const talkAgent=intent.agentId??agent?.id;
-      const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(generationEnabled?{requestReply:true}:{})},from=conversationRef.current?.messageWindowStart;
+      /* THE IDS OF WHAT IS ON THE CHIPS, and only those: the server links
+         them to this message in the same write and drops anything else it
+         staged under this id. */
+      const attachmentIds=intent.attachments?.length?{attachmentIds:intent.attachments.map(item=>item.id)}:{};
+      const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(generationEnabled?{requestReply:true}:{}),...attachmentIds},from=conversationRef.current?.messageWindowStart;
         return from!==undefined?saveConversationMessage(scope.profileId,id,input,signal,from):saveConversationMessage(scope.profileId,id,input,signal);})
-        :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:generationEnabled===true},intent.talkWith&&talkAgent?{perspective:intent.talkWith,agentId:talkAgent}:undefined));
+        :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:generationEnabled===true,...attachmentIds},intent.talkWith&&talkAgent?{perspective:intent.talkWith,agentId:talkAgent}:undefined));
       if(mine(owner)){observe(next);setError(null);if(id)reply.check();}
     }catch{if(mine(owner))setError(say('worldConversationSaveFailed'));}
     finally{working.current=false;if(mine(owner))setBusy(false);}
   };
-  const edit=(content:string)=>{const current=draftRef.current,own=current?.writer===writer.current;keep({id:own?current.id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content,revision:conversation?.revision??0,pending:false});};
+  /* THE MESSAGE'S ID IS KEPT WHILE IT CARRIES ANYTHING. Photos and files are
+     staged on the server under the id this message WILL be sent with, so a
+     draft read back from another tab or a reload — which `edit` would
+     otherwise fork under a fresh id — keeps its id, its chat id and its
+     attachments, and this tab becomes its writer. Without any, the fork is
+     as before: two tabs' words never overwrite each other. */
+  const edit=(content:string)=>{const current=draftRef.current,carry=Boolean(current&&(current.writer===writer.current||current.attachments?.length));
+    keep({id:carry?current!.id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content,revision:conversation?.revision??0,pending:false,
+      ...(carry&&current!.conversationId?{conversationId:current!.conversationId}:{}),...(carry&&current!.attachments?.length?{attachments:current!.attachments}:{})});};
+  /* A MESSAGE TO STAGE ONTO, made before the first chip if nothing is typed
+     yet. A new chat's id is chosen here rather than at Send — the server
+     stages a photo for a conversation that does not exist yet, and the
+     create links it, so the two must name the same id. `save` already reuses
+     `conversationId` when the draft has one. */
+  const draftForAttaching=():Draft|null=>{
+    const current=draftRef.current;if(current?.pending)return null;
+    const carry=Boolean(current&&(current.writer===writer.current||current.attachments?.length));
+    const next:Draft=carry?{...current!,writer:writer.current}:{id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content:current?.content??'',revision:conversation?.revision??0,pending:false};
+    if(!id&&!next.conversationId)next.conversationId=crypto.randomUUID();
+    if(carry&&next.writer===current!.writer&&next.conversationId===current!.conversationId)return current;
+    return keep(next)?next:null;
+  };
+  const upload=async(item:Upload)=>{
+    const target=draftForAttaching(),owner=lifecycle.current;
+    if(!target){track(rows=>rows.map(row=>row.key===item.key?{...row,failed:true}:row));return;}
+    track(rows=>rows.map(row=>row.key===item.key?{...row,failed:false}:row));
+    try{
+      /* NOT THROUGH `run`: its fifteen seconds are for a JSON round trip, and
+         a 25 MB photo on a phone's connection can take longer than that. The
+         page's own lifetime still cancels it. */
+      const row=await uploadMessageAttachment({profile:scope.profileId,conversationId:id??target.conversationId!,messageId:target.id,file:item.file,contentType:item.contentType,type:item.type,name:item.name},owner.signal);
+      if(!mine(owner))return;
+      localFiles.current.set(row.id,item.file);
+      track(rows=>rows.filter(other=>other.key!==item.key));
+      const current=draftRef.current;
+      /* The message moved on while this was uploading (it was sent, or
+         replaced): the staged row is the server's to sweep, never ours to
+         attach to a different message. */
+      if(!current||current.id!==target.id||current.pending)return;
+      const attached:ConversationDraftAttachment={id:row.id,type:row.type,name:row.name,contentType:row.contentType,size:row.size};
+      keep({...current,updatedAt:Date.now(),attachments:[...(current.attachments??[]),attached]});
+    }catch{if(mine(owner))track(rows=>rows.map(row=>row.key===item.key?{...row,failed:true}:row));}
+  };
+  const attachedCount=(draft?.attachments?.length??0)+uploads.length;
+  const pick=async(files:File[],door:'photo'|'file')=>{
+    setAttachNote(null);
+    const vacant=MOST_ATTACHED-(draftRef.current?.attachments?.length??0)-uploadsRef.current.length;
+    if(files.length>vacant)setAttachNote('worldAttachLimit');
+    for(const file of files.slice(0,Math.max(0,vacant))){
+      try{const checked=await checkPick(file,door);
+        const item:Upload={key:crypto.randomUUID(),file:checked.file,type:checked.type,contentType:checked.contentType,name:file.name.slice(0,255)||say(checked.type==='image'?'worldAddPhoto':'worldAddFile'),failed:false};
+        track(rows=>[...rows,item]);void upload(item);}
+      catch(reason){setAttachNote(refusalOf(reason));}
+    }
+  };
+  /* × TAKES IT OFF THIS MESSAGE. An uploaded one stays staged on the server
+     until the send, which deletes every staged row the message did not name. */
+  const unattach=(attachmentId:string)=>{const current=draftRef.current;if(!current||current.pending)return;
+    keep({...current,updatedAt:Date.now(),attachments:(current.attachments??[]).filter(item=>item.id!==attachmentId)});};
+
   /* ═══ SPEAKING INTO THE FIELD ═════════════════════════════════════════
      The same hook the notepad uses, pointed at this draft. `use-dictation`
      carries the argument for why the microphone writes WORDS rather than a
@@ -301,13 +434,37 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     : loading||generationEnabled===null ? 'worldChatLoading' as const
     : awaitingReply ? 'worldConversationThinking' as const
     : busy ? 'worldChatSending' as const
-    : !draft?.content.trim() ? 'worldConversationNeedsWords' as const
+    : uploads.some(row=>!row.failed) ? 'worldComposerUploading' as const
+    : uploads.length ? 'worldAttachFix' as const
+    /* A PHOTO IS A MESSAGE. Founder: "photo-only messages allowed" — words
+       or at least one attachment, and the server accepts '' then. */
+    : !draft?.content.trim()&&!draft?.attachments?.length ? 'worldConversationNeedsWords' as const
     : null;
   const replyNotice=reply.error?'worldConversationReplyCheckFailed' as const
     :reply.state?.retryAfter&&reply.state.phase!=='ready'?'worldConversationReplyLimit' as const
     :reply.state?.phase==='failed'?'worldConversationReplyFailed' as const
     :reply.state?.phase==='stopped'?'worldConversationReplyStopped' as const:null;
+  /* THE MIC AND THE ＋, rendered once and placed by whoever has room for
+     them: the bar's lent group when there is one, this footer when not. */
+  const vacant=MOST_ATTACHED-attachedCount;
+  const tools=(dictateClass:string,addClass:string)=><>
+    {dictationAvailable()?<button type="button"
+      className={`${dictateClass}${dictation.listening?' chat-dictate--on':''}`}
+      aria-pressed={dictation.listening}
+      aria-label={say(dictation.listening?'worldComposerDictateStop':'worldComposerDictate')}
+      disabled={busy||draft?.pending}
+      onClick={()=>dictation.listening?dictation.stop():dictation.start()}>
+      <HomeActionIcon kind="record"/></button>:null}
+    {/* SIX, AND IT SAYS SO. At the server's cap the ＋ dims and its title
+        is the reason, rather than offering a menu whose every row fails. */}
+    <AddMenu buttonClassName={addClass} multiple label={say('worldAddMenu')}
+      photoLabel={say('worldAddPhotos')} fileLabel={say('worldAddFile')}
+      disabled={!canCompose||busy||Boolean(draft?.pending)||vacant<=0||storageFailed}
+      title={vacant<=0?say('worldAttachLimit'):undefined}
+      onPhotos={files=>{void pick(files,'photo');}} onFiles={files=>{void pick(files,'file');}}/>
+  </>;
   return <main ref={root} className="chat-page">
+    {toolsSlot&&toolsHost&&canCompose?createPortal(tools('waka-dock-tool chat-dictate','waka-dock-tool'),toolsHost):null}
     {/* NO ROW ACROSS THE TOP AT ALL. `.chat-top` held "Your memory" and a
         `···` menu, and a comment arguing it was "not a second header" — which
         it was, on a product whose other screens have one bar and two corner
@@ -431,9 +588,12 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               const run=`${before?.role===message.role?'m':'f'}${after?.role===message.role?'m':'l'}`;
               return <article key={message.id} className="chat-message" data-role={message.role} data-run={run}>
                 <p className="chat-said">{say(message.role==='user'?'worldConversationYou':'worldConversationWaka')}</p>
-                <div className="chat-bubble">
+                {message.content||message.followUpQuestion?<div className="chat-bubble">
                   <ConversationText text={message.content}/>{message.followUpQuestion?<ConversationText text={message.followUpQuestion}/>:null}
-                </div>
+                </div>:null}
+                {/* WHAT WAS SENT WITH IT, under the words. A photo-only turn
+                    is these alone; a reply never has any. */}
+                <MessageAttachments attachments={message.attachments??[]} locale={locale}/>
                 {/* ═══ THE METADATA ROW, ON THE LAST BUBBLE OF A RUN ══════
                     The reference's rule, verbatim: "put metadata in the
                     last ChatMessageBubble metadata slot when the message
@@ -455,7 +615,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             {sending?
               <article className="chat-message chat-sending" data-role="user" data-run={`${latestMessage?.role==='user'?'m':'f'}l`}>
                 <p className="chat-said">{say('worldConversationYou')}</p>
-                <div className="chat-bubble"><ConversationText text={sending.content}/></div>
+                {sending.content?<div className="chat-bubble"><ConversationText text={sending.content}/></div>:null}
+                {/* What it carries, drawn the way it will be once it lands. */}
+                <MessageAttachments locale={locale} attachments={(sending.attachments??[]).map(item=>({...item,conversationId:id??sending.conversationId??'',messageId:sending.id,staged:true,createdAt:new Date(sending.updatedAt).toISOString()}))}/>
                 <p className="chat-meta" role="status">{say(busy?'worldChatSending':'worldReviewPending')}</p>
               </article>:null}
           </div>
@@ -531,7 +693,22 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         {!generationEnabled?<p className="chat-reply-status" role="status">{say('worldConversationRepliesUnavailable')}</p>:null}
         {storageFailed?<p className="chat-reply-status" role="alert">{say('worldConversationDraftFailed')}</p>:null}
         {full?<p className="chat-reply-status">{say('worldConversationFull')}</p>:null}
+        {/* WHY A PICK WAS NOT ADDED, in the line the box already speaks in —
+            a photo that is not one, a file over the cap or off the list, a
+            seventh. Cleared by the next pick. */}
+        {attachNote?<p className="chat-reply-status" role="status">{say(attachNote)}</p>:null}
         <div className="chat-composer-body">
+          {/* ═══ THE CHIPS, ABOVE THE FIELD ════════════════════════════════
+              What this message will carry, before it is sent: a photo as a
+              small picture, a file as its glyph, name and size, each with an
+              ×. Uploading and "Couldn’t add this" are said on the chip they
+              are about, and a failed one offers its retry beside its ×. */}
+          {draft?.attachments?.length||uploads.length?<ul className="chat-chips" aria-label={say('worldAttachList')}>
+            {(draft?.attachments??[]).map(item=><Chip key={item.id} type={item.type} name={item.name??say(item.type==='image'?'worldAddPhoto':'worldAddFile')} size={item.size}
+              file={localFiles.current.get(item.id)} attachmentId={item.id} state="ready" locale={locale} onRemove={()=>unattach(item.id)}/>)}
+            {uploads.map(item=><Chip key={item.key} type={item.type} name={item.name} size={item.file.size} file={item.file} state={item.failed?'failed':'uploading'} locale={locale}
+              onRemove={()=>track(rows=>rows.filter(row=>row.key!==item.key))} onRetry={()=>void upload(item)}/>)}
+          </ul>:null}
           <label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
           <div className="chat-composer-footer">
             {/* ═══ THE SEND ACTIONS, AND DICTATION IS ONE OF THEM ═══════
@@ -548,13 +725,15 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
                 SpeechRecognition, but you should still design the composer
                 to work without it." Both halves are obeyed: absent where
                 it cannot work, and the field is typed into either way. */}
-            {dictationAvailable()?<button type="button"
-              className={`chat-dictate${dictation.listening?' chat-dictate--on':''}`}
-              aria-pressed={dictation.listening}
-              aria-label={say(dictation.listening?'worldComposerDictateStop':'worldComposerDictate')}
-              disabled={busy||draft?.pending}
-              onClick={()=>dictation.listening?dictation.stop():dictation.start()}>
-              <HomeActionIcon kind="record"/></button>:null}
+            {/* ═══ AND SINCE 2026-10-16 THEY MAY STAND IN THE BAR INSTEAD ════
+                Founder: "The dictate button and ＋ move OUT of the chat box
+                INTO the bar's middle group (the box keeps the text field and
+                Send)." The reference's advice above is about a composer that
+                is the page's only footer; on the home page the bar is that
+                footer, as it is on a note, and a note's mic is in the bar. So
+                when `Home` lends a slot the two go there, and a panel
+                standing alone keeps them here. */}
+            {toolsSlot?null:tools('chat-dictate','chat-add')}
             {/* ONE CONTROL FOR THE TRANSPORT. Stop used to sit beside the
                 "thinking" line halfway up the page, which is the reference's
                 own anti-pattern — the thing you press to interrupt a reply

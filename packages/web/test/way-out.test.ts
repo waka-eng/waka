@@ -533,12 +533,15 @@ describe("every surface has a way out you can see", () => {
 
     /* THE RULES. One after the row's own word, on every bar that has an
        owner; a second, before Close, only where there is a middle group —
-       the note's tools, or a saved note's tools in the archive. A chat and a
-       bare list are door │ Close. */
+       the note's tools, a chat's tools (the mic and the ＋, lent to the
+       panel since 2026-10-16), or a saved note's tools in the archive. A
+       bare list is door │ Close. */
     expect(code(home), "the first rule no longer follows the bar owner's row").toMatch(
       /\{barOwner && item\.id === barOwner \? <span className="waka-dock-sep" aria-hidden="true" \/> : null\}/);
-    expect(code(home), "the second rule is drawn where there is no middle group (a chat, or a bare list)").toMatch(
-      /\{barOwner && item\.id === barOwner && \(making === 'inspiration' \|\| \(viewNavigation\.view\?\.open === 'saves' && savedNoteOpen\)\) \? <span className="waka-dock-sep" aria-hidden="true" \/> : null\}/);
+    expect(code(home), "the second rule is drawn where there is no middle group (a bare list)").toMatch(
+      /\{barOwner && item\.id === barOwner && \(making !== null \|\| \(viewNavigation\.view\?\.open === 'saves' && savedNoteOpen\)\) \? <span className="waka-dock-sep" aria-hidden="true" \/> : null\}/);
+    expect(code(home), "a chat no longer lends its middle group to the panel's mic and ＋").toMatch(
+      /item\.id === 'talk' && making === 'talk' \? \(\s*<span className="waka-dock-making" role="group" id=\{CHAT_TOOLS_SLOT\}/);
 
     /* AND CLOSE, LAST, THE ONE-PRESS WAY HOME on a making page and on a
        list: the note goes down as a draft; a chat, a list, or a saved note

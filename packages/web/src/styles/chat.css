@@ -1112,4 +1112,267 @@
   font-size: var(--t-meta);
   color: var(--muted);
 }
+
+/* ═══ WHAT CAME WITH IT: PHOTOS AND FILES UNDER A MESSAGE ═══════════════════
+   Soft, not framed. Every tile is the bubble's raised tier — a low-alpha
+   fill of `--moon-warm` — with round corners and no edge, so a photo or a
+   file reads as part of the turn it came with rather than as a card laid
+   on top of it. Sizes are fluid (`min()` against the measure) so no
+   breakpoint is needed: three photos to a row shrink together on a phone.
+   They sit on the speaker's side, as the bubble does. */
+.chat-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  width: fit-content;
+  max-width: 100%;
+  margin-top: var(--sp-6);
+}
+
+.chat-message[data-role="user"] .chat-attachments {
+  margin-inline-start: auto;
+  align-items: flex-end;
+}
+
+.chat-attachment-photos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-6);
+  width: min(100%, calc(3 * 200px + 2 * var(--sp-6)));
+}
+
+.chat-attachment-photos[data-cols="1"] {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(100%, 200px);
+}
+
+.chat-attachment-photos[data-cols="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(100%, calc(2 * 200px + var(--sp-6)));
+}
+
+.chat-attachment-photo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--moon-warm) 9%, transparent);
+  color: var(--muted);
+}
+
+.chat-attachment-photo[data-state="failed"] {
+  background: color-mix(in srgb, var(--moon-warm) 5%, transparent);
+}
+
+.chat-attachment-photo:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.chat-attachment-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.chat-attachment-photo[data-state="ready"] .chat-attachment-image {
+  opacity: 1;
+}
+
+.chat-attachment-note {
+  padding: 0 var(--sp-8);
+  text-align: center;
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+
+.chat-attachment-files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  max-width: 100%;
+}
+
+/* Two classes deep so the surface's own `.chat-page button` reset (one
+   class and an element) does not take the fill back off the tile. */
+.chat-attachments .chat-attachment-file {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-10);
+  width: min(100%, 320px);
+  min-height: 44px;
+  padding: var(--sp-8) var(--sp-14);
+  border: 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--moon-warm) 9%, transparent);
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  font-weight: 300;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.chat-attachments .chat-attachment-file:hover {
+  background: color-mix(in srgb, var(--moon-warm) 14%, transparent);
+}
+
+/* WAITING DIMS THE FILL, NOT THE WORDS — the same rule as a disabled
+   control on this surface: the name stays readable while its link is read. */
+.chat-attachments .chat-attachment-file[data-state="waiting"] {
+  background: color-mix(in srgb, var(--moon-warm) 5%, transparent);
+  cursor: progress;
+}
+
+.chat-attachments .chat-attachment-file:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 16px;
+}
+
+.chat-attachment-file-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.chat-attachment-file-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-attachment-file-size {
+  flex: none;
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-attachment-image { transition: none; }
+}
+
+/* ═══ THE ＋ IN A CHAT STANDING ALONE ════════════════════════════════════
+   Ghost, beside the mic, for the same reason the mic is ghost: an input
+   method, not the act. On the home page both ride in the bar instead and
+   wear `.waka-dock-tool`. */
+.chat-page .chat-add {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--r-pill);
+  color: var(--muted);
+}
+
+.chat-page .chat-add svg { width: 19px; height: 19px; }
+
+/* The menu's rows inside the page wear the page's blanket button rule
+   unless told otherwise; this keeps them the bar's rows. */
+.chat-page .waka-add-row { color: var(--ink); font-size: var(--t-ui); font-weight: 400; }
+
+/* ═══ CHIPS: WHAT THIS MESSAGE WILL CARRY (2026-10-16) ══════════════════
+   Above the field, inside the box. Soft, with no hard edge — a low fill and
+   a round corner, the founder's 몽글몽글 — because a bordered chip inside a
+   bordered box is two edges where one is already enough. They wrap rather
+   than scroll, so six never hide one another. */
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-6);
+  max-width: 100%;
+  min-height: var(--sp-44);
+  padding: var(--sp-4);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+  font-size: var(--t-meta);
+}
+
+/* In flight, dimmer; failed, warmer — said in words on the chip as well. */
+.chat-chip--uploading { opacity: 0.7; }
+.chat-chip--failed { background: color-mix(in srgb, var(--moon-warm) 14%, transparent); }
+.chat-chip--ready { opacity: 1; }
+
+.chat-chip-thumb {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  object-fit: cover;
+  image-orientation: from-image;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--muted);
+}
+
+.chat-chip-thumb svg { width: 18px; height: 18px; }
+
+.chat-chip-file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-6);
+  min-width: 0;
+  padding-inline-start: var(--sp-6);
+}
+
+.chat-chip-file svg { flex: none; width: 18px; height: 18px; color: var(--muted); }
+
+/* A long filename is cut, not wrapped: the chip is one line. */
+.chat-chip-name {
+  min-width: 0;
+  max-width: 14em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-chip-size,
+.chat-chip-state {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chat-page .chat-chip-act {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: var(--r-pill);
+  color: var(--muted);
+  font-size: var(--t-ui);
+  line-height: 1;
+}
 }

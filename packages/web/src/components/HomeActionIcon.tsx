@@ -76,8 +76,15 @@
    specfici inspiration." An arrow leaving an open tray — the shape both
    phone systems already taught for "send this somewhere", so it needs no
    label beside it. (It was drawn as `keep` turned inside out; `keep` is a
-   disk now — see its own note — and share keeps its tray.) */
-export function HomeActionIcon({kind,className}:{kind:'capture'|'chat'|'record'|'photo'|'play'|'pause'|'keep'|'erase'|'send'|'stop'|'share';className?:string}){
+   disk now — see its own note — and share keeps its tray.)
+
+   `plus` AND `file` ARRIVED 2026-10-16. Founder, 2026-10-15: in a note the
+   photo button "becomes ＋" with "Add photo" and "Add file", and the chat
+   gets the same ＋. The plus is the bar's one door to a choice rather than
+   an act, so it is the plainest mark there is; `file` is a page with its
+   corner folded — the shape both phone systems use for "a document" — and
+   it stands beside a name on every tile, so it never has to carry one. */
+export function HomeActionIcon({kind,className}:{kind:'capture'|'chat'|'record'|'photo'|'plus'|'file'|'play'|'pause'|'keep'|'erase'|'send'|'stop'|'share';className?:string}){
   return <svg className={className} data-home-action-icon={kind} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
     {kind==='capture'?<><path className="jar-spark-core" d="m12 5 1.8 5.2L19 12l-5.2 1.8L12 19l-1.8-5.2L5 12l5.2-1.8z" fill="currentColor" strokeWidth=".8"/>
         <g className="jar-spark-rays" strokeWidth="1.4"><path d="m3 3 2 2m14 14 2 2M3 21l2-2M19 5l2-2"/></g></>
@@ -94,6 +101,8 @@ export function HomeActionIcon({kind,className}:{kind:'capture'|'chat'|'record'|
         <path d="m6.6 6.8.85 11.3a1.7 1.7 0 0 0 1.7 1.6h5.7a1.7 1.7 0 0 0 1.7-1.6l.85-11.3"/></>
       :kind==='play'?<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>
       :kind==='pause'?<><rect x="7.5" y="5.5" width="3.4" height="13" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.1" y="5.5" width="3.4" height="13" rx="1.2" fill="currentColor" stroke="none"/></>
+      :kind==='plus'?<path d="M12 5v14M5 12h14"/>
+      :kind==='file'?<><path d="M13.8 3.5H7.5A1.5 1.5 0 0 0 6 5v14a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 19V7.7z"/><path d="M13.8 3.5v4.2H18"/></>
       :kind==='photo'?<><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="m4 17 4.5-4.5a2 2 0 0 1 2.8 0L16 17"/><path d="m14 15 1.6-1.6a2 2 0 0 1 2.8 0L20 15"/></>
       :<><path d="M20 11a3 3 0 0 1-3 3H9l-5 4V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3z"/><path d="M10 18h7l4 3v-5"/><path d="M8 8h8"/></>}
   </svg>;

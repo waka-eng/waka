@@ -324,16 +324,18 @@ it('records explicit reflection opening immediately, before the world observer d
   expect(open).toBeDefined(); await act(async()=>open.click());
   expect(location.search).toContain('reflection=open');
 });
-it('a greeting cannot close its own selected card after the person starts interacting with it', async()=>{
+it('a returning visitor is greeted by the creature, and no card opens by itself', async()=>{
+  /* Founder, 2026-10-16: "once in a while the inspiration card keeps coming
+     up in the main page but dont have that." The greeting used to open the
+     newest memory's card for 2.6s; now it only speaks. */
   localStorage.setItem('waka.seen','1');
   vi.mocked(loadInspiration).mockResolvedValue({...detail,id:'loaded'});
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>}); await settle();
   await act(async()=>{await vi.advanceTimersByTimeAsync(1500);}); await settle();
-  const panel=world.container.querySelector('[aria-label="A saved inspiration"]'); expect(panel).not.toBeNull();
-  await act(async()=>panel!.dispatchEvent(new Event('pointerdown',{bubbles:true})));
+  expect(world.container.querySelector('[aria-label="A saved inspiration"]'), 'the greeting opened a card').toBeNull();
   await act(async()=>{await vi.advanceTimersByTimeAsync(4000);}); await settle();
-  expect(world.container.querySelector('[aria-label="A saved inspiration"]')).not.toBeNull();
-  expect(location.search).toContain('inspiration=loaded');
+  expect(world.container.querySelector('[aria-label="A saved inspiration"]'), 'a card opened by itself').toBeNull();
+  expect(location.search).not.toContain('inspiration=');
 });
 
 it('restores an older card, its earlier reflection and date across Back/Forward without booting again', async () => {
@@ -886,7 +888,9 @@ it('steps back from the chats list to the chat it was opened from on ↩', async
   await act(async () => returnRow()!.click()); await settle();
   expect(open(), '↩ left the chats list up').toBeNull();
   expect(location.pathname, '↩ did not step back to the chat').toBe('/chat/new');
-  expect(barShape(world.container), 'the chat\'s bar did not come back').toEqual(['All chats', '│', 'Close']);
+  /* All chats │ its tools │ Close — the ＋ (and the mic, where the browser
+     can listen) lent to the panel since 2026-10-16; see `chat-bar.test.tsx`. */
+  expect(barShape(world.container), 'the chat\'s bar did not come back').toEqual(['All chats', '│', 'Add photo or file', '│', 'Close']);
 });
 
 it('goes home on ↩ from a list reached some other way, since there is nothing to step back to', async () => {
@@ -967,7 +971,10 @@ it('gives a new note the bar All inspirations │ its tools │ Close, with no C
     expect(shape.slice(0, seps[0]), 'the first group is not the archive\'s door alone').toEqual(['All inspirations']);
     expect(shape.slice(seps[1]! + 1), 'the last group is not Close alone').toEqual(['Close']);
     const tools = shape.slice(seps[0]! + 1, seps[1]);
-    expect(tools, 'the note\'s tools are not the mic, the photo and Save, in that order').toEqual(['Speak', 'Photo', 'Save inspiration']);
+    /* THE PHOTO BECAME ＋ (2026-10-16): "All inspirations │ dictate · ＋ ·
+       save │ Close". Its two rows are not in the bar until it is pressed —
+       `note-add-menu.test.tsx` opens it. */
+    expect(tools, 'the note\'s tools are not the mic, the ＋ and Save, in that order').toEqual(['Speak', 'Add photo or file', 'Save inspiration']);
     /* The tools are the making-slot's, and Save is the disk-drawn keep. */
     const making = world.container.querySelector('nav.waka-dock .waka-dock-making');
     expect(making?.querySelector('button.waka-dock-tool--keep [data-home-action-icon="keep"]'), 'Save lost its keep icon').toBeTruthy();
@@ -976,6 +983,8 @@ it('gives a new note the bar All inspirations │ its tools │ Close, with no C
     expect(making?.querySelector('button.waka-dock-tool--keep [data-home-action-icon="keep"] rect'), 'Save is drawn as a download again').toBeTruthy();
     expect(making?.querySelectorAll('button.waka-dock-tool').length, 'a tool in the middle is not a dock tool').toBe(tools.length);
     expect(making?.querySelector('button.waka-dock-tool [data-home-action-icon="record"]'), 'the mic is not drawn as one').toBeTruthy();
+    expect(making?.querySelector('button.waka-dock-tool[aria-haspopup="menu"] [data-home-action-icon="plus"]'), 'the ＋ is not drawn as one, or opens no menu').toBeTruthy();
+    expect(making?.querySelector('[data-home-action-icon="photo"]'), 'the photo glyph is back in the bar').toBeNull();
     expect(shape, 'Chat is still in the bar while a note is being written').not.toContain('Chat');
     expect(shape, 'the bar still says Inspiration on a new note').not.toContain('Inspiration');
   } finally {
