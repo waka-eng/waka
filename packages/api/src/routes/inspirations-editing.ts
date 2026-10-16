@@ -22,7 +22,7 @@ import {
 } from "@aws-sdk/client-s3";
 
 import { makeAttachmentsS3Client } from "../lib/s3-client.js";
-import { and, asc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from 'zod';
 
@@ -36,10 +36,10 @@ import {
   profiles,
   backgroundJobs,
   deletedInspirations,
-  DELETED_KEEP_DAYS,
   type Inspiration,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { deletedShelfCutoff } from "../lib/deleted-shelf.js";
 import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh, enqueueGroupTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
@@ -134,6 +134,7 @@ async function sweepAttachmentObjects(keys: string[], inspirationId: string): Pr
 export function registerEditingRoutes(
   routes: Hono<AuthEnv>,
   getDatabase: typeof getDb,
+  now: () => Date = () => new Date(),
 ): void {
   /**
    * PATCH /api/inspirations/:id
@@ -287,18 +288,19 @@ export function registerEditingRoutes(
     if (!target.ok) return c.json(target.body, target.status);
 
     // Collect the object keys before the cascade removes the rows that name
-    // them; a link attachment has no key and is skipped by the predicate.
-    const s3KeyRows = await db
-      .select({ s3Key: attachments.s3Key, type: attachments.type })
+    // them; a link attachment has no key, so it is not swept, but it is
+    // still lost with the row and counts toward `hadPhoto` below.
+    const attachmentRows = await db
+      .select({ s3Key: attachments.s3Key })
       .from(attachments)
       .innerJoin(inspirations, eq(inspirations.id, attachments.inspirationId))
       .where(
         and(
           eq(attachments.inspirationId, idCheck.data),
           eq(inspirations.profileId, target.profileId),
-          isNotNull(attachments.s3Key),
         ),
       );
+    const s3KeyRows = attachmentRows.filter((row): row is { s3Key: string } => row.s3Key !== null);
 
     // Lock the source before collecting every destination's witnesses.
     // No derivation can add a new source FK after this collection. Lock the
@@ -342,8 +344,9 @@ export function registerEditingRoutes(
       const ownDelete = session.profile.type === "human" && !session.keyScoped && target.profileId === session.profile.id;
       /* Whatever on this shelf has passed its month goes now, whether or not
          anybody opens the shelf again. */
+      const at = now();
       await tx.delete(deletedInspirations).where(and(eq(deletedInspirations.profileId, target.profileId),
-        lt(deletedInspirations.deletedAt, new Date(Date.now() - DELETED_KEEP_DAYS * 86_400_000))));
+        lt(deletedInspirations.deletedAt, deletedShelfCutoff(at))));
       const [whole] = !ownDelete ? [] : await tx.select({ text: inspirations.text, kind: inspirations.kind, category: inspirations.category,
         source: inspirations.source, visibility: inspirations.visibility, createdAt: inspirations.createdAt })
         .from(inspirations).where(and(eq(inspirations.id, idCheck.data), eq(inspirations.profileId, target.profileId)));
@@ -351,11 +354,12 @@ export function registerEditingRoutes(
         const said = await tx.select({ question: reflections.question, answer: reflections.answer, skipped: reflections.skipped })
           .from(reflections).where(and(eq(reflections.inspirationId, idCheck.data), eq(reflections.profileId, target.profileId)))
           .orderBy(asc(reflections.createdAt), asc(reflections.id));
-        const copy = { profileId: target.profileId, text: whole.text, kind: whole.kind, category: whole.category,
-          source: whole.source, visibility: whole.visibility, reflections: said, hadPhoto: s3KeyRows.some((row) => row.type === "image"),
-          keptAt: whole.createdAt, deletedAt: new Date() };
-        await tx.insert(deletedInspirations).values({ id: idCheck.data, ...copy })
-          .onConflictDoUpdate({ target: deletedInspirations.id, set: copy });
+        /* A plain insert: the restore removes the shelf copy and the delete
+           above clears expired ones, so an id already on the shelf would be
+           a second delete of a row that no longer exists. */
+        await tx.insert(deletedInspirations).values({ id: idCheck.data, profileId: target.profileId, text: whole.text, kind: whole.kind,
+          category: whole.category, source: whole.source, visibility: whole.visibility, reflections: said,
+          hadPhoto: attachmentRows.length > 0, keptAt: whole.createdAt, deletedAt: at });
       }
 
       const removed = await tx

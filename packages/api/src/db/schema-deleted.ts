@@ -16,12 +16,15 @@
  * made every one of those queries a place to forget it.
  *
  * Restoring is an ordinary save under the same id and the original date, and
- * the reading runs again. What a restore cannot return is a photo: those are
- * swept from storage at delete time as before, and `had_photo` says so.
+ * the reading runs again. What a restore cannot return is listed at the top
+ * of routes/inspirations-deleted.ts: attachments of every kind (swept from
+ * storage at delete time; `had_photo` is true when there were any, the name
+ * kept from when only photos were counted), the experience, decision
+ * citations and conversation origin.
  *
- * Thirty days, then the copy goes for good. That is lapse-on-read (see the
- * list route), the same as the harvest basket: the only moment the
- * difference shows is the moment somebody looks.
+ * Thirty days, then the copy goes for good: on the person's own reads and
+ * deletes, and for everyone in the worker's daily run (`sweepDeletedShelf`),
+ * so a person who never comes back is not held past the month either.
  */
 import { boolean, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
@@ -50,6 +53,7 @@ export const deletedInspirations = pgTable(
     source: inspirationSourceEnum("source").notNull(),
     visibility: inspirationVisibilityEnum("visibility").notNull(),
     reflections: jsonb("reflections").$type<DeletedReflection[]>().notNull().default([]),
+    /** Whether it had any attachment (photo, recording, file or link). */
     hadPhoto: boolean("had_photo").notNull().default(false),
     /** When it was first kept — what "Kept <date>" says after a restore. */
     keptAt: timestamp("kept_at", { withTimezone: true }).notNull(),

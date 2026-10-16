@@ -11,27 +11,37 @@
  * away, and an agent or a keeper key on disk has no business reading it or
  * bringing things back.
  */
-import { and, asc, desc, eq, gte, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
-import { DELETED_KEEP_DAYS, deletedInspirations, inspirations, reflections } from "../db/index.js";
+import { deletedInspirations, inspirationRevisions, inspirations, reflections } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { deletedShelfCutoff, deletedShelfGoneAt } from "../lib/deleted-shelf.js";
 import { humanSessionsOnly, type AuthEnv } from "../lib/middleware.js";
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { uuidSchema } from "./inspirations-validation.js";
 
-const DAY_MS = 86_400_000;
+/* WHAT A RESTORE CANNOT BRING BACK, said once so the route and the reader
+   agree. The copy is the words, their kind, category, source, visibility
+   and the reflections asked of them. Not kept, and so not returned:
+     - attachments of every kind (photo, recording, file, link) — the files
+       are swept from storage at delete time; `hadPhoto` records that there
+       were any, and the restore answers `notRestored: ["attachments"]`;
+     - the experience it was filed under, the decision-principle citations
+       that named it, and the conversation it was saved from — each is a
+       link that cascaded with the row, and none is copied;
+     - its reading and signals — the reading runs again on restore. */
+const ATTACHMENT_KINDS = new Set(["image", "audio", "link", "mixed"]);
 
 export function registerDeletedRoutes(routes: Hono<AuthEnv>, getDatabase: typeof getDb, now: () => Date = () => new Date()): void {
   routes.get("/deleted", humanSessionsOnly, async (c) => {
     c.header("Cache-Control", "private, no-store");
     const db = getDatabase();
     const profileId = c.get("session").profile.id;
-    const at = now();
     /* Lapse on read: past thirty days the copy goes for good. */
     await db.delete(deletedInspirations).where(and(eq(deletedInspirations.profileId, profileId),
-      lt(deletedInspirations.deletedAt, new Date(at.getTime() - DELETED_KEEP_DAYS * DAY_MS))));
+      lt(deletedInspirations.deletedAt, deletedShelfCutoff(now()))));
     const rows = await db.select({ id: deletedInspirations.id, text: deletedInspirations.text, kind: deletedInspirations.kind,
       hadPhoto: deletedInspirations.hadPhoto, keptAt: deletedInspirations.keptAt, deletedAt: deletedInspirations.deletedAt })
       .from(deletedInspirations).where(eq(deletedInspirations.profileId, profileId))
@@ -44,7 +54,7 @@ export function registerDeletedRoutes(routes: Hono<AuthEnv>, getDatabase: typeof
         hadPhoto: row.hadPhoto,
         keptAt: row.keptAt.toISOString(),
         deletedAt: row.deletedAt.toISOString(),
-        goneAt: new Date(row.deletedAt.getTime() + DELETED_KEEP_DAYS * DAY_MS).toISOString(),
+        goneAt: deletedShelfGoneAt(row.deletedAt).toISOString(),
       })),
     });
   });
@@ -57,19 +67,31 @@ export function registerDeletedRoutes(routes: Hono<AuthEnv>, getDatabase: typeof
     if (!id.success) return c.json({ error: "Invalid inspiration id" }, 400);
     const db = getDatabase();
     const profileId = c.get("session").profile.id;
+    const at = now();
     const restored = await db.transaction(async (tx) => {
       /* Past its month a copy is gone, whether or not the list was read. */
       const [copy] = await tx.select().from(deletedInspirations)
         .where(and(eq(deletedInspirations.id, id.data), eq(deletedInspirations.profileId, profileId),
-          gte(deletedInspirations.deletedAt, new Date(now().getTime() - DELETED_KEEP_DAYS * DAY_MS)))).for("update");
+          gte(deletedInspirations.deletedAt, deletedShelfCutoff(at)))).for("update");
       if (!copy) {
         const [already] = await tx.select({ id: inspirations.id }).from(inspirations)
           .where(and(eq(inspirations.id, id.data), eq(inspirations.profileId, profileId)));
-        return already ? "already" as const : null;
+        return already ? { state: "already" as const, notRestored: [] } : null;
       }
-      const at = now();
-      await tx.insert(inspirations).values({ id: copy.id, profileId, text: copy.text, kind: copy.kind, category: copy.category,
+      /* A kind that named an attachment comes back as a note, because the
+         attachment does not come back with it. */
+      const kind = copy.kind && ATTACHMENT_KINDS.has(copy.kind) ? "note" as const : copy.kind;
+      await tx.insert(inspirations).values({ id: copy.id, profileId, text: copy.text, kind, category: copy.category,
         source: copy.source, visibility: copy.visibility, createdAt: copy.keptAt, updatedAt: at });
+      /* THE REVISION FENCE DOES NOT RESTART. The insert trigger starts a
+         fresh revision row at 1, and anything still holding (id, revision)
+         from before the delete — a queued job, a snapshot — would match it
+         again. Lifting both revisions to the restore's epoch-milliseconds
+         puts the restored row past every revision the old one ever had. */
+      await tx.update(inspirationRevisions).set({
+        personalRevision: sql`GREATEST(${inspirationRevisions.personalRevision}, ${at.getTime()}::bigint)`,
+        publicRevision: sql`GREATEST(${inspirationRevisions.publicRevision}, ${at.getTime()}::bigint)`,
+      }).where(and(eq(inspirationRevisions.profileId, profileId), eq(inspirationRevisions.inspirationId, copy.id)));
       if (copy.reflections.length) {
         await tx.insert(reflections).values(copy.reflections.map((reflection, index) => ({ profileId, inspirationId: copy.id,
           question: reflection.question, answer: reflection.answer, skipped: reflection.skipped,
@@ -77,11 +99,11 @@ export function registerDeletedRoutes(routes: Hono<AuthEnv>, getDatabase: typeof
       }
       await tx.delete(deletedInspirations).where(eq(deletedInspirations.id, copy.id));
       await requestSignalDerivation({ profileId, inspirationId: copy.id, reason: "created", changedSource: "inspiration" }, tx);
-      return "restored" as const;
+      return { state: "restored" as const, notRestored: copy.hadPhoto ? ["attachments"] : [] };
     });
     if (!restored) return c.json({ error: "Nothing to bring back" }, 404);
-    if (restored === "restored") await wakeCommittedBackgroundJobs();
-    return c.json({ id: id.data }, 200);
+    if (restored.state === "restored") await wakeCommittedBackgroundJobs();
+    return c.json({ id: id.data, notRestored: restored.notRestored }, 200);
   });
 
   /* GONE FOR GOOD, before the thirty days are up. */

@@ -88,3 +88,37 @@ it('puts what is on the shelf in the person\'s export', async () => {
   const exported = await assembleProfileExport(t.db as never, f.profileId);
   expect(exported.deletedInspirations.map((row) => row.text)).toEqual(['Small first moves']);
 });
+
+/* Found in review (2026-10-15), second pass: what a restore loses, said;
+   the revision fence; and a month that passes for people who never return. */
+it('says the attachments did not come back, counts a link among them, and restores the kind as a note', async () => {
+  const f = await fixture();
+  await t.sql`UPDATE inspirations SET kind='link' WHERE id=${f.id}`;
+  await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url) VALUES (${f.profileId},${f.id},'link','https://example.test/a')`;
+  await f.app.request(`/api/inspirations/${f.id}`, { method: 'DELETE' });
+  const restored = await f.app.request(`/api/inspirations/deleted/${f.id}/restore`, { method: 'POST' });
+  expect(await restored.json()).toEqual({ id: f.id, notRestored: ['attachments'] });
+  const [back] = await t.sql`SELECT kind FROM inspirations WHERE id=${f.id}`;
+  expect(back!.kind, 'a link kind with no link would describe something that is not there').toBe('note');
+});
+it('restores past every revision the deleted row ever had', async () => {
+  const f = await fixture();
+  await t.sql`UPDATE inspirations SET text='Small first moves, edited' WHERE id=${f.id}`;
+  const [before] = await t.sql`SELECT personal_revision::text AS r FROM inspiration_revisions WHERE inspiration_id=${f.id}`;
+  expect(BigInt(before!.r)).toBeGreaterThan(1n);
+  await f.app.request(`/api/inspirations/${f.id}`, { method: 'DELETE' });
+  await f.app.request(`/api/inspirations/deleted/${f.id}/restore`, { method: 'POST' });
+  const [after] = await t.sql`SELECT personal_revision::text AS p, public_revision::text AS q FROM inspiration_revisions WHERE inspiration_id=${f.id}`;
+  expect(BigInt(after!.p)).toBeGreaterThan(BigInt(before!.r));
+  expect(BigInt(after!.q)).toBeGreaterThan(BigInt(before!.r));
+});
+it('sweeps everyone\'s expired copies in the daily run, and leaves them out of the export before that', async () => {
+  const { sweepDeletedShelf } = await import('../lib/deleted-shelf.js');
+  const f = await fixture(), other = await fixture();
+  await f.app.request(`/api/inspirations/${f.id}`, { method: 'DELETE' });
+  await other.app.request(`/api/inspirations/${other.id}`, { method: 'DELETE' });
+  await t.sql`UPDATE deleted_inspirations SET deleted_at=now()-interval '31 days' WHERE profile_id=${f.profileId}`;
+  expect((await assembleProfileExport(t.db as never, f.profileId)).deletedInspirations).toEqual([]);
+  expect(await sweepDeletedShelf(t.db as never, new Date())).toBe(1);
+  expect((await t.sql`SELECT profile_id FROM deleted_inspirations`).map((row) => row.profile_id)).toEqual([other.profileId]);
+});

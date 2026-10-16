@@ -89,6 +89,9 @@ export interface InspirationsRouteDependencies {
   getDatabase?: typeof getDb;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
   attachmentHead?: AttachmentHead;
+  /** One clock for the delete and the deleted shelf, so a copy's month is
+      measured the same way where it is filed and where it lapses. */
+  now?: () => Date;
 }
 
 export function createInspirationsRoutes(
@@ -109,9 +112,10 @@ export function createInspirationsRoutes(
   // something to rediscover the next time one changes.
   registerCaptureRoutes(routes, getDatabase, deps.attachmentHead);
   /* Before recall: `GET /deleted` must not reach `GET /:id`. */
-  registerDeletedRoutes(routes, getDatabase);
+  const now = deps.now ?? (() => new Date());
+  registerDeletedRoutes(routes, getDatabase, now);
   registerRecallRoutes(routes, getDatabase);
-  registerEditingRoutes(routes, getDatabase);
+  registerEditingRoutes(routes, getDatabase, now);
   registerReflectionRoutes(routes, getDatabase);
   registerProcessingRoutes(routes, getDatabase);
   registerSaveRequestRoutes(routes, getDatabase);

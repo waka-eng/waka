@@ -24,7 +24,8 @@
  * rows record what THEY said out loud, and those are here).
  */
 
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
+import { deletedShelfCutoff } from "./deleted-shelf.js";
 import {conversations,conversationMessages,conversationReplyRequests} from '../db/schema-conversations.js';
 import {principleGenerationSteps} from '../db/schema-principle-work.js';
 
@@ -203,7 +204,9 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
        sentences waiting in their basket or decided there — both are theirs,
        and an export that left them out would say less than the product
        keeps (found in review, 2026-10-15). */
-    deletedInspirations: await db.select().from(deletedInspirations).where(eq(deletedInspirations.profileId, profileId)).orderBy(asc(deletedInspirations.deletedAt), asc(deletedInspirations.id)),
+    /* Only what is still on the shelf: a copy past its month is gone, even
+       if no sweep has reached it yet. */
+    deletedInspirations: await db.select().from(deletedInspirations).where(and(eq(deletedInspirations.profileId, profileId), gte(deletedInspirations.deletedAt, deletedShelfCutoff(new Date())))).orderBy(asc(deletedInspirations.deletedAt), asc(deletedInspirations.id)),
     /* A candidate past its week has lapsed whether or not the basket was
        opened since, so its words are not exported as if they were waiting. */
     harvestCandidates: (await db.select({ id: harvestCandidates.id, text: harvestCandidates.text, title: harvestCandidates.title, context: harvestCandidates.context,
