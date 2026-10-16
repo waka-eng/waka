@@ -1292,7 +1292,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                   2026-10-16). The link's own card, the one the field panel
                   already shows, sits under the words it prompted. */}
               {open.attachments.filter((item) => item.type === "link").map((item) => (
-                <AttachmentPreview key={item.id} item={item} locale={locale} readOnly />
+                <AttachmentPreview key={item.id} item={item} locale={locale} quiet />
               ))}
 
               {/* ═══ AND ITS STATE GOES TO THE BAR WITH EVERYTHING ELSE'S ══

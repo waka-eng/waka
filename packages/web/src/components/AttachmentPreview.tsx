@@ -29,11 +29,18 @@ function httpUrl(value?: string | null) {
   try { const url = new URL(value ?? ''); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.toString() : null; }
   catch { return null; }
 }
-export function AttachmentPreview({ item, locale, readOnly=false }: { item: ApiAttachmentSummary; locale: SupportedLocale; readOnly?:boolean }) {
-  return <Preview key={item.id} item={item} locale={locale} readOnly={readOnly} />;
+/* QUIET IS FOR A PAGE WHOSE STATES LIVE ELSEWHERE. The opened note has one
+   rule for states — "states should show and disappear in the bottom bar
+   only" — so there this card says nothing about itself: it is absent until
+   its details have been read once, then it is only the card (thumbnail,
+   title ↗, site, description). No status or alert lines, no buttons, no
+   polling, and no "Page text" disclosure either: that is the machine's
+   reading of the page behind a press, not something you kept. */
+export function AttachmentPreview({ item, locale, readOnly=false, quiet=false }: { item: ApiAttachmentSummary; locale: SupportedLocale; readOnly?:boolean; quiet?: boolean }) {
+  return <Preview key={item.id} item={item} locale={locale} readOnly={readOnly || quiet} quiet={quiet} />;
 }
 
-function Preview({ item,locale,readOnly }: { item: ApiAttachmentSummary;locale:SupportedLocale;readOnly:boolean }) {
+function Preview({ item,locale,readOnly,quiet }: { item: ApiAttachmentSummary;locale:SupportedLocale;readOnly:boolean;quiet:boolean }) {
   const [data, setData] = useState<ApiAttachmentDetails | null>(null), [loadError, setLoadError] = useState(false);
   const [actionError, setActionError] = useState(false), [busy, setBusy] = useState(false), [refresh, setRefresh] = useState(0);
   const [waiting, setWaiting] = useState(false), [imageFailed, setImageFailed] = useState(false);
@@ -49,14 +56,14 @@ function Preview({ item,locale,readOnly }: { item: ApiAttachmentSummary;locale:S
         const value = await fetchAttachmentDetails(item.id, controller.signal);
         if (controller.signal.aborted) return;
         setData(value); setLoadError(false);
-        if (value.analysis.status === 'pending') {
+        if (value.analysis.status === 'pending' && !quiet) {
           if (++checks < 20) timer = window.setTimeout(() => { if (!document.hidden) void read(); else setWaiting(true); }, 3000);
           else setWaiting(true);
         }
       } catch { if (!controller.signal.aborted) { setData(null); setLoadError(true); } }
     };
     void read(); return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [item.id, refresh, busy]);
+  }, [item.id, refresh, busy, quiet]);
   const retry = async () => {
     const controller = new AbortController(); mutation.current?.abort(); mutation.current = controller;
     setBusy(true); setActionError(false);
@@ -78,13 +85,16 @@ function Preview({ item,locale,readOnly }: { item: ApiAttachmentSummary;locale:S
   const status = data?.analysis.status, reason = row?.enrichment.errorReason ?? '';
   const unavailable = /401|403|auth|login/i.test(reason) ? say('worldAttachmentNeedsAccess')
     : item.type === 'link' ? say('worldAttachmentNoLinkPreview') : say('worldAttachmentNoImageDescription');
-  return <section className="jar-attachment-preview" aria-label={say(item.type === 'link' ? 'worldAttachmentLinkPreview' : 'worldAttachmentImageDescription')}>
-    {item.type === 'link' ? <>
-      {data?.previewImageAvailable && !imageFailed ? <img className="jar-link-thumbnail" src={attachmentPreviewImageUrl(item.id)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setImageFailed(true)} /> : null}
-      <h3>{original ? <a href={original} target="_blank" rel="noreferrer">{title} <span aria-hidden="true">↗</span></a> : title}</h3>
-      {hostname && hostname !== title ? <p className="jar-link-site">{link?.siteName || hostname}</p> : null}
-      {link?.description ? <p className="jar-link-description">{link.description}</p> : null}
-    </> : null}
+  const card = item.type === 'link' ? <>
+    {data?.previewImageAvailable && !imageFailed ? <img className="jar-link-thumbnail" src={attachmentPreviewImageUrl(item.id)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setImageFailed(true)} /> : null}
+    <h3>{original ? <a href={original} target="_blank" rel="noreferrer">{title} <span aria-hidden="true">↗</span></a> : title}</h3>
+    {hostname && hostname !== title ? <p className="jar-link-site">{link?.siteName || hostname}</p> : null}
+    {link?.description ? <p className="jar-link-description">{link.description}</p> : null}
+  </> : null;
+  const label = say(item.type === 'link' ? 'worldAttachmentLinkPreview' : 'worldAttachmentImageDescription');
+  if (quiet) return data ? <section className="jar-attachment-preview" aria-label={label}>{card}</section> : null;
+  return <section className="jar-attachment-preview" aria-label={label}>
+    {card}
     {!data && !loadError ? <p role="status">{say('worldAttachmentPreviewLoading')}</p> : null}
     {status === 'pending' ? <p role="status">{say(item.type === 'link' ? 'worldAttachmentReadingLink' : 'worldAttachmentReadingPhoto')}</p> : null}
     {status === 'failed' ? <p>{say('worldAttachmentPreviewFailed')}</p> : null}

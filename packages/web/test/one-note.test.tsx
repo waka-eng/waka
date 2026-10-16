@@ -76,6 +76,14 @@ const ROW = {
   attachments: [] as Array<{ id: string; type: "link"; label: string; url: string }>,
 };
 
+/** The link card's one read: counted, and answered when the test says. */
+const details = vi.hoisted(() => {
+  const state = { calls: 0, finish: (_value: unknown) => {} };
+  return Object.assign(state, {
+    read: (..._args: unknown[]) => { state.calls += 1; return new Promise((done) => { state.finish = done; }); },
+  });
+});
+
 /* THE WRITE, AND ONLY THE WRITE. `lib/api` is spread through rather than
    replaced because this page also reaches it for presign, upload, finalize
    and delete, and a bare mock would turn any of those into `undefined is
@@ -85,9 +93,9 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
   return {
     ...actual,
-    /* HTTP only, for the link card's details; the card itself runs. Never
-       resolves, so the card stays at its first frame: the original link. */
-    fetchAttachmentDetails: () => new Promise(() => {}),
+    /* HTTP only, for the link card's details; the card itself runs. Held
+       open until the test lets it go, so the loading frame is observable. */
+    fetchAttachmentDetails: (...args: unknown[]) => details.read(...args),
     updateInspiration: async (id: string, patch: { text?: string }) => {
       written.push({ id, text: patch.text ?? "" });
       return undefined as never;
@@ -351,16 +359,43 @@ it("lends the bar a Save that lights only on an unsaved change, and goes out onc
  *
  * The row carried the attachment and the page drew only images and words,
  * so a note about an essay had lost the essay. The link's own card sits
- * under the words, read-only. */
-it("shows a saved link's card under the words of the opened note", async () => {
+ * under the words — and only the card. The note's states live in the bar
+ * ("states should show and disappear in the bottom bar only"), so the card
+ * is absent while it loads, says nothing about itself once it has, and
+ * reads once rather than polling while the analysis is still pending. */
+it("shows a saved link's card under the words of the opened note, and no state with it", async () => {
   ROW.attachments = [{ id: "link-1", type: "link", label: "https://example.test/essay", url: "https://example.test/essay" }];
+  details.calls = 0;
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
     await savedNote();
-    const card = host.querySelector(".waka-over-one .jar-attachment-preview");
-    expect(card, "the opened note lost its link").not.toBeNull();
-    expect(card!.querySelector("a")?.href).toBe("https://example.test/essay");
-    expect(host.querySelector(".waka-note-page")!.compareDocumentPosition(card!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const card = () => host.querySelector(".waka-over-one .jar-attachment-preview");
+    expect(details.calls).toBe(1);
+    expect(card(), "a loading card drew on the note page").toBeNull();
+    expect(host.textContent).not.toContain("Loading preview");
+
+    await act(async () => details.finish({
+      attachment: { id: "link-1", inspirationId: ROW.id, type: "link", url: "https://example.test/essay",
+        name: null, contentType: null, size: null, createdAt: new Date().toISOString(),
+        enrichment: { status: "pending", kind: "page_body", text: "Extracted page text", errorReason: null, updatedAt: null,
+          image: null, link: { title: "An essay on dusk", description: "Light, late", siteName: "Example journal",
+            hostname: "example.test", finalUrl: "https://example.test/essay", previewImageUrl: null } } },
+      previewImageAvailable: false,
+      analysis: { status: "pending", canRetry: true, retryAfter: new Date().toISOString() },
+    }));
+    expect(card(), "the opened note lost its link").not.toBeNull();
+    expect(card()!.querySelector("a")?.href).toBe("https://example.test/essay");
+    expect(card()!.textContent).toContain("An essay on dusk");
+    expect(card()!.textContent).toContain("Light, late");
+    expect(card()!.querySelectorAll("button, [role=status], [role=alert], details")).toHaveLength(0);
+    expect(card()!.textContent).not.toMatch(/Reading|Check|Try again|Page text|retry/i);
+    expect(host.querySelector(".waka-note-page")!.compareDocumentPosition(card()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    /* One read: pending is not a reason to poll on this page. */
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    expect(details.calls).toBe(1);
   } finally {
+    vi.useRealTimers();
     ROW.attachments = [];
   }
 });
