@@ -88,6 +88,8 @@ export const conversations=pgTable('conversations',{
    */
   initialInspirationFk:foreignKey({columns:[table.profileId,table.initialInspirationId],foreignColumns:[inspirations.profileId,inspirations.id],name:'conversations_initial_inspiration_fk'}),
   ownerUpdated:index('conversations_owner_updated_idx').on(table.profileId,table.updatedAt),
+  /* Removing an agent nulls this column across every chat that named it. */
+  agentProfile:index('conversations_agent_profile_idx').on(table.agentProfileId),
   revisionBounds:check('conversations_revision_bounds',sql`${table.revision} BETWEEN 0 AND 200`),
   /* Spelled out because the migration that created it is: keep it equal to
      `conversationPerspectiveValues`. */

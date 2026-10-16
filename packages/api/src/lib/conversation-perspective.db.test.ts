@@ -32,3 +32,13 @@ it('reads only the agent for an agent chat, and falls back to the person when th
   const foreign=await conversationMemory(t.db as never,p.person,{perspective:'agent',agentProfileId:stranger.agent});
   expect(foreign).toEqual({perspective:'mine',personId:p.person,agentId:null});
 });
+it('re-proves a both chat\'s citations with their owners, and an agent chat\'s context names the person',async()=>{
+  const {currentConversationReferences}=await import('./conversation-context.js');
+  const p=await people();
+  const both=await conversationMemory(t.db as never,p.person,{perspective:'both',agentProfileId:p.agent});
+  const read=await readPerspectiveContext(t.db as never,both,'small first moves');
+  const again=await currentConversationReferences(t.db as never,both,read.inspirations.map(({kind,id,hash})=>({kind,id,hash})));
+  expect(again.map(row=>row?.owner)).toEqual(['person','agent']);
+  const agentOnly=await readPerspectiveContext(t.db as never,await conversationMemory(t.db as never,p.person,{perspective:'agent',agentProfileId:p.agent}),'small first moves');
+  expect(agentOnly.profileId).toBe(p.person);
+});

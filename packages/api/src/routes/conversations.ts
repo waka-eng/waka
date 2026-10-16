@@ -6,7 +6,7 @@ import {getDb} from '../lib/db.js';
 import {requireAuth,humanSessionsOnly,type AuthEnv} from '../lib/middleware.js';
 import {resolveTargetProfile} from './inspirations-tenancy.js';
 import {profileQuerySchema} from './inspirations-validation.js';
-import {CONVERSATION_LIMITS,accountAgent,conversationCapabilities,conversationMemory,conversationRepliesEnabled,currentConversationReferences,memoryProfiles,readPerspectiveContext,type ConversationSource} from '../lib/conversation-context.js';
+import {CONVERSATION_LIMITS,accountAgent,conversationCapabilities,conversationMemory,conversationRepliesEnabled,currentConversationReferences,readPerspectiveContext,type ConversationSource} from '../lib/conversation-context.js';
 import {conversationSearchQuery} from '../lib/conversation-material.js';
 import {CONVERSATION_STARTERS,conversationPreview} from '../lib/conversation-preview.js';
 import {ConversationReplyError,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
@@ -65,7 +65,10 @@ async function readConversation(db:Reader,profileId:string,id:string,window?:Mes
   const topic=window?await db.select({role:conversationMessages.role,content:conversationMessages.content}).from(conversationMessages)
     .where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id),eq(conversationMessages.role,'user')))
     .orderBy(sql`CASE WHEN trim(${conversationMessages.content}) IN (${sql.join(CONVERSATION_STARTERS.map(value=>sql`${value}`),sql`, `)}) THEN 1 ELSE 0 END`,asc(conversationMessages.position)).limit(1):messages;
-  return {...row,preview:conversationPreview(topic),...(window?{messageWindowStart:start}:{}),initialPrinciple:initialPrinciple??null,initialInspiration:initialInspiration??null,messages:(await projectConversationMessages(db,profileId,id,messages)).map(message=>({...message,savedInspirationIds:saved.filter(item=>item.messageId===message.id).map(item=>item.inspirationId)}))};
+  /* Whose memory it reads, worked out once and handed to the projection, and
+     reported as it is now: an agent since removed reads as 'mine'. */
+  const memory=await conversationMemory(db,profileId,row);
+  return {...row,perspective:memory.perspective,agentProfileId:memory.agentId,preview:conversationPreview(topic),...(window?{messageWindowStart:start}:{}),initialPrinciple:initialPrinciple??null,initialInspiration:initialInspiration??null,messages:(await projectConversationMessages(db,profileId,id,messages,memory)).map(message=>({...message,savedInspirationIds:saved.filter(item=>item.messageId===message.id).map(item=>item.inspirationId)}))};
 }
 /**
  * The keep a conversation is being pointed at must exist AND be this
@@ -117,6 +120,11 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       await tx.select({id:profiles.id}).from(profiles).where(eq(profiles.id,profileId)).for('update');
       const [existing]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,input.data.id)));
       if(existing){
+        /* A retry is the same create only if it asks for the same memory:
+           joining an agent chat from a create that asked for your own (or
+           the other way round) would quietly discard what the caller chose. */
+        if(existing.perspective!==(input.data.perspective??'mine')||(existing.agentProfileId??null)!==(input.data.agentId??null))
+          throw new ConversationError('This conversation already began with a different memory.',409);
         const current=await readConversation(tx,profileId,input.data.id);
         if(input.data.firstMessage){
           const first=current.messages[0];
@@ -154,6 +162,10 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
          account, or nothing: a stranger's profile or a person's is refused
          rather than quietly read as yours. */
       const perspective=input.data.perspective??'mine';
+      /* A pin is one of the person's own keeps; a chat on the agent's memory
+         alone never reads the person's, so a pin there would be shown and
+         never seen by the reply. */
+      if(perspective==='agent'&&(input.data.principleId||input.data.inspirationId))throw new ConversationError('A chat with your agent alone cannot start from your own keep.',400);
       let agentProfileId:string|null=null;
       if(perspective!=='mine'){
         if(!input.data.agentId)throw new ConversationError('Choose which agent to talk with.',400);
@@ -229,6 +241,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       await tx.select({id:conversations.id}).from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id.data))).for('update');
       const current=await readConversation(tx,profileId,id.data);
       if(current.initialInspirationId===input.data.inspirationId)return windowedConversation(current,window);
+      if(input.data.inspirationId&&current.perspective==='agent')throw new ConversationError('A chat with your agent alone cannot point at your own keep.',400);
       if(input.data.inspirationId)await requireOwnedInspiration(tx,profileId,input.data.inspirationId);
       await tx.update(conversations).set({initialInspirationId:input.data.inspirationId,updatedAt:new Date()})
         .where(and(eq(conversations.profileId,profileId),eq(conversations.id,id.data)));
@@ -243,7 +256,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       .where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,row.id),eq(conversationReplyRequests.userMessageId,lastUser.id)))
       .orderBy(desc(conversationReplyRequests.createdAt),desc(conversationReplyRequests.id)).limit(1):[];
     if(request?.sources){
-      const memory=memoryProfiles(await conversationMemory(tx,profileId,row));
+      const memory=await conversationMemory(tx,profileId,row);
       const sources=(await currentConversationReferences(tx,memory,request.sources)).filter((source):source is ConversationSource=>source!==null);
       const bound=(kind:ConversationSource['kind'],remaining:number)=>sources.filter(source=>source.kind===kind).flatMap(source=>{
         if(remaining<=0)return [];const text=source.text.slice(0,remaining);remaining-=text.length;

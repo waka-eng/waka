@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {and,asc,desc,eq,gte,inArray,sql} from 'drizzle-orm';
 import {backgroundJobs,conversationMessages,conversationReplyRequests,conversations,generationRevisions,inspirationEmbeddings,profiles,type BackgroundJob,type ConversationReference} from '../db/index.js';
 import type {getDb} from './db.js';
-import {CONVERSATION_LIMITS,conversationHash,conversationMemory,conversationRepliesEnabled,currentConversationReferences,currentConversationReferenceGroups,memoryProfiles,readPerspectiveContext,conversationPromptSources} from './conversation-context.js';
+import {CONVERSATION_LIMITS,conversationHash,conversationMemory,conversationRepliesEnabled,currentConversationReferences,currentConversationReferenceGroups,memoryProfiles,readPerspectiveContext,conversationPromptSources,type ConversationMemory} from './conversation-context.js';
 import {getDefaultModelProvider,type ConversationReplyInput} from './model-provider.js';
 import {parseConversationReply} from '../queue/gemini.js';
 import {conversationSearchQuery} from './conversation-material.js';
@@ -20,11 +20,11 @@ async function owned(db:Reader,profileId:string,id:string){
   const [row]=await db.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
   if(!row)throw new ConversationReplyError(404,'Conversation not found.');if(row.deletedAt)throw new ConversationReplyError(410,'This conversation was deleted.');return row;
 }
-/** The profiles a chat's citations may come from — its own, its agent's, or both. */
+/** Whose memory a chat's citations may come from — its own, its agent's, or both. */
 async function memoryOf(db:Reader,profileId:string,id:string){
   const [row]=await db.select({perspective:conversations.perspective,agentProfileId:conversations.agentProfileId}).from(conversations)
     .where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
-  return memoryProfiles(await conversationMemory(db,profileId,row??{}));
+  return conversationMemory(db,profileId,row??{});
 }
 async function lockConversation(tx:Tx,profileId:string,id:string){
   await tx.select({id:conversations.id}).from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id))).for('update');
@@ -46,7 +46,7 @@ async function effectiveStatus(db:Reader,row:Request){
   const [job]=row.jobId?await db.select().from(backgroundJobs).where(and(eq(backgroundJobs.profileId,row.profileId),eq(backgroundJobs.id,row.jobId))):[];
   return statusWithJob(row.status,job);
 }
-export async function projectConversationMessages(db:Reader,profileId:string,id:string,messages:Array<typeof conversationMessages.$inferSelect>,memory?:string[]){
+export async function projectConversationMessages(db:Reader,profileId:string,id:string,messages:Array<typeof conversationMessages.$inferSelect>,memory?:ConversationMemory){
   const requests=await requestsFor(db,profileId,id);
   const byMessage=new Map<string,Request>();
   for(const request of requests)if(request.status==='ready'&&request.assistantMessageId&&!byMessage.has(request.assistantMessageId))byMessage.set(request.assistantMessageId,request);
@@ -66,7 +66,7 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
   const anchor=messages.find(row=>row.id===userMessageId&&row.role==='user');
   if(!anchor||anchor.position!==conversation.revision)return null;
   const memory=await conversationMemory(db,profileId,conversation);
-  const projected=await projectConversationMessages(db,profileId,id,messages.slice(-8),memoryProfiles(memory));
+  const projected=await projectConversationMessages(db,profileId,id,messages.slice(-8),memory);
   const history:ConversationReplyInput['history']=[];let characters=0,contextChanged=messages.length>8||projected.some(row=>row.memoryChanged);
   // Keep complete messages: truncating a human sentence can drop its negation
   // or correction. Missing earlier context is disclosed to the provider.
@@ -102,7 +102,7 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     sources.findIndex(source=>source.kind==='inspiration'&&source.id===conversation.initialInspirationId),
   ].find(index=>index>=0)??-1;
   const input:ConversationReplyInput={...(memory.perspective!=='mine'?{perspective:memory.perspective}:{}),preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
-  return {input,sources,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
+  return {input,sources,memory,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }
 async function replyState(db:Reader,profileId:string,id:string){
   const now=new Date(),boundary=new Date(now.getTime()-HOUR);
@@ -197,7 +197,8 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
       WHERE p.account_id=${owner.accountId}::uuid AND r.dispatched_at>=now()-interval '1 hour'`);
     if(usage.count>=CONVERSATION_LIMITS.modelCalls)return refuse('failed','budget');
     const [indexed]=conversationUsesSavedSources(next.input.history)&&embeddingClient?.model===GEMINI_EMBEDDING_MODEL&&usage.count+2<=CONVERSATION_LIMITS.modelCalls
-      ?await tx.select({id:inspirationEmbeddings.id}).from(inspirationEmbeddings).where(and(eq(inspirationEmbeddings.profileId,job.profileId),eq(inspirationEmbeddings.inputScope,'personal'),eq(inspirationEmbeddings.model,GEMINI_EMBEDDING_MODEL),eq(inspirationEmbeddings.dimensions,GEMINI_EMBEDDING_DIMENSIONS))).limit(1):[];
+      /* Indexed where the chat actually reads: the agent's memory for an agent chat. */
+      ?await tx.select({id:inspirationEmbeddings.id}).from(inspirationEmbeddings).where(and(inArray(inspirationEmbeddings.profileId,memoryProfiles(next.memory)),eq(inspirationEmbeddings.inputScope,'personal'),eq(inspirationEmbeddings.model,GEMINI_EMBEDDING_MODEL),eq(inspirationEmbeddings.dimensions,GEMINI_EMBEDDING_DIMENSIONS))).limit(1):[];
     const semantic=Boolean(indexed);
     await tx.update(conversationReplyRequests).set({status:'running',dispatchedAt:sql`clock_timestamp()`,retrievalDispatchedAt:semantic?sql`clock_timestamp()`:null,failureCode:null}).where(eq(conversationReplyRequests.id,requestId));
     return {...next,userMessageId:request.userMessageId!,semantic};

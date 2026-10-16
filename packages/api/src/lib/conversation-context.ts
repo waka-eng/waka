@@ -98,20 +98,34 @@ async function readConversationReferenceSources(db:Reader,profileId:string,refer
 }
 const matchesReference=(source:ConversationSource,reference:ConversationReference)=>source.kind===reference.kind&&source.id===reference.id&&
   (source.hash===reference.hash||source.kind==='top_of_mind_entry'&&source.legacyHash===reference.hash);
+/** Whose sources a read may find: one profile (a chat about the person's own
+ * memory, or a caller with no chat), or a chat's memory. */
+export type ConversationScope=string|ConversationMemory;
 /** A chat that reads two memories re-proves its citations against both: ids
- * are unique across profiles, so a source is found in whichever one holds it. */
-async function referenceSourcesIn(db:Reader,profileIds:string|string[],references:ConversationReference[]):Promise<ConversationSource[]>{
+ * are unique across profiles, so a source is found in whichever one holds it,
+ * and each comes back tagged with whose it is — the same `owner` the reply's
+ * own sources carried, so a re-proven 'both' context keeps its labels. */
+async function referenceSourcesIn(db:Reader,scope:ConversationScope,references:ConversationReference[]):Promise<ConversationSource[]>{
   const out:ConversationSource[]=[];
-  for(const profileId of Array.isArray(profileIds)?profileIds:[profileIds])out.push(...await readConversationReferenceSources(db,profileId,references));
+  for(const {profileId,owner} of scopeProfiles(scope)){
+    const rows=await readConversationReferenceSources(db,profileId,references);
+    out.push(...(owner?rows.map(row=>({...row,owner})):rows));
+  }
   return out;
 }
-export async function currentConversationReferences(db:Reader,profileId:string|string[],references:ConversationReference[]):Promise<Array<ConversationSource|null>>{
-  const available=await referenceSourcesIn(db,profileId,references);
+function scopeProfiles(scope:ConversationScope):Array<{profileId:string;owner?:'person'|'agent'}>{
+  if(typeof scope==='string')return [{profileId:scope}];
+  if(scope.perspective==='mine'||!scope.agentId)return [{profileId:scope.personId}];
+  if(scope.perspective==='agent')return [{profileId:scope.agentId,owner:'agent'}];
+  return [{profileId:scope.personId,owner:'person'},{profileId:scope.agentId,owner:'agent'}];
+}
+export async function currentConversationReferences(db:Reader,scope:ConversationScope,references:ConversationReference[]):Promise<Array<ConversationSource|null>>{
+  const available=await referenceSourcesIn(db,scope,references);
   return references.map(reference=>available.find(source=>matchesReference(source,reference))??null);
 }
 /** Per-read batching, never a cross-request source cache. Three identities per
  * chunk fit every existing excerpt allowance, even with full-length sources. */
-export async function currentConversationReferenceGroups(db:Reader,profileId:string|string[],groups:ConversationReference[][]):Promise<Array<Array<ConversationSource|null>>>{
+export async function currentConversationReferenceGroups(db:Reader,scope:ConversationScope,groups:ConversationReference[][]):Promise<Array<Array<ConversationSource|null>>>{
   if(groups.length>CONVERSATION_LIMITS.messages||groups.some(group=>group.length>3))throw new Error('Conversation reference bounds');
   const key=(source:{kind:string;id:string})=>`${source.kind}:${source.id}`;
   const identities=new Map<string,ConversationReference>();
@@ -122,7 +136,7 @@ export async function currentConversationReferenceGroups(db:Reader,profileId:str
   }
   const selected=[...identities.values()],available=new Map<string,ConversationSource[]>();
   for(let offset=0;offset<selected.length;offset+=3){
-    for(const source of await referenceSourcesIn(db,profileId,selected.slice(offset,offset+3))){
+    for(const source of await referenceSourcesIn(db,scope,selected.slice(offset,offset+3))){
       const rows=available.get(key(source))??[];rows.push(source);available.set(key(source),rows);
     }
   }
@@ -156,7 +170,7 @@ export async function accountAgent(db:Reader,profileId:string,agentId:string):Pr
 }
 /** Every profile whose sources this chat may cite. */
 export function memoryProfiles(memory:ConversationMemory):string[]{
-  return memory.perspective==='mine'||!memory.agentId?[memory.personId]:memory.perspective==='agent'?[memory.agentId]:[memory.personId,memory.agentId];
+  return scopeProfiles(memory).map(({profileId})=>profileId);
 }
 /* Two memories in one reply, without growing the reply: each kind is
    interleaved — yours, then the agent's, then yours — and held to the same
@@ -176,10 +190,13 @@ export async function readPerspectiveContext(db:Reader,memory:ConversationMemory
   if(memory.perspective==='mine'||!memory.agentId)
     return readConversationContext(db,memory.personId,question,undefined,initialPrincipleId,initialInspirationId,queryVector,onRetrievalTrace);
   const tag=(owner:'person'|'agent',rows:ConversationSource[])=>rows.map(row=>({...row,owner}));
-  /* The pins belong to the person's own memory; the agent's is read plain. */
+  /* The pins belong to the person's own memory; the agent's is read plain.
+     A chat on the agent's memory alone carries no pins at all — the routes
+     refuse them — so nothing pinned can be shown that the model never saw. */
   const agent=await readConversationContext(db,memory.agentId,question,undefined,null,null,queryVector,memory.perspective==='agent'?onRetrievalTrace:undefined);
   if(memory.perspective==='agent')
-    return {...agent,principles:tag('agent',agent.principles),reading:tag('agent',agent.reading),inspirations:tag('agent',agent.inspirations)};
+    /* The context is still the person's chat's: `profileId` names them, not the agent. */
+    return {...agent,profileId:memory.personId,principles:tag('agent',agent.principles),reading:tag('agent',agent.reading),inspirations:tag('agent',agent.inspirations)};
   const mine=await readConversationContext(db,memory.personId,question,undefined,initialPrincipleId,initialInspirationId,queryVector,onRetrievalTrace);
   return {...mine,
     principles:interleave('principle',tag('person',mine.principles),tag('agent',agent.principles)),
