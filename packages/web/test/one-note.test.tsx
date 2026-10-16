@@ -73,8 +73,19 @@ const ROW = {
   preview: "dusk on the hill",
   capturedMs: Date.UTC(2026, 9, 8, 19, 30),
   category: null,
-  attachments: [],
+  attachments: [] as Array<{ id: string; type: "link"; label: string; url: string }>,
 };
+
+/** The link card's one read: counted, and answered when the test says. */
+const details = vi.hoisted(() => {
+  const state = { calls: 0, finish: (_value: unknown) => {}, fail: (_error: unknown) => {} };
+  return Object.assign(state, {
+    read: (..._args: unknown[]) => {
+      state.calls += 1;
+      return new Promise((done, failed) => { state.finish = done; state.fail = failed; });
+    },
+  });
+});
 
 /* THE WRITE, AND ONLY THE WRITE. `lib/api` is spread through rather than
    replaced because this page also reaches it for presign, upload, finalize
@@ -85,6 +96,9 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
   return {
     ...actual,
+    /* HTTP only, for the link card's details; the card itself runs. Held
+       open until the test lets it go, so the loading frame is observable. */
+    fetchAttachmentDetails: (...args: unknown[]) => details.read(...args),
     updateInspiration: async (id: string, patch: { text?: string }) => {
       written.push({ id, text: patch.text ?? "" });
       return undefined as never;
@@ -341,5 +355,107 @@ it("lends the bar a Save that lights only on an unsaved change, and goes out onc
     expect(written).toHaveLength(1);
   } finally {
     slot.remove();
+  }
+});
+
+/* ═══ A SAVED LINK KEEPS ITS LINK ON THE OPENED NOTE (2026-10-16) ═════════
+ *
+ * The row carried the attachment and the page drew only images and words,
+ * so a note about an essay had lost the essay. The link's own card sits
+ * under the words — and only the card. The note's states live in the bar
+ * ("states should show and disappear in the bottom bar only"), so the card
+ * is absent while it loads and says nothing about itself once it has. A
+ * pending analysis is re-read silently, so the card fills in when the title
+ * arrives; a failed read falls back to the bare link, never to nothing. */
+const LINK = "https://example.test/essay";
+const card = () => host.querySelector(".waka-over-one .jar-attachment-preview");
+function detailsOf(pending: boolean) {
+  return {
+    attachment: { id: "link-1", inspirationId: ROW.id, type: "link", url: LINK,
+      name: null, contentType: null, size: null, createdAt: new Date().toISOString(),
+      enrichment: { status: pending ? "pending" : "ready", kind: "page_body", text: "Extracted page text", errorReason: null, updatedAt: null,
+        image: null, link: pending ? null : { title: "An essay on dusk", description: "Light, late", siteName: "Example journal",
+          hostname: "example.test", finalUrl: LINK, previewImageUrl: null } } },
+    previewImageAvailable: false,
+    analysis: { status: pending ? "pending" : "ready", canRetry: true, retryAfter: new Date().toISOString() },
+  };
+}
+function expectNoState(): void {
+  expect(card()!.querySelectorAll("button, [role=status], [role=alert], details")).toHaveLength(0);
+  expect(host.querySelector(".waka-over-one")!.textContent).not.toMatch(/Loading|Reading|Check|Try again|Page text|retry|couldn/i);
+}
+
+it("shows a saved link's card under the words of the opened note, filling in silently", async () => {
+  ROW.attachments = [{ id: "link-1", type: "link", label: LINK, url: LINK }];
+  details.calls = 0;
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    await savedNote();
+    expect(details.calls).toBe(1);
+    expect(card(), "a loading card drew on the note page").toBeNull();
+    expect(host.textContent).not.toContain("Loading preview");
+
+    /* Pending: the bare link, no word about the wait. */
+    await act(async () => details.finish(detailsOf(true)));
+    expect(card(), "the opened note lost its link").not.toBeNull();
+    expect(card()!.querySelector("a")?.href).toBe(LINK);
+    expect(card()!.textContent).not.toContain("An essay on dusk");
+    expectNoState();
+    expect(host.querySelector(".waka-note-page")!.compareDocumentPosition(card()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    /* A second read, and the card fills in. */
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    expect(details.calls).toBe(2);
+    await act(async () => details.finish(detailsOf(false)));
+    expect(card()!.textContent).toContain("An essay on dusk");
+    expect(card()!.textContent).toContain("Light, late");
+    expectNoState();
+  } finally {
+    vi.useRealTimers();
+    ROW.attachments = [];
+  }
+});
+
+it("resumes the silent re-read when a hidden tab comes back", async () => {
+  ROW.attachments = [{ id: "link-1", type: "link", label: LINK, url: LINK }];
+  details.calls = 0;
+  let hidden = false;
+  const hiddenSpy = vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    await savedNote();
+    await act(async () => details.finish(detailsOf(true)));
+    hidden = true;
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    expect(details.calls, "read while the tab was hidden").toBe(1);
+    await act(async () => { vi.advanceTimersByTime(30_000); });
+    expect(details.calls).toBe(1);
+
+    hidden = false;
+    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+    expect(details.calls, "the re-read never resumed").toBe(2);
+    await act(async () => details.finish(detailsOf(false)));
+    expect(card()!.textContent).toContain("An essay on dusk");
+    expectNoState();
+  } finally {
+    vi.useRealTimers();
+    hiddenSpy.mockRestore();
+    ROW.attachments = [];
+  }
+});
+
+it("keeps the bare link on the note when its details cannot be read", async () => {
+  ROW.attachments = [{ id: "link-1", type: "link", label: LINK, url: LINK }];
+  try {
+    await savedNote();
+    expect(card()).toBeNull();
+    await act(async () => details.fail(new Error("private provider text")));
+    expect(card(), "a failed read took the link off the note").not.toBeNull();
+    expect(card()!.querySelector("a")?.href).toBe(LINK);
+    expect(card()!.textContent).toContain("example.test");
+    expect(host.textContent).not.toContain("private provider text");
+    expectNoState();
+  } finally {
+    ROW.attachments = [];
   }
 });

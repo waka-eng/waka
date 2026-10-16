@@ -43,6 +43,7 @@ import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
+import { AttachmentPreview } from "./AttachmentPreview";
 import { NoteTools } from "./NoteTools";
 import {
   attachmentPreviewImageUrl,
@@ -1283,6 +1284,16 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                 aria-label={say("worldCaptureInspiration")}
                 onChange={(event) => { setDraft(event.target.value); setSaveFailed(false); }}
               />
+
+              {/* WHAT YOU KEPT IT FROM. A saved link reached this page as a
+                  note with the link nowhere on it — the row carried the
+                  attachment and the page drew only images and words, so a
+                  note about an essay had lost the essay (screenshot check,
+                  2026-10-16). The link's own card, the one the field panel
+                  already shows, sits under the words it prompted. */}
+              {open.attachments.filter((item) => item.type === "link").map((item) => (
+                <AttachmentPreview key={item.id} item={item} locale={locale} quiet />
+              ))}
 
               {/* ═══ AND ITS STATE GOES TO THE BAR WITH EVERYTHING ELSE'S ══
                   Founder: "states should show and disappear in the bottom
