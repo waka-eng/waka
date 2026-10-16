@@ -222,6 +222,8 @@ describe("the keeper's standing key", () => {
       ["GET", "/api/weather"],
       ["GET", "/api/experiences"],
       ["GET", "/api/graph"],
+      /* The basket (2026-10-15): the key proposes; it never decides. */
+      ["POST", "/api/harvest"],
     ];
     for (const [method, path] of passes) {
       expect(keeperKeyMayPass(method, path), `${method} ${path} is the key's work`).toBe(true);
@@ -246,6 +248,11 @@ describe("the keeper's standing key", () => {
       ["DELETE", "/api/auth/me"],
       ["POST", "/api/inspirationsevil"],
       ["GET", "/api/inspirationsevil"],
+      /* Reading the basket and deciding on it are the person's, at a browser. */
+      ["GET", "/api/harvest"],
+      ["POST", "/api/harvest/00000000-0000-0000-0000-000000000000/keep"],
+      ["POST", "/api/harvest/00000000-0000-0000-0000-000000000000/decline"],
+      ["POST", "/api/harvestevil"],
     ];
     for (const [method, path] of refused) {
       expect(keeperKeyMayPass(method, path), `${method} ${path} is beyond the key`).toBe(false);

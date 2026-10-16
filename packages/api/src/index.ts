@@ -53,6 +53,7 @@ import { sessionsRoutes } from "./routes/sessions.js";
 import { publicProfileRoutes } from "./routes/public-profiles.js";
 import { signalsRoutes } from "./routes/signals.js";
 import { createClaimsRoutes } from "./routes/claims.js";
+import { createHarvestRoutes } from "./routes/harvest.js";
 import { createInspirationDaysRoutes } from "./routes/inspiration-days.js";
 import { topOfMindRoutes } from "./routes/top-of-mind.js";
 
@@ -137,6 +138,9 @@ app.route("/api/recall", createRecallRoutes());
 app.route("/api/signal-duplicates", createSignalDuplicatesRoutes());
 // The unanswered half of layer 2, at an address of its own — see routes/claims.ts.
 app.route("/api/claims", createClaimsRoutes());
+// The basket: the person's own sentences, picked from their work, waiting
+// to be kept or let go — see routes/harvest.ts and db/schema-harvest.ts.
+app.route("/api/harvest", createHarvestRoutes());
 // How much was kept on each day — the calendar's one fact.
 app.route("/api/inspiration-days", createInspirationDaysRoutes());
 

@@ -71,7 +71,11 @@ async function resolveSessionFromToken(token: string): Promise<AuthenticatedSess
  * convention. Exported pure, so the list is a unit test away.
  */
 export function keeperKeyMayPass(method: string, path: string): boolean {
-  if (method === "POST") return path === "/api/inspirations";
+  /* `/api/harvest` is the keeper key's other way in (2026-10-15): the
+     person's own collector proposes sentences there for the person to
+     decide on at a browser. Proposing only — the decision routes under it
+     are `humanSessionsOnly`, which refuses this key. */
+  if (method === "POST") return path === "/api/inspirations" || path === "/api/harvest";
   if (method !== "GET") return false;
   return [
     "/api/inspirations",
@@ -157,7 +161,7 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
  *
  * None of it was reachable, and that is the thinnest kind of safe: the only
  * thing in front of those nine was `keeperKeyMayPass` — ONE positive list,
- * in ONE middleware, naming ten GET prefixes and one POST. A defence whose
+ * in ONE middleware, naming ten GET prefixes and two POSTs. A defence whose
  * whole strength is an allowlist nobody has widened yet is a defence that
  * ends the first time someone widens it, and the widening will look like a
  * one-line product change rather than like granting a config file the power

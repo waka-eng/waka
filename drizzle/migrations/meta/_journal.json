@@ -505,6 +505,20 @@
       "when": 1791781200000,
       "tag": "0071_inspiration_category_converge",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1792089305615,
+      "tag": "0072_harvest_candidates",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1792089365615,
+      "tag": "0073_harvest_own_reason",
+      "breakpoints": true
     }
   ]
 }
