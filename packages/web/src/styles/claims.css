@@ -1596,10 +1596,22 @@
 }
 
 .waka-over--note .waka-note-page,
-.waka-over--note .waka-sheet-picture {
+.waka-over--note .waka-sheet-picture,
+.waka-over--note .jar-attachment-preview {
   width: 100%;
   max-width: 34rem;
   margin-inline: auto;
+}
+
+/* A SAVED LINK'S CARD sits in the words' column, under them — it landed on
+   the screen's left edge with no column of its own (screenshot check,
+   2026-10-16). Quiet, so it reads as where the note came from, not a second
+   note. */
+.waka-over--note .jar-attachment-preview {
+  box-sizing: border-box;
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--waka-r-control);
 }
 
 /* ═══ AND THE WORDS ARE SET THE WAY THE NOTEPAD SETS THEM ════════════════

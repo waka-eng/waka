@@ -73,7 +73,7 @@ const ROW = {
   preview: "dusk on the hill",
   capturedMs: Date.UTC(2026, 9, 8, 19, 30),
   category: null,
-  attachments: [],
+  attachments: [] as Array<{ id: string; type: "link"; label: string; url: string }>,
 };
 
 /* THE WRITE, AND ONLY THE WRITE. `lib/api` is spread through rather than
@@ -85,6 +85,9 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
   return {
     ...actual,
+    /* HTTP only, for the link card's details; the card itself runs. Never
+       resolves, so the card stays at its first frame: the original link. */
+    fetchAttachmentDetails: () => new Promise(() => {}),
     updateInspiration: async (id: string, patch: { text?: string }) => {
       written.push({ id, text: patch.text ?? "" });
       return undefined as never;
@@ -341,5 +344,23 @@ it("lends the bar a Save that lights only on an unsaved change, and goes out onc
     expect(written).toHaveLength(1);
   } finally {
     slot.remove();
+  }
+});
+
+/* ═══ A SAVED LINK KEEPS ITS LINK ON THE OPENED NOTE (2026-10-16) ═════════
+ *
+ * The row carried the attachment and the page drew only images and words,
+ * so a note about an essay had lost the essay. The link's own card sits
+ * under the words, read-only. */
+it("shows a saved link's card under the words of the opened note", async () => {
+  ROW.attachments = [{ id: "link-1", type: "link", label: "https://example.test/essay", url: "https://example.test/essay" }];
+  try {
+    await savedNote();
+    const card = host.querySelector(".waka-over-one .jar-attachment-preview");
+    expect(card, "the opened note lost its link").not.toBeNull();
+    expect(card!.querySelector("a")?.href).toBe("https://example.test/essay");
+    expect(host.querySelector(".waka-note-page")!.compareDocumentPosition(card!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  } finally {
+    ROW.attachments = [];
   }
 });
