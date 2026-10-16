@@ -416,6 +416,34 @@ it("shows a saved link's card under the words of the opened note, filling in sil
   }
 });
 
+it("resumes the silent re-read when a hidden tab comes back", async () => {
+  ROW.attachments = [{ id: "link-1", type: "link", label: LINK, url: LINK }];
+  details.calls = 0;
+  let hidden = false;
+  const hiddenSpy = vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    await savedNote();
+    await act(async () => details.finish(detailsOf(true)));
+    hidden = true;
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    expect(details.calls, "read while the tab was hidden").toBe(1);
+    await act(async () => { vi.advanceTimersByTime(30_000); });
+    expect(details.calls).toBe(1);
+
+    hidden = false;
+    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+    expect(details.calls, "the re-read never resumed").toBe(2);
+    await act(async () => details.finish(detailsOf(false)));
+    expect(card()!.textContent).toContain("An essay on dusk");
+    expectNoState();
+  } finally {
+    vi.useRealTimers();
+    hiddenSpy.mockRestore();
+    ROW.attachments = [];
+  }
+});
+
 it("keeps the bare link on the note when its details cannot be read", async () => {
   ROW.attachments = [{ id: "link-1", type: "link", label: LINK, url: LINK }];
   try {

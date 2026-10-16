@@ -54,19 +54,33 @@ function Preview({ item,locale,readOnly,quiet }: { item: ApiAttachmentSummary;lo
     if (busy) return;
     const controller = new AbortController(); let timer = 0, checks = 0;
     setWaiting(false);
+    /* A HIDDEN TAB PAUSES THE RE-READ. The loud card resumes it with its
+       "Check preview" press; the quiet one has no press, so it resumes the
+       moment the tab is visible again — silently, and still under the cap. */
+    const onVisible = () => {
+      if (document.hidden) return;
+      document.removeEventListener('visibilitychange', onVisible);
+      void read();
+    };
     const read = async () => {
       try {
         const value = await fetchAttachmentDetails(item.id, controller.signal);
         if (controller.signal.aborted) return;
         setData(value); setLoadError(false);
         if (value.analysis.status === 'pending') {
-          if (++checks < 20) timer = window.setTimeout(() => { if (!document.hidden) void read(); else setWaiting(true); }, 3000);
+          if (++checks < 20) timer = window.setTimeout(() => {
+            if (!document.hidden) void read();
+            else if (quiet) document.addEventListener('visibilitychange', onVisible);
+            else setWaiting(true);
+          }, 3000);
           else setWaiting(true);
         }
       } catch { if (!controller.signal.aborted) { setData(null); setLoadError(true); } }
     };
-    void read(); return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [item.id, refresh, busy, quiet]);
+    void read();
+    return () => { controller.abort(); window.clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); };
+    /* `quiet` is fixed for a Preview's life, so it is not a reason to re-read. */
+  }, [item.id, refresh, busy]);
   const retry = async () => {
     const controller = new AbortController(); mutation.current?.abort(); mutation.current = controller;
     setBusy(true); setActionError(false);
