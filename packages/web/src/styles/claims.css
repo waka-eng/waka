@@ -4755,6 +4755,15 @@
   opacity: 0;
   pointer-events: none;
 }
+/* AND IT GOES AT ONCE. Founder, 2026-10-15: "when closing the new inspiration
+   area, a chatbox is shown like for 0.1 sec." The slot's 0.28s opacity fade
+   (home.css, there for the dial's wind-back) ran on close too, while the
+   world came back over 0.2s — so the half-faded box was on screen as the
+   page went. Closing is instant; the dial keeps its fade (`--away`). The
+   doubled class outranks home.css's rule whichever sheet loads last. */
+.jar-mouth-slot.jar-mouth-slot--closed {
+  transition: none;
+}
 
 /* IN THE CORNER NOW, SO IT SITS ON THE BAR'S BASELINE RATHER THAN FLOATING
    UNDER A CHIN. Founder: "switch between me and my agent should go in top
