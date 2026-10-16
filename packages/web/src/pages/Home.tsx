@@ -2772,13 +2772,20 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      fetch finished after the camera settled drew its empty wall and said "I
      haven't formed anything yet" over a reading the server had already
      returned (screenshot check, 2026-10-16).
-     ONLY A FIRST LOAD, AND ONLY ON ITS OWN WALL. Its wall is empty, so there
-     is nothing on it to shear, and only that agent's bundle lands. A REFRESH
-     — an agent already in `agents` — still lands only at arrival, as it
-     always has: replacing a standing wall's ground is the rebuild the pending
-     map exists to hold back. A gated, polled at-rest version of this was
-     tried and caused more than it fixed (final review, 2026-10-16). */
+     ONLY A FIRST LOAD, ONLY ON ITS OWN WALL, AND ONLY AT REST. Any
+     `setAgents` rebuilds the whole simulation (the pour depends on
+     `agents`), so landing is safe only while nothing moves — and
+     `atWallRef` cannot say that: it updates on ARRIVAL, so it still names
+     this agent once you are crossing away or aiming up. The loop's own
+     `navigationState()` can; while it is moving, or before there is a loop,
+     the bundle stays pending and lands at the next arrival, exactly as on
+     dev. Only that agent's bundle lands. A REFRESH — an agent already in
+     `agents` — still lands only at arrival, as it always has. A polled
+     at-rest version of this was tried and caused more than it fixed (final
+     review, 2026-10-16). */
   const landFirstLoadIfStandingOn = useCallback((agentId: string) => {
+    const sim = simApiRef.current;
+    if (!sim || sim.navigationState().moving) return;
     const w = atWallRef.current;
     if (w.kind !== "agent" || w.id !== agentId) return;
     const fresh = pendingAgentBundlesRef.current.get(agentId);
