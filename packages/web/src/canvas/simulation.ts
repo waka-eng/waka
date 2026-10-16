@@ -481,6 +481,18 @@ const THINK_EYE_X = 1.5;
 const THINK_EYE_Y = -1.9;
 const THINK_BLINK = 1.6;
 const THINK_SQUINT = 0.74;
+/* The ease the glasses come on with: `thinkNow` covers ~96% of the way in
+   0.6s. The glow the wind-up releases when they go on — gentler than a save
+   (0.95) or an answer (0.72): settling in, not celebrating. How far above
+   the face the lenses start, as a share of the body's height. */
+const THINK_EASE = 0.004;
+const THINK_FLARE = 0.45;
+const GLASS_DROP = 0.5;
+/** easeOutBack: arrives with a small overshoot and settles — glasses landing. */
+const landing = (t: number): number => {
+  const c1 = 1.70158, c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+};
 const MOOD_GLANCE = 0.45;
 /**
  * HOW LONG THE COMPANION TAKES TO BECOME THE ONE WHOSE WALL THIS IS.
@@ -1845,6 +1857,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       mood: 0,
       /** reviewing with you: glasses on, eyes up and aside, slower blink — see `think` */
       thinking: false,
+      /** 0 → 1, how far the glasses and the thinking face have come on (eased) */
+      thinkNow: 0,
     };
     /* AND SO DOES THE CREATURE. Every field above is a number, a boolean or a
        string — no canvas, no node, nothing bound to the palette this run baked
@@ -4323,8 +4337,13 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            go UNDER them. A lens sits where its eye RESTS, not where it looks:
            glasses stay on the face while the eyes move behind them. */
         const lenses: Array<{ x: number; rx: number; ry: number; alpha: number; ca: number }> = [];
-        const lensY = -bh * 0.06 + Math.sin(lat) * bh * FACE_R;
-        if (companion.thinking) {
+        /* `think` is how far on they are; the lenses come DOWN onto the face
+           along `landing` (a small overshoot past the eyes, then settled) and
+           go back UP the same way, fading in as they arrive. */
+        const think = companion.thinkNow;
+        const lensY = -bh * 0.06 + Math.sin(lat) * bh * FACE_R - (1 - landing(think)) * bh * GLASS_DROP;
+        const lensFade = clamp01(think * 1.6);
+        if (think > 0.01) {
           for (const lon of [-EYE_LON, EYE_LON]) {
             const a = companion.yaw + lon;
             const ca = Math.cos(a);
@@ -4333,7 +4352,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
               x: Math.sin(a) * bw * FACE_R * cosLat,
               rx: companion.size * GLASS_R * Math.max(ca * cosLat, 0.2),
               ry: companion.size * GLASS_R * Math.max(cosLat, 0.35),
-              alpha: clamp01(ca / Math.sin(0.25)),
+              alpha: clamp01(ca / Math.sin(0.25)) * lensFade,
               ca,
             });
           }
@@ -4354,7 +4373,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           const ca = Math.cos(a);
           if (ca <= 0) continue;
           /* at the edge a blink is a flicker, so it is suppressed there */
-          const eh = (ca < 0.3 ? 1 : Math.max(0.12, 1 - companion.blink)) * (companion.thinking ? THINK_SQUINT : 1);
+          const eh = (ca < 0.3 ? 1 : Math.max(0.12, 1 - companion.blink)) * lerp(1, THINK_SQUINT, companion.thinkNow);
           ctx!.globalAlpha = clamp01(ca / Math.sin(0.25));
           const ex = Math.sin(a) * bw * FACE_R * cosLat + companion.eyeX * ca;
           if (formMachine) {
@@ -4395,7 +4414,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             continue;
           }
           /* behind a lens the eye reads a touch larger, as through glass */
-          const mag = companion.thinking ? GLASS_MAGNIFY : 1;
+          const mag = lerp(1, GLASS_MAGNIFY, companion.thinkNow);
           ctx!.beginPath();
           ctx!.ellipse(
             ex,
@@ -4747,6 +4766,18 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       /* the companion. Its glow eases toward the real signal; its flare
          decays; it blinks; and when it is genuinely inspired, motes rise. */
       companion.inspNow = view.reduced ? companion.insp : lerp(companion.inspNow, companion.insp, 1 - Math.pow(0.02, dt));
+      /* THE GLASSES GO ON OVER ABOUT 0.6s, and the face goes into thought
+         with them — the squint and the lens's magnification ride the same
+         value, so nothing about the expression snaps. Under reduced motion
+         they are simply on or off. */
+      {
+        const goal = companion.thinking ? 1 : 0;
+        if (view.reduced || Math.abs(goal - companion.thinkNow) < 0.002) companion.thinkNow = goal;
+        else {
+          companion.thinkNow = lerp(companion.thinkNow, goal, 1 - Math.pow(THINK_EASE, dt));
+          easing = true;
+        }
+      }
       /* THE GATHER, AND THE RELEASE AT THE END OF IT. The compression eases IN
          (u·u) so the body sinks rather than snapping down, and the flare it is
          holding fires at the bottom — the fast half of a slow-in, fast-out.
@@ -5715,6 +5746,17 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            something — and back to you when it is done. */
         companion.eyeTX = on ? THINK_EYE_X : 0;
         companion.eyeTY = on ? THINK_EYE_Y : 0;
+        /* IT SETTLES IN TO READ. Founder, 2026-10-15: "transition from
+           regular mode to review mode should use motion more (esp the agent
+           wearing glasses and changing expression)." Going in, the body
+           gathers (the same wind-up the big moments use) and a soft glow
+           answers at the bottom of it, while `thinkNow` carries the glasses
+           down onto the face and the face into thought — see the update
+           step. Coming out needs no gather: the glasses simply lift off. */
+        if (on && !view.reduced) {
+          companion.antAt = performance.now();
+          companion.antFlare = THINK_FLARE;
+        }
         wake();
       },
       acknowledge: (moment: Moment = "touch") => {
