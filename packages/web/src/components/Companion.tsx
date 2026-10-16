@@ -34,37 +34,23 @@
  */
 import { useEffect, useRef } from "react";
 
-import { OWNER_BEING } from "../character/body";
-import { REST_BLEED, restPose } from "../character/raster";
+import { OWNER_BEING, type Being } from "../character/body";
+import { REST_BLEED, coolRamp, restPose } from "../character/raster";
 import { renderScale } from "../canvas/scale";
-import { parseColor } from "../canvas/sprites";
-import type { Ramp } from "../lib/appearance";
+import { MACHINE_CELLS, pixelate, rampFromCss, rasterGrain } from "../canvas/palette";
 
-/**
- * The ramp the drawing needs, read off the root exactly the way
- * `buildPalette` reads it — so a page's creature is lit by the stylesheet
- * rather than by a copy of its values kept here, and the warm/cold decision
- * stays in one place. The fallbacks match `home.css`; a cold one would draw
- * a cold companion, which is the failure the palette note in
- * `canvas/palette.ts` warns about.
- */
-function rampFromCss(root: HTMLElement): Ramp {
-  const cs = getComputedStyle(root);
-  const v = (name: string, fallback: string) =>
-    parseColor(cs.getPropertyValue(name).trim() || fallback);
-  return {
-    live: v("--jar-live", "#fff2dc"),
-    liveEdge: v("--jar-live-edge", "#f7ead4"),
-    liveBloom: v("--jar-live-bloom", "#ffedd0"),
-    fade: v("--jar-fade", "#b9c4d1"),
-    dorm: v("--jar-dorm", "#28323f"),
-    dust: v("--jar-dust", "#cdd8e6"),
-    bodyLit: v("--jar-body-lit", "#f7f1e4"),
-    bodyShade: v("--jar-body-shade", "#a49b8c"),
-  };
-}
-
-export function Companion({ size = 72 }: { size?: number }): JSX.Element {
+export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel = false, label = "WAKA" }: {
+  size?: number;
+  /** Whose body. Your own by default; an agent's is `agentBeing(agentId)`. */
+  being?: Being;
+  /** An agent is the same creature in colder light (`coolRamp`). */
+  cool?: boolean;
+  /** And at a coarser resolution: the same `MACHINE_CELLS` step the world
+      bakes an agent's body at, so the face beside a line is the face on the
+      agent's wall. Founder, 2026-10-15: "bring the pixelated agent". */
+  pixel?: boolean;
+  label?: string;
+}): JSX.Element {
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -94,8 +80,30 @@ export function Companion({ size = 72 }: { size?: number }): JSX.Element {
        alive in your field — a reading of your material. A page is not a
        reading of anything, so a dim companion there would be saying
        something untrue about you. */
-    restPose(g, size, rampFromCss(document.documentElement), OWNER_BEING, 1, dpr);
-  }, [size]);
+    const ramp = coolRamp(rampFromCss(document.documentElement), cool);
+    /* THE WORLD'S FILM ON THE BODY. Founder, 2026-10-15, of the waiting
+       page's creature beside the home screen's: "use exact same code". The
+       world bakes its creature with this grain; without it a page's creature
+       is the same shape in a smoother, whiter material. */
+    const tile = rasterGrain(ramp.dorm);
+    const grain = tile ? g.createPattern(tile, "repeat") : null;
+    if (!pixel) {
+      restPose(g, size, ramp, being, 1, dpr, grain);
+      return;
+    }
+    /* Drawn whole, then stepped: the world quantises the BODY sprite, so the
+       cells here are counted across the body, not across the padded box. */
+    const sharp = document.createElement("canvas");
+    sharp.width = node.width;
+    sharp.height = node.height;
+    const sg = sharp.getContext("2d");
+    if (!sg) return;
+    sg.scale(dpr, dpr);
+    sg.translate(pad, pad);
+    restPose(sg, size, ramp, being, 1, dpr, grain);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.drawImage(pixelate(sharp, MACHINE_CELLS * (box / size)), 0, 0);
+  }, [size, being, cool, pixel]);
 
   /* The element is the padded box too, so the drawing is not squashed back
      into `size` by CSS — which would reintroduce the crop as a scale. */
@@ -111,7 +119,7 @@ export function Companion({ size = 72 }: { size?: number }): JSX.Element {
            because it is a whole scene. This is one fixed illustration of one
            thing, so it can say what it is in a word, and does. */
         role="img"
-        aria-label="WAKA"
+        aria-label={label}
       />
     </span>
   );

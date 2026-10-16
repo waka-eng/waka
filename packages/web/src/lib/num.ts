@@ -1,7 +1,7 @@
 /**
  * NUMBERS, AND NOTHING THAT KNOWS WHAT THEY ARE FOR.
  *
- * Nine declarations with well over a hundred call sites between them, spread
+ * Nine declarations (a tenth, `easeInOut`, since) with well over a hundred call sites between them, spread
  * across the canvas loop, the companion's motion, the sky and travel. When the
  * split was mapped, every module DISCLAIMED them — each one correctly said
  * "these are not mine, they belong in lib/" — and no module then claimed them.
@@ -31,6 +31,9 @@ export const clamp01 = (v: number) => clamp(v, 0, 1);
  * genuinely move on the same curve rather than on two that look alike.
  */
 export const easeOut = (u: number) => 1 - Math.pow(1 - u, 3);
+
+/** Cubic ease-in-out: slow away, fast through the middle, slow to rest. */
+export const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 /**
  * A RATE, NOT A PER-FRAME STEP.

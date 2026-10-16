@@ -31,6 +31,10 @@ export interface ApiClaimSource {
 }
 
 export type ApiClaim = ApiSignal & {
+  /** Present when this reading was answered yes or partly a season ago and
+      is being asked again — "is this STILL true?". Absent on a first ask and
+      on an older server. */
+  askedAgain?: { lastAnsweredAt: string };
   /** Up to four of the saves behind it. Absent on an older server, and empty
       when every save it stood on has since been deleted. */
   from?: ApiClaimSource[];
@@ -67,6 +71,9 @@ export async function listClaims(
      sentence someone is being asked to rule on. */
   const claims = (body.claims ?? []).map((claim) => ({
     ...claim,
+    askedAgain: claim.askedAgain && typeof claim.askedAgain.lastAnsweredAt === "string" && Number.isFinite(Date.parse(claim.askedAgain.lastAnsweredAt))
+      ? claim.askedAgain
+      : undefined,
     from: Array.isArray(claim.from)
       ? claim.from.filter(
           (row): row is ApiClaimSource =>

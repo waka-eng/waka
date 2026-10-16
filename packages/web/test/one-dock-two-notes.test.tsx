@@ -278,7 +278,10 @@ const KNOWN_DIFFERENCES = [
  * green, which is why it is named here even though this file cannot measure
  * it.
  */
-const ONLY_ON_THE_SAVED_NOTE = ["Delete"];
+/* SHARE JOINED IT (2026-10-15) for the same reason as Delete. Founder: "i
+   also dont see option to share a specfici inspiration." Only a kept thing
+   has anything to show anyone; the notepad must not grow it either. */
+const ONLY_ON_THE_SAVED_NOTE = ["Delete", "Share this inspiration"];
 
 /** Both rows, with the one-sided presses taken out so the rest can be compared. */
 function comparable(row: ReturnType<typeof dockPresses>) {

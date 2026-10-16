@@ -44,7 +44,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DialogSurface } from "./DialogSurface";
+import { PrinciplesGround } from "./PrinciplesGround";
+import { Companion } from "./Companion";
+import { TimelessSky } from "./TimelessSky";
+import { CrossingCompanion, type CreatureSpot } from "./CrossingCompanion";
 import { useFirstVisit } from "../lib/first-visit";
+import { readProfileText, writeProfileText } from "../lib/profile-storage";
 import { fetchPrinciples, type ApiPrinciple } from "../lib/api";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { monthTag, numWords } from "../lib/words";
@@ -98,7 +103,20 @@ function heldSince(row: ApiPrinciple, locale: SupportedLocale): string | null {
   return Number.isNaN(when.getTime()) ? null : monthTag(when.getTime(), locale);
 }
 
-export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onOpen, onShare }: {
+/** Where the page keeps its creature, measured off the element that holds it. */
+function pageCreature(): CreatureSpot | null {
+  const node = document.querySelector<HTMLElement>(".waka-page--timeless [data-crossing-target]");
+  if (!node) return null;
+  const size = Number(node.dataset.crossingTarget) || 0;
+  const canvas = node.querySelector("canvas") ?? node;
+  const box = canvas.getBoundingClientRect();
+  if (!box.width || !size) return null;
+  /* The canvas is the padded box, the same bleed on every side, so its
+     centre is the body's centre. */
+  return { x: box.left + box.width / 2, y: box.top + box.height / 2, size };
+}
+
+export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onOpen, onShare, onChat, crossing = null, onCrossed }: {
   locale: SupportedLocale;
   profileId?: string | null;
   /** Whose name goes on the card. The attribution is half of why a card is
@@ -111,12 +129,56 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
   /** Straight to the artifact. Optional so a surface that cannot share —
       somebody else's principles, read-only — simply does not offer it. */
   onShare?: (id: string) => void;
+  /** A chat about what the creature said on the waiting page. */
+  onChat?: (said: string) => void;
+  /**
+   * THE WALK FROM NOW, OR BACK TO IT — see `CrossingCompanion`. `home` is
+   * where the world's creature stands; "in" walks there and then glides to
+   * the page's creature, "out" glides from the page's creature home and
+   * walks there. Absent when the page was reached from anywhere but Now.
+   */
+  crossing?: { going: "in" | "out"; home: CreatureSpot | null } | null;
+  /** The walk finished; on the way out, the page may go. */
+  onCrossed?: () => void;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   const newHere = useFirstVisit(profileId ? { accountId: "p", profileId } : null, "principles");
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
+  /**
+   * THE FIRST ONE IS MET, ONCE.
+   *
+   * After a wait the page has made a point of, the first principle arriving
+   * as the top row of an ordinary list would spend the whole build-up on
+   * nothing. So the first time this device sees principles on this profile,
+   * the page says so above them and the first card comes up in light. Once:
+   * the flag is written as soon as it has been shown.
+   */
+  const [arriving, setArriving] = useState(false);
+  const arrivalScope = profileId ? { accountId: "p", profileId } : null;
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
+  /* LATCHED. The walk in is decided once, on arrival; the walk out arrives
+     later, as a new prop on a page that is already up. The sky reads the
+     same object for the whole stay, so finishing a walk never restarts it. */
+  const [walk, setWalk] = useState(() => (crossing?.home ? { ...crossing, from: crossing.home } : null));
+  const [walking, setWalking] = useState(walk !== null);
+  useEffect(() => {
+    /* Turned round on the way home: walk back in from where the world's
+       creature stands, as a new walk (review, 2026-10-15). */
+    if (crossing?.going === "in" && walking && walk?.going === "out" && crossing.home) {
+      setWalk({ ...crossing, from: crossing.home });
+      setWalking(true);
+      return;
+    }
+    if (crossing?.going !== "out") return;
+    /* Turned back mid-walk: the creature has not reached the page's spot
+       yet, so it walks home from where the world left it. */
+    const from = walking && walk?.going === "in" ? crossing.home : pageCreature();
+    if (!crossing.home || !from) { onCrossed?.(); return; }
+    setWalk({ ...crossing, from });
+    setWalking(true);
+    /* once, when the walk out is asked for */
+  }, [crossing?.going]);
 
   useEffect(() => {
     mounted.current = true;
@@ -132,6 +194,18 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
       if (!mounted.current) return;
       setRows(held);
       setPhase("ready");
+      if (held.length > 0 && arrivalScope) {
+        let met = "1";
+        try { met = readProfileText(arrivalScope, "principles:met"); } catch { /* treat as met */ }
+        /* "waiting" is written by this page when it opens on an empty
+           ground (the branch below). Only a person who
+           actually waited is greeted; somebody whose principles were there
+           the first time they opened the page has nothing to be met. */
+        if (met === "waiting") setArriving(true);
+        try { writeProfileText(arrivalScope, "principles:met", "1"); } catch { /* once is best-effort */ }
+      } else if (held.length === 0 && arrivalScope) {
+        try { writeProfileText(arrivalScope, "principles:met", "waiting"); } catch { /* best-effort */ }
+      }
     } catch {
       if (!mounted.current) return;
       setPhase("failed");
@@ -143,7 +217,24 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
   }, [load]);
 
   return (
-    <div className="waka-page">
+    <div className={`waka-page waka-page--timeless${walking && walk ? ` waka-page--crossing waka-page--crossing-${walk.going}` : ""}`}>
+      {/* TIME PASSING, ONCE, AS YOU ARRIVE — see `TimelessSky`. While the
+          creature walks, the sky is what moves past it. */}
+      <TimelessSky travel={walk ? { dir: walk.going === "in" ? 1 : -1, going: walk.going } : null} />
+      {walking && walk ? (
+        <CrossingCompanion
+          /* A reversal is a new walk, not the old one continuing. */
+          key={walk.going}
+          from={walk.from}
+          to={walk.going === "in" ? pageCreature : walk.home}
+          dir={walk.going === "in" ? 1 : -1}
+          going={walk.going}
+          onDone={() => {
+            setWalking(false);
+            onCrossed?.();
+          }}
+        />
+      ) : null}
       {/* A PAGE, NOT A DIALOG — `modal={false}`. Founder, on this surface by
           name: "how do we even need the close button for inspiration and
           chat? It's supposed to just be moving around. I mean for principles
@@ -185,14 +276,34 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
             </button>
           </>
         ) : rows.length === 0 ? (
-          <p className="waka-over-status">{say("worldPrinciplesEmpty")}</p>
+          /* THE WAIT IS THE GROUND BEING LAID — see `PrinciplesGround`. */
+          <PrinciplesGround locale={locale} profileId={profileId} onChat={onChat} />
         ) : (
+          <>
+          {/* THE CREATURE THAT WAITED WITH YOU PRESENTS IT. Same body, same
+              bubble as the waiting page, so the arrival reads as the end of
+              that wait rather than as a list that happened to fill. */}
+          {arriving ? (
+            <div className="waka-ground-hero waka-ground-hero--ready waka-held-first-hero" style={{ ["--charge" as string]: 1 }}>
+              <div className="jar-char-bubble-body waka-ground-bubble waka-held-first">
+                <span className="jar-char-bubble-reading" role="status">{say("worldPrinciplesFirst")}</span>
+              </div>
+              <span className="waka-ground-being" data-crossing-target="96" style={{ ["--being" as string]: "98px" }}><Companion size={96} /></span>
+            </div>
+          ) : (
+            /* THE CREATURE COMES WITH YOU, and stays above what it holds.
+               Founder: "the character should be a big part of it" — it is the
+               one who walked here, so the page keeps it in view. */
+            <div className="waka-held-hero">
+              <span className="waka-ground-being" data-crossing-target="88" style={{ ["--being" as string]: "90px" }}><Companion size={88} /></span>
+            </div>
+          )}
           <ul className="waka-held">
-            {rows.map((row) => {
+            {rows.map((row, index) => {
               const since = heldSince(row, locale);
               const from = evidenceCount(row);
               return (
-                <li key={row.id} className="waka-held-card">
+                <li key={row.id} className={`waka-held-card${arriving && index === 0 ? " waka-held-card--arriving" : ""}`}>
                   {/* THE STATEMENT IS THE PRESS, AND SHARING IS ITS OWN.
                       This was one button wrapping the whole card, which was
                       right when the card did one thing. It does two now, and
@@ -263,6 +374,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
               );
             })}
           </ul>
+          </>
         )}
       </DialogSurface>
     </div>

@@ -1669,8 +1669,6 @@ button.jar-tile-face,
 .jar-principle-share button:disabled { opacity:.4; cursor:default; }
 .jar-share-columns { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:var(--sp-24); margin-block:var(--sp-16); }
 .jar-share-controls { min-width:0; }
-.jar-share-options { display:flex; gap:var(--sp-12); }
-.jar-share-options > label { flex:1; min-width:0; }
 .jar-principle-share .jar-share-name { flex-direction:row; align-items:center; min-height:var(--sp-44); }
 .jar-share-name input { width:var(--sp-20); height:var(--sp-20); }
 .jar-share-preview { min-width:0; align-self:start; grid-column:1; grid-row:1; }
@@ -1679,6 +1677,56 @@ button.jar-tile-face,
 .jar-share-controls summary { min-height:var(--sp-44); padding-block:var(--sp-12); box-sizing:border-box; cursor:pointer; font-size:var(--t-lead); }
 .jar-share-preview img { display:block; width:100%; height:auto; border:1px solid var(--w-edge); }
 .jar-principle-share footer { border-top:1px solid var(--w-edge); padding-top:var(--sp-12); }
+/* ═══ THE SHARE SHEET FOR A SAVE OR THE TOP OF MIND ═══════════════════════
+   Founder, 2026-10-15: sharing should feel like "Strava and other products".
+   The card is the sheet: it is the largest thing in it, centred, at the
+   size it will be seen. Below it, the four looks as small cards, then one
+   row with the name switch and the words link, then the action. Narrow
+   enough to read as one object rather than a settings page. */
+.jar-seek.jar-thing-share { box-sizing:border-box; z-index:8; width:min(520px,calc(100vw - var(--sp-24))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-24)); display:flex; flex-direction:column; gap:var(--sp-12); color:var(--w-ink); font-size:var(--t-body); line-height:1.5; text-align:left; user-select:text; touch-action:pan-y; }
+.jar-thing-share header,.jar-thing-share footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; flex-shrink:0; gap:var(--sp-12); }
+.jar-thing-share h2 { font-size:var(--t-lead); font-weight:500; }
+.jar-thing-share button { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); border:1px solid var(--w-edge); border-radius:var(--sp-12); background:none; color:var(--w-ink); font:inherit; cursor:pointer; }
+.jar-thing-share button:disabled { opacity:.4; cursor:default; }
+.jar-thing-share textarea { width:100%; min-width:0; box-sizing:border-box; min-height:var(--sp-44); padding:var(--sp-8); border:1px solid var(--w-edge); border-radius:var(--sp-8); background:var(--jar-panel); color:var(--w-ink); font:inherit; font-size:var(--t-lead); resize:vertical; line-height:1.5; }
+.jar-thing-share label { display:flex; flex-direction:column; gap:var(--sp-6); font-size:var(--t-body); }
+.jar-thing-share footer { border-top:1px solid var(--w-edge); padding-top:var(--sp-12); }
+.jar-share-stage { display:grid; place-items:center; min-height:min(60vw,320px); }
+.jar-share-stage img { display:block; width:100%; max-height:min(58dvh,560px); object-fit:contain; border-radius:var(--sp-8); }
+.jar-share-row { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-12); flex-wrap:wrap; }
+.jar-thing-share .jar-share-name { flex-direction:row; align-items:center; min-height:var(--sp-44); }
+.jar-share-wording { display:flex; flex-direction:column; gap:var(--sp-8); }
+.jar-share-actions { display:flex; gap:var(--sp-8); margin-inline-start:auto; }
+.jar-share-quiet { margin:0; color:var(--w-muted); font-size:var(--t-meta); }
+/* A link, not a button: it opens something optional. */
+.jar-thing-share .jar-share-link { border:0; padding-inline:var(--sp-4); color:var(--w-muted); text-decoration:underline; text-underline-offset:.2em; }
+.jar-share-link:hover,.jar-share-link:focus-visible { color:var(--w-ink); }
+/* THE COMMIT CONTROL IS THE ONE PRIMARY. The claim answers refuse a primary
+   because they are peers; this is not a choice among answers, it is the
+   single act the sheet exists for, so it is the one thing in full ink. */
+.jar-thing-share .jar-share-primary,
+.jar-principle-share .jar-share-primary { background:var(--w-ink); border-color:var(--w-ink); color:var(--moon-ground); font-weight:500; }
+
+/* THE FOUR LOOKS, as small cards at the card's own proportions. */
+.jar-share-looks { display:flex; gap:var(--sp-12); justify-content:center; align-items:flex-end; margin-block:var(--sp-4); }
+.jar-thing-share .jar-share-look,
+.jar-principle-share .jar-share-look { display:grid; place-items:center; min-width:var(--sp-44); min-height:var(--sp-44); padding:var(--sp-4); border:1px solid transparent; border-radius:var(--sp-8); opacity:.55; transition:opacity .2s ease, border-color .2s ease; }
+.jar-share-look:hover,.jar-share-look:focus-visible { opacity:.85; }
+.jar-share-look[aria-pressed="true"] { opacity:1; border-color:var(--w-edge); }
+.jar-share-swatch { display:flex; flex-direction:column; justify-content:center; gap:var(--sp-4); box-sizing:border-box; width:28px; padding:0 var(--sp-6); border-radius:var(--sp-4); border:1px solid var(--w-edge); }
+.jar-share-swatch--square { height:28px; }
+.jar-share-swatch--portrait { height:35px; }
+/* THE PRODUCT'S OWN GROUND AND INK, not the card's exact hexes. A swatch is
+   a reminder of which look, not a colour proof — the preview above it is the
+   proof — and drawing it from tokens adds no literal to a palette the
+   colour ratchet is draining. */
+.jar-share-swatch--dark { background:var(--moon-ground); }
+.jar-share-swatch--light { background:var(--w-ink); }
+.jar-share-swatch-line { display:block; height:2px; border-radius:1px; width:100%; background:currentColor; }
+.jar-share-swatch--dark .jar-share-swatch-line { color:var(--w-ink); }
+.jar-share-swatch--light .jar-share-swatch-line { color:var(--moon-ground); }
+.jar-share-swatch-line--short { width:60%; }
+@media (prefers-reduced-motion: reduce) { .jar-share-look { transition:none; } }
 @media (max-width:680px) { .jar-share-columns { grid-template-columns:minmax(0,1fr); } .jar-share-preview { grid-row:1; } .jar-share-controls { grid-column:1; grid-row:2; } }.jar-review select { box-sizing:border-box; width:100%; min-height:var(--sp-44); font:inherit; font-size:var(--t-lead); color:var(--w-ink); background:var(--w-raised); border:1px solid var(--w-edge); border-radius:var(--sp-12); padding:var(--sp-12); }.jar-reflection-flow .jar-reflection-turn button { min-height: var(--sp-44); }
 .jar-attachment-transcript { margin-top: var(--sp-16); font-size: var(--t-ui); line-height: 1.6; }
 .jar-attachment-transcript header { display: flex; align-items: baseline; gap: var(--sp-12); }

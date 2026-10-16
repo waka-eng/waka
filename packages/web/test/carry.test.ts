@@ -38,7 +38,7 @@ import {
   FIELD_CARRY_ROOTS_SHARE,
 } from "../src/lib/aliveness";
 import type { Evidence, Inspiration, Signal } from "../src/lib/data";
-import { colorBall, tierOf } from "../src/space/inspiration/field";
+import { colorBall } from "../src/space/inspiration/field";
 import { makeBall, seedOf, skyOf } from "../src/space/inspiration/orb";
 
 const NOW = Date.UTC(2026, 7, 24);
@@ -232,9 +232,10 @@ describe("the carry: how much of a person a memory holds up", () => {
        the max clamped everything to full, and no amount of carry could show
        through — the first banding fix rescued old archives and left young
        ones saturated from the other end. This case is that field: everything
-       kept TODAY, differing only in what stands on it, asserted at the TIER
-       — the band the sprite is actually drawn from — because alive values
-       that differ inside one band still render as the founder's flat grey. */
+       kept TODAY, differing only in what stands on it. This was asserted at
+       the sprite TIER the orb was drawn from, because alive values inside one
+       band rendered as the founder's flat grey; the orbs and their bands are
+       gone, so it is asserted on `alive`, the light itself. */
     const freshLit = (input: {
       id: string;
       citingSignalIds: string[];
@@ -275,7 +276,7 @@ describe("the carry: how much of a person a memory holds up", () => {
         ),
       );
       colorBall(ball, NOW);
-      return tierOf(ball);
+      return ball.alive;
     };
 
     const nothing = freshLit({ id: "f-none", citingSignalIds: [] });
@@ -323,7 +324,9 @@ describe("the carry: how much of a person a memory holds up", () => {
        aliveness.
 
        So: same age, same everything, one emerging candidate each, and the
-       drawn TIER must climb with the evidence behind it. */
+       light must climb with the evidence behind it. (It was the drawn TIER
+       while orbs were drawn from banded sprites; with the orbs gone it is
+       `alive`, strictly.) */
     const byEvidence = (id: string, evidenceCount: number) => {
       const citations = new Map<string, Evidence[]>([[id, [cites("s1", id)]]]);
       const signals = new Map([
@@ -338,7 +341,7 @@ describe("the carry: how much of a person a memory holds up", () => {
       ]);
       const ball = makeBall(seedOf(memory(id), citations, signals, new Set(), new Set()));
       colorBall(ball, NOW);
-      return tierOf(ball);
+      return ball.alive;
     };
 
     const tiers = [1, 2, FIELD_CARRY_PROMOTION_EVIDENCE].map((n) =>
@@ -347,7 +350,7 @@ describe("the carry: how much of a person a memory holds up", () => {
     for (let i = 1; i < tiers.length; i += 1) {
       expect(
         tiers[i],
-        `evidence ${i + 1} must draw from a brighter band than evidence ${i}`,
+        `evidence ${i + 1} must be brighter than evidence ${i}`,
       ).toBeGreaterThan(tiers[i - 1]);
     }
   });

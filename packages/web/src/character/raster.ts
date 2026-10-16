@@ -219,6 +219,133 @@ export function rasterBody(
 }
 
 
+/* The last body baked by `turnedPose`, keyed by the identity of what it was
+   baked from. One entry: a page draws one creature at a time, and the walk
+   asks for the same one ~130 times in a row. */
+const bakeIds = new WeakMap<object, number>();
+let bakeSeq = 0;
+const idOf = (value: object | null): number => {
+  if (!value) return 0;
+  let id = bakeIds.get(value);
+  if (!id) { id = ++bakeSeq; bakeIds.set(value, id); }
+  return id;
+};
+const bakeKey = (need: number, ramp: Ramp, be: Being, grain: CanvasPattern | null) => `${need}:${idOf(ramp)}:${idOf(be)}:${idOf(grain)}`;
+const lastBake: { key: string; body: HTMLCanvasElement | null } = { key: "", body: null };
+
+/**
+ * THE SAME DRAWING, TURNED AND MID-STEP — for the one page-side performance
+ * that needs it: the walk between Now and Principles (`CrossingCompanion`).
+ *
+ * `yaw` is the loop's planet turn (0 faces you, ±π/2 is profile) and
+ * `stride` is a step, -1..1: the near nub lifts as the far one drops. It is
+ * NOT a second simulation: nothing here reads the world, and the crossing
+ * passes its own two numbers for its own second and a half. The rest pose
+ * below is this function at zero and zero, so the two cannot drift.
+ */
+export function turnedPose(
+  g: CanvasRenderingContext2D,
+  size: number,
+  ramp: Ramp,
+  be: Being,
+  lit: number,
+  /** Device pixels per CSS pixel — see `restPose`. */
+  dpr: number,
+  yaw: number,
+  stride: number,
+  /** Where it looks, up (-1) to down (+1): the eyes slide along the face and
+      flatten a little, the way a glance reads on a pebble with no neck. */
+  look = 0,
+  /** The world's film, so a page's creature is the same matte material as
+      the world's (founder: "use exact same code ... for the character"). */
+  grain: CanvasPattern | null = null,
+): void {
+  /* ═══ BAKE AT LEAST AS LARGE AS WE PAINT ═══════════════════════════════
+     The factor was `round(size / BODY_PX * 4)` with no `dpr` in it, while
+     `rasterBody` bakes `BODY_PX * factor` DEVICE pixels and this context is
+     scaled by the ratio. So the bake was chosen in CSS pixels and spent in
+     device pixels.
+
+     ONE CONFIGURATION WAS ACTUALLY BROKEN, and it is worth naming exactly
+     because the first write-up of this change claimed more: at 88 CSS px
+     and dpr 3 the factor is `round(1.467)` = 1, a 240px sprite painted at
+     264 device px. Analytically that is the only under-bake — it needs
+     size in (80, 90) at dpr 3 — and 88 is the login and onboarding
+     companion. Every other caller and ratio was already large enough.
+
+     THE REAL WIN IS THE LOADING SCREEN, which the first write-up missed
+     entirely. At 190 CSS px and dpr 1 the old rule baked 720px and painted
+     190 — a 0.264x reduction, which ALIASES. Measured against ground truths
+     baked at 4x, 6x, 8x and 12x the paint, the new 240px bake is about
+     twice as faithful for a ninth of the memory; at dpr 2 it is ~25% more
+     faithful for a quarter. That is a desktop improvement, honestly, not a
+     phone one.
+
+     AND NO, IT IS NOT "7% SHARPER" AT 88/dpr3. That number came from mean
+     gradient, which REWARDS ALIASING and calls it sharpness — the old
+     0.264x path scores well on it precisely because it aliases. Measured
+     properly, the 88/dpr3 case moves +0.29% and the ranking flips with the
+     ground truth. The under-bake is worth fixing because a bake smaller
+     than its paint is wrong, not because anyone can see it.
+
+     CEIL, NOT ROUND. Rounding is what let 1.467 become 1 and put the bake
+     below the paint; `ceil` on DEVICE pixels makes that unrepresentable. */
+  const need = Math.max(1, Math.ceil((size * dpr) / BODY_PX));
+  /* The walk draws this every frame with the same inputs; bake once. */
+  const key = bakeKey(need, ramp, be, grain);
+  const body = key === lastBake.key && lastBake.body ? lastBake.body : rasterBody(need, BODY_TIERS - 1, grain, ramp, be);
+  if (key !== lastBake.key) { lastBake.key = key; lastBake.body = body; }
+  const half = size / 2;
+
+  /* THE NUBS GO FIRST AND THEY ARE BOTH IN FRONT, which is the loop's
+     behaviour at yaw 0 rather than a simplification of it: its guard is
+     `cos(a) < 0 !== behind`, and `Math.cos(Math.PI / 2)` is 6.1e-17 — not
+     negative — so at rest the behind-pass draws neither and the front-pass
+     draws both. They are painted before the body here for the same reason
+     the loop paints the far one first: a nub protrudes, so the body's edge
+     has to land on top of it rather than meet it. */
+  const nubR = size * (NUB_R_DIM + (NUB_R_LIT - NUB_R_DIM) * lit);
+  const nubRgb = mix(NUB_DIM, NUB_LIT, lit);
+  g.fillStyle = rgbCss(nubRgb, 1);
+  /* A nub turned toward you, off the silhouette's edge, is in front of the
+     body and is painted after it; at rest both sit on the edge (cos ≈ 0) and
+     go first, as above. */
+  const nub = (lon: number, side: number) => {
+    g.beginPath();
+    g.arc(half + Math.sin(lon + yaw) * size * NUB_X, half + size * NUB_Y - side * stride * size * 0.05, nubR, 0, Math.PI * 2);
+    g.fill();
+  };
+  const nubs = [[-NUB_LON, -1], [NUB_LON, 1]] as const;
+  for (const [lon, side] of nubs) if (Math.cos(lon + yaw) <= 0.05) nub(lon, side);
+
+  g.drawImage(body, 0, 0, size, size);
+
+  for (const [lon, side] of nubs) if (Math.cos(lon + yaw) > 0.05) {
+    g.fillStyle = rgbCss(nubRgb, 1);
+    nub(lon, side);
+  }
+
+  /* THE EYES, CLIPPED TO THE SILHOUETTE the same way the loop clips them —
+     `bodyPath` is the one tracer, so the bake and the clip cannot drift. */
+  g.save();
+  g.translate(half, half);
+  bodyPath(g, size, size, be);
+  g.clip();
+  g.fillStyle = EYE_INK;
+  const er = size * EYE_R;
+  /* `-size * 0.06` is the loop's `eyY` at latitude 0: the eyes sit a little
+     above the equator, which is what makes the dome read as a forehead. */
+  const eyY = -size * 0.06 + look * size * 0.08;
+  for (const lon of [-EYE_LON, EYE_LON]) {
+    const ca = Math.cos(lon + yaw);
+    if (ca <= 0) continue;
+    g.beginPath();
+    g.ellipse(Math.sin(lon + yaw) * size * FACE_R, eyY, er * Math.max(ca, 0.2), er * (1 - 0.22 * Math.abs(look)), 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.restore();
+}
+
 /**
  * ═══ THE REST POSE — the creature with nothing happening to it ══════════
  *
@@ -264,75 +391,7 @@ export function restPose(
       fixed: a default would silently restore it the first time somebody
       forgot the argument. */
   dpr: number,
+  grain: CanvasPattern | null = null,
 ): void {
-  /* ═══ BAKE AT LEAST AS LARGE AS WE PAINT ═══════════════════════════════
-     The factor was `round(size / BODY_PX * 4)` with no `dpr` in it, while
-     `rasterBody` bakes `BODY_PX * factor` DEVICE pixels and this context is
-     scaled by the ratio. So the bake was chosen in CSS pixels and spent in
-     device pixels.
-
-     ONE CONFIGURATION WAS ACTUALLY BROKEN, and it is worth naming exactly
-     because the first write-up of this change claimed more: at 88 CSS px
-     and dpr 3 the factor is `round(1.467)` = 1, a 240px sprite painted at
-     264 device px. Analytically that is the only under-bake — it needs
-     size in (80, 90) at dpr 3 — and 88 is the login and onboarding
-     companion. Every other caller and ratio was already large enough.
-
-     THE REAL WIN IS THE LOADING SCREEN, which the first write-up missed
-     entirely. At 190 CSS px and dpr 1 the old rule baked 720px and painted
-     190 — a 0.264x reduction, which ALIASES. Measured against ground truths
-     baked at 4x, 6x, 8x and 12x the paint, the new 240px bake is about
-     twice as faithful for a ninth of the memory; at dpr 2 it is ~25% more
-     faithful for a quarter. That is a desktop improvement, honestly, not a
-     phone one.
-
-     AND NO, IT IS NOT "7% SHARPER" AT 88/dpr3. That number came from mean
-     gradient, which REWARDS ALIASING and calls it sharpness — the old
-     0.264x path scores well on it precisely because it aliases. Measured
-     properly, the 88/dpr3 case moves +0.29% and the ranking flips with the
-     ground truth. The under-bake is worth fixing because a bake smaller
-     than its paint is wrong, not because anyone can see it.
-
-     CEIL, NOT ROUND. Rounding is what let 1.467 become 1 and put the bake
-     below the paint; `ceil` on DEVICE pixels makes that unrepresentable. */
-  const need = Math.max(1, Math.ceil((size * dpr) / BODY_PX));
-  const body = rasterBody(need, BODY_TIERS - 1, null, ramp, be);
-  const half = size / 2;
-
-  /* THE NUBS GO FIRST AND THEY ARE BOTH IN FRONT, which is the loop's
-     behaviour at yaw 0 rather than a simplification of it: its guard is
-     `cos(a) < 0 !== behind`, and `Math.cos(Math.PI / 2)` is 6.1e-17 — not
-     negative — so at rest the behind-pass draws neither and the front-pass
-     draws both. They are painted before the body here for the same reason
-     the loop paints the far one first: a nub protrudes, so the body's edge
-     has to land on top of it rather than meet it. */
-  const nubR = size * (NUB_R_DIM + (NUB_R_LIT - NUB_R_DIM) * lit);
-  const nubRgb = mix(NUB_DIM, NUB_LIT, lit);
-  g.fillStyle = rgbCss(nubRgb, 1);
-  for (const lon of [-NUB_LON, NUB_LON]) {
-    g.beginPath();
-    g.arc(half + Math.sin(lon) * size * NUB_X, half + size * NUB_Y, nubR, 0, Math.PI * 2);
-    g.fill();
-  }
-
-  g.drawImage(body, 0, 0, size, size);
-
-  /* THE EYES, CLIPPED TO THE SILHOUETTE the same way the loop clips them —
-     `bodyPath` is the one tracer, so the bake and the clip cannot drift. */
-  g.save();
-  g.translate(half, half);
-  bodyPath(g, size, size, be);
-  g.clip();
-  g.fillStyle = EYE_INK;
-  const er = size * EYE_R;
-  /* `-size * 0.06` is the loop's `eyY` at latitude 0: the eyes sit a little
-     above the equator, which is what makes the dome read as a forehead. */
-  const eyY = -size * 0.06;
-  for (const lon of [-EYE_LON, EYE_LON]) {
-    const ca = Math.cos(lon);
-    g.beginPath();
-    g.ellipse(Math.sin(lon) * size * FACE_R, eyY, er * Math.max(ca, 0.2), er, 0, 0, Math.PI * 2);
-    g.fill();
-  }
-  g.restore();
+  turnedPose(g, size, ramp, be, lit, dpr, 0, 0, 0, grain);
 }

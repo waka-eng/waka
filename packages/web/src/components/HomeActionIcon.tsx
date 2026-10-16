@@ -70,14 +70,21 @@
    object on the page, and three controls for a thing that needs one. The
    tile IS the control now, so it needs the two shapes a transport has.
    Solid rather than outlined: at 20px a stroked triangle reads as a chevron,
-   and these sit inside a filled tile rather than beside a label. */
-export function HomeActionIcon({kind,className}:{kind:'capture'|'chat'|'record'|'photo'|'play'|'pause'|'keep'|'erase'|'send'|'stop';className?:string}){
+   and these sit inside a filled tile rather than beside a label.
+
+   `share` ARRIVED 2026-10-15. Founder: "i also dont see option to share a
+   specfici inspiration." An arrow leaving an open tray — the shape both
+   phone systems already taught for "send this somewhere", so it needs no
+   label beside it. It is `keep` turned inside out on purpose: keep brings a
+   thing down into the tray, share lifts it out. */
+export function HomeActionIcon({kind,className}:{kind:'capture'|'chat'|'record'|'photo'|'play'|'pause'|'keep'|'erase'|'send'|'stop'|'share';className?:string}){
   return <svg className={className} data-home-action-icon={kind} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
     {kind==='capture'?<><path className="jar-spark-core" d="m12 5 1.8 5.2L19 12l-5.2 1.8L12 19l-1.8-5.2L5 12l5.2-1.8z" fill="currentColor" strokeWidth=".8"/>
         <g className="jar-spark-rays" strokeWidth="1.4"><path d="m3 3 2 2m14 14 2 2M3 21l2-2M19 5l2-2"/></g></>
       :kind==='record'?<><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></>
       :kind==='send'?<path d="M4.5 12h14m0 0-5.5-5.5M18.5 12 13 17.5" fill="none" stroke="currentColor" strokeWidth="1.9"/>
       :kind==='stop'?<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none"/>
+      :kind==='share'?<><path d="M12 14.2V4.4"/><path d="m8.6 7.6 3.4-3.4 3.4 3.4"/><path d="M7.5 10.5H6.2a1.4 1.4 0 0 0-1.4 1.4v6.4a1.4 1.4 0 0 0 1.4 1.4h11.6a1.4 1.4 0 0 0 1.4-1.4v-6.4a1.4 1.4 0 0 0-1.4-1.4h-1.3"/></>
       :kind==='keep'?<><path d="M12 4v9.2"/><path d="m8.6 10 3.4 3.4L15.4 10"/><path d="M5 18.5h14"/></>
       :kind==='erase'?<><path d="M4.8 6.8h14.4"/><path d="M9.6 6.8V5.1a1.2 1.2 0 0 1 1.2-1.2h2.4a1.2 1.2 0 0 1 1.2 1.2v1.7"/>
         <path d="m6.6 6.8.85 11.3a1.7 1.7 0 0 0 1.7 1.6h5.7a1.7 1.7 0 0 0 1.7-1.6l.85-11.3"/></>

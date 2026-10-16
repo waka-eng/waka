@@ -56,7 +56,7 @@
  *     is Home".
  *   - `field/simulation.ts` was the second, and `field` is a sanctioned world
  *     word — but in this tree "field" already means LAYER 1 specifically
- *     (`space/inspiration/field.ts`, `fitField`, `paintField`, `FIELD_EDGE`).
+ *     (`space/inspiration/field.ts`, `fitField`, `FIELD_EDGE`).
  *     A top-level `field/` holding the camera, the sky and the companion would
  *     put two meanings under one word, which is the debt the vocabulary gate
  *     exists to stop.
@@ -96,16 +96,10 @@ import type { Measured } from "./measured";
 import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, FACE_R, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
-import { paintField } from "../space/inspiration/field-paint";
 import {
   colorBall,
   fitField,
   scatterX,
-  sortByDepth,
-  EASE_DIM_IN,
-  EASE_DIM_OUT,
-  EASE_GLOW_IN,
-  EASE_GLOW_OUT,
 } from "../space/inspiration/field";
 import {
   bornBall,
@@ -366,9 +360,6 @@ const EASE_SETTLE = 0.08;
  * copies of the same five numbers. What is left is a camera and a character,
  * and nothing outside this loop reads them.
  */
-/** Contact: present within a frame, gone over a couple of hundred ms. */
-const EASE_PRESS_IN = 1e-16;
-const EASE_PRESS_OUT = 3.8e-3;
 /** The camera's rubber band at the ends of the world. */
 const EASE_BAND = 2.6e-5;
 /* THE HAND'S OWN SPEED went with the lateral gesture. `EASE_VEL` smoothed a
@@ -409,6 +400,8 @@ export const UNWIND_MS = 650;
  * pay for them.
  */
 const ANTICIPATE_MS = 130;
+/** The keep's hop: two bounces over this long, the second lower. */
+const HOP_MS = 720;
 /** How far it compresses at the bottom of the gather. Squash, so positive. */
 const ANTICIPATE_SQ = 0.03;
 /** And how long the body takes to come back up out of it, once released. */
@@ -687,6 +680,21 @@ export interface SimApi {
   /** The companion glows for a beat — a tap was heard. */
   acknowledge: (moment?: Moment) => void;
   /**
+   * Step up out of the way while somebody else is speaking under it — the
+   * agent asking why a pick was let go. Founder, 2026-10-15, approved: the
+   * creature rises a little while its bubble fades, and settles back when
+   * the question is answered.
+   */
+  stepAside: (on: boolean) => void;
+  /**
+   * Where the companion stands on screen right now — its centre in viewport
+   * pixels and its body width. The crossing into Principles draws its own
+   * creature exactly here, so the one you see does not move when the page
+   * takes over from the world (founder, 2026-10-15: "character should stay
+   * in place and animate across the two transitions").
+   */
+  creatureAt: () => { x: number; y: number; size: number } | null;
+  /**
    * Where the reading panel should sit beside the focused orb — and, only if
    * the orb would otherwise be off-screen or behind the panel, a camera nudge
    * that brings it back into view NEXT TO it. A panel is not an event: most
@@ -827,19 +835,8 @@ export interface FieldAudit {
     rMax: number;
     aliveMax: number;
     arriveMin: number;
-    /**
-     * HOW MANY ORBS ARE SUNK, AND HOW MANY ARE LIT.
-     *
-     * The audit could see everything about a memory except the one channel
-     * that carries meaning. Two things drive that channel — a search, and
-     * (since 2026-08-24) reading a pattern, which lights the memories it was
-     * read from where they live instead of setting them orbiting. Both say
-     * the same sentence to the field, "this one and everything else sinks",
-     * and neither was observable from outside: a light that never moved and
-     * a light that moved correctly looked identical to every test here.
-     */
-    dimmed: number;
-    glowing: number;
+    /* `dimmed` and `glowing` — how many orbs a search or a reading had sunk
+       and lit — went with the light they counted. */
   };
   /**
    * WHETHER THE SKY IS LEANING DOWN, AND HOW FAR EACH STATEMENT CAME.
@@ -1016,8 +1013,6 @@ export interface SimulationOptions {
   dialRef: RefObject<HTMLDivElement>;
   /** The archive walk is still arriving, so the ground is not yet the whole ground. Read 1x. */
   fieldLoadingRef: MutableRefObject<boolean>;
-  /** The memories a search matched; everything else sinks. Read 1x per frame. */
-  foundRef: MutableRefObject<ReadonlySet<string> | null>;
   /* FOUR ROOM REFS ARE GONE FROM THIS SURFACE: `groupFieldRef` (one room's
      fetched ground, by group id), `groupCacheRef` (its board and the lease
      over it), `groupsRef` (the rooms this account is in, in axis order) and
@@ -1033,12 +1028,8 @@ export interface SimulationOptions {
   inspirationsRef: MutableRefObject<Inspiration[] | null>;
   /** Which language the loop's own sentences are in. Read 3x. */
   localeRef: MutableRefObject<SupportedLocale>;
-  /** A reading panel is occluding part of the field right now. Read 1x. */
-  panelOpenRef: MutableRefObject<boolean>;
   /** Where in time the wall is parked, or null for now. Read 1x. */
   parkedRef: MutableRefObject<number | null>;
-  /** The memories under the pattern being read, lit where they live. Read 1x per frame. */
-  readingLitRef: MutableRefObject<ReadonlySet<string> | null>;
   /**
    * The sky, as of the frame that asks. Read 1x, at setup, into `pouredSky`.
    * This is the one capture whose staleness the file already argued — see the
@@ -1069,8 +1060,6 @@ export interface SimulationOptions {
 
   /** Say the next thing out loud. Called when the companion is pressed. */
   creatureSpeaksRef: MutableRefObject<() => void>;
-  /** Warm one memory's full reading so a tap has nothing to wait for. */
-  loadDetailRef: MutableRefObject<(id: string) => Promise<unknown>>;
   /** Warm whatever kind of wall this is. Called as travel toward it begins. */
   loadWallRef: MutableRefObject<(wall: Space) => void>;
   /** Open the search. Called from the loop's own keyboard handler. */
@@ -1124,6 +1113,9 @@ export interface SimulationOptions {
   paletteRef: MutableRefObject<Palette | null>;
   /** The loop's own fallback sentence, published for a press to read. Written 1x, at setup. */
   sayLineRef: MutableRefObject<(() => string) | null>;
+  /** Which catalogue line `sayLine` said last, and its words, so a caller
+      can ask what KIND of line is showing without matching translations. */
+  sayLineKeyRef: MutableRefObject<{ line: string; key: MessageKey } | null>;
   /** Which orb is focused. Written 2x here — and see `setSelectedId` above, which is the same two moments. */
   selectedIdRef: MutableRefObject<string | null>;
   /** The control surface itself. Written 2x: installed at setup, nulled in the teardown. */
@@ -1174,21 +1166,18 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     creatureSpeaksRef,
     dialRef,
     fieldLoadingRef,
-    foundRef,
     headingRef,
     inspirationsRef,
     lastGoRef,
-    loadDetailRef,
     loadWallRef,
     localeRef,
     openSeekRef,
     paletteRef,
     panelArrowRef,
-    panelOpenRef,
     parkedRef,
     pushArrivedRef,
-    readingLitRef,
     sayLineRef,
+    sayLineKeyRef,
     selectedIdRef,
     simApiRef,
     skyRef,
@@ -1678,8 +1667,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       ownerId: null as number | null,
       /** Did the press interrupt a snap? Then it owes the world one back. */
       interruptedSnap: false,
-      /** Which memory the finger is on, if any: it answers at touchdown. */
-      pressId: null as string | null,
       /** When the press landed: a tap is decided on release, not on a threshold. */
       downT: 0,
       dragging: false,
@@ -1827,6 +1814,15 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       /* the wind-up: when it began, what it is winding up TO, and how far
          into the compression the body currently is */
       antAt: 0,
+      /* THE HOP (2026-10-15): when the gather for a keep releases, two small
+         happy bounces. `hopNext` arms it at the wind-up; `hopAt` is when the
+         bounce began, 0 at rest. */
+      hopNext: false,
+      hopAt: 0,
+      /* STEPPING ASIDE: `aside` is where it wants to be (0 or a raise in
+         px, negative is up), `asideNow` where it is, eased. */
+      aside: 0,
+      asideNow: 0,
       antFlare: 0,
       ant: 0,
       /** the slow one: -1 … 1, half-life MOOD_HALF_LIFE_MS, rhythm only */
@@ -1847,16 +1843,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     const riseY = new Float32Array(4);
     const riseA = new Float32Array(4);
     const inspTop = new Float32Array(8);
-
-    /* Painter's order for the shadow+body pass: bottom-most orb first, so an
-       orb's contact shadow lands ON whatever it is resting against and is then
-       covered by the orb itself. A preallocated index array, kept for the life
-       of the loop and re-sorted in place, so neither the painter nor the hit
-       test allocates per frame. `sortByDepth` itself moved to
-       `space/inspiration/field.ts` when the painter left the page — the two
-       must never end up with two orderings, which is the bug where you click
-       one memory and a different one lights up. */
-    const order: number[] = list.map((_, i) => i);
 
     function wake() {
       clock.lastActive = performance.now();
@@ -2182,15 +2168,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     function dropBall(i: number) {
       const b = list[i];
       if (selectedIdRef.current === b.id) release();
-      if (gesture.pressId === b.id) gesture.pressId = null;
       if (held.ball === b) held.ball = null;
       list.splice(i, 1);
       byId.delete(b.id);
       sceneRemove(b);
-      /* the depth order is an index permutation over `list`: it has to be
-         rebuilt, not spliced, or every index past `i` points one ball over */
-      order.length = list.length;
-      for (let k = 0; k < list.length; k++) order[k] = k;
       assignHomes();
       computeInspiration();
     }
@@ -3692,11 +3673,12 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           month: monthTag(TRef.current, localeRef.current),
         });
       const pick = (keys: MessageKey[]): string => {
-        const opts = keys.map((k) => t(localeRef.current, k));
-        const fresh = opts.filter((o) => o !== companion.lastSaid);
-        const s = (fresh.length ? fresh : opts)[Math.floor(Math.random() * (fresh.length || opts.length))];
-        companion.lastSaid = s;
-        return s;
+        const opts = keys.map((key) => ({ key, line: t(localeRef.current, key) }));
+        const fresh = opts.filter((o) => o.line !== companion.lastSaid);
+        const said = (fresh.length ? fresh : opts)[Math.floor(Math.random() * (fresh.length || opts.length))];
+        companion.lastSaid = said.line;
+        sayLineKeyRef.current = said;
+        return said.line;
       };
       /* An empty archive is the one state every single person passes through,
          and the layout's own vocabulary pointed at the dark beats any
@@ -3836,26 +3818,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       }
     }
 
-    /**
-     * Is the detail panel open right now? An ACCESSOR, and deliberately not a
-     * value.
-     *
-     * The field's painter needs this to know whether to lay the focused
-     * memory's wide outer ring down — a ring that reaches under an open card,
-     * and light must live behind a panel, never on it. The ref it reads is
-     * re-pointed by React while this loop is still running, so a boolean
-     * captured when the painter was wired up would be frozen at whatever was
-     * true then. Nothing would report that: the ring would simply stop
-     * answering the panel, and the picture would keep drawing. Declared once
-     * out here rather than inside `draw` so the frame does not allocate a
-     * closure sixty times a second to ask one question.
-     */
-
-    const grid = (v: number): number => {
-      if (mech < 0.02) return v;
-      const q = 1 + mech * 7;
-      return Math.round(v / q) * q;
-    };
 
     function draw(now: number) {
       const pal = paletteRef.current;
@@ -3918,37 +3880,14 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         ctx!.drawImage(pal.mote, mx + cam.x - mr * 3, moteY[i] + cam.y - mr * 3, mr * 6, mr * 6);
       }
 
-      /* passes 1 and 2 — THE GROUND. Every memory's diffuse bloom laid down in
-         additive light, then every memory's disc drawn over it. One appearance
-         in two loops: the disc reads as lit from within precisely because its
-         own bloom is already underneath it, so the two are not separable and
-         they left together. `space/inspiration/field-paint.ts`. */
-      paintField({
-        ctx: ctx!,
-        pal,
-        list,
-        order,
-        cam,
-        view,
-        t,
-        depthSpan: Math.max(view.layout.fieldBottom - view.layout.fieldTop, 1),
-        selId: selectedIdRef.current,
-        /* THE BREATH-HOLD HAD EXACTLY ONE CAUSE AND IT IS GONE. `still` was
-           `pour.active`: while orbs were arriving on their stagger the field's
-           ambient breath held, so the arrival was the only thing moving. With
-           no pour there is nothing to hold the breath for, and this is the
-           honest value rather than a flag that can never be set. The field
-           still holds its breath under reduced motion — `field-paint.ts` reads
-           `view.reduced || still`, so that half is untouched — which means the
-           parameter itself is now vestigial and should go with the next change
-           to that file. Not done here: `space/inspiration/field-paint.ts` is
-           not this change's to edit, and a signature change smuggled into a
-           deletion is how a deletion stops being reviewable. */
-        still: false,
-        mech,
-        grid,
-        panelOpen: () => panelOpenRef.current,
-      });
+      /* THE BALLS ARE GONE (founder, 2026-10-15): "these balls for
+         inspirations being saved should FULLY BE DELETED and removed." The
+         ground used to paint every memory as an orb here — its bloom, then
+         its disc — and `space/inspiration/field-paint.ts` held the drawing.
+         Both are deleted, along with the hit test that made the orbs
+         pressable, so nothing invisible can still take a press. A memory is
+         still a record the world reads (`Ball`), and it opens from the
+         Inspirations page; it is simply never drawn as a ball. */
 
       /* No connection visuals. The founder was explicit after seeing them:
          "I don't want the connections with the other balls to appear. It's
@@ -4039,7 +3978,15 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         const bobStep = 1 + mech * 3;
         const bob = mech < 0.02 ? bobRaw : Math.round(bobRaw / bobStep) * bobStep;
         /* it rides ahead of the world vertically as well as horizontally */
-        const cyC = companion.y + bob + companion.lift;
+        /* THE HOP: two bounces, the second smaller, on the release of a
+           keep. A |sine| over the hop's span gives two arcs that each touch
+           the ground, and the decay makes the second one lower — a creature
+           that is delighted, not one that is bouncing on a spring. */
+        const hopT = companion.hopAt > 0 ? clamp01((performance.now() - companion.hopAt) / HOP_MS) : 0;
+        const hop = hopT > 0 && hopT < 1
+          ? -Math.abs(Math.sin(Math.PI * 2 * hopT)) * companion.size * 0.14 * (1 - hopT * 0.45)
+          : 0;
+        const cyC = companion.y + bob + companion.lift + hop + companion.asideNow;
         /* THE TRAVELER'S PLACE. The companion is screen-anchored — it is the
            one who travels, so the layout slides under it — and during a
            transition it rides ahead of centre by charOff, near the leading
@@ -4624,58 +4571,14 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          the focused orb itself holds still (step() skips anything held). */
       step(dt, now);
 
-      /* presentation lerps: the unrelated sink into the haze, the kin light
-         up. Bloom eases in over ~300ms — light blooms, it does not pop. The
-         orb's scale rides nothing: selection never touches geometry. */
       /* a vertical move in progress is motion, so the loop stays awake for it */
       let easing = Math.abs(companion.pitch) > 0.01 || Math.abs(companion.lift) > 0.4;
-      allBalls((arr) => {
-        for (const b of arr) {
-          /* SEARCHING USES THE FOCUS LAW IT ALREADY HAS. A search is the same
-             sentence as a selection — "this one, and everything else sinks" —
-             so it runs through dim and glow rather than through a results
-             list. The memory keeps its place in the field, which is the one
-             thing a list can never show you. */
-          /* A SEARCH OUTRANKS A READING. Both speak the same sentence to the
-             field — "this one, and everything else sinks" — but a query is
-             something you asked for in words and reading a pattern is not,
-             so while a search is open it owns the light. */
-          const hits = foundRef.current ?? readingLitRef.current;
-          const missed = hits !== null && !hits.has(b.sigId ?? b.id);
-          const wantDim = missed || (selActive && b.hold === 0) ? 1 : 0;
-          const wantGlow = b.hold !== 0 || (hits !== null && !missed) ? 1 : 0;
-          /* CONTACT, ON BOTH PATHS. This lived inside the else, so a person
-             who asked for less movement got no answer under their finger at
-             all — and being told what you are touching is a STATE, not a
-             motion. It renders instantly there, exactly as dim and glow do. */
-          const wantPress = b.id === gesture.pressId ? 1 : 0;
-          if (view.reduced) {
-            b.dim = wantDim;
-            b.glow = wantGlow;
-            if (b.press !== wantPress) {
-              b.press = wantPress;
-              easing = true;
-            }
-          } else {
-            /* ASYMMETRIC ON PURPOSE. Light arrives fast and leaves slowly:
-               a grab answers in a couple of frames, and letting go decays the
-               way a real afterglow does. Grabbing and releasing sharing one
-               curve is exactly what a CSS transition looks like. */
-            const kg = kd(wantGlow > b.glow ? EASE_GLOW_IN : EASE_GLOW_OUT, dt);
-            const km = kd(wantDim > b.dim ? EASE_DIM_IN : EASE_DIM_OUT, dt);
-            b.dim = Math.abs(b.dim - wantDim) < 0.01 ? wantDim : lerp(b.dim, wantDim, km);
-            b.glow = Math.abs(b.glow - wantGlow) < 0.01 ? wantGlow : lerp(b.glow, wantGlow, kg);
-            /* contact: on in about thirty milliseconds, off over a couple of
-               hundred, so touchdown is answered inside a single frame */
-            b.press =
-              Math.abs(b.press - wantPress) < 0.004
-                ? wantPress
-                : lerp(b.press, wantPress, kd(wantPress > b.press ? EASE_PRESS_IN : EASE_PRESS_OUT, dt));
-            if (b.press !== wantPress) easing = true;
-            if (b.dim !== wantDim || b.glow !== wantGlow) easing = true;
-          }
-        }
-      });
+      /* THE FIELD'S LIGHT EASED HERE — every ball's dim, glow and contact
+         press, chased toward a search, a reading or a finger every frame.
+         The balls stopped being drawn (founder, 2026-10-15: "these balls for
+         inspirations being saved should FULLY BE DELETED and removed"), so
+         the easing lit nothing and only kept the loop awake for it. It went
+         with the inputs that fed it (`foundRef`, `readingLitRef`). */
 
       /* A JOURNEY turns the companion, and nothing else does now. Winding
          time turned it too — the yaw chased a finger's position down the
@@ -4748,6 +4651,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           companion.flare = Math.max(companion.flare, companion.antFlare);
           companion.antAt = 0;
           companion.antFlare = 0;
+          if (companion.hopNext) {
+            companion.hopNext = false;
+            companion.hopAt = now;
+          }
         }
         easing = true;
       } else if (companion.ant > 0.0005) {
@@ -4758,6 +4665,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       }
       if (companion.flare > 0) {
         companion.flare = Math.max(0, companion.flare - dt / 0.7);
+        easing = true;
+      }
+      if (companion.hopAt > 0) {
+        if (now - companion.hopAt >= HOP_MS) companion.hopAt = 0;
+        else easing = true;
+      }
+      if (companion.asideNow !== companion.aside) {
+        companion.asideNow = view.reduced || Math.abs(companion.asideNow - companion.aside) < 0.4
+          ? companion.aside
+          : lerp(companion.asideNow, companion.aside, kd(4e-3, dt));
         easing = true;
       }
       /* THE DISPOSITION FALLS BACK TOWARD LEVEL. A half-life, not a linear
@@ -5019,13 +4936,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       releaseHolds();
       selectedIdRef.current = id;
       setSelectedId(id);
-      /* IT LOOKS AT WHAT YOU TAPPED.
-         A companion that only ever looks at the user is a cursor; the whole
-         idea of attention as an interface is that it can go somewhere else.
-         So the eyes leave you and go to the memory, the body leans after them,
-         and it holds there while you read. It does not travel: tap is focus,
-         not rearrangement, and the layout stays where you left it. */
-      attendTo(b.x, b.y);
+      /* IT NO LONGER LOOKS AT THE MEMORY'S PLACE: memories are not drawn,
+         so the eyes would go to a spot with nothing in it. It stays with you
+         while the card is open (review, 2026-10-15). */
       b.hold = 1;
       held.ball = b;
       /* the companion brightens in sympathy with an alive bubble */
@@ -5041,8 +4954,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
        should show the name of the person above the character temporarily and
        character should also brighten up temporarily"). `memberAt` walked
        `companySeats` BACKWARDS, so nearer avatars took overlapping taps first
-       — the same reverse-of-the-painting-order rule `hitAt` follows below, and
-       the reason the pointer never lied about which being it would take.
+       — the same reverse-of-the-painting-order rule the orbs' hit test
+       followed, and the reason the pointer never lied about which being it would take.
        `noticeMember` lit one for a beat, refusing to re-arm a notice that
        still had half a second left on it so that a wandering cursor could not
        hold a member permanently bright. Both read state the draw pass built;
@@ -5050,42 +4963,13 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
 
     function overChar(cx: number, wy: number): boolean {
       const dx = cx - (view.w / 2 + companion.off);
-      const dy = wy - companion.y;
+      const dy = wy - (companion.y + companion.asideNow);
       const r = companion.size * 0.55;
       return dx * dx + dy * dy <= r * r;
     }
 
-    /**
-     * What is under the pointer — hit-tested in the EXACT reverse of the
-     * order the draw pass paints in, so the orb whose pixels are on top is
-     * the orb that answers. (Walking `list` by index instead was the bug
-     * behind "I click one ball and a different one lights up": the painter's
-     * order is by depth, and index order has nothing to do with it.)
-     *
-     * It re-sorts first because a tap can arrive while the loop is parked;
-     * the sort is O(n) on the near-sorted array it shares with the renderer.
-     */
-    function hitAt(cx: number, cy: number): Ball | null {
-      const wx = cx + cam.x;
-      const wy = cy + cam.y;
-      let found: Ball | null = null;
-      const scan = (arr: Ball[], ord: number[]) => {
-        sortByDepth(arr, ord);
-        for (let k = ord.length - 1; k >= 0; k--) {
-          const b = arr[ord[k]];
-          if (!b.active || b.gone > 0.6) continue;
-          const dx = b.x - wx;
-          const dy = b.y - wy;
-          if (dx * dx + dy * dy <= (b.r + 4) * (b.r + 4)) {
-            found = b;
-            return;
-          }
-        }
-      };
-      scan(list, order);
-      return found;
-    }
-
+    /** A tap on the world. The companion is the only thing in it that
+        answers one; the field is not drawn, so nothing under it can. */
     function tap(cx: number, cy: number) {
       /* mid-travel the page is the traveler's: taps wait for arrival */
       if (trip.active) return;
@@ -5101,18 +4985,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            the weather in the first place. */
         creatureSpeaksRef.current();
         wake();
-        return;
-      }
-      /* A TAP ON A MEMBER STOOD HERE, BEFORE THE ORB TEST. It noticed them,
-         then opened only that member's public inspirations inside the current
-         room, writing the destination immediately so Back returned to the
-         room even mid-glide. The ORDER was the ruling: company is painted in
-         front of the field, so a press that lands on both must resolve to the
-         thing on top. The orb test is first now because it is the only test
-         left. */
-      const ball = hitAt(cx, cy);
-      if (ball) {
-        select(ball.id);
         return;
       }
       /* bare ground: a focused orb gives the light back and everything
@@ -5200,25 +5072,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       gesture.interruptedSnap = cam.aiming;
       cam.aiming = false;
       gesture.snapAt = 0;
-      /* Warm the reading while the finger is still down: it buys the whole
-         press-to-release interval, and it is free when the background sweep
-         has already been here.
-         THE GUARD WAS `warm.col === undefined || warm.own` — another member's
-         room orb was never fetched, because its preview was all that was ours
-         to show. `col` and `own` are set by nothing since the room orb went
-         (see the tombstone in `space/inspiration/orb.ts`), so the test read
-         `undefined === undefined` on every orb in the world. Every orb a
-         press can land on is one of your own or your agent's, and both are
-         yours to read. */
-      const warm = hitAt(e.clientX, e.clientY);
-      if (warm) void loadDetailRef.current(warm.sigId ?? warm.id);
-      /* AND THE LIGHT ANSWERS AT TOUCHDOWN. The whole contact term was built
-         and then never armed — `pressId` was declared, read once in the loop
-         and written nowhere, so `press` sat at zero forever and a press still
-         produced literally nothing for the ninety to two hundred and fifty
-         milliseconds the finger was down. The hit is already in hand for the
-         prefetch above, so this costs one assignment. */
-      gesture.pressId = warm ? warm.id : null;
+      /* No orb is under the finger any more — the field is not drawn — so
+         there is nothing to warm and nothing to light at touchdown. */
       wake();
     };
     /**
@@ -5329,8 +5184,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         /* a member under the pointer used to say who it was, for a beat, and
            counted toward the cursor the same way the companion and an orb do */
         const over =
-          overChar(e.clientX, e.clientY + cam.y) ||
-          hitAt(e.clientX, e.clientY) !== null;
+          overChar(e.clientX, e.clientY + cam.y);
         const want = over ? "pointer" : "";
         if (gesture.cursor !== want) {
           gesture.cursor = want;
@@ -5344,9 +5198,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       if (!gesture.down) return;
       if (!gesture.dragging && Math.abs(e.clientX - gesture.downX) + Math.abs(e.clientY - gesture.downY) > TAP_SLOP) {
         gesture.dragging = true;
-        /* the finger is moving the world now, not touching a memory: the
-           contact light lets go the moment the gesture changes its mind */
-        gesture.pressId = null;
         /* THE GESTURE NO LONGER HAS A SIDEWAYS AXIS. It used to pick between
            travel (2) and the vertical drag (1) on the first movement; travel
            was for crossing to another room and there are no rooms, so axis 2
@@ -5372,9 +5223,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     };
     const onUp = (e: PointerEvent) => {
       if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
-      /* the finger is off it: the contact light starts decaying now, and the
-         selection's own glow takes over from tap() below */
-      gesture.pressId = null;
       /* Hand the world back before anything branches. Every path out of here
          is a finished gesture, and the capture and the identity go together —
          the cloud-drag paths used to return without either. */
@@ -5413,7 +5261,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     };
     const onCancel = (e: PointerEvent) => {
       if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
-      gesture.pressId = null;
       if (gesture.dragging || gesture.interruptedSnap) {
         /* cancelled mid-drag, or cancelled on a press that had interrupted a
            move: either way the layout is owed a resting place */
@@ -5737,6 +5584,21 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
        * the body can already do — how hard it flares, where it looks, and how
        * long it holds. Nothing new is drawn; what differs is the gesture.
        */
+      creatureAt: () => {
+        const box = canvas.getBoundingClientRect();
+        if (!box.width) return null;
+        return {
+          x: box.left + view.w / 2 + companion.off,
+          y: box.top + companion.y + companion.lift + companion.asideNow - cam.y,
+          size: companion.size,
+        };
+      },
+      stepAside: (on: boolean) => {
+        /* Up by most of a body: enough to clear a question asked beneath it
+           on a phone, measured at 390 × 844, and not so far that it leaves. */
+        companion.aside = on ? -companion.size * 0.95 : 0;
+        wake();
+      },
       acknowledge: (moment: Moment = "touch") => {
         /*
          * WHAT THIS DID TO THE CREATURE, BEFORE WHAT IT MADE IT DO.
@@ -5767,9 +5629,18 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             if (!view.reduced) {
               companion.antAt = performance.now();
               companion.antFlare = 0.95;
+              /* AND IT HOPS. Founder, 2026-10-15, with the balls gone: when
+                 something is saved, the creature "glows up and reacts to it
+                 (maybe get excited or have some motion?)". The flare is the
+                 glow; the hop is the excitement, on the release, so the
+                 gather reads as winding up for it. */
+              companion.hopNext = true;
             } else companion.flare = Math.max(companion.flare, 0.95);
             companion.eyeTX = 0;
-            companion.eyeTY = 1.5;
+            /* EYES ON YOU, NOT THE GROUND. They used to drop to where the new
+               ball landed; there is no ball any more, so the delight is
+               shared with the person who made it. */
+            companion.eyeTY = -0.5;
             companion.attendUntil = performance.now() + 1500;
             companion.attendLean = 0;
             break;
@@ -6042,7 +5913,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         colorBall(b, TRef.current);
         list.push(b);
         byId.set(b.id, b);
-        order.push(list.length - 1);
         /* AND INTO ITS SCENE, or it is nowhere — #289 and this branch found
            the same bug the same night. `sceneAdd` is that fix with its mirror
            attached: `dropBall` had the omission facing the other way, and a
@@ -6369,8 +6239,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             let rMax = 0;
             let aliveMax = 0;
             let arriveMin = Infinity;
-            let dimmed = 0;
-            let glowing = 0;
             for (const b of list) {
               if ((b.agentId ?? "") !== curWall().id) continue;
               if (b.active) active++;
@@ -6378,9 +6246,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
               rMax = Math.max(rMax, b.r);
               aliveMax = Math.max(aliveMax, b.alive);
               arriveMin = Math.min(arriveMin, b.arrive);
-              /* mid-ease values are neither yet; half is the crossing */
-              if (b.dim > 0.5) dimmed++;
-              if (b.glow > 0.5) glowing++;
             }
             return {
               active,
@@ -6388,8 +6253,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
               rMax: Math.round(rMax),
               aliveMax: Number(aliveMax.toFixed(3)),
               arriveMin: Number(arriveMin.toFixed(2)),
-              dimmed,
-              glowing,
             };
           })(),
           /* the same question asked upward: how far the sky has leaned into

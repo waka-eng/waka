@@ -27,7 +27,6 @@ import { Inspiration, type Evidence, type Signal } from "../../lib/data";
 import { hashStr, mix32, TAU } from "../../lib/num";
 import { type ApiAgentSignal } from "../../lib/agent-contract";
 import { FIELD_CARRY_PROMOTION_EVIDENCE } from "../../lib/aliveness";
-import { sizeIdxFor } from "../../canvas/sprites";
 
 
 export interface Ball {
@@ -74,7 +73,6 @@ export interface Ball {
   r: number;
   /** What it would be with room to spare. Fitting is never cumulative. */
   rBase: number;
-  sizeIdx: number;
   /** Stable per-ball random in [0,1) for scatter. */
   frac: number;
   /**
@@ -141,16 +139,9 @@ export interface Ball {
   aliveTo: number;
   /** 0 free · 1 selected. Never a position target — light only. */
   hold: 0 | 1;
-  dim: number;
-  glow: number;
-  /**
-   * CONTACT. The finger is on this one RIGHT NOW — up fast, down slow, and it
-   * reaches the bloom and nothing else. A press used to produce literally
-   * nothing for the ninety to two hundred and fifty milliseconds it lasted:
-   * the world answered on release, which on a device with no hover is how a
-   * dormant orb comes to look like scenery rather than something touchable.
-   */
-  press: number;
+  /* `dim`, `glow` and `press` — the haze, the bloom and the contact light —
+     went with the drawing they eased; nothing reads a ball's light but its
+     `alive`. */
   /* ---- room-orb extras (set only for balls living in a room column) ---- */
   /** Which column this orb lives in. Unset = the personal jar. */
   col?: number;
@@ -416,7 +407,6 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     terms: s.terms,
     r,
     rBase: r,
-    sizeIdx: sizeIdxFor(r),
     frac: (hashStr(s.id) % 1000) / 1000,
     scat: scatterSeed(s.id),
     x: 0,
@@ -451,9 +441,6 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     breathRate: 0.9 + Math.random() * 0.5,
     breathPhase: Math.random() * TAU,
     hold: 0,
-    dim: 0,
-    glow: 0,
-    press: 0,
     origin: s.origin ?? "human",
     lens: 0,
   };
@@ -524,7 +511,6 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
     terms: [],
     r,
     rBase: r,
-    sizeIdx: sizeIdxFor(r),
     frac: (hashStr(s.id) % 1000) / 1000,
     scat: scatterSeed(s.id),
     x: 0,
@@ -558,9 +544,6 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
     breathRate: 0.9 + Math.random() * 0.5,
     breathPhase: Math.random() * TAU,
     hold: 0,
-    dim: 0,
-    glow: 0,
-    press: 0,
     origin: s.origin,
     agentId: s.agentId,
     ownerProfileId: s.ownerProfileId,
@@ -604,15 +587,12 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
  * `canvas/simulation.ts`'s press-to-warm guard and `pages/Home`'s
  * `openReflections` — have been collapsed, each with a tombstone saying why.
  * `hue` IS NOW GONE TOO (2026-10-15), along with the tinting behind it. It
- * had a reader in `field-paint.ts` but NO WRITER anywhere — `hueByOwnerRef`
+ * had a reader in the field painter (since deleted with the orbs) but NO WRITER anywhere — `hueByOwnerRef`
  * was its only one and went with the rooms — so `b.hue ?? -1` was a constant
  * dressed as a lookup, and `orbsForHue`'s `hue >= 0` arm could never be
- * taken. `tintRamp` and `MEMBER_HUES` went with it. `orbsForHue` itself
- * stays: agent orbs still reach it for the pixel raster, just without a hue.
+ * taken. `tintRamp`, `MEMBER_HUES` and `orbsForHue` are all gone now — the
+ * orbs are not drawn at all (2026-10-15).
  *
- * `col` REMAINS, with one reader and no writer: `field-paint.ts` asks
- * `b.col === undefined` before the answered-reflection mark, which is now
- * always true. Left deliberately — collapsing it changes what is drawn, not
- * just what is typed, and that wants its own change. It is the last residue
- * of the room orb.
+ * `col` REMAINS on the record with no reader: the painter that asked it
+ * went with the orbs. It is the last residue of the room orb.
  */

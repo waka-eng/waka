@@ -79,11 +79,12 @@
  * left; a reply that fails, stops or is rate-limited still prints a sentence
  * saying which. A quiet surface is not the same as a quiet failure.
  */
-import {useEffect,useLayoutEffect,useRef,useState} from 'react';
+import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {createConversation,fetchConversation,listConversations,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
 import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage';
 import {useConversationReply} from '../lib/use-conversation-reply';
 import {Companion} from './Companion';
+import {agentBeing} from '../character/body';
 import {ConversationText} from './ConversationText';
 import {HomeActionIcon} from './HomeActionIcon';
 import {timeOf} from '../lib/words';
@@ -92,7 +93,17 @@ import {fetchPrinciples,type ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
 import {readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft as Draft,type StoredConversationDraft} from '../lib/conversation-drafts';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void}){
+export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,agent=null}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;
+  /** The account's agent, when it has one: a new chat may talk with it, or with both. */
+  agent?:{id:string;name:string}|null}){
+  /* ═══ WHO YOU ARE TALKING WITH ═══════════════════════════════════════
+     Founder, 2026-10-15: "new chat should also let you select if you want
+     to chat with me vs my agent or both perspectives." Chosen before the
+     first message and fixed after it — the chat is still yours and sits in
+     your one list; what changes is the memory the reply stands on. */
+  const [talkWith,setTalkWith]=useState<'mine'|'agent'|'both'>('mine');
+  /* One object per agent, so the creature is not re-drawn on every keystroke. */
+  const agentForm=useMemo(()=>agent?agentBeing(agent.id):null,[agent?.id]);
   const journal=id??`new:${initialPrincipleId??'general'}`;
   const initial=initialConversation?.id===id&&initialConversation.profileId===scope.profileId?initialConversation:null;
   const bootstrap=useRef(initial);
@@ -235,18 +246,23 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        their own draft and both are still on disk; what went is the `<select>`
        that offered them to you by their first fifty characters, which is a
        revision list wearing a label. */
-    try{const saved=readConversationDrafts(scope,journal);if(saved[0]){receipt.current=saved[0];draftRef.current=saved[0].value;setDraft(saved[0].value);}}catch{setStorageFailed(true);}
+    try{const saved=readConversationDrafts(scope,journal);if(saved[0]){receipt.current=saved[0];draftRef.current=saved[0].value;setDraft(saved[0].value);if(saved[0].value.talkWith)setTalkWith(saved[0].value.talkWith);}}catch{setStorageFailed(true);}
     try{const saved=JSON.parse(sessionStorage.getItem(scrollKey)??'null');if(saved&&Number.isFinite(saved.top)&&saved.top>=0&&typeof saved.nearBottom==='boolean'&&(saved.messageWindowStart===undefined||Number.isSafeInteger(saved.messageWindowStart)&&saved.messageWindowStart>=1&&saved.messageWindowStart<=200))restoredScroll.current={...saved,messageWindowStart:saved.messageWindowStart??1};}catch{/* Scrolling is recoverable without a stored position. */}
     void refresh();return()=>lifecycle.current.abort();
   },[scope.accountId,scope.profileId,id,initialPrincipleId]);
   const save=async()=>{
     if(working.current||loading||generationEnabled===null||awaitingReply||!draftRef.current?.content.trim()||storageFailed||focusFailed||id&&!conversation)return;
-    const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID()}:{})};
+    /* A draft kept before its agent was recorded waits for the agent to load,
+       rather than starting a chat on your own memory instead. */
+    if(!id&&draftRef.current.talkWith&&!draftRef.current.agentId&&!agent)return;
+    const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID(),...(current.talkWith?{}:agent&&talkWith!=='mine'?{talkWith,agentId:agent.id}:{})}:{})};
     if(!keep(intent))return;const owner=lifecycle.current;working.current=true;setBusy(true);setError(null);nearBottom.current=true;
     try{
+      /* The agent the draft was started with; a draft kept before that was recorded falls back to the one shown. */
+      const talkAgent=intent.agentId??agent?.id;
       const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(generationEnabled?{requestReply:true}:{})},from=conversationRef.current?.messageWindowStart;
         return from!==undefined?saveConversationMessage(scope.profileId,id,input,signal,from):saveConversationMessage(scope.profileId,id,input,signal);})
-        :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:generationEnabled===true}));
+        :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:generationEnabled===true},intent.talkWith&&talkAgent?{perspective:intent.talkWith,agentId:talkAgent}:undefined));
       if(mine(owner)){observe(next);setError(null);if(id)reply.check();}
     }catch{if(mine(owner))setError(say('worldConversationSaveFailed'));}
     finally{working.current=false;if(mine(owner))setBusy(false);}
@@ -333,12 +349,39 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               companion is speaking IN them, and a portrait above the
               transcript would be a second claim to the same voice. It holds
               the empty page the way it holds the home screen, and then it
-              gets out of the way. */}
-          {!conversation?.messages.length&&!draft?.content&&!loading&&!error?
+              gets out of the way.
+
+              AND IT STAYS WHILE YOU TYPE. Founder, 2026-10-15, of the page
+              going blank on the first keystroke: "till user sends first
+              message, keep [it] on." Typing is not a turn yet; the opening
+              leaves when the first message is actually on its way. */}
+          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error?
             <div className="chat-opening">
-              <Companion size={64}/>
-              <p>{say('worldConversationOpening')}</p>
+              {/* The one you are about to talk with is the one on screen:
+                  yours, your agent in its own pixel form, or the two of
+                  you side by side. */}
+              <span className="chat-opening-beings">
+                {talkWith!=='agent'?<Companion size={64}/>:null}
+                {agent&&agentForm&&talkWith!=='mine'?<Companion size={talkWith==='both'?52:64} being={agentForm} cool pixel label={agent.name}/>:null}
+              </span>
+              <p>{say(talkWith==='agent'?'worldConversationOpeningAgent':talkWith==='both'?'worldConversationOpeningBoth':'worldConversationOpening')}</p>
+              {agent&&!id&&!initialPrincipleId?(
+                <div className="chat-with" role="group" aria-label={say('worldChatWithLabel')}>
+                  {(['mine','agent','both'] as const).map(choice=>(
+                    <button key={choice} type="button" aria-pressed={talkWith===choice}
+                      className={`chat-with-choice${talkWith===choice?' chat-with-choice--on':''}`}
+                      onClick={()=>setTalkWith(choice)}>
+                      {say(choice==='mine'?'worldChatWithMe':choice==='agent'?'worldChatWithAgent':'worldChatWithBoth')}
+                    </button>
+                  ))}
+                </div>
+              ):null}
             </div>:null}
+          {/* AND ONCE IT HAS STARTED, A CHAT THAT IS NOT ONLY YOURS SAYS SO,
+              in one quiet line, so an answer from the agent's memory is
+              never read as one from yours. */}
+          {conversation?.messages.length&&conversation.perspective&&conversation.perspective!=='mine'?
+            <p className="chat-with-note">{say(conversation.perspective==='agent'?'worldChatWithAgentNote':'worldChatWithBothNote')}</p>:null}
           {/* ═══ THE TRANSCRIPT, ON THE REFERENCE'S MESSAGE ANATOMY ═════
               Founder: "make the chat message list and the chat message
               thing also follow what you see on this AI chat conversation."

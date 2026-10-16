@@ -148,10 +148,16 @@ const STYLES = resolve(HERE, "../src/styles");
  *        the rule: slack in a ratchet is room for the thing it was built to
  *        stop.
  *
- * What is left is `home.css`'s 23 and `layers.css`'s deliberate 2. The floor
- * this is walking toward is 2.
+ *    26  2026-10-15. `layers.css` gains its third deliberate rule:
+ *        `.jar [tabindex="-1"]:focus-visible { filter: none }`. It has to be
+ *        unlayered, because the rule it narrows (`.jar :focus-visible`) is,
+ *        and an unlayered rule can only be overridden by another. Without it
+ *        a page focused by the code turned flat white after any key press.
+ *
+ * What is left is `home.css`'s 23 and `layers.css`'s deliberate 3. The floor
+ * this is walking toward is 3.
  */
-const UNLAYERED_CEILING = 25;
+const UNLAYERED_CEILING = 26;
 
 /** Read the rules, not the prose — the same blanking the other gates use. */
 const commentsBlanked = (css: string): string =>

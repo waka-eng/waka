@@ -1,7 +1,7 @@
 import {ApiError,apiPath,deleteJson,getJson,postJson} from './http';
 export type ConversationSourceKind='principle'|'top_of_mind_entry'|'inspiration';
 export interface ApiConversationMessage{id:string;profileId:string;conversationId:string;position:number;role:'user'|'assistant';content:string;createdAt:string;correctsMessageId?:string|null;savedInspirationIds?:string[];followUpQuestion?:string|null;memoryChanged?:boolean;replyRequestId?:string|null;citations?:Array<{index:number;kind:ConversationSourceKind;id:string;available:boolean;preview?:string;historical?:boolean;recordedAt?:string}>}
-export interface ApiConversation{id:string;profileId:string;revision:number;createdAt:string;updatedAt:string;messages:ApiConversationMessage[];messageWindowStart?:number;preview?:string;generationEnabled?:boolean;initialPrinciple?:{id:string;statement:string;state:string}|null;
+export interface ApiConversation{id:string;profileId:string;revision:number;perspective?:'mine'|'agent'|'both';agentProfileId?:string|null;createdAt:string;updatedAt:string;messages:ApiConversationMessage[];messageWindowStart?:number;preview?:string;generationEnabled?:boolean;initialPrinciple?:{id:string;statement:string;state:string}|null;
   /* WHAT THIS CONVERSATION IS PINNED TO. Founder: "user can pick an
      inspiration on the right ... and then when the user specifically brings
      that up then the agent can read it." The server pins it into the reply's
@@ -39,7 +39,9 @@ function checked(body:{conversation:ApiConversation;generationEnabled:boolean},p
 }
 export async function listConversations(profile:string,signal?:AbortSignal){const body=await getJson<{profileId:string;conversations:ConversationSummary[];generationEnabled:boolean}>(path(profile),'Could not load conversations.',signal);if(body?.profileId!==profile||typeof body.generationEnabled!=='boolean'||!Array.isArray(body.conversations)||body.conversations.length>100||body.conversations.some(row=>row.profileId!==profile||typeof row.id!=='string'||typeof row.preview!=='string'))throw invalid();return body;}
 export async function fetchConversation(profile:string,id:string,signal?:AbortSignal,from?:number){return checked(await readWindow(profile,`/${encodeURIComponent(id)}`,signal,from),profile,id);}
-export async function createConversation(profile:string,id:string,signal?:AbortSignal,principleId?:string,firstMessage?:{id:string;content:string;requestReply?:boolean}){return checked(await writeWindow(profile,'',{id,...(principleId?{principleId}:{}),...(firstMessage?{firstMessage}:{})},'Could not start the conversation.',signal),profile,id);}
+/** `talkWith` picks whose memory the reply reads — see `conversations.perspective`
+    on the server. Absent is the person's own, as every chat before it. */
+export async function createConversation(profile:string,id:string,signal?:AbortSignal,principleId?:string,firstMessage?:{id:string;content:string;requestReply?:boolean},talkWith?:{perspective:'agent'|'both';agentId:string}){return checked(await writeWindow(profile,'',{id,...(principleId?{principleId}:{}),...(firstMessage?{firstMessage}:{}),...(talkWith?talkWith:{})},'Could not start the conversation.',signal),profile,id);}
 /* `pinConversationInspiration` WENT WITH THE DRAWER THAT CALLED IT.
    Founder: "let's get rid of the side part and referencing inspiration ...
    it's too complicated right now." The ROUTE is live and tested — PATCH

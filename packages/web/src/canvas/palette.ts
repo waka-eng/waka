@@ -1,23 +1,17 @@
 import { type Ramp } from "../lib/appearance";
 import { clamp } from "../lib/num";
 import {
-  BLOOM_EXP,
-  BLOOM_R,
   GRAIN_AMP,
   GRAIN_PX,
   GRAIN_TILE,
   KEY_X,
   KEY_Y,
   NEB_PEAK,
-  SIZE_R,
-  TIERS,
   ditherAlpha,
   makeSprite,
   mix,
   parseColor,
-  rampAt,
   rasterBloom,
-  rasterOrb,
   rgbCss,
 } from "./sprites";
 import { OWNER_BEING, type Being } from "../character/body";
@@ -32,7 +26,7 @@ const NEB_PX = 150;
  * EVERY SPRITE THE WORLD OWNS, RASTERED ONCE.
  *
  * A `Palette` is the whole drawable inventory for one skin at one device pixel
- * ratio: orbs at each size and tier, blooms, nebulae, the seam, the grain, the
+ * ratio: the companion's aura, motes, nebulae, the seam, the grain, the
  * vignette, and the companion's baked bodies. `buildPalette` makes one; the
  * frame loop only ever reads it.
  *
@@ -45,29 +39,10 @@ const NEB_PX = 150;
 export interface Palette {
   dpr: number;
   ramp: Ramp;
-  /** The dormant colour as CSS — a photo orb desaturates toward it. */
-  gray: string;
   /**
-   * [sizeBucket][alivenessTier] — the disc itself. There is no tint axis: two
-   * memories at the same aliveness are the same light, whatever they are about.
-   */
-  orbs: HTMLCanvasElement[][];
-  /**
-   * [hue][size][tier], baked on first sight rather than up front. Five hues x
-   * nine sizes x five tiers is 225 more canvases, and most sessions never
-   * enter a room with four other people in it — so a hue costs nothing until
-   * somebody's memory is actually on the ground in front of you.
-   */
-  hued: Map<string, HTMLCanvasElement[][]>;
-  /** [sizeBucket][alivenessTier] — the diffuse outer bloom, additive. */
-  blooms: HTMLCanvasElement[][];
-  /** The second, much wider and dimmer ring the focused orb wears. */
-  aura: HTMLCanvasElement;
-  /**
-   * The companion's four aura layers. They are baked separately from the orb
-   * blooms so each can carry a slightly different falloff curve — four
-   * identical curves stacked at four radii is exactly how faint banding
-   * becomes visible banding.
+   * The companion's four aura layers, each with a slightly different falloff
+   * curve — four identical curves stacked at four radii is exactly how faint
+   * banding becomes visible banding.
    */
   auraLayers: HTMLCanvasElement[];
   /** One tiny point; motes and background sparkles share it. */
@@ -227,7 +202,7 @@ function rasterDot(
  * luminance reads as a filter, grain that carries the ground's own warmth
  * reads as the material.
  */
-function rasterGrain(cast: [number, number, number]): HTMLCanvasElement | null {
+export function rasterGrain(cast: [number, number, number]): HTMLCanvasElement | null {
   /* ═══ THE FILM STAYS AT CSS RESOLUTION, AND THE REASON IS MEASURED ═══
      An attempt on 2026-10-12 baked this at `GRAIN_PX * dpr` to stop the
      browser magnifying it 3x on a phone. The magnification is real — a
@@ -325,17 +300,21 @@ function rasterVignette(dpr: number): HTMLCanvasElement {
  * goes quiet when the jar does is the whole point.
  */
 
-export function buildPalette(
-  root: HTMLElement,
-  dpr: number,
-  ctx: CanvasRenderingContext2D,
-): Palette {
+/**
+ * THE RAMP, READ OFF THE ROOT — once, for the world's palette and for every
+ * creature drawn off the world's canvas (a page's `Companion`, the walk to
+ * the timeless page, a share card), so each is lit by the stylesheet rather
+ * than by a copy of its values, and the warm/cold decision stays in one
+ * place.
+ *
+ * Every colour the canvas paints with lives in jar.css beside the ones the
+ * DOM paints with, so the surface is ONE block to read and one to change.
+ */
+export function rampFromCss(root: HTMLElement): Ramp {
   const cs = getComputedStyle(root);
   const v = (name: string, fallback: string) =>
     parseColor(cs.getPropertyValue(name).trim() || fallback);
-  /* Every colour the canvas paints with lives in jar.css beside the ones the
-     DOM paints with, so the surface is ONE block to read and one to change. */
-  const ramp: Ramp = {
+  return {
     live: v("--jar-live", "#fff2dc"),
     liveEdge: v("--jar-live-edge", "#f7ead4"),
     liveBloom: v("--jar-live-bloom", "#ffedd0"),
@@ -351,9 +330,14 @@ export function buildPalette(
     bodyLit: v("--jar-body-lit", "#f7f1e4"),
     bodyShade: v("--jar-body-shade", "#a49b8c"),
   };
-  const grayCss = cs.getPropertyValue("--jar-dorm").trim() || "#28323f";
-  const tiers: number[] = [];
-  for (let t = 0; t < TIERS; t++) tiers.push(t);
+}
+
+export function buildPalette(
+  root: HTMLElement,
+  dpr: number,
+  ctx: CanvasRenderingContext2D,
+): Palette {
+  const ramp = rampFromCss(root);
   const grainTile = rasterGrain(ramp.dorm);
   /* the same tile, as a pattern, for the one bake that genuinely has an
      opaque backdrop to blend against: the companion's own body */
@@ -364,14 +348,10 @@ export function buildPalette(
   return {
     dpr,
     ramp,
-    gray: grayCss,
-    /* [size][tier]: aliveness picks the light, and nothing else picks anything */
-    orbs: SIZE_R.map((r) => tiers.map((t) => rasterOrb(ramp, r, dpr, t))),
-    hued: new Map(),
-    blooms: SIZE_R.map((r) =>
-      tiers.map((t) => rasterBloom(rampAt(ramp, t / (TIERS - 1)).bloom, r * BLOOM_R, dpr, BLOOM_EXP)),
-    ),
-    aura: rasterBloom(ramp.liveBloom, 96, dpr, BLOOM_EXP * 0.8),
+    /* NO ORB SHEETS (2026-10-15). The discs, their blooms, the hued sheets for
+       other people's memories and the focused orb's aura were baked here for
+       every size and brightness, for the field painter. The painter and the
+       balls are deleted, so the bake went with them. */
     auraLayers: [0, 1, 2, 3].map((i) =>
       rasterBloom(mix(ramp.liveBloom, ramp.live, i * 0.18), NEB_PX * 0.55, dpr, 2 + i * 0.2),
     ),

@@ -14,6 +14,7 @@ import {useRef} from 'react';
 import {ConversationPanel} from '../src/components/ConversationPanel';
 import {createConversation,fetchConversation,fetchConversationReply,listConversations,type ApiConversation} from '../src/lib/api/conversations';
 const owner=vi.hoisted(()=>({account:'owner',profile:'profile'}));
+const withAgent=vi.hoisted(()=>({value:null as {id:string;name:string}|null}));
 vi.mock('../src/lib/auth-context',()=>({useAuth:()=>({status:'authenticated',account:{id:owner.account},profile:{id:owner.profile,preferredLocale:'en-US'}})}));
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),listConversations:vi.fn()}));
 let host:HTMLDivElement,root:Root,row:ApiConversation|null;
@@ -44,7 +45,7 @@ function TalkHost(){
   const owner=`${scope.accountId}:${scope.profileId}`;
   const committed=useRef<{owner:string;row:ApiConversation}|null>(null);
   if(committed.current&&(committed.current.owner!==owner||committed.current.row.id!==id))committed.current=null;
-  return <ConversationPanel key={`${owner}:${id??'new'}`} scope={scope} id={id} locale="en-US"
+  return <ConversationPanel key={`${owner}:${id??'new'}`} scope={scope} id={id} locale="en-US" agent={withAgent.value}
     initialConversation={committed.current?.row}
     onCreated={row=>{if(row.profileId===scope.profileId)committed.current={owner,row};}}
     /* THE NEW-TO-ID HOP, which is the whole point of the first case: a
@@ -57,7 +58,7 @@ function TalkHost(){
 }
 const render=()=>act(async()=>root.render(<MemoryRouter initialEntries={['/chat/new']}><Routes><Route path="/chat/:conversationId" element={<TalkHost/>}/></Routes></MemoryRouter>));
 beforeEach(()=>{
-  vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});localStorage.clear();sessionStorage.clear();owner.account='owner';owner.profile='profile';row=null;
+  vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});localStorage.clear();sessionStorage.clear();owner.account='owner';owner.profile='profile';row=null;withAgent.value=null;
   (globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
   vi.mocked(listConversations).mockImplementation(async profile=>({profileId:profile,conversations:[],generationEnabled:true}));
   vi.mocked(createConversation).mockImplementation(async(profile,id,_signal,_principle,first)=>{
@@ -95,4 +96,25 @@ it('clears the bootstrap on a profile switch instead of showing another owner’
   owner.account='other-owner';owner.profile='other-profile';await render();
   expect(fetchConversation).toHaveBeenCalledWith('other-profile',row!.id,expect.any(AbortSignal));
   expect(host.querySelector('.chat-messages')?.textContent).not.toContain('What has changed in how I think?');
+});
+
+/* WHO YOU ARE TALKING WITH (2026-10-15): "new chat should also let you
+   select if you want to chat with me vs my agent or both perspectives." */
+it('offers me, my agent or both before the first message, and starts the chat with that choice', async()=>{
+  /* A real profile id: the draft keeps it, and a draft holds only UUIDs. */
+  const agentId='3f6c1a52-8d0e-4b7a-9c21-5e4f7a8b9c0d';
+  withAgent.value={id:agentId,name:'Demo Agent'};
+  await render();
+  const choices=[...host.querySelectorAll('.chat-with-choice')].map(node=>node.textContent);
+  expect(choices).toEqual(['Me','My agent','Both']);
+  await act(async()=>([...host.querySelectorAll<HTMLButtonElement>('.chat-with-choice')].find(node=>node.textContent==='Both'))!.click());
+  await ask('What do we each think?');
+  expect(vi.mocked(createConversation).mock.calls[0]![5]).toEqual({perspective:'both',agentId});
+});
+
+it('asks nobody to choose when there is no agent, and starts an ordinary chat', async()=>{
+  await render();
+  expect(host.querySelector('.chat-with')).toBeNull();
+  await ask('Just me');
+  expect(vi.mocked(createConversation).mock.calls[0]![5]).toBeUndefined();
 });

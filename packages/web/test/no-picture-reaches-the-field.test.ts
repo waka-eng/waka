@@ -104,23 +104,15 @@ describe("no picture comes down with a memory", () => {
     ).toEqual([]);
   });
 
-  it("draws nothing on the ground but the palette's own discs", () => {
-    /* THE SYMPTOM, still held. Every `drawImage` in the field must take its
-       source from the baked palette or the orb sheet — never from a thing
-       fetched off the network. */
-    const paint = sources.get("space/inspiration/field-paint.ts");
-    expect(paint, "field-paint.ts is not where this thinks it is").toBeDefined();
-    const sources_drawn = [...(paint ?? "").matchAll(/drawImage\(\s*([A-Za-z_$][\w.$[\]]*)/g)].map(
-      (m) => m[1]!,
-    );
-    expect(sources_drawn.length, "no drawImage found — the scan is looking at the wrong file").
-      toBeGreaterThan(2);
-    for (const s of sources_drawn) {
-      expect(
-        /^(pal\.|sheet\b)/.test(s),
-        `field-paint draws from \`${s}\`, which is neither the palette nor the orb sheet`,
-      ).toBe(true);
-    }
+  it("draws nothing on the ground at all, now that the orbs are gone", () => {
+    /* THE SYMPTOM, held more strictly than before. This case used to check
+       that every image the field painter drew came from the palette or the
+       orb sheet. Since 2026-10-15 there is no field painter — founder:
+       "these balls for inspirations being saved should FULLY BE DELETED and
+       removed" — so the rule is that it stays gone. A painter coming back
+       has to come back through this line and say why. */
+    expect(sources.has("space/inspiration/field-paint.ts"), "the field painter is back").toBe(false);
+    expect(sources.get("canvas/simulation.ts") ?? "", "the world paints the field again").not.toMatch(/paintField\(/);
   });
 
   it("reads a source tree that really contains the layer this is about", () => {

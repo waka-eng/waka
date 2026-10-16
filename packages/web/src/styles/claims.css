@@ -2263,6 +2263,237 @@
  * evidence, not a headline.
  * ------------------------------------------------------------------------- */
 
+/* ═══ THE PRINCIPLES PAGE STANDS ON TIME ════════════════════════════════
+   Founder, 2026-10-15: "when clicking on principles, the background does a
+   time travel effect to show these are timeless principles." The trails
+   (`TimelessSky.tsx`) paint above the page's ground and under everything
+   on it. */
+.waka-timeless {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.waka-page--timeless > :not(.waka-timeless, .waka-crossing-being) {
+  position: relative;
+  z-index: 1;
+}
+
+/* ═══ THE GROUND, BEFORE THE FIRST PRINCIPLE ═════════════════════════════
+   Founder, 2026-10-15: "even the waiting time I wanted to have a very
+   thrilling and super exciting waiting time." See `PrinciplesGround.tsx`.
+
+   The empty page is the card a principle will be — same proportions, same
+   corner, same face — with three seats in it. Light is the only meaning
+   channel, so the whole state is carried by light: an empty seat is a
+   faint line, a held seat is the pattern's own words in muted ink, and the
+   card's edge warms when every seat is held. No numerals, no progress bar. */
+.waka-ground {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-20);
+  padding-block: var(--sp-16);
+}
+
+/* ═══ THE CREATURE WAITS WITH YOU ════════════════════════════════════════
+   Founder, 2026-10-15: "the character should be a big part of it ... the
+   character should give that feeling of an exciting anticipation."
+
+   It stands over the card it is waiting to fill, speaking in the same
+   bubble it uses on the home screen. Its glow is the progress: `--charge`
+   runs 0 to 1 as seats fill, and the halo brightens and widens with it, so
+   the most important number on the page is read as light, never as a
+   digit. Once anything is holding it breathes, slowly; when every seat is
+   held it breathes a little faster, which is the anticipation itself. */
+.waka-ground-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-16);
+  padding-block-start: var(--sp-8);
+}
+
+.waka-ground-bubble {
+  /* Everything it looks like comes from `.jar-char-bubble-body`, the home
+     screen's own bubble; this only keeps it above the creature's light. */
+  position: relative;
+  z-index: 1;
+}
+
+/* THE COMPANION'S BOX IS FOUR TIMES ITS BODY, because its aura is painted
+   from that box (`.waka-companion`). Left as is, the box put a body's height
+   of empty light between the bubble and the creature and another below it,
+   and pushed the seats off a phone screen. So the hero pulls the box up
+   under the bubble and lets the card sit in the lower aura. The body itself
+   is never overlapped — `--being` is the body's box, and the margins stop
+   short of it — and the aura is not clipped, it passes behind the card. */
+.waka-ground-being {
+  position: relative;
+  display: block;
+  /* Tighter under the bubble than the box's own math, to match the home
+     screen's gap (founder, 2026-10-15: "the spacing between the character
+     and the speech bubble is too high. I prefer the amount ... used here"). */
+  margin-block: calc(var(--being, 106px) * -1.32 - var(--sp-24)) calc(var(--being, 106px) * -1.22);
+}
+
+/* THE AURA IS THE PROGRESS. The companion's own light, at the strength the
+   waiting has earned: faint with nothing holding, full when every seat is. */
+.waka-ground-being .waka-companion {
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--jar-live, var(--moon-warm)) calc(8% + 26% * var(--charge, 0)), transparent) 0%,
+    color-mix(in srgb, var(--jar-live, var(--moon-warm)) calc(3% + 10% * var(--charge, 0)), transparent) 15%,
+    transparent 55%
+  );
+}
+
+.waka-ground-hero--stirring .waka-ground-being {
+  animation: waka-ground-breathe 3.6s ease-in-out infinite;
+}
+
+.waka-ground-hero--ready .waka-ground-being {
+  animation-duration: 2.2s;
+}
+
+@keyframes waka-ground-breathe {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  50% { transform: translateY(calc(var(--sp-4) * -1)) scale(1.015, 0.985); }
+}
+
+/* The first principle's arrival wears the same hero, a little smaller. */
+.waka-held-first-hero {
+  margin-block-end: var(--sp-16);
+}
+
+/* ═══ THE CARD THAT ISN'T THERE YET — soft, not dashed ════════════════════
+   Founder, 2026-10-15: "this effect is good but I think we can make it a lot
+   prettier and matching the design of our thing." The dashed rectangle was
+   the one hard edge on a page of light. The design language is 몽글몽글: no
+   visible borders, very-low-alpha layered fills, light that wells up. So the
+   card is a soft field of warm light at the principle card's proportions,
+   its seats are rounded wells, and it glows from within when every seat is
+   held. */
+.waka-ground-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  box-sizing: border-box;
+  width: min(24rem, 100%);
+  padding: var(--sp-20) var(--sp-24) var(--sp-24);
+  border-radius: var(--waka-r-surface);
+  /* LIGHT, NOT A SLAB. A flat fill of any alpha on this ground reads as a
+     grey box — the founder's own words for exactly that, about the claim
+     card: "that gray box is so ugly." So the card is only a glow, centred and
+     spent by the nearest side — brightest in the middle, nothing at any
+     edge — so nothing marks where it ends. */
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--jar-live) 9%, transparent), transparent);
+  transition: background 0.8s ease;
+}
+
+.waka-ground-card--full {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--jar-live) 16%, transparent), transparent);
+}
+
+.waka-ground-seats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-10);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.waka-ground-seat {
+  display: flex;
+  align-items: center;
+  min-height: var(--sp-40);
+  padding: var(--sp-8) var(--sp-14);
+  border-radius: var(--waka-r-hand-sm);
+  /* a streak of light from the left that fades out, never a filled pill */
+  background: linear-gradient(90deg, color-mix(in srgb, var(--jar-live) 5%, transparent), transparent 80%);
+}
+
+/* A held seat is a little more lit than an empty one; its words are the
+   pattern's own. */
+.waka-ground-seat--held {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--jar-live) 11%, transparent), transparent 85%);
+}
+
+.waka-ground-empty {
+  display: block;
+  width: 62%;
+  height: var(--sp-6);
+  border-radius: var(--sp-6);
+  background: color-mix(in srgb, var(--jar-live) 7%, transparent);
+}
+
+.waka-ground-seat:nth-child(2) .waka-ground-empty { width: 48%; }
+.waka-ground-seat:nth-child(3) .waka-ground-empty { width: 34%; }
+
+.waka-ground-words {
+  display: block;
+  color: color-mix(in srgb, var(--ink) 78%, transparent);
+  font-family: var(--waka-face);
+  font-size: var(--t-body);
+  /* regular, not light: the same ruling as the claim slip's — thin strokes
+     on the night read as spindly */
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+}
+
+/* A SEAT THAT FILLED WHILE YOU WERE AWAY comes up in light, once. It is the
+   one change on this page, so it is the one motion. */
+.waka-ground-seat--new .waka-ground-words {
+  /* HELD WARM, THEN SETTLED. A fade that starts the instant the page paints
+     is over before the eye has found it — measured in a browser, the first
+     version was indistinguishable from its neighbours half a second in. The
+     warmth holds for long enough to be found, then becomes one of the rest. */
+  animation: waka-ground-arrive 2.8s ease-in-out both;
+}
+
+@keyframes waka-ground-arrive {
+  0%, 45% { color: var(--moon-warm); text-shadow: 0 0 12px color-mix(in srgb, var(--moon-warm) 55%, transparent); }
+  100% { color: var(--muted); text-shadow: none; }
+}
+
+.waka-ground-foot {
+  order: -1;
+  margin: 0;
+  color: color-mix(in srgb, var(--jar-live) 70%, transparent);
+  font-family: var(--waka-face);
+  font-size: var(--t-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* THE FIRST PRINCIPLE, MET. One line above it, and the card comes up in
+   light — the same light the ground's seats were waiting in. Once. */
+.waka-held-first {
+  color: var(--waka-on-light);
+  font-size: var(--t-lead);
+}
+
+.waka-held-card--arriving {
+  animation: waka-held-arrive 1.8s ease-out both;
+}
+
+@keyframes waka-held-arrive {
+  from { border-color: color-mix(in srgb, var(--moon-warm) 70%, transparent); box-shadow: 0 0 32px color-mix(in srgb, var(--moon-warm) 22%, transparent); }
+  to { border-color: var(--line); box-shadow: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waka-ground-card { transition: none; }
+  .waka-ground-hero--stirring .waka-ground-being { animation: none; }
+  .waka-ground-seat--new .waka-ground-words,
+  .waka-held-card--arriving { animation: none; }
+}
+
 .waka-held {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr));
@@ -3531,6 +3762,19 @@
   pointer-events: auto;
 }
 
+/* ═══ THE CEILING LIFTS WHILE THE CARD IS IN THE HAND ═══════════════════
+   The scroller above clips everything outside its own box, which is right
+   for a long claim at rest and wrong for a slip that is being moved: it
+   cut the card off at the edge mid-drag and hid the tag travelling with it
+   — measured in a browser on 2026-10-15, on the vertical card this slip
+   replaced, and the sideways throw and the downward pull leave the same box.
+   While a slip is held or leaving, nothing is scrolled and nothing is long,
+   so the clip has no job for those few hundred milliseconds. At rest it comes straight back, and
+   with it the reason it exists. */
+.jar-char-say:has(.jar-pick[data-moving]) {
+  overflow: visible;
+}
+
 /* IT HANGS FROM THE BOTTOM BY AN AUTO MARGIN, NOT BY `justify-content`.
    Caught by `phone-breakpoints` on the way in, which is the third time this
    exact trap has been sprung in this codebase: `justify-content: flex-end` in
@@ -3543,160 +3787,18 @@
   margin-block-start: auto;
 }
 
-/* ---------------------------------------------------------------------------
- * The claim the companion is holding
- *
- * Sits in its voice block, under its face, on the screen everyone starts on.
- * One at a time: the statement is the only thing here with weight, the ask
- * above it is a label, and the three answers are the whole interaction.
- * ------------------------------------------------------------------------- */
-
-/**
- * NO CARD. The claim was a bordered, raised rectangle sitting directly under
- * the companion's face, which made the one screen the product opens on read
- * as three stacked boxes: a reading, a card, and a field. It is not a card —
- * it is the creature SAYING something, and nothing else it says is boxed.
- *
- * What made it legible as a question was never the border; it is the small
- * uppercase ask above the sentence, which is still there. Removing the frame
- * gives back the border, the radius, two lines of padding and the raised
- * ground — which is most of the crowding, and all of it was chrome.
- */
-/**
- * ═══ THE CLAIM IS THE NOTE ══════════════════════════════════════════════
- *
- * Founder, pointing at the ribboned card along the bottom of 썸원's home —
- * the one that says "오늘도 반가워요!" — "the main screen should be just the
- * character and then the claim should always show there. Because that's
- * like the first thing that the user should answer."
- *
- * That card is the one thing on their home screen that is ADDRESSED TO YOU,
- * and it is given a surface of its own so you cannot mistake it for
- * scenery. The claim is WAKA's version of it, and the inversion is right on
- * the evidence as well as the feeling: a claim can exist from the first
- * thing a person saves, while a top of mind needs three pieces of evidence
- * behind a signal. The screen was leading with what takes longest to exist
- * and burying what was ready on day one.
- *
- * So it stops being loose text under the chin and becomes an object: the
- * warm raised tone, a large radius, real padding, and NO BORDER — separated
- * from the ground by value, which is the whole of how the reference does it.
- */
-.jar-char-claim {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  /* SMALLER, by the founder's own measure: "maybe a little smaller". It is a
-     question resting on the dock now rather than the centre of the screen,
-     and a 32rem slab at reading size down there would be a second page. */
-  gap: var(--sp-12);
-  width: min(26rem, 100%);
-  padding: var(--sp-16) var(--sp-20) var(--sp-14);
-  /* A CORNER DRAWN RATHER THAN SPECIFIED — see `--waka-r-hand`. The bubble
-     over the creature's head already refuses a uniform radius for exactly
-     this reason ("a said thing is softer on one side than the other"), and
-     the note the creature holds up is the same kind of object. */
-  border-radius: var(--waka-r-hand);
-  /* ═══ AN OUTLINE, NOT A FILL ══════════════════════════════════════════
-     Founder, pointing at this block: "that gray box is so ugly. How do we
-     make it a little bit prettier? Maybe it should just be this outlined
-     box as we have before for the chat" — and attached the composer, which
-     is a transparent field inside a soft hairline.
-
-     The fill was argued from the reference, where a card on a WHITE page is
-     separated by value. On a near-black ground the same move produces a
-     grey rectangle: `--waka-raised` is 1.07:1 against the ground, so what
-     it actually draws is not a lit object but a slightly less black one,
-     and a slightly less black rectangle is the definition of a slab.
-
-     An outline does the separating with a single warm line, which is the
-     one thing on a dark ground that CAN be seen, and leaves the inside of
-     the card made of the same night as everything around it. That is also
-     the 몽글몽글 answer: the question is held by a soft edge rather than
-     stamped onto a plate.
-
-     THE EDGE IS WARM, not white. `--moon-edge` is a neutral white alpha and
-     would put the one cold line on the screen around the one warm object on
-     it. */
-  border: 1px solid color-mix(in srgb, var(--moon-warm) 22%, transparent);
-  background: transparent;
-}
-
-/* A GRAIN WAS PUT ON THIS CARD AND TAKEN STRAIGHT BACK OFF. "A bit more
-   grainy and aligned with the character's design" got a film of the
-   creature's own emulsion here; founder, on the result: "dont grain it". Same
-   answer as the page grounds an hour earlier — on a dark surface this film
-   reads as dirt rather than as paper. What survives of that ruling is the
-   warmth and the hand-drawn corner above, which is the half that worked. */
-
-/* The one sentence with weight. Same face and the same light weight as the
-   reading above it — it is the same kind of thing, said earlier. */
-/* `.jar-char-claim-from` IS NOT GONE, AND THIS NOTE SAID IT WAS. Corrected
-   2026-10-12: the rule is still declared below and `Home.tsx` still renders
-   it — measured on screen as "From 2 things you kept" under a live claim. A
-   tombstone for something still alive is worse than no comment, because the
-   next person deletes the rule on its word. What follows is the history,
-   which is true and worth keeping; only the first sentence was wrong.
-
-   THE EVIDENCE LIST IS GONE — that is what this paragraph was about. Founder, on a
-   screenshot of three evidence lines under a claim: "makes the page messy",
-   and before that "we need to remove this or else it's gonna not have enough
-   space." The claim's slot has a reserved height now so the creature cannot
-   move when you change faces, and a list that grows by one line per save is
-   the one thing that slot cannot hold. The ids are still on the claim and the
-   reasoning for showing them is kept in `Home.tsx` where it happened. */
-
-/* THE READING WEARS THE SAME NOTE AS THE QUESTION — same seat, same
-   material — and is a shade quieter, because it is something to read rather
-   than something waiting on you. */
-/* ═══ `.jar-char-claim--reading` WENT WITH THE SEAT IT DRESSED ══════════
-   Founder, on a bordered box with nothing inside it: "there isn't anything
-   the user needs to engage with, so why is this box here?"
-
-   The seat held one of two things — a claim to answer, or the reading's
-   verbs. The verbs came off the top of mind ("controls under a statement
-   about you must ANSWER it, not administer it"), which made "neither"
-   reachable for the first time, and the branch went on drawing its frame
-   around nothing. The branch is gone; these two rules dressed only that
-   branch.
-
-   RECORDED RATHER THAN QUIETLY DELETED, because no gate would ever have
-   noticed: `dead-css.ts` is report-only — its `main()` returns 0 and prints
-   "EVIDENCE, NOT A DELETION LIST" — and `every-class-is-dressed.test.ts` is
-   the inverse check, which deleting markup can only make greener. Two dead
-   rules here would have sat unnoticed indefinitely.
-
-   What it set: `color: var(--muted)` on the seat, and `--ink` plus the
-   interface face on the statement inside it. The claim seat keeps its own
-   rules; only the reading modifier is gone. */
-
-
-/* WHERE THE CLAIM CAME FROM — one quiet line, in the same register the
-   principles' proof line wears, and a door rather than a label. It sits
-   under the statement and above the answers: you read what it says about
-   you, then how it knows, then you answer. */
-.jar-char-claim-from {
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.jar-char-claim-from:hover,
-.jar-char-claim-from:focus-visible {
-  color: var(--ink);
-}
-
-.jar-char-claim-from:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: -2px;
-  border-radius: var(--waka-r-hand-sm);
-}
+/* ═══ THE CLAIM THE CREATURE HELD WENT WITH ITS SEAT ════════════════════
+   `.jar-char-claim` and what it wore — `-from` (the "From 2 things you kept"
+   door), `-statement`, and the correction field `-mine` / `-edit` — dressed
+   the claim that sat in the creature's voice block, under its face. Founder,
+   on that seat: "the main screen should be just the character and then the
+   claim should always show there." It still shows there, as a `ClaimSlip`
+   (the `.jar-pick` rules below, `--reading` tone), and correcting a claim
+   became a chat ("can we open a chat experience rather than asking user to
+   answer in that small space?"). The family is gone because nothing renders
+   it; the arguments it carried — an outline rather than a grey slab on the
+   near-black ground, a corner drawn rather than specified, "dont grain it"
+   — are in git under this file. */
 
 /* The way out of a filtered archive, in the count's seat — see the note at
    its call site for why it replaces the count rather than joining it. */
@@ -3714,56 +3816,6 @@
 .waka-over-unfocus:hover,
 .waka-over-unfocus:focus-visible {
   color: var(--ink);
-}
-
-.jar-char-claim-statement {
-  margin: 0;
-  font-family: var(--waka-face);
-  /* A STEP DOWN, with the card. `--t-lead` is the size the reading above is
-     set at, and the reading is the thing the creature is holding up; the
-     question resting on the dock is asked quieter than the answer is given. */
-  font-size: var(--t-ui);
-  font-weight: 300;
-  /* 1.35 -> 1.5. A sentence asking somebody to consult themselves is read,
-     not scanned, and the reference sets everything it wants read loosely. */
-  line-height: 1.5;
-  color: var(--ink);
-  text-align: center;
-  text-wrap: pretty;
-}
-
-/* The sentence, handed back for you to say properly. Same width as the
-   claim it replaces, so pressing partly does not resize the block under the
-   companion. */
-.jar-char-claim-mine {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-12);
-  width: 100%;
-}
-
-.jar-char-claim-edit {
-  width: 100%;
-  box-sizing: border-box;
-  padding: var(--sp-12);
-  border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent);
-  border-radius: var(--waka-r-surface);
-  background: var(--waka-raised);
-  color: var(--ink);
-  font-family: var(--waka-face);
-  /* The same size the claim was. You are editing that sentence, not filling
-     in a form about it. */
-  font-size: var(--t-lead);
-  font-weight: 300;
-  line-height: 1.35;
-  text-align: center;
-  resize: none;
-  field-sizing: content;
-}
-
-.jar-char-claim-edit:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
 }
 
 /**
@@ -3873,81 +3925,231 @@
   color: var(--jar-muted);
 }
 
-/* The answers sit at the start of the line here rather than centred: this is
-   a list being worked down, so every row's first answer should land under the
-   last one. The creature's claim is a single centred utterance and keeps its
-   own alignment. */
-.waka-claim .jar-char-claim-answers {
-  justify-content: flex-start;
-}
+/* ═══ THE ANSWER ROW, THEN THE UP/DOWN CARD, WENT (2026-10-15) ══════════
+   First the three words under the sentence (`.jar-char-claim-answers`)
+   became one gesture with two directions — founder: "swipe the card towards
+   the character up to say yes and swipe it down to say no" — and then that
+   vertical card (`ClaimCard.tsx`, its `.jar-char-claim-dir` words and
+   chevrons, its slot, its held and leaving states) went too. Founder, on the
+   agent's sideways pick: "let's have this design for 'keep it or not it' for
+   the first type of claim too ... better than the drag upward, drag down."
+   Both kinds of claim are a `ClaimSlip` now: the `.jar-pick` rules below,
+   with a `--reading` tone. The history is in git under this file. */
 
-.waka-claim .jar-char-claim-answers button {
-  flex: 0 0 auto;
-}
-
-/**
- * ONE REGISTER FOR "RESPOND TO A STATEMENT ABOUT YOURSELF".
- *
- * `.jar-poster-answers` joined this rule on 2026-10-11 and left it the same
- * day, which earns a line because the reasoning survives the retreat.
- *
- * The home screen carried TWO sentences about the person — the creature's
- * claim and the top of mind above it — asking for the same thing in two
- * languages: three pills with a question over them down here, four plain
- * maintenance verbs up there. Giving the top of mind this register fixed the
- * language and uncovered the deeper problem: two answer rows on one screen.
- * Founder: "I feel like this page is trying to do too much at once."
- *
- * And a hand-written top of mind cannot be answered at all — "WRITTEN BY
- * HAND" sat directly above a button asking the author to confirm their own
- * sentence. Founder: "weird". So that surface wears maintenance verbs again,
- * deliberately, and this register has one user: the creature's claim, the
- * only thing on the home screen that asks a question. Law 11 is unchanged
- * and now records the exception.
- */
-.jar-char-claim-answers {
+/* ═══ THE CLAIM SLIP — and the agent's pick is the base tone ═════════════
+   Founder, 2026-10-15: type two needs "a very clear distinction" from a
+   reading. Both share the slip and its gestures (`ClaimSlip.tsx`); the
+   distinction is material. The pick wears the agent's colder light
+   (`--jar-fade`, the same cool the world mixes into an agent's body) and
+   pixel-stepped corners; a reading wears the warm edge (`--reading`,
+   below). The eye knows who is speaking before it reads a word. */
+.jar-pick {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-10);
+  width: min(26rem, 100%);
+}
+
+.jar-pick-who {
+  display: inline-flex;
+  align-items: center;
   gap: var(--sp-8);
+  margin: 0;
+  color: color-mix(in srgb, var(--jar-fade) 85%, var(--ink));
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  letter-spacing: 0.02em;
+}
+
+.jar-pick-pile {
+  position: relative;
+  width: 100%;
+}
+
+/* THE NEXT ONE, BEHIND — AN EDGE, NOT A PREVIEW. Founder, 2026-10-15: "we
+   just want to show that there is something more behind, but we shouldn't
+   have to show too much preview — a very very slight indication that
+   there's another card in the back is more than enough." So it is the
+   slip's own outline, a hair narrower, showing a few pixels below the
+   front one, with nothing written on it. */
+.jar-pick-pile:has(> .jar-pick-behind) {
+  padding-bottom: var(--sp-6);
+}
+
+/* No edge or fill of its own: each tone brings both — the reading's below,
+   the pick's in its pixel-corner layers at the foot of this file. */
+.jar-pick-behind {
+  position: absolute;
+  inset: var(--sp-6) var(--sp-12) 0;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: var(--waka-r-hand);
+  pointer-events: none;
+}
+
+.jar-pick-slip {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--sp-20) var(--sp-24) var(--sp-16);
+  /* THE EDGE AND THE FILL ARE THE TONE'S. Both fills are opaque over the
+     ground, because the slip must cover the pile edge behind it: the
+     reading's warm one is set below, the pick's cool one is a clipped layer
+     inside its pixel corners at the foot of this file. */
+  border: 1px solid transparent;
+  border-radius: var(--waka-r-hand);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  will-change: transform;
+  transition: transform 0.24s ease, opacity 0.24s ease;
+}
+
+.jar-pick-slip:focus-visible {
+  outline: 2px solid var(--jar-fade);
+  outline-offset: 2px;
+}
+
+.jar-pick-slip--held {
+  cursor: grabbing;
+  transition: none;
+}
+
+.jar-pick-slip--leaving-keep {
+  transform: translateX(120%) rotate(8deg);
+  opacity: 0;
+}
+
+.jar-pick-slip--leaving-not {
+  transform: translateX(-120%) rotate(-8deg);
+  opacity: 0;
+}
+
+.jar-pick-words {
+  margin: var(--sp-8) 0 0;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  /* the same voice as a reading's, in italic: your words, quoted */
+  font-size: var(--t-body);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+
+.jar-pick-source {
+  margin: var(--sp-12) 0 0;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+}
+
+/* THE ANSWER FORMS IN LIGHT (see `ClaimSlip.tsx`). `--near` runs 0 to 1
+   as the slip travels; the stamp that printed the answer on the words went
+   on the founder's word. Toward keeping, the slip's edge and glow warm; toward
+   letting go, the slip dims; and the matching answer underneath lights up
+   and its chevron leans out. */
+.jar-pick--toward-keep .jar-pick-slip {
+  border-color: color-mix(in srgb, var(--moon-warm) calc(24% + 40% * var(--near, 0)), transparent);
+  box-shadow: 0 0 calc(36px * var(--near, 0)) color-mix(in srgb, var(--moon-warm) calc(26% * var(--near, 0)), transparent);
+}
+
+/* The words and the edge dim, never the slip itself: a see-through slip
+   showed the pile behind it as a tangle of outlines. */
+/* Not the grain: it is part of the card, not its words, and lifting its
+   opacity to "half dimmed" turned a breath of film into static (founder,
+   2026-10-15: "dont grain it out"). */
+.jar-pick--toward-not .jar-pick-slip > *:not(.jar-pick-grain) {
+  opacity: calc(1 - 0.5 * var(--near, 0));
+}
+
+.jar-pick--toward-not .jar-pick-slip {
+  border-color: color-mix(in srgb, var(--line) calc(100% - 50% * var(--near, 0)), transparent);
+}
+
+.jar-pick--toward-keep .jar-pick-act--keep,
+.jar-pick--toward-not .jar-pick-act--not {
+  color: color-mix(in srgb, var(--ink) calc(100% * var(--near, 0)), var(--muted));
+}
+
+.jar-pick--toward-keep .jar-pick-act--keep svg {
+  transform: translateX(calc(4px * var(--near, 0)));
+}
+
+.jar-pick--toward-not .jar-pick-act--not svg {
+  transform: translateX(calc(-4px * var(--near, 0)));
+}
+
+/* THE TAG: a soft pill on the slip's top edge, half outside it, so it is
+   never over the words. Keeping wears the creature's bubble — warm cream,
+   dark ink, the same glow; letting go is a quiet dark pill. It fades in and
+   grows a touch with the drag (`--near`), and leans with the slip. */
+.jar-pick-tag {
+  position: absolute;
+  top: calc(var(--sp-14) * -1);
+  z-index: 2;
+  padding: var(--sp-4) var(--sp-14);
+  border-radius: var(--waka-r-hand-sm);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: var(--near, 0);
+}
+
+/* ON THE TRAILING EDGE, the one that stays on screen: dragging right to
+   keep, the tag rides the slip's left shoulder; dragging left to let go, its
+   right. Measured on a 390px phone: on the leading edge it slid off the
+   screen exactly when it mattered. */
+.jar-pick-tag--keep {
+  left: var(--sp-20);
+  --bubble-fill: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep));
+  background: var(--bubble-fill);
+  color: var(--waka-on-light);
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--jar-live) 22%, transparent),
+    0 0 30px color-mix(in srgb, var(--jar-live) 10%, transparent);
+  transform: rotate(-4deg) scale(calc(0.88 + 0.12 * var(--near, 0)));
+}
+
+.jar-pick-tag--not {
+  right: var(--sp-20);
+  background: color-mix(in srgb, var(--jar-fade) 16%, var(--bg));
+  color: var(--ink);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--jar-fade) 22%, transparent);
+  transform: rotate(4deg) scale(calc(0.88 + 0.12 * var(--near, 0)));
+}
+
+/* The tag must not dim with the words it is answering for. */
+.jar-pick--toward-not .jar-pick-slip > .jar-pick-tag {
+  opacity: var(--near, 0);
+}
+
+.jar-pick-acts {
+  display: grid;
+  /* THE TWO ANSWERS AT THE SLIP'S TWO EDGES. The middle seat held "Chat
+     about it" until the founder took it off the card (2026-10-15); the
+     grid stays so the answers keep their places either way. */
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  width: 100%;
   margin: 0;
 }
 
-.jar-char-claim-answers button {
-  /* 44, not 36: the smallest target a thumb reliably hits, and these three
-     are the only thing on the home screen the product asks a person to
-     press. They were below the floor on exactly the device that has no
-     pointer to fall back on. */
+.jar-pick-act--not { justify-self: start; }
+.jar-pick-act--keep { justify-self: end; grid-column: 3; }
+
+.jar-pick-act {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
   min-height: 44px;
-  /* EVEN, AND NEVER FOLDED. `flex: 1 1 0` made them equal from a ZERO basis,
-     so the longest label broke first and "not true" wrapped while the two
-     shorter ones sat on one line. A `max-content` basis keeps them even
-     while there is room and never asks a label to fold. */
-  flex: 0 0 auto;
-  white-space: nowrap;
-  /* ═══ WORDS, NOT PILLS ════════════════════════════════════════════════
-     Founder: "the yes / partly / not true button is a little bit weird."
-
-     Measured on screen, it was three bordered pills inside a bordered card
-     sitting directly above the dock's pill — a box inside a box above a
-     box, four drawn shapes stacked at the bottom of a screen whose whole
-     material is "no boxes except the dock". The card's outline is the
-     founder's own choice for this block ("maybe it should just be this
-     outlined box as we have before for the chat") and it stays; what goes
-     is the second and third layer inside it.
-
-     IT COSTS THEM NO AFFORDANCE, because they never had one worth keeping:
-     at `--line` the border measures 1.41:1 against this ground, which is
-     under every visibility floor there is — so the pills were drawing a
-     shape nobody could quite see and spending the card's whole interior on
-     it. Three words under a sentence, in the register every other verb in
-     this product now wears — the note's Delete, the chats list's verbs,
-     the plus sheet's two rows.
-
-     THE 44px FLOOR SURVIVES, which is the half that was load-bearing: these
-     are still the only thing on the home screen a person is asked to press,
-     and a thumb still has to hit them. Padding carries it instead of a
-     border. */
   padding: 0 var(--sp-12);
   border: 0;
   background: none;
@@ -3958,59 +4160,360 @@
   transition: color 0.2s ease;
 }
 
-.jar-char-claim-answers button:hover,
-.jar-char-claim-answers button:focus-visible {
+.jar-pick-act:hover,
+.jar-pick-act:focus-visible {
   color: var(--ink);
 }
 
-.jar-char-claim-answers button:focus-visible {
+.jar-pick-act:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: -2px;
   border-radius: var(--waka-r-hand-sm);
 }
 
-/**
- * THE THREE ANSWERS ARE PEERS. "yes" IS NOT FILLED ANY MORE.
- *
- * It was the inked one, on the reasoning that emphasis here is lightness and
- * never colour. That reasoning is right about HOW to emphasise and wrong that
- * anything should be emphasised at all, for three reasons:
- *
- *   1. IT BREAKS THE FIRST LAW. A filled white button is the brightest thing
- *      on this screen after the creature itself. If light is the only meaning
- *      channel, lighting one of three answers says THIS IS THE ANSWER — the
- *      product pre-answering its own question about the person.
- *   2. IT SKEWS THE CORPUS. A visually primary option among mutually
- *      exclusive answers measurably pulls the distribution toward it, and
- *      every principle this product will ever write is downstream of these
- *      verdicts. A thumb on the scale here is a thumb on the scale in the
- *      finished thing.
- *   3. NOBODY ELSE DOES IT. Typeform, Duolingo, How We Feel and Daylio all
- *      render peer answers at equal weight; a primary style appears only on a
- *      separate COMMIT control. There is no commit step here — answering is
- *      one tap, by design — so there is no slot for a primary.
- *
- * Light still does the work; it just does it AFTER the answer rather than
- * before it. See the chosen state below.
- */
-/* A BUTTON IS ONE LINE, ALWAYS (founder: "All buttons should be a single
-   line. Never make it into a two line thing."). `flex: 1 1 0` made the three
-   equal — which is right, they are peers — but equal from a zero basis means
-   the longest label is the first to break, so "not true" wrapped while the
-   two shorter ones sat on one line. A basis of `max-content` keeps them even
-   while there is room and never asks a label to fold. */
-/* WHAT YOU CHOSE, once you have chosen. The press is what earns the light —
-   this is the same channel, spent on a fact instead of on a suggestion. */
-.jar-char-claim-answers button[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--ink) 40%, transparent);
+.jar-pick-act svg {
+  transition: transform 0.2s ease;
+}
+
+.jar-pick-act--keep:hover svg { transform: translateX(2px); }
+.jar-pick-act--not:hover svg { transform: translateX(-2px); }
+
+.jar-pick-act:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ═══ THE READING TONE ══════════════════════════════════════════════════
+   The same slip as the agent's pick, in WAKA's own material: the warm edge
+   the reading note always wore, a breath of warm light for its fill, and
+   WAKA's plain sentence where the pick has your quoted words. The big
+   creature above is the one asking, so there is no header. */
+.jar-pick--reading .jar-pick-slip {
+  border-color: color-mix(in srgb, var(--moon-warm) 24%, transparent);
+  background: color-mix(in srgb, var(--moon-warm) 5%, var(--bg));
+  text-align: center;
+}
+
+.jar-pick--reading .jar-pick-slip:focus-visible {
+  outline-color: var(--moon-warm);
+}
+
+.jar-pick--reading .jar-pick-behind {
+  border-color: color-mix(in srgb, var(--moon-warm) 16%, transparent);
+  background: color-mix(in srgb, var(--moon-warm) 3%, var(--bg));
+}
+
+/* A slip that opens says so to the pointer: the hand, until it is held. */
+.jar-pick-slip--opens {
+  cursor: pointer;
+}
+
+/* THE SLIP SPEAKS IN THE BUBBLE'S VOICE. Founder, 2026-10-15, on a reading
+   set in Jost 300 at lead size: "font size and style is ugly." Thin strokes
+   at a large size on the night read as spindly, and the slip was speaking
+   louder and thinner than the creature's own bubble — the type the founder
+   chose ("I prefer this font"). So: Jost at its regular weight, body size,
+   balanced so a line never ends on a lone word, and a hair of negative
+   tracking, which is what keeps a geometric sans from looking airy. */
+.jar-pick-statement {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-body);
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+
+/* Where a reading came from: one quiet line that opens those saves. */
+.jar-pick-from {
+  min-height: 44px;
+  margin-top: var(--sp-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.jar-pick-from:hover,
+.jar-pick-from:focus-visible {
   color: var(--ink);
 }
 
-.jar-char-claim-answers button:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
+
+@media (prefers-reduced-motion: reduce) {
+  .jar-pick-slip,
+  .jar-pick-act svg {
+    transition: none;
+  }
 }
 
+/* ═══ WHY NOT — a list you read down ═══════════════════════════════════════
+   Founder, 2026-10-15: "maybe it should just be a list of buttons rather
+   than kind of ugly shaped like this." One row per reason: the reason, the
+   line that says what it means, and a chevron, on a soft cool fill with no
+   visible border — the very-low-alpha layered fills of the reference the
+   founder named, rather than outlines. Skip sits at the head's far end, so it
+   costs no row (see `HarvestReasons.tsx`). */
+/* And it wears the slip's material, so the agent's question and the agent's
+   pick are visibly the same voice. */
+.jar-harvest-why {
+  box-sizing: border-box;
+  padding: var(--sp-16) var(--sp-20);
+  border: 1px solid color-mix(in srgb, var(--jar-fade) 40%, transparent);
+  border-radius: var(--waka-r-hand);
+  background: color-mix(in srgb, var(--jar-fade) 7%, var(--bg));
+  align-items: stretch;
+  gap: var(--sp-12);
+  cursor: default;
+  touch-action: auto;
+  user-select: text;
+}
+
+.jar-harvest-why .jar-pick-who {
+  align-self: stretch;
+  color: var(--ink);
+  font-size: var(--t-ui);
+}
+
+/* Skip at the head's far end. */
+.jar-harvest-head .jar-harvest-skip {
+  margin-inline-start: auto;
+}
+
+.jar-harvest-quote {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  font-style: italic;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.jar-harvest-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jar-harvest-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--sp-8) var(--sp-16);
+  border: 0;
+  border-radius: var(--waka-r-hand-sm);
+  background: color-mix(in srgb, var(--jar-fade) 8%, transparent);
+  color: var(--muted);
+  font-family: var(--waka-face);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.jar-harvest-row:hover,
+.jar-harvest-row:focus-visible {
+  background: color-mix(in srgb, var(--jar-fade) 16%, transparent);
+  color: var(--ink);
+}
+
+.jar-harvest-row:focus-visible {
+  outline: 2px solid var(--jar-fade);
+  outline-offset: 1px;
+}
+
+.jar-harvest-row:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.jar-harvest-row svg {
+  flex: none;
+  transition: transform 0.2s ease;
+}
+
+.jar-harvest-row:hover svg {
+  transform: translateX(2px);
+}
+
+.jar-harvest-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.jar-harvest-row-label {
+  color: var(--ink);
+  font-size: var(--t-ui);
+}
+
+.jar-harvest-row-hint {
+  font-size: var(--t-meta);
+  line-height: 1.4;
+}
+
+.jar-harvest-foot {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  text-align: center;
+}
+
+/* ON A PHONE, THE LIST FITS BESIDE THE CREATURE. Each row keeps its label
+   and its full 44px target; the explaining lines, the quote and the
+   reassurance come back wherever there is room for them. MEASURED in a
+   browser on 2026-10-15 at 390 × 844 and at 1280 × 900: with all of it, the
+   list was taller than the space under the creature on both, and scrolled
+   its last reason out of sight. The explaining line is the row's hover text
+   there. */
+@media (max-width: 600px), (max-height: 1000px) {
+  .jar-harvest-row-hint,
+  .jar-harvest-quote,
+  .jar-harvest-foot {
+    display: none;
+  }
+}
+
+.jar-harvest-skip {
+  min-height: 44px;
+  padding: 0 var(--sp-4);
+  border: 0;
+  background: none;
+  /* Quiet: founder, 2026-10-15, "remove underline, make lighter color".
+     Skipping is the way past the question, not an answer to it. */
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  cursor: pointer;
+}
+
+.jar-harvest-skip:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.jar-harvest-skip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.jar-harvest-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-8);
+  margin: 0;
+}
+
+.jar-harvest-act {
+  min-height: 44px;
+  padding: 0 var(--sp-16);
+  border: 0;
+  border-radius: var(--waka-r-hand-sm);
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  cursor: pointer;
+}
+
+.jar-harvest-act--keep {
+  background: color-mix(in srgb, var(--jar-fade) 16%, transparent);
+  color: var(--ink);
+}
+
+.jar-harvest-act:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.jar-harvest-fix {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+}
+
+.jar-harvest-fix textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--sp-10) var(--sp-12);
+  border: 0;
+  border-radius: var(--waka-r-hand-sm);
+  background: color-mix(in srgb, var(--jar-fade) 8%, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-ui);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.jar-harvest-failed {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jar-harvest-row,
+  .jar-harvest-row svg {
+    transition: none;
+  }
+}
+
+/* AFTER A NO, ONE LINE. It says the answer was taken and offers the
+   conversation the soft answers used to open by force. Same register as the
+   verdict receipt the reading's grounds wear. */
+.jar-char-claim-receipt {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  text-align: center;
+}
+
+.jar-char-claim-receipt-act {
+  min-height: 44px;
+  padding: 0 var(--sp-8);
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.jar-char-claim-receipt-act:hover,
+.jar-char-claim-receipt-act:focus-visible {
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jar-char-claim-receipt-act {
+    transition: none;
+  }
+}
 
 /* The opened card wears `.jar-panel`'s own inner classes, so its type and
    spacing come from the stylesheet that defines that design. Only the things
@@ -4464,6 +4967,26 @@
  * `global.css` clears the default outline everywhere.
  */
 
+/* While the agent asks why a pick was let go, the creature steps up and
+   its own bubble goes quiet: one speaker at a time. */
+.jar--agent-asking .jar-char-bubble {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+
+/* and comes back the same way when the question is answered */
+.jar:not(.jar--agent-asking) .jar-char-bubble {
+  transition: opacity 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jar--agent-asking .jar-char-bubble,
+  .jar:not(.jar--agent-asking) .jar-char-bubble {
+    transition: none;
+  }
+}
+
 .jar-char-bubble {
   position: absolute;
   left: 0;
@@ -4505,44 +5028,86 @@
 
    THREE PARTS, AND THE MIDDLE ONE IS STILL THE LOUDEST. The preamble is
    the fine step and muted; the reading keeps the body size and full ink;
-   the act is fine again and underlined. Light and size carry the ranking,
-   which is this product's only channel, so the words a person came to read
-   stay the words they land on.
+   the act is fine again, a quiet row at the bubble's foot. Light and size
+   carry the ranking, which is this product's only channel, so the words a
+   person came to read stay the words they land on.
 
-   THE ACT IS SPEECH, NOT A PILL, and the note one block down is why: "a
-   pill inside a speech bubble is a dialog box with an OK in it — the
-   bubble stops reading as something said and starts reading as something
-   that wants an answer." An underlined line in the creature's own voice is
-   it offering; a filled rectangle is a form. The founder asked for the
-   offer, not for the form.
+   THE ACT IS SPEECH, NOT A FORM: "a pill inside a speech bubble is a
+   dialog box with an OK in it — the bubble stops reading as something said
+   and starts reading as something that wants an answer." So it is no
+   filled button but a row under a hairline, in the bubble's own ink, which
+   the founder chose from six — see `.jar-char-bubble-act`.
 
-   UNDERLINED, AND HERE THAT IS THE RULE RATHER THAN AN EXCEPTION. The
-   offer this replaces argued its way OUT of an underline — "a rule drawn
-   under a five-word reply to a press you just made is explaining a thing
-   the press already explained." That was true when the bubble appeared
-   BECAUSE you pressed the creature. This one appears on its own, under a
-   sentence that is not pressable, so nothing else says it can be. */
+   WHY IT IS VISIBLY A CONTROL AT ALL: this offer appears on its own, under
+   a sentence that is not pressable, so nothing else says it can be. */
 .jar-char-bubble-of {
   font-size: var(--t-meta);
   color: color-mix(in srgb, var(--waka-on-light) 60%, transparent);
 }
 
+/* The bubble's offers, side by side when there are two. Spoken lines, so
+   the gap is a word space and a half, not a toolbar's. */
+.jar-char-bubble-acts {
+  display: flex;
+  align-self: stretch;
+  /* Out to the bubble's own edges: the row is the bubble's foot, so it
+     cancels the body's side and bottom padding rather than sitting inside it. */
+  margin: var(--sp-4) calc(var(--sp-16) * -1) calc(var(--sp-10) * -1);
+  border-top: 1px solid color-mix(in srgb, var(--waka-on-light) 11%, transparent);
+}
+
+/* ═══ A ROW AT THE BUBBLE'S FOOT (2026-10-15) ════════════════════════════
+   Founder, shown six ways to offer the act: "i like this the most" — the
+   one where a hairline runs across the bubble and the acts are the row
+   under it. It keeps everything in one layer (the founder's worry about a
+   button above the bubble: "so many layers of items"), it reads as part of
+   what was said rather than a control bolted on, and two acts split the row
+   with a second hairline. The first act is the one the eye lands on; a
+   second (`--quiet`) is the same row a step lighter. */
 .jar-char-bubble-act {
   appearance: none;
   -webkit-appearance: none;
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* SMALL AND LIGHT. Founder, of the first cut at its regular height and
+     medium weight: "maybe make the cta button much smaller and lighter font
+     though." The sentence above stays the loudest thing in the bubble; the
+     row is a quiet foot under it. Touch screens still get the full floor —
+     see the coarse-pointer rule for this class further down. */
+  min-height: var(--sp-32);
   margin: 0;
-  padding: 0;
+  padding: 0 var(--sp-12);
   border: 0;
+  border-radius: 0;
   background: none;
-  color: var(--waka-on-light);
+  color: color-mix(in srgb, var(--waka-on-light) 78%, transparent);
   font: inherit;
   font-size: var(--t-meta);
+  font-weight: 400;
   letter-spacing: normal;
   text-transform: none;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-decoration-thickness: 1px;
+  text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.jar-char-bubble-act:first-child { border-bottom-left-radius: 20px; }
+.jar-char-bubble-act:last-child { border-bottom-right-radius: 20px; }
+
+.jar-char-bubble-act + .jar-char-bubble-act {
+  border-left: 1px solid color-mix(in srgb, var(--waka-on-light) 11%, transparent);
+}
+
+.jar-char-bubble-act:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--waka-on-light) 6%, transparent);
+}
+
+.jar-char-bubble-act--quiet {
+  font-weight: 300;
+  color: color-mix(in srgb, var(--waka-on-light) 58%, transparent);
 }
 
 .jar-char-bubble-act:disabled {
@@ -4705,8 +5270,11 @@
  * seen at all, which is the mirror of the dither over the dark ground — and
  * the reason the ground's film cannot simply be reused as-is.
  */
-.jar-char-bubble-body::before {
-  content: "";
+/* ONE FILM, TWO STRENGTHS. The bubble's grain and the claim slip's are the
+   same tile (`--jar-grain`) laid the same way; each says only how strong
+   (`--grain-strength`) and, for the bubble, how it blends. */
+.jar-char-bubble-body::before,
+.jar-pick-grain {
   position: absolute;
   inset: 0;
   z-index: -1;
@@ -4714,6 +5282,12 @@
   background-image: var(--jar-grain, none);
   background-size: var(--jar-grain-size, 128px);
   background-repeat: repeat;
+  opacity: var(--grain-strength);
+  pointer-events: none;
+}
+
+.jar-char-bubble-body::before {
+  content: "";
   /**
    * THE SAME EMULSION AS THE CREATURE, AT THE SAME STRENGTH.
    *
@@ -4755,8 +5329,7 @@
      Half of it. Still visibly the same emulsion as the companion speaking —
      which is the entire reason the bubble has grain at all — without being
      the first thing the eye lands on. */
-  opacity: 0.07;
-  pointer-events: none;
+  --grain-strength: 0.07;
 }
 
 /* THE TAIL, pointing at the thing that said it. A rotated square rather than
@@ -4807,16 +5380,15 @@
    `:focus-visible` went on 2026-10-12, along with the coarse-pointer rule
    at the bottom of this file. Nothing in `packages/web/src` outside
    `src/styles` has rendered the class since the bubble was rebuilt: the
-   offer inside the speech is `.jar-char-bubble-act`, forty lines above,
-   which `Home.tsx` renders in three places (talk about this, talk about
-   that, add an inspiration).
+   offer inside the speech is `.jar-char-bubble-act`, above, which
+   `Home.tsx` renders.
 
    THE RULING SURVIVES THE CLASS, and it is `-act`'s to keep: founder, "talk
    about this rather than put it in a button". It was a bordered pill, which
    made the bubble a dialog box with an OK in it — something that wants an
-   answer rather than something said — and became a line of the same voice,
-   underlined, the way an offer is made inside a sentence. `-act` is written
-   that way already.
+   answer rather than something said — and became part of the speech
+   instead. `-act` keeps that: a quiet row at the bubble's foot, not a
+   button.
 
    WHAT WENT WITH IT AND HAD TO BE PUT BACK, which is the only reason this
    is a long tombstone. The dead rule carried `min-height: var(--sp-24)` and
@@ -5653,7 +6225,6 @@
  *   .jar-char-face         ..×32   me / my agent: growing it pushes the claim
  *                                  down on a 568-tall screen, where
  *                                  `.jar-char-say` is already scrolling
- *   .jar-char-claim-from   ..×29   a cited save; four of them under a claim
  *   .waka-talks-del        39×44   destructive, and a bigger destructive
  *                                  target is a worse one. `.waka-rail-del`
  *                                  now, and it still carries its own 44.
@@ -5715,10 +6286,10 @@
     align-items: center;
   }
 
-  /* It keeps the costume it was given — a line of the same speech, underlined
-     (founder: "talk about this rather than put it in a button") — and gains
-     only the air around it. The underline does not move because the text is
-     centred in the taller box.
+  /* It keeps the costume it was given — a row of the same speech (founder:
+     "talk about this rather than put it in a button") — and gains only the
+     air around it. The words do not move because they are centred in the
+     taller box.
 
      THE SELECTOR WAS `.jar-char-bubble-go` AND THAT CLASS NO LONGER EXISTS.
      Its tombstone is at the family's own block above. The offer inside the
@@ -5795,5 +6366,294 @@
     min-height: var(--sp-36);
   }
 }
+/* ---------------------------------------------------------------------------
+ * The deleted shelf, and the moment just after a delete
+ *
+ * Founder, 2026-10-15: "just delete when user clicks on this, but give option
+ * to undo it. also create option to see all deleted inspirations in the
+ * inspirations list." See `SavesOverlay`'s `eraseOpen` and
+ * `api/src/db/schema-deleted.ts`.
+ * ------------------------------------------------------------------------- */
+
+/* The last tab, in a quieter dash than the shelves of kept things: it is
+   where things went, not a kind of thing you keep. */
+.waka-tab--shelf {
+  border-style: dashed;
+}
+
+.waka-shelf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+
+/* The same row as the archive's, with its two verbs on the trailing edge
+   instead of the whole row being a press. */
+.waka-shelf-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-16) 0;
+}
+
+.waka-shelf-words {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+  font-family: var(--waka-face);
+}
+
+.waka-shelf-acts {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+/* Bringing back is the act this shelf exists for, so it is the inked pill;
+   deleting for good is the quiet word beside it. */
+.waka-shelf-back,
+.waka-shelf-forget {
+  min-height: 44px;
+  padding: 0 var(--sp-16);
+  border-radius: var(--r-pill);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.waka-shelf-back {
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+}
+
+.waka-shelf-back:hover,
+.waka-shelf-back:focus-visible {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.waka-shelf-forget {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.waka-shelf-forget:hover,
+.waka-shelf-forget:focus-visible,
+.waka-shelf-forget--armed {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.waka-shelf-back:focus-visible,
+.waka-shelf-forget:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* MEASURED at 390px wide: the two verbs beside a lead line left the line a
+   stub, so on a phone they go under the words. */
+@media (max-width: 520px) {
+  .waka-shelf-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* "Deleted. Undo" — the one line of state the list shows, held at the foot
+   of the column where the bar's own states sit when a note is open. A pill
+   so it reads as a moment that will pass, not as part of the list. */
+.waka-over-undo {
+  position: sticky;
+  bottom: var(--sp-16);
+  align-self: center;
+  margin: var(--sp-16) auto 0;
+  padding: var(--sp-8) var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  white-space: nowrap;
+  width: max-content;
+  animation: waka-undo-in 220ms ease-out;
+}
+
+@keyframes waka-undo-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waka-over-undo { animation: none; }
+}
+
+/* ---------------------------------------------------------------------------
+ * The walk between Now and Principles — see `CrossingCompanion`.
+ *
+ * Founder, 2026-10-15: "clicking principle from now should make agent turn
+ * right and move right (dont move it physically but motion shows it walking)
+ * and the background makes it look like it's moving to that new timeless
+ * space."
+ * ------------------------------------------------------------------------- */
+
+/* The walking creature: placed by its own transform at the world's spot,
+   above the page, and never in the way of a press. */
+.waka-crossing-being {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  transform-origin: center;
+  pointer-events: none;
+}
+
+/* The page's own creature waits, unseen, while the walking one is out:
+   two of the same body on one screen would be two creatures. */
+.waka-page--crossing [data-crossing-target] {
+  visibility: hidden;
+}
+
+/* In: what the page holds arrives as the creature reaches it — after the
+   walk, during the glide — so the place is there before its contents. */
+.waka-page--crossing .waka-over {
+  /* Unseen is unpressable: while the creature walks, the page's contents are
+     fading in or out, and nothing invisible may take a press (review). */
+  pointer-events: none;
+}
+
+.waka-page--crossing-in .waka-over {
+  opacity: 0;
+  animation: waka-cross-reveal 460ms ease-out 1240ms forwards;
+}
+
+/* Out: the contents go first, so the walk home is the creature and the sky. */
+.waka-page--crossing-out .waka-over {
+  animation: waka-cross-hide 220ms ease-in forwards;
+}
+
+@keyframes waka-cross-reveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes waka-cross-hide {
+  to { opacity: 0; }
+}
+
+/* The creature above a list of principles: centred, a little room under it
+   so the first card reads as something it is holding up. */
+.waka-held-hero {
+  display: flex;
+  justify-content: center;
+  margin: var(--sp-8) 0 var(--sp-16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waka-page--crossing-in .waka-over,
+  .waka-page--crossing-out .waka-over {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * The agent's card has pixel corners
+ *
+ * Founder, 2026-10-15, after trying two whole new cards: "just bring back
+ * the old card that was best", then "just make the agent related claim have
+ * pixelated corners". So both cards are the old ones, and the agent's pick
+ * alone has its corners stepped at the same pixel step its body is drawn
+ * at — the agent's identity in the card's shape, where its face used to be.
+ *
+ * The steps are two clipped layers behind the content — the edge colour,
+ * then the fill one pixel in — so the outline follows the steps (a real
+ * border would be cut at every corner) and the tag riding the card's top
+ * edge is never clipped.
+ * ------------------------------------------------------------------------- */
+.jar-pick:not(.jar-pick--reading) {
+  --pixel-steps: polygon(
+    0 12px, 4px 12px, 4px 8px, 8px 8px, 8px 4px, 12px 4px, 12px 0,
+    calc(100% - 12px) 0, calc(100% - 12px) 4px, calc(100% - 8px) 4px, calc(100% - 8px) 8px, calc(100% - 4px) 8px, calc(100% - 4px) 12px, 100% 12px,
+    100% calc(100% - 12px), calc(100% - 4px) calc(100% - 12px), calc(100% - 4px) calc(100% - 8px), calc(100% - 8px) calc(100% - 8px), calc(100% - 8px) calc(100% - 4px), calc(100% - 12px) calc(100% - 4px), calc(100% - 12px) 100%,
+    12px 100%, 12px calc(100% - 4px), 8px calc(100% - 4px), 8px calc(100% - 8px), 4px calc(100% - 8px), 4px calc(100% - 12px), 0 calc(100% - 12px)
+  );
+}
+
+.jar-pick:not(.jar-pick--reading) .jar-pick-slip {
+  /* Kept transparent against the toward-states' edge colours, which the
+     stepped layers below carry instead. */
+  border-color: transparent;
+  border-radius: 0;
+}
+
+.jar-pick:not(.jar-pick--reading) .jar-pick-slip::before,
+.jar-pick:not(.jar-pick--reading) .jar-pick-slip::after {
+  content: "";
+  position: absolute;
+  clip-path: var(--pixel-steps);
+  pointer-events: none;
+}
+
+/* The edge: the old card's border colour, warming toward a keep. */
+.jar-pick:not(.jar-pick--reading) .jar-pick-slip::before {
+  inset: -1px;
+  z-index: -3;
+  background: color-mix(in srgb, var(--jar-fade) 40%, transparent);
+}
+
+.jar-pick:not(.jar-pick--reading).jar-pick--toward-keep .jar-pick-slip::before {
+  background: color-mix(in srgb, var(--moon-warm) calc(24% + 40% * var(--near, 0)), transparent);
+}
+
+/* The fill: the old card's own, one pixel inside the edge. */
+.jar-pick:not(.jar-pick--reading) .jar-pick-slip::after {
+  inset: 0;
+  z-index: -2;
+  background: color-mix(in srgb, var(--jar-fade) 7%, var(--bg));
+}
+
+/* A rounded glow around a stepped card would draw the old corners back. */
+.jar-pick:not(.jar-pick--reading).jar-pick--toward-keep .jar-pick-slip,
+.jar-pick:not(.jar-pick--reading).jar-pick--toward-not .jar-pick-slip {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* The card behind: the same stepped edge and a fill as quiet as the old
+   one's, so a drag that uncovers it shows an outline, not a slab. */
+.jar-pick:not(.jar-pick--reading) .jar-pick-behind {
+  border: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--jar-fade) 20%, transparent);
+  clip-path: var(--pixel-steps);
+}
+
+.jar-pick:not(.jar-pick--reading) .jar-pick-behind::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background: color-mix(in srgb, var(--jar-fade) 4%, var(--bg));
+  clip-path: var(--pixel-steps);
+}
+
+/* THE CARD'S GRAIN: the same tile the world and the bubble wear
+   (`--jar-grain`), at about half the bubble's strength — on a dark card the
+   film only has to break the flatness, not be seen. Under the words, over
+   the fill, and stepped with the agent's corners. */
+.jar-pick-grain {
+  --grain-strength: 0.045;
+}
+
+.jar-pick:not(.jar-pick--reading) .jar-pick-grain {
+  clip-path: var(--pixel-steps);
+}
+
 /* ─── end of `@layer chrome` ─── */
 }

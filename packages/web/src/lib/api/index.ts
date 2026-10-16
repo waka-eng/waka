@@ -12,6 +12,7 @@
  *   attachments.ts               attachments.ts   /api/attachments
  *   signals.ts                   signals.ts       /api/signals        (layer 2)
  *   claims.ts                    claims.ts        /api/claims         (layer 2, unanswered)
+ *   harvest.ts                   harvest.ts       /api/harvest        (the basket, before layer 1)
  *   principles.ts                principles.ts    /api/principles     (layer 4)
  *   top-of-mind.ts               top-of-mind.ts   /api/top-of-mind    (layer 3)
  *   feedback.ts                  feedback.ts      /api/feedback
@@ -85,6 +86,7 @@ export * from "./inspiration-save-requests";
 export * from "./attachments";
 export * from "./signals";
 export * from "./claims";
+export * from "./harvest";
 export * from "./inspiration-days";
 export * from "./principles";
 export * from "./top-of-mind";

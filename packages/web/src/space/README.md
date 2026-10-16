@@ -20,7 +20,7 @@ down. A reader who opens the folder now finds one.
   above all three. That is the test for anything else arriving at this level —
   not "it is shared", but "it is the SAME ACT on every layer".
 - `space-kinds/` — **how spaces differ from each other.** A space is yours or
-  an agent's, and the two are not identical: an agent's orbs are pixelated.
+  an agent's, and the two are not identical (an agent's creature is pixelated; memories are no longer drawn as orbs).
   Everything that answers "how does *this kind* differ" is one of these files.
 
 A *space* is the thing that owns a full set of three layers — your own is one,
