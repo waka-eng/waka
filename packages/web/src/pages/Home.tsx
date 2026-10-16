@@ -481,7 +481,7 @@ async function loadAgentBundle(
     name: string;
     createdAt: string;
   },
-  opts: { strict?: boolean } = {},
+  opts: { strict?: boolean; onReadingFailed?: () => void } = {},
 ): Promise<AgentBundle> {
         /* TWO POSTURES, BY WHAT THE CALLER HOLDS. At first load there is
            nothing yet, so a failed fetch degrades to an honest empty wall.
@@ -496,7 +496,9 @@ async function loadAgentBundle(
           : await Promise.all([
               loadInspirations(p.id).catch(() => EMPTY_FIELD),
               loadSignals(p.id).catch(() => [] as Signal[]),
-              loadTopOfMind(p.id).catch(() => null),
+              /* forgiving, but not silent: the caller must be able to
+                 tell "formed nothing" from "could not ask" */
+              loadTopOfMind(p.id).catch(() => { opts.onReadingFailed?.(); return null; }),
             ]);
         const inspirations = field.inspirations;
         const entries = (tom?.entries ?? []).slice().sort((a, b) => a.createdMs - b.createdMs);
@@ -2490,9 +2492,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      what you have kept — and an agent says it has formed nothing. The poster
      chose between exactly these; the bubble is the poster's new seat, so it
      makes the same choice from the same facts rather than a simpler one. */
-  const restingWord = standingAsAgent
-    ? chrome.formingAlt ?? say("worldFormingNothingAdopted")
-    : say(inspirations?.length || fieldBeyond ? "worldPersonalReadingNotReady" : "worldPersonalReadingEmpty");
+  /* `restingWord` itself is declared below `wallChromeNow`, which its agent
+     half reads (code review round 3, 2026-10-16). */
 
   /* The self wall's NAME is canon ("Me" — it also mints the /w/me address);
      what a person reads is the catalog's word for it. User-given names —
@@ -2735,6 +2736,63 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       boundary (observed as a wall that says six and lights none). Travel is
       when the refresh is ASKED for; arrival is when it may land. */
   const pendingAgentBundlesRef = useRef<Map<string, AgentBundle>>(new Map());
+  /** Which agents' last landed bundle could not read their top of mind. The
+      first load is forgiving — a failed read becomes an empty board rather
+      than no wall — so an empty bundle alone cannot tell "has formed nothing"
+      from "we could not ask". This is the difference, set as a bundle lands
+      and cleared when one lands with its reading (final review, 2026-10-16). */
+  const [agentReadingFailed, setAgentReadingFailed] = useState<ReadonlySet<string>>(() => new Set());
+  /** Per pending bundle: whether its top-of-mind read failed. Lands with it. */
+  const pendingReadingFailedRef = useRef<Map<string, boolean>>(new Map());
+  /** Put fetched bundles on their walls, and their reading's standing with them. */
+  const applyAgentBundles = useCallback((fresh: Map<string, AgentBundle>) => {
+    const failed = new Map<string, boolean>();
+    for (const id of fresh.keys()) {
+      failed.set(id, pendingReadingFailedRef.current.get(id) === true);
+      pendingReadingFailedRef.current.delete(id);
+    }
+    const left = new Map(fresh);
+    setAgents((prev) => {
+      const replaced = (prev ?? []).map((a) => {
+        const f = left.get(a.agent.id);
+        left.delete(a.agent.id);
+        return f ?? a;
+      });
+      /* anything left is a FIRST load — the wall's memory arriving at all */
+      return [...replaced, ...left.values()];
+    });
+    setAgentReadingFailed((prev) => {
+      const next = new Set(prev);
+      for (const [id, f] of failed) if (f) next.add(id); else next.delete(id);
+      return next.size === prev.size && [...next].every((id) => prev.has(id)) ? prev : next;
+    });
+  }, []);
+  /* A FIRST LOAD THAT FINISHES AFTER ARRIVAL LANDS NOW. Arrival is the only
+     moment a pending bundle was applied, so the first visit to an agent whose
+     fetch finished after the camera settled drew its empty wall and said "I
+     haven't formed anything yet" over a reading the server had already
+     returned (screenshot check, 2026-10-16).
+     ONLY A FIRST LOAD, ONLY ON ITS OWN WALL, AND ONLY AT REST. Any
+     `setAgents` rebuilds the whole simulation (the pour depends on
+     `agents`), so landing is safe only while nothing moves — and
+     `atWallRef` cannot say that: it updates on ARRIVAL, so it still names
+     this agent once you are crossing away or aiming up. The loop's own
+     `navigationState()` can; while it is moving, or before there is a loop,
+     the bundle stays pending and lands at the next arrival, exactly as on
+     dev. Only that agent's bundle lands. A REFRESH — an agent already in
+     `agents` — still lands only at arrival, as it always has. A polled
+     at-rest version of this was tried and caused more than it fixed (final
+     review, 2026-10-16). */
+  const landFirstLoadIfStandingOn = useCallback((agentId: string) => {
+    const sim = simApiRef.current;
+    if (!sim || sim.navigationState().moving) return;
+    const w = atWallRef.current;
+    if (w.kind !== "agent" || w.id !== agentId) return;
+    const fresh = pendingAgentBundlesRef.current.get(agentId);
+    if (!fresh) return;
+    pendingAgentBundlesRef.current.delete(agentId);
+    applyAgentBundles(new Map([[agentId, fresh]]));
+  }, [applyAgentBundles]);
   /** Whether an agent wall's FIRST load is underway or has failed. Success
       needs no entry here — the bundle's presence in `agents` is readiness. */
   const agentFirstLoadRef = useRef<Map<string, "pending" | "failed">>(new Map());
@@ -2753,6 +2811,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
         void loadAgentBundle(entry, { strict: true })
           .then((fresh) => {
             pendingAgentBundlesRef.current.set(agentId, fresh);
+            pendingReadingFailedRef.current.set(agentId, false);
           })
           .catch(() => {
             /* keep the last good ground, and let the very next approach
@@ -2770,11 +2829,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       if (agentFirstLoadRef.current.get(agentId) === "pending") return;
       agentFirstLoadRef.current.set(agentId, "pending");
       agentRefreshBusyRef.current.add(agentId);
-      void loadAgentBundle(entry)
+      let readingFailed = false;
+      void loadAgentBundle(entry, { onReadingFailed: () => { readingFailed = true; } })
         .then((fresh) => {
           agentFirstLoadRef.current.delete(agentId);
           agentRefreshedAtRef.current.set(agentId, Date.now());
           pendingAgentBundlesRef.current.set(agentId, fresh);
+          pendingReadingFailedRef.current.set(agentId, readingFailed);
+          landFirstLoadIfStandingOn(agentId);
         })
         .catch(() => {
           agentFirstLoadRef.current.set(agentId, "failed");
@@ -2783,7 +2845,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           agentRefreshBusyRef.current.delete(agentId);
         });
     },
-    [agentRoster, agents],
+    [agentRoster, agents, landFirstLoadIfStandingOn],
   );
 
   /**
@@ -2813,16 +2875,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     if (pending.size === 0) return;
     const fresh = new Map(pending);
     pending.clear();
-    setAgents((prev) => {
-      const replaced = (prev ?? []).map((a) => {
-        const f = fresh.get(a.agent.id);
-        fresh.delete(a.agent.id);
-        return f ?? a;
-      });
-      /* anything left is a FIRST load — the wall's memory arriving at all */
-      return [...replaced, ...fresh.values()];
-    });
-  }, [atWall]);
+    applyAgentBundles(fresh);
+  }, [atWall, applyAgentBundles]);
 
   const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
@@ -3843,7 +3897,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     for (const w of walls) {
       if (w.kind === "agent") {
         const a = (agents ?? []).find((x) => x.agent.id === w.id);
-        if (a) m.set(spaceKey(w), deriveAgentChrome(a, nowMs, nowMs));
+        /* in the reader's language: `formingAlt` is a sentence */
+        if (a) m.set(spaceKey(w), deriveAgentChrome(a, nowMs, nowMs, locale));
       } else {
         const at = deriveAmbition(nowMs, adopted, notes);
         m.set(spaceKey(w), {
@@ -3858,7 +3913,39 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       }
     }
     return m;
-  }, [walls, agents, dial, adopted, notes, emerging, topOfMind, inspirations]);
+  }, [walls, agents, dial, adopted, notes, emerging, topOfMind, inspirations, locale]);
+  /** What an agent's wall holds up: its own reading, never yours.
+      FROM ITS OWN BUNDLE AT NOW, NOT FROM `chrome`. `chrome` is written by
+      `applyChrome` in an effect AFTER `atWall` changes, so the first render on
+      the agent's wall still held YOUR sentence — under "This is what's on my
+      mind right now." And `chrome.text` is the reading at the dial's T, which
+      is not "right now" once the dial is wound back (code review,
+      2026-10-16). It is read in render from the agent's own bundle.
+      AND IT IS THE LEAD, NOT THE NEWEST. `loadAgentBundle` sets
+      `direction.current` by the same rule as your bubble's `lead` — pinned,
+      else first in the board's order — while the history's newest entry by
+      date can be an unpinned later one (code review round 2, 2026-10-16). */
+  const standingBundle = standingAsAgent
+    ? (agents ?? []).find((a) => a.agent.id === atWall.id) ?? null
+    : null;
+  const agentSays = standingBundle?.direction.current?.ambition ?? null;
+  /* NO BUBBLE UNTIL THE AGENT'S BUNDLE IS HERE. While its first load is
+     pending — or failed — the app does not know whether the agent has formed
+     anything, and "nothing adopted yet" would be a claim about it. Founder:
+     "no bubble at all while there is nothing true to put in it." A loaded
+     bundle with no reading still says the resting line, because then it is
+     true (code review round 3, 2026-10-16). */
+  /* AND NONE WHILE ITS READING COULD NOT BE READ. A failed top-of-mind read
+     lands as an empty board, which would say "I haven't formed anything yet"
+     over a reading that exists (final review, 2026-10-16). */
+  const agentBundleMissing = standingAsAgent &&
+    (standingBundle === null || agentReadingFailed.has(atWall.id));
+  /* AND THE RESTING LINE IS THE AGENT'S AT NOW, from `wallChromeNow`, for the
+     same reason `agentSays` is not `chrome`: `chrome.formingAlt` is written
+     an effect late and at the dial's T. */
+  const restingWord = standingAsAgent
+    ? wallChromeNow.get(spaceKey(atWall))?.formingAlt ?? say("worldFormingNothingAdopted")
+    : say(inspirations?.length || fieldBeyond ? "worldPersonalReadingNotReady" : "worldPersonalReadingEmpty");
 
   /**
    * WHAT EACH WALL'S CLAIM RESTS ON.
@@ -7593,7 +7680,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                        creature up the screen. The position is a function of
                        the window alone now, so the band can collapse to
                        nothing and the creature does not move a pixel. */
-                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}${here&&w.kind==='self'&&!mouthOpen?' jar-hq-inner--yielded':''}`}
+                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}${here&&(w.kind==='self'||(w.kind==='agent'&&atNow))&&!mouthOpen?' jar-hq-inner--yielded':''}`}
+                    /* AN AGENT'S WALL YIELDS TOO, now that its bubble holds its
+                       own reading: the poster printed the same sentence huge
+                       behind the bubble (screenshot check, 2026-10-16).
+                       BUT ONLY AT THE PRESENT. The bubble says what is on the
+                       agent's mind NOW; wound back, the poster is the only
+                       place the agent's history (and its `asOf`) is said, so
+                       it stays and the agent's bubble steps out instead (code
+                       review round 2, 2026-10-16). */
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
                     {/* R01 makes the personal reading explicit while keeping
@@ -8953,8 +9048,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   An empty bubble over the creature's head would be a shape
                   saying "something belongs here", which is worse than air;
                   the press target above stays, so the offer is always one
-                  press away whether or not anything is being held up. */}
-              {lead || bubbleHoldsTheLine ? (
+                  press away whether or not anything is being held up.
+                  AND NONE ON AN AGENT'S WALL WOUND BACK: the poster holds
+                  that moment's reading there, and neither "on my mind right
+                  now" nor "nothing formed yet" is true of a wall showing its
+                  history (code review round 2, 2026-10-16). */}
+              {(lead || agentSays || bubbleHoldsTheLine) && !(standingAsAgent && (!atNow || agentBundleMissing)) ? (
                 /* ═══ TWO WEIGHTS OF BUBBLE, AND ONLY TWO ═══════════════
                    Founder, with the reading beside an observation: "the
                    speech bubble that shows the top of mind versus everything
@@ -9123,6 +9222,33 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               </button>
                             ) : null}
                           </span>
+                        </>
+                      ) : agentSays ? (
+                        /* ═══ AND ON ITS WALL, THE AGENT'S OWN ══════════
+                           The scoping above kept your sentence off your
+                           agent's wall, and nothing took its place: an agent
+                           with a reading fell through to `restingWord`, so it
+                           said "nothing adopted yet" over a top of mind the
+                           server had returned (screenshot check, 2026-10-16).
+                           Its line is the agent's LEAD — `direction.current`
+                           on its own bundle, chosen by the same pinned-else-
+                           first rule as your `lead` (see `agentSays`) — and
+                           not the wall's `chrome`, which lands an effect late
+                           (one render of YOUR sentence here) and holds the
+                           dial's T rather than now. Framed in its own first
+                           person, because the creature is wearing its form.
+
+                           NO "LET'S CHAT ABOUT IT" HERE, on purpose.
+                           `talkAbout` opens YOUR chat with the text as YOUR
+                           opening message (`createConversation(profileId, …,
+                           { content: kept.text })`), so the agent's "I keep
+                           the version that…" would arrive as words you said.
+                           Until a chat can quote a subject rather than speak
+                           it, the honest bubble here has no act (code
+                           review, 2026-10-16). */
+                        <>
+                          <span className="jar-char-bubble-of">{say('worldBubbleActAgentMine')}</span>
+                          <span className="jar-char-bubble-reading">{agentSays}</span>
                         </>
                       ) : (
                         /* ═══ AND THE EMPTY LINE IS A DOOR AFTER ALL ═════
