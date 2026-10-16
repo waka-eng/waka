@@ -2741,7 +2741,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      drew its empty wall and said "I haven't formed anything yet" over a
      reading the server had already returned (screenshot check, 2026-10-16).
      Standing on that wall is the same "at rest" arrival is, so it lands. */
-  const [agentLanded, setAgentLanded] = useState(0);
   /* AT REST, NOT MERELY LAST ARRIVED. `atWallRef` only moves on ARRIVAL, so
      it still names this agent after you have started travelling away — and
      a bump then would drain every pending bundle mid-crossing, the very
@@ -2749,13 +2748,24 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      loop's own `navigationState()` says whether a crossing (or a camera aim)
      is running and which wall it is on; only when nothing is moving and that
      wall is this agent does the bundle land now. Otherwise the next arrival
-     lands it, as before. */
+     lands it, as before.
+     AND ONLY THIS AGENT'S BUNDLE LANDS. Other walls' pending bundles are
+     theirs to land at their own arrival; draining the whole map here would
+     rebuild walls nobody is standing on (code review round 2, 2026-10-16). */
   const landIfStandingOn = useCallback((agentId: string) => {
     const nav = simApiRef.current?.navigationState();
     if (!nav || nav.moving) return;
     const w = atWallRef.current;
-    if (nav.wall.kind === "agent" && nav.wall.id === agentId && w.kind === "agent" && w.id === agentId)
-      setAgentLanded((n) => n + 1);
+    if (nav.wall.kind !== "agent" || nav.wall.id !== agentId || w.kind !== "agent" || w.id !== agentId) return;
+    const fresh = pendingAgentBundlesRef.current.get(agentId);
+    if (!fresh) return;
+    pendingAgentBundlesRef.current.delete(agentId);
+    setAgents((prev) => {
+      const list = prev ?? [];
+      return list.some((a) => a.agent.id === agentId)
+        ? list.map((a) => (a.agent.id === agentId ? fresh : a))
+        : [...list, fresh];
+    });
   }, []);
   /** Whether an agent wall's FIRST load is underway or has failed. Success
       needs no entry here — the bundle's presence in `agents` is readiness. */
@@ -2846,7 +2856,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       /* anything left is a FIRST load — the wall's memory arriving at all */
       return [...replaced, ...fresh.values()];
     });
-  }, [atWall, agentLanded]);
+  }, [atWall]);
 
   const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
@@ -3889,9 +3899,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       the agent's wall still held YOUR sentence — under "This is what's on my
       mind right now." And `chrome.text` is the reading at the dial's T, which
       is not "right now" once the dial is wound back (code review,
-      2026-10-16). `wallChromeNow` is derived in render from the agent's own
-      bundle at `nowMs`, so the frame and the sentence cannot disagree. */
-  const agentSays = standingAsAgent ? wallChromeNow.get(spaceKey(atWall))?.text ?? null : null;
+      2026-10-16). It is read in render from the agent's own bundle.
+      AND IT IS THE LEAD, NOT THE NEWEST. `loadAgentBundle` sets
+      `direction.current` by the same rule as your bubble's `lead` — pinned,
+      else first in the board's order — while the history's newest entry by
+      date can be an unpinned later one (code review round 2, 2026-10-16). */
+  const agentSays = standingAsAgent
+    ? (agents ?? []).find((a) => a.agent.id === atWall.id)?.direction.current?.ambition ?? null
+    : null;
 
   /**
    * WHAT EACH WALL'S CLAIM RESTS ON.
@@ -7626,10 +7641,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                        creature up the screen. The position is a function of
                        the window alone now, so the band can collapse to
                        nothing and the creature does not move a pixel. */
-                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}${here&&(w.kind==='self'||w.kind==='agent')&&!mouthOpen?' jar-hq-inner--yielded':''}`}
+                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}${here&&(w.kind==='self'||(w.kind==='agent'&&atNow))&&!mouthOpen?' jar-hq-inner--yielded':''}`}
                     /* AN AGENT'S WALL YIELDS TOO, now that its bubble holds its
                        own reading: the poster printed the same sentence huge
-                       behind the bubble (screenshot check, 2026-10-16). */
+                       behind the bubble (screenshot check, 2026-10-16).
+                       BUT ONLY AT THE PRESENT. The bubble says what is on the
+                       agent's mind NOW; wound back, the poster is the only
+                       place the agent's history (and its `asOf`) is said, so
+                       it stays and the agent's bubble steps out instead (code
+                       review round 2, 2026-10-16). */
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
                     {/* R01 makes the personal reading explicit while keeping
@@ -8989,8 +9009,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   An empty bubble over the creature's head would be a shape
                   saying "something belongs here", which is worse than air;
                   the press target above stays, so the offer is always one
-                  press away whether or not anything is being held up. */}
-              {lead || agentSays || bubbleHoldsTheLine ? (
+                  press away whether or not anything is being held up.
+                  AND NONE ON AN AGENT'S WALL WOUND BACK: the poster holds
+                  that moment's reading there, and neither "on my mind right
+                  now" nor "nothing formed yet" is true of a wall showing its
+                  history (code review round 2, 2026-10-16). */}
+              {(lead || agentSays || bubbleHoldsTheLine) && !(standingAsAgent && !atNow) ? (
                 /* ═══ TWO WEIGHTS OF BUBBLE, AND ONLY TWO ═══════════════
                    Founder, with the reading beside an observation: "the
                    speech bubble that shows the top of mind versus everything

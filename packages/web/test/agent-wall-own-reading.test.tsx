@@ -26,25 +26,31 @@ const FACTS = vi.hoisted(() => ({
 }));
 const OWNER_SAYS = vi.hoisted(() => 'The owner keeps returning to slow mornings.');
 const AGENT_SAYS = vi.hoisted(() => 'I keep the version that survives the runtime.');
+/* NEWER, UNPINNED, AND FIRST IN THE LIST — the entry a "newest by date" or
+   "first served" reading would pick. The agent's lead is the PINNED one, by
+   the same rule as your own bubble's `lead`. */
+const AGENT_NEWER = vi.hoisted(() => 'A later thought the agent has not pinned.');
 
 vi.mock('../src/lib/api/principles', async original => ({
   ...await original<typeof import('../src/lib/api/principles')>(),
   fetchPrincipleRead: vi.fn(async () => ({ principles: [], status: { phase: 'ready', eligible: false } })),
 }));
 vi.mock('../src/lib/data', async original => {
-  const board = (body: string) => ({
-    id: `tom-${body.length}`, version: 1, reason: 'initial' as const, createdMs: Date.UTC(2026, 7, 14, 12),
-    entries: [{
-      id: `entry-${body.length}`, type: 'hypothesis' as const, body, belief: null, prompt: null,
-      locked: false, pinned: false, dismissed: false, sortOrder: 0, citedSignals: [],
-      createdMs: Date.UTC(2026, 7, 14, 12),
-    }],
+  const entry = (id: string, body: string, pinned: boolean, daysAgo: number) => ({
+    id, type: 'hypothesis' as const, body, belief: null, prompt: null,
+    locked: false, pinned, dismissed: false, sortOrder: 0, citedSignals: [],
+    createdMs: Date.UTC(2026, 7, 16, 12) - daysAgo * 86_400_000,
+  });
+  const board = (entries: ReturnType<typeof entry>[]) => ({
+    id: `tom-${entries[0]!.id}`, version: 1, reason: 'initial' as const, createdMs: Date.UTC(2026, 7, 14, 12), entries,
   });
   return {
     ...await original<typeof import('../src/lib/data')>(), ...dataMockFrom(FACTS),
     /* yours when no profile (or yours) is named; the agent's otherwise */
     loadTopOfMind: async (profile?: string) =>
-      board(profile && profile !== VIEWER_ID ? AGENT_SAYS : OWNER_SAYS),
+      profile && profile !== VIEWER_ID
+        ? board([entry('agent-newer', AGENT_NEWER, false, 1), entry('agent-lead', AGENT_SAYS, true, 3)])
+        : board([entry('owner-lead', OWNER_SAYS, false, 2)]),
   };
 });
 vi.mock('../src/lib/api', async original => ({
@@ -84,7 +90,7 @@ it("holds up the agent's own reading on its wall, never the owner's", async () =
      A LIMIT, MEASURED: `act` flushes the effect in the same turn as the
      render it follows, so that one stale commit never reaches the DOM here —
      pointing `agentSays` back at `chrome` still passes. The guard against it
-     is structural (`agentSays` reads `wallChromeNow`, derived in render);
+     is structural (`agentSays` reads the agent bundle's `direction.current` in render);
      these checks hold the observable half: no settled step mislabels. */
   const mislabelled = () => {
     const b = bubble();
@@ -105,4 +111,5 @@ it("holds up the agent's own reading on its wall, never the owner's", async () =
   expect(said?.querySelector('.jar-char-bubble-reading')?.textContent?.trim(),
     'the agent wall fell through to the resting line over a reading it holds').toBe(AGENT_SAYS);
   expect(said?.querySelector('.jar-char-bubble-of')?.textContent?.trim()).toBe('This is what’s on my mind right now.');
+  expect(said?.textContent ?? '', 'the bubble held the newest entry rather than the pinned lead').not.toContain(AGENT_NEWER);
 });
