@@ -2490,6 +2490,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      what you have kept — and an agent says it has formed nothing. The poster
      chose between exactly these; the bubble is the poster's new seat, so it
      makes the same choice from the same facts rather than a simpler one. */
+  /** What an agent's wall holds up: its own reading, never yours. */
+  const agentSays = standingAsAgent ? chrome.text : null;
   const restingWord = standingAsAgent
     ? chrome.formingAlt ?? say("worldFormingNothingAdopted")
     : say(inspirations?.length || fieldBeyond ? "worldPersonalReadingNotReady" : "worldPersonalReadingEmpty");
@@ -2735,6 +2737,17 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       boundary (observed as a wall that says six and lights none). Travel is
       when the refresh is ASKED for; arrival is when it may land. */
   const pendingAgentBundlesRef = useRef<Map<string, AgentBundle>>(new Map());
+  /* A BUNDLE THAT LANDS AFTER ARRIVAL LANDS NOW. Arrival is the only moment
+     a pending bundle was applied, so one whose fetch finished after the
+     camera settled waited for the NEXT trip — the first visit to an agent
+     drew its empty wall and said "I haven't formed anything yet" over a
+     reading the server had already returned (screenshot check, 2026-10-16).
+     Standing on that wall is the same "at rest" arrival is, so it lands. */
+  const [agentLanded, setAgentLanded] = useState(0);
+  const landIfStandingOn = useCallback((agentId: string) => {
+    const w = atWallRef.current;
+    if (w.kind === "agent" && w.id === agentId) setAgentLanded((n) => n + 1);
+  }, []);
   /** Whether an agent wall's FIRST load is underway or has failed. Success
       needs no entry here — the bundle's presence in `agents` is readiness. */
   const agentFirstLoadRef = useRef<Map<string, "pending" | "failed">>(new Map());
@@ -2753,6 +2766,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
         void loadAgentBundle(entry, { strict: true })
           .then((fresh) => {
             pendingAgentBundlesRef.current.set(agentId, fresh);
+            landIfStandingOn(agentId);
           })
           .catch(() => {
             /* keep the last good ground, and let the very next approach
@@ -2775,6 +2789,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           agentFirstLoadRef.current.delete(agentId);
           agentRefreshedAtRef.current.set(agentId, Date.now());
           pendingAgentBundlesRef.current.set(agentId, fresh);
+          landIfStandingOn(agentId);
         })
         .catch(() => {
           agentFirstLoadRef.current.set(agentId, "failed");
@@ -2783,7 +2798,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           agentRefreshBusyRef.current.delete(agentId);
         });
     },
-    [agentRoster, agents],
+    [agentRoster, agents, landIfStandingOn],
   );
 
   /**
@@ -2822,7 +2837,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       /* anything left is a FIRST load — the wall's memory arriving at all */
       return [...replaced, ...fresh.values()];
     });
-  }, [atWall]);
+  }, [atWall, agentLanded]);
 
   const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
@@ -7593,7 +7608,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                        creature up the screen. The position is a function of
                        the window alone now, so the band can collapse to
                        nothing and the creature does not move a pixel. */
-                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}${here&&w.kind==='self'&&!mouthOpen?' jar-hq-inner--yielded':''}`}
+                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}${here&&(w.kind==='self'||w.kind==='agent')&&!mouthOpen?' jar-hq-inner--yielded':''}`}
+                    /* AN AGENT'S WALL YIELDS TOO, now that its bubble holds its
+                       own reading: the poster printed the same sentence huge
+                       behind the bubble (screenshot check, 2026-10-16). */
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
                     {/* R01 makes the personal reading explicit while keeping
@@ -8954,7 +8972,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   saying "something belongs here", which is worse than air;
                   the press target above stays, so the offer is always one
                   press away whether or not anything is being held up. */}
-              {lead || bubbleHoldsTheLine ? (
+              {lead || agentSays || bubbleHoldsTheLine ? (
                 /* ═══ TWO WEIGHTS OF BUBBLE, AND ONLY TWO ═══════════════
                    Founder, with the reading beside an observation: "the
                    speech bubble that shows the top of mind versus everything
@@ -9122,6 +9140,28 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                 {say('worldBubbleActShare')}
                               </button>
                             ) : null}
+                          </span>
+                        </>
+                      ) : agentSays ? (
+                        /* ═══ AND ON ITS WALL, THE AGENT'S OWN ══════════
+                           The scoping above kept your sentence off your
+                           agent's wall, and nothing took its place: an agent
+                           with a reading fell through to `restingWord`, so it
+                           said "nothing adopted yet" over a top of mind the
+                           server had returned (screenshot check, 2026-10-16).
+                           Its line is the wall's chrome — the same
+                           `deriveAgentChrome` reading the dial winds — framed
+                           in its own first person, because the creature is
+                           wearing its form. */
+                        <>
+                          <span className="jar-char-bubble-of">{say('worldBubbleActAgentMine')}</span>
+                          <span className="jar-char-bubble-reading">{agentSays}</span>
+                          <span className="jar-char-bubble-acts">
+                            <button type="button" className="jar-char-bubble-act"
+                              disabled={talking}
+                              onClick={() => { void talkAbout({ id: '', text: agentSays }); }}>
+                              {say('worldTalkAboutThis')}
+                            </button>
                           </span>
                         </>
                       ) : (
