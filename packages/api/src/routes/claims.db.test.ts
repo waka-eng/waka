@@ -35,6 +35,7 @@ import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.
 import type { AuthEnv } from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
 import { createClaimsRoutes } from "./claims.js";
+import { CLAIM_REASK_DAYS } from "./signals.js";
 
 let t: TestDatabase;
 let seq = 0;
@@ -304,6 +305,18 @@ describe("the claims awaiting a word", () => {
     expect(await queueFor(theirs)).toHaveLength(0);
   });
 
+  it("asks the most recently evidenced first, never the most confident", async () => {
+    /* The query orders by evidence and says confidence is deliberately not a
+       term; decoration re-sorted by confidence on the way out, so the order
+       was never the one written down. */
+    const person = await seedPerson("order-by-evidence");
+    const confident = await claimWith(person, "Well supported, read earlier.", "active", 6);
+    await t.sql`UPDATE signals SET last_evidence_at = now() - interval '2 days' WHERE id = ${confident}`;
+    const recent = await claimWith(person, "Thinly supported, read just now.", "active", 3);
+
+    expect((await queueFor(person)).map((row) => row.id)).toEqual([recent, confident]);
+  });
+
   it("reports more honestly when the backlog is longer than the page", async () => {
     const person = await seedPerson("backlog");
     for (let i = 0; i < 3; i += 1) {
@@ -316,5 +329,62 @@ describe("the claims awaiting a word", () => {
 
     expect(body.claims).toHaveLength(2);
     expect(body.more).toBe(true);
+  });
+});
+
+describe("the yeses that have aged", () => {
+  /* Founder, 2026-10-15: "is this still true? ... obviously things go
+     outdated." A yes is a statement about one moment. After a season the
+     same reading is asked again — and the queue still asks the unanswered
+     first. */
+  async function answeredDaysAgo(person: Person, signalId: string, value: "true" | "partly" | "not_true", days: number) {
+    await answer(person, signalId, value);
+    await t.sql`UPDATE feedback SET created_at = now() - make_interval(days => ${days})
+      WHERE profile_id = ${person.profileId} AND target_id = ${signalId}`;
+  }
+  const askedAgain = async (person: Person) =>
+    ((await queueFor(person)) as Array<ClaimRow & { askedAgain?: { lastAnsweredAt: string } }>);
+
+  it("asks again about a yes older than a season, and says when it was", async () => {
+    const person = await seedPerson("season");
+    const id = await claimWith(person, "You choose tools you can leave.", "active", 3);
+    await answeredDaysAgo(person, id, "true", CLAIM_REASK_DAYS + 5);
+
+    const queue = await askedAgain(person);
+    expect(queue.map((row) => row.id)).toEqual([id]);
+    expect(queue[0]!.askedAgain?.lastAnsweredAt, "the card needs to know when the last yes was").toBeTruthy();
+  });
+
+  it("does not ask again about a recent yes, a no, or the person's own words", async () => {
+    const person = await seedPerson("not-yet");
+    const recent = await claimWith(person, "Recent yes.", "active", 3);
+    await answeredDaysAgo(person, recent, "true", 10);
+    const refused = await claimWith(person, "Old no.", "active", 3);
+    await answeredDaysAgo(person, refused, "not_true", CLAIM_REASK_DAYS + 30);
+    const own = await claimWith(person, "My own words.", "active", 3);
+    await answeredDaysAgo(person, own, "true", CLAIM_REASK_DAYS + 30);
+    await t.sql`UPDATE signals SET locked_at = now() WHERE id = ${own}`;
+
+    expect(await askedAgain(person)).toEqual([]);
+  });
+
+  it("asks the unanswered first, then the oldest yes", async () => {
+    const person = await seedPerson("order");
+    const older = await claimWith(person, "Oldest yes.", "active", 3);
+    await answeredDaysAgo(person, older, "partly", CLAIM_REASK_DAYS + 60);
+    const old = await claimWith(person, "Old yes.", "active", 3);
+    await answeredDaysAgo(person, old, "true", CLAIM_REASK_DAYS + 20);
+    const fresh = await claimWith(person, "Never answered.", "active", 3);
+
+    expect((await askedAgain(person)).map((row) => row.id)).toEqual([fresh, older, old]);
+  });
+
+  it("stops asking once it has been answered again", async () => {
+    const person = await seedPerson("answered-again");
+    const id = await claimWith(person, "Still choosing small doors.", "active", 3);
+    await answeredDaysAgo(person, id, "true", CLAIM_REASK_DAYS + 5);
+    await answer(person, id, "true");
+
+    expect(await askedAgain(person)).toEqual([]);
   });
 });
