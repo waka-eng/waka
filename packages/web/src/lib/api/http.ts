@@ -34,6 +34,7 @@
 // ---------------------------------------------------------------------------
 import {invalidateSourceRequest} from '../inspiration-snapshots';
 import { apiFetch } from './transport';
+import { MAX_MESSAGE_ATTACHMENTS } from './file-accept';
 
 /**
  * Field-level validation errors as emitted by Hono handlers via zod's
@@ -72,9 +73,10 @@ export class ApiError extends Error {
   }
 }
 
-/** Ids, or nothing: a refusal's list is read only when it is a short list of strings. */
+/** Ids, or nothing: a refusal's list is read only when it is a list of strings
+    no longer than a message can carry. */
 const idList = (value: unknown): string[] | undefined =>
-  Array.isArray(value) && value.length <= 6 && value.every((item) => typeof item === "string") ? value as string[] : undefined;
+  Array.isArray(value) && value.length <= MAX_MESSAGE_ATTACHMENTS && value.every((item) => typeof item === "string") ? value as string[] : undefined;
 
 // ---------------------------------------------------------------------------
 // API path helper

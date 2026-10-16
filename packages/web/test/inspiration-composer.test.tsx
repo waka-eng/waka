@@ -180,6 +180,23 @@ it('keeps an unsupported browser preview saveable and gives the failed file its 
      `keep-ready.test.ts`. A preview failure is this page's business; whether
      it blocks a save is not. */
 });
+/* AN UNNAMED UPLOAD IS CALLED WHAT IT IS, ON SCREEN ONLY. The draft keeps
+   no name (so none is sent); the tile says "Photo", "File" or "Recording" —
+   and a recording is never called a photo. */
+it('labels unnamed photos, files and recordings by kind, in the reader\'s language', async () => {
+  props.media = [
+    { id: 'p', type: 'image', blob: new Blob(['p'], { type: 'image/png' }) },
+    { id: 'f', type: 'file', blob: new Blob(['f'], { type: 'application/pdf' }) },
+    { id: 'a', type: 'audio', blob: new Blob(['a'], { type: 'audio/webm' }) },
+  ];
+  await mount();
+  expect([...host.querySelectorAll('.jar-tile')].map(tile => tile.getAttribute('title'))).toEqual(['Photo', 'File', 'Recording']);
+  expect(host.querySelector('[aria-label="Remove Recording"]'), 'the recording\'s × does not say what it removes').toBeTruthy();
+  expect(host.querySelector('[aria-label="Play Recording"]')).toBeTruthy();
+  expect(props.media.every(item => item.name === undefined), 'a label was written into the draft').toBe(true);
+  props.locale = 'ko-KR'; await mount();
+  expect([...host.querySelectorAll('.jar-tile')].map(tile => tile.getAttribute('title'))).toEqual(['사진', '파일', '녹음']);
+});
 /* ═══ WHICH FILE IS IN FLIGHT, SHOWN RATHER THAN COUNTED ═══════════════
    "Uploading file 1 of 1… Keep this window open." is gone. A person cannot
    act on which of three files is moving, and the instruction asked them not

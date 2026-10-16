@@ -111,9 +111,19 @@ it("shows a file's name and human size, linked to its URL", async () => {
   expect((tiles[0] as HTMLAnchorElement).rel).toBe("noopener noreferrer");
 });
 
-/** What `window.open('', '_blank')` hands back: a blank tab to point later. */
+/** What `window.open('', '_blank')` hands back: a blank tab to point later,
+    with a document of its own. `followed` is the link the tab was sent
+    through — its address and its `rel` — or null while it waits. */
 function blankTab() {
-  return { opener: window as Window | null, location: { href: "" }, close: vi.fn() };
+  const doc = document.implementation.createHTMLDocument("");
+  const tab = { opener: window as Window | null, location: { href: "" }, close: vi.fn(), document: doc,
+    followed: null as { href: string; rel: string; inTab: boolean } | null };
+  doc.addEventListener("click", (event) => {
+    const link = event.target as HTMLAnchorElement;
+    tab.followed = { href: link.href, rel: link.rel, inTab: link.ownerDocument === doc };
+    event.preventDefault();
+  });
+  return tab;
 }
 
 it("lets a file whose link is not ready yet be pressed: the tab opens in the click, then goes to the link", async () => {
@@ -133,9 +143,13 @@ it("lets a file whose link is not ready yet be pressed: the tab opens in the cli
   expect(open).toHaveBeenCalledTimes(1);
   expect(open).toHaveBeenCalledWith("", "_blank");
   expect(tab.opener).toBeNull();
-  expect(tab.location.href).toBe("");
+  expect(tab.followed).toBeNull();
   await act(async () => { resolve("https://storage.example.test/f-1"); });
-  expect(tab.location.href).toBe("https://storage.example.test/f-1");
+  /* The tab goes there by a link of its own that sends no Referer — not by
+     this page setting its address, which would tell the bucket where from. */
+  expect(tab.followed).toEqual({ href: "https://storage.example.test/f-1", rel: "noreferrer", inTab: true });
+  expect(tab.location.href, "the address was set from this page, Referer and all").toBe("");
+  expect(tab.opener).toBeNull();
   expect(tab.close).not.toHaveBeenCalled();
   expect(host.querySelector("a.chat-attachment-file")?.getAttribute("href")).toBe("https://storage.example.test/f-1");
 });
@@ -150,7 +164,7 @@ it("closes the tab it opened when the read fails, and the file can be pressed ag
   await act(async () => { button.click(); });
   expect(open).toHaveBeenCalledWith("", "_blank");
   expect(tab.close).toHaveBeenCalledTimes(1);
-  expect(tab.location.href).toBe("");
+  expect(tab.followed).toBeNull();
   expect(host.querySelector('button.chat-attachment-file[data-state="failed"]')).not.toBeNull();
 });
 
@@ -167,7 +181,18 @@ it("a stale photo link is read again on click, in a tab opened by the click", as
   expect(click.defaultPrevented).toBe(true);
   expect(open).toHaveBeenCalledWith("", "_blank");
   await act(async () => { await Promise.resolve(); });
-  expect(tab.location.href).toBe("https://storage.example.test/new.jpg");
+  expect(tab.followed).toEqual({ href: "https://storage.example.test/new.jpg", rel: "noreferrer", inTab: true });
+});
+
+it("still opens the file when the blank tab's document cannot be reached", async () => {
+  vi.mocked(fetchAttachmentUrl).mockReturnValueOnce(new Promise<string>(() => {})).mockResolvedValueOnce("https://storage.example.test/f-2");
+  const tab = { opener: window as Window | null, location: { href: "" }, close: vi.fn(),
+    get document(): Document { throw new DOMException("Blocked", "SecurityError"); } };
+  open.mockReturnValue(tab);
+  await show([file("f-2", "plan.pdf", 2048)]);
+  await act(async () => { (host.querySelector("button.chat-attachment-file") as HTMLButtonElement).click(); });
+  expect(tab.location.href).toBe("https://storage.example.test/f-2");
+  expect(tab.opener).toBeNull();
 });
 
 it("aborts the read when the message leaves the screen", async () => {

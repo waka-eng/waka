@@ -7,9 +7,8 @@ import {requireAuth,humanSessionsOnly,type AuthEnv} from '../lib/middleware.js';
 import {resolveTargetProfile} from './inspirations-tenancy.js';
 import {profileQuerySchema} from './inspirations-validation.js';
 import {CONVERSATION_LIMITS,accountAgent,conversationCapabilities,conversationMemory,conversationRepliesEnabled,currentConversationReferences,readPerspectiveContext,type ConversationSource} from '../lib/conversation-context.js';
-import {conversationSearchQuery} from '../lib/conversation-material.js';
 import {CONVERSATION_STARTERS,conversationPreview} from '../lib/conversation-preview.js';
-import {ConversationReplyError,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
+import {ConversationReplyError,conversationReplyWindow,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
 import {wakeCommittedBackgroundJobs} from '../lib/queue.js';
 import {personalPrincipleReadable} from '../lib/personal-output.js';
 import {PRINCIPLE_MIN_SIGNALS} from '../lib/principle-generation.js';
@@ -288,7 +287,9 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       });
       return {profileId,principles:bound('principle',8000),reading:bound('top_of_mind_entry',4000),inspirations:bound('inspiration',4000),...conversationCapabilities()};
     }
-    return readPerspectiveContext(tx,await conversationMemory(tx,profileId,row),conversationSearchQuery(row.messages),row.initialPrincipleId,row.initialInspirationId);
+    // The words the reply would search with — its own selection of the
+    // transcript, not every message this read happens to hold.
+    return readPerspectiveContext(tx,await conversationMemory(tx,profileId,row),conversationReplyWindow(row.messages).searchQuery,row.initialPrincipleId,row.initialInspirationId);
   },{isolationLevel:'repeatable read',accessMode:'read only'})));
   routes.post('/:id/messages',async c=>{
     const window=messageWindow(c.req.query('from'),c.req.query('limit'));

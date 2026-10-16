@@ -4,7 +4,7 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {fetchConversation,saveConversationMessage} from '../src/lib/api/conversations';
 import {finalizeAttachment,uploadMessageAttachment} from '../src/lib/api/attachments';
-import {FILE_ACCEPT,FileRefused,attachmentFileContentType,inspectAttachmentFile} from '../src/lib/api/file-accept';
+import {FILE_ACCEPT,FileRefused,MAX_MESSAGE_ATTACHMENTS,attachmentFileContentType,inspectAttachmentFile} from '../src/lib/api/file-accept';
 afterEach(()=>vi.unstubAllGlobals());
 const createdAt='2026-10-15T12:00:00Z';
 const attachment={id:'a1',conversationId:'conversation',messageId:'m1',staged:false,type:'image',name:'IMG.png',contentType:'image/png',size:120,createdAt};
@@ -49,6 +49,41 @@ it('uploads in three steps with one content type throughout',async()=>{
   expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({filename:'plan.pdf',contentType:'application/pdf',size:3});
   expect(fetch.mock.calls[1][1]).toMatchObject({method:'PUT',headers:{'Content-Type':'application/pdf','Content-Length':'3'}});
   expect(JSON.parse(fetch.mock.calls[2][1].body)).toEqual({conversationId:'conversation',messageId:'m1',type:'file',key:'profiles/p/attachments/1.pdf',contentType:'application/pdf',size:3,name:'plan.pdf'});
+});
+const presigned=()=>reply({profileId:'profile',uploadUrl:'https://bucket.example/put',key:'profiles/p/attachments/1.png',expiresAt:createdAt,headers:{'Content-Type':'image/png','Content-Length':'3'}});
+it('an abort calls the upload off only while it is presigning; from the PUT on it finishes',async()=>{
+  // Called off during the presign: nothing was made, so nothing is sent.
+  const early=new AbortController();
+  const first=vi.fn().mockImplementationOnce(async()=>{early.abort();return presigned();});
+  vi.stubGlobal('fetch',first);
+  await expect(uploadMessageAttachment({profile:'profile',conversationId:'conversation',messageId:'m1',file:new File(['png'],'a.png',{type:'image/png'}),contentType:'image/png',type:'image'},early.signal)).rejects.toMatchObject({name:'AbortError'});
+  expect(first,'bytes were sent after the upload was called off').toHaveBeenCalledTimes(1);
+  // Called off during the PUT: the object may land, so it lands and is staged — the caller discards it.
+  const late=new AbortController();
+  const fetch=vi.fn().mockResolvedValueOnce(presigned())
+    .mockImplementationOnce(async()=>{late.abort();return new Response(null,{status:200});})
+    .mockResolvedValueOnce(reply({attachment:{...attachment,staged:true}},201));
+  vi.stubGlobal('fetch',fetch);
+  const row=await uploadMessageAttachment({profile:'profile',conversationId:'conversation',messageId:'m1',file:new File(['png'],'a.png',{type:'image/png'}),contentType:'image/png',type:'image'},late.signal);
+  expect(row.id).toBe('a1');
+  expect(fetch.mock.calls[1][1].signal,'the PUT could be cut off mid-object').toBeUndefined();
+  expect(fetch.mock.calls[2][1].signal,'the finalize could be cut off mid-commit').toBeUndefined();
+});
+it('sends no name for an unnamed upload',async()=>{
+  const fetch=vi.fn().mockResolvedValueOnce(presigned()).mockResolvedValueOnce(new Response(null,{status:200}))
+    .mockResolvedValueOnce(reply({attachment:{...attachment,name:null,staged:true}},201));
+  vi.stubGlobal('fetch',fetch);
+  await uploadMessageAttachment({profile:'profile',conversationId:'conversation',messageId:'m1',file:new File(['png'],'',{type:'image/png'}),contentType:'image/png',type:'image'});
+  expect(JSON.parse(fetch.mock.calls[2][1].body)).not.toHaveProperty('name');
+});
+it('reads a refusal\'s missing ids up to a message\'s cap, and no further',async()=>{
+  const refusal=(count:number)=>reply({error:'Some attachments are not ready.',code:'attachment_not_ready',missingAttachmentIds:Array.from({length:count},(_,at)=>`a${at}`)},409);
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(refusal(MAX_MESSAGE_ATTACHMENTS)).mockResolvedValueOnce(refusal(MAX_MESSAGE_ATTACHMENTS+1)));
+  const send=()=>saveConversationMessage('profile','conversation',{id:'m1',content:'',revision:0,attachmentIds:['a0']});
+  await expect(send()).rejects.toMatchObject({code:'attachment_not_ready',missingAttachmentIds:Array.from({length:MAX_MESSAGE_ATTACHMENTS},(_,at)=>`a${at}`)});
+  const tooMany=await send().catch(error=>error);
+  expect(tooMany.code).toBe('attachment_not_ready');
+  expect(tooMany.missingAttachmentIds,'a list longer than a message can carry was believed').toBeUndefined();
 });
 it('"Add file" offers documents and photos, and refuses what the server would',()=>{
   expect(FILE_ACCEPT).toContain('application/pdf');expect(FILE_ACCEPT).toContain('.docx');expect(FILE_ACCEPT).toContain('.md');

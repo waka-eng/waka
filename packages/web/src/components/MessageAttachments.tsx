@@ -23,6 +23,23 @@ function openBlankTab(): Window | null {
   return tab;
 }
 
+/* AND IT ARRIVES WITH NO REFERER — the other half of the ready link's `rel`.
+   Setting `tab.location.href` from here is this page navigating that tab,
+   so the bucket would be told this page's address (its origin, at the
+   default policy). Instead the blank tab follows a link of its own that says
+   `noreferrer`: the navigation is the tab's, from a document with no
+   address worth sending, and Chrome, Safari and Firefox all send it with no
+   Referer. If the tab's document is out of reach, the address is set
+   directly — the file still opens. */
+function sendTab(tab: Window, url: string) {
+  try {
+    const doc = tab.document, link = doc.createElement('a');
+    link.href = url; link.rel = 'noreferrer';
+    (doc.body ?? doc.documentElement).appendChild(link);
+    link.click();
+  } catch { tab.location.href = url; }
+}
+
 function useAttachmentUrl(id: string) {
   const [state, setState] = useState<{ url: string | null; failed: boolean }>({ url: null, failed: false });
   const readAt = useRef(0), click = useRef<AbortController | null>(null);
@@ -48,7 +65,7 @@ function useAttachmentUrl(id: string) {
       if (controller.signal.aborted) { tab?.close(); return; }
       readAt.current = Date.now();
       setState({ url, failed: false });
-      if (tab) tab.location.href = url;
+      if (tab) sendTab(tab, url);
     }).catch(() => {
       tab?.close();
       if (!controller.signal.aborted) setState({ url: null, failed: true });

@@ -57,7 +57,7 @@ import { type AuthEnv, profileAccessError, requireAuth, asAccountProfile } from 
 import { enqueueEnrichAttachment, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { attachmentKeyPrefix, attachmentObjectUrl, getAttachmentsBucket } from '../lib/attachment-storage.js';
 import { ALLOWED_ATTACHMENT_CONTENT_TYPE, MAX_ATTACHMENT_UPLOAD_BYTES, isAllowedFileContentType, isRasterImageContentType } from '../lib/inspiration-attachment-input.js';
-import { InspirationAttachmentError, assertAttachmentKeysUnused, verifyUploadedAttachment, type AttachmentHead } from '../lib/inspiration-attachments.js';
+import { InspirationAttachmentError, assertAttachmentKeysUnused, lockAttachmentKeys, verifyUploadedAttachment, type AttachmentHead } from '../lib/inspiration-attachments.js';
 import { ConversationAttachmentError, MAX_MESSAGE_ATTACHMENTS, MAX_STAGED_MESSAGE_ATTACHMENTS, discardStagedAttachment, messageAttachmentSelection, serializeMessageAttachment, stagedCapCutoff, unreferencedAttachmentKeys } from '../lib/conversation-attachments.js';
 import { sweepAttachmentObjects, type DeleteAttachmentObjects } from '../lib/attachment-sweep.js';
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
@@ -627,9 +627,12 @@ attachmentsRoutes.delete('/:attachmentId', async (c) => {
  *      must not hold the composer shut), and the worker's daily sweep
  *      removes them, bytes and all, after seven days.
  *
- * Locks the profile row, then the conversation row, so it serializes with
- * conversation create (profile lock) and message send (conversation lock):
- * a row can never be staged for a message that committed a moment earlier.
+ * Locks the upload's key first — every door that writes a key takes its key
+ * lock before any row lock (`lockAttachmentKeys`), so no two doors can wait
+ * on each other — then the profile row, then the conversation row, so it
+ * serializes with conversation create (profile lock) and message send
+ * (conversation lock): a row can never be staged for a message that
+ * committed a moment earlier.
  */
 async function finalizeChatAttachment(c: Context<AuthEnv>, data: z.infer<typeof finalizeChatSchema>) {
   const session = c.get("session");
@@ -648,6 +651,7 @@ async function finalizeChatAttachment(c: Context<AuthEnv>, data: z.infer<typeof 
   }
   type Refusal = { refused: { error: string; status: 404 | 409 | 410 | 429; code?: string } };
   const outcome = await db.transaction(async (tx): Promise<Refusal | { row: Parameters<typeof serializeMessageAttachment>[0] }> => {
+    await lockAttachmentKeys(tx, [data.key]);
     await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.id, profileId)).for('update');
     const [conversation] = await tx.select({ profileId: conversations.profileId, deletedAt: conversations.deletedAt })
       .from(conversations).where(eq(conversations.id, data.conversationId)).for('update');
@@ -823,7 +827,9 @@ attachmentsRoutes.post("/", async (c) => {
   const finalized = await db.transaction(async (tx) => {
     /* ONE STORED OBJECT, ONE ATTACHMENT — the rule note capture and the chat
        finalize keep: a second row on an object would lose its bytes when
-       the first row's owner is deleted. */
+       the first row's owner is deleted. Its key lock is this transaction's
+       first statement, ahead of any row the enqueue below locks — the
+       order every door keeps. */
     if (rowToInsert.s3Key) {
       try { await assertAttachmentKeysUnused(tx, [rowToInsert.s3Key]); }
       catch (error) { if (error instanceof InspirationAttachmentError) return { refused: error }; throw error; }

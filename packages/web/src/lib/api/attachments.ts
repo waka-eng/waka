@@ -345,6 +345,17 @@ export async function discardMessageAttachment(id: string, options: { profile?: 
  * on — `inspectAttachmentFile(file).contentType` for "Add file", the photo
  * sniffer's verdict (`file.type` after `inspectInspirationPhoto`) for "Add
  * photos". Send the returned `id` in the message's `attachmentIds`.
+ *
+ * `signal` CALLS IT OFF ONLY BEFORE ANYTHING EXISTS. Presigning makes
+ * nothing, so it may be abandoned; but once the PUT starts the object may
+ * land, and once finalize is sent the row may commit — an abort there would
+ * leave bytes no row names (which the staged-row sweep cannot find) or a
+ * staged row counting against the six-per-message and thirty-unsent caps.
+ * So from the PUT on it runs to the end, and a caller that no longer wants
+ * the result discards it (`discardMessageAttachment`) when it arrives.
+ *
+ * No `name` means none: an unnamed upload is stored unnamed. The presign's
+ * `filename` is only a hint for the key, never shown.
  */
 export async function uploadMessageAttachment(
   input: { profile: string; conversationId: string; messageId: string; file: File | Blob; name?: string; contentType: string; type: "image" | "file" },
@@ -352,9 +363,10 @@ export async function uploadMessageAttachment(
 ): Promise<ApiMessageAttachment> {
   const name = input.name ?? ("name" in input.file && typeof input.file.name === "string" ? input.file.name : undefined);
   const presigned = await presignAttachment({ filename: name || "attachment", contentType: input.contentType, size: input.file.size }, signal, { profile: input.profile });
-  await uploadToPresignedUrl(presigned.uploadUrl, input.file, presigned.headers, signal);
+  if (signal?.aborted) throw new DOMException("The upload was called off before it started", "AbortError");
+  await uploadToPresignedUrl(presigned.uploadUrl, input.file, presigned.headers);
   return finalizeAttachment({
     conversationId: input.conversationId, messageId: input.messageId, type: input.type, key: presigned.key,
     contentType: input.contentType, size: input.file.size, ...(name ? { name: name.slice(0, 255) } : {}),
-  }, { profile: input.profile, ...(signal ? { signal } : {}) });
+  }, { profile: input.profile });
 }

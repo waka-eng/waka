@@ -129,6 +129,9 @@ it('sends words and a file together in an existing chat, naming exactly the chip
   expect(saveConversationMessage).toHaveBeenCalledOnce();
   const input=vi.mocked(saveConversationMessage).mock.calls[0]![2];
   expect(input).toMatchObject({id:upload.messageId,content:'Here is the lease.',attachmentIds:attached.map(item=>item.id)});
+  // Confirmed by its id: the draft clears and nothing reads as still sending.
+  expect(readConversationDrafts(scope,chat),'the sent message stayed pending').toEqual([]);
+  expect(host.querySelector('.chat-sending')).toBeNull();
 });
 
 it('keeps the message id while it carries something, so words typed after a photo still send with it', async()=>{
@@ -264,22 +267,58 @@ it('when the refusal names no attachment, every chip goes and the words stay', a
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t confirm this message');
 });
 
-it('× on a chip still uploading calls its upload off, and one that lands anyway is discarded, not added', async()=>{
+it('× on a chip mid-upload takes it off at once, lets the upload finish, and discards what it made', async()=>{
   vi.mocked(discardMessageAttachment).mockResolvedValue(undefined);
-  let land!:(row:ApiMessageAttachment)=>void,signal:AbortSignal|undefined,staged:{conversationId:string;messageId:string}|undefined;
-  vi.mocked(uploadMessageAttachment).mockImplementationOnce((input,s)=>{signal=s;staged=input;return new Promise(resolve=>{land=resolve;});});
+  let land!:(row:ApiMessageAttachment)=>void,staged:{conversationId:string;messageId:string}|undefined;
+  /* Five already on the message, and a sixth past its PUT, finalizing —
+     the server may be committing its row as × is pressed. */
   await mount();await flush();
+  await pick('photos',Array.from({length:5},(_,at)=>png(`kept-${at}.png`)));
+  vi.mocked(uploadMessageAttachment).mockImplementationOnce(input=>{staged=input;return new Promise(resolve=>{land=resolve;});});
   await pick('photos',[png()]);
-  expect(chips()[0]!.className).toContain('chat-chip--uploading');
-  await act(async()=>chips()[0]!.querySelector<HTMLButtonElement>('button[aria-label="Remove sky.png"]')!.click());
-  expect(chips()).toHaveLength(0);
-  expect(signal?.aborted,'the upload kept going after ×').toBe(true);
-  // The server had already staged it when the stop arrived.
+  expect(chips()).toHaveLength(6);
+  expect(chips()[5]!.className).toContain('chat-chip--uploading');
+  expect(plus()!.disabled,'six were not six').toBe(true);
+  await act(async()=>chips()[5]!.querySelector<HTMLButtonElement>('button[aria-label="Remove sky.png"]')!.click());
+  expect(chips(),'× did not take the chip off at once').toHaveLength(5);
+  expect(discardMessageAttachment,'something was discarded before the upload said what it made').not.toHaveBeenCalled();
+  /* THE PLACE IS FREE NOW, not when the removed one finishes: a new pick
+     is not refused by an upload nobody wants. */
+  expect(plus()!.disabled,'a removed upload still holds its place').toBe(false);
+  await pick('photos',[png('instead.png')]);
+  expect(host.textContent,'the new pick was refused by the cap').not.toContain('Up to 6 at a time');
+  expect(chips().map(chip=>chip.title)).toContain('instead.png');
+  expect(uploadMessageAttachment).toHaveBeenCalledTimes(7);
+  // The finalize commits after all.
   const row:ApiMessageAttachment={id:'22222222-2222-4222-8222-222222222222',conversationId:staged!.conversationId,messageId:staged!.messageId,staged:true,type:'image',name:'sky.png',contentType:'image/png',size:16,createdAt:'2026-10-16T00:30:00Z'};
   await act(async()=>land(row));await flush();
-  expect(chips(),'the removed photo came back').toHaveLength(0);
-  expect(readConversationDrafts(scope,chat)[0]?.value.attachments??[]).toEqual([]);
+  expect(chips(),'the removed photo came back').toHaveLength(6);
+  expect(chips().map(chip=>chip.title)).not.toContain('sky.png');
+  expect(readConversationDrafts(scope,chat)[0]!.value.attachments!.map(item=>item.id)).not.toContain(row.id);
+  expect(discardMessageAttachment,'the upload × removed was left staged on the server').toHaveBeenCalledWith(row.id,{profile:scope.profileId});
+});
+
+it('an upload that lands after the chat was closed is discarded, not left staged', async()=>{
+  vi.mocked(discardMessageAttachment).mockResolvedValue(undefined);
+  let land!:(row:ApiMessageAttachment)=>void,staged:{conversationId:string;messageId:string}|undefined;
+  vi.mocked(uploadMessageAttachment).mockImplementationOnce(input=>{staged=input;return new Promise(resolve=>{land=resolve;});});
+  await mount();await flush();
+  await pick('photos',[png()]);
+  await act(async()=>root.unmount());root=createRoot(host);
+  const row:ApiMessageAttachment={id:'33333333-3333-4333-8333-333333333333',conversationId:staged!.conversationId,messageId:staged!.messageId,staged:true,type:'image',name:'sky.png',contentType:'image/png',size:16,createdAt:'2026-10-16T00:30:00Z'};
+  await act(async()=>land(row));await flush();
   expect(discardMessageAttachment).toHaveBeenCalledWith(row.id,{profile:scope.profileId});
+});
+
+it('× on a chip whose upload then fails leaves nothing to discard and nothing on the box', async()=>{
+  let fail!:(reason:Error)=>void;
+  vi.mocked(uploadMessageAttachment).mockImplementationOnce(()=>new Promise((_,reject)=>{fail=reject;}));
+  await mount();await flush();
+  await pick('photos',[png()]);
+  await act(async()=>chips()[0]!.querySelector<HTMLButtonElement>('button[aria-label="Remove sky.png"]')!.click());
+  await act(async()=>fail(new Error('network')));await flush();
+  expect(chips()).toHaveLength(0);
+  expect(discardMessageAttachment).not.toHaveBeenCalled();
 });
 
 it('two quick picks together still stop at six', async()=>{
@@ -298,9 +337,15 @@ it('two quick picks together still stop at six', async()=>{
   expect(host.textContent).toContain('Up to 6 at a time');
 });
 
-it('an unnamed photo is called a photo, not "Add photo"', async()=>{
+it('an unnamed photo is called a photo on its chip, and sent with no name', async()=>{
   await mount();await flush();
   await pick('photos',[png('')]);
-  expect(vi.mocked(uploadMessageAttachment).mock.calls[0]![0].name).toBe('Photo');
+  // "Photo" is the reader's word for it, not a fact about the upload.
+  expect(vi.mocked(uploadMessageAttachment).mock.calls[0]![0],'the screen\'s label was sent as the photo\'s name').not.toHaveProperty('name');
   expect(chips()[0]!.title).toBe('Photo');
+  expect(readConversationDrafts(scope,chat)[0]!.value.attachments![0]!.name).toBeNull();
+  // Uploaded, its chip reads the draft's name — still none, still "Photo" — and a file is a file.
+  await pick('file',[new File(['%PDF-1.7'],'',{type:'application/pdf'})]);
+  expect(vi.mocked(uploadMessageAttachment).mock.calls[1]![0]).not.toHaveProperty('name');
+  expect(chips().map(chip=>chip.title)).toEqual(['Photo','File']);
 });

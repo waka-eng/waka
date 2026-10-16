@@ -78,14 +78,28 @@ export async function verifyUploadedAttachment(input: { key: string; contentType
  * doors finalizing the same key at once both read "unused" under READ
  * COMMITTED and both insert. A transaction-scoped advisory lock per key,
  * taken before the read, makes the second door wait for the first to commit
- * and then see its row. Keys are locked in sorted order so two saves naming
- * overlapping keys cannot deadlock; the locks release with the transaction.
+ * and then see its row; the locks release with the transaction. Every door
+ * takes them FIRST (`lockAttachmentKeys`), before any row lock it holds, so
+ * the order is key locks → row locks everywhere and no two doors can each
+ * hold one while waiting on the other's. Taking them again here costs a
+ * door that already did nothing, and keeps this check sound on its own.
  */
 export async function assertAttachmentKeysUnused(db: Pick<ReturnType<typeof getDb>, 'select' | 'execute'>, keys: string[]): Promise<void> {
   if (!keys.length) return;
-  for (const key of [...new Set(keys)].sort()) {
-    await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'waka.attachment-key:' + key}, 0))`);
-  }
+  await lockAttachmentKeys(db, keys);
   const [reused] = await db.select({ id: attachments.id }).from(attachments).where(inArray(attachments.s3Key, keys)).limit(1);
   if (reused) throw new InspirationAttachmentError(409, 'attachment_already_attached', 'This upload is already attached. Upload it again.');
+}
+
+/**
+ * THE KEYS' LOCKS, IN ONE STATEMENT AND ONE ORDER. Sorted inside the
+ * statement, not by a loop of round trips, so two saves naming overlapping
+ * keys always queue on the lowest shared key first and cannot deadlock on
+ * each other. A door's first statement in its transaction: key locks, then
+ * row locks, on note capture, the inspiration finalize and the chat finalize.
+ */
+export async function lockAttachmentKeys(db: Pick<ReturnType<typeof getDb>, 'execute'>, keys: readonly string[]): Promise<void> {
+  if (!keys.length) return;
+  await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(s.k, 0)) FROM (SELECT DISTINCT 'waka.attachment-key:' || k AS k
+    FROM unnest(ARRAY[${sql.join(keys.map((key) => sql`${key}`), sql`, `)}]::text[]) AS k ORDER BY 1) s`);
 }

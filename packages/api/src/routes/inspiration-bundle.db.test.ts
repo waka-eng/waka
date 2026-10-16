@@ -4,6 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { afterAll, beforeEach, expect, it, vi } from 'vitest';
+import postgres from 'postgres';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 import type { AuthEnv } from '../lib/middleware.js';
 import type { AttachmentHead } from '../lib/inspiration-attachments.js';
@@ -90,4 +91,26 @@ it('one stored object backs one attachment: a note cannot reuse an upload that i
   expect((await f.post({ text: 'Third', attachments: [twice, twice] })).status).toBe(400);
   expect(await t.sql`SELECT id FROM inspirations`).toHaveLength(1);
   expect(await t.sql`SELECT id FROM attachments`).toHaveLength(1);
+});
+it('a note waiting on an upload\'s key holds no row lock yet: key locks come first on every door', async () => {
+  const f = await fixture();
+  const other = postgres(process.env.DB_CONNECTION_URL!, { max: 1, prepare: false, connection: { search_path: t.schemaName } });
+  // Its own connection: the fixture's single one is the waiting save's.
+  const probe = postgres(process.env.DB_CONNECTION_URL!, { max: 1, prepare: false, connection: { search_path: t.schemaName } });
+  try {
+    let acquired!: () => void, release!: () => void;
+    const locked = new Promise<void>((resolve) => { acquired = resolve; }), released = new Promise<void>((resolve) => { release = resolve; });
+    // Another door mid-finalize on the same key (the string mirrors `lockAttachmentKeys`).
+    const held = other.begin(async (tx) => { await tx`SELECT pg_advisory_xact_lock(hashtextextended(${'waka.attachment-key:' + f.audio.key}, 0))`; acquired(); await released; });
+    try {
+      await locked;
+      const pending = Promise.resolve(f.post({ text: 'Waits its turn', attachments: [f.audio] }));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      /* With the profile's key-share lock taken first, this NOWAIT would be
+         refused: the save would be holding a row while it waits on a key. */
+      await probe.begin(async (tx) => { await tx`SELECT id FROM profiles WHERE id=${f.profileId} FOR UPDATE NOWAIT`; });
+      release(); await held;
+      expect((await pending).status).toBe(201);
+    } finally { release(); await held.catch(() => undefined); }
+  } finally { await other.end(); await probe.end(); }
 });

@@ -166,6 +166,7 @@ export function registerCaptureRoutes(
     const persistInspiration = () =>
       runInspirationSave(db, {
         profileId: target.profileId, requestId: parseInspirationSaveRequestId(c.req.header('Idempotency-Key')), operation: 'inspiration',
+        attachmentKeys: (parsed.data.attachments ?? []).flatMap((input) => input.type === 'link' ? [] : [input.key]),
         material: { text: parsed.data.text, kind: parsed.data.kind ?? null, source, visibility: visibility ?? 'private',
           ...(parsed.data.fromConversation?{fromConversation:parsed.data.fromConversation}:{}),
           ...(parsed.data.attachments ? { attachments: parsed.data.attachments } : {}),

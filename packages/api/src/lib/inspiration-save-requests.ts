@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { inspirationSaveRequests, profiles } from '../db/index.js';
 import { getDb } from './db.js';
 import type { InspirationProcessingReceipt } from './inspiration-processing.js';
+import { lockAttachmentKeys } from './inspiration-attachments.js';
 
 type Database = ReturnType<typeof getDb>;
 export type InspirationSaveTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -35,9 +36,14 @@ function ordered(input: unknown): unknown {
  * A keyless caller retains the existing create contract, without false dedup. */
 export async function runInspirationSave<T>(db: Database, input: {
   profileId: string; requestId?: string; operation: InspirationSaveOperation; material: unknown;
+  /** Uploaded keys the save will write onto rows. Their locks are taken
+      before the profile lock below — key locks first on every door
+      (`lockAttachmentKeys`). */
+  attachmentKeys?: readonly string[];
 }, create: (tx: InspirationSaveTransaction) => Promise<SavedInspirationReference & { response: T }>,
 load: (tx: InspirationSaveTransaction, saved: SavedInspirationReference) => Promise<T>) {
   return db.transaction(async (tx) => {
+    await lockAttachmentKeys(tx, input.attachmentKeys ?? []);
     if (!input.requestId) {
       const made = await create(tx);
       return { response: made.response, replayed: false, saveRequest: undefined };

@@ -63,6 +63,34 @@ export async function projectConversationMessages(db:Reader,profileId:string,id:
         ...(current[index]?{preview:current[index]!.text.replace(/\s+/g,' ').slice(0,96),...(current[index]!.historical?{historical:true,recordedAt:current[index]!.recordedAt}:{} )}:{})}))??[]};
   });
 }
+/**
+ * WHAT A REPLY READS, AND THE WORDS IT SEARCHES WITH — one selection of the
+ * transcript, so the reply and `GET /:id/context` cannot disagree about what
+ * a chat is about. The newest eight messages, newest first, until 8,000
+ * characters; an assistant turn whose memory changed is left out.
+ *
+ * Retrieval searches with the person's words only: an attachment note
+ * ("[Attached, not read: ...]") is not a question about their memory. For a
+ * photo/file-only message the latest words IN THIS SELECTION stand in, and
+ * with none, the names of what was attached (`conversationSearchQuery`) —
+ * never words from further back than the reply itself can see.
+ */
+export function conversationReplyWindow(messages:ReadonlyArray<{role:'user'|'assistant';content:string;followUpQuestion:string|null;memoryChanged:boolean;
+  correctsMessageId:string|null;attachments:ReadonlyArray<{type:'image'|'file';name:string|null}>}>){
+  const history:ConversationReplyInput['history']=[];let characters=0,cut=false;
+  const searchHistory:Array<{role:string;content:string;attachments:ReadonlyArray<{name:string|null}>}>=[];
+  // Keep complete messages: truncating a human sentence can drop its negation
+  // or correction. Missing earlier context is disclosed to the provider.
+  for(const row of messages.slice(-8).reverse()){
+    if(row.role==='assistant'&&row.memoryChanged)continue;
+    const note=attachmentNote(row.attachments);
+    const content=row.content+(row.followUpQuestion?'\n'+row.followUpQuestion:'')+(note?(row.content?'\n':'')+note:'');
+    if(characters+content.length>8000){cut=true;break;}
+    history.unshift({role:row.role,content,...(row.correctsMessageId?{correction:true}:{})});characters+=content.length;
+    searchHistory.unshift({role:row.role,content:row.content,attachments:row.attachments});
+  }
+  return {history,cut,searchQuery:conversationSearchQuery(searchHistory)};
+}
 async function inputFor(db:Reader,profileId:string,id:string,userMessageId:string,queryVector?:number[]){
   const conversation=await owned(db,profileId,id),messages=await db.select().from(conversationMessages)
     .where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id))).orderBy(asc(conversationMessages.position));
@@ -70,24 +98,9 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
   if(!anchor||anchor.position!==conversation.revision)return null;
   const memory=await conversationMemory(db,profileId,conversation);
   const projected=await projectConversationMessages(db,profileId,id,messages.slice(-8),memory);
-  const history:ConversationReplyInput['history']=[];let characters=0,contextChanged=messages.length>8||projected.some(row=>row.memoryChanged);
-  // What retrieval searches with: the person's words. An attachment note
-  // ("[Attached, not read: ...]") is not a question about their memory; for a
-  // photo/file-only message the latest words that exist stand in, and with
-  // none at all, the names of what was attached (`conversationSearchQuery`).
-  const searchHistory:Array<{role:string;content:string;attachments:ReadonlyArray<{name:string|null}>}>=[];
-  // Keep complete messages: truncating a human sentence can drop its negation
-  // or correction. Missing earlier context is disclosed to the provider.
-  for(const row of [...projected].reverse()){
-    if(row.role==='assistant'&&row.memoryChanged)continue;
-    const note=attachmentNote(row.attachments);
-    const content=row.content+(row.followUpQuestion?'\n'+row.followUpQuestion:'')+(note?(row.content?'\n':'')+note:'');
-    if(characters+content.length>8000){contextChanged=true;break;}
-    history.unshift({role:row.role,content,...(row.correctsMessageId?{correction:true}:{})});characters+=content.length;
-    searchHistory.unshift({role:row.role,content:row.content,attachments:row.attachments});
-  }
+  const window=conversationReplyWindow(projected),history=window.history,searchQuery=window.searchQuery;
+  const contextChanged=messages.length>8||window.cut||projected.some(row=>row.memoryChanged);
   let retrievalTrace:ConversationRetrievalTrace|undefined;
-  const searchQuery=conversationSearchQuery(searchHistory);
   const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,searchQuery,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
   const [profile]=await db.select({locale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId));
   /* Pinning a keep into `sources` puts it in front of the model; pointing

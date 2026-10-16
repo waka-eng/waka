@@ -146,6 +146,17 @@ it('puts a chosen file on the shelf as a file tile and saves it as type file und
   expect(input.attachments).toEqual([expect.objectContaining({ type: 'file', contentType: 'application/pdf', name: 'Lease.pdf' })]);
 });
 
+it('an unnamed file is called "File" on its tile and saved with no name at all', async () => {
+  await openNotepad();
+  await choose(accept => accept.includes('application/pdf'), new File(['%PDF-1.7 a lease'], '', { type: 'application/pdf' }));
+  const tile = world.container.querySelector('.jar-shelf .jar-tile');
+  expect(tile?.getAttribute('title'), 'the unnamed file has no label on screen').toBe('File');
+  const save = world.container.querySelector<HTMLButtonElement>('nav.waka-dock button.waka-dock-tool--keep');
+  await act(async () => save!.click()); await settle();
+  const [attached] = vi.mocked(createInspiration).mock.calls[0]![0].attachments!;
+  expect(attached, 'the screen\'s label was saved as the file\'s name').not.toHaveProperty('name');
+});
+
 it('marks a file the server would refuse before anything is uploaded', async () => {
   await openNotepad();
   await choose(accept => accept.includes('application/pdf'), new File(['MZ'], 'run.exe', { type: 'application/x-msdownload' }));

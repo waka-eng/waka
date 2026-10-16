@@ -81,6 +81,7 @@ import { useAuthoredSave } from '../lib/use-authored-save';
 import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
+import { attachmentLabel } from '../lib/attachment-label';
 import { Menu } from '../components/Menu';
 import { usePageMenu, wallAgnosticView } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
@@ -5360,9 +5361,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       await composerDraft.flush(); current();
       if (initialMedia.some(item => item.blob && !item.uploaded)) await uploadDraftFiles(initialMedia, controller, current);
       const attachments: NonNullable<CreateInspirationRequest['attachments']> = composerDraft.current.current.media.map(item => {
-        if (item.type === 'link' && item.url) return { type: 'link', url: item.url, name: item.name };
+        // An unnamed upload is sent unnamed; its label is the reader's to say.
+        const name = item.name ? { name: item.name } : {};
+        if (item.type === 'link' && item.url) return { type: 'link', url: item.url, ...name };
         if (!item.uploaded || item.type === 'link') throw new Error('This attachment has not uploaded yet.');
-        return { type: item.type, ...item.uploaded, name: item.name };
+        return { type: item.type, ...item.uploaded, ...name };
       });
       for (const { url } of inspirationLinks(text)) {
         if (!url) continue;
@@ -5420,25 +5423,26 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           const verdict = door === 'file' ? inspectAttachmentFile(file) : null;
           if (verdict?.kind === 'file') {
             if (epoch !== fileOwnerEpoch.current) return;
-            const name = file.name.slice(0, 255) || say('worldChatAttachmentFileUnnamed');
-            accepted.push({ id: crypto.randomUUID(), type: 'file', name,
+            /* NO NAME IS KEPT AS NO NAME: "File" is said on the tile
+               (`attachmentLabel`), never saved as this file's name. */
+            accepted.push({ id: crypto.randomUUID(), type: 'file', ...(file.name ? { name: file.name.slice(0, 255) } : {}),
               blob: file.type === verdict.contentType ? file : new File([file], file.name, { type: verdict.contentType, lastModified: file.lastModified }) });
             continue;
           }
           const checked = audio ? file : await inspectInspirationPhoto(file);
           if (epoch !== fileOwnerEpoch.current) return;
-          accepted.push({ id: crypto.randomUUID(), type: audio ? 'audio' : 'image', name: checked.name.slice(0, 255) || say('worldChatAttachmentPhotoUnnamed'), blob: checked });
+          accepted.push({ id: crypto.randomUUID(), type: audio ? 'audio' : 'image', ...(checked.name ? { name: checked.name.slice(0, 255) } : {}), blob: checked });
         } catch (reason) {
           /* A REFUSED FILE STAYS ON THE SHELF, MARKED, as a refused photo
              does — so the person sees which one and can take it off. The
              reason is said in their language: `FileRefused` carries a code. */
           if (reason instanceof FileRefused) {
-            accepted.push({ id: crypto.randomUUID(), type: 'file', name: file.name.slice(0, 255) || say('worldChatAttachmentFileUnnamed'), blob: file,
+            accepted.push({ id: crypto.randomUUID(), type: 'file', ...(file.name ? { name: file.name.slice(0, 255) } : {}), blob: file,
               validationError: say(reason.reason === 'too_large' ? 'worldAttachTooLarge' : reason.reason === 'empty' ? 'worldPhotoEmpty' : 'worldAttachUnsupported') });
             continue;
           }
           const message = reason instanceof Error ? reason.message : 'Couldn’t read this file.';
-          if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', name: file.name.slice(0, 255) || say('worldChatAttachmentPhotoUnnamed'), blob: file, validationError: message });
+          if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', ...(file.name ? { name: file.name.slice(0, 255) } : {}), blob: file, validationError: message });
           else problems.push(`${file.name}: ${message}`);
         }
       }
@@ -8524,10 +8528,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   <ul className="waka-drawer-items">
                     {inputMedia.map(item => (
                       <li key={item.id}>
-                        <span>{item.name}</span>
+                        <span>{attachmentLabel(locale, item.type, item.name)}</span>
                         <button
                           type="button"
-                          aria-label={`${say('worldRemoveLower')} ${item.name}`}
+                          aria-label={`${say('worldRemoveLower')} ${attachmentLabel(locale, item.type, item.name)}`}
                           onClick={() => composerDraft.setMedia(composerDraft.current.current.media.filter(row => row.id !== item.id))}
                         >
                           ×

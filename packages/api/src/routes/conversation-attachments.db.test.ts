@@ -14,6 +14,9 @@ import {createAttachmentRoutes} from './attachments.js';
 import type {AuthEnv} from '../lib/middleware.js';
 import {attachmentNote,attachmentSearchText,sweepStaleStagedAttachments} from '../lib/conversation-attachments.js';
 import {getDb} from '../lib/db.js';
+import {lockAttachmentKeys} from '../lib/inspiration-attachments.js';
+import type {SQL} from 'drizzle-orm';
+import {PgDialect} from 'drizzle-orm/pg-core';
 import {setDefaultModelProviderForTests,type ConversationReplyInput,type ConversationReplyResult,type ModelProvider} from '../lib/model-provider.js';
 import {postgresBackgroundJobStore,processBackgroundJob} from '../lib/queue.js';
 
@@ -355,4 +358,60 @@ it('one stored object, one attachment, even when two doors finalize the same key
       }finally{release();await held.catch(()=>undefined);}
     }
   }finally{await other.end();}
+});
+
+it('the chat finalize takes its key lock before any row lock, so it waits holding nothing another door needs',async()=>{
+  const p=await person(),object=p.upload();
+  const other=postgres(process.env.DB_CONNECTION_URL!,{max:1,prepare:false,connection:{search_path:t.schemaName}});
+  // Its own connection: the fixture's single one is the waiting request's.
+  const probe=postgres(process.env.DB_CONNECTION_URL!,{max:1,prepare:false,connection:{search_path:t.schemaName}});
+  try{
+    let acquired!:()=>void,release!:()=>void;
+    const locked=new Promise<void>(resolve=>{acquired=resolve;}),released=new Promise<void>(resolve=>{release=resolve;});
+    const held=other.begin(async tx=>{await tx`SELECT pg_advisory_xact_lock(hashtextextended(${'waka.attachment-key:'+object.key},0))`;acquired();await released;});
+    try{
+      await locked;
+      const pending=Promise.resolve(p.post('/attachments',{conversationId:randomUUID(),messageId:randomUUID(),type:'image',...object}));
+      await new Promise(resolve=>setTimeout(resolve,300));
+      /* Waiting on the key, it must not already hold the profile row: with
+         row locks first, a door that holds the key and wants the profile
+         would deadlock against it. */
+      await probe.begin(async tx=>{await tx`SELECT id FROM profiles WHERE id=${p.profileId} FOR UPDATE NOWAIT`;});
+      release();await held;
+      expect((await pending).status).toBe(201);
+    }finally{release();await held.catch(()=>undefined);}
+  }finally{await other.end();await probe.end();}
+});
+
+it('locks every key in one statement, each once',async()=>{
+  const statements:string[]=[];
+  const [held]=await t.sql.begin(async tx=>{
+    const counted={execute:async(query:SQL)=>{const built=new PgDialect().sqlToQuery(query);statements.push(built.sql);return tx.unsafe(built.sql,built.params as never[]);}};
+    await lockAttachmentKeys(counted as never,['profiles/b/attachments/2.png','profiles/a/attachments/1.png','profiles/b/attachments/2.png']);
+    return tx`SELECT count(*)::int AS n FROM pg_locks WHERE locktype='advisory' AND pid=pg_backend_pid() AND granted`;
+  });
+  expect(statements,'the keys were locked by a loop of round trips').toHaveLength(1);
+  expect(held!.n,'a key was locked twice, or one was missed').toBe(2);
+});
+
+it('the reply and the context endpoint search a photo-only turn with the same words, even with older words out of the reply\'s sight',async()=>{
+  const p=await person(),conversationId=randomUUID();
+  await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${p.profileId},'Kitchen remodel: open shelves, warm oak, one long counter.')`;
+  await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${p.profileId},'Garden pond: lilies, koi and a flat stone to sit on.')`;
+  // Words first, then eight photo-only turns: the words are nine messages back.
+  const first=randomUUID();
+  expect((await p.post('/conversations',{id:conversationId,firstMessage:{id:first,content:'Planning the kitchen remodel with open shelves'}})).status).toBe(200);
+  let last='';
+  for(let at=1;at<=8;at+=1){
+    last=randomUUID();
+    const photo=(await json(await p.stage(conversationId,last,{name:at===8?'garden_pond.png':`IMG_${1000+at}.png`}))).attachment;
+    expect((await p.post(`/conversations/${conversationId}/messages`,{id:last,content:'',revision:at,attachmentIds:[photo.id]})).status).toBe(200);
+  }
+  const context=await json(await p.human.request(`/conversations/${conversationId}/context`));
+  expect(context.inspirations.map((source:any)=>source.text)).toEqual([expect.stringContaining('Garden pond')]);
+  expect((await p.post(`/conversations/${conversationId}/replies`,{messageId:last,afterRequestId:null})).status).toBe(200);
+  await t.sql`UPDATE background_jobs SET run_after=now()+interval '1 day' WHERE type::text<>'generate_conversation_reply'`;
+  const job=await postgresBackgroundJobStore.claimNext(new Date());expect(job?.type).toBe('generate_conversation_reply');
+  await processBackgroundJob(job!);
+  expect(answer.mock.calls.at(-1)![0].sources.map(source=>source.text)).toEqual(context.inspirations.map((source:any)=>source.text));
 });

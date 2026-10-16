@@ -20,6 +20,12 @@
    own file reads is the leftover `reachable.test.ts` counts. */
 const MAX_ATTACHMENT_FILE_BYTES = 25 * 1024 * 1024;
 
+/** Photos and files per chat message — the server's `MAX_MESSAGE_ATTACHMENTS`.
+    Exported, unlike the two above, because two places read it: the
+    composer's cap, and the longest list of missing ids `http.ts` will believe
+    from a refusal. One number, so the two cannot drift apart. */
+export const MAX_MESSAGE_ATTACHMENTS = 6;
+
 const FILE_ATTACHMENT_CONTENT_TYPES = [
   "application/pdf",
   "text/plain",

@@ -110,6 +110,7 @@
   "worldChatAttachmentPhoto": "사진: {name}",
   "worldChatAttachmentPhotoUnnamed": "사진",
   "worldChatAttachmentFileUnnamed": "파일",
+  "worldChatAttachmentRecordingUnnamed": "녹음",
   "worldChatAttachmentFailed": "불러오지 못했어요",
   "worldBackUp": "벽으로 올라가기",
   "worldBoardRereadWarn": "전부 다시 읽어요. 하는 말이 달라질 수도 있어요.",

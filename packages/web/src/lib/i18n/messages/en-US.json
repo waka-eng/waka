@@ -110,6 +110,7 @@
   "worldChatAttachmentPhoto": "Photo: {name}",
   "worldChatAttachmentPhotoUnnamed": "Photo",
   "worldChatAttachmentFileUnnamed": "File",
+  "worldChatAttachmentRecordingUnnamed": "Recording",
   "worldChatAttachmentFailed": "Couldn’t load",
   "worldBackUp": "Back up to the wall",
   "worldBoardRereadWarn": "Reading everything again. What it says may change.",
