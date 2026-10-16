@@ -26,6 +26,7 @@ export * from "./schema-consultations";
 export * from "./schema-statement-chains";
 export * from "./schema-agent-keys";
 export * from "./schema-keeper-keys";
+export * from "./schema-harvest";
 export * from "./schema-experiences";
 export * from "./schema-grants";
 export * from "./schema-cli-login-codes";

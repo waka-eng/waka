@@ -71,7 +71,11 @@ async function resolveSessionFromToken(token: string): Promise<AuthenticatedSess
  * convention. Exported pure, so the list is a unit test away.
  */
 export function keeperKeyMayPass(method: string, path: string): boolean {
-  if (method === "POST") return path === "/api/inspirations";
+  /* `/api/harvest` is the keeper key's other way in (2026-10-15): the
+     person's own collector proposes sentences there for the person to
+     decide on at a browser. Proposing only — the decision routes under it
+     are `humanSessionsOnly`, which refuses this key. */
+  if (method === "POST") return path === "/api/inspirations" || path === "/api/harvest";
   if (method !== "GET") return false;
   return [
     "/api/inspirations",

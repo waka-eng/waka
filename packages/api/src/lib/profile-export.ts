@@ -32,6 +32,7 @@ import {
   attachments,
   consultations,
   decisionPrincipleCitations,
+  harvestCandidates,
   feedback,
   inspirations,
   inspirationConversationOrigins,
@@ -196,6 +197,13 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
     principleGenerationSteps:await db.select().from(principleGenerationSteps).where(eq(principleGenerationSteps.profileId,profileId)).orderBy(asc(principleGenerationSteps.startedAt),asc(principleGenerationSteps.id)),
     experiences: experienceRows,
     inspirations: inspirationRows,
+    /* The sentences waiting in the person's basket or decided there — theirs,
+       and an export that left them out would say less than the product
+       keeps (found in review, 2026-10-15). */
+    harvestCandidates: await db.select({ id: harvestCandidates.id, text: harvestCandidates.text, title: harvestCandidates.title, context: harvestCandidates.context,
+      status: harvestCandidates.status, reason: harvestCandidates.reason, reasonNote: harvestCandidates.reasonNote, inspirationId: harvestCandidates.inspirationId,
+      createdAt: harvestCandidates.createdAt, decidedAt: harvestCandidates.decidedAt })
+      .from(harvestCandidates).where(eq(harvestCandidates.profileId, profileId)).orderBy(asc(harvestCandidates.createdAt), asc(harvestCandidates.id)),
     inspirationConversationOrigins:await db.select().from(inspirationConversationOrigins).where(eq(inspirationConversationOrigins.profileId,profileId)).orderBy(asc(inspirationConversationOrigins.createdAt),asc(inspirationConversationOrigins.inspirationId)),
     attachments: attachmentRows,
     reflections: reflectionRows,
