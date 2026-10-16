@@ -5,6 +5,12 @@ import {backgroundJobs} from './schema-background-jobs.js';
 import {principles} from './schema-principles.js';
 import {inspirations} from './schema-inspirations.js';
 
+/** Whose memory a chat's replies stand on — see `conversations.perspective`.
+    The one list: the column's type, its check, the route's validation and
+    the prompt's input all read it. */
+export const conversationPerspectiveValues=['mine','agent','both'] as const;
+export type ConversationPerspective=(typeof conversationPerspectiveValues)[number];
+
 export const conversations=pgTable('conversations',{
   id:uuid('id').primaryKey(),
   profileId:uuid('profile_id').notNull().references(()=>profiles.id,{onDelete:'cascade'}),
@@ -50,6 +56,21 @@ export const conversations=pgTable('conversations',{
    */
   initialInspirationId:uuid('initial_inspiration_id'),
   revision:integer('revision').notNull().default(0),
+  /**
+   * WHOSE MEMORY THE REPLY READS. Founder, 2026-10-15: "new chat should also
+   * let you select if you want to chat with me vs my agent or both
+   * perspectives."
+   *
+   * The conversation is still the person's — one list, one owner, per the
+   * earlier ruling that "there should be no difference between me and my
+   * agent's chat". What changes is the material the reply stands on: the
+   * person's own saves ('mine', and every chat before this column), the
+   * agent's ('agent'), or both, each source labelled with whose it is
+   * ('both'). `agentProfileId` names which agent; if it is gone, the chat
+   * quietly reads the person's own memory again.
+   */
+  perspective:text('perspective').$type<ConversationPerspective>().notNull().default('mine'),
+  agentProfileId:uuid('agent_profile_id').references(()=>profiles.id,{onDelete:'set null'}),
   createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
   updatedAt:timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
   deletedAt:timestamp('deleted_at',{withTimezone:true}),
@@ -67,7 +88,12 @@ export const conversations=pgTable('conversations',{
    */
   initialInspirationFk:foreignKey({columns:[table.profileId,table.initialInspirationId],foreignColumns:[inspirations.profileId,inspirations.id],name:'conversations_initial_inspiration_fk'}),
   ownerUpdated:index('conversations_owner_updated_idx').on(table.profileId,table.updatedAt),
+  /* Removing an agent nulls this column across every chat that named it. */
+  agentProfile:index('conversations_agent_profile_idx').on(table.agentProfileId),
   revisionBounds:check('conversations_revision_bounds',sql`${table.revision} BETWEEN 0 AND 200`),
+  /* Spelled out because the migration that created it is: keep it equal to
+     `conversationPerspectiveValues`. */
+  perspectiveCheck:check('conversations_perspective_check',sql`${table.perspective} IN ('mine','agent','both')`),
 }));
 export const conversationMessages=pgTable('conversation_messages',{
   id:uuid('id').primaryKey(),profileId:uuid('profile_id').notNull(),conversationId:uuid('conversation_id').notNull(),

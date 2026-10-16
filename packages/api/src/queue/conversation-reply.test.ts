@@ -62,3 +62,9 @@ it.each([
   {answer:'A statement.',followUpQuestion:'First? Second?',citations:[]},
   {answer:'11111111-1111-4111-8111-111111111111',followUpQuestion:null,citations:[]},
 ])('refuses invalid grounding or multi-question output %#',payload=>expect(()=>parseConversationReply(payload,input)).toThrow());
+it('says whose memory the sources are only when there are sources to say it about',()=>{
+  const text=(extra:Partial<ConversationReplyInput>)=>buildConversationReplyRequest({...input,...extra}).contents[0].parts[0].text;
+  expect(text({perspective:'agent'})).toContain('from the person’s AI agent’s memory');
+  expect(text({perspective:'agent',sources:[]})).not.toContain('Every source below');
+  expect(text({perspective:'both',sources:[]})).not.toContain('Each source has owner');
+});

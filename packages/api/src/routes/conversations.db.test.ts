@@ -213,3 +213,51 @@ it('refuses a create replay whose first words match but whose picked inspiration
   expect((await f.send('',{id:f.id,inspirationId:one.id,firstMessage})).status).toBe(200);
   expect(await t.sql`SELECT id FROM conversation_messages`).toHaveLength(1);
 });
+/* WHOSE MEMORY A CHAT READS (2026-10-15): only an agent of the same account
+   may be chosen, and the choice is returned with the chat. */
+it('starts a chat with your own agent or both, and refuses anyone else\'s agent',async()=>{
+  const f=await fixture(),other=await fixture();
+  const [mine]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${f.accountId},'agent','Mine') RETURNING id`;
+  const [theirs]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${other.accountId},'agent','Theirs') RETURNING id`;
+  expect((await f.send('',{id:randomUUID(),perspective:'both',agentId:theirs.id})).status).toBe(404);
+  expect((await f.send('',{id:randomUUID(),perspective:'agent'})).status).toBe(400);
+  expect((await f.send('',{id:randomUUID(),perspective:'agent',agentId:f.profileId})).status,'a person is not an agent').toBe(404);
+  const response=await f.send('',{id:f.id,perspective:'both',agentId:mine.id});expect(response.status).toBe(200);
+  const body=await response.json() as {conversation:{perspective:string;agentProfileId:string;profileId:string}};
+  expect(body.conversation).toMatchObject({perspective:'both',agentProfileId:mine.id,profileId:f.profileId});
+  const plain=await (await f.send('',{id:randomUUID()})).json() as {conversation:{perspective:string}};
+  expect(plain.conversation.perspective,'every chat before this reads your own memory').toBe('mine');
+});
+/* Found in review (2026-10-15): a retry that asked for another memory, and a
+   pin an agent-only chat would show but never read. */
+it('refuses a create retry that asks for a different memory, and a pin on a chat with the agent alone',async()=>{
+  const f=await fixture();
+  const [agent]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${f.accountId},'agent','Mine') RETURNING id`;
+  const [keep]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'My own keep') RETURNING id`;
+  expect((await f.send('',{id:f.id,perspective:'both',agentId:agent.id})).status).toBe(200);
+  expect((await f.send('',{id:f.id})).status,'the same id asking for your own memory is a different create').toBe(409);
+  expect((await f.send('',{id:f.id,perspective:'both',agentId:agent.id})).status).toBe(200);
+  expect((await f.send('',{id:randomUUID(),perspective:'agent',agentId:agent.id,inspirationId:keep.id})).status).toBe(400);
+  const agentChat=randomUUID();
+  expect((await f.send('',{id:agentChat,perspective:'agent',agentId:agent.id})).status).toBe(200);
+  const patched=await f.app.request(`/conversations/${agentChat}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({inspirationId:keep.id})});
+  expect(patched.status).toBe(400);
+});
+it('reports an agent chat whose agent is gone as your own memory',async()=>{
+  const f=await fixture();
+  const [agent]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${f.accountId},'agent','Gone') RETURNING id`;
+  expect((await f.send('',{id:f.id,perspective:'agent',agentId:agent.id})).status).toBe(200);
+  await t.sql`DELETE FROM profiles WHERE id=${agent.id}`;
+  const read=await (await f.app.request(`/conversations/${f.id}`)).json() as {conversation:{perspective:string;agentProfileId:string|null}};
+  expect(read.conversation).toMatchObject({perspective:'mine',agentProfileId:null});
+});
+it('treats an identical retry as the same create, for your own memory and after the agent is removed',async()=>{
+  const f=await fixture();
+  const [agent]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${f.accountId},'agent','Soon gone') RETURNING id`;
+  const mine=randomUUID();
+  expect((await f.send('',{id:mine,perspective:'mine'})).status).toBe(200);
+  expect((await f.send('',{id:mine,perspective:'mine',agentId:agent.id})).status,'an agent id means nothing for your own memory').toBe(200);
+  expect((await f.send('',{id:f.id,perspective:'agent',agentId:agent.id})).status).toBe(200);
+  await t.sql`DELETE FROM profiles WHERE id=${agent.id}`;
+  expect((await f.send('',{id:f.id,perspective:'agent',agentId:agent.id})).status,'the same retry after the agent went').toBe(200);
+});

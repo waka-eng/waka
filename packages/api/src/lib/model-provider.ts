@@ -22,7 +22,7 @@
  * model.
  */
 
-import type { PrincipleType, TopOfMindEntryType } from "../db/index.js";
+import type { ConversationPerspective, PrincipleType, TopOfMindEntryType } from "../db/index.js";
 import type { SupportedLocale } from "./locales.js";
 import {timeModelProvider} from './performance-stages.js';
 
@@ -454,8 +454,12 @@ export interface ConversationReplyInput {
   messageDate?:string;
   contextChanged?:boolean;
   focusSourceNumber?:number;
+  /** Absent for a chat about the person's own memory — every chat before
+      2026-10-15, and the prompt is byte-identical for them. 'agent' reads
+      only the agent's memory; 'both' reads both, each source marked `owner`. */
+  perspective?:Exclude<ConversationPerspective,'mine'>;
   history:Array<{role:'user'|'assistant';content:string;correction?:boolean}>;
-  sources:Array<{kind:'principle'|'top_of_mind_entry'|'inspiration';text:string;recordedAt?:string;artifactVersion?:number;historical?:boolean;state?:string;rank?:number;locked?:boolean;supportCurrent?:boolean;truncated:boolean}>;
+  sources:Array<{kind:'principle'|'top_of_mind_entry'|'inspiration';text:string;owner?:'person'|'agent';recordedAt?:string;artifactVersion?:number;historical?:boolean;state?:string;rank?:number;locked?:boolean;supportCurrent?:boolean;truncated:boolean}>;
 }
 export const CONVERSATION_REPLY_OUTPUT_TOKENS=1200;
 export interface ConversationReplyResult {answer:string;followUpQuestion:string|null;citations:Array<{sourceNumber:number;quote:string}>}
