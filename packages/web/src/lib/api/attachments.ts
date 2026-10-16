@@ -227,7 +227,7 @@ export async function uploadToPresignedUrl(
  * Discriminated union for POST /attachments. Mirrors the server zod schema
  * so a misuse here trips a typecheck error rather than a 400 at runtime.
  */
-export type FinalizeAttachmentRequest =
+export type FinalizeInspirationAttachmentRequest =
   | {
       type: "link";
       inspirationId: string;
@@ -244,19 +244,103 @@ export type FinalizeAttachmentRequest =
     };
 
 /**
+ * A photo or file for a chat message that has not been sent yet. `messageId`
+ * is the id the composer WILL send the message under; the row waits
+ * ("staged") until `saveConversationMessage` / `createConversation` sends that
+ * id with this attachment's id in `attachmentIds`. `contentType` and `size`
+ * are required and must equal what was presigned and PUT.
+ */
+export interface FinalizeMessageAttachmentRequest {
+  conversationId: string;
+  messageId: string;
+  type: "image" | "file";
+  key: string;
+  contentType: string;
+  size: number;
+  name?: string;
+}
+
+export type FinalizeAttachmentRequest = FinalizeInspirationAttachmentRequest | FinalizeMessageAttachmentRequest;
+
+/**
+ * A photo or file in a chat transcript. No URL: open the bytes with
+ * `fetchAttachmentUrl(id)` (a five-minute presigned read, owner-checked),
+ * exactly as an inspiration photo is opened. `staged` is true only on the
+ * finalize response, before the message is sent.
+ */
+export interface ApiMessageAttachment {
+  id: string;
+  conversationId: string;
+  messageId: string;
+  staged: boolean;
+  type: "image" | "file";
+  name: string | null;
+  contentType: string | null;
+  size: number | null;
+  createdAt: string;
+}
+export function isApiMessageAttachment(value: unknown): value is ApiMessageAttachment {
+  const row = value as ApiMessageAttachment;
+  return Boolean(row) && typeof row.id === "string" && typeof row.conversationId === "string" && typeof row.messageId === "string" &&
+    typeof row.staged === "boolean" && (row.type === "image" || row.type === "file") &&
+    (row.name === null || typeof row.name === "string") && (row.contentType === null || typeof row.contentType === "string") &&
+    (row.size === null || (typeof row.size === "number" && Number.isSafeInteger(row.size))) && Number.isFinite(Date.parse(row.createdAt));
+}
+
+/**
  * POST /attachments
  *
  * Finalize an attachment after the S3 PUT has succeeded (image / file) or
  * record a pasted link directly (link). The server enforces inspiration
  * ownership; on success it returns the canonical row and queues enrichment.
+ *
+ * With `{conversationId, messageId}` instead of `inspirationId` it stages a
+ * chat attachment and returns an `ApiMessageAttachment`. `options.profile`
+ * is the chat's owner, the same `profile` the conversation calls take.
  */
+export async function finalizeAttachment(input: FinalizeInspirationAttachmentRequest): Promise<ApiAttachment>;
+export async function finalizeAttachment(input: FinalizeMessageAttachmentRequest, options?: { profile?: string; signal?: AbortSignal }): Promise<ApiMessageAttachment>;
 export async function finalizeAttachment(
   input: FinalizeAttachmentRequest,
-): Promise<ApiAttachment> {
+  options: { profile?: string; signal?: AbortSignal } = {},
+): Promise<ApiAttachment | ApiMessageAttachment> {
+  if ("conversationId" in input) {
+    const body = await postJson<{ attachment: ApiMessageAttachment }>(
+      apiPath(`/attachments${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ""}`),
+      input,
+      "Could not attach this file",
+      options.signal,
+    );
+    if (!isApiMessageAttachment(body?.attachment) || body.attachment.conversationId !== input.conversationId.toLowerCase() ||
+      body.attachment.messageId !== input.messageId.toLowerCase()) {
+      throw new ApiError({ status: 200, code: "invalid_response", message: "Could not verify this attachment" });
+    }
+    return body.attachment;
+  }
   const body = await postJson<{ attachment: ApiAttachment }>(
     apiPath("/attachments"),
     input,
     "Failed to record attachment",
   );
   return body.attachment;
+}
+
+/**
+ * THE WHOLE CHAT UPLOAD IN ONE CALL: presign → PUT to S3 → stage onto the
+ * message about to be sent. `contentType` is the one every step must agree
+ * on — `inspectAttachmentFile(file).contentType` for "Add file", the photo
+ * sniffer's verdict (`file.type` after `inspectInspirationPhoto`) for "Add
+ * photos". Send the returned `id` in the message's `attachmentIds`.
+ */
+export async function uploadMessageAttachment(
+  input: { profile: string; conversationId: string; messageId: string; file: File | Blob; name?: string; contentType: string; type: "image" | "file" },
+  signal?: AbortSignal,
+): Promise<ApiMessageAttachment> {
+  const name = input.name ?? ("name" in input.file && typeof input.file.name === "string" ? input.file.name : undefined);
+  const presigned = await presignAttachment({ filename: name || "attachment", contentType: input.contentType, size: input.file.size }, signal, { profile: input.profile });
+  await uploadToPresignedUrl(presigned.uploadUrl, input.file, presigned.headers, signal);
+  return finalizeAttachment({
+    conversationId: input.conversationId, messageId: input.messageId, type: input.type, key: presigned.key,
+    contentType: input.contentType, size: input.file.size, ...(name ? { name: name.slice(0, 255) } : {}),
+  }, { profile: input.profile, ...(signal ? { signal } : {}) });
 }

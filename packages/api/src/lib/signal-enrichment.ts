@@ -793,7 +793,11 @@ export async function enrichAttachment(
     .from(attachments)
     .where(eq(attachments.id, attachmentId))
     .limit(1);
+  /* Only an inspiration's attachment is enriched. A chat attachment (0076) is
+     never enqueued, and is treated as absent if one ever arrives here. */
   if (!attachment) return { status: "missing" };
+  const inspirationId = attachment.inspirationId;
+  if (!inspirationId) return { status: "missing" };
 
   let result: AttachmentEnrichmentVerdict;
   let link: Partial<LinkEnrichment> = {};
@@ -821,7 +825,7 @@ export async function enrichAttachment(
   const now = new Date();
   const persisted = await db.transaction(async (tx) => {
     const [parent] = await tx.select({ id: inspirations.id }).from(inspirations)
-      .where(and(eq(inspirations.id, attachment.inspirationId), eq(inspirations.profileId, attachment.profileId))).for("update");
+      .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, attachment.profileId))).for("update");
     if (!parent) return false;
     const [current] = await tx.select().from(attachments).where(eq(attachments.id, attachmentId)).for("update");
     if (!current) return false;
@@ -858,7 +862,7 @@ export async function enrichAttachment(
     if (current.enrichmentStatus !== result.status || current.enrichmentText !== nextText ||
       current.enrichmentKind !== (result.status === "ready" ? result.kind : null) ||
       current.hostname !== (link.hostname ?? null)) {
-      await requestSignalDerivation({ profileId: attachment.profileId, inspirationId: attachment.inspirationId,
+      await requestSignalDerivation({ profileId: attachment.profileId, inspirationId,
         reason: "edited", changedSource: "inspiration" }, tx);
     }
     return true;

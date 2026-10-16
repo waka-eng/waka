@@ -104,6 +104,11 @@ export interface CreateReflectionRequest {
 
 export interface CreateInspirationRequest {
   fromConversation?:{conversationId:string;messageId:string;selectedText:string;adopted:boolean};
+  /* The server also accepts `{ type: 'file', key, contentType, size, name? }`
+     (2026-10-15, `FILE_ATTACHMENT_CONTENT_TYPES` in `./file-accept`). It is
+     not in this union yet only because `Home.tsx` derives `kind` from an
+     attachment's type, and there is no 'file' kind: whoever adds "Add file"
+     to the note composer widens this and sends kind 'note' (or 'mixed'). */
   attachments?: Array<{ type: 'link'; url: string; name?: string } | { type: 'image' | 'audio'; key: string; contentType: string; size: number; name?: string }>;
   text: string;
   kind?: ApiInspirationKind;

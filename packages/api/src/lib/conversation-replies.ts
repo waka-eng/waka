@@ -10,6 +10,7 @@ import {conversationUsesSavedSources} from './conversation-corrections.js';
 import {GEMINI_EMBEDDING_DIMENSIONS,GEMINI_EMBEDDING_MODEL,GeminiEmbeddingHttpClient,validateEmbeddingVector,type GeminiEmbeddingClient} from './inspiration-embeddings.js';
 import type {ConversationRetrievalTrace} from './conversation-retrieval.js';
 import {enqueueConversationReply,STALE_LOCK_SECONDS,wakeCommittedBackgroundJobs} from './queue.js';
+import {attachmentNote,readMessageAttachments} from './conversation-attachments.js';
 type Db=ReturnType<typeof getDb>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
 type Reader=Pick<Db,'select'>;
@@ -51,11 +52,13 @@ export async function projectConversationMessages(db:Reader,profileId:string,id:
   const byMessage=new Map<string,Request>();
   for(const request of requests)if(request.status==='ready'&&request.assistantMessageId&&!byMessage.has(request.assistantMessageId))byMessage.set(request.assistantMessageId,request);
   const groups=await currentConversationReferenceGroups(db,memory??await memoryOf(db,profileId,id),messages.map(message=>message.role==='assistant'?byMessage.get(message.id)?.references??[]:[]));
+  // Photos and files sent with the person's messages (0076); [] for every other message.
+  const media=await readMessageAttachments(db,profileId,id,messages.filter(message=>message.role==='user').map(message=>message.id));
   return messages.map((message,index)=>{
-    if(message.role==='user')return {...message,followUpQuestion:null,memoryChanged:false,replyRequestId:null,citations:[]};
+    if(message.role==='user')return {...message,attachments:media.get(message.id)??[],followUpQuestion:null,memoryChanged:false,replyRequestId:null,citations:[]};
     const request=byMessage.get(message.id),current=groups[index];
     const memoryChanged=!request||current.some((row,index)=>row===null||row.historical===true&&request.references[index]?.historical!==true);
-    return {...message,followUpQuestion:request?.followUpQuestion??null,memoryChanged,replyRequestId:request?.id??null,
+    return {...message,attachments:[],followUpQuestion:request?.followUpQuestion??null,memoryChanged,replyRequestId:request?.id??null,
       citations:request?.references.map((reference,index)=>({index,kind:reference.kind,id:reference.id,available:current[index]!==null,
         ...(current[index]?{preview:current[index]!.text.replace(/\s+/g,' ').slice(0,96),...(current[index]!.historical?{historical:true,recordedAt:current[index]!.recordedAt}:{} )}:{})}))??[]};
   });
@@ -68,16 +71,21 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
   const memory=await conversationMemory(db,profileId,conversation);
   const projected=await projectConversationMessages(db,profileId,id,messages.slice(-8),memory);
   const history:ConversationReplyInput['history']=[];let characters=0,contextChanged=messages.length>8||projected.some(row=>row.memoryChanged);
+  // What retrieval searches with: the person's words only. An attachment note
+  // ("photo IMG_2041.jpg") is not a question about their memory.
+  const searchHistory:Array<{role:string;content:string}>=[];
   // Keep complete messages: truncating a human sentence can drop its negation
   // or correction. Missing earlier context is disclosed to the provider.
   for(const row of [...projected].reverse()){
     if(row.role==='assistant'&&row.memoryChanged)continue;
-    const content=row.content+(row.followUpQuestion?'\n'+row.followUpQuestion:'');
+    const note=attachmentNote(row.attachments);
+    const content=row.content+(row.followUpQuestion?'\n'+row.followUpQuestion:'')+(note?(row.content?'\n':'')+note:'');
     if(characters+content.length>8000){contextChanged=true;break;}
     history.unshift({role:row.role,content,...(row.correctsMessageId?{correction:true}:{})});characters+=content.length;
+    searchHistory.unshift({role:row.role,content:row.content});
   }
   let retrievalTrace:ConversationRetrievalTrace|undefined;
-  const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,conversationSearchQuery(history),conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
+  const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,conversationSearchQuery(searchHistory),conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
   const [profile]=await db.select({locale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId));
   /* Pinning a keep into `sources` puts it in front of the model; pointing
    * `focusSourceNumber` at it is what tells the model that THIS is the one the

@@ -84,6 +84,7 @@ export * from "./inspiration-processing";
    still stand; this barrel simply no longer offers a client for them. */
 export * from "./inspiration-save-requests";
 export * from "./attachments";
+export * from "./file-accept";
 export * from "./signals";
 export * from "./claims";
 export * from "./harvest";

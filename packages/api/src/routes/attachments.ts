@@ -39,12 +39,14 @@ import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, type S3Client } 
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { attachmentsRegion, makeAttachmentsS3Client } from "../lib/s3-client.js";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 
 import {
   attachments,
+  conversationMessages,
+  conversations,
   inspirations,
   profiles,
   type Attachment,
@@ -54,7 +56,9 @@ import { getDb } from "../lib/db.js";
 import { type AuthEnv, profileAccessError, requireAuth, asAccountProfile } from "../lib/middleware.js";
 import { enqueueEnrichAttachment, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { attachmentKeyPrefix, attachmentObjectUrl, getAttachmentsBucket } from '../lib/attachment-storage.js';
-import { ALLOWED_ATTACHMENT_CONTENT_TYPE, MAX_ATTACHMENT_UPLOAD_BYTES } from '../lib/inspiration-attachment-input.js';
+import { ALLOWED_ATTACHMENT_CONTENT_TYPE, IMAGE_CONTENT_TYPE, MAX_ATTACHMENT_UPLOAD_BYTES, isAllowedFileContentType } from '../lib/inspiration-attachment-input.js';
+import { InspirationAttachmentError, verifyUploadedAttachment, type AttachmentHead } from '../lib/inspiration-attachments.js';
+import { MAX_MESSAGE_ATTACHMENTS, MAX_STAGED_MESSAGE_ATTACHMENTS, messageAttachmentSelection, serializeMessageAttachment } from '../lib/conversation-attachments.js';
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { validationDetails } from "../lib/validation.js";
 import { profileQuerySchema } from './inspirations-validation.js';
@@ -177,14 +181,42 @@ const finalizeS3Schema = z.object({
 }).strict();
 
 /**
+ * A PHOTO OR FILE FOR A CHAT MESSAGE (0076). Uploaded bytes only — no links,
+ * no remote images, no audio — and stricter than the inspiration shape above:
+ * `contentType` and `size` are required, checked against the type's
+ * allowlist here and against S3's HEAD in the handler. `messageId` is the id
+ * the client will send the message under; the message must not exist yet.
+ * Strict, and without `inspirationId`, so a payload naming both owners
+ * matches no shape at all.
+ */
+const finalizeChatSchema = z.object({
+  conversationId: z.string().uuid("conversationId must be a uuid").transform((v) => v.toLowerCase()),
+  messageId: z.string().uuid("messageId must be a uuid").transform((v) => v.toLowerCase()),
+  name: baseFinalizeFields.name,
+  type: z.enum(["image", "file"]),
+  key: z.string().trim().min(1, "key is required").max(1024, "key is too long"),
+  contentType: z.string().trim().min(1).max(255),
+  size: z.number().int().min(1).max(MAX_ATTACHMENT_UPLOAD_BYTES, `size exceeds the ${MAX_ATTACHMENT_UPLOAD_BYTES}-byte cap`),
+}).strict().superRefine((value, context) => {
+  const allowed = value.type === "image"
+    ? IMAGE_CONTENT_TYPE.test(value.contentType)
+    : isAllowedFileContentType(value.contentType);
+  if (!allowed || !ALLOWED_ATTACHMENT_CONTENT_TYPE.test(value.contentType)) {
+    context.addIssue({ code: "custom", path: ["contentType"], message: "This file type cannot be attached" });
+  }
+});
+
+/**
  * Ordered rather than discriminated: `image` arrives two ways, carrying a
  * `key` when it was uploaded and a `url` when it was pasted, so the S3 shape
  * is tried first and a payload without a key falls through to the remote one.
+ * The chat shape is last; it is the only one without `inspirationId`.
  */
 const finalizeRequestSchema = z.union([
   finalizeLinkSchema,
   finalizeS3Schema,
   finalizeRemoteImageSchema,
+  finalizeChatSchema,
 ]);
 
 export type FinalizeAttachmentRequest = z.infer<typeof finalizeRequestSchema>;
@@ -423,6 +455,8 @@ export interface AttachmentRouteDependencies {
   getDatabase?: typeof getDb;
   authMiddleware?: typeof requireAuth;
   previewImage?: typeof fetchLinkPreviewImage;
+  /** S3 HEAD for the chat finalize's upload check; injected by tests. */
+  attachmentHead?: AttachmentHead;
 }
 
 /**
@@ -449,7 +483,8 @@ async function previewAccess(c: Context<AuthEnv>, write = false) {
   const db = getDatabase(), session = c.get('session');
   const [found] = await db.select({ row: attachments, accountId: profiles.accountId, type: profiles.type })
     .from(attachments).innerJoin(profiles, eq(profiles.id, attachments.profileId)).where(eq(attachments.id, id.data)).limit(1);
-  if (!found || found.accountId !== session.profile.accountId || !['link', 'image'].includes(found.row.type)) return c.json({ error: 'Attachment not found' }, 404);
+  // A chat attachment has no preview or analysis surface (it is never enriched).
+  if (!found || found.accountId !== session.profile.accountId || !['link', 'image'].includes(found.row.type) || found.row.inspirationId === null) return c.json({ error: 'Attachment not found' }, 404);
   const target = asAccountProfile({ id: found.row.profileId, accountId: found.accountId, type: found.type });
   if (!target) return c.json({ error: 'Attachment not found' }, 404);
   const denied = await profileAccessError(db, session, target, write ? 'write' : 'read');
@@ -500,9 +535,13 @@ attachmentsRoutes.get('/:attachmentId/url', async c => {
   if (!id.success) return c.json({ error: 'Invalid attachment' }, 400);
   const db = getDatabase(), session = c.get('session');
   const [row] = await db.select({ id: attachments.id, profileId: attachments.profileId, key: attachments.s3Key,
-    url: attachments.url, accountId: profiles.accountId, type: profiles.type }).from(attachments)
+    url: attachments.url, conversationId: attachments.conversationId, accountId: profiles.accountId, type: profiles.type }).from(attachments)
     .innerJoin(profiles, eq(profiles.id, attachments.profileId)).where(eq(attachments.id, id.data)).limit(1);
   if (!row || row.accountId !== session.profile.accountId) return c.json({ error: 'Attachment not found' }, 404);
+  /* A chat's photos and files are as private as the chat: conversations are
+     the person at a browser's alone (`humanSessionsOnly`), so an agent
+     session's read grant over the human profile does not reach them. */
+  if (row.conversationId !== null && (session.profile.type !== 'human' || session.keyScoped)) return c.json({ error: 'Attachment not found' }, 404);
   const target = asAccountProfile({ id: row.profileId, accountId: row.accountId, type: row.type });
   if (!target) return c.json({ error: 'Attachment not found' }, 404);
   const denied = await profileAccessError(db, session, target, 'read');
@@ -516,6 +555,75 @@ attachmentsRoutes.get('/:attachmentId/url', async c => {
     return c.json({ attachmentId: row.id, url, expiresAt: new Date(Date.now() + PRESIGN_TTL_SECONDS * 1000).toISOString() });
   } catch { return c.json({ error: 'Could not open this attachment. Try again.' }, 503); }
 });
+
+/**
+ * FINALIZE ONTO A CHAT MESSAGE THAT IS ABOUT TO BE SENT (0076).
+ *
+ *   { conversationId, messageId, type: "image" | "file", key, contentType, size, name? }
+ *
+ * The row is STAGED: it waits for `POST /conversations[/:id/messages]` to
+ * send `messageId` with this attachment's id in `attachmentIds`. Checks, in
+ * order:
+ *
+ *   1. The person at a browser only — conversations are `humanSessionsOnly`,
+ *      so an agent session or keeper key cannot attach to one either.
+ *   2. The chat's owner is resolved exactly as the conversation routes
+ *      resolve it (`?profile=`, default the session's own, "write"). If the
+ *      conversation exists it must be that profile's and not deleted; if it
+ *      does not exist yet this is a first message, and the create links it.
+ *   3. `messageId` must not be a sent message — a sent message is immutable.
+ *      All staged rows for one message id must name the same conversation.
+ *   4. The upload is what it says: key under the uploader's own prefix, and
+ *      S3's HEAD reports the declared length and type (shared with capture).
+ *      One object backs one row, so a delete never sweeps bytes another row
+ *      still names.
+ *   5. Bounds: six per message, thirty staged per profile.
+ *
+ * Locks the profile row, then the conversation row, so it serializes with
+ * conversation create (profile lock) and message send (conversation lock):
+ * a row can never be staged for a message that committed a moment earlier.
+ */
+async function finalizeChatAttachment(c: Context<AuthEnv>, data: z.infer<typeof finalizeChatSchema>) {
+  const session = c.get("session");
+  if (session.profile.type !== 'human' || session.keyScoped) return c.json({ error: "Only the account holder can attach files to a conversation" }, 403);
+  const query = profileQuerySchema.safeParse(c.req.query());
+  if (!query.success) return c.json({ error: 'Invalid profile' }, 400);
+  const db = getDatabase();
+  const target = await resolveTargetProfile(db, session, query.data.profile, 'write');
+  if (!target.ok) return c.json(target.body, target.status);
+  const profileId = target.profileId;
+  let object: Awaited<ReturnType<typeof verifyUploadedAttachment>>;
+  try { object = await verifyUploadedAttachment(data, session.profile.id, deps.attachmentHead); }
+  catch (error) {
+    if (error instanceof InspirationAttachmentError) return c.json({ error: error.message, code: error.code }, error.status);
+    throw error;
+  }
+  type Refusal = { refused: { error: string; status: 404 | 409 | 410 | 429 } };
+  const outcome = await db.transaction(async (tx): Promise<Refusal | { row: Parameters<typeof serializeMessageAttachment>[0] }> => {
+    await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.id, profileId)).for('update');
+    const [conversation] = await tx.select({ profileId: conversations.profileId, deletedAt: conversations.deletedAt })
+      .from(conversations).where(eq(conversations.id, data.conversationId)).for('update');
+    if (conversation && conversation.profileId !== profileId) return { refused: { error: 'Conversation not found', status: 404 } };
+    if (conversation?.deletedAt) return { refused: { error: 'This conversation was deleted.', status: 410 } };
+    const [sent] = await tx.select({ id: conversationMessages.id }).from(conversationMessages).where(eq(conversationMessages.id, data.messageId)).limit(1);
+    if (sent) return { refused: { error: 'This message was already sent. Attach to a new message.', status: 409 } };
+    const staged = await tx.select({ conversationId: attachments.conversationId, stagedMessageId: attachments.stagedMessageId }).from(attachments)
+      .where(and(eq(attachments.profileId, profileId), isNotNull(attachments.stagedMessageId)));
+    const forMessage = staged.filter((row) => row.stagedMessageId === data.messageId);
+    if (forMessage.some((row) => row.conversationId !== data.conversationId)) return { refused: { error: 'This message belongs to another conversation.', status: 409 } };
+    if (forMessage.length >= MAX_MESSAGE_ATTACHMENTS) return { refused: { error: `A message can carry up to ${MAX_MESSAGE_ATTACHMENTS} attachments.`, status: 409 } };
+    if (staged.length >= MAX_STAGED_MESSAGE_ATTACHMENTS) return { refused: { error: 'Too many unsent attachments. Send or discard a draft first.', status: 429 } };
+    const [reused] = await tx.select({ id: attachments.id }).from(attachments).where(eq(attachments.s3Key, data.key)).limit(1);
+    if (reused) return { refused: { error: 'This upload is already attached. Upload it again.', status: 409 } };
+    const [row] = await tx.insert(attachments).values({
+      profileId, inspirationId: null, conversationId: data.conversationId, stagedMessageId: data.messageId,
+      type: data.type, name: data.name ?? null, ...object, enrichmentStatus: 'unavailable',
+    }).returning(messageAttachmentSelection);
+    return { row: row! };
+  });
+  if ('refused' in outcome) return c.json({ error: outcome.refused.error }, outcome.refused.status);
+  return c.json({ attachment: serializeMessageAttachment(outcome.row) }, 201);
+}
 
 /**
  * POST /api/attachments — finalize an upload, or record a link.
@@ -559,6 +667,8 @@ attachmentsRoutes.post("/", async (c) => {
       400,
     );
   }
+
+  if ("conversationId" in parsed.data) return finalizeChatAttachment(c, parsed.data);
 
   const session = c.get("session");
   const db = getDatabase();

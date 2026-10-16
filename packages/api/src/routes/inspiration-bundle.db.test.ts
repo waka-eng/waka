@@ -67,3 +67,13 @@ it('replaying a deleted source cannot resurrect its attachments', async () => {
   expect((await f.post(input, key)).status).toBe(410);
   expect(await t.sql`SELECT id FROM inspirations`).toHaveLength(0); expect(await t.sql`SELECT id FROM attachments`).toHaveLength(0);
 });
+it('a note carries a file: verified like a photo, recorded unavailable, never queued, and an executable is refused', async () => {
+  const f = await fixture(async () => ({ ContentLength: 2048, ContentType: 'application/pdf' }));
+  const file = { type: 'file', key: `profiles/${f.profileId}/attachments/2-plan.pdf`, name: 'Plan.pdf', contentType: 'application/pdf', size: 2048 };
+  const response = await f.post({ text: 'The lease, for later.', kind: 'note', attachments: [file] });
+  expect(response.status).toBe(201);
+  const saved = await response.json() as Saved;
+  expect(saved.inspiration.attachments).toMatchObject([{ type: 'file', name: 'Plan.pdf', contentType: 'application/pdf', size: 2048, enrichment: { status: 'unavailable' } }]);
+  expect(await t.sql`SELECT id FROM background_jobs WHERE type::text = 'enrich_attachment'`).toHaveLength(0);
+  expect((await f.post({ text: 'x', attachments: [{ ...file, key: `profiles/${f.profileId}/attachments/3-run.exe`, contentType: 'application/x-msdownload' }] })).status).toBe(400);
+});
