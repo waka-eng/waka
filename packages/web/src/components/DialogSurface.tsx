@@ -156,7 +156,7 @@ function focusableWithin(root: HTMLElement): HTMLElement[] {
  * there is no HTML element for one.
  */
 /** How long the drop-out takes; `claims.css` `waka-modal-out` is the same. */
-const MODAL_LEAVE_MS = 180;
+export const MODAL_LEAVE_MS = 180;
 
 /**
  * CLOSE A RAISED PAGE THE WAY IT OPENED: it drops back out, then `then` runs.
@@ -174,13 +174,14 @@ export function leaveAsModal(then: () => void, from?: Element | null): void {
   if (node.dataset.leaving) return;
   node.dataset.leaving = "1";
   window.setTimeout(() => {
-    then();
     /* AND IF THE PAGE IS STILL HERE AFTERWARDS — a close that waits on
        something that failed — it comes back rather than staying on screen
        invisible and unpressable with no way out. */
     /* 1.5s, not one more drop-out: a draft's close waits on the recorder
-       stopping, and the page must not flicker back while it does. */
+       stopping, and the page must not flicker back while it does. Scheduled
+       BEFORE `then`, so a close that throws still brings the page back. */
     window.setTimeout(() => { if (node.isConnected) delete node.dataset.leaving; }, 1500);
+    then();
   }, MODAL_LEAVE_MS);
 }
 

@@ -10,7 +10,7 @@ import {conversationUsesSavedSources} from './conversation-corrections.js';
 import {GEMINI_EMBEDDING_DIMENSIONS,GEMINI_EMBEDDING_MODEL,GeminiEmbeddingHttpClient,validateEmbeddingVector,type GeminiEmbeddingClient} from './inspiration-embeddings.js';
 import type {ConversationRetrievalTrace} from './conversation-retrieval.js';
 import {enqueueConversationReply,STALE_LOCK_SECONDS,wakeCommittedBackgroundJobs} from './queue.js';
-import {attachmentNote,attachmentSearchText,readMessageAttachments} from './conversation-attachments.js';
+import {attachmentNote,readMessageAttachments} from './conversation-attachments.js';
 type Db=ReturnType<typeof getDb>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
 type Reader=Pick<Db,'select'>;
@@ -75,7 +75,7 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
   // ("[Attached, not read: ...]") is not a question about their memory; for a
   // photo/file-only message the latest words that exist stand in, and with
   // none at all, the names of what was attached (`conversationSearchQuery`).
-  const searchHistory:Array<{role:string;content:string}>=[];
+  const searchHistory:Array<{role:string;content:string;attachments:ReadonlyArray<{name:string|null}>}>=[];
   // Keep complete messages: truncating a human sentence can drop its negation
   // or correction. Missing earlier context is disclosed to the provider.
   for(const row of [...projected].reverse()){
@@ -84,10 +84,10 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     const content=row.content+(row.followUpQuestion?'\n'+row.followUpQuestion:'')+(note?(row.content?'\n':'')+note:'');
     if(characters+content.length>8000){contextChanged=true;break;}
     history.unshift({role:row.role,content,...(row.correctsMessageId?{correction:true}:{})});characters+=content.length;
-    searchHistory.unshift({role:row.role,content:row.content});
+    searchHistory.unshift({role:row.role,content:row.content,attachments:row.attachments});
   }
   let retrievalTrace:ConversationRetrievalTrace|undefined;
-  const searchQuery=conversationSearchQuery(searchHistory,attachmentSearchText(projected.find(row=>row.id===userMessageId)?.attachments??[]));
+  const searchQuery=conversationSearchQuery(searchHistory);
   const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,searchQuery,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
   const [profile]=await db.select({locale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId));
   /* Pinning a keep into `sources` puts it in front of the model; pointing

@@ -108,7 +108,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
   routes.onError((error,c)=>{
     if(error instanceof ConversationError)return c.json({error:error.message},error.status);
     if(error instanceof ConversationReplyError)return c.json({error:error.message},error.status);
-    if(error instanceof ConversationAttachmentError)return c.json({error:error.message},error.status);
+    if(error instanceof ConversationAttachmentError)return c.json(error.body(),error.status);
     const code=(error as {code?:string;cause?:{code?:string}}).cause?.code??(error as {code?:string}).code;
     if(['23505','40001','40P01','55P03'].includes(code??''))return c.json({error:'The conversation changed. Check your saved messages before retrying.'},409);
     console.error('[conversations]',{code:typeof code==='string'&&/^[0-9A-Z]{5}$/.test(code)?code:'unknown'});

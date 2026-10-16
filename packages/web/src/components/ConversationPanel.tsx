@@ -90,7 +90,7 @@ import {ConversationText} from './ConversationText';
 import {HomeActionIcon} from './HomeActionIcon';
 import {timeOf} from '../lib/words';
 import {dictationAvailable,useDictation} from '../lib/use-dictation';
-import {fetchPrinciples,type ApiPrinciple} from '../lib/api';
+import {ApiError,fetchPrinciples,type ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
 import {readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft as Draft,type ConversationDraftAttachment,type StoredConversationDraft} from '../lib/conversation-drafts';
 import {AddMenu} from './AddMenu';
@@ -141,6 +141,8 @@ async function checkPick(file:File,door:'photo'|'file'):Promise<{file:File;type:
   if(door==='file'){const verdict=inspectAttachmentFile(file);if(verdict.kind==='file')return {file:verdict.file,type:'file',contentType:verdict.contentType};}
   const photo=await inspectInspirationPhoto(file);return {file:photo,type:'image',contentType:photo.type};
 }
+/** The server's rule for a message's words (`storedContent`): blank is ''. */
+const storedContent=(content:string)=>content.trim().length>0?content:'';
 const refusalOf=(reason:unknown):MessageKey=>reason instanceof PhotoRefused?reason.reason
   :reason instanceof FileRefused?(reason.reason==='too_large'?'worldAttachTooLarge':reason.reason==='empty'?'worldPhotoEmpty':'worldAttachUnsupported'):'worldAttachFailed';
 
@@ -182,6 +184,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      chips draw at once instead of asking the server for a look. */
   const [uploads,setUploads]=useState<Upload[]>([]),uploadsRef=useRef<Upload[]>([]);
   const localFiles=useRef(new Map<string,File>());
+  /* ONE STOP PER UPLOAD, so × on a chip still uploading can call off that
+     request and no other. Keyed by the chip's local key. */
+  const uploadStops=useRef(new Map<string,AbortController>());
   const [attachNote,setAttachNote]=useState<MessageKey|null>(null);
   const track=(next:(rows:Upload[])=>Upload[])=>{uploadsRef.current=next(uploadsRef.current);setUploads(uploadsRef.current);};
   /* THE BAR'S SLOT IS FOUND AFTER PAINT, as `NoteTools` finds its own: `Home`
@@ -209,8 +214,12 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const observe=(next:ApiConversation)=>{
     if(conversationRef.current?.id===next.id&&conversationRef.current.profileId===next.profileId&&conversationRef.current.revision>next.revision)next=conversationRef.current;
     conversationRef.current=next;setConversation(next);setGenerationEnabled(next.generationEnabled??false);
-    const pending=draftRef.current;
-    if(pending?.pending&&next.messages.some(message=>message.id===pending.id&&message.content===pending.content)){
+    /* THE WORDS AS THE SERVER KEPT THEM. A photo-only send stores '' however
+       many spaces were in the box (`storedContent` in the conversation
+       routes), so comparing the raw draft would never match and the message
+       would read as unsent forever. */
+    const pending=draftRef.current,stored=pending?storedContent(pending.content):'';
+    if(pending?.pending&&next.messages.some(message=>message.id===pending.id&&message.content===stored)){
       try{if(receipt.current)clearConversationDraft(receipt.current);}catch{setStorageFailed(true);}
       receipt.current=undefined;draftRef.current=null;setDraft(null);setError(null);
       if(!id){onCreated?.(next);onChoose(next.id);}
@@ -337,8 +346,31 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(generationEnabled?{requestReply:true}:{}),...attachmentIds},from=conversationRef.current?.messageWindowStart;
         return from!==undefined?saveConversationMessage(scope.profileId,id,input,signal,from):saveConversationMessage(scope.profileId,id,input,signal);})
         :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:generationEnabled===true,...attachmentIds},intent.talkWith&&talkAgent?{perspective:intent.talkWith,agentId:talkAgent}:undefined));
-      if(mine(owner)){observe(next);setError(null);if(id)reply.check();}
-    }catch{if(mine(owner))setError(say('worldConversationSaveFailed'));}
+      if(mine(owner)){observe(next);setError(null);setAttachNote(null);if(id)reply.check();}
+    }catch(reason){
+      if(!mine(owner))return;
+      /* ═══ A PHOTO THAT IS NO LONGER THERE ════════════════════════════
+         A draft can outlive what it carries: the daily sweep takes a staged
+         upload after seven days, and another tab's × takes one at once. The
+         server then refuses the whole send (409 `attachment_not_ready`), and
+         a draft left pending would be refused on every retry with its field
+         and ＋ shut — words you can see and cannot send or change. So the
+         send is called off, not retried: the chips the server named go (all
+         of them if it named none), the words stay, and one plain line says
+         what to do. The rest are still staged under this message's id, so
+         the next Send links them. */
+      const current=draftRef.current;
+      if(reason instanceof ApiError&&reason.status===409&&reason.code==='attachment_not_ready'&&current?.pending&&current.id===intent.id){
+        const gone=new Set(reason.missingAttachmentIds?.length?reason.missingAttachmentIds:(current.attachments??[]).map(item=>item.id));
+        const left=(current.attachments??[]).filter(item=>!gone.has(item.id));
+        const back:Draft={...current,pending:false,updatedAt:Date.now()};
+        if(left.length)back.attachments=left;else delete back.attachments;
+        keep(back);
+        setError(null);setAttachNote('worldAttachGone');
+        return;
+      }
+      setError(say('worldConversationSaveFailed'));
+    }
     finally{working.current=false;if(mine(owner))setBusy(false);}
   };
   /* THE MESSAGE'S ID IS KEPT WHILE IT CARRIES ANYTHING. Photos and files are
@@ -363,16 +395,24 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     if(carry&&next.writer===current!.writer&&next.conversationId===current!.conversationId)return current;
     return keep(next)?next:null;
   };
+  const wanted=(key:string)=>uploadsRef.current.some(row=>row.key===key);
   const upload=async(item:Upload)=>{
     const target=draftForAttaching(),owner=lifecycle.current;
     if(!target){track(rows=>rows.map(row=>row.key===item.key?{...row,failed:true}:row));return;}
     track(rows=>rows.map(row=>row.key===item.key?{...row,failed:false}:row));
+    uploadStops.current.get(item.key)?.abort();
+    const stop=new AbortController(),leave=()=>stop.abort();uploadStops.current.set(item.key,stop);
+    owner.signal.addEventListener('abort',leave,{once:true});
     try{
       /* NOT THROUGH `run`: its fifteen seconds are for a JSON round trip, and
          a 25 MB photo on a phone's connection can take longer than that. The
-         page's own lifetime still cancels it. */
-      const row=await uploadMessageAttachment({profile:scope.profileId,conversationId:id??target.conversationId!,messageId:target.id,file:item.file,contentType:item.contentType,type:item.type,name:item.name},owner.signal);
+         page's own lifetime still cancels it, and so does this chip's ×. */
+      const row=await uploadMessageAttachment({profile:scope.profileId,conversationId:id??target.conversationId!,messageId:target.id,file:item.file,contentType:item.contentType,type:item.type,name:item.name},stop.signal);
       if(!mine(owner))return;
+      /* × WON THE RACE BUT THE UPLOAD LANDED ANYWAY — the stop came after
+         the server had staged it. The chip is gone, so the row must not come
+         back as one; it is discarded, as × would have discarded it. */
+      if(!wanted(item.key)){void discardMessageAttachment(row.id,{profile:scope.profileId}).catch(()=>undefined);return;}
       localFiles.current.set(row.id,item.file);
       track(rows=>rows.filter(other=>other.key!==item.key));
       const current=draftRef.current;
@@ -382,16 +422,25 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       if(!current||current.id!==target.id||current.pending)return;
       const attached:ConversationDraftAttachment={id:row.id,type:row.type,name:row.name,contentType:row.contentType,size:row.size};
       keep({...current,updatedAt:Date.now(),attachments:[...(current.attachments??[]),attached]});
-    }catch{if(mine(owner))track(rows=>rows.map(row=>row.key===item.key?{...row,failed:true}:row));}
+    }catch{if(mine(owner)&&!stop.signal.aborted)track(rows=>rows.map(row=>row.key===item.key?{...row,failed:true}:row));}
+    finally{owner.signal.removeEventListener('abort',leave);if(uploadStops.current.get(item.key)===stop)uploadStops.current.delete(item.key);}
   };
+  /* × ON A CHIP STILL ON ITS WAY: off the box, and its request called off. */
+  const dropUpload=(key:string)=>{track(rows=>rows.filter(row=>row.key!==key));uploadStops.current.get(key)?.abort();uploadStops.current.delete(key);};
   const attachedCount=(draft?.attachments?.length??0)+uploads.length;
+  const occupied=()=>(draftRef.current?.attachments?.length??0)+uploadsRef.current.length;
   const pick=async(files:File[],door:'photo'|'file')=>{
     setAttachNote(null);
-    const vacant=MOST_ATTACHED-(draftRef.current?.attachments?.length??0)-uploadsRef.current.length;
+    const vacant=MOST_ATTACHED-occupied();
     if(files.length>vacant)setAttachNote('worldAttachLimit');
     for(const file of files.slice(0,Math.max(0,vacant))){
       try{const checked=await checkPick(file,door);
-        const item:Upload={key:crypto.randomUUID(),file:checked.file,type:checked.type,contentType:checked.contentType,name:file.name.slice(0,255)||say(checked.type==='image'?'worldAddPhoto':'worldAddFile'),failed:false};
+        /* SIX COUNTED AGAIN AT THE MOMENT OF ADDING. `vacant` was counted
+           before the sniffing awaited, and a second pick made meanwhile has
+           counted the same empty places; the one that arrives second finds
+           them taken and says so. */
+        if(occupied()>=MOST_ATTACHED){setAttachNote('worldAttachLimit');break;}
+        const item:Upload={key:crypto.randomUUID(),file:checked.file,type:checked.type,contentType:checked.contentType,name:file.name.slice(0,255)||say(checked.type==='image'?'worldChatAttachmentPhotoUnnamed':'worldChatAttachmentFileUnnamed'),failed:false};
         track(rows=>[...rows,item]);void upload(item);}
       catch(reason){setAttachNote(refusalOf(reason));}
     }
@@ -708,10 +757,10 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               ×. Uploading and "Couldn’t add this" are said on the chip they
               are about, and a failed one offers its retry beside its ×. */}
           {draft?.attachments?.length||uploads.length?<ul className="chat-chips" aria-label={say('worldAttachList')}>
-            {(draft?.attachments??[]).map(item=><Chip key={item.id} type={item.type} name={item.name??say(item.type==='image'?'worldAddPhoto':'worldAddFile')} size={item.size}
+            {(draft?.attachments??[]).map(item=><Chip key={item.id} type={item.type} name={item.name??say(item.type==='image'?'worldChatAttachmentPhotoUnnamed':'worldChatAttachmentFileUnnamed')} size={item.size}
               file={localFiles.current.get(item.id)} attachmentId={item.id} state="ready" locale={locale} onRemove={()=>unattach(item.id)}/>)}
             {uploads.map(item=><Chip key={item.key} type={item.type} name={item.name} size={item.file.size} file={item.file} state={item.failed?'failed':'uploading'} locale={locale}
-              onRemove={()=>track(rows=>rows.filter(row=>row.key!==item.key))} onRetry={()=>void upload(item)}/>)}
+              onRemove={()=>dropUpload(item.key)} onRetry={()=>void upload(item)}/>)}
           </ul>:null}
           <label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
           <div className="chat-composer-footer">

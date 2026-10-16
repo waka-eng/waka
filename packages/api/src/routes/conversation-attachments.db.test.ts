@@ -7,6 +7,7 @@
 import {randomUUID} from 'node:crypto';
 import {Hono} from 'hono';
 import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
+import postgres from 'postgres';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/index.js';
 import {createConversationRoutes} from './conversations.js';
 import {createAttachmentRoutes} from './attachments.js';
@@ -293,4 +294,65 @@ it('a photo-only message still reads saved material: the latest words, else what
   const second=randomUUID(),photo2=(await json(await p.stage(conversation2,second,{name:'IMG_2041.png'}))).attachment;
   expect((await p.post(`/conversations/${conversation2}/messages`,{id:second,content:'',revision:1,requestReply:true,attachmentIds:[photo2.id]})).status).toBe(200);
   expect((await replyTo()).sources.map(source=>source.text)).toEqual([expect.stringContaining('warm oak')]);
+});
+
+it('the context endpoint searches a photo-only chat by what was attached, as the reply does',async()=>{
+  const p=await person(),conversationId=randomUUID(),first=randomUUID();
+  await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${p.profileId},'Kitchen remodel: open shelves, warm oak, one long counter.')`;
+  const photo=(await json(await p.stage(conversationId,first,{name:'kitchen_remodel.png'}))).attachment;
+  // No reply requested, so the endpoint reads the context itself rather than a recorded request's.
+  expect((await p.post('/conversations',{id:conversationId,firstMessage:{id:first,content:'',attachmentIds:[photo.id]}})).status).toBe(200);
+  const context=await json(await p.human.request(`/conversations/${conversationId}/context`));
+  expect(context.inspirations.map((source:any)=>source.text)).toEqual([expect.stringContaining('open shelves')]);
+});
+
+it('a send naming an upload that is gone says which one, so the composer can drop it',async()=>{
+  const p=await person(),conversationId=randomUUID(),messageId=randomUUID();
+  const kept=(await json(await p.stage(conversationId,messageId))).attachment;
+  const lost=(await json(await p.stage(conversationId,messageId))).attachment;
+  // The daily sweep (or another tab's ×) took one of the two.
+  await t.sql`DELETE FROM attachments WHERE id=${lost.id}`;
+  const refused=await p.post('/conversations',{id:conversationId,firstMessage:{id:messageId,content:'  ',attachmentIds:[kept.id,lost.id]}});
+  expect(refused.status).toBe(409);
+  expect(await json(refused)).toEqual({error:expect.any(String),code:'attachment_not_ready',missingAttachmentIds:[lost.id]});
+  expect(await t.sql`SELECT id FROM conversations WHERE id=${conversationId}`).toHaveLength(0);
+  // Resent without it, the same message goes through with what is left.
+  const sent=await p.post('/conversations',{id:conversationId,firstMessage:{id:messageId,content:'  ',attachmentIds:[kept.id]}});
+  expect(sent.status).toBe(200);
+  expect((await json(sent)).conversation.messages[0].attachments.map((row:any)=>row.id)).toEqual([kept.id]);
+  // The same refusal on a later message.
+  const next=randomUUID(),gone=randomUUID();
+  const later=await p.post(`/conversations/${conversationId}/messages`,{id:next,content:'And this',revision:1,attachmentIds:[gone]});
+  expect(later.status).toBe(409);expect(await json(later)).toMatchObject({code:'attachment_not_ready',missingAttachmentIds:[gone]});
+});
+
+it('one stored object, one attachment, even when two doors finalize the same key at once',async()=>{
+  const p=await person();
+  const [source]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${p.profileId},'A note') RETURNING id`;
+  const other=postgres(process.env.DB_CONNECTION_URL!,{max:1,prepare:false,connection:{search_path:t.schemaName}});
+  try{
+    for(const door of ['chat','inspiration'] as const){
+      const object=p.upload();
+      let acquired!:()=>void,release!:()=>void;
+      const locked=new Promise<void>(resolve=>{acquired=resolve;}),released=new Promise<void>(resolve=>{release=resolve;});
+      /* Another door mid-insert: it holds the key's lock (the string mirrors
+         `assertAttachmentKeysUnused`) and has written its row, uncommitted. */
+      const held=other.begin(async tx=>{
+        await tx`SELECT pg_advisory_xact_lock(hashtextextended(${'waka.attachment-key:'+object.key},0))`;
+        await tx`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key) VALUES(${p.profileId},${source.id},'image','u',${object.key})`;
+        acquired();await released;
+      });
+      try{
+        await locked;
+        const pending:Promise<Response>=Promise.resolve(door==='chat'?p.post('/attachments',{conversationId:randomUUID(),messageId:randomUUID(),type:'image',...object})
+          :p.post('/attachments',{inspirationId:source.id,type:'image',...object}));
+        // It waits for the lock rather than reading "unused" past an uncommitted row.
+        expect(await Promise.race([pending.then(()=>'answered'),new Promise(resolve=>setTimeout(()=>resolve('waiting'),300))])).toBe('waiting');
+        release();await held;
+        const response=await pending;
+        expect(response.status).toBe(409);expect(await json(response)).toMatchObject({code:'attachment_already_attached'});
+        expect(await t.sql`SELECT id FROM attachments WHERE s3_key=${object.key}`).toHaveLength(1);
+      }finally{release();await held.catch(()=>undefined);}
+    }
+  }finally{await other.end();}
 });

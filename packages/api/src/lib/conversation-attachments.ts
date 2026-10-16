@@ -33,7 +33,13 @@ export const STAGED_KEEP_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export class ConversationAttachmentError extends Error {
-  constructor(readonly status: 400 | 404 | 409 | 429, message: string) { super(message); }
+  constructor(readonly status: 400 | 404 | 409 | 429, message: string,
+    readonly code?: 'attachment_not_ready', readonly missingAttachmentIds?: string[]) { super(message); }
+  /** The JSON a route answers with: the sentence, and when there is one, the
+      code and which ids it was about, so a composer can drop exactly those. */
+  body() {
+    return { error: this.message, ...(this.code ? { code: this.code } : {}), ...(this.missingAttachmentIds ? { missingAttachmentIds: this.missingAttachmentIds } : {}) };
+  }
 }
 
 export const messageAttachmentSelection = {
@@ -86,7 +92,16 @@ export async function linkMessageAttachments(tx: Tx, input: { profileId: string;
     .where(and(eq(attachments.profileId, input.profileId), eq(attachments.stagedMessageId, input.messageId))).for('update');
   const wanted = new Set(input.attachmentIds);
   const usable = staged.filter((row) => row.conversationId === input.conversationId && wanted.has(row.id));
-  if (usable.length !== wanted.size) throw new ConversationAttachmentError(409, 'Some attachments are not ready for this message. Add them again.');
+  /* NAMED, NOT ONLY REFUSED. A draft can outlive its uploads — the daily
+     sweep takes week-old staged rows, and another tab may have removed one —
+     and a composer told only "409" would resend the same ids forever. It is
+     told which ids this profile no longer has staged for this message, and
+     drops those. */
+  if (usable.length !== wanted.size) {
+    const found = new Set(usable.map((row) => row.id));
+    throw new ConversationAttachmentError(409, 'Some attachments are not ready for this message. Add them again.', 'attachment_not_ready',
+      input.attachmentIds.filter((id) => !found.has(id)));
+  }
   if (usable.length) {
     await tx.update(attachments).set({ messageId: input.messageId, stagedMessageId: null, updatedAt: new Date() })
       .where(and(eq(attachments.profileId, input.profileId), inArray(attachments.id, usable.map((row) => row.id))));

@@ -36,6 +36,7 @@ import {ConversationPanel} from '../src/components/ConversationPanel';
 import {createConversation,fetchConversation,fetchConversationReply,listConversations,saveConversationMessage,type ApiConversation} from '../src/lib/api/conversations';
 import {discardMessageAttachment,fetchAttachmentUrl,uploadMessageAttachment,type ApiMessageAttachment} from '../src/lib/api/attachments';
 import {readConversationDrafts} from '../src/lib/conversation-drafts';
+import {ApiError} from '../src/lib/api';
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
 vi.mock('../src/lib/api/attachments',async original=>({...await original<typeof import('../src/lib/api/attachments')>(),uploadMessageAttachment:vi.fn(),fetchAttachmentUrl:vi.fn(),discardMessageAttachment:vi.fn()}));
 
@@ -48,7 +49,8 @@ beforeEach(()=>{
   vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:false});
   vi.mocked(fetchConversationReply).mockResolvedValue({profileId:scope.profileId,conversationId:chat,messageId:null,requestId:null,phase:'idle',revision:0,failureCode:null,retryAfter:null,runAfter:null,canRetry:false,generationEnabled:false});
   const sent=(conversationId:string,input:{id:string;content:string;attachmentIds?:string[]})=>{
-    stored={...stored,id:conversationId,revision:stored.revision+1,messages:[...stored.messages,{id:input.id,content:input.content,profileId:scope.profileId,conversationId,position:stored.revision+1,role:'user',createdAt:'2026-10-16T01:00:00Z',attachments:[]}]};
+    /* Kept the way the server keeps it: blank words are stored as ''. */
+    stored={...stored,id:conversationId,revision:stored.revision+1,messages:[...stored.messages,{id:input.id,content:input.content.trim()?input.content:'',profileId:scope.profileId,conversationId,position:stored.revision+1,role:'user',createdAt:'2026-10-16T01:00:00Z',attachments:[]}]};
     return structuredClone(stored);
   };
   vi.mocked(saveConversationMessage).mockImplementation(async(_profile,conversationId,input)=>sent(conversationId,input));
@@ -205,4 +207,100 @@ it('puts the mic and the ＋ into a slot the page lends, and not in the box', as
     expect(host.querySelector('footer.chat-composer textarea'),'the box lost its field').toBeTruthy();
     expect(host.querySelector('footer.chat-composer button.chat-send'),'the box lost its Send').toBeTruthy();
   }finally{delete (window as unknown as {SpeechRecognition?:unknown}).SpeechRecognition;}
+});
+
+it('a photo sent with only spaces in the box is confirmed, clears the draft, and opens the new chat', async()=>{
+  await mount(null);await flush();
+  await type('   ');
+  await pick('photos',[png()]);
+  expect(send().disabled).toBe(false);
+  await act(async()=>send().click());await flush();
+  const [,conversationId,,,first]=vi.mocked(createConversation).mock.calls[0]!;
+  expect(first?.content).toBe('   ');
+  // The server kept '' — and that is still this message.
+  expect(stored.messages[0]!.content).toBe('');
+  expect(choose,'the new chat was never opened').toHaveBeenCalledWith(conversationId);
+  expect(readConversationDrafts(scope,'new:general'),'the sent draft stayed pending').toEqual([]);
+  expect(host.querySelector('.chat-sending'),'the message still reads as being sent').toBeNull();
+});
+
+it('a send refused for a photo that is gone drops that chip, keeps the words, says so, and sends again', async()=>{
+  await mount(null);await flush();
+  await type('Two from the trip');
+  await pick('photos',[png('one.png'),png('two.png')]);
+  const [lost,kept]=readConversationDrafts(scope,'new:general')[0]!.value.attachments!;
+  vi.mocked(createConversation).mockRejectedValueOnce(new ApiError({status:409,code:'attachment_not_ready',message:'Some attachments are not ready for this message. Add them again.',missingAttachmentIds:[lost!.id]}));
+  await act(async()=>send().click());await flush();
+  const draft=readConversationDrafts(scope,'new:general')[0]!.value;
+  expect(draft.pending,'the refused send stayed pending, to be refused forever').toBe(false);
+  expect(draft.content).toBe('Two from the trip');
+  expect(draft.attachments?.map(item=>item.id)).toEqual([kept!.id]);
+  expect(chips()).toHaveLength(1);
+  expect(host.querySelector('.chat-composer')!.textContent).toContain('A photo or file couldn’t be found — add it again.');
+  expect(host.querySelector('[role="alert"]'),'it was reported as a failed save instead').toBeNull();
+  expect(host.querySelector('textarea')!.disabled,'the words cannot be changed').toBe(false);
+  expect(plus()!.disabled,'nothing can be added back').toBe(false);
+  await act(async()=>send().click());await flush();
+  const [,,,,first]=vi.mocked(createConversation).mock.calls[1]!;
+  expect(first).toMatchObject({id:draft.id,content:'Two from the trip',attachmentIds:[kept!.id]});
+  expect(choose).toHaveBeenCalled();
+});
+
+it('when the refusal names no attachment, every chip goes and the words stay', async()=>{
+  await mount();await flush();
+  await type('Look');
+  await pick('file',[pdf()]);
+  vi.mocked(saveConversationMessage).mockRejectedValueOnce(new ApiError({status:409,code:'attachment_not_ready',message:'Some attachments are not ready.'}));
+  await act(async()=>send().click());await flush();
+  const draft=readConversationDrafts(scope,chat)[0]!.value;
+  expect(draft).toMatchObject({pending:false,content:'Look'});
+  expect(draft.attachments).toBeUndefined();
+  expect(chips()).toHaveLength(0);
+  expect(send().disabled).toBe(false);
+  // Any other refusal is still a failed save, and the draft still pending.
+  vi.mocked(saveConversationMessage).mockRejectedValueOnce(new ApiError({status:409,message:'New messages arrived.'}));
+  await act(async()=>send().click());await flush();
+  expect(readConversationDrafts(scope,chat)[0]!.value.pending).toBe(true);
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t confirm this message');
+});
+
+it('× on a chip still uploading calls its upload off, and one that lands anyway is discarded, not added', async()=>{
+  vi.mocked(discardMessageAttachment).mockResolvedValue(undefined);
+  let land!:(row:ApiMessageAttachment)=>void,signal:AbortSignal|undefined,staged:{conversationId:string;messageId:string}|undefined;
+  vi.mocked(uploadMessageAttachment).mockImplementationOnce((input,s)=>{signal=s;staged=input;return new Promise(resolve=>{land=resolve;});});
+  await mount();await flush();
+  await pick('photos',[png()]);
+  expect(chips()[0]!.className).toContain('chat-chip--uploading');
+  await act(async()=>chips()[0]!.querySelector<HTMLButtonElement>('button[aria-label="Remove sky.png"]')!.click());
+  expect(chips()).toHaveLength(0);
+  expect(signal?.aborted,'the upload kept going after ×').toBe(true);
+  // The server had already staged it when the stop arrived.
+  const row:ApiMessageAttachment={id:'22222222-2222-4222-8222-222222222222',conversationId:staged!.conversationId,messageId:staged!.messageId,staged:true,type:'image',name:'sky.png',contentType:'image/png',size:16,createdAt:'2026-10-16T00:30:00Z'};
+  await act(async()=>land(row));await flush();
+  expect(chips(),'the removed photo came back').toHaveLength(0);
+  expect(readConversationDrafts(scope,chat)[0]?.value.attachments??[]).toEqual([]);
+  expect(discardMessageAttachment).toHaveBeenCalledWith(row.id,{profile:scope.profileId});
+});
+
+it('two quick picks together still stop at six', async()=>{
+  await mount();await flush();
+  const inputs=()=>[...host.querySelectorAll<HTMLInputElement>('input[type="file"]')].find(node=>!node.accept.includes('application/pdf'))!;
+  await act(async()=>{
+    for(const batch of ['a','b']){
+      const input=inputs();
+      Object.defineProperty(input,'files',{configurable:true,value:Array.from({length:4},(_,at)=>png(`${batch}-${at}.png`))});
+      input.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+  });
+  await flush();await flush();
+  expect(uploadMessageAttachment,'two picks together went past six').toHaveBeenCalledTimes(6);
+  expect(chips()).toHaveLength(6);
+  expect(host.textContent).toContain('Up to 6 at a time');
+});
+
+it('an unnamed photo is called a photo, not "Add photo"', async()=>{
+  await mount();await flush();
+  await pick('photos',[png('')]);
+  expect(vi.mocked(uploadMessageAttachment).mock.calls[0]![0].name).toBe('Photo');
+  expect(chips()[0]!.title).toBe('Photo');
 });

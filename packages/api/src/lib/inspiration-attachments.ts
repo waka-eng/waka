@@ -1,5 +1,5 @@
 import { HeadObjectCommand, type HeadObjectCommandOutput } from '@aws-sdk/client-s3';
-import { inArray } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import { attachments } from '../db/index.js';
 import type { getDb } from './db.js';
 import { attachmentKeyPrefix, attachmentObjectUrl, getAttachmentsBucket } from './attachment-storage.js';
@@ -73,9 +73,19 @@ export async function verifyUploadedAttachment(input: { key: string; contentType
  * have its file deleted out from under it. Call inside the inserting
  * transaction. (Not a UNIQUE index: rows written before these checks may
  * hold legacy duplicates; `attachments_s3_key_idx` serves this lookup.)
+ *
+ * AND THE CHECK HOLDS ITS KEY UNTIL THE INSERT COMMITS. Without a lock two
+ * doors finalizing the same key at once both read "unused" under READ
+ * COMMITTED and both insert. A transaction-scoped advisory lock per key,
+ * taken before the read, makes the second door wait for the first to commit
+ * and then see its row. Keys are locked in sorted order so two saves naming
+ * overlapping keys cannot deadlock; the locks release with the transaction.
  */
-export async function assertAttachmentKeysUnused(db: Pick<ReturnType<typeof getDb>, 'select'>, keys: string[]): Promise<void> {
+export async function assertAttachmentKeysUnused(db: Pick<ReturnType<typeof getDb>, 'select' | 'execute'>, keys: string[]): Promise<void> {
   if (!keys.length) return;
+  for (const key of [...new Set(keys)].sort()) {
+    await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'waka.attachment-key:' + key}, 0))`);
+  }
   const [reused] = await db.select({ id: attachments.id }).from(attachments).where(inArray(attachments.s3Key, keys)).limit(1);
   if (reused) throw new InspirationAttachmentError(409, 'attachment_already_attached', 'This upload is already attached. Upload it again.');
 }

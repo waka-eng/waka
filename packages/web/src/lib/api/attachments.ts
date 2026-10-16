@@ -326,13 +326,6 @@ export async function finalizeAttachment(
 }
 
 /**
- * THE WHOLE CHAT UPLOAD IN ONE CALL: presign → PUT to S3 → stage onto the
- * message about to be sent. `contentType` is the one every step must agree
- * on — `inspectAttachmentFile(file).contentType` for "Add file", the photo
- * sniffer's verdict (`file.type` after `inspectInspirationPhoto`) for "Add
- * photos". Send the returned `id` in the message's `attachmentIds`.
- */
-/**
  * DISCARD AN UNSENT CHAT UPLOAD — the chip's ×. `DELETE /api/attachments/:id`
  * removes a STAGED row and its object (a sent one is 409, someone else's 404).
  * Best effort by design: the send already deletes every staged row the
@@ -346,6 +339,13 @@ export async function discardMessageAttachment(id: string, options: { profile?: 
   );
 }
 
+/**
+ * THE WHOLE CHAT UPLOAD IN ONE CALL: presign → PUT to S3 → stage onto the
+ * message about to be sent. `contentType` is the one every step must agree
+ * on — `inspectAttachmentFile(file).contentType` for "Add file", the photo
+ * sniffer's verdict (`file.type` after `inspectInspirationPhoto`) for "Add
+ * photos". Send the returned `id` in the message's `attachmentIds`.
+ */
 export async function uploadMessageAttachment(
   input: { profile: string; conversationId: string; messageId: string; file: File | Blob; name?: string; contentType: string; type: "image" | "file" },
   signal?: AbortSignal,

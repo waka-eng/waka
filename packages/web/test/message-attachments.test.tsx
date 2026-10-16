@@ -105,22 +105,69 @@ it("shows a file's name and human size, linked to its URL", async () => {
   ])).toEqual([
     ["A", "brief.pdf", "240 KB", "https://storage.example.test/f-1"],
     ["A", "deck.key", "3.1 MB", "https://storage.example.test/f-2"],
-    ["A", "File", "900 B", "https://storage.example.test/f-3"],
+    ["A", "File", "1 KB", "https://storage.example.test/f-3"],
   ]);
   expect((tiles[0] as HTMLAnchorElement).target).toBe("_blank");
   expect((tiles[0] as HTMLAnchorElement).rel).toBe("noopener noreferrer");
 });
 
-it("lets a file whose link is not ready yet be pressed, then reads it and opens it", async () => {
+/** What `window.open('', '_blank')` hands back: a blank tab to point later. */
+function blankTab() {
+  return { opener: window as Window | null, location: { href: "" }, close: vi.fn() };
+}
+
+it("lets a file whose link is not ready yet be pressed: the tab opens in the click, then goes to the link", async () => {
+  let resolve!: (url: string) => void;
   vi.mocked(fetchAttachmentUrl)
     .mockReturnValueOnce(new Promise<string>(() => {}))
-    .mockResolvedValueOnce("https://storage.example.test/f-1");
+    .mockReturnValueOnce(new Promise<string>((done) => { resolve = done; }));
+  const tab = blankTab();
+  open.mockReturnValue(tab);
   await show([file("f-1", "brief.pdf", 245_760)]);
-  const button = host.querySelector("button.chat-attachment-file")!;
-  expect(button.getAttribute("aria-disabled")).toBe("true");
-  await act(async () => { (button as HTMLButtonElement).click(); });
-  expect(open).toHaveBeenCalledWith("https://storage.example.test/f-1", "_blank", "noopener,noreferrer");
+  const button = host.querySelector("button.chat-attachment-file") as HTMLButtonElement;
+  // A control that acts is not announced as one that cannot.
+  expect(button.hasAttribute("aria-disabled")).toBe(false);
+  expect(button.disabled).toBe(false);
+  act(() => { button.click(); });
+  // Opened synchronously, inside the press — not after the read, where it would be a blocked popup.
+  expect(open).toHaveBeenCalledTimes(1);
+  expect(open).toHaveBeenCalledWith("", "_blank");
+  expect(tab.opener).toBeNull();
+  expect(tab.location.href).toBe("");
+  await act(async () => { resolve("https://storage.example.test/f-1"); });
+  expect(tab.location.href).toBe("https://storage.example.test/f-1");
+  expect(tab.close).not.toHaveBeenCalled();
   expect(host.querySelector("a.chat-attachment-file")?.getAttribute("href")).toBe("https://storage.example.test/f-1");
+});
+
+it("closes the tab it opened when the read fails, and the file can be pressed again", async () => {
+  vi.mocked(fetchAttachmentUrl).mockRejectedValueOnce(new Error("first")).mockRejectedValueOnce(new Error("again"));
+  const tab = blankTab();
+  open.mockReturnValue(tab);
+  await show([file("f-1", "brief.pdf", 245_760)]);
+  const button = host.querySelector('button.chat-attachment-file[data-state="failed"]') as HTMLButtonElement;
+  expect(button.textContent).toContain("Couldn’t load");
+  await act(async () => { button.click(); });
+  expect(open).toHaveBeenCalledWith("", "_blank");
+  expect(tab.close).toHaveBeenCalledTimes(1);
+  expect(tab.location.href).toBe("");
+  expect(host.querySelector('button.chat-attachment-file[data-state="failed"]')).not.toBeNull();
+});
+
+it("a stale photo link is read again on click, in a tab opened by the click", async () => {
+  vi.mocked(fetchAttachmentUrl).mockResolvedValueOnce("https://storage.example.test/old.jpg").mockResolvedValueOnce("https://storage.example.test/new.jpg");
+  const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+  await show([photo("p-1", "beach.jpg")]);
+  const tab = blankTab();
+  open.mockReturnValue(tab);
+  now.mockReturnValue(1_000_000 + 5 * 60_000);
+  const link = host.querySelector("a.chat-attachment-photo") as HTMLAnchorElement;
+  const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+  act(() => { link.dispatchEvent(click); });
+  expect(click.defaultPrevented).toBe(true);
+  expect(open).toHaveBeenCalledWith("", "_blank");
+  await act(async () => { await Promise.resolve(); });
+  expect(tab.location.href).toBe("https://storage.example.test/new.jpg");
 });
 
 it("aborts the read when the message leaves the screen", async () => {

@@ -3,6 +3,7 @@ import {and,asc,desc,eq,inArray,sql} from 'drizzle-orm';
 import {attachments,inspirations,inspirationRevisions,reflections} from '../db/index.js';
 import type {getDb} from './db.js';
 import {effectiveAttachmentStatus,effectiveAttachmentText} from './attachment-material.js';
+import {attachmentSearchText} from './conversation-attachments.js';
 
 type Reader=Pick<ReturnType<typeof getDb>,'select'>;
 /** Resolve short continuations from human context, never an assistant's
@@ -10,12 +11,17 @@ type Reader=Pick<ReturnType<typeof getDb>,'select'>;
 /**
  * What retrieval searches with: the person's latest words. A photo- or
  * file-only message (content '', migration 0076) has none, so the most recent
- * message that does stands in; with no words anywhere, `fallback` (the
- * attachments' names) does, so the reply still reads saved material.
+ * message that does stands in; with no words anywhere, the names of what the
+ * latest message of yours carried (`attachmentSearchText`) do, so the reply
+ * still reads saved material.
+ *
+ * THE FALLBACK LIVES HERE, not at a caller. The reply and the context
+ * endpoint both ask this function, and when the reply alone passed the names
+ * in, the two disagreed about what a photo-only chat was about.
  */
-export function conversationSearchQuery(history:ReadonlyArray<{role:string;content:string}>,fallback=''){
+export function conversationSearchQuery(history:ReadonlyArray<{role:string;content:string;attachments?:ReadonlyArray<{name:string|null}>}>){
   const human=history.filter(row=>row.role==='user'&&row.content.trim().length>0),latest=human.at(-1)?.content??'';
-  if(!latest)return fallback.trim().slice(0,1000);
+  if(!latest)return attachmentSearchText(history.filter(row=>row.role==='user').at(-1)?.attachments??[]).trim().slice(0,1000);
   const isContinuation=(text:string)=>text.length<=120&&(/\b(that|it|those|this idea)\b/i.test(text)||/^(why|how so)[?!.\s]*$/i.test(text)||/(그거|그것|이거|그건|그럼|이것|그 생각|그 얘기)|^왜[?\s]*$/.test(text));
   const prior=isContinuation(latest)?human.slice(0,-1).reverse().find(row=>!isContinuation(row.content)):undefined;
   return (prior?`${latest}\n${prior.content.slice(0,600)}`:latest).slice(0,1000);

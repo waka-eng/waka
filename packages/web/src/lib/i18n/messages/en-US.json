@@ -167,6 +167,7 @@
   "worldAttachUnsupported": "This kind of file can’t be added",
   "worldAttachLimit": "Up to 6 at a time",
   "worldAttachFix": "Remove or retry the one that couldn’t be added",
+  "worldAttachGone": "A photo or file couldn’t be found — add it again.",
   "worldAttachList": "Attached",
   "worldComposerPlayFile": "Play {name}",
   "worldComposerRecord": "Record",

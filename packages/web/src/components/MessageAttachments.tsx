@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { fetchAttachmentUrl, type ApiMessageAttachment } from '../lib/api';
+import { fileSizeWords } from '../lib/api/file-accept';
 import { formatMessage, t, type SupportedLocale } from '../lib/locales';
 import { HomeActionIcon } from './HomeActionIcon';
 
@@ -10,20 +11,16 @@ import { HomeActionIcon } from './HomeActionIcon';
    sending the person to an expired signature's error page. */
 const STALE_AFTER_MS = 4 * 60_000;
 
-function openInNewTab(url: string) {
-  window.open(url, '_blank', 'noopener,noreferrer');
-}
-
-/* "240 KB", "3.1 MB". Binary steps, because that is what the picker that
-   chose the file showed; one decimal only while it still says something. */
-function sizeWords(bytes: number | null): string | null {
-  if (bytes === null || !Number.isFinite(bytes) || bytes < 0) return null;
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB'];
-  let value = bytes / 1024, unit = 0;
-  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
-  const shown = unit === 0 || value >= 100 ? String(Math.max(1, Math.round(value))) : String(Number(value.toFixed(1)));
-  return `${shown} ${units[unit]}`;
+/* THE TAB IS OPENED IN THE CLICK, THE ADDRESS ARRIVES AFTER. A browser lets
+   a page open a window only while it is handling the press; one opened after
+   an `await` is a popup, and blocked. So the blank tab is opened at once and
+   cut loose from this page (`opener = null` — the noopener half of what the
+   ready link's `rel` says), and it is pointed at the signed read when that
+   lands, or closed if it does not. */
+function openBlankTab(): Window | null {
+  const tab = window.open('', '_blank');
+  if (tab) { try { tab.opener = null; } catch { /* Some browsers refuse; the tab still opens. */ } }
+  return tab;
 }
 
 function useAttachmentUrl(id: string) {
@@ -38,25 +35,29 @@ function useAttachmentUrl(id: string) {
     return () => { controller.abort(); click.current?.abort(); };
   }, [id]);
   /* Read again, then open — for a click before the first read landed, after
-     it failed, or after it went stale. Nothing opens if the tile unmounted. */
-  const openFresh = useCallback(async () => {
+     it failed, or after it went stale. Synchronous up to `openBlankTab`, so
+     it must be called from the click itself; the tab it opened closes again
+     if the read fails, if a second click replaces this one, or if the tile
+     unmounted. */
+  const openFresh = useCallback(() => {
     click.current?.abort();
     const controller = new AbortController();
     click.current = controller;
-    try {
-      const url = await fetchAttachmentUrl(id, controller.signal);
-      if (controller.signal.aborted) return;
+    const tab = openBlankTab();
+    void fetchAttachmentUrl(id, controller.signal).then(url => {
+      if (controller.signal.aborted) { tab?.close(); return; }
       readAt.current = Date.now();
       setState({ url, failed: false });
-      openInNewTab(url);
-    } catch {
+      if (tab) tab.location.href = url;
+    }).catch(() => {
+      tab?.close();
       if (!controller.signal.aborted) setState({ url: null, failed: true });
-    }
+    });
   }, [id]);
   const onLinkClick = useCallback((event: MouseEvent<HTMLAnchorElement>) => {
     if (Date.now() - readAt.current < STALE_AFTER_MS) return;
     event.preventDefault();
-    void openFresh();
+    openFresh();
   }, [openFresh]);
   const markFailed = useCallback(() => setState({ url: null, failed: true }), []);
   return { ...state, openFresh, onLinkClick, markFailed };
@@ -81,7 +82,9 @@ function PhotoTile({ item, locale }: { item: ApiMessageAttachment; locale: Suppo
 function FileTile({ item, locale }: { item: ApiMessageAttachment; locale: SupportedLocale }) {
   const { url, failed, openFresh, onLinkClick } = useAttachmentUrl(item.id);
   const name = item.name || t(locale, 'worldChatAttachmentFileUnnamed');
-  const size = sizeWords(item.size);
+  /* The chip's words for the same file (`fileSizeWords`), so a size does not
+     change on the way from the box into the transcript. */
+  const size = fileSizeWords(item.size);
   const body = <>
     <HomeActionIcon kind="file" className="chat-attachment-file-icon" />
     <span className="chat-attachment-file-name">{name}</span>
@@ -91,8 +94,13 @@ function FileTile({ item, locale }: { item: ApiMessageAttachment; locale: Suppor
   if (url) {
     return <a className="chat-attachment-file" data-state="ready" href={url} target="_blank" rel="noopener noreferrer" title={name} onClick={onLinkClick}>{body}</a>;
   }
-  return <button type="button" className="chat-attachment-file" data-state={failed ? 'failed' : 'waiting'} aria-disabled="true" title={name}
-    onClick={() => void openFresh()}>{body}</button>;
+  /* A BUTTON THAT WORKS, AND SAYS IT DOES. It used to be `aria-disabled` and
+     open the file anyway — a control telling a screen reader it cannot be
+     pressed while doing something when pressed. Pressing it reads the link
+     and opens it, while waiting or after a failed read alike; `data-state`
+     dims the fill, not the control. */
+  return <button type="button" className="chat-attachment-file" data-state={failed ? 'failed' : 'waiting'} title={name}
+    onClick={openFresh}>{body}</button>;
 }
 
 export function MessageAttachments({ attachments, locale }: { attachments: ApiMessageAttachment[]; locale: SupportedLocale }): JSX.Element | null {

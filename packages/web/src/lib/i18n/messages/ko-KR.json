@@ -167,6 +167,7 @@
   "worldAttachUnsupported": "이 종류의 파일은 추가할 수 없어요",
   "worldAttachLimit": "한 번에 6개까지 돼요",
   "worldAttachFix": "추가하지 못한 것을 빼거나 다시 시도해 주세요",
+  "worldAttachGone": "사진이나 파일을 찾지 못했어요 — 다시 추가해 주세요.",
   "worldAttachList": "첨부한 것",
   "worldComposerPlayFile": "{name} 재생",
   "worldComposerRecord": "녹음",

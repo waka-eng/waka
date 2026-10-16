@@ -593,7 +593,7 @@ attachmentsRoutes.delete('/:attachmentId', async (c) => {
   let key: string | null;
   try { key = await db.transaction((tx) => discardStagedAttachment(tx, target.profileId, id.data.toLowerCase())); }
   catch (error) {
-    if (error instanceof ConversationAttachmentError) return c.json({ error: error.message }, error.status);
+    if (error instanceof ConversationAttachmentError) return c.json(error.body(), error.status);
     throw error;
   }
   const keys = await unreferencedAttachmentKeys(db, key ? [key] : []);
@@ -646,7 +646,7 @@ async function finalizeChatAttachment(c: Context<AuthEnv>, data: z.infer<typeof 
     if (error instanceof InspirationAttachmentError) return c.json({ error: error.message, code: error.code }, error.status);
     throw error;
   }
-  type Refusal = { refused: { error: string; status: 404 | 409 | 410 | 429 } };
+  type Refusal = { refused: { error: string; status: 404 | 409 | 410 | 429; code?: string } };
   const outcome = await db.transaction(async (tx): Promise<Refusal | { row: Parameters<typeof serializeMessageAttachment>[0] }> => {
     await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.id, profileId)).for('update');
     const [conversation] = await tx.select({ profileId: conversations.profileId, deletedAt: conversations.deletedAt })
@@ -662,15 +662,20 @@ async function finalizeChatAttachment(c: Context<AuthEnv>, data: z.infer<typeof 
     if (forMessage.length >= MAX_MESSAGE_ATTACHMENTS) return { refused: { error: `A message can carry up to ${MAX_MESSAGE_ATTACHMENTS} attachments.`, status: 409 } };
     const capFrom = stagedCapCutoff(new Date()).getTime();
     if (staged.filter((row) => row.createdAt.getTime() > capFrom).length >= MAX_STAGED_MESSAGE_ATTACHMENTS) return { refused: { error: 'Too many unsent attachments. Send or discard a draft first.', status: 429 } };
-    const [reused] = await tx.select({ id: attachments.id }).from(attachments).where(eq(attachments.s3Key, data.key)).limit(1);
-    if (reused) return { refused: { error: 'This upload is already attached. Upload it again.', status: 409 } };
+    /* The same rule, and the same lock, as note capture and the inspiration
+       finalize: one door's check, not a second copy that could drift. */
+    try { await assertAttachmentKeysUnused(tx, [data.key]); }
+    catch (error) {
+      if (error instanceof InspirationAttachmentError) return { refused: { error: error.message, status: 409, code: error.code } };
+      throw error;
+    }
     const [row] = await tx.insert(attachments).values({
       profileId, inspirationId: null, conversationId: data.conversationId, stagedMessageId: data.messageId,
       type: data.type, name: data.name ?? null, ...object, enrichmentStatus: 'unavailable',
     }).returning(messageAttachmentSelection);
     return { row: row! };
   });
-  if ('refused' in outcome) return c.json({ error: outcome.refused.error }, outcome.refused.status);
+  if ('refused' in outcome) return c.json({ error: outcome.refused.error, ...(outcome.refused.code ? { code: outcome.refused.code } : {}) }, outcome.refused.status);
   return c.json({ attachment: serializeMessageAttachment(outcome.row) }, 201);
 }
 

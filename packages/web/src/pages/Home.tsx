@@ -5420,25 +5420,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           const verdict = door === 'file' ? inspectAttachmentFile(file) : null;
           if (verdict?.kind === 'file') {
             if (epoch !== fileOwnerEpoch.current) return;
-            const name = file.name.slice(0, 255) || say('worldAddFile');
+            const name = file.name.slice(0, 255) || say('worldChatAttachmentFileUnnamed');
             accepted.push({ id: crypto.randomUUID(), type: 'file', name,
               blob: file.type === verdict.contentType ? file : new File([file], file.name, { type: verdict.contentType, lastModified: file.lastModified }) });
             continue;
           }
           const checked = audio ? file : await inspectInspirationPhoto(file);
           if (epoch !== fileOwnerEpoch.current) return;
-          accepted.push({ id: crypto.randomUUID(), type: audio ? 'audio' : 'image', name: checked.name.slice(0, 255) || 'Photo', blob: checked });
+          accepted.push({ id: crypto.randomUUID(), type: audio ? 'audio' : 'image', name: checked.name.slice(0, 255) || say('worldChatAttachmentPhotoUnnamed'), blob: checked });
         } catch (reason) {
           /* A REFUSED FILE STAYS ON THE SHELF, MARKED, as a refused photo
              does — so the person sees which one and can take it off. The
              reason is said in their language: `FileRefused` carries a code. */
           if (reason instanceof FileRefused) {
-            accepted.push({ id: crypto.randomUUID(), type: 'file', name: file.name.slice(0, 255) || say('worldAddFile'), blob: file,
+            accepted.push({ id: crypto.randomUUID(), type: 'file', name: file.name.slice(0, 255) || say('worldChatAttachmentFileUnnamed'), blob: file,
               validationError: say(reason.reason === 'too_large' ? 'worldAttachTooLarge' : reason.reason === 'empty' ? 'worldPhotoEmpty' : 'worldAttachUnsupported') });
             continue;
           }
           const message = reason instanceof Error ? reason.message : 'Couldn’t read this file.';
-          if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', name: file.name.slice(0, 255) || 'Photo', blob: file, validationError: message });
+          if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', name: file.name.slice(0, 255) || say('worldChatAttachmentPhotoUnnamed'), blob: file, validationError: message });
           else problems.push(`${file.name}: ${message}`);
         }
       }
