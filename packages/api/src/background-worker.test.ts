@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { handler } from "./background-worker.js";
+import { handler, isScheduledEvent } from "./background-worker.js";
 import { runBackgroundJobWorker,readBackgroundJobRecoveryState,hasNearTermBackgroundJobRetry,hasNearTermRequestedReading,type BackgroundJobRetryWake } from "./lib/queue.js";
 
 /** WHAT THIS MOCKS, AND WHY: `runBackgroundJobWorker` supplies completed pass
@@ -161,5 +161,14 @@ describe("background worker cron handler", () => {
 
     expect(runBackgroundJobWorker).toHaveBeenCalledTimes(1);
     expect(drained).toMatchObject({ claimed: 0, deferred: 0, passes: 1 });
+  });
+});
+
+describe("the deleted shelf's daily sweep", () => {
+  it("is the scheduled cron's alone, never an enqueue or a local wake", () => {
+    expect(isScheduledEvent({ source: "aws.events", "detail-type": "Scheduled Event" })).toBe(true);
+    expect(isScheduledEvent({ mode: "enqueue" })).toBe(false);
+    expect(isScheduledEvent(undefined)).toBe(false);
+    expect(isScheduledEvent({ source: "aws.events", "detail-type": "Something Else" })).toBe(false);
   });
 });

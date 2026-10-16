@@ -122,3 +122,12 @@ it('sweeps everyone\'s expired copies in the daily run, and leaves them out of t
   expect(await sweepDeletedShelf(t.db as never, new Date())).toBe(1);
   expect((await t.sql`SELECT profile_id FROM deleted_inspirations`).map((row) => row.profile_id)).toEqual([other.profileId]);
 });
+it('gives a restored save back to the harvest candidate it was kept from', async () => {
+  const f = await fixture();
+  const [candidate] = await t.sql`INSERT INTO harvest_candidates(profile_id,status,source_hash,inspiration_id,context)
+    VALUES (${f.profileId},'kept','h',${f.id},${JSON.stringify({ keptAs: f.id })}::jsonb) RETURNING id`;
+  await f.app.request(`/api/inspirations/${f.id}`, { method: 'DELETE' });
+  expect((await t.sql`SELECT inspiration_id FROM harvest_candidates WHERE id=${candidate!.id}`)[0]!.inspiration_id).toBeNull();
+  await f.app.request(`/api/inspirations/deleted/${f.id}/restore`, { method: 'POST' });
+  expect((await t.sql`SELECT inspiration_id, source_hash FROM harvest_candidates WHERE id=${candidate!.id}`)[0]).toEqual({ inspiration_id: f.id, source_hash: 'h' });
+});

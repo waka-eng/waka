@@ -14,3 +14,5 @@ CREATE TABLE "deleted_inspirations" (
   "deleted_at" timestamp with time zone NOT NULL DEFAULT now()
 );--> statement-breakpoint
 CREATE INDEX "deleted_inspirations_recent" ON "deleted_inspirations" ("profile_id","deleted_at");
+--> statement-breakpoint
+CREATE INDEX "deleted_inspirations_expiry" ON "deleted_inspirations" ("deleted_at");

@@ -61,5 +61,7 @@ export const deletedInspirations = pgTable(
   },
   (table) => ({
     recent: index("deleted_inspirations_recent").on(table.profileId, table.deletedAt),
+    /** The daily sweep reads by age across everyone (`sweepDeletedShelf`). */
+    expiry: index("deleted_inspirations_expiry").on(table.deletedAt),
   }),
 );

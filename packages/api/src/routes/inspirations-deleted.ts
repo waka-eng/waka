@@ -11,10 +11,10 @@
  * away, and an agent or a keeper key on disk has no business reading it or
  * bringing things back.
  */
-import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
-import { deletedInspirations, inspirationRevisions, inspirations, reflections } from "../db/index.js";
+import { deletedInspirations, harvestCandidates, inspirationRevisions, inspirations, reflections } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { deletedShelfCutoff, deletedShelfGoneAt } from "../lib/deleted-shelf.js";
 import { humanSessionsOnly, type AuthEnv } from "../lib/middleware.js";
@@ -97,6 +97,13 @@ export function registerDeletedRoutes(routes: Hono<AuthEnv>, getDatabase: typeof
           question: reflection.question, answer: reflection.answer, skipped: reflection.skipped,
           createdAt: new Date(at.getTime() + index) })));
       }
+      /* A save that a harvest candidate became is that candidate's again:
+         its link emptied when the save was deleted, and its hash was held
+         while the copy waited here (`lapseHarvest`), so the same sentence
+         is not proposed beside the save it already is. */
+      await tx.update(harvestCandidates).set({ inspirationId: copy.id })
+        .where(and(eq(harvestCandidates.profileId, profileId), eq(harvestCandidates.status, "kept"), isNull(harvestCandidates.inspirationId),
+          sql`${harvestCandidates.context}->>'keptAs' = ${copy.id}::text`));
       await tx.delete(deletedInspirations).where(eq(deletedInspirations.id, copy.id));
       await requestSignalDerivation({ profileId, inspirationId: copy.id, reason: "created", changedSource: "inspiration" }, tx);
       return { state: "restored" as const, notRestored: copy.hadPhoto ? ["attachments"] : [] };

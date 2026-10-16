@@ -23,7 +23,7 @@ import { and, asc, count, eq, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
-import { HARVEST_LAPSE_DAYS, harvestCandidates, harvestReasonValues, inspirationSaveRequests, inspirations, type HarvestContext } from "../db/index.js";
+import { HARVEST_LAPSE_DAYS, deletedInspirations, harvestCandidates, harvestReasonValues, inspirationSaveRequests, inspirations, type HarvestContext } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { validationDetails } from "../lib/validation.js";
@@ -127,8 +127,8 @@ type HarvestWriter = Pick<ReturnType<typeof getDb>, "update">;
  *
  * AND A KEPT SENTENCE WHOSE SAVE IS GONE may be asked about again: the
  * hash stayed so a kept line is not proposed twice, but once the person has
- * deleted that save (the foreign key empties `inspiration_id`) nothing would
- * otherwise ever let it back.
+ * deleted that save (the foreign key empties `inspiration_id`) and it has
+ * left the deleted shelf, nothing would otherwise ever let it back.
  */
 export async function lapseHarvest(db: HarvestWriter, profileId: string, at: Date): Promise<void> {
   const cutoff = new Date(at.getTime() - LAPSE_MS);
@@ -139,7 +139,10 @@ export async function lapseHarvest(db: HarvestWriter, profileId: string, at: Dat
   await db
     .update(harvestCandidates)
     .set({ sourceHash: null })
-    .where(and(eq(harvestCandidates.profileId, profileId), eq(harvestCandidates.status, "kept"), isNull(harvestCandidates.inspirationId), sql`${harvestCandidates.sourceHash} IS NOT NULL`));
+    .where(and(eq(harvestCandidates.profileId, profileId), eq(harvestCandidates.status, "kept"), isNull(harvestCandidates.inspirationId), sql`${harvestCandidates.sourceHash} IS NOT NULL`,
+      /* Not while the save waits on the deleted shelf: it may come back,
+         and then this sentence is kept again (see the shelf's restore). */
+      sql`NOT EXISTS (SELECT 1 FROM ${deletedInspirations} WHERE ${deletedInspirations.profileId} = ${profileId} AND ${deletedInspirations.id}::text = ${harvestCandidates.context}->>'keptAs')`));
 }
 
 export interface HarvestRouteDependencies {
