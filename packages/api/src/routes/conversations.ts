@@ -123,7 +123,13 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
         /* A retry is the same create only if it asks for the same memory:
            joining an agent chat from a create that asked for your own (or
            the other way round) would quietly discard what the caller chose. */
-        if(existing.perspective!==(input.data.perspective??'mine')||(existing.agentProfileId??null)!==(input.data.agentId??null))
+        /* Compared as the memory each one means, not column for column: an
+           agent id only matters when the perspective is not 'mine', and a
+           chat whose agent has since been removed reads as 'mine'. */
+        const stored=await conversationMemory(tx,profileId,existing);
+        const asked=input.data.perspective&&input.data.perspective!=='mine'&&input.data.agentId?{perspective:input.data.perspective,agentId:input.data.agentId}:{perspective:'mine' as const,agentId:null};
+        const removed=existing.perspective!=='mine'&&stored.perspective==='mine';
+        if(!removed&&(stored.perspective!==asked.perspective||stored.agentId!==asked.agentId))
           throw new ConversationError('This conversation already began with a different memory.',409);
         const current=await readConversation(tx,profileId,input.data.id);
         if(input.data.firstMessage){

@@ -251,3 +251,13 @@ it('reports an agent chat whose agent is gone as your own memory',async()=>{
   const read=await (await f.app.request(`/conversations/${f.id}`)).json() as {conversation:{perspective:string;agentProfileId:string|null}};
   expect(read.conversation).toMatchObject({perspective:'mine',agentProfileId:null});
 });
+it('treats an identical retry as the same create, for your own memory and after the agent is removed',async()=>{
+  const f=await fixture();
+  const [agent]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${f.accountId},'agent','Soon gone') RETURNING id`;
+  const mine=randomUUID();
+  expect((await f.send('',{id:mine,perspective:'mine'})).status).toBe(200);
+  expect((await f.send('',{id:mine,perspective:'mine',agentId:agent.id})).status,'an agent id means nothing for your own memory').toBe(200);
+  expect((await f.send('',{id:f.id,perspective:'agent',agentId:agent.id})).status).toBe(200);
+  await t.sql`DELETE FROM profiles WHERE id=${agent.id}`;
+  expect((await f.send('',{id:f.id,perspective:'agent',agentId:agent.id})).status,'the same retry after the agent went').toBe(200);
+});

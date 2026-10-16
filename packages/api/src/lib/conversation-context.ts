@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {and,asc,desc,eq,inArray,sql} from 'drizzle-orm';
+import {alias} from 'drizzle-orm/pg-core';
 import {inspirations,principles,profiles,type ConversationPerspective,type ConversationReference} from '../db/index.js';
 import type {getDb} from './db.js';
 import {personalPrincipleReadable,personalPrincipleSupportCurrent} from './personal-output.js';
@@ -162,10 +163,11 @@ export async function conversationMemory(db:Reader,profileId:string,conversation
  * rule for a chat's agent: checked when the chat is started, and again every
  * time it is read. */
 export async function accountAgent(db:Reader,profileId:string,agentId:string):Promise<string|null>{
-  const [owner]=await db.select({accountId:profiles.accountId,type:profiles.type}).from(profiles).where(eq(profiles.id,profileId));
-  if(!owner?.accountId||owner.type!=='human')return null;
+  /* One self-join: it runs on every read, reply and reference of an agent chat. */
+  const person=alias(profiles,'person');
   const [agent]=await db.select({id:profiles.id}).from(profiles)
-    .where(and(eq(profiles.id,agentId),eq(profiles.accountId,owner.accountId),eq(profiles.type,'agent')));
+    .innerJoin(person,and(eq(person.id,profileId),eq(person.type,'human'),eq(person.accountId,profiles.accountId)))
+    .where(and(eq(profiles.id,agentId),eq(profiles.type,'agent')));
   return agent?.id??null;
 }
 /** Every profile whose sources this chat may cite. */
