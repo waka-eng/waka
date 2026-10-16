@@ -185,3 +185,15 @@ it("holds only the top three, and the creature, not a title, says these are your
   expect(host.querySelector(".waka-over-head")?.classList.contains("sr-only"), "the title is for screen readers only").toBe(true);
   expect(host.querySelector(".waka-over-what"), "the one-visit line is gone").toBeNull();
 });
+
+/* AN AGENT'S PRINCIPLES ARE NOT YOURS (review, 2026-10-16): the same page
+   reads an agent's wall, and the bubble must say whose they are. */
+it("says these are your agent's principles on an agent's wall", async () => {
+  vi.mocked(fetchPrinciples).mockResolvedValue([PRINCIPLE]);
+  await act(async () => root.render(
+    <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Bot" title="Your Agent's Principles" whose="agent" onClose={() => {}} onOpen={() => {}} />,
+  ));
+  const said = host.querySelector(".waka-held-hero .waka-held-says")?.textContent ?? "";
+  expect(said).toBe("These are your agent's principles: what has stayed true across its top of mind for a long time.");
+  expect(said).not.toContain("These are your principles");
+});

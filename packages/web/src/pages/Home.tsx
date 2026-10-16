@@ -11415,6 +11415,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         name={atWall.kind==='agent'?atWall.name:auth?.profile?.name??''}
         title={say(atWall.kind==='agent'?'worldAgentPrinciples':'worldPrinciplesShortcut')}
+        whose={atWall.kind==='agent'?'agent':'own'}
         onClose={leaveOpen}
         /* Opening one REPLACES the overlay rather than stacking on it: the
            principle's own surface is the next thing to read, not a sheet on

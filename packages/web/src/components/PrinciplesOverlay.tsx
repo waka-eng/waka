@@ -117,10 +117,16 @@ function pageCreature(): CreatureSpot | null {
 
 /** How far a pull left on the page travels, in CSS px, before it is the walk home. */
 const PULL_HOME = 56;
-/** The page holds the top three principles, never more. */
+/**
+ * The page holds the top three principles, never more. Founder, 2026-10-16:
+ * "have max 3 principles only". Ranks past three are NOT deleted, only not
+ * shown here — they stay in the ranked set and on each principle's own
+ * surface ("fading never deletes"). No "more" control, by the founder's
+ * explicit "max 3".
+ */
 const MAX_HELD = 3;
 
-export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onOpen, onShare, onChat, crossing = null, onCrossed }: {
+export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own", onClose, onOpen, onShare, onChat, crossing = null, onCrossed }: {
   locale: SupportedLocale;
   profileId?: string | null;
   /** Whose name goes on the card. The attribution is half of why a card is
@@ -128,6 +134,9 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
       rather than printing an empty byline. */
   name: string;
   title: string;
+  /** Whose principles these are — the bubble must not call an agent's
+      principles yours. Chosen by Home the same way it chooses `title`. */
+  whose?: "own" | "agent";
   onClose: () => void;
   onOpen: (id: string) => void;
   /** Straight to the artifact. Optional so a surface that cannot share —
@@ -318,7 +327,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
                one who walked here, so the page keeps it in view. */
             <div className="waka-ground-hero waka-ground-hero--ready waka-held-hero" style={{ ["--charge" as string]: 1 }}>
               <div className="jar-char-bubble-body waka-ground-bubble waka-held-says">
-                <span className="jar-char-bubble-reading">{say("worldPrinciplesWhatIs")}</span>
+                <span className="jar-char-bubble-reading">{say(whose === "agent" ? "worldPrinciplesWhatIsAgent" : "worldPrinciplesWhatIs")}</span>
               </div>
               <span className="waka-ground-being" data-crossing-target="88" style={{ ["--being" as string]: "90px" }}><Companion size={88} /></span>
             </div>
