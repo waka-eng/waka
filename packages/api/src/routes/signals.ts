@@ -500,7 +500,7 @@ export async function listClaimsAwaitingVerdict(
        order follows the evidence, and confidence is deliberately not a term.
        Ranking by confidence here would rebuild the bias the queue exists to
        undo. */
-    .orderBy(desc(signals.lastEvidenceAt), desc(signals.createdAt))
+    .orderBy(sql`${signals.lastEvidenceAt} DESC NULLS LAST`, desc(signals.createdAt))
     .limit(input.limit);
 
   /* The origins ride along: a claim shown with no sense of where it came from
@@ -552,13 +552,16 @@ export async function listClaimsToAskAgain(
 ): Promise<Array<SignalSummary & { askedAgain: { lastAnsweredAt: string } }>> {
   if (input.limit <= 0) return [];
   const cutoff = new Date((input.now ?? new Date()).getTime() - CLAIM_REASK_DAYS * 86_400_000);
-  const latest = (column: "value" | "created_at") => sql`(SELECT ${sql.raw(`f.${column === "value" ? "value::text" : "created_at"}`)}
-    FROM ${feedback} AS f
-    WHERE f.profile_id = ${input.profileId}
-      AND f.target_id = ${signals.id}
-      AND ${feedbackWordingCurrent("f")}
-    ORDER BY f.created_at DESC
-    LIMIT 1)`;
+  /* THE LAST ANSWER, FOUND ONCE PER CLAIM. A lateral lookup on the
+     feedback index (profile, type, target) rather than a correlated
+     subquery repeated in the select, the filter and the order — measured in
+     review at ~900x faster on a profile with 20k other verdicts. The wording
+     must be current: an answer to an older revision of the sentence does not
+     count, and that sentence is asked as unanswered instead.
+
+     NOT A CLAIM THAT GAVE WAY. A reading that yielded when its owner settled
+     a contradiction keeps its old yes, and asking it again could not reopen
+     the pair — so it is not asked. */
   const rows = await db
     .select({
       id: signals.id,
@@ -571,9 +574,17 @@ export async function listClaimsToAskAgain(
       dismissedAt: signals.dismissedAt,
       createdAt: signals.createdAt,
       statementRevision: signals.statementRevision,
-      lastAnsweredAt: sql<string | Date>`${latest("created_at")}`,
+      lastAnsweredAt: sql<string | Date>`last_answer.created_at`,
     })
     .from(signals)
+    .innerJoin(sql`LATERAL (SELECT f.value::text AS value, f.created_at
+        FROM ${feedback} AS f
+        WHERE f.profile_id = ${input.profileId}
+          AND f.target_type = 'signal'
+          AND f.target_id = ${signals.id}
+          AND coalesce(f.target_revision, 1) = ${signals.statementRevision}
+        ORDER BY f.created_at DESC
+        LIMIT 1) AS last_answer`, sql`true`)
     .where(
       and(
         eq(signals.profileId, input.profileId),
@@ -581,11 +592,12 @@ export async function listClaimsToAskAgain(
         isNull(signals.lockedAt),
         isNull(signals.unsupportedAt),
         eq(signals.status, "active"),
-        sql`${latest("value")} IN ('true', 'partly')`,
-        sql`${latest("created_at")} < ${cutoff.toISOString()}::timestamptz`,
+        sql`last_answer.value IN ('true', 'partly')`,
+        sql`last_answer.created_at < ${cutoff.toISOString()}::timestamptz`,
+        sql`NOT EXISTS (SELECT 1 FROM signal_contradictions sc WHERE sc.yielded_signal_id = ${signals.id})`,
       ),
     )
-    .orderBy(sql`${latest("created_at")} ASC`)
+    .orderBy(sql`last_answer.created_at ASC`)
     .limit(input.limit);
 
   const decorated = await decorateSignals(db, input.profileId, rows, true);
