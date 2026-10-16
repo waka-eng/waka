@@ -12,6 +12,9 @@
  *   GET    /api/inspirations/:id/processing            saved material → reading
  *   POST   /api/inspirations/:id/processing/retry      recover failed work
  *   GET    /api/inspirations/save-requests/:requestId  reconcile an authored save
+ *   GET    /api/inspirations/deleted                  the deleted shelf, 30 days
+ *   POST   /api/inspirations/deleted/:id/restore      bring one back
+ *   DELETE /api/inspirations/deleted/:id              gone for good
  *
  * An inspiration is whatever arrived — pasted text, a link, an image, an
  * agent's relayed excerpt. It is editable and deletable, and it is never
@@ -77,6 +80,7 @@ import { registerRecallRoutes } from "./inspirations-recall.js";
 import { registerReflectionRoutes } from "./inspirations-reflections.js";
 import { registerProcessingRoutes } from "./inspirations-processing.js";
 import { registerSaveRequestRoutes } from './inspirations-save-requests.js';
+import { registerDeletedRoutes } from './inspirations-deleted.js';
 import type { AttachmentHead } from '../lib/inspiration-attachments.js';
 
 export type { CreateInspirationInput } from "./inspirations-validation.js";
@@ -85,6 +89,9 @@ export interface InspirationsRouteDependencies {
   getDatabase?: typeof getDb;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
   attachmentHead?: AttachmentHead;
+  /** One clock for the delete and the deleted shelf, so a copy's month is
+      measured the same way where it is filed and where it lapses. */
+  now?: () => Date;
 }
 
 export function createInspirationsRoutes(
@@ -104,8 +111,11 @@ export function createInspirationsRoutes(
   // `/:id/reflections`, but that is a property of the patterns rather than
   // something to rediscover the next time one changes.
   registerCaptureRoutes(routes, getDatabase, deps.attachmentHead);
+  /* Before recall: `GET /deleted` must not reach `GET /:id`. */
+  const now = deps.now ?? (() => new Date());
+  registerDeletedRoutes(routes, getDatabase, now);
   registerRecallRoutes(routes, getDatabase);
-  registerEditingRoutes(routes, getDatabase);
+  registerEditingRoutes(routes, getDatabase, now);
   registerReflectionRoutes(routes, getDatabase);
   registerProcessingRoutes(routes, getDatabase);
   registerSaveRequestRoutes(routes, getDatabase);

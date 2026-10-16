@@ -20,6 +20,8 @@
 
 import { runBackgroundJobWorker,readBackgroundJobRecoveryState,hasNearTermBackgroundJobRetry,readBackgroundJobWakeReferences,hasNearTermRequestedReading,collectReadingWakeReferences,type BackgroundJobRetryWake } from "./lib/queue.js";
 import {QUEUE_RECOVERY_LIMITS,recordQueueRecovery} from './lib/queue-recovery.js';
+import {sweepDeletedShelf} from './lib/deleted-shelf.js';
+import {getDb} from './lib/db.js';
 
 const DEFAULT_CRON_LIMIT = 5;
 const MAX_CRON_LIMIT = 25;
@@ -38,6 +40,11 @@ function parseCronLimit(raw: string | undefined): number {
   return Math.min(parsed, MAX_CRON_LIMIT);
 }
 
+/** The daily cron's EventBridge event, and nothing else. */
+export function isScheduledEvent(event:unknown):boolean{
+  return Boolean(event&&typeof event==='object'&&(event as {source?:unknown}).source==='aws.events'&&(event as {'detail-type'?:unknown})['detail-type']==='Scheduled Event');
+}
+
 export async function handler(event?:unknown) {
   if(event&&typeof event==='object'&&(event as {mode?:unknown}).mode==='recovery'){
     const state=await readBackgroundJobRecoveryState();recordQueueRecovery(state);
@@ -51,6 +58,14 @@ export async function handler(event?:unknown) {
   // Local calls, daily sweeps and recovery must not manufacture Lambda errors.
   const asyncEnqueue = Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME && event && typeof event==='object' && (event as {mode?:unknown}).mode==='enqueue');
   const wakes=asyncEnqueue?readBackgroundJobWakeReferences((event as {wakes?:unknown}).wakes):[];
+  /* The daily run also lets the deleted shelf's expired copies go, for the
+     people who never open it again. Only on the scheduled event — not on an
+     enqueue or a local wake, which are a person's work waiting — and a
+     failure here never costs the queue its pass. */
+  if(isScheduledEvent(event)){
+    try{const swept=await sweepDeletedShelf(getDb(),new Date());if(swept)console.info('[deleted-shelf-sweep]',JSON.stringify({swept}));}
+    catch(error){console.warn('[deleted-shelf-sweep] failed',error instanceof Error?error.message:String(error));}
+  }
   const retries:BackgroundJobRetryWake[]=[];
   const total = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
   let passes = 0;

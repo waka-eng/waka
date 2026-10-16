@@ -223,6 +223,19 @@ describe("keeping", () => {
     expect((await propose(me, "Kept, then deleted.")).body).toEqual({ proposed: 1, skipped: 0 });
   });
 
+  it("holds a kept sentence while its save waits on the deleted shelf", async () => {
+    const me = await seedPerson("shelved");
+    await propose(me, "On the shelf for now.");
+    const [candidate] = await waiting(me);
+    const inspirationId = await saved(me, "On the shelf for now.", { candidate: candidate!.id });
+    await call(me, "POST", `/${candidate!.id}/keep`, { inspirationId });
+    await t.sql`INSERT INTO deleted_inspirations (id, profile_id, text, source, visibility, kept_at) VALUES (${inspirationId}, ${me.profileId}, 'On the shelf for now.', 'app', 'private', now())`;
+    await t.sql`DELETE FROM inspirations WHERE id = ${inspirationId}`;
+    expect((await propose(me, "On the shelf for now.")).body, "it may still come back").toEqual({ proposed: 0, skipped: 1 });
+    await t.sql`DELETE FROM deleted_inspirations WHERE id = ${inspirationId}`;
+    expect((await propose(me, "On the shelf for now.")).body, "gone for good, so it may be asked again").toEqual({ proposed: 1, skipped: 0 });
+  });
+
   it("refuses to link someone else's save", async () => {
     const me = await seedPerson("linker");
     const them = await seedPerson("other");
