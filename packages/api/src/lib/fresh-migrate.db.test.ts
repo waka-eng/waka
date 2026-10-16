@@ -31,9 +31,11 @@
  * WHAT THIS MOCKS, AND WHY: nothing, and it deliberately does not use the
  * shared test-schema helper. That helper replays the migration files by hand
  * into a schema, which is exactly the thing that hid this bug; this case
- * calls drizzle's own migrator against a database it creates and drops.
+ * calls drizzle's own migrator against a real, empty database. That
+ * database is provisioned by `test/global-database-provision.ts` rather
+ * than by this file — see the note on `DATABASE` below for why.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
@@ -45,8 +47,13 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import {execFileSync} from 'node:child_process';
 
-/** `waka_freshmig_<random>` — created here, dropped in afterAll. */
-const DATABASE = `waka_freshmig_${Math.random().toString(36).slice(2, 10)}`;
+/* THE NAMES COME FROM `test/global-database-provision.ts`, which creates both
+   databases before any worker starts and drops them after every worker has
+   stopped. This file performs NO `CREATE`/`DROP DATABASE` of its own: those
+   are cluster-wide operations costing 0.25s on an idle server and 14-25s
+   under this suite, and doing them in a hook is what made this file fail
+   with "1660 passed, 0 failed" on roughly one run in three. */
+const DATABASE = inject("freshMigrateDb");
 
 function migrationsFolder(): string {
   let cursor = fileURLToPath(new URL(".", import.meta.url));
@@ -59,36 +66,37 @@ function migrationsFolder(): string {
 }
 
 const url = process.env.DB_CONNECTION_URL ?? process.env.DATABASE_URL ?? "";
-/** The admin connection creates and drops; it must not be the target itself. */
-let admin: postgres.Sql | undefined;
 let freshUrl = "";
 
-describe("the first migration on an empty database", () => {
-  beforeAll(async () => {
-    admin = postgres(url, { max: 1, onnotice: () => {} });
-    await admin.unsafe(`CREATE DATABASE "${DATABASE}"`);
-    freshUrl = url.replace(/\/[^/?]+(\?|$)/, `/${DATABASE}$1`);
-  }, 60_000);
 
-  /* ═══ 60s, THE SAME CEILING ITS `beforeAll` ALREADY HAS ════════════════
-     This hook asked for no timeout and so inherited vitest's 45s default,
-     while the `beforeAll` directly above asks for 60. Under the full API
-     suite — 187 files, many holding Postgres connections — `DROP DATABASE
-     ... WITH (FORCE)` waits to terminate those backends and overran it.
-     The run then reported FAIL with `1842 passed, 0 failed`: a file-level
+describe("the first migration on an empty database", () => {
+  beforeAll(() => {
+    freshUrl = url.replace(/\/[^/?]+(\?|$)/, `/${DATABASE}$1`);
+  });
+
+  /* ═══ WHY NEITHER HOOK PROVISIONS ANYTHING ════════════════════════════
+     This file used to `CREATE DATABASE` in `beforeAll` and `DROP DATABASE`
+     in `afterAll`. Both are cluster-wide — a template copy, a directory
+     removal, a checkpoint — and they contend with concurrency rather than
+     scaling with it. Measured on a 10-core machine against local Postgres
+     17: 0.25s on an idle server, and 14.4s / 21.1s / 25.4s while the full
+     api suite runs. The hook overran its timeout on roughly one run in
+     three and reported FAIL beside `1660 passed, 0 failed` — a file-level
      failure with no failing assertion, which is the shape that teaches
      people to rerun CI instead of reading it.
 
-     IT IS A FIX, NOT A LONGER WAIT. After one such failure the orphaned
-     database was looked for and was already gone — the statement had
-     completed and the hook was merely slow. In isolation the same teardown
-     finishes in under a second. */
-  afterAll(async () => {
-    if (admin) {
-      await admin.unsafe(`DROP DATABASE IF EXISTS "${DATABASE}" WITH (FORCE)`).catch(() => {});
-      await admin.end();
-    }
-  }, 60_000);
+     TWO FIXES WERE TRIED AND BOTH WERE WRONG, which is worth keeping:
+     raising the ceiling (45s -> 60s) only moved a number that depends on
+     what the other 170 files happen to be doing; and bounding the DROP
+     while leaving `sql.end()` alone did nothing, because `end()` waits for
+     queries still in flight on that connection.
+
+     The work now happens in `test/global-database-provision.ts`, once
+     before any worker starts and once after every worker has stopped,
+     against an idle cluster. This file is handed two names and connects
+     to them. */
+  /* No `afterAll`: there is nothing of this file's to tear down. The
+     database is the provisioner's and it drops both when the run ends. */
 
   it("applies the whole corpus through drizzle's own migrator, in one run", async () => {
     const sql = postgres(freshUrl, { max: 1, onnotice: () => {} });
@@ -303,25 +311,19 @@ describe("the first migration on an empty database", () => {
  * it is literally the state of `meta/_journal.json` at commit a063bd1b.
  */
 describe("a database that migrated during the broken journal window", () => {
-  const STUCK = `waka_stuckmig_${Math.random().toString(36).slice(2, 10)}`;
-  let stuckAdmin: postgres.Sql | undefined;
+  const STUCK = inject("stuckMigrateDb");
   let stuckUrl = "";
   let staged = "";
 
-  beforeAll(async () => {
-    stuckAdmin = postgres(url, { max: 1, onnotice: () => {} });
-    await stuckAdmin.unsafe(`CREATE DATABASE "${STUCK}"`);
+  beforeAll(() => {
     stuckUrl = url.replace(/\/[^/?]+(\?|$)/, `/${STUCK}$1`);
     staged = mkdtempSync(join(tmpdir(), "waka-prefix-journal-"));
-  }, 60_000);
+  });
 
-  afterAll(async () => {
-    if (stuckAdmin) {
-      await stuckAdmin.unsafe(`DROP DATABASE IF EXISTS "${STUCK}" WITH (FORCE)`).catch(() => {});
-      await stuckAdmin.end();
-    }
+  afterAll(() => {
+    /* The staged journal is this file's own; the database is not. */
     if (staged) rmSync(staged, { recursive: true, force: true });
-  }, 60_000);
+  });
 
   it("receives `inspirations.category` anyway, through 0071", async () => {
     const folder = migrationsFolder();
