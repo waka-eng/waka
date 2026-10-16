@@ -197,3 +197,23 @@ it("says these are your agent's principles on an agent's wall", async () => {
   expect(said).toBe("These are your agent's principles: what has stayed true across its top of mind for a long time.");
   expect(said).not.toContain("These are your principles");
 });
+
+it("on an agent's wall, the waiting ground and the first-principle greeting speak of the agent", async () => {
+  const agentPage = () => act(async () => root.render(
+    <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Bot" title="Your Agent's Principles" whose="agent" onClose={() => {}} onOpen={() => {}} />,
+  ));
+  vi.mocked(fetchSignals).mockResolvedValue([]);
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);
+  await agentPage();
+  expect(line()).toBe("Nothing is holding yet. I’m watching for what your agent keeps coming back to.");
+  expect(host.querySelector(".waka-ground-foot")?.textContent).toBe("Your agent’s first principle");
+  expect(host.querySelector(".waka-ground")?.getAttribute("aria-label")).toBe("What your agent’s first principle will grow from");
+
+  vi.mocked(fetchPrinciples).mockResolvedValue([{ ...PRINCIPLE, citedSignals: [{ examples: [{}, {}] }] } as unknown as ApiPrinciple]);
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  await agentPage();
+  expect(host.querySelector(".waka-held-first")?.textContent).toBe("Here it is. Your agent’s first principle.");
+  expect(host.querySelector(".waka-held-proof")?.textContent).toContain("Drawn from two things it kept");
+  expect(host.textContent).not.toMatch(/your (first )?principle|you kept/i);
+});

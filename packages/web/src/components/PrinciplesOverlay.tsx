@@ -155,6 +155,10 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
   onCrossed?: () => void;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
+  /* EVERY VISIBLE LINE SAYS WHOSE THESE ARE (review, 2026-10-16). With the
+     title for screen readers only, the page's own words are the only
+     attribution left, so on an agent's wall none of them may say "your". */
+  const agent = whose === "agent";
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
   /**
    * THE FIRST ONE IS MET, ONCE.
@@ -300,7 +304,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
         ) : phase === "failed" ? (
           <>
             <p className="waka-over-status" role="alert">
-              {say("worldPrinciplesFailed")}
+              {say(agent ? "worldPrinciplesFailedAgent" : "worldPrinciplesFailed")}
             </p>
             <button type="button" className="waka-over-retry" onClick={() => void load()}>
               {say("worldRetry")}
@@ -308,7 +312,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           </>
         ) : rows.length === 0 ? (
           /* THE WAIT IS THE GROUND BEING LAID — see `PrinciplesGround`. */
-          <PrinciplesGround locale={locale} profileId={profileId} onChat={onChat} />
+          <PrinciplesGround locale={locale} profileId={profileId} whose={whose} onChat={onChat} />
         ) : (
           <>
           {/* THE CREATURE THAT WAITED WITH YOU PRESENTS IT. Same body, same
@@ -317,7 +321,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           {arriving ? (
             <div className="waka-ground-hero waka-ground-hero--ready waka-held-first-hero" style={{ ["--charge" as string]: 1 }}>
               <div className="jar-char-bubble-body waka-ground-bubble waka-held-first">
-                <span className="jar-char-bubble-reading" role="status">{say("worldPrinciplesFirst")}</span>
+                <span className="jar-char-bubble-reading" role="status">{say(agent ? "worldPrinciplesFirstAgent" : "worldPrinciplesFirst")}</span>
               </div>
               <span className="waka-ground-being" data-crossing-target="96" style={{ ["--being" as string]: "98px" }}><Companion size={96} /></span>
             </div>
@@ -327,7 +331,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
                one who walked here, so the page keeps it in view. */
             <div className="waka-ground-hero waka-ground-hero--ready waka-held-hero" style={{ ["--charge" as string]: 1 }}>
               <div className="jar-char-bubble-body waka-ground-bubble waka-held-says">
-                <span className="jar-char-bubble-reading">{say(whose === "agent" ? "worldPrinciplesWhatIsAgent" : "worldPrinciplesWhatIs")}</span>
+                <span className="jar-char-bubble-reading">{say(agent ? "worldPrinciplesWhatIsAgent" : "worldPrinciplesWhatIs")}</span>
               </div>
               <span className="waka-ground-being" data-crossing-target="88" style={{ ["--being" as string]: "90px" }}><Companion size={88} /></span>
             </div>
@@ -374,11 +378,11 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
                           sees. Giving the selector words would silently pick
                           "other" for every value including one. */}
                       {since && from
-                        ? formatMessage(locale, "worldPrincipleEarned", { since, count: from, countWords: numWords(from, locale) })
+                        ? formatMessage(locale, agent ? "worldPrincipleEarnedAgent" : "worldPrincipleEarned", { since, count: from, countWords: numWords(from, locale) })
                         : since
                           ? formatMessage(locale, "worldPrincipleSince", { since })
                           : from
-                            ? formatMessage(locale, "worldPrincipleFrom", { count: from, countWords: numWords(from, locale) })
+                            ? formatMessage(locale, agent ? "worldPrincipleFromAgent" : "worldPrincipleFrom", { count: from, countWords: numWords(from, locale) })
                             : null}
                     </span>
                     {/* ONE PRESS FROM SEEING IT TO SHARING IT.
