@@ -95,7 +95,12 @@ function verbsOffered(): string[] {
 const REGISTER: Record<string, string> = {
   // the archive
   createInspiration: "deleteInspiration",
-  deleteInspiration: "createInspiration",
+  deleteInspiration: "restoreInspiration",
+  /* THE DELETED SHELF (2026-10-15). Deleting now has a real way back: the
+     shelf holds the words for a month and `restoreInspiration` puts them
+     back under the same id and date. */
+  restoreInspiration: "deleteInspiration",
+  forgetDeletedInspiration: "RULED: the shelf's own exit — a copy the person asked to be rid of before the month is up; the confirm is a second press in the shelf row, and the inspiration itself was already deleted",
   updateInspiration: "RULED: an edit is its own inverse — edit it again",
   /* THE REFLECTION PAIR IS GONE, AND THIS IS THE COMMIT IT GOES IN
      (2026-10-10). `createReflection` / `deleteReflection` was a whole and
@@ -143,6 +148,8 @@ const REGISTER: Record<string, string> = {
      settings page the founder folded into the gear's dropdown. The ROUTE
      stands; what is gone is the verb this product offers. */
   createFeedback: "RULED: a verdict is answered by giving a different one, not by withdrawing it",
+  keepHarvest: "RULED: keeping makes an ordinary inspiration, and that inspiration is deleted like any other; the basket's copy of the words is gone by design",
+  declineHarvest: "RULED: letting a candidate go deletes its words at once (the Harvest design), so there is nothing to restore; the same sentence is not proposed again",
   updateTopOfMindEntry: "releaseTopOfMindEntry",
   releaseTopOfMindEntry: "updateTopOfMindEntry",
   dismissTopOfMindEntry: "restoreTopOfMindEntry",

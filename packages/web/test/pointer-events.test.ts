@@ -260,6 +260,27 @@ describe("nothing visible loses its press", () => {
                that is a real button of its own (`.jar-char-press`) rather
                than this. */
             ".waka-companion",
+            /* THE TAG ON A CLAIM SLIP (2026-10-15): one word, `aria-hidden`,
+               on the slip's edge while it is dragged or leaving. The press
+               under it is the drag itself; the named buttons under the slip
+               are the real answers. */
+            ".jar-pick-tag",
+            /* THE NEXT CLAIM, PREVIEWED BEHIND THE FRONT SLIP (2026-10-15):
+               `aria-hidden`, dimmed, and only something to see — the front
+               slip is the one that answers. */
+            ".jar-pick-behind",
+            /* THE STAR TRAILS behind the principles page (2026-10-15): one
+               `aria-hidden` canvas of paint under the page's content. */
+            ".waka-timeless",
+            /* THE CREATURE WALKING BETWEEN NOW AND PRINCIPLES (2026-10-15):
+               one `aria-hidden` canvas, on screen for a second and a half,
+               standing where the world's creature stands. Nothing to press:
+               the dock under it is the way anywhere. */
+            ".waka-crossing-being",
+            /* THE FILM ON A CLAIM CARD (2026-10-15): an empty, `aria-hidden`
+               span of grain under the card's words. The card itself is the
+               press. */
+            ".jar-pick-grain",
           ].includes(selector),
       );
     expect(

@@ -288,14 +288,42 @@ export async function updateInspiration(
  * links. A signal that loses all of its evidence is retired unless a human
  * edit locked it, in which case its text stays and it is marked unsupported.
  */
-export async function deleteInspiration(id: string, options: ProfileScoped & { sourceRevision?: string; signal?: AbortSignal } = {}): Promise<void> {
+export async function deleteInspiration(id: string, options: ProfileScoped & { sourceRevision?: string; signal?: AbortSignal; keepalive?: boolean } = {}): Promise<void> {
   await requestVoid(
     apiPath(`/inspirations/${encodeURIComponent(id)}${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
     "DELETE",
     options.sourceRevision ? { sourceRevision: options.sourceRevision } : undefined,
     "Failed to delete this capture",
     options.signal,
+    options.keepalive,
   );
+}
+
+/** One inspiration on the deleted shelf — held thirty days, then gone. */
+export interface ApiDeletedInspiration {
+  id: string;
+  text: string;
+  kind: string | null;
+  /** Any attachment (photo, recording, file, link): none comes back with the words, and the shelf says so. */
+  hadPhoto: boolean;
+  keptAt: string;
+  deletedAt: string;
+  goneAt: string;
+}
+
+export async function listDeletedInspirations(signal?: AbortSignal): Promise<ApiDeletedInspiration[]> {
+  const body = await getJson<{ deleted: ApiDeletedInspiration[] }>(apiPath("/inspirations/deleted"), "Failed to load deleted inspirations", signal);
+  return body.deleted;
+}
+
+/** Back under the same id and its original date; the reading runs again. */
+export async function restoreInspiration(id: string): Promise<void> {
+  await requestVoid(apiPath(`/inspirations/deleted/${encodeURIComponent(id)}/restore`), "POST", undefined, "Failed to bring this back");
+}
+
+/** Off the shelf for good, before the thirty days are up. */
+export async function forgetDeletedInspiration(id: string): Promise<void> {
+  await requestVoid(apiPath(`/inspirations/deleted/${encodeURIComponent(id)}`), "DELETE", undefined, "Failed to delete this for good");
 }
 
 // ---------------------------------------------------------------------------

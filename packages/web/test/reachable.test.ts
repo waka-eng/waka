@@ -75,7 +75,14 @@ const TOOLS = resolve(dirname(fileURLToPath(import.meta.url)), "../../../tools")
  * `lib/aliveness.ts`'s constants, which is the exact state that module was
  * written to end. See the tombstone there.
  */
-const PRIVATE_ENOUGH = 31;
+/* 31 -> 23 on 2026-10-15. Nobody drained eight exports by hand: the orb
+   bakers and their shading constants went with the balls they drew, and
+   eight of the symbols on this list were among them. */
+/* 23 -> 20 on 2026-10-15, at the merge with `dev`: rooms and the orbs both
+   left, and three exports lost their last importer between them. */
+/* 20 -> 19 on 2026-10-15: `CROSS_MS`, read only by the walk it times,
+   stopped being exported. */
+const PRIVATE_ENOUGH = 19;
 
 function sources(dir: string, found: string[] = []): string[] {
   let entries: string[];

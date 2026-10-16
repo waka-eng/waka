@@ -14,12 +14,13 @@
  * sites, ONE of them covered. The three that left were a room's settings
  * (`space/settings/SpaceSettings.tsx`, deleted), the room form
  * (`space-kinds/GroupPanel.tsx`, deleted) and the join sheet (`Home.tsx`).
- * Re-counted again on 2026-10-15: 6 modal call sites. The one that left was
- * the agent-naming dialog in `Home.tsx`, deleted because nothing could open
- * it — its only opener went with the new-place sheet in `f918b62f` and the
- * verb already lives in `SettingsPanel`.
  * Two of those three were covered, which is why the coverage count fell
- * further than the sheet count.
+ * further than the sheet count. Re-counted again on 2026-10-15: 6 modal call
+ * sites. The one that left was the agent-naming dialog in `Home.tsx`,
+ * deleted because nothing could open it — its only opener went with the
+ * new-place sheet in `f918b62f` and the verb already lives in
+ * `SettingsPanel`. The share sheet (`ShareSheet.tsx`) arrived the same day:
+ * 7 modal call sites, one covered.
  *
  * That is worse than an uncovered sheet, because the file holding the rule
  * was the one place anybody auditing dismissal would look, and it reported
@@ -97,11 +98,14 @@
  *   below stands aside for anything editable, because leaving a half-typed
  *   name is not the same act as leaving the sheet.
  *
- *   READ-ONLY SHEETS THAT SIMPLY NEVER OPTED IN, and which are the three a
+ *   READ-ONLY SHEETS THAT SIMPLY NEVER OPTED IN, and which are the four a
  *   reader of this file would most reasonably expect to be covered: the
  *   memory card (`Home.tsx`, `.jar-panel`), the reading comparison
  *   (`components/ReadingChanges.tsx`) and the principle's share sheet
- *   (`components/PrincipleShare.tsx`). Nothing is lost by closing them, so
+ *   (`components/PrincipleShare.tsx`), joined on 2026-10-15 by the sheet that
+ *   makes a card of a save or the top of mind (`components/ShareSheet.tsx`),
+ *   which wears the principle share's backdrop and so its decision. Nothing
+ *   is lost by closing them, so
  *   the founder's sentence applies to them as directly as it applied to the
  *   sheet it was said about. The memory card is the one with a complication
  *   worth naming before anybody wires it: it opens over the field, and a
@@ -120,7 +124,7 @@
  * press-away to the notepad, against a decision written down in that
  * component's own surface header, and a change that makes a rule universal
  * by breaking the one case the rule was consciously excluded from is not an
- * improvement. The order is: rule on the three read-only sheets, give
+ * improvement. The order is: rule on the four read-only sheets, give
  * `DialogSurface` the behaviour with an opt-out, then delete this section.
  *
  * ── AND THE MECHANICS, WHICH BELONG TO THE HOOK RATHER THAN TO THE LIST ───

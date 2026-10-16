@@ -2640,6 +2640,12 @@
 }
 .jar-panel-foot-r {
   justify-self: end;
+  /* TWO VERBS CAN STAND HERE NOW — Share, then Delete (2026-10-15) — and
+     inline buttons with no gap read as one word, "ShareDelete", which a
+     browser check caught on the first render. */
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-16);
 }
 .jar-panel-foot-c button {
   display: inline-flex;

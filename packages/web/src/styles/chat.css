@@ -1056,4 +1056,60 @@
     min-height: var(--waka-corner);
   }
 }
+
+/* ═══ WHO YOU ARE TALKING WITH ═════════════════════════════════════════
+   Founder, 2026-10-15: "new chat should also let you select if you want to
+   chat with me vs my agent or both perspectives." Three words in the
+   archive's own tab shape, under the opening line, only before the first
+   message. The creatures above them change with the choice. */
+.chat-opening-beings {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* SIDE BY SIDE, CLOSE ENOUGH TO SHARE ONE LIGHT. Each creature's box is four
+   times its body (its own glow), so two boxes side by side stood two bodies
+   apart; they overlap until the bodies are a nub's width from each other.
+   The agent is the smaller, and is set down so their feet meet one line. */
+.chat-opening-beings > .waka-companion + .waka-companion {
+  margin-left: calc(var(--waka-companion-size) * -2.75);
+  translate: 0 6px;
+}
+
+.chat-with {
+  display: inline-flex;
+  gap: var(--sp-8);
+  margin-top: var(--sp-16);
+}
+
+.chat-page .chat-with-choice {
+  min-height: 36px;
+  padding: 0 var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-page .chat-with-choice:hover {
+  color: var(--ink);
+}
+
+.chat-page .chat-with-choice--on,
+.chat-page .chat-with-choice--on:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.chat-with-note {
+  margin: 0 0 var(--sp-12);
+  text-align: center;
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
 }

@@ -73,3 +73,6 @@ scratch/
 packages/*/scratch/
 scratch2/
 packages/*/scratch2/
+
+# Claude Code's per-task git worktrees, created inside the repo.
+.claude/worktrees/

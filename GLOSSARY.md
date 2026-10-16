@@ -63,6 +63,8 @@ These are approved names; rows marked planned do not claim shipped storage or UI
 | A deliberately saved thought's chat provenance | `inspiration_conversation_origin` | From your conversation / Your takeaway from WAKA | your words or a suggestion you rewrote and adopted | implemented locally |
 | A user message correcting an earlier reply | `corrects_message_id` | Correct reply | tell WAKA what to understand differently without changing a Principle | implemented |
 | Exported rendering of selected principle wording | `principle_artifact` | Share a principle | choose the words that leave WAKA | planned |
+| A sentence of the person's own, picked from their work, waiting to be kept | `harvest_candidates` | Picked from your work | something you said that might be worth keeping | implemented locally 2026-10-15 |
+| Why a picked sentence was not kept | `harvest_candidates.reason` (+ `reason_note` for `other`) | Why not? | not mine, already kept, private, too small, cut wrong, or something else in the person's own words | implemented locally 2026-10-15 |
 
 See [the capture foundation contract](docs/plans/2026-10-02-capture-foundation-contract.md).
 

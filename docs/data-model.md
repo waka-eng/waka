@@ -154,6 +154,11 @@ is enforced twice, deliberately: a positive route allowlist at the
 of the access matrix underneath — a standing credential in a config file
 on disk must not be the account's admin, however it is presented.
 
+Since 2026-10-15 the key has one more verb: it may **propose** sentences to
+the harvest basket (`POST /api/harvest`, below). Proposing is not deciding:
+reading the basket, keeping and letting go are `humanSessionsOnly`, so a
+key's own collector never approves what it gathered.
+
 ---
 
 ## Private conversation foundation
@@ -175,6 +180,15 @@ A conversation may start from an owned, currently readable Principle via
 inventing a user message. Its profile-bearing foreign key clears only the source
 ID on deletion, preserving conversation history. Merely opening a conversation
 does not request a reply.
+
+`conversations.perspective` (migration 0075) says whose memory the replies
+stand on: `mine` (the person's own saves, and every chat before the column),
+`agent`, or `both`, each source labelled with whose it is. `agent_profile_id`
+names which agent and is set only when the chat is started by the account's
+human profile with one of that account's agents; anything else is refused.
+The ownership is checked again on every read, and if the agent is gone
+(`ON DELETE SET NULL`) or no longer the account's, the chat quietly reads the
+person's own memory. The conversation itself stays the person's either way.
 
 Milestone 6 adds `conversation_reply_requests`, separate from user messages.
 One pending/running reply is allowed per conversation. An initial request or
@@ -953,6 +967,62 @@ agent's relayed excerpt, an agent's own observation.
   together. A failed queue insertion cannot leave an accepted but unprocessed
   correction behind.
 
+## Harvest candidates (before layer 1)
+
+`harvest_candidates`, added 2026-10-15 (migration 0072). A sentence of the
+person's own, picked from their work by a collector they run, waiting for
+them to keep it or let it go. It is **not an inspiration** and nothing in
+the four layers reads it: no extraction, no top of mind, no principles.
+
+- **Proposed** by the human profile's own sessions, the keeper key
+  included, into that profile only. Agent profiles are refused: since
+  2026-08-29 agents do not write into the human's material, and the basket
+  is not a way around that. At most 30 wait at once. The same sentence,
+  normalised for spacing and case (`source_hash`), is proposed once.
+- **Kept**: the client saves the words through the ordinary
+  `POST /api/inspirations` (the candidate id is the save request id when the
+  words are unchanged; corrected words are a new save with their own id),
+  then `POST /api/harvest/:id/keep` records which inspiration it became.
+  The basket's copy of the words is deleted; the hash stays.
+- **Declined**: the words are deleted in the same write. A reason may come
+  with it or once afterwards: `not_mine`, `already_kept`, `private`,
+  `trivial`, `miscut`, or `other` with the person's own words in
+  `reason_note` (1–280 characters, and only with `other`; migration 0073).
+  The hash stays, so a refused sentence is not proposed again.
+- **Lapsed**: seven days unchosen. The words, the title and the hash are
+  deleted when the basket is next read; the sentence may be proposed again.
+
+A CHECK holds that `text` is present exactly while the status is
+`pending`. `context` describes where a candidate came from (tool, project,
+hour, position, mode) without any of its content. Erasing the profile
+erases its basket.
+
+## Deleted inspirations (the shelf beside layer 1)
+
+`deleted_inspirations`, added 2026-10-15 (migration 0074). Deleting an
+inspiration still deletes it — the row, its evidence and every signal
+reconciliation happen exactly as before — and, in the same transaction, a
+copy of its words, kind, category, source, visibility, reflections and the
+date it was kept goes onto this shelf under the inspiration's own id. Nothing
+that reads `inspirations` has to learn to skip a deleted row.
+
+- **Own deletes only.** A copy is written only when the person's own
+  browser session deletes from their own archive; deleting on an agent's
+  archive, or with an agent or keeper key, leaves no copy.
+- **Thirty days** (`DELETED_KEEP_DAYS`), lapse-on-read: past the month a copy
+  is removed the next time the shelf is listed or that archive deletes again, and a
+  restore never finds one older than that.
+- **Routes**, browser sessions only, the caller's own profile:
+  `GET /api/inspirations/deleted` lists the shelf (newest first, at most
+  200, each with when it goes); `POST /api/inspirations/deleted/:id/restore`
+  saves it again as an ordinary inspiration under the same id and original
+  date and re-runs the reading; `DELETE /api/inspirations/deleted/:id`
+  removes it for good before the month is up.
+- A photo cannot come back: attachments are swept from storage at delete
+  time as before, and `had_photo` records that there was one.
+
+Erasing the profile erases its shelf; the profile export includes it.
+
 ## Experience (layer-1 grouping)
 
 The named ground a run of memories was gathered on (meeting decision,
@@ -1216,6 +1286,8 @@ words for the wrong layer. Disposition of every existing concept:
 | `GET /api/top-of-mind` | L3 | Returns the acting profile's single current artifact (+ version metadata). |
 | `GET /api/principles`, `POST`, `PATCH /:id`, `DELETE /:id`, `POST /reorder` | L4 | Ranked set + owner curation. **No refresh endpoint** — generation belongs to the nightly cron alone. |
 | `GET /api/principles.md` | L4 | The canonical machine rendering: one deterministic markdown document, byte-identical for every consumer. |
+| `POST /api/harvest`, `GET /api/harvest`, `POST /:id/keep`, `POST /:id/decline` | before L1 | The harvest basket. Proposing is open to the human profile's own sessions, the keeper key included; reading and deciding are browser only. |
+| `GET /api/inspirations/deleted`, `POST /deleted/:id/restore`, `DELETE /deleted/:id` | beside L1 | The deleted shelf: thirty days of the person's own deletes. Browser sessions only. |
 | Cross-profile reads | L2/L3/L4 | An agent-bound session may read the human profile per the permission matrix (explicit target parameter; server-enforced). |
 | `/api/wow-moments`, `/api/wow-status` | — | Deleted. |
 

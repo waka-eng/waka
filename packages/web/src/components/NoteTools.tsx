@@ -78,14 +78,21 @@ export function NoteTools(props: {
       save icon." Absent on the notepad, because a note that was never kept
       has nothing to erase — see `one-dock-two-notes.test.tsx`'s ledger. */
   eraseLabel: string;
-  eraseConfirmLabel: string;
-  cancelEraseLabel: string;
-  eraseQuestion: string;
-  /** Armed, not yet committed. */
-  erasePending: boolean;
-  erasing: boolean;
+  /* `erasing` WENT: delete is one press with an Undo now, so there is no
+     armed state to report, and what it carried was always `saving`. */
   onErase: () => void;
-  onCancelErase: () => void;
+  /** AN ARCHIVE WITH NO SHELF ASKS FIRST. An agent's archive keeps no
+      deleted copies, so there the first press arms and the question sits in
+      the bar's state slot; the caller clears it whenever the note changes. */
+  eraseQuestion?: string;
+  eraseConfirmLabel?: string;
+  cancelEraseLabel?: string;
+  erasePending?: boolean;
+  onCancelErase?: () => void;
+  /** Share this note as an image. Absent on the notepad: a note that was
+      never kept has nothing yet to show anyone. */
+  shareLabel?: string;
+  onShare?: () => void;
   /** A chosen photo, OR a finished recording — `SavesOverlay` hands the same
       callback to the recorder, so one destination takes both kinds. That is
       why this component does not sniff the bytes before calling it even
@@ -207,25 +214,37 @@ export function NoteTools(props: {
           IT CAME FROM THE NOTE'S TRAILING SLOT, which is where it had been
           since the two note pages were merged — and that slot styled
           nothing, so this control measured 59x32 against a product floor of
-          44 for an act, on the one irreversible thing a note can do. The
+          44 for an act, on the one destructive thing a note can do. The
           dock gives it the floor every other tool has, and puts the two
           halves of a destructive act in the place the founder already
           ruled states belong: "states should show and disappear in the
           bottom bar only."
 
-          ARMED IS A VISIBLE QUESTION, NOT A SILENT MODE. Pressing once asks
-          in the bar's own state slot and offers the way out beside it;
-          pressing the trash again commits. A security review found the
-          sibling of this control in settings staying armed after its
-          section was collapsed, so arming here is cleared by the caller
-          whenever the note changes or closes. */}
+          ONE PRESS, AND THE WAY BACK IS UNDO. Founder, 2026-10-15, of the
+          "Delete this? Not now" question this used to open: "just delete
+          when user clicks on this, but give option to undo it." The caller
+          takes the note off the page at once and offers Undo where the list
+          is; nothing is final until that moment passes, and even then the
+          deleted shelf holds it for a month. A question before every delete
+          was the cost of an act that could not be taken back, and it can
+          now. */}
+      {/* ═══ SHARE SITS BETWEEN KEEPING AND ERASING ══════════════════════
+          Founder: "i also dont see option to share a specfici inspiration."
+          The note is the one place a single inspiration is fully on screen,
+          so it is where showing it to somebody starts — the same image the
+          top of mind makes, from the same sheet. */}
+      {props.onShare && props.shareLabel ? (
+        <button type="button" className="waka-dock-tool"
+          aria-label={props.shareLabel} disabled={props.saving}
+          onClick={props.onShare}><HomeActionIcon kind="share" /></button>
+      ) : null}
       <button type="button" className="waka-dock-tool waka-dock-tool--erase"
-        aria-label={props.erasePending ? props.eraseConfirmLabel : props.eraseLabel}
-        disabled={props.erasing}
+        aria-label={props.erasePending && props.eraseConfirmLabel ? props.eraseConfirmLabel : props.eraseLabel}
+        disabled={props.saving}
         onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
       {/* ONE LINE, THE SAME SLOT THE NOTEPAD'S STATE USES. Founder: "states
           should show and disappear in the bottom bar only." */}
-      {props.erasePending ? (
+      {props.erasePending && props.eraseQuestion ? (
         <span className="waka-dock-state" role="status">
           {props.eraseQuestion}
           <button type="button" className="waka-dock-undo" onClick={props.onCancelErase}>

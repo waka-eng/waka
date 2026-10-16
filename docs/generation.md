@@ -1290,18 +1290,15 @@ not have, which is exactly the lie this table would otherwise have told.)
 | `FIELD_CARRY_SPAN` | 0.85 | Extra light a fully-carrying memory holds over a barely-cited one |
 | `FIELD_ATTENTION_SPAN` | 0.16 | Extra floor for coming back to a memory, graded by how often |
 | `FIELD_RECENCY_WEIGHT` | 0.25 | The share of the range freshness may spend; the rest belongs to use |
-| `FIELD_TIER_CEILING` | 1 | Aliveness at or above this draws in the brightest band |
-| `FIELD_TIER_GAMMA` | 0.7 | Bends the banding so the dim half gets the larger share of bands |
 
-**Why the light is banded through a curve.** An orb is drawn from a pre-baked
-sprite, so the aliveness continuum is quantised. That mapping was linear while
-aliveness is exponential in age: with a seven-day half-life a fortnight sits at
-0.25, three weeks at 0.125, four at 0.06 — so nearly every band went to the
-first week and everything past three weeks collapsed into the bottom one, and
-an archive with months in it rendered as one flat grey. `FIELD_TIER_GAMMA`
-bends the mapping toward the dim half, and `TIERS` (in
-`packages/web/src/canvas/sprites.ts`) widened from five bands to nine. Neither
-changes what a memory IS — only how finely the eye can read it.
+**The banding went with the orbs (2026-10-15).** While each memory was drawn
+as an orb from a pre-baked sprite, the aliveness continuum was quantised into
+bands — `TIERS`, nine of them, through `FIELD_TIER_CEILING` (1) and
+`FIELD_TIER_GAMMA` (0.7), a curve because aliveness is exponential in age and
+a linear banding spent nearly every band on the first week. The orbs are no
+longer drawn, so the bands and both constants are gone; `alive` itself is
+unchanged. The band arithmetic below is kept as the record of how the shares
+were sized.
 
 **Why promotion is the largest share, and why it grades.** Roots, the poster
 and a principle are all the same number for every memory in a young archive:

@@ -318,9 +318,17 @@ them something.** The richer version — ask when the reading is WAKA's own,
 offer maintenance when it is theirs — is not built; `lead.locked` and the
 provenance band already know which it is, so it is available when wanted.
 
-**The model is in the product, not in this document.** `jar-char-claim-answers`
-is the register: a question, three peer answers, no primary, and one of them
-opens a field to say what is closer. Any new surface that shows a person a
+**The model is in the product, not in this document.** `ClaimSlip` is the
+register: a question, two peer answers, no primary, and both reachable by a
+gesture AND by a named button. Since 2026-10-15 the two answers are
+directions — the slip is thrown left for "Not anymore" and right for "Still
+true" — and "Chat about it", between them, is a third way out rather than a
+third answer: pulling the slip down (or pressing the middle label) opens a
+conversation and files nothing. After a no, the receipt offers the same
+conversation. Before the slip it was `ClaimCard`, swiped up toward the
+creature or down away from it, and before that `jar-char-claim-answers`,
+three peer words under the sentence, which is where this law was first
+written. Any new surface that shows a person a
 sentence about themselves wears it. When the top of mind did not, the home
 screen carried two sentences about the same person asking for the same thing
 in two different languages — which is Law 5 as well, arriving by a different

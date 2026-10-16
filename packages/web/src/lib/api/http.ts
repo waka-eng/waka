@@ -256,6 +256,8 @@ export async function requestVoid(
   payload: unknown,
   fallbackMessage: string,
   signal?: AbortSignal,
+  /** Let the request outlive the page — for a delete sent as the tab closes. */
+  keepalive?: boolean,
 ): Promise<void> {
   let res: Response;
   invalidateSourceRequest(path);
@@ -263,6 +265,7 @@ export async function requestVoid(
     res = await apiFetch(path, {
       method,
       ...(signal ? { signal } : {}),
+      ...(keepalive ? { keepalive: true } : {}),
       credentials: "include",
       headers:
         payload === undefined

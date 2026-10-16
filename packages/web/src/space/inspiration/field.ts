@@ -2,10 +2,9 @@
  * LAYER ONE — THE FIELD: how an inspiration LOOKS, and where it comes to rest.
  *
  * `orb.ts` beside this file says what an inspiration IS. This says what the
- * field does with one: how bright it is for its age (`colorBall`), which size
- * band its sprite comes from (`tierOf`), how tightly a whole field has to pack
- * to fit the band it is given (`fitField`), and where in that band any one orb
- * settles (`scatterX`).
+ * field does with one: how bright it is for its age (`colorBall`), how
+ * tightly a whole field has to pack to fit the band it is given
+ * (`fitField`), and where in that band any one orb settles (`scatterX`).
  *
  * One reason to exist: every function here is pure geometry or pure light —
  * given an orb and a number, it returns a number. Nothing schedules a frame,
@@ -23,43 +22,18 @@ import {
   FIELD_FRONTIER_DAYS,
   FIELD_REFLECTION_SATURATION,
   FIELD_REFLECTION_WEIGHT,
-  FIELD_TIER_CEILING,
-  FIELD_TIER_GAMMA,
 } from "../../lib/aliveness";
 import { clamp, clamp01, DAY_MS } from "../../lib/num";
-import { SIZE_R, TIERS, sizeIdxFor } from "../../canvas/sprites";
+import { SIZE_R, sizeIdxFor } from "../../canvas/sprites";
 import type { Ball } from "./orb";
 
 /** However crowded the field gets, an orb never shrinks past this. */
 export const ORB_R_MIN = 6;
 
-/**
- * THE FOCUS LAW, AS RATES — how fast light arrives and how slowly it leaves.
- *
- * Each is the fraction of the distance still remaining one second later, fed
- * to `kd()` with the frame's own dt, so all of these mean the same thing on a
- * 60Hz Android and a 120Hz iPhone. They were per-frame constants (0.14, 0.16,
- * 0.2) and therefore meant two different things on the two devices sitting
- * side by side.
- *
- * They live HERE, with the field, and not with whoever happens to read them.
- * They sat in Home.tsx for as long as the page was the only thing that eased
- * anything, in a block of twelve that also held the camera's rubber band and
- * the companion's turn. Then the sky engine moved out to `space/signal/
- * sky-engine.ts` and took a satellite's glow and dim with it — and a satellite
- * IS a field orb, shown as evidence, so the two must fade on ONE curve or the
- * same memory answers a selection two different ways depending on which
- * section you are looking at it in. Copying five numbers into the new module
- * is exactly how that drifts apart. The other seven eases stayed in the page:
- * they belong to a camera and a character, and nothing outside the loop reads
- * them.
- */
-/** Light in fast, out slow: τ ≈ 28ms arriving, ≈ 180ms leaving. */
-export const EASE_GLOW_IN = 1e-16;
-export const EASE_GLOW_OUT = 3.8e-3;
-/** The haze the other way round: it closes in slowly and lifts briskly. */
-export const EASE_DIM_IN = 1.1e-2;
-export const EASE_DIM_OUT = 4.5e-4;
+/* THE FOCUS LAW'S RATES WENT WITH THE ORBS. `EASE_GLOW_*` and `EASE_DIM_*`
+   were how fast an orb's light arrived and how slowly it left, kept here so
+   a field orb and a sky satellite faded on one curve. Nothing draws an orb
+   now, and the loop stopped easing light nobody sees. */
 
 /**
  * Aliveness mirrors the real activation engine's constants (7-day half-life,
@@ -161,44 +135,9 @@ export function colorBall(b: Ball, T: number): void {
   b.frontier = !b.hasNotes && days > FIELD_FRONTIER_DAYS;
 }
 
-/**
- * The aliveness continuum, quantised to the baked sprite tiers — through a
- * curve, because the continuum is exponential and a linear banding spent
- * almost every step on the first week (see `FIELD_TIER_GAMMA`). Baked
- * sprites still mean nothing is drawn per frame.
- */
-export function tierOf(b: Ball): number {
-  const lit = Math.pow(clamp01(b.alive / FIELD_TIER_CEILING), FIELD_TIER_GAMMA);
-  return Math.round(lit * (TIERS - 1));
-}
+/* `tierOf` WENT WITH THE SPRITES IT INDEXED: it quantised `alive` into the
+   baked bands an orb was drawn from. `alive` itself is still the light. */
 
-/**
- * Painter's order for the shadow+body pass: bottom-most orb first, so an
- * orb's contact shadow lands ON whatever it is resting against and is
- * then covered by the orb itself. Insertion sort over a preallocated
- * index array — O(n) on the near-sorted frame-to-frame case, and it
- * allocates nothing.
- *
- * TWO CALLERS, AND THEY MUST NEVER DISAGREE. The painter walks this order
- * forwards; the page's hit test walks the identical array backwards, so the
- * orb whose pixels are on top is the orb that answers a tap. Walking `list`
- * by index instead was the bug behind "I click one ball and a different one
- * lights up". When the painter moved out of the page the sort had to land
- * somewhere both could import, or the two would have been free to drift into
- * two orderings — which is that same bug with no single line to blame.
- */
-export function sortByDepth(arr: Ball[], ord: number[]) {
-  for (let i = 1; i < ord.length; i++) {
-    const v = ord[i];
-    const y = arr[v].y;
-    let j = i - 1;
-    while (j >= 0 && arr[ord[j]].y < y) {
-      ord[j + 1] = ord[j];
-      j--;
-    }
-    ord[j + 1] = v;
-  }
-}
 
 /**
  * THE FIELD SHOWS EVERYTHING — INVARIANT, not a layout preference.
@@ -228,7 +167,6 @@ export function fitField(arr: Ball[], bandW: number, bandH: number): number {
        two places that build a ball, and that divergence is what made every
        orb outside a fit a blurry one. */
     const bi = sizeIdxFor(r);
-    b.sizeIdx = bi;
     /* and it is DRAWN at the size it was baked at. The radius jitter was
        always meaningless variation — size encodes nothing here, by law — so
        snapping it to a baked value costs the design nothing and buys a

@@ -5,65 +5,48 @@
  * are the seams the world reads itself through — the claim comes from
  * `listClaims` and the answer leaves through `createFeedback`, and both have
  * to be observable for a press to be checkable at all. `lib/api/conversations`
- * joined them when the two soft answers started opening a chat: that is now
- * a third thing a press DOES, so it is a third thing that has to be
- * watchable. `lib/auth-context` supplies the viewer. `helpers/render-home` and `helpers/canvas-stub` replace
- * time, frames, randomness and drawing, not Home's behavior; the simulation,
- * the layout and every state transition under test are the shipped ones.
+ * stays mocked because a conversation is still one thing an answer can lead
+ * to — now by a second press on the receipt, never by the answer itself — so
+ * it has to be watchable to assert both halves. `lib/auth-context` supplies
+ * the viewer. `helpers/render-home` and `helpers/canvas-stub` replace time,
+ * frames, randomness and drawing, not Home's behavior.
  *
  * ── WHY THIS SUITE EXISTS ──────────────────────────────────────────────────
  *
- * The confirm loop — the thing the founder's workflow design puts at the
- * centre of the product — had NO suite that pressed it. Three buttons under a
- * sentence about you, the one interaction the whole pipeline is built to
- * collect, and nothing anywhere asserted that pressing one recorded anything.
- * `docs/six-laws.md` Law 8 is about exactly that gap: *"a new control gets a
- * test that presses it and asserts the effect — never that it is on screen"*,
- * and the reason the law exists is a control that rendered, read correctly,
- * was enabled, and did nothing.
+ * The confirm loop is the thing the product is built to collect, and
+ * `docs/six-laws.md` Law 8 says a control gets a test that presses it and
+ * asserts the effect, never that it is on screen. Every case below moves or
+ * presses a real control and asserts what reached the server, or that
+ * nothing did.
  *
- * So every case below presses a real button and asserts what reached the
- * server, or asserts that nothing did. None of them check that anything is
- * visible for its own sake.
+ * ── THE ROW BECAME A CARD, AND THE CASES FOLLOWED ─────────────────────────
  *
- * ── THE CORRECTION FIELD IS GONE, AND FOUR CASES WENT WITH IT ─────────────
+ * Founder, 2026-10-15: *"I want this to be feeling like a swipe experience
+ * ... swipe the card towards the character up to say yes and swipe it down
+ * to say no ... drag on laptop, swipe on mobile."*
  *
- * Founder, 2026-10-11: *"the yes / partly / not true button is a little bit
- * weird. And then when the user clicks on partly and not true, can we open a
- * chat experience rather than asking user to answer in that small space?"*
+ * Three words (yes · partly · not true) became two directions — first up
+ * and down, then sideways on a slip, with "Not anymore" and "Still true"
+ * named on either side under it and "Chat about it" between them. What the earlier
+ * cases guarded is kept where it still applies: the verdict reaches the
+ * server IMMEDIATELY, and yes stays on this screen so the sitting can go on.
+ * What changed, and is asserted below: a no no longer opens a conversation
+ * by itself — it offers one, on the receipt, with a second press — and
+ * `partly` is not reachable from this slot at all.
  *
- * TOMBSTONED RATHER THAN DELETED, because what they guarded was real and the
- * next person should know it was considered. `records a correction and the
- * verdict it belongs to in one write, and only on Save`, `files not true
- * with no correction when the field is left empty`, `leaves the claim
- * unanswered when the correction is abandoned`, and `keeps the words and
- * says so when the correction does not land` all pressed a two-row textarea
- * that opened under the claim when you said "Not true". That field had
- * itself replaced five components on an earlier instruction — *"Collapse all
- * five into 'correct a claim' — one text field, reached only after 'not
- * quite'"* — and the last of the four was the replacement for the draft
- * store those five carried: a failed write kept the words on screen rather
- * than closing over them.
- *
- * None of that protection is lost, it has MOVED. The words a person wants to
- * say now go into a conversation, which has its own draft store, its own
- * failure sentence and its own history — all of it stronger than a textarea
- * with no localStorage behind it. What IS given up is `correctionText`:
- * nothing writes one any more. `ReviewEvidence` still quotes the ones
- * already on record and the server still accepts the field, so the loss is a
- * source, not a reader — see the note at the answer row in `Home.tsx`.
- *
- * So the cases below press the same three buttons and assert the two things
- * that now have to be true: the verdict reaches the server IMMEDIATELY for
- * all three, and the two soft answers carry on into a conversation seeded
- * with the claim.
+ * TOMBSTONES, kept so the next person knows they were considered. The
+ * correction textarea (four cases) went on 2026-10-11 when the soft answers
+ * started opening a chat; `gives partly the same door` went today when
+ * partly left the slot. `correctionText` is still produced by nothing.
  */
 import { act } from "react";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
 import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 import { createFeedback, listClaims } from "../src/lib/api";
+import { loadSignal } from "../src/lib/data";
 import { createConversation } from "../src/lib/api/conversations";
+import { SLIP_LEAVE_MS as LEAVE_MS } from "../src/components/ClaimSlip";
 
 const FACTS = { inspirations: [{ id: "kept-1", text: "An original capture", daysAgo: 3 }], groups: [] };
 const CLAIM = {
@@ -91,9 +74,6 @@ vi.mock("../src/lib/api", async (original) => ({
   listClaims: vi.fn(),
   createFeedback: vi.fn(),
 }));
-/* THE SEAM THE TWO SOFT ANSWERS LEAVE THROUGH. `talkAbout` creates a
-   conversation and then navigates to it, so a press is only checkable if
-   this is observable — same argument as `createFeedback` above. */
 vi.mock("../src/lib/api/conversations", async (original) => ({
   ...await original<typeof import("../src/lib/api/conversations")>(),
   createConversation: vi.fn(),
@@ -106,6 +86,13 @@ vi.mock("../src/lib/auth-context", async (original) => ({
 vi.mock("../src/lib/data", async (original) => ({
   ...await original<typeof import("../src/lib/data")>(),
   ...dataMockFrom({ inspirations: [{ id: "kept-1", text: "An original capture", daysAgo: 3 }], groups: [] }),
+  /* THE CLAIM'S ROOTS, for the tap that dives deeper: a claim is a signal,
+     and its evidence comes from `loadSignal`. */
+  loadSignal: vi.fn(async (id: string) => ({
+    id, statement: "", status: "emerging", confidence: 24, evidenceCount: 1, lastEvidenceMs: 0, createdMs: 0,
+    locked: false, unsupported: false, sharedGroupIds: [], reviewEvidence: [],
+    evidence: [{ signalId: id, inspirationId: "kept-1", preview: "An original capture", quote: null, quoteSource: null, reason: null, createdMs: 0 }],
+  })),
 }));
 
 let world: MountedWorld;
@@ -113,88 +100,186 @@ beforeAll(() => {
   installCanvasStub(); setViewport(1280, 900);
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
-afterEach(() => { world?.unmount(); vi.clearAllMocks(); });
+afterEach(() => { world?.unmount(); vi.clearAllMocks(); vi.useRealTimers(); });
 
-/** The answer row, read by its words rather than by its order. */
-function answer(label: string): HTMLButtonElement {
-  const found = [...world.container.querySelectorAll<HTMLButtonElement>(".jar-char-claim-answers button")]
+/** The two directions, read by their words rather than by their order. */
+function direction(label: string): HTMLButtonElement {
+  const found = [...world.container.querySelectorAll<HTMLButtonElement>(".jar-pick-act")]
     .find((node) => node.textContent?.trim() === label);
   if (!found) {
-    throw new Error(`no answer named ${label}. The claim offers: ` +
-      [...world.container.querySelectorAll(".jar-char-claim-answers button")].map((n) => n.textContent?.trim()).join(", "));
+    throw new Error(`no direction named ${label}. The card offers: ` +
+      [...world.container.querySelectorAll(".jar-pick-act")].map((n) => n.textContent?.trim()).join(", "));
   }
   return found;
 }
-const statement = () => world.container.querySelector(".jar-char-claim-statement")?.textContent ?? "";
-/* `field` AND `correct` WENT WITH THE TEXTAREA. They read and typed into
-   `textarea.jar-char-claim-edit`, which no surface renders — see the
-   tombstone in this file's header. */
+const card = () => world.container.querySelector<HTMLDivElement>(".jar-pick-slip");
+/* The FRONT slip's sentence: the next claim is previewed behind it. */
+const statement = () => world.container.querySelector(".jar-pick-slip .jar-pick-statement")?.textContent ?? "";
+const receiptDoor = () => world.container.querySelector<HTMLButtonElement>(".jar-char-claim-receipt-act");
+
 async function withClaims(...claims: Array<typeof CLAIM>) {
   vi.mocked(listClaims).mockResolvedValue({ claims, more: false });
   world = await mountWorld(FACTS);
   expect(statement(), "the claim queue is not on screen, so nothing below presses anything").toContain(claims[0]!.statement);
 }
 
-/** The one conversation this press opened, if it opened one. */
+/** Lets the card finish its trip so the queue advances. */
+async function cardLeaves() {
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, LEAVE_MS + 30)); });
+}
+
+/** The one conversation a press opened, if it opened one. */
 const openedChat = () => vi.mocked(createConversation).mock.calls[0];
 
-it("files not true at once and carries it into a conversation about the claim", async () => {
+/** A sideways pointer drag on the slip, in pixels; positive is right (keep).
+    jsdom gives the slip no height, so a flick is used — the same release a
+    thumb makes. */
+async function drag(node: HTMLElement, dx: number) {
+  const fire = (type: string, x: number, timeStamp: number) => {
+    const event = new window.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, clientX: x, clientY: 300, button: 0, buttons: 1 });
+    Object.defineProperty(event, "timeStamp", { value: timeStamp });
+    node.dispatchEvent(event);
+  };
+  await act(async () => {
+    fire("pointerdown", 300, 0);
+    fire("pointermove", 300 + dx / 2, 20);
+    fire("pointermove", 300 + dx, 40);
+    fire("pointerup", 300 + dx, 50);
+  });
+}
+
+it("files true at once when the slip goes right, and the next claim comes up", async () => {
   vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
-  vi.mocked(createConversation).mockResolvedValue({} as Awaited<ReturnType<typeof createConversation>>);
   await withClaims(CLAIM, SECOND);
 
-  await act(async () => answer("Not true").click());
+  await drag(card()!, 80);
 
-  /* IMMEDIATELY, which is the reversal. This answer used to send nothing on
-     the first press, because a two-row field below it could still change
-     what got filed. A conversation is not a row, so there is nothing to
-     wait for — and an answer that depended on finishing a chat would be an
-     answer lost whenever somebody closed the tab. */
+  /* IMMEDIATELY. A judgement about yourself does not wait on the card
+     finishing its trip any more than on a round trip. */
   expect(createFeedback).toHaveBeenCalledTimes(1);
   expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({
-    targetType: "signal", targetId: "claim-1", value: "not_true", targetRevision: "7",
+    targetType: "signal", targetId: "claim-1", value: "true", targetRevision: "7",
   });
-  /* AND NOTHING CARRIES A CORRECTION ANY MORE. Asserted rather than assumed:
-     the field is gone, so a `correctionText` appearing here would mean some
-     other path had started producing one silently. */
-  expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).not.toHaveProperty("correctionText");
-
-  /* THE WORDS GO SOMEWHERE A PERSON CAN SAY THEM. Seeded with the claim —
-     the same shape the other two doors into a conversation use — and the
-     verdict just filed reaches the reply on its own, because
-     `recentFeedback()` passes every value into the generation payload. */
-  const chat = openedChat();
-  expect(chat, "saying not true opened no conversation").toBeTruthy();
-  expect(chat?.[4]).toMatchObject({ content: CLAIM.statement });
-});
-
-it("gives partly the same door, which it never had at all", async () => {
-  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
-  vi.mocked(createConversation).mockResolvedValue({} as Awaited<ReturnType<typeof createConversation>>);
-  await withClaims(CLAIM, SECOND);
-
-  await act(async () => answer("Partly").click());
-
-  /* THE ANSWER WITH THE MOST LEFT UNSAID WAS THE ONE GIVEN NOWHERE TO SAY
-     IT. "Partly" filed in silence and advanced; only "not true" earned a
-     field. Both soft answers open the same door now. */
-  expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "partly" });
-  expect(openedChat()?.[4], "partly still files in silence").toMatchObject({ content: CLAIM.statement });
-});
-
-it("keeps yes at one press and on this screen, so the sitting can continue", async () => {
-  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
-  vi.mocked(createConversation).mockResolvedValue({} as Awaited<ReturnType<typeof createConversation>>);
-  await withClaims(CLAIM, SECOND);
-
-  await act(async () => answer("Yes").click());
-
-  /* AGREEING IS FINISHED THE MOMENT IT IS PRESSED — there is nothing to add
-     to it — so it is the one answer that does not leave. Taking somebody to
-     a conversation after "yes" would end a sitting they had not finished,
-     which is the opposite of the terminal beat the queue is built around. */
-  expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "true" });
   expect(openedChat(), "yes should not take anybody anywhere").toBeUndefined();
+  await cardLeaves();
   expect(statement(), "the next claim did not come up").toContain(SECOND.statement);
 });
 
+it("files not true when the slip goes left, opens nothing, and offers the conversation on the receipt", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  vi.mocked(createConversation).mockResolvedValue({} as Awaited<ReturnType<typeof createConversation>>);
+  await withClaims(CLAIM, SECOND);
+
+  await drag(card()!, -80);
+
+  expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "not_true", targetRevision: "7" });
+  /* NOTHING CARRIES A CORRECTION. The field is gone; a `correctionText` here
+     would mean some other path had started producing one silently. */
+  expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).not.toHaveProperty("correctionText");
+  /* A NO COSTS WHAT A YES COSTS. The chat is offered, not forced. */
+  expect(openedChat(), "letting the slip go left opened a conversation on its own").toBeUndefined();
+
+  const door = receiptDoor();
+  expect(door, "the receipt offered no way to say what is true instead").toBeTruthy();
+  await act(async () => door!.click());
+  /* Seeded with the claim — the shape the other doors into a conversation
+     use. The verdict already filed reaches the reply through
+     `recentFeedback()`. */
+  expect(openedChat()?.[4]).toMatchObject({ content: CLAIM.statement });
+});
+
+it("settles back and files nothing when the drag stops short", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  await withClaims(CLAIM, SECOND);
+
+  await drag(card()!, 10);
+
+  expect(createFeedback).not.toHaveBeenCalled();
+  expect(statement()).toContain(CLAIM.statement);
+  expect(card()?.className).not.toContain("leaving");
+});
+
+it("answers the same way from the two named directions, for anyone who does not drag", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  await withClaims(CLAIM, SECOND);
+
+  await act(async () => direction("Still true").click());
+  expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "true" });
+  await cardLeaves();
+  expect(statement()).toContain(SECOND.statement);
+
+  await act(async () => direction("Not anymore").click());
+  expect(vi.mocked(createFeedback).mock.calls[1]?.[0]).toMatchObject({ targetId: "claim-2", value: "not_true" });
+});
+
+it("answers from the keyboard with the card focused", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  await withClaims(CLAIM, SECOND);
+
+  const node = card()!;
+  await act(async () => {
+    node.focus();
+    node.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+  });
+  expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "true" });
+});
+
+it("does not offer partly from this slot at all", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  await withClaims(CLAIM);
+  const words = [...world.container.querySelectorAll(".jar-pick-act")].map((n) => n.textContent?.trim());
+  /* The two answers and nothing else: "partly" is nowhere in the row, and
+     neither is a chat (founder, 2026-10-15: "remove chat about it under the
+     claim"). */
+  expect(words).toEqual(["Not anymore", "Still true"]);
+});
+
+it("offers no chat on the card, by button or by key", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  await withClaims(CLAIM);
+  expect(world.container.querySelector(".jar-pick-act--chat"), "a chat door is back on the claim card").toBeNull();
+  const card = world.container.querySelector(".jar-pick") as HTMLElement;
+  await act(async () => { card.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+  expect(createFeedback, "ArrowDown answered the claim").not.toHaveBeenCalled();
+  expect(world.container.querySelector(".jar-pick-statement")?.textContent).toBe(CLAIM.statement);
+});
+
+it("says when the last yes was, when a reading is being asked again", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  await withClaims({ ...CLAIM, askedAgain: { lastAnsweredAt: "2026-06-15T12:00:00.000Z" } } as typeof CLAIM);
+  const line = world.container.querySelector(".jar-pick-source")?.textContent ?? "";
+  expect(line).toContain("You said this was true in June");
+  expect(line, "states render, numerals never").not.toMatch(/\d/);
+});
+
+it("says nothing about a last answer on a first ask", async () => {
+  await withClaims(CLAIM);
+  expect(world.container.querySelector(".jar-pick-source")).toBeNull();
+});
+
+it("hints at the next claim with a bare edge, and no back card when it is the last", async () => {
+  await withClaims(CLAIM, SECOND);
+  const edge = world.container.querySelector(".jar-pick-behind");
+  expect(edge, "nothing says another claim is waiting").not.toBeNull();
+  expect(edge?.textContent, "the back card previews words; it should only hint").toBe("");
+  world.unmount();
+  vi.clearAllMocks();
+  await withClaims(CLAIM);
+  expect(world.container.querySelector(".jar-pick-behind"), "an empty back card with nothing behind it").toBeNull();
+});
+
+it("opens the claim's roots when the slip is tapped rather than dragged", async () => {
+  await withClaims(CLAIM, SECOND);
+  await drag(card()!, 0);
+  expect(loadSignal).toHaveBeenCalledWith("claim-1");
+  expect(createFeedback, "a tap is not an answer").not.toHaveBeenCalled();
+  const room = world.container.querySelector(".jar-prov-room");
+  expect(room?.querySelector(".jar-prov-room-lead")?.textContent).toBe(CLAIM.statement);
+  expect(room?.textContent).toContain("An original capture");
+});
+
+it("does not open the roots after a drag that settles back", async () => {
+  await withClaims(CLAIM, SECOND);
+  await drag(card()!, 10);
+  expect(loadSignal).not.toHaveBeenCalled();
+});

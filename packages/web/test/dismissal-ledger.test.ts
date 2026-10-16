@@ -81,6 +81,7 @@ const SHEETS: ReadonlyArray<{ file: string; what: string }> = [
   { file: "components/InspirationSearch.tsx", what: "the archive's search — holds a typed query" },
   { file: "components/PrincipleShare.tsx", what: "sharing a principle — never opted in" },
   { file: "components/ReadingChanges.tsx", what: "what changed in the reading — never opted in" },
+  { file: "components/ShareSheet.tsx", what: "sharing a save or the top of mind — never opted in, like the principle share" },
   /* TWO ROWS LEFT THIS LEDGER ON 2026-10-12 (founder: "방 없애" — remove
      rooms): `space-kinds/GroupPanel.tsx`, the room form, which held a
      half-typed name and never opted in; and `space/settings/

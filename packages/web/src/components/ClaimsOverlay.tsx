@@ -80,7 +80,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DialogSurface } from "./DialogSurface";
 import { useFirstVisit } from "../lib/first-visit";
 import { listClaims, type ApiClaim } from "../lib/api/claims";
-import { t, type SupportedLocale } from "../lib/locales";
+import { formatMessage, t, type SupportedLocale } from "../lib/locales";
+import { monthTag } from "../lib/words";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -204,6 +205,14 @@ export function ClaimsOverlay({ locale, onClose, onAsk, answered }: ClaimsOverla
                   >
                     <span className="waka-claim-statement">{row.statement}</span>
                   </button>
+                  {/* ASKED AGAIN, AND SAYS SO — the same line the slip on the
+                      home screen wears, so a claim you said yes to a season
+                      ago does not look like one you never answered. */}
+                  {row.askedAgain ? (
+                    <p className="waka-claim-said">
+                      {formatMessage(locale, "worldClaimAskedAgain", { month: monthTag(Date.parse(row.askedAgain.lastAnsweredAt), locale) })}
+                    </p>
+                  ) : null}
 
                   {/* THE RECEIPTS, ALWAYS, NOT BEHIND A PRESS — and this is
                       the room's entire reason to exist. `api/claims.ts` has

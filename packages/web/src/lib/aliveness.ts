@@ -74,8 +74,8 @@ export const FIELD_ATTENTION_SPAN = 0.16;
  * HOW MUCH OF THE RANGE FRESHNESS MAY SPEND — measured, not guessed.
  *
  * This was a CAP at 0.55, and a cap was the wrong instrument twice over.
- * Driving a real derived archive through `colorBall` and `tierOf` and
- * printing the histogram (five memories, four of them on the poster) gave
+ * Driving a real derived archive through `colorBall` and the sprite banding
+ * the orbs were then drawn in, and printing the histogram (five memories, four of them on the poster) gave
  * tier 6 and tier 7 — ONE band apart out of nine, both crowded at the top,
  * which is exactly the "all same brightness" the founder kept reporting. Two
  * causes, both visible in that measurement:
@@ -108,28 +108,12 @@ export const FIELD_RECENCY_WEIGHT = 0.25;
 /** Untouched for longer than this, and cited by nothing, is a frontier. */
 export const FIELD_FRONTIER_DAYS = 3;
 
-/**
- * HOW THE LIGHT IS BANDED — and why the field used to be a wall of one grey.
- *
- * An orb is drawn from a pre-baked sprite, so the aliveness continuum has to
- * be quantised into bands. That mapping was LINEAR across 0.05–0.60 while
- * aliveness itself is EXPONENTIAL in age, and the two do not meet: with a
- * seven-day half-life a fortnight-old memory sits at 0.25, three weeks at
- * 0.125, four at 0.06 — so nearly every band was spent on the first week and
- * everything past three weeks collapsed into the bottom one. An archive with
- * months in it rendered as one flat grey, which is exactly what the founder
- * was looking at, and no amount of extra meaning upstream could have shown
- * through it.
- *
- * The ceiling is where a memory is simply at full light — the whole range,
- * now that recency is capped and only a carried memory can reach the top of
- * it; the gamma bends the mapping so the dim half — which is most of any
- * real archive — still gets the larger share of the bands. Together with a wider `TIERS` they resolve two months of decay
- * as a gradient instead of a cliff. Perception, not scoring: neither number
- * changes what a memory IS, only how finely the eye can read it.
- */
-export const FIELD_TIER_CEILING = 1;
-export const FIELD_TIER_GAMMA = 0.7;
+/* `FIELD_TIER_CEILING` AND `FIELD_TIER_GAMMA` WENT WITH THE ORBS. They bent
+   the aliveness continuum into the baked sprite bands an orb was drawn from
+   — a gamma, because the continuum is exponential in age and a linear
+   banding spent nearly every band on the first week (founder, 2026-08-24:
+   two months of memories "one flat grey"). Perception, never scoring; with
+   nothing drawn there is nothing to perceive, and `alive` is unchanged. */
 
 /**
  * THE CARRY — how much of this person's self-knowledge a memory is holding up.

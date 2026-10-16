@@ -2,7 +2,7 @@
  * BAKED LIGHT — the sprites the canvas draws, and nothing that knows what they
  * mean.
  *
- * The machinery half of the world. It knows orbs, bloom, dither and colour
+ * The machinery half of the world. It knows light, grain, dither and colour
  * temperature; it does not know what an inspiration is, or a signal, or a
  * group. Every function here is a pure function of a `Ramp` and a size — call
  * it twice with the same arguments and you get the same canvas back — which is
@@ -14,57 +14,12 @@
  * make this module and `character/` a hard runtime cycle. Untying that is its
  * own change and the primitives underneath it do not have to wait for it.
  *
- * `orbsForHue` is the one function here that reaches a product idea — it takes
- * a member's hue slot, because it is the only sprite function that knows two
- * people can stand in the same field. It types its argument STRUCTURALLY
- * (`HuedPalette` below) rather than importing `Palette` from the page, so this
- * module has no edge back into the thing it was extracted from.
+ * The orb bakers that lived here (`rasterOrb`, `rasterOrbPixel`,
+ * `orbsForHue`) went on 2026-10-15 with the balls they drew.
  */
 
-import { type Ramp } from "../lib/appearance";
-import { lerp, TAU } from "../lib/num";
+import { lerp } from "../lib/num";
 
-/**
- * What `orbsForHue` needs from a palette, and no more. The page's `Palette`
- * satisfies this structurally, so neither file has to know about the other.
- */
-export interface HuedPalette {
-  ramp: Ramp;
-  dpr: number;
-  hued: Map<string, HTMLCanvasElement[][]>;
-}
-
-export const BLOOM_R = 2.2;
-export const BLOOM_PEAK = 0.2;
-export const BLOOM_EXP = 2.2;
-/**
- * The bloom's whole strength curve, in one place: wide and thin, the way
- * a bright point reads through a night lens. A dormant memory keeps a
- * trace of one — the continuum never reaches nothing.
- *
- * It sits here rather than in either painter because BOTH of them ask it the
- * same question. It was a local inside the page's draw function while the sky
- * and the field were painted by the same 531-line body; splitting that body
- * would have meant two copies of one curve, and two copies is how the light
- * under a memory and the light under the same memory shown as evidence drift
- * apart. That exact drift is what the satellite pass's own comments record
- * having already been fixed twice.
- */
-export const bloomAlpha = (pow: number) => BLOOM_PEAK * (0.13 + 0.87 * pow);
-/**
- * How much of the disc's radius is feather.
- *
- * This said "Crisp: this is photography" over a value of 0.07 — seven percent
- * of the radius, about three and a half device pixels of gradient on every
- * perimeter. Nothing with that much feather reads as an object; it reads as a
- * smudge, and with the bloom sitting under it the orb dissolved into its own
- * light. The whole sphere treatment above — terminator, rim, counter-rim,
- * specular — was being spent on something with no edge to hold it.
- *
- * Two point two percent is under one device pixel: enough to kill the jaggies
- * a hard circle would show, and nothing beyond that.
- */
-export const EDGE_SOFT = 0.022;
 /**
  * THE KEY LIGHT — one source, and the whole world agrees about it.
  *
@@ -78,7 +33,8 @@ export const EDGE_SOFT = 0.022;
  * read as drawn rather than photographed.
  *
  * So: one motivated source, high and to the upper left, stated once here and
- * obeyed by the orbs, the clouds and the companion alike. Everything in a
+ * obeyed by the clouds and the companion alike (and by the orbs, while
+ * they were drawn). Everything in a
  * frame agreeing about where the light is is most of what "one place" means.
  *
  * It is NIGHT-PHOTOGRAPHY SUBTLE. If it reads as a shiny 3D ball it has
@@ -89,26 +45,6 @@ export const EDGE_SOFT = 0.022;
  */
 export const KEY_X = -0.62;
 export const KEY_Y = -0.78;
-/**
- * THE SURFACE, TURNED UP UNTIL IT IS ACTUALLY A SURFACE.
- *
- * Every one of these terms was already written and every one was set so faint
- * that none of it survived the bloom underneath — the orbs read as flat cream
- * blobs, which is exactly what they were being drawn as. A sphere is not a
- * gradient; it is a bright grazing rim, a dark terminator, a cold bounce on
- * the far edge and one small specular, and all four have to be strong enough
- * to be seen through the light the orb is sitting in.
- *
- * They still encode nothing. Aliveness is temperature and luminance; this is
- * form, and form is the same on a bright memory and a dark one — which is the
- * whole reason a cooled coal still looks like an object.
- */
-export const KEY_SHADE = 0.46;
-export const KEY_RIM = 0.5;
-export const KEY_COUNTER = 0.17;
-export const KEY_SPEC = 0.42;
-/** The broad wrap across the lit third — the old sheen, now motivated. */
-export const SHEEN = 0.26;
 /**
  * FILM GRAIN, AND IT HAS TO BE VISIBLE. One noise value per CELL rather than
  * per device pixel — a one-device-pixel cell on a retina display is half a CSS
@@ -141,10 +77,11 @@ export const VIGNETTE = 0.34;
 /** A candidate's unformed light: the same ramp, spread out and faint. */
 export const NEB_PEAK = 0.12;
 
-/** Size buckets the orb + halo sprites are rastered at (radius is 24-32). */
 /**
- * THE SIZES A DISC IS ACTUALLY BAKED AT — and they have to cover the range the
- * field really draws at, which these did not.
+ * THE RADII A FIELD ORB SNAPS TO. They were the sizes its disc was baked at;
+ * the orbs are not drawn any more, but `fitField` still snaps every radius to
+ * this table and the radius still spaces the field, so the table stays. Its
+ * history, from when the bakes were real:
  *
  * There were three, at 25 / 28.5 / 32, chosen for the meaningless per-orb
  * radius jitter. But the field FITS its orbs to the band: crowd it and the
@@ -155,15 +92,13 @@ export const NEB_PEAK = 0.12;
  *
  * Nine steps across the whole real range, spaced closer at the small end where
  * a given percentage error is most visible. Any drawn radius now lands within
- * a few percent of a sprite baked for it. Nine sizes × four tiers is thirty-six
- * discs baked once at load — nothing per frame, which is the standing rule.
+ * a few percent of a sprite baked for it.
  */
 export const SIZE_R = [6, 8.5, 11.5, 15, 19, 23, 26.5, 29.5, 32];
-/** Sprite bleed so the rim arc's outer antialiasing is never clipped. */
-export const ORB_PAD = 2;
 
 /**
- * WHICH BAKED DISC A GIVEN RADIUS IS DRAWN FROM — one rule, in one place.
+ * WHICH SIZE A GIVEN RADIUS SNAPS TO — one rule, in one place. (While orbs
+ * were drawn, the baked disc it was drawn from.)
  *
  * `SIZE_R` grew from three sizes to nine so that nothing would be scaled at
  * draw time. `fitField` was taught the new table; the two places that BUILD a
@@ -198,80 +133,9 @@ export function sizeIdxFor(r: number): number {
   return best;
 }
 
-/**
- * How many bands the aliveness continuum is drawn in.
- *
- * Five could not resolve a real archive: with a seven-day half-life, two
- * months of memories landed in the bottom two bands and the field read as one
- * flat grey (founder, 2026-08-24). Nine, mapped through `FIELD_TIER_GAMMA`,
- * makes a fortnight, three weeks and a month visibly different. The cost is
- * sprites baked once per (hue, resolution) at first use — nine per size
- * instead of five, still nothing per frame.
- */
-export const TIERS = 9;
-
 /* the per-member hue system lives in lib/appearance.ts — see the note
    there for why, and docs/architecture.md for the seams generally */
 
-/**
- * HOW COARSE A MACHINE'S MEMORY IS. Four device pixels to one of the orb's
- * own, which at the smallest baked size still leaves roughly a dozen steps
- * across the disc — enough that the edge reads as stepped rather than as a
- * blurry circle, and few enough that it reads as a resolution rather than as
- * a texture.
- */
-export const PIXEL_STEP = 4;
-
-/**
- * AN AGENT'S MEMORY IS THE SAME LIGHT AT A COARSER RESOLUTION.
- *
- * Not a different colour, not a different size, not a different shape: the
- * identical disc, the identical ramp, the identical aliveness tier — rendered
- * on a grid a quarter as fine and scaled up without smoothing. Everything the
- * light says still says it; what changes is how finely the thing can be
- * described, which is the honest difference between a memory somebody had and
- * a memory something recorded.
- *
- * This is the same sentence the rest of the world already speaks: the machine
- * hand on an agent's poster, the quantized positions when you cross into an
- * agent's wall, the stepped tick that replaces the companion's float. One
- * grammar, said again in the one place it had not been said yet.
- */
-export function rasterOrbPixel(ramp: Ramp, r: number, dpr: number, tier: number): HTMLCanvasElement {
-  /* the small render: the real orb, drawn at a fraction of the resolution */
-  const small = rasterOrb(ramp, r, dpr / PIXEL_STEP, tier);
-  const D = Math.max(8, Math.ceil((r + ORB_PAD) * 2 * dpr));
-  const [c, g] = makeSprite(D);
-  if (!g) return small;
-  /* nearest-neighbour on the way up — this is the whole effect, and doing it
-     at bake time means the frame loop never touches a smoothing flag */
-  g.imageSmoothingEnabled = false;
-  g.drawImage(small, 0, 0, D, D);
-  return c;
-}
-
-/**
- * A sprite sheet for one (hue, resolution) pair, baked the first time such a
- * memory is about to be drawn and held for the life of the palette. Called
- * from inside the frame loop, which is normally forbidden — but only ever on
- * the frame a combination first appears, and there are at most a handful, so
- * this is a bounded one-off rather than per-frame work.
- */
-export function orbsForHue(pal: HuedPalette, pixel: boolean): HTMLCanvasElement[][] {
-  /* THE `hue` ARGUMENT WENT on 2026-10-15. Every caller passed a value that
-     could only be -1 once `Ball.hue` lost its last writer with the rooms, so
-     the `hue >= 0` arm — `tintRamp`, and `MEMBER_HUES` behind it — was
-     unreachable. The name is kept because the cache it owns is unchanged. */
-  const key = pixel ? "p" : "s";
-  const got = pal.hued.get(key);
-  if (got) return got;
-  const ramp = pal.ramp;
-  const tiers = Array.from({ length: TIERS }, (_, i) => i);
-  const bake = pixel ? rasterOrbPixel : rasterOrb;
-  const made = SIZE_R.map((r) => tiers.map((t) => bake(ramp, r, pal.dpr, t)));
-  pal.hued.set(key, made);
-  return made;
-}
 
 export function makeSprite(px: number): [HTMLCanvasElement, CanvasRenderingContext2D | null] {
   const c = document.createElement("canvas");
@@ -289,174 +153,6 @@ export function mix(
   t: number,
 ): [number, number, number] {
   return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
-}
-
-/**
- * WHERE A TIER SITS ON THE RAMP — and the law this whole surface is built on.
- *
- * THE ONLY WARM THING ON SCREEN IS WHAT IS MOST ALIVE.
- *
- * Colour TEMPERATURE is the aliveness signal and luminance is the second
- * channel, and nothing else varies at all:
- *
- *   alive   — a slightly warm white, the single warm note in a cold frame
- *   fading  — through neutral, then cool: a silver that has lost its warmth
- *   dormant — cold and near-invisible, barely separated from the ground
- *
- * Read down a field of these and the warm ones are the live ones; that is the
- * entire readout, and it works at a glance and at a distance because warmth
- * against cold is pre-attentive in a way that six pastel hues never were.
- *
- * HUE-PER-THEME IS DELETED FOREVER. It said which theme an id happened to hash
- * to — unreadable by anyone, and a direct contradiction of the page's own law
- * that light is the only meaning channel. Do not reintroduce a colour that
- * encodes a category: if something needs to be told apart from its neighbour,
- * it is either alive or it is not.
- *
- * Below the half-way point a tier walks from dormant up to fading, above it
- * from fading up to alive — one continuum, quantised only because the sprites
- * are baked.
- */
-export function rampAt(ramp: Ramp, life: number): {
-  core: [number, number, number];
-  edge: [number, number, number];
-  bloom: [number, number, number];
-} {
-  const core =
-    life < 0.5 ? mix(ramp.dorm, ramp.fade, life * 2) : mix(ramp.fade, ramp.live, (life - 0.5) * 2);
-  const edge =
-    life < 0.5
-      ? mix(ramp.dorm, ramp.fade, life * 2)
-      : mix(ramp.fade, ramp.liveEdge, (life - 0.5) * 2);
-  /* a dormant orb's bloom is its own cold colour, which additively is very
-     nearly nothing — it stops glowing without ever leaving the field */
-  return { core, edge, bloom: mix(ramp.dorm, ramp.liveBloom, Math.pow(life, 1.2)) };
-}
-
-/**
- * The orb: a disc of light with a diffuse bloom. No rim light, no terminator,
- * no contact shadow — these are lit from within and they float, so nothing
- * about them implies an outside source.
- *
- * What varies from orb to orb is ALIVENESS and nothing else. `tier` walks that
- * continuum: 0 is dormant — dim, cold and nearly colourless, still holding its
- * place in the field — and TIERS-1 is fully alive, the brightest and warmest
- * the skin has.
- *
- * The edge is built rather than gradient-masked, because one skin needs it to
- * be IMPERFECT: the mask is a stack of rim paths from R down to R(1-soft),
- * each laid at 1/K alpha under `lighter`, which sums to a linear feather that
- * follows whatever silhouette the rim traced. A perfect circle is what reads
- * as digital, and hanji is the argument against it.
- */
-export function rasterOrb(ramp: Ramp, r: number, dpr: number, tier: number): HTMLCanvasElement {
-  const D = Math.max(8, Math.ceil((r + ORB_PAD) * 2 * dpr));
-  const [c, g] = makeSprite(D);
-  if (!g) return c;
-  const R = r * dpr;
-  const cx = D / 2;
-  const cy = D / 2;
-  const life = tier / (TIERS - 1);
-  const at = rampAt(ramp, life);
-  const ca = at.core;
-  const cb = at.edge;
-
-  /* the disc: a 135-degree ramp, top-left to bottom-right. Both ends are the
-     same light at the same aliveness — this is shading, not two colours */
-  const k = R * 0.72;
-  const disc = g.createLinearGradient(cx - k, cy - k, cx + k, cy + k);
-  disc.addColorStop(0, rgbCss(ca, 1));
-  disc.addColorStop(1, rgbCss(cb, 1));
-  g.fillStyle = disc;
-  g.fillRect(0, 0, D, D);
-
-  /* ---- THE SURFACE. All of it baked, all of it agreeing with KEY_X/KEY_Y,
-     and none of it costing a single instruction at draw time. ----
-
-     A dormant orb keeps a surface too: it is the SPECULAR and the wrap that
-     belong to its own light and fade with it, while the terminator and the
-     counter-rim belong to the WORLD's light and are there whatever the memory
-     has left. That is why a dead coal still looks like an object. */
-  const lx = cx + KEY_X * R;
-  const ly = cy + KEY_Y * R;
-
-  /* the terminator: the form falling away from the key, into the ground's own
-     colour so the dark side sinks into the layout rather than going grey */
-  const shade = g.createRadialGradient(lx, ly, R * 0.2, cx - KEY_X * R * 0.3, cy - KEY_Y * R * 0.3, R * 1.6);
-  shade.addColorStop(0, "rgba(6,8,13,0)");
-  shade.addColorStop(0.55, `rgba(6,8,13,${(KEY_SHADE * 0.35).toFixed(3)})`);
-  shade.addColorStop(1, `rgba(6,8,13,${KEY_SHADE.toFixed(3)})`);
-  g.fillStyle = shade;
-  g.fillRect(0, 0, D, D);
-
-  /* the rim: a soft arc where the key grazes the edge */
-  const rimX = cx + KEY_X * R * 0.94;
-  const rimY = cy + KEY_Y * R * 0.94;
-  const rim = g.createRadialGradient(rimX, rimY, 0, rimX, rimY, R * 0.62);
-  rim.addColorStop(0, `rgba(255,252,246,${(KEY_RIM * (0.42 + 0.58 * life)).toFixed(3)})`);
-  rim.addColorStop(0.5, `rgba(255,252,246,${(KEY_RIM * 0.22 * (0.42 + 0.58 * life)).toFixed(3)})`);
-  rim.addColorStop(1, "rgba(255,252,246,0)");
-  g.fillStyle = rim;
-  g.fillRect(0, 0, D, D);
-
-  /* the counter-rim: the cold bounce off everything else in the room, on the
-     opposite edge and much weaker — this is the term that reads as "night" */
-  const ccx = cx - KEY_X * R * 0.9;
-  const ccy = cy - KEY_Y * R * 0.9;
-  const counter = g.createRadialGradient(ccx, ccy, 0, ccx, ccy, R * 0.75);
-  counter.addColorStop(0, `rgba(176,196,222,${KEY_COUNTER.toFixed(3)})`);
-  counter.addColorStop(1, "rgba(176,196,222,0)");
-  g.fillStyle = counter;
-  g.fillRect(0, 0, D, D);
-
-  /* the broad wrap across the lit side — the old sheen, now pointed at a
-     source that exists */
-  if (life > 0.05) {
-    const sheen = g.createLinearGradient(lx, ly, cx - KEY_X * k, cy - KEY_Y * k);
-    sheen.addColorStop(0, `rgba(255,255,255,${(SHEEN * life).toFixed(3)})`);
-    sheen.addColorStop(0.45, `rgba(255,255,255,${(SHEEN * 0.33 * life).toFixed(3)})`);
-    sheen.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = sheen;
-    g.fillRect(0, 0, D, D);
-  }
-
-  /* and the specular: small, soft, well inside the rim, and it belongs to the
-     memory's own light — a dormant one barely catches anything */
-  const spX = cx + KEY_X * R * 0.46;
-  const spY = cy + KEY_Y * R * 0.46;
-  /* smaller and tighter: a big soft specular is a haze, a small one is glass */
-  const spR = R * 0.19;
-  const spec = g.createRadialGradient(spX, spY, 0, spX, spY, spR);
-  spec.addColorStop(0, `rgba(255,255,255,${(KEY_SPEC * (0.25 + 0.75 * life)).toFixed(3)})`);
-  spec.addColorStop(1, "rgba(255,255,255,0)");
-  g.fillStyle = spec;
-  g.fillRect(0, 0, D, D);
-
-  /* THE EDGE. A stack of discs, R down to R(1−soft), each at 1/K alpha under
-     `lighter` so they sum to a linear feather — the perimeter is never a
-     cut-out, and the disc melts into its own bloom. */
-  const [mc, mg] = makeSprite(D);
-  if (!mg) return c;
-  const K = 12;
-  /* ONE DEVICE PIXEL, AND THE FLOOR MUST BE IN THE SAME UNITS AS R.
-     This read `(2 * dpr) / R`, but R is ALREADY in device pixels — so the
-     dpr multiply was applied twice and the floor came out at four device
-     pixels of feather on a retina screen. It overrode EDGE_SOFT entirely at
-     every size, which is why the perimeter stayed a smudge no matter what
-     that constant said. One over R is exactly one device pixel: enough to
-     antialias the circle and not one step more. */
-  const soft = Math.max(EDGE_SOFT, 1 / Math.max(R, 1));
-  mg.globalCompositeOperation = "lighter";
-  mg.fillStyle = `rgba(255,255,255,${(1 / K).toFixed(4)})`;
-  for (let i = 0; i < K; i++) {
-    mg.beginPath();
-    mg.arc(cx, cy, R * (1 - soft * (i / (K - 1))), 0, TAU);
-    mg.fill();
-  }
-  g.globalCompositeOperation = "destination-in";
-  g.drawImage(mc, 0, 0);
-  g.globalCompositeOperation = "source-over";
-  return c;
 }
 
 /**

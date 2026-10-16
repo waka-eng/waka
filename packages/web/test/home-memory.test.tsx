@@ -259,6 +259,19 @@ vi.mock("../src/lib/data", async (importOriginal) => {
   return {
     ...actual,
     ...dataMockFrom(FACTS),
+    /* ONE MEMORY BY ITS ADDRESS. With the orbs gone (2026-10-15) the card
+       opens from `/inspirations/:id`, which reads the memory itself rather
+       than finding it on the ground, so the fixture answers that read too. */
+    loadInspiration: async (id: string) => {
+      const kept = FACTS.inspirations.find((x) => x.id === id);
+      if (!kept) throw new Error(`no such memory ${id}`);
+      const at = BASE - kept.daysAgo * DAY;
+      return {
+        id: kept.id, preview: kept.text, text: kept.text, isPublic: kept.isPublic, kind: "note", source: "app",
+        category: null, capturedMs: at, updatedMs: at, attachments: [], reflectionCount: 0,
+        conversationOrigin: null, reflections: [], enrichment: [],
+      };
+    },
     loadSignals: async () => SIGNALS.map(row),
     loadSignal: async (id: string) => {
       const s = SIGNALS.find((x) => x.id === id);
@@ -357,65 +370,43 @@ function canvas(): HTMLElement {
 }
 
 /**
- * Press across the field until a memory's panel opens, and hand it back.
+ * OPEN A MEMORY BY ITS ADDRESS.
  *
- * The band comes from the audit rather than from a guess, so this follows the
- * field wherever the fit put it; the step is smaller than the smallest orb the
- * audit reports, so a hit is not luck.
+ * These helpers used to press across the field until an orb answered. The
+ * orbs are gone (founder, 2026-10-15: "these balls for inspirations being
+ * saved should FULLY BE DELETED and removed"), so nothing on the ground
+ * can be pressed. The card these cases are about now opens from a search
+ * result or a link, both of which go through the memory's address.
  */
-async function tapAnOrb(): Promise<HTMLElement> {
-  const a = layout.audit();
-  if (a.drawn.active === 0) throw new Error("the field is empty — nothing to tap");
-  const step = Math.max(6, Math.floor(a.drawn.rMin));
-  for (let y = Math.floor(a.highest); y <= Math.ceil(a.lowest); y += step) {
-    for (let x = 20; x <= 1400; x += step) {
-      await pressOn(canvas(), x, y);
-      await liftAt(x, y);
-      await layout.step(24);
-      const open = layout.container.querySelector<HTMLElement>(".jar-panel--in");
-      if (open) return open;
+async function openFromArchive(match: (text: string) => boolean, what: string): Promise<HTMLElement> {
+  /* By its address, which is what a search result and a shared link do:
+     `/inspirations/:id` opens the memory's card over the world. */
+  const memory = FACTS.inspirations.find((row) => match(row.text));
+  if (!memory) throw new Error(`no memory in the fixture for ${what}`);
+  layout.unmount();
+  layout = await mountWorld(FACTS, { initialEntries: [`/inspirations/${memory.id}`] });
+  /* The address is applied by a loop that waits on timers between its
+     stages (the wall, the section, the read), so frames alone never finish
+     it: real time passes between them, up to a bound. */
+  for (let turn = 0; turn < 40; turn += 1) {
+    await layout.step(10);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 90)); });
+    const open = layout.container.querySelector<HTMLElement>(".jar-panel--in");
+    if (open) {
+      await layout.step(12);
+      return open;
     }
   }
-  throw new Error(
-    `no tap anywhere across the field opened a memory: ${a.drawn.active} drawn, ` +
-      `band ${a.highest}–${a.lowest}, radii ${a.drawn.rMin}–${a.drawn.rMax}`,
-  );
+  throw new Error(`the address of ${what} opened no memory`);
 }
 
-/**
- * Open a NAMED memory's panel by tapping the field until that one answers.
- *
- * `tapAnOrb` gives whichever orb the scan reaches first, which is enough when
- * any memory will do. A case about what deleting COSTS needs a specific one:
- * `own-0` through `own-4` are cited by the two signals overhead and `own-5` is
- * cited by nothing, and that difference is the whole subject.
- */
-async function openMemory(text: string): Promise<HTMLElement> {
-  const a = layout.audit();
-  /* A COARSE SCAN, NOT A FINE ONE. Every probe costs frames, and the fit
-     spreads six orbs across the whole band — stepping by the smallest radius
-     was thousands of presses and a timeout. Tapping a second orb replaces the
-     panel, so misses cost nothing and need no close. */
-  const step = Math.max(12, Math.floor(a.drawn.rMin));
-  for (let y = Math.floor(a.highest); y <= Math.ceil(a.lowest); y += step) {
-    for (let x = 20; x <= 1400; x += step) {
-      await pressOn(canvas(), x, y);
-      await liftAt(x, y);
-      await layout.step(3);
-      const open = layout.container.querySelector<HTMLElement>(".jar-panel--in");
-      if (!open) continue;
-      const said = (open.querySelector(".jar-panel-text")?.textContent ?? "").trim();
-      if (said.startsWith(text)) {
-        await layout.step(12);
-        return open;
-      }
-    }
-  }
-  throw new Error(
-    `no orb in the field opened "${text}": ${a.drawn.active} drawn, ` +
-      `band ${a.highest}–${a.lowest}, radii ${a.drawn.rMin}–${a.drawn.rMax}`,
-  );
-}
+/** Any memory will do. */
+const tapAnOrb = (): Promise<HTMLElement> => openFromArchive(() => true, "any memory");
+
+/** A NAMED memory: `own-0` through `own-4` are cited by the two signals
+    overhead and `own-5` is cited by nothing, and that difference is the
+    whole subject of the cases that use this. */
+const openMemory = (text: string): Promise<HTMLElement> => openFromArchive((said) => said.startsWith(text), `"${text}"`);
 
 /** The verbs under an open memory, pressed by name. */
 async function pressPanelVerb(panel: HTMLElement, name: string): Promise<void> {

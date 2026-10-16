@@ -10,10 +10,10 @@ import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {PrincipleShare} from '../src/components/PrincipleShare';
 import {fetchPrinciples,fetchPrincipleStatements,updatePrinciple,reorderPrinciples,type ApiPrinciple} from '../src/lib/api';
-import {ArtifactLayoutError,renderPrincipleArtifact} from '../src/lib/principle-artifact';
+import {ArtifactLayoutError,renderShareCard} from '../src/lib/principle-artifact';
 import {readPrincipleArtifactDrafts} from '../src/lib/principle-artifact-drafts';
 vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),fetchPrinciples:vi.fn(),fetchPrincipleStatements:vi.fn(),updatePrinciple:vi.fn(),reorderPrinciples:vi.fn()}));
-vi.mock('../src/lib/principle-artifact',async original=>({...await original<typeof import('../src/lib/principle-artifact')>(),renderPrincipleArtifact:vi.fn()}));
+vi.mock('../src/lib/principle-artifact',async original=>({...await original<typeof import('../src/lib/principle-artifact')>(),renderShareCard:vi.fn()}));
 const id='11111111-1111-4111-8111-111111111111',scope={accountId:'owner',profileId:'human'};
 const source:ApiPrinciple={id,statement:'Leave room to reconsider.',type:'maxim',state:'held',origin:'minted',rank:0,locked:false,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T00:00:00Z',
   citedSignals:[{id:'signal',statement:'PRIVATE_SENTINEL',examples:[{text:'PRIVATE_SENTINEL',createdAt:'2026-10-03T00:00:00Z'}]}]};
@@ -24,7 +24,7 @@ beforeEach(()=>{
   vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});localStorage.clear();
   (globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
   vi.mocked(fetchPrinciples).mockResolvedValue([structuredClone(source)]);
-  vi.mocked(renderPrincipleArtifact).mockImplementation(async content=>({blob:new Blob([content.items.map(item=>item.text).join('\n')],{type:'image/png'}),width:1080,height:1080,fallbackFont:false}));
+  vi.mocked(renderShareCard).mockImplementation(async content=>({blob:new Blob([content.items.map(item=>item.text).join('\n')],{type:'image/png'}),width:1080,height:1080,fallbackFont:false}));
   const BaseURL=URL;vi.stubGlobal('URL',class extends BaseURL{static createObjectURL=vi.fn(()=>`blob:fixture-${crypto.randomUUID()}`);static revokeObjectURL=vi.fn();});
   Object.defineProperty(navigator,'share',{configurable:true,value:nativeShare});Object.defineProperty(navigator,'canShare',{configurable:true,value:nativeCanShare});nativeCanShare.mockReturnValue(false);
   host=document.createElement('div');document.body.append(host);root=createRoot(host);
@@ -52,7 +52,7 @@ it('starts with an exportable preview and keeps editing and customization option
 });
 it('edits only the card and never renders private evidence or the hidden name',async()=>{
   await mount();await settle();await type('My card words');await settle();
-  expect(renderPrincipleArtifact).toHaveBeenLastCalledWith({items:[{text:'My card words'}],name:'',appearance:'dark',format:'square'});
+  expect(renderShareCard).toHaveBeenLastCalledWith({items:[{text:'My card words'}],name:'',appearance:'dark',format:'square'});
   expect(host.textContent).not.toContain('PRIVATE_SENTINEL');expect(updatePrinciple).not.toHaveBeenCalled();expect(reorderPrinciples).not.toHaveBeenCalled();
   expect(readPrincipleArtifactDrafts(scope,id)[0].value.entries[0].originalStatement).toBe(source.statement);
 });
@@ -62,8 +62,8 @@ it('restores a closed draft and forks its next edit without overwriting the earl
   expect(readPrincipleArtifactDrafts(scope,id).map(row=>row.value.entries[0].text).sort()).toEqual(['A new draft of these words','Keep these card words']);
 });
 it('never enables export from a late preview of earlier wording',async()=>{
-  let resolve!:(value:Awaited<ReturnType<typeof renderPrincipleArtifact>>)=>void;
-  vi.mocked(renderPrincipleArtifact).mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));await mount();await settle();
+  let resolve!:(value:Awaited<ReturnType<typeof renderShareCard>>)=>void;
+  vi.mocked(renderShareCard).mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));await mount();await settle();
   await type('Changed while the image was rendering');
   await act(async()=>resolve({blob:new Blob(['old']),width:1080,height:1080,fallbackFont:false}));expect(button('Save image').disabled).toBe(true);
   await settle();expect(button('Save image').disabled).toBe(false);expect(host.querySelector('img')!.alt).toBe('Changed while the image was rendering');
@@ -76,7 +76,7 @@ it('keeps wording after native cancellation and never claims it was published',a
 });
 it('hides an obsolete preview after a render failure and retries without changing the draft',async()=>{
   await mount();await settle();
-  vi.mocked(renderPrincipleArtifact).mockRejectedValueOnce(new ArtifactLayoutError('unavailable'));
+  vi.mocked(renderShareCard).mockRejectedValueOnce(new ArtifactLayoutError('unavailable'));
   await type('Keep these words after an image failure');await settle();
   expect(button('Save image').disabled).toBe(true);expect(host.querySelector('img')).toBeNull();
   expect(host.querySelector('textarea')!.value).toBe('Keep these words after an image failure');
@@ -104,12 +104,12 @@ it('falls back to download after native sharing fails and sends only the preview
 });
 it('recovers a failed source read without creating a draft or an export from missing data',async()=>{
   vi.mocked(fetchPrinciples).mockRejectedValueOnce(new Error('Offline'));
-  await mount();expect(host.querySelector('textarea')).toBeNull();expect(renderPrincipleArtifact).not.toHaveBeenCalled();
+  await mount();expect(host.querySelector('textarea')).toBeNull();expect(renderShareCard).not.toHaveBeenCalled();
   await act(async()=>button('Try again').click());await settle();
   expect(host.querySelector('textarea')!.value).toBe(source.statement);expect(button('Save image').disabled).toBe(false);
 });
 it.each(['empty','too_long'] as const)('keeps unrenderable %s wording editable and disables export',async code=>{
-  await mount();await settle();vi.mocked(renderPrincipleArtifact).mockRejectedValueOnce(new ArtifactLayoutError(code));
+  await mount();await settle();vi.mocked(renderShareCard).mockRejectedValueOnce(new ArtifactLayoutError(code));
   const words=code==='empty'?'   ':'Long wording '.repeat(100);await type(words);await settle();
   expect(host.querySelector('textarea')!.value).toBe(words);expect(button('Save image').disabled).toBe(true);expect(host.querySelector('img')).toBeNull();
   await type('Fits again');await settle();expect(button('Save image').disabled).toBe(false);
@@ -126,9 +126,9 @@ it('keeps visible words after storage failure and saves them on explicit retry',
 });
 it('does not restore or export a local draft if the source is no longer accessible',async()=>{
   await mount();await type('Private draft');await act(async()=>root.unmount());root=createRoot(host);
-  vi.mocked(fetchPrinciples).mockResolvedValue([]);vi.mocked(renderPrincipleArtifact).mockClear();await mount();await settle();
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);vi.mocked(renderShareCard).mockClear();await mount();await settle();
   expect(host.querySelector('textarea')).toBeNull();expect(host.textContent).not.toContain('Private draft');
-  expect(renderPrincipleArtifact).not.toHaveBeenCalled();expect(host.querySelector('footer')).toBeNull();
+  expect(renderShareCard).not.toHaveBeenCalled();expect(host.querySelector('footer')).toBeNull();
 });
 it('builds change cards from recorded words and dates with no editable invented past',async()=>{
   const beforeId='22222222-2222-4222-8222-222222222222',afterId='33333333-3333-4333-8333-333333333333';
@@ -136,7 +136,7 @@ it('builds change cards from recorded words and dates with no editable invented 
     {id:afterId,statement:'Current saved wording.',createdAt:'2026-10-03T12:00:00Z'},
     {id:beforeId,statement:'Earlier saved wording.',createdAt:'2026-10-01T12:00:00Z'}]});
   await mount();await changeMode();await settle();
-  expect(host.querySelector('textarea')).toBeNull();expect(renderPrincipleArtifact).toHaveBeenLastCalledWith({name:'',appearance:'dark',format:'square',items:[
+  expect(host.querySelector('textarea')).toBeNull();expect(renderShareCard).toHaveBeenLastCalledWith({name:'',appearance:'dark',format:'square',items:[
     {text:'Earlier saved wording.',label:'Earlier wording',date:new Date('2026-10-01T12:00:00Z').toLocaleDateString('en-US',{dateStyle:'medium'})},
     {text:'Current saved wording.',label:'Current wording',date:new Date('2026-10-03T12:00:00Z').toLocaleDateString('en-US',{dateStyle:'medium'})}]});
   expect(readPrincipleArtifactDrafts(scope,id)[0].value.beforeStatementId).toBe(beforeId);
@@ -162,7 +162,7 @@ it('opens with the set, led by the pressed one, capped at three and edited separ
      is a real assertion rather than one the fixture satisfies by accident. */
   vi.mocked(fetchPrinciples).mockResolvedValue([extra,source,third,fourth]);await mount();
   await type('Only my card edit');await settle();
-  expect(renderPrincipleArtifact).toHaveBeenLastCalledWith(expect.objectContaining({name:'',appearance:'dark',format:'square',
+  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({name:'',appearance:'dark',format:'square',
     items:[{text:'Only my card edit'},{text:extra.statement},{text:third.statement}]}));
   /* The cap holds and the fourth never arrives, so there is nothing left to
      add — which is why the control that used to build this is absent. */
@@ -189,7 +189,7 @@ it('puts the proof on the card, counting each save once across the set',async()=
   const b={...source,id:'22222222-2222-4222-8222-222222222222',statement:'Second.',heldSince:held,
     citedSignals:[{id:'s2',statement:'y',examples:[shared]}]};
   vi.mocked(fetchPrinciples).mockResolvedValue([a,b]);await mount();await settle();
-  const last=vi.mocked(renderPrincipleArtifact).mock.calls.at(-1)![0];
+  const last=vi.mocked(renderShareCard).mock.calls.at(-1)![0];
   expect(last.proof,'the card carries no proof, so it is a sentiment with nothing behind it').toBeTruthy();
   /* Two distinct saves, not three: the shared one is counted once. */
   expect(last.proof).toContain('2 things I kept');
@@ -208,10 +208,10 @@ it('preserves exact selected history and offers feasible options for an overlong
     {id:old,statement:'First.',createdAt:'2026-10-01T12:00:00Z'},
     {id:recent,statement:'Previous.',createdAt:'2026-10-02T12:00:00Z'}]});
   await mount();await changeMode();await settle();expect(readPrincipleArtifactDrafts(scope,id)[0].value.beforeStatementId).toBe(recent);
-  vi.mocked(renderPrincipleArtifact).mockRejectedValueOnce(new ArtifactLayoutError('too_long'));
+  vi.mocked(renderShareCard).mockRejectedValueOnce(new ArtifactLayoutError('too_long'));
   await act(async()=>{const select=[...host.querySelectorAll('select')].find(row=>[...row.options].some(option=>option.value===old))!;select.value=old;select.dispatchEvent(new Event('change',{bubbles:true}));});await settle();
   expect(host.textContent).toContain('These recorded words don’t fit.');expect(host.textContent).not.toContain('Shorten the text');
   expect(host.querySelector('textarea')).toBeNull();expect(button('Save image').disabled).toBe(true);
   await act(async()=>root.unmount());root=createRoot(host);await mount();await settle();
-  expect(renderPrincipleArtifact).toHaveBeenLastCalledWith(expect.objectContaining({items:[expect.objectContaining({text:'First.'}),expect.objectContaining({text:'Today.'})]}));
+  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({items:[expect.objectContaining({text:'First.'}),expect.objectContaining({text:'Today.'})]}));
 });

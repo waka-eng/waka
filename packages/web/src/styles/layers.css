@@ -317,6 +317,19 @@
   filter: brightness(1.75);
 }
 /*
+ * BUT NOT A WHOLE PAGE. A surface that opens over the world takes focus
+ * itself (`DialogSurface`, `tabIndex={-1}`) so the keyboard starts there —
+ * and after the first key press anywhere, Chromium counts that focus as
+ * "visible". The rule above then brightened the ENTIRE page by 1.75: the
+ * bubble, the creature and every word went flat white. Founder, 2026-10-15:
+ * "why does it be like this plain white when I hover over it? I don't like
+ * it, don't do that." A container focused by the code is not a thing the
+ * person moved to, so it does not light up; everything inside it still does.
+ */
+.jar [tabindex="-1"]:focus-visible {
+  filter: none;
+}
+/*
  * `border-radius: inherit` USED TO BE IN THAT RULE, and it was a bug with a
  * long reach. This block is UNLAYERED, which means it beats every layer at
  * any specificity — the property that makes it a floor. So the line did not

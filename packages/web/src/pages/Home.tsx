@@ -86,12 +86,17 @@ import { usePageMenu, wallAgnosticView } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
+import { ShareSheet, inspirationShareTarget, type ShareTarget } from '../components/ShareSheet';
+import { type CreatureSpot } from '../components/CrossingCompanion';
+import { prefersStillness } from '../lib/motion';
+import { toolName } from '../lib/tool-name';
 import { ReviewEvidence } from '../components/ReviewEvidence';
 import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
-import { listClaims, type ApiClaim } from '../lib/api';
+import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
+import { candidateSaveRequestId } from '../lib/harvest';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
 import { inspectInspirationPhoto, PHOTO_ACCEPT } from '../lib/inspiration-photo';
 import { uploadInspirationMedia } from '../lib/inspiration-media-upload';
@@ -111,6 +116,9 @@ import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { ClaimsOverlay } from "../components/ClaimsOverlay";
+import { ClaimSlip } from "../components/ClaimSlip";
+import { HarvestReasons } from "../components/HarvestReasons";
+import { AgentPick } from "../components/AgentPick";
 import { ConversationsOverlay } from "../components/ConversationsOverlay";
 import { ConversationPanel } from "../components/ConversationPanel";
 import type { ApiConversation } from "../lib/api/conversations";
@@ -166,6 +174,7 @@ import type { AgentBundle } from "../lib/agent-contract";
 import { MOCK_AGENTS, MOCK_AGENT_BUNDLES } from "../lib/fixture/agent-walls";
 import { offlineHome, type OfflineHome } from "../lib/fixture/offline-home";
 import {
+  agoWords,
   asSentence,
   dateStamp,
   dateWords,
@@ -187,11 +196,10 @@ import {
   dismissTopOfMindEntry,
   restoreTopOfMindEntry,
   releaseTopOfMindEntry,
-  /* `updateInspiration` HAD TWO CALLERS and now has none in this file: the
-     memory's own editor (which sends `text`) and `togglePublic` (which sent
-     `visibility`). The editor is still here — it goes through
-     `lib/data`'s `saveInspiration` — and the route still accepts
-     `visibility`. What is gone is this page asking it to. */
+  /* `updateInspiration` HAD TWO CALLERS and lost both: the memory's own
+     editor (which sent `text`) and `togglePublic` (which sent `visibility`).
+     Its one caller here now is the harvest keep, which corrects the words of
+     a save it already made rather than making a second (`keepCandidate`). */
   fetchProfiles,
   /* `ApiGroupMember` and `ApiGroupSummary` STOOD HERE and were the last two
      room shapes this file named; `ApiGroupFieldInspiration` was the third,
@@ -669,6 +677,9 @@ interface PanelData {
    registers a dismissal against it either, so a list naming it here would
    have been a guard for no hook on a class with no wearer. */
 const KEEP_PROV = [".jar-prov-room", ".jar-panel"] as const;
+
+/** The world's lines about there being little or nothing kept yet. */
+const NOTHING_LINES: ReadonlySet<MessageKey> = new Set<MessageKey>(['worldSayEmpty1', 'worldSayEmpty2', 'worldSayQuiet1', 'worldSayQuiet2', 'worldSayQuiet3', 'worldSayYoung1', 'worldSayYoung2']);
 
 export default function HomePage(): JSX.Element {
   /* No gate. This is home now — it is what a signed-in person lands on, in
@@ -1224,6 +1235,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** The loop's own fallback line, reachable from a press. Assigned inside
       the frame effect, where it is written. */
   const sayLineRef = useRef<(() => string) | null>(null);
+  const sayLineKeyRef = useRef<{ line: string; key: MessageKey } | null>(null);
   /** Which thing the next press says. */
   const creatureTurn = useRef(0);
   /**
@@ -1296,6 +1308,17 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      again — releases. It lags `selectedId` at BOTH ends: it does not appear
      until its content is whole, and it stays mounted through its fade-out. */
   const [panel, setPanel] = useState<PanelData | null>(null);
+  /**
+   * A SAVE OR THE TOP OF MIND, BEING MADE INTO A CARD.
+   *
+   * Founder, 2026-10-15: "share an inspiration, share their current top of
+   * mind or share their principle ... a preview, save it to share as an
+   * image." Principles keep their own address (`/principles/:id/share`)
+   * because a principle card has drafts and a set; these two are one card
+   * made in one sitting, so they open over whatever was in front of you
+   * and close back to it.
+   */
+  const [thingShare, setThingShare] = useState<ShareTarget | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   /* The sky's two discrete facts, pushed up from the loop: is the camera
      standing in it (the dial has no meaning among candidates), and which
@@ -1706,6 +1729,47 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const answeringAsRef = useRef<string | undefined>(undefined);
   const [claimQueue, setClaimQueue] = useState<ApiClaim[]>([]);
   /**
+   * WHAT A COLLECTOR PICKED FROM YOUR DAY, WAITING TO BE KEPT OR LET GO.
+   *
+   * Founder, 2026-10-15: claims "change depending on where it came from".
+   * A reading WAKA made of you asks "still true?"; a sentence of your own
+   * that a collector picked asks "keep this?", and a no asks why. Both stand
+   * in the one slot, one at a time, and these go first: a candidate's words
+   * are deleted after a week unchosen, and a reading has no clock.
+   */
+  const [harvestQueue, setHarvestQueue] = useState<ApiHarvestCandidate[]>([]);
+  /** A candidate that was swiped away and is being asked "why not". */
+  const [harvestWhy, setHarvestWhy] = useState<{ candidate: ApiHarvestCandidate; busy: boolean; failed: boolean } | null>(null);
+  /* THE CREATURE STEPS ASIDE WHILE THE AGENT ASKS. Founder, 2026-10-15,
+     approved: on a phone the why-not list covered the lower half of the
+     creature, and two characters stacked on each other muddy who is
+     speaking. So while the agent asks, the creature rises a little and its
+     bubble fades (`.jar--agent-asking`); answering or skipping brings it
+     back, which also reads as "done". */
+  useEffect(() => {
+    simApiRef.current?.stepAside(Boolean(harvestWhy) && !mouthOpen);
+  }, [harvestWhy, mouthOpen]);
+  /* A candidate whose card is mid-trip, and those whose keep failed while it
+     was: a failure that lands before the card has gone is held until it
+     has, so the queue is never rewritten from under a card in flight. */
+  const harvestLeavingRef = useRef(new Set<string>());
+  const harvestReturnRef = useRef(new Set<string>());
+  /** After a reading is answered "Not anymore": one line that says it was
+      noted and offers the conversation. Clears on its own, or when the door is taken. */
+  const [claimReceipt, setClaimReceipt] = useState<{ statement: string } | null>(null);
+  useEffect(() => {
+    if (!claimReceipt) return;
+    /* It does not leave while somebody is on it: a receipt whose button has
+       focus waits until focus moves on (review, 2026-10-15). */
+    let timer = 0;
+    const leave = () => {
+      if (document.activeElement?.closest('.jar-char-claim-receipt')) { timer = window.setTimeout(leave, 1500); return; }
+      setClaimReceipt(null);
+    };
+    timer = window.setTimeout(leave, 9000);
+    return () => window.clearTimeout(timer);
+  }, [claimReceipt]);
+  /**
    * CORRECTING A CLAIM — THE ONLY PLACE IN THE PRODUCT THAT TAKES TYPING
    * BESIDES THE ONE BOX.
    *
@@ -1741,8 +1805,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      experience rather than asking user to answer in that small space?" The
      paragraphs above describe a decision about `partly` that still stands —
      it files at once, with no round trip — and the state that made "not
-     true" the expensive answer has no job left. See the note at the answer
-     row in the claim block. */
+     true" the expensive answer has no job left; "Not anymore" files at once
+     and the receipt line offers the conversation. */
   /**
    * AND THE QUEUE BELONGS TO THE WALL YOU ARE STANDING ON.
    *
@@ -1924,8 +1988,19 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     (atWall.kind === "agent" || standingAsAgent || readingLoadPhase === "ready");
 
   answeringAsRef.current = claimsFor;
+  /* Which wall a late answer would land on. The basket is the person's own,
+     so a response that arrives after they have stepped onto the agent's wall
+     is dropped rather than shown there as the agent's (found in review). */
+  const standingAsAgentRef = useRef(standingAsAgent);
+  standingAsAgentRef.current = standingAsAgent;
+  useEffect(() => { if (standingAsAgent) setHarvestWhy(null); }, [standingAsAgent]);
   const loadClaims = useCallback(() => {
-    if (standingAsAgent) { setClaimQueue([]); return; }
+    if (standingAsAgent) { setClaimQueue([]); setHarvestQueue([]); return; }
+    /* The basket loads beside the claims. A failure is an empty basket:
+       nothing here is broken for the person, nothing is being asked. */
+    void listHarvest()
+      .then((rows) => { if (!standingAsAgentRef.current) setHarvestQueue(rows.slice(0, 3)); })
+      .catch(() => setHarvestQueue([]));
     void listClaims({ limit: 8 })
       /* ═══ THREE IS A SITTING ═══════════════════════════════════════════
          Not eight, which is what this used to hold. A claim is expensive to
@@ -1946,7 +2021,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
          cost; running dry reads as a chore completed. The rest of the queue
          is still visible in its own room, which is now a doorway back to
          here. */
-      .then(({ claims }) => setClaimQueue(claims.slice(0, 3)))
+      .then(({ claims }) => { if (!standingAsAgentRef.current) setClaimQueue(claims.slice(0, 3)); })
       /* A queue that cannot be fetched is silence, not an error on the home
          screen: nothing here is broken for the person, there is simply
          nothing being asked. */
@@ -1980,7 +2055,30 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      drawing over the list was the COMPANION itself, on the canvas, where a
      stylesheet cannot reach it. This ref is how the loop hears the same
      fact the class is stating. */
+  const simApiRef = useRef<SimApi | null>(null);
   const asideRef = useRef(false);
+  /* ═══ THE WALK BETWEEN NOW AND PRINCIPLES ══════════════════════════════
+     Founder, 2026-10-15: "clicking principle from now should make agent
+     turn right and move right ... and when user is going from principles to
+     now, do sth similar." Decided in render, from what the address was a
+     moment ago, so the page's first frame already knows it is being walked
+     into — a crossing that arrived one render late would flash the page
+     whole first. Only between Now and Principles: from Inspirations or a
+     chat, the page simply appears, because the creature was not standing on
+     screen to walk. */
+  const principlesOpen = viewNavigation.view?.open === 'principles';
+  const atNowView = !viewNavigation.view?.open && !viewNavigation.view?.conversationId &&
+    !viewNavigation.view?.compose && !viewNavigation.view?.sharePrinciple && !viewNavigation.view?.principleId;
+  const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
+  const [principlesCrossing, setPrinciplesCrossing] = useState<{ going: 'in' | 'out'; home: CreatureSpot | null } | null>(null);
+  if (crossSeen.open !== principlesOpen || crossSeen.now !== atNowView) {
+    const home = simApiRef.current?.creatureAt() ?? null;
+    if (principlesOpen && !crossSeen.open && crossSeen.now && home && !prefersStillness()) setPrinciplesCrossing({ going: 'in', home });
+    else if (!principlesOpen && crossSeen.open && atNowView && home && !prefersStillness()) setPrinciplesCrossing({ going: 'out', home });
+    else setPrinciplesCrossing(null);
+    setCrossSeen({ open: principlesOpen, now: atNowView });
+  }
+  const walkingHome = principlesCrossing?.going === 'out';
   /* EVERY SURFACE THAT MOUNTS A PAGE, not just the ones that set `open`.
      The first version of this asked `view.open` alone and the chat broke
      immediately: a conversation sets `conversationId`, so the world went on
@@ -1990,7 +2088,9 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      parameters are what mount one. */
   asideRef.current = Boolean(
     viewNavigation.view?.open || viewNavigation.view?.conversationId ||
-    viewNavigation.view?.sharePrinciple || viewNavigation.view?.compose,
+    viewNavigation.view?.sharePrinciple || viewNavigation.view?.compose ||
+    /* the walk home is still the page's creature until it arrives */
+    walkingHome,
   );
   useEffect(() => { if (!mouthOpen && recording.phase !== 'idle') void recording.stop(); }, [mouthOpen, recording.phase, recording.stop]);
   const [newInspirationRequested, setNewInspirationRequested] = useState(false);
@@ -2067,7 +2167,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   selectedIdRef.current = selectedId;
   const ballsRef = useRef<{ list: Ball[]; byId: Map<string, Ball> } | null>(null);
   const paletteRef = useRef<Palette | null>(null);
-  const simApiRef = useRef<SimApi | null>(null);
   /* why the last goToWall did or did not move — dev diagnosis only */
   const lastGoRef = useRef<string>("never called");
   /**
@@ -2111,6 +2210,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      minted before a language change still speaks the language of the moment
      it fires. */
   const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
+  /* The creature's lines that are about there being little or nothing kept —
+     see the bubble's "CHAT WHEN THERE IS SOMETHING" note. Decided by the
+     catalogue key the world picked (`sayLineKeyRef`), and only while that
+     line is the one showing; translated words are never compared. */
+  const sayIsAboutNothing = useCallback((line: string) => {
+    const said = sayLineKeyRef.current;
+    return Boolean(said && said.line === line && NOTHING_LINES.has(said.key));
+  }, []);
 
   /* ═══ THE TWO SETTINGS THE CORNER CARD HOLDS ═════════════════════════════
      Founder: "how do I kind of make it more of a drop down when I click on
@@ -3860,21 +3967,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         creatureSpeaksRef,
         dialRef,
         fieldLoadingRef,
-        foundRef,
         headingRef,
         inspirationsRef,
         lastGoRef,
-        loadDetailRef,
         loadWallRef,
         localeRef,
         openSeekRef,
         paletteRef,
         panelArrowRef,
-        panelOpenRef,
         parkedRef,
         pushArrivedRef,
-        readingLitRef,
         sayLineRef,
+        sayLineKeyRef,
         selectedIdRef,
         simApiRef,
         skyRef,
@@ -5828,6 +5932,114 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     [],
   );
 
+  /**
+   * KEEPING A CANDIDATE IS AN ORDINARY SAVE, THEN A LINK.
+   *
+   * The words go through `createInspiration` like anything typed into the
+   * box — with the candidate's id as the save request id, so a retried keep
+   * finds the first save instead of making a second — and only then is the
+   * basket told which save it became. It arrives in the world the way a
+   * fresh save does. If either step fails, the candidate comes back to the
+   * front of the queue and the creature says so; nothing is lost.
+   */
+  /* A save made for a candidate whose link to the basket has not landed yet. */
+  const keptSavesRef = useRef(new Map<string, { made: Awaited<ReturnType<typeof createInspiration>>; savedAs: string }>());
+  const keepCandidate = useCallback(async (candidate: ApiHarvestCandidate, words: string, requeue = true): Promise<boolean> => {
+    const profile = storageScope?.profileId;
+    if (!profile || offlineRef.current) {
+      /* Nothing was sent, so the card comes back rather than vanishing. */
+      if (requeue) {
+        if (harvestLeavingRef.current.has(candidate.id)) harvestReturnRef.current.add(candidate.id);
+        else setHarvestQueue((queue) => [candidate, ...queue.filter((row) => row.id !== candidate.id)]);
+        setCharSay(say('worldHarvestKeepFailed'));
+      }
+      return false;
+    }
+    try {
+      /* ONE SAVE PER CANDIDATE, WHATEVER FAILS. The request id is known
+         before anything is sent — the candidate's own for its own words, one
+         derived from the candidate and the words for corrected ones
+         (`candidateSaveRequestId`) — so a lost response retried is the same
+         save. And once a save exists it is remembered: if the link failed
+         and the words are then corrected, that same save takes the new
+         words rather than a second save being made beside it. */
+      const known = keptSavesRef.current.get(candidate.id);
+      const made = !known
+        ? await createInspiration({ text: words }, { requestId: await candidateSaveRequestId(candidate, words), profile })
+        : known.made.text === words ? known.made : await updateInspiration(known.made.id, { text: words });
+      /* `savedAs` is the words the save was MADE with, which its request id
+         was derived from; the keep sends them when the save says something
+         else now, so the server can still tell whose save it is. */
+      const savedAs = known?.savedAs ?? words;
+      keptSavesRef.current.set(candidate.id, { made, savedAs });
+      /* The archive changed: a page still arriving must not overwrite it. */
+      sourceListMutationRef.current += 1;
+      if (readingMountedRef.current) {
+        const detail = toInspirationDetail(made);
+        detailsRef.current.set(made.id, detail);
+        if (!inspirationsRef.current?.some((item) => item.id === made.id)) {
+          birthInspiration(made.id, detail.preview, Date.parse(made.createdAt), made.id);
+        }
+        setInspirations((previous) => previous?.some((item) => item.id === made.id) ? previous : [...(previous ?? []), detail]);
+        if (made.processing) sourceProcessing.track(made.id, made.processing);
+      }
+      try {
+        if (savedAs !== made.text) await keepHarvest(candidate.id, made.id, savedAs);
+        else await keepHarvest(candidate.id, made.id);
+      } catch (err) {
+        /* Decided elsewhere (another tab, or it lapsed): the save stands and
+           is already in the world, so this keep is finished — retrying would
+           only meet the same refusal. */
+        if (!(err instanceof ApiError && err.status === 409 && err.code === 'harvest_decided')) throw err;
+      }
+      keptSavesRef.current.delete(candidate.id);
+      return true;
+    } catch {
+      if (!readingMountedRef.current) return false;
+      if (requeue) {
+        if (harvestLeavingRef.current.has(candidate.id)) harvestReturnRef.current.add(candidate.id);
+        else setHarvestQueue((queue) => [candidate, ...queue.filter((row) => row.id !== candidate.id)]);
+        setCharSay(say('worldHarvestKeepFailed'));
+      }
+      return false;
+    }
+  }, [storageScope?.profileId, say]);
+
+  /** Letting a candidate go, with or without a reason. The words are deleted
+      on the server in the same write. On failure the question stays open
+      with the reason it did not land beside it. */
+  const letCandidateGo = useCallback(async (candidate: ApiHarvestCandidate, reason?: HarvestReason, note?: string) => {
+    setHarvestWhy({ candidate, busy: true, failed: false });
+    try {
+      await declineHarvest(candidate.id, reason, note);
+      setHarvestWhy(null);
+    } catch {
+      setHarvestWhy({ candidate, busy: false, failed: true });
+    }
+  }, []);
+
+  /**
+   * DIVE INTO A CLAIM. Founder, 2026-10-15: "user should be able to click on
+   * the card to dive deeper." The deeper view already exists — the room the
+   * top of mind's "built from" opens: the statement, then every save it
+   * stands on, each with the words that carried it. A claim is a signal, so
+   * its evidence is one `loadSignal` away. If that read fails, the saves the
+   * claim arrived with still open in the archive, which is the shallower
+   * door it always had.
+   */
+  const openClaimRoots = useCallback(async (claim: ApiClaim) => {
+    try {
+      const detail = await loadSignal(claim.id);
+      if (!readingMountedRef.current) return;
+      setProvPick(null);
+      setProv({ lead: claim.statement, rows: detail.evidence, reviewSignalIds: detail.reviewEvidence?.length ? [claim.id] : [] });
+    } catch {
+      if (!readingMountedRef.current || !claim.from?.length) return;
+      setSavesFocus({ label: formatMessage(locale, "worldClaimFromCount", { count: claim.from.length }), ids: claim.from.map((row) => row.id) });
+      openOverHome('saves');
+    }
+  }, [locale]);
+
   /** The verdict's receipt, shown briefly under the answered statement. */
   const [verdictReceipt, setVerdictReceipt] = useState<{ id: string; text: string } | null>(
     null,
@@ -6298,40 +6510,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   /** read by the loop's key handler, which is built once */
   const openSeekRef = useRef<() => void>(() => undefined);
   openSeekRef.current = () => setSeek((s) => (s === null ? "" : s));
-  const foundRef = useRef<ReadonlySet<string> | null>(null);
-  /**
-   * THE MEMORIES UNDER THE PATTERN YOU ARE READING — lit where they live.
-   *
-   * Reading one of your own patterns used to set its memories orbiting the
-   * sentence, which gave every one of them a second place to be while the
-   * field below held the first. The founder disliked it on sight and the
-   * reason is the world's own argument: a memory has a location and keeps
-   * it. So the grounds are published here instead, into the very channel a
-   * search uses — "this one, and everything else sinks" — and the field
-   * answers by lighting exactly those and dimming the rest.
-   *
-   * A search still outranks it: a query is a thing you asked for in words,
-   * and reading a pattern is not. Only your OWN wall lights, because only
-   * your own memories are in the ground to light (a room's evidence names
-   * people, and those keep their ring — see `solveSats`).
-   */
-  /* AND WHAT IT FOLLOWS IS THE ROOM THAT IS OPEN. It used to follow
-     `focusCandId`, which only the sky's `focusOn` ever set — so when the
-     candidate layer went dormant this light went out with it, silently, and
-     stayed out. The provenance room is the same act by the same person
-     ("what is this built from"), it carries the very rows this needs, and it
-     is the one a person can actually reach. */
-  const readingLit = useMemo<ReadonlySet<string> | null>(() => {
-    if (!prov || atWall.kind !== "self") return null;
-    if (prov.rows.length === 0) return null;
-    return new Set(prov.rows.map((e) => e.inspirationId));
-  }, [prov, atWall]);
-  const readingLitRef = useRef<ReadonlySet<string> | null>(null);
-  readingLitRef.current = readingLit;
-  /* the loop is parked when nothing moves; a new set is a change to draw */
-  useEffect(() => {
-    simApiRef.current?.wake();
-  }, [readingLit]);
+  /* `foundRef` AND `readingLit` WENT WITH THE ORBS THEY LIT. A search's
+     matches and the saves under the reading you had open were published to
+     the field — "this one, and everything else sinks" — and the field
+     answered by lighting those orbs and dimming the rest. The orbs are not
+     drawn any more, so there was nothing left to light; `foundRef` had no
+     writer at all by then. */
   /* `copied` AND `copyInvite` ARE GONE. The invite WAS the link — no email
      to send, no pending state to track, no notification channel this product
      has — you copied it and put it wherever you already talk to these
@@ -6910,7 +7094,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       /* THE SAME THREE, so the DOM chrome and the canvas step aside
          together. They were two different conditions and the chat sat in
          the gap between them. */
-      className={`jar${viewNavigation.view?.open || viewNavigation.view?.conversationId || viewNavigation.view?.sharePrinciple || viewNavigation.view?.compose ? " jar--aside" : ""}`}
+      className={`jar${viewNavigation.view?.open || viewNavigation.view?.conversationId || viewNavigation.view?.sharePrinciple || viewNavigation.view?.compose || walkingHome ? " jar--aside" : ""}${harvestWhy && !mouthOpen ? " jar--agent-asking" : ""}`}
       aria-label="Waka"
     >
       {/* the world's early face, until the first real frame: the same ground,
@@ -7842,8 +8026,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         hundred pixels below this one. The creature's claim
                         asks a statement and offers three peer answers, one of
                         which opens a field to say what is closer
-                        (`jar-char-claim-answers`, and `setCorrecting` under
-                        "not true"). Two sentences about you were on one
+                        (then `jar-char-claim-answers`, and `setCorrecting`
+                        under "not true"; both have since gone, the answers
+                        to a sideways slip). Two sentences about you were on one
                         screen asking for the same thing in two different
                         languages, and the one nobody complained about is the
                         one that asks a question.
@@ -7967,6 +8152,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             >
                               {say("worldRemoveLower")}
                             </button>
+                            {/* SHARE IS NOT AN ANSWER, AND IT SITS WITH THE
+                                MAINTENANCE ON PURPOSE. Law 11's worry is two
+                                rows asking the person something on one page;
+                                this row asks nothing, and making a card of a
+                                sentence is upkeep in the same register as
+                                editing it. The words are the person's as they
+                                stand now — the card is drawn from `lead.body`,
+                                never from a draft. */}
+                            {storageScope && !offline ? (
+                              <button
+                                type="button"
+                                className="jar-board-act"
+                                onClick={() => setThingShare({
+                                  kind: "topOfMind",
+                                  text: lead.body,
+                                  proof: formatMessage(locale, "worldShareOnMyMind", { date: dateStamp(Date.now(), locale) }),
+                                })}
+                              >
+                                {say("worldShare")}
+                              </button>
+                            ) : null}
                             {/* THE QUIET LINE: facts about this sentence, and
                                 the remedies for them. Never answers. */}
                             {/* ALWAYS MOUNTED, not only when the reading has
@@ -8762,11 +8968,30 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         <>
                           <span className="jar-char-bubble-of">{say('worldBubbleActMine')}</span>
                           <span className="jar-char-bubble-reading">{lead.body}</span>
-                          <button type="button" className="jar-char-bubble-act"
-                            disabled={talking}
-                            onClick={() => { void talkAbout({ id: '', text: lead.body }); }}>
-                            {say('worldBubbleActTalk')}
-                          </button>
+                          {/* TWO OFFERS, BOTH IN ITS VOICE. Founder,
+                              2026-10-15: people should be able to "share
+                              their current top of mind". This bubble is
+                              where the top of mind is on the home screen,
+                              so the offer is made here, as one more thing
+                              the creature says rather than a button beside
+                              it — the same foot row as talking. */}
+                          <span className="jar-char-bubble-acts">
+                            <button type="button" className="jar-char-bubble-act"
+                              disabled={talking}
+                              onClick={() => { void talkAbout({ id: '', text: lead.body }); }}>
+                              {say('worldTalkAboutThis')}
+                            </button>
+                            {storageScope && !offline ? (
+                              <button type="button" className="jar-char-bubble-act jar-char-bubble-act--quiet"
+                                onClick={() => setThingShare({
+                                  kind: "topOfMind",
+                                  text: lead.body,
+                                  proof: formatMessage(locale, "worldShareOnMyMind", { date: dateStamp(Date.now(), locale) }),
+                                })}>
+                                {say('worldBubbleActShare')}
+                              </button>
+                            ) : null}
+                          </span>
                         </>
                       ) : (
                         /* ═══ AND THE EMPTY LINE IS A DOOR AFTER ALL ═════
@@ -8795,10 +9020,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                            it, and they go to the same place. */
                         <>
                           <span className="jar-char-bubble-reading">{restingWord}</span>
-                          <button type="button" className="jar-char-bubble-act"
-                            onClick={startNewInspiration}>
-                            {say('worldBubbleActAdd')}
-                          </button>
+                          {/* NEVER ON THE AGENT. Founder, 2026-10-15: "you
+                              cannot add inspiration for the agent mode. only
+                              your agent can add inspiration. remove that as
+                              an option for agent character at all times."
+                              What an agent keeps arrives from the agent's own
+                              work; the person standing on its wall cannot
+                              write into it, so the offer would be a door to
+                              a notepad that saves to somebody else. */}
+                          {standingAsAgent ? null : (
+                            <span className="jar-char-bubble-acts">
+                              <button type="button" className="jar-char-bubble-act"
+                                onClick={startNewInspiration}>
+                                {say('worldBubbleActAdd')}
+                              </button>
+                            </span>
+                          )}
                         </>
                       )
                     )}
@@ -8836,11 +9073,38 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     is the bubble that reports what has been happening, and
                     it led into a chat on a press nothing advertised. */}
                 <span className="jar-char-bubble-reading" role="status">{charSay}</span>
-                <button type="button" className="jar-char-bubble-act"
-                  disabled={talking}
-                  onClick={() => { void talkAbout({ id: '', text: charSay }); }}>
-                  {say('worldBubbleActTalk')}
-                </button>
+                {/* ═══ CHAT WHEN THERE IS SOMETHING, SAVE WHEN THERE IS NOT ══
+                    Founder, of "Quiet lately — Let's talk about it":
+                    "determine when it's appropriate to say 'lets chat about
+                    it' vs 'save an inspiration' ... the latter is more
+                    appropriate."
+
+                    THE RULE: a line ABOUT something you kept — last week
+                    still warm, memories nothing rests on yet, what the
+                    weather noticed — is worth a conversation. A line about
+                    there being little or NOTHING — empty, quiet, too young
+                    to see a shape — has nothing on the other side of a chat;
+                    what it is asking for is the next thing kept, so it
+                    opens the notepad. On the agent's wall that second kind
+                    offers nothing, because only the agent writes there. */}
+                {sayIsAboutNothing(charSay) ? (
+                  standingAsAgent ? null : (
+                    <span className="jar-char-bubble-acts">
+                      <button type="button" className="jar-char-bubble-act"
+                        onClick={startNewInspiration}>
+                        {say('worldBubbleActAdd')}
+                      </button>
+                    </span>
+                  )
+                ) : (
+                  <span className="jar-char-bubble-acts">
+                    <button type="button" className="jar-char-bubble-act"
+                      disabled={talking}
+                      onClick={() => { void talkAbout({ id: '', text: charSay }); }}>
+                      {say('worldTalkAboutThis')}
+                    </button>
+                  </span>
+                )}
               </div>
             </div>
           ) : null}
@@ -8883,40 +9147,193 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 door until the dock took that job, and whose material you are
                 looking at is a better use of a fixed corner than a second
                 entrance to a room the dock already names. */}
-            {!mouthOpen && claimQueue[0] ? (
-              <div className="jar-char-claim">
-                {/* NO "IS THIS TRUE OF YOU?" ABOVE IT. Founder: "where this
-                    text appears and 'is this true of you' kind of is too much
-                    like information." It was a label explaining three buttons
-                    that already explain themselves — a sentence about you with
-                    yes / partly / not true underneath can only be asking one
-                    thing, and saying so out loud made the creature sound like
-                    it was reading a form. */}
-                <p className="jar-char-claim-statement">{claimQueue[0].statement}</p>
-                {/* ═══ WHERE IT CAME FROM, IN ONE LINE ════════════════════
-                    Founder: "how do we help the user deep dive into what
-                    inspirations led to this top of mind... without
-                    overwhelming the space we have?"
+            {/* ═══ THE CLAIM IS A CARD YOU MOVE ════════════════════════════
+                Founder, 2026-10-15: "I want this to be feeling like a swipe
+                experience ... drag on laptop, swipe on mobile, to give this
+                sense of a very easy yes or no." It was swiped up and down
+                first; it is a `ClaimSlip` now, thrown sideways like the
+                agent's pick ("better than the drag upward, drag down").
 
-                    THE LIST WAS TRIED HERE AND YOU REJECTED IT. Three
-                    evidence lines used to sit under this statement, and the
-                    verdict was "makes the page messy" and "we need to remove
-                    this or else it's gonna not have enough space". The ids
-                    stayed on the claim; it was the RENDERING that failed.
+                WHAT STOOD HERE. Three words under the sentence — yes, partly,
+                not true — and the two soft ones opened a conversation. The
+                history of that row is in git (`ClaimCard.tsx`, then `ClaimSlip.tsx`); what
+                carries over is everything that was load-bearing: the verdict
+                still files the instant an answer commits, one card at a time,
+                the queue advances without a round trip, and the sitting still
+                ends on the top of mind coming back.
 
-                    So it is one line, in the register the principles surface
-                    already uses for exactly this — "held since August, drawn
-                    from 14 things you kept", which the craft notes call the
-                    whole difference between that card and a fortune cookie.
-                    One line cannot crowd anything, and pressing it opens the
-                    archive showing precisely those saves: a real list you
-                    can scan and open, rather than a paragraph about them.
+                PARTLY LEFT WITH THE ROW. Its job — an invitation to say what
+                is true instead — is "Chat about it", the slip's third way out
+                (pulled down, or the middle label), and the one link on the
+                receipt after a "Not anymore", below. A no never opens the
+                chat on its own: no has to cost what yes costs, or the gesture
+                is a trap on one side.
 
-                    Absent when the claim arrived without its sources — an
-                    older server omits `from`, and a line claiming nothing is
-                    worse than no line. */}
+                NO "IS THIS TRUE OF YOU?" ABOVE IT, still. Founder: "'is this
+                true of you' kind of is too much like information." The labels
+                under the slip say it instead, and they are the controls for
+                anyone who does not drag. */}
+            {/* ═══ WHY NOT — after a candidate was swiped away ═══════════ */}
+            {!mouthOpen && harvestWhy ? (
+              <HarvestReasons
+                key={harvestWhy.candidate.id}
+                text={harvestWhy.candidate.text}
+                locale={locale}
+                busy={harvestWhy.busy}
+                failed={harvestWhy.failed}
+                onReason={(reason, note) => { void letCandidateGo(harvestWhy.candidate, reason, note); }}
+                onKeepFixed={(words) => {
+                  const candidate = harvestWhy.candidate;
+                  setHarvestWhy({ candidate, busy: true, failed: false });
+                  void keepCandidate(candidate, words, false).then((kept) => {
+                    /* Kept: the question is finished. Not kept: it stays
+                       open with the corrected words and says so — the swipe
+                       already declined it, so putting the original back in
+                       the queue would only lose the edit. */
+                    if (kept) { setHarvestWhy(null); setCharSay(say('worldHarvestKept')); }
+                    else setHarvestWhy({ candidate, busy: false, failed: true });
+                  });
+                }}
+              />
+            ) : null}
+            {/* ═══ A SENTENCE OF YOURS, PICKED FROM YOUR DAY ══════════════
+                The same slip and the same gesture as a reading — right keeps
+                it, left lets it go — because the act is the same act: is
+                this mine to hold. What differs is what
+                happens next. A kept candidate becomes an ordinary save; a
+                let-go one asks why, because a collector that only hears
+                "no" cannot pick better tomorrow. */}
+            {!mouthOpen && !harvestWhy && harvestQueue[0] ? (
+              /* NOT THE READING'S TONE, ON PURPOSE. Founder, 2026-10-15: type
+                 two needs "a very clear distinction" — these are what the
+                 agent thought mattered, not what WAKA reads in you. So a line
+                 saying your agent noticed it, your own words in italic, and
+                 the agent's colder light with pixel-stepped corners. See
+                 `AgentPick`. */
+              <AgentPick
+                key={`harvest:${harvestQueue[0].id}`}
+                id={harvestQueue[0].id}
+                text={harvestQueue[0].text}
+                /* WHERE IT CAME FROM, BY NAME. Founder, 2026-10-15: "lets say
+                   sth like 'Inferred from your [claude/gpt/etc] MCP [date]'." */
+                source={[
+                  toolName(harvestQueue[0].tool)
+                    ? formatMessage(locale, 'worldHarvestInferred', { tool: toolName(harvestQueue[0].tool)! })
+                    : say('worldHarvestInferredPlain'),
+                  agoWords(Date.parse(harvestQueue[0].createdAt), Date.now(), locale),
+                ].join(' · ')}
+                next={harvestQueue.length > 1}
+                locale={locale}
+                onAnswer={(answer) => {
+                  const candidate = harvestQueue[0]!;
+                  harvestLeavingRef.current.add(candidate.id);
+                  if (answer === 'keep') {
+                    void keepCandidate(candidate, candidate.text).then((kept) => { if (kept) setCharSay(say('worldHarvestKept')); });
+                  } else {
+                    /* LET GO NOW; THE REASON IS A SECOND, OPTIONAL THOUGHT.
+                       The decline lands on the swipe, so a closed tab or an
+                       unanswered "why not" cannot leave the sentence waiting
+                       to be asked again. The reason, if one comes, follows
+                       it — the server takes one reason after a bare decline. */
+                    void declineHarvest(candidate.id).catch(() => undefined);
+                  }
+                }}
+                onLeft={(answer) => {
+                  const candidate = harvestQueue[0]!;
+                  harvestLeavingRef.current.delete(candidate.id);
+                  const comesBack = harvestReturnRef.current.delete(candidate.id);
+                  /* From the queue as it is NOW, not as this render saw it:
+                     a failed keep may have changed it during the trip. */
+                  setHarvestQueue((queue) => {
+                    const rest = queue.filter((row) => row.id !== candidate.id);
+                    return comesBack ? [candidate, ...rest] : rest;
+                  });
+                  if (answer === 'not') setHarvestWhy({ candidate, busy: false, failed: false });
+                }}
+              />
+            ) : null}
+            {!mouthOpen && !harvestWhy && !harvestQueue[0] && claimQueue[0] ? (
+              /* THE SAME SLIP AS YOUR AGENT'S PICK, IN THE OTHER MATERIAL.
+                 Founder, 2026-10-15: "let's have this design for 'keep it or
+                 not it' for the first type of claim too ... better than the
+                 drag upward, drag down." Sideways, with both answers named
+                 under it. What still tells the two apart is who presents it
+                 (here, the creature above; there, your agent) and what the
+                 slip is (WAKA's plain sentence in warm light; there, your own
+                 words quoted in cool). */
+              <ClaimSlip
+                key={claimQueue[0].id}
+                id={claimQueue[0].id}
+                tone="reading"
+                label={claimQueue[0].statement}
+                labelKeep={say('worldStillTrue')}
+                labelNot={say('worldNotAnymore')}
+                /* NO CHAT DOOR ON THE CARD. Founder, 2026-10-15: "remove chat
+                   about it under the claim." The card asks one thing — still
+                   true or not anymore — and the slip no longer has a chat
+                   door, pull-down or ArrowDown to offer. After a no, the
+                   receipt line still offers "Say what's true". */
+                more={claimQueue.length > 1}
+                /* A TAP GOES DEEPER: the reading and the saves it stands on,
+                   in the same room the top of mind's "built from" opens. */
+                onOpen={() => { void openClaimRoots(claimQueue[0]!); }}
+                onAnswer={(answer) => {
+                  const claim = claimQueue[0]!;
+                  /* Keep is `true`, not is `not_true`, filed now — a judgement
+                     about yourself should not wait on a slip finishing its
+                     trip. `partly` is not reachable from here; see the note
+                     above. */
+                  sayVerdict(claim.id, answer === 'keep' ? 'true' : 'not_true', undefined, claim.contested, claim.statementRevision);
+                  /* THE RECEIPT OFFERS THE DOOR. After a no, one line under
+                     the slot says it was noted and offers the conversation
+                     the soft answers used to open by force. After a yes
+                     there is nothing to add to agreeing, so there is no
+                     line. */
+                  setClaimReceipt(answer === 'not' ? { statement: claim.statement } : null);
+                }}
+                onLeft={() => {
+                  /* ═══ THE SITTING ENDS ON SOMETHING ════════════════════
+                     Every product that asks for a run of small judgements
+                     terminates the run on a GIFT rather than a receipt:
+                     Readwise's last card is a bonus highlight, Finch's pet
+                     comes back with a story. WAKA's terminal beat is the
+                     person's own top of mind coming back — the statement
+                     band un-yields when this queue empties — and the line
+                     says what is happening rather than claiming the
+                     sentence on screen has already changed. */
+                  /* By id and functionally: a refetch during the card's trip
+                     must not be overwritten by the queue as it was before. */
+                  const answered = claimQueue[0]?.id;
+                  setClaimQueue((queue) => {
+                    const left = queue.filter((claim) => claim.id !== answered);
+                    if (!left.length) setCharSay(say('worldSittingDone'));
+                    return left;
+                  });
+                }}
+              >
+                <p className="jar-pick-statement">{claimQueue[0].statement}</p>
+                {/* ASKED AGAIN, AND SAYS SO. Founder, 2026-10-15: "is this
+                    still true? ... obviously things go outdated." A reading
+                    you said yes to a season ago comes back; without this
+                    line it would look like WAKA forgot you had answered. The
+                    month is spoken, never printed as a number. */}
+                {claimQueue[0].askedAgain ? (
+                  <p className="jar-pick-source">
+                    {formatMessage(locale, "worldClaimAskedAgain", { month: monthTag(Date.parse(claimQueue[0].askedAgain.lastAnsweredAt), locale) })}
+                  </p>
+                ) : null}
+                {/* WHERE IT CAME FROM, IN ONE LINE — unchanged. Founder:
+                    "how do we help the user deep dive into what inspirations
+                    led to this ... without overwhelming the space we have?"
+                    The three-line list was tried and rejected ("makes the
+                    page messy"); one line in the proof register the
+                    principles wear, and pressing it opens the archive on
+                    exactly those saves. Absent when the claim arrived with
+                    no sources, because a line claiming nothing is worse than
+                    no line. It is a control inside the card, so the card's
+                    gesture lets it be. */}
                 {claimQueue[0].from?.length ? (
-                  <button type="button" className="jar-char-claim-from"
+                  <button type="button" className="jar-pick-from"
                     onClick={() => {
                       const claim = claimQueue[0]!;
                       setSavesFocus({
@@ -8928,152 +9345,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     {formatMessage(locale, "worldClaimFromCount", { count: claimQueue[0].from.length })}
                   </button>
                 ) : null}
-                {/* WHAT IT READ THIS FROM IS GONE FROM HERE, AND THE REASON
-                    IS SPACE, NOT DOUBT ABOUT IT.
-
-                    Founder, on a screenshot of three evidence lines under a
-                    claim: "we need to remove this or else it's gonna not have
-                    enough space." They are right, and the thing that changed
-                    underneath is that this block now has a RESERVED height —
-                    the claim keeps its slot whether or not there is a claim,
-                    so the creature never moves when you switch faces. A list
-                    that grows by one line per save cannot live inside a slot
-                    whose whole job is not to grow.
-
-                    The argument for having had them stands and is worth
-                    keeping where someone will find it: a sentence about you
-                    with nothing under it can only be agreed with on feel,
-                    while the same sentence beside the things you actually
-                    kept can be CHECKED — which is the difference between a
-                    reading and a horoscope. It also changed what "not true"
-                    meant: with the saves on screen, rejecting a claim is
-                    correcting a misreading of evidence; without them it is
-                    being told who you are and having to argue back.
-
-                    So this is a relocation, not a deletion. The ids are still
-                    on the claim (`from`, with previews, from
-                    `routes/claims.ts`) and nothing about generation changed.
-                    They belong on a surface that can afford to grow — the
-                    claim's own reading, where the evidence already lives —
-                    and the correction field below is what answers the
-                    "argue back" half here. */}
-                {/* ═══ "NOT QUITE" AND "NOT ME" OPEN A CONVERSATION ═══════
-                    Founder: "the yes / partly / not true button is a little
-                    bit weird. And then when the user clicks on partly and
-                    not true, can we open a chat experience rather than
-                    asking user to answer in that small space?"
-
-                    WHAT STOOD HERE. "Not true" opened a two-row textarea
-                    inside the claim's card, with a Save and a Leave it — the
-                    only typing in the whole confirm loop, deliberately, and
-                    argued for at the time: "'not true' on its own tells the
-                    loop a sentence is wrong and nothing about what is right,
-                    so the next pass has no more to go on than the last one
-                    did."
-
-                    That argument was right about WHY the words matter and
-                    wrong about where they go. Saying what is actually true
-                    of you is the most considered thing this product ever
-                    asks for, and it was being asked for in a box two lines
-                    tall, wedged under the sentence being disputed, with a
-                    Save button — which is a form, at the exact moment a
-                    person has something to say. The place for that is the
-                    place this product already has for saying things.
-
-                    SO BOTH SOFT ANSWERS GO THERE, not just the hard one.
-                    "Partly" had no field at all and filed in silence, which
-                    is the opposite failure: the answer with the most left
-                    unsaid was the one given nowhere to say it.
-
-                    THE VERDICT IS STILL FILED FIRST, and immediately. The
-                    old flow withheld it until the words were written so that
-                    one answer made one row; a conversation is not a row, so
-                    there is nothing to wait for, and an answer that depends
-                    on finishing a chat would be an answer lost whenever
-                    somebody closed the tab.
-
-                    WHAT THIS GIVES UP, named rather than discovered later:
-                    nothing writes `correctionText` any more. `ReviewEvidence`
-                    still quotes the corrections already on record, and the
-                    server still accepts the field, but the UI has stopped
-                    producing them — the elaboration lives in the
-                    conversation now. If that signal should keep feeding
-                    principle evidence, the honest place to take it from is
-                    the first thing the person says in the chat this opens. */}
-                <p className="jar-char-claim-answers">
-                  {(['true', 'partly', 'not_true'] as const).map(value => (
-                    <button
-                      key={value}
-                      type="button"
-                      /* NO PRIMARY. The three answers are peers — see the
-                         note in claims.css for why lighting "yes" both broke
-                         the light-is-the-only-channel law and put a thumb on
-                         the scale of every principle written downstream. */
-                      onClick={() => {
-                        const claim = claimQueue[0]!;
-                        /* NOT TRUE IS THE ONE ANSWER THAT IS NOT FINISHED, so
-                           it alone sends nothing yet: the field below it may
-                           still change what goes on the record, and a verdict
-                           filed before the words would be a second row for the
-                           same answer. Yes and partly advance at once — a
-                           judgement about yourself should not wait on a round
-                           trip. */
-                        sayVerdict(claim.id, value, undefined, claim.contested, claim.statementRevision);
-                        /* AND THE TWO SOFT ANSWERS CARRY ON SOMEWHERE THEY
-                           CAN BE SAID. "Yes" is finished the moment it is
-                           pressed — there is nothing to add to agreeing —
-                           so it alone stays on this screen and lets the
-                           sitting continue. See the note above the row. */
-                        if (value !== 'true') {
-                          /* Seeded with the claim itself, which is the same
-                             shape the other two doors into a conversation
-                             use (`lead.body`, a kept thing). The verdict
-                             just filed reaches the reply on its own:
-                             `recentFeedback()` passes every value into the
-                             generation payload beside the statement it was
-                             given about. */
-                          void talkAbout({ id: '', text: claim.statement });
-                        }
-                        /* ═══ THE SITTING ENDS ON SOMETHING ════════════════
-                           Every product that asks for a run of small
-                           judgements terminates the run deliberately, and
-                           terminates it on a GIFT rather than a receipt:
-                           Readwise's last card is a bonus highlight, Finch's
-                           pet comes back from its adventure with a story.
-                           Nobody ends on "you're done", because that makes
-                           the queue the point, and the queue is not the
-                           point.
-
-                           WAKA has a better terminal beat available than any
-                           of them, and it costs nothing to show: the statement
-                           band un-yields the moment this queue empties, so the
-                           last act of the sitting is your own top of mind
-                           coming back. The person watches the thing they were
-                           answering FOR return to the screen.
-
-                           The line is what keeps that honest. The reading
-                           re-forms on the server from the signals as they now
-                           stand, which is not instant — so the creature says
-                           what is happening rather than claiming the sentence
-                           on screen has already changed. Overclaiming here
-                           would be the one lie that costs this product its
-                           licence, since the whole proposition is that its
-                           account of you is checkable. */
-                        /* Computed out here, not inside the updater: a
-                           `setState` updater has to be pure, and React calls
-                           it twice in development to prove it. `claimQueue` is
-                           already in scope at the press, so there is nothing
-                           to read from inside one. */
-                        const left = claimQueue.slice(1);
-                        setClaimQueue(left);
-                        if (!left.length) setCharSay(say('worldSittingDone'));
-                      }}
-                    >
-                      {say(value === 'true' ? 'worldYes' : value === 'partly' ? 'worldPartly' : 'worldNotTrue')}
-                    </button>
-                  ))}
-                </p>
-              </div>
+              </ClaimSlip>
+            ) : null}
+            {!mouthOpen && claimReceipt ? (
+              <p className="jar-char-claim-receipt" role="status">
+                {say('worldClaimNoted')}{' '}
+                <button type="button" className="jar-char-claim-receipt-act"
+                  onClick={() => {
+                    const receipt = claimReceipt;
+                    setClaimReceipt(null);
+                    /* Seeded with the claim, the shape the other doors into
+                       a conversation use; the verdict already filed reaches
+                       the reply through `recentFeedback()`. */
+                    void talkAbout({ id: '', text: receipt.statement });
+                  }}>
+                  {say('worldSayWhatsTrue')}
+                </button>
+              </p>
             ) : null}
             {/* ═══ AND THE SEAT DOES NOT SIT THERE EMPTY ═══════════════════
                 Founder, on a bordered box with nothing inside it: "there
@@ -9593,16 +9881,33 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       {say("worldDeleteFailed")}
                     </span>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        panelPowersSignal
-                          ? setForget({ id: panelId, step: "asking" })
-                          : forgetIt()
-                      }
-                    >
-                      {say("worldDelete")}
-                    </button>
+                    <>
+                      {/* ONE PRESS FROM A THING YOU KEPT TO A CARD OF IT.
+                          Only your own, and only when it has words: the card
+                          is the words, and a picture alone has nothing for
+                          it to say (the renderer refuses an empty card). */}
+                      {storageScope && !offline && !standingAsAgent && panel.detail && panel.detail.text.trim() ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const detail = panel.detail!;
+                            setThingShare(inspirationShareTarget(locale, { text: detail.text, capturedMs: panelBall.capturedMs, attachments: detail.attachments }));
+                          }}
+                        >
+                          {say("worldShare")}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          panelPowersSignal
+                            ? setForget({ id: panelId, step: "asking" })
+                            : forgetIt()
+                        }
+                      >
+                        {say("worldDelete")}
+                      </button>
+                    </>
                   )}
                 </>
               )}
@@ -10213,8 +10518,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           single concept in the product, against three strings for the
           interaction meant to be at its centre — and ruled *"Collapse all
           five into 'correct a claim' — one text field, reached only after
-          'not quite'."* The field is up beside the claim, in
-          `.jar-char-claim-mine`.
+          'not quite'."* That field has since gone too: correcting a claim
+          is a conversation now, opened from the claim itself.
           What went with this one call: `ReviewPanel`, `ReviewDialogue`,
           `ReviewResult`, `ReflectionFlow`, `useReviewSession`,
           `useReviewDialogue`, `useReviewEntry`, the review draft and
@@ -10224,7 +10529,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           the principles they are evidence for, which is where the collecting
           was pointed all along. */}
       <div className={`jar-personal-shortcuts${atWall.kind==='self'?' jar-personal-shortcuts--self':''}${atWall.kind==='self'&&inSky?' jar-personal-shortcuts--sky':''}${!inField&&!inSky&&wallCount>0&&(!atNow||(charSay!==''&&!mouthOpen))?' jar-personal-shortcuts--above-count':''}`}
-        hidden={Boolean(panelOpen||mouthOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple||viewNavigation.view?.open)}>
+        hidden={Boolean(panelOpen||mouthOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple||thingShare||viewNavigation.view?.open)}>
       {/* THE REVIEW SHORTCUT IS GONE FROM THIS CORNER. It was the one door
           into the folded flow, and `useReviewEntry` existed only to decide
           whether it should read "Review" or "Resume review" — a fetch on
@@ -10791,7 +11096,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            writing on; the two corners are the world's furniture and the
            notepad has never shown them. It also returns the 60px the
            archive reserves for them — see `.waka-page--note`. */
-        hidden={Boolean(panelOpen||mouthOpen||savedNoteOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}/>:null}
+        hidden={Boolean(panelOpen||mouthOpen||savedNoteOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple||thingShare)}/>:null}
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
           /* the label said "find YOUR inspirations" on a room's wall, where
@@ -10805,6 +11110,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         key={`${storageScope.accountId}:${storageScope.profileId}:${viewNavigation.view.principleId}`} scope={storageScope}
         id={viewNavigation.view.principleId} name={auth?.profile?.name??''} locale={locale} onClose={viewNavigation.closeShare}
         onChoose={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true},{replace:true})}/>:null}
+      {thingShare ? (
+        <ShareSheet target={thingShare} name={auth?.profile?.name ?? ''} locale={locale} onClose={() => setThingShare(null)} />
+      ) : null}
 
       {/* THE THREE THINGS YOU HOLD UP IN FRONT OF THE WORLD.
           Founder: "for your inspirations, after I click on it, I feel like
@@ -10853,6 +11161,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         onNoteOpen={savedNoteChanged}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
+        ownArchive={atWall.kind!=='agent'} shareName={auth?.profile?.name ?? ''}
         title={say(atWall.kind==='agent'?'worldAgentField':'worldMenuField')}
         focus={savesFocus} onClearFocus={() => setSavesFocus(null)}
         /* THE SWITCH IS IN THE CORNER, AND IT ALWAYS WAS. Founder: "if the
@@ -10894,7 +11203,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           });
           leaveOpen();
         }}/>:null}
-      {storageScope&&viewNavigation.view?.open==='principles'?<PrinciplesOverlay
+      {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         name={atWall.kind==='agent'?atWall.name:auth?.profile?.name??''}
@@ -10910,7 +11219,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            the larger version of that same card. Routing through the
            principle page first made a person confirm a choice they had
            already made by pressing share. */
-        onShare={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true})}/>:null}
+        onShare={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true})}
+        /* What the creature said on the waiting page, talked about. */
+        onChat={said => { void talkAbout({ id: '', text: said }); }}
+        crossing={principlesCrossing}
+        onCrossed={() => setPrinciplesCrossing(null)}/>:null}
       {/* ═══ CHATS DO NOT HAVE AN OWNER THE WAY AN ARCHIVE DOES ══════════
           Founder: "I don't think there should be a difference between me and
           my agent's chat. Inspiration, sure. But I don't see a reason why
@@ -11030,6 +11343,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               scope={storageScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
+              agent={agentWall ? { id: agentWall.id, name: agentWall.name } : null}
               onCreated={row=>{if(row.profileId===storageScope.profileId)committedTalk.current={owner,row};}}
               /* `replace` on the new-to-id hop so dismissing does not land
                  back on the blank conversation you just started. */
