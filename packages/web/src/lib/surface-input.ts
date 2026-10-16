@@ -1,7 +1,8 @@
 /** Native writers and panels own input before the spatial world's shortcuts. */
 /* `.jar-roomform` AND `.jar-settings` CAME OUT on 2026-10-15: both matched
    nothing. `closest()` needs a wearer, and no markup in `src` carries either
-   bare class — only the suffixed `.jar-roomform-box` and `.jar-settings-warn`,
+   bare class — only the suffixed `.jar-roomform-box` (and, when this was written,
+   `.jar-settings-warn`, which has since gone the same way),
    which these selectors do not match. `.jar-roomform`'s only bare wearer was
    the deleted room form; `.jar-settings`'s were the deleted join sheet and
    space-settings panel. Behaviour is unchanged by their removal, which is

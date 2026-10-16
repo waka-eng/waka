@@ -1,5 +1,5 @@
 /**
- * ONE SHEET OF SEVEN CLOSES BOTH WAYS, AND THIS IS THE HOOK IT OPTS INTO.
+ * ONE SHEET OF SIX CLOSES BOTH WAYS, AND THIS IS THE HOOK IT OPTS INTO.
  *
  * ── WHAT THIS HEADER USED TO SAY, AND WHY IT HAD TO STOP ──────────────────
  *
@@ -10,10 +10,14 @@
  * zero in every component file, and a sheet added tomorrow gets Escape from
  * `DialogSurface` and nothing else. Counted on 2026-10-11: ten modal
  * `DialogSurface` call sites, three of them covered. Re-counted on
- * 2026-10-12, after rooms were removed (founder: "방 없애"): 7 modal call
+ * 2026-10-12, after rooms were removed (founder: "방 없애"): seven modal call
  * sites, ONE of them covered. The three that left were a room's settings
  * (`space/settings/SpaceSettings.tsx`, deleted), the room form
  * (`space-kinds/GroupPanel.tsx`, deleted) and the join sheet (`Home.tsx`).
+ * Re-counted again on 2026-10-15: 6 modal call sites. The one that left was
+ * the agent-naming dialog in `Home.tsx`, deleted because nothing could open
+ * it — its only opener went with the new-place sheet in `f918b62f` and the
+ * verb already lives in `SettingsPanel`.
  * Two of those three were covered, which is why the coverage count fell
  * further than the sheet count.
  *
@@ -60,12 +64,13 @@
  * way out. `KEEP_SHEET`, the list that held `.jar-settings` out of "outside"
  * for those two, went with them.
  *
- * ── THE SEVEN THAT DO NOT, EACH FOR A STATED REASON ───────────────────────
+ * ── THE FIVE THAT DO NOT, EACH FOR A STATED REASON ────────────────────────
  *
  * Grouped, because they are three different situations and only one of them
- * is a decision. (It was seven with rooms in the product; the room form is
- * struck below rather than renumbered, because the count is what a reader
- * checks the list against.)
+ * is a decision. (Seven with rooms in the product; six once the room form
+ * went; five since 2026-10-15, when the agent's name sheet was deleted for
+ * being unopenable. The count is what a reader checks the list against, so
+ * it is kept honest rather than left to drift.)
  *
  *   REFUSED ON PURPOSE, AND MUST STAY REFUSED — the notepad and the
  *   composer, `components/InspirationComposer.tsx`. `DialogSurface`'s own
@@ -77,15 +82,17 @@
  *   lifted into `DialogSurface` for every modal surface, this one needs an
  *   opt-OUT in the same change.
  *
- *   HOLDING WORDS SOMEBODY IS PARTWAY THROUGH TYPING — the agent's name
- *   sheet (`Home.tsx`, `.jar-seek` + `.jar-roomform-box`) and the archive's
- *   search (`components/InspirationSearch.tsx`). The room form
- *   (`space-kinds/GroupPanel.tsx`) was the third and is gone with rooms.
+ *   HOLDING WORDS SOMEBODY IS PARTWAY THROUGH TYPING — the archive's search
+ *   (`components/InspirationSearch.tsx`), and only that now. Two others
+ *   stood here: the room form (`space-kinds/GroupPanel.tsx`), gone with
+ *   rooms, and the agent's name sheet (`Home.tsx`), deleted on 2026-10-15
+ *   because nothing could open it — its only opener went with the new-place
+ *   sheet and naming an agent lives in `SettingsPanel` now.
  *   Same class of harm as the notepad
- *   and a smaller amount of it: a half-typed name or query is cheap to
+ *   and a smaller amount of it: a half-typed query is cheap to
  *   retype and still annoying to lose. Unanswered rather than decided —
- *   nobody has ruled on these three, and the honest state of the product is
- *   that they were never wired rather than that they were argued about. The
+ *   nobody has ruled on it, and the honest state of the product is
+ *   that it was never wired rather than that it was argued about. The
  *   field's own Escape is already protected either way: the key handler
  *   below stands aside for anything editable, because leaving a half-typed
  *   name is not the same act as leaving the sheet.
