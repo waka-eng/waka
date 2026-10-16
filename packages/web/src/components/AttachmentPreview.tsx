@@ -33,9 +33,12 @@ function httpUrl(value?: string | null) {
    rule for states — "states should show and disappear in the bottom bar
    only" — so there this card says nothing about itself: it is absent until
    its details have been read once, then it is only the card (thumbnail,
-   title ↗, site, description). No status or alert lines, no buttons, no
-   polling, and no "Page text" disclosure either: that is the machine's
-   reading of the page behind a press, not something you kept. */
+   title ↗, site, description). No status or alert lines, no buttons, and
+   no "Page text" disclosure either: that is the machine's reading of the
+   page behind a press, not something you kept. It still re-reads while the
+   analysis is pending (the same bounded loop), silently, so the card fills
+   in when the title arrives. And if the read FAILS it falls back to a bare
+   card built from the row alone — the note must never lose its link. */
 export function AttachmentPreview({ item, locale, readOnly=false, quiet=false }: { item: ApiAttachmentSummary; locale: SupportedLocale; readOnly?:boolean; quiet?: boolean }) {
   return <Preview key={item.id} item={item} locale={locale} readOnly={readOnly || quiet} quiet={quiet} />;
 }
@@ -56,7 +59,7 @@ function Preview({ item,locale,readOnly,quiet }: { item: ApiAttachmentSummary;lo
         const value = await fetchAttachmentDetails(item.id, controller.signal);
         if (controller.signal.aborted) return;
         setData(value); setLoadError(false);
-        if (value.analysis.status === 'pending' && !quiet) {
+        if (value.analysis.status === 'pending') {
           if (++checks < 20) timer = window.setTimeout(() => { if (!document.hidden) void read(); else setWaiting(true); }, 3000);
           else setWaiting(true);
         }
@@ -92,7 +95,7 @@ function Preview({ item,locale,readOnly,quiet }: { item: ApiAttachmentSummary;lo
     {link?.description ? <p className="jar-link-description">{link.description}</p> : null}
   </> : null;
   const label = say(item.type === 'link' ? 'worldAttachmentLinkPreview' : 'worldAttachmentImageDescription');
-  if (quiet) return data ? <section className="jar-attachment-preview" aria-label={label}>{card}</section> : null;
+  if (quiet) return data || (loadError && item.type === 'link') ? <section className="jar-attachment-preview" aria-label={label}>{card}</section> : null;
   return <section className="jar-attachment-preview" aria-label={label}>
     {card}
     {!data && !loadError ? <p role="status">{say('worldAttachmentPreviewLoading')}</p> : null}

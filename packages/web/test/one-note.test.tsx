@@ -78,9 +78,12 @@ const ROW = {
 
 /** The link card's one read: counted, and answered when the test says. */
 const details = vi.hoisted(() => {
-  const state = { calls: 0, finish: (_value: unknown) => {} };
+  const state = { calls: 0, finish: (_value: unknown) => {}, fail: (_error: unknown) => {} };
   return Object.assign(state, {
-    read: (..._args: unknown[]) => { state.calls += 1; return new Promise((done) => { state.finish = done; }); },
+    read: (..._args: unknown[]) => {
+      state.calls += 1;
+      return new Promise((done, failed) => { state.finish = done; state.fail = failed; });
+    },
   });
 });
 
@@ -361,41 +364,70 @@ it("lends the bar a Save that lights only on an unsaved change, and goes out onc
  * so a note about an essay had lost the essay. The link's own card sits
  * under the words — and only the card. The note's states live in the bar
  * ("states should show and disappear in the bottom bar only"), so the card
- * is absent while it loads, says nothing about itself once it has, and
- * reads once rather than polling while the analysis is still pending. */
-it("shows a saved link's card under the words of the opened note, and no state with it", async () => {
-  ROW.attachments = [{ id: "link-1", type: "link", label: "https://example.test/essay", url: "https://example.test/essay" }];
+ * is absent while it loads and says nothing about itself once it has. A
+ * pending analysis is re-read silently, so the card fills in when the title
+ * arrives; a failed read falls back to the bare link, never to nothing. */
+const LINK = "https://example.test/essay";
+const card = () => host.querySelector(".waka-over-one .jar-attachment-preview");
+function detailsOf(pending: boolean) {
+  return {
+    attachment: { id: "link-1", inspirationId: ROW.id, type: "link", url: LINK,
+      name: null, contentType: null, size: null, createdAt: new Date().toISOString(),
+      enrichment: { status: pending ? "pending" : "ready", kind: "page_body", text: "Extracted page text", errorReason: null, updatedAt: null,
+        image: null, link: pending ? null : { title: "An essay on dusk", description: "Light, late", siteName: "Example journal",
+          hostname: "example.test", finalUrl: LINK, previewImageUrl: null } } },
+    previewImageAvailable: false,
+    analysis: { status: pending ? "pending" : "ready", canRetry: true, retryAfter: new Date().toISOString() },
+  };
+}
+function expectNoState(): void {
+  expect(card()!.querySelectorAll("button, [role=status], [role=alert], details")).toHaveLength(0);
+  expect(host.querySelector(".waka-over-one")!.textContent).not.toMatch(/Loading|Reading|Check|Try again|Page text|retry|couldn/i);
+}
+
+it("shows a saved link's card under the words of the opened note, filling in silently", async () => {
+  ROW.attachments = [{ id: "link-1", type: "link", label: LINK, url: LINK }];
   details.calls = 0;
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
     await savedNote();
-    const card = () => host.querySelector(".waka-over-one .jar-attachment-preview");
     expect(details.calls).toBe(1);
     expect(card(), "a loading card drew on the note page").toBeNull();
     expect(host.textContent).not.toContain("Loading preview");
 
-    await act(async () => details.finish({
-      attachment: { id: "link-1", inspirationId: ROW.id, type: "link", url: "https://example.test/essay",
-        name: null, contentType: null, size: null, createdAt: new Date().toISOString(),
-        enrichment: { status: "pending", kind: "page_body", text: "Extracted page text", errorReason: null, updatedAt: null,
-          image: null, link: { title: "An essay on dusk", description: "Light, late", siteName: "Example journal",
-            hostname: "example.test", finalUrl: "https://example.test/essay", previewImageUrl: null } } },
-      previewImageAvailable: false,
-      analysis: { status: "pending", canRetry: true, retryAfter: new Date().toISOString() },
-    }));
+    /* Pending: the bare link, no word about the wait. */
+    await act(async () => details.finish(detailsOf(true)));
     expect(card(), "the opened note lost its link").not.toBeNull();
-    expect(card()!.querySelector("a")?.href).toBe("https://example.test/essay");
-    expect(card()!.textContent).toContain("An essay on dusk");
-    expect(card()!.textContent).toContain("Light, late");
-    expect(card()!.querySelectorAll("button, [role=status], [role=alert], details")).toHaveLength(0);
-    expect(card()!.textContent).not.toMatch(/Reading|Check|Try again|Page text|retry/i);
+    expect(card()!.querySelector("a")?.href).toBe(LINK);
+    expect(card()!.textContent).not.toContain("An essay on dusk");
+    expectNoState();
     expect(host.querySelector(".waka-note-page")!.compareDocumentPosition(card()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    /* One read: pending is not a reason to poll on this page. */
-    await act(async () => { vi.advanceTimersByTime(10_000); });
-    expect(details.calls).toBe(1);
+    /* A second read, and the card fills in. */
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    expect(details.calls).toBe(2);
+    await act(async () => details.finish(detailsOf(false)));
+    expect(card()!.textContent).toContain("An essay on dusk");
+    expect(card()!.textContent).toContain("Light, late");
+    expectNoState();
   } finally {
     vi.useRealTimers();
+    ROW.attachments = [];
+  }
+});
+
+it("keeps the bare link on the note when its details cannot be read", async () => {
+  ROW.attachments = [{ id: "link-1", type: "link", label: LINK, url: LINK }];
+  try {
+    await savedNote();
+    expect(card()).toBeNull();
+    await act(async () => details.fail(new Error("private provider text")));
+    expect(card(), "a failed read took the link off the note").not.toBeNull();
+    expect(card()!.querySelector("a")?.href).toBe(LINK);
+    expect(card()!.textContent).toContain("example.test");
+    expect(host.textContent).not.toContain("private provider text");
+    expectNoState();
+  } finally {
     ROW.attachments = [];
   }
 });
