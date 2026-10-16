@@ -6,7 +6,7 @@ import type { InspirationAttachmentInput } from './inspiration-attachment-input.
 
 export type AttachmentHead = (bucket: string, key: string) => Promise<Pick<HeadObjectCommandOutput, 'ContentLength' | 'ContentType'>>;
 export class InspirationAttachmentError extends Error {
-  constructor(readonly status: 400 | 403 | 404 | 503, readonly code: string, message: string) { super(message); }
+  constructor(readonly status: 400 | 403 | 404 | 409 | 503, readonly code: string, message: string) { super(message); }
 }
 export const headUploadedAttachment: AttachmentHead = async (bucket, key) => {
   const client = makeAttachmentsS3Client();

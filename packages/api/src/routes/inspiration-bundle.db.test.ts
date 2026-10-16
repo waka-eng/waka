@@ -77,3 +77,17 @@ it('a note carries a file: verified like a photo, recorded unavailable, never qu
   expect(await t.sql`SELECT id FROM background_jobs WHERE type::text = 'enrich_attachment'`).toHaveLength(0);
   expect((await f.post({ text: 'x', attachments: [{ ...file, key: `profiles/${f.profileId}/attachments/3-run.exe`, contentType: 'application/x-msdownload' }] })).status).toBe(400);
 });
+it('one stored object backs one attachment: a note cannot reuse an upload that is already attached', async () => {
+  /* Security review 2026-10-16: deleting a note that reused a chat message's
+     object would delete the chat's file with it. */
+  const f = await fixture();
+  expect((await f.post({ text: 'First', attachments: [f.audio] })).status).toBe(201);
+  const reused = await f.post({ text: 'Second', attachments: [f.audio] });
+  expect(reused.status).toBe(409);
+  expect(await reused.json()).toMatchObject({ code: 'attachment_already_attached' });
+  // The same object twice in one save never reaches storage: the schema refuses it.
+  const twice = { ...f.audio, key: `profiles/${f.profileId}/attachments/9-twice.webm` };
+  expect((await f.post({ text: 'Third', attachments: [twice, twice] })).status).toBe(400);
+  expect(await t.sql`SELECT id FROM inspirations`).toHaveLength(1);
+  expect(await t.sql`SELECT id FROM attachments`).toHaveLength(1);
+});

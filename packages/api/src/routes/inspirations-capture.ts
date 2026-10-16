@@ -17,6 +17,7 @@
  */
 
 import { Hono } from "hono";
+import { inArray } from "drizzle-orm";
 
 import {
   decisionPrincipleCitations,
@@ -214,6 +215,18 @@ export function registerCaptureRoutes(
 
       const media = parsed.data.attachments?.length ? await prepareInspirationAttachments(parsed.data.attachments,
         { uploaderProfileId: session.profile.id, profileId: target.profileId, inspirationId: inserted.id }, attachmentHead) : [];
+      /* ONE STORED OBJECT, ONE ATTACHMENT — the rule the chat finalize already
+         keeps. Without it a note could name an object one of the same
+         person's chat messages already carries, and deleting the note would
+         delete the chat's file with it. Found by the 2026-10-16 security
+         review of the attachments work. */
+      const keys = media.map((row) => row.s3Key).filter((key): key is string => typeof key === 'string');
+      /* (The same object twice in ONE save is already refused by the input
+         schema — "An attachment is included twice".) */
+      if (keys.length) {
+        const [reused] = await tx.select({ id: attachments.id }).from(attachments).where(inArray(attachments.s3Key, keys)).limit(1);
+        if (reused) throw new InspirationAttachmentError(409, 'attachment_already_attached', 'This upload is already attached. Upload it again.');
+      }
       const insertedAttachments = media.length ? await tx.insert(attachments).values(media).returning(attachmentSelection) : [];
       for (const attachment of insertedAttachments) {
         if (attachment.enrichmentStatus === 'pending') await enqueueEnrichAttachment(target.profileId, attachment.id, inserted.id, tx);
