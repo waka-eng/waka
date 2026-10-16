@@ -481,7 +481,7 @@ async function loadAgentBundle(
     name: string;
     createdAt: string;
   },
-  opts: { strict?: boolean } = {},
+  opts: { strict?: boolean; onReadingFailed?: () => void } = {},
 ): Promise<AgentBundle> {
         /* TWO POSTURES, BY WHAT THE CALLER HOLDS. At first load there is
            nothing yet, so a failed fetch degrades to an honest empty wall.
@@ -496,7 +496,9 @@ async function loadAgentBundle(
           : await Promise.all([
               loadInspirations(p.id).catch(() => EMPTY_FIELD),
               loadSignals(p.id).catch(() => [] as Signal[]),
-              loadTopOfMind(p.id).catch(() => null),
+              /* forgiving, but not silent: the caller must be able to
+                 tell "formed nothing" from "could not ask" */
+              loadTopOfMind(p.id).catch(() => { opts.onReadingFailed?.(); return null; }),
             ]);
         const inspirations = field.inspirations;
         const entries = (tom?.entries ?? []).slice().sort((a, b) => a.createdMs - b.createdMs);
@@ -2734,59 +2736,56 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       boundary (observed as a wall that says six and lights none). Travel is
       when the refresh is ASKED for; arrival is when it may land. */
   const pendingAgentBundlesRef = useRef<Map<string, AgentBundle>>(new Map());
-  /* A BUNDLE THAT LANDS AFTER ARRIVAL LANDS NOW. Arrival is the only moment
-     a pending bundle was applied, so one whose fetch finished after the
-     camera settled waited for the NEXT trip — the first visit to an agent
-     drew its empty wall and said "I haven't formed anything yet" over a
-     reading the server had already returned (screenshot check, 2026-10-16).
-     Standing on that wall is the same "at rest" arrival is, so it lands.
-
-     ONE ROUTINE, ONE RULE: the whole pending map lands, exactly as arrival
-     lands it, and only while the loop's own `navigationState()` says nothing
-     is moving — not a crossing, not a camera aim. `atWallRef` is not that
-     signal: it only moves on ARRIVAL, so it still names a wall you have
-     started travelling away from, and landing then rebuilds the world
-     mid-crossing, the shear the pending map exists to prevent (code review,
-     2026-10-16). With no simulation there is no world to shear.
-
-     AND IT POLLS, BRIEFLY, because the moving→rest transition has no event.
-     Arrival is pushed when a crossing ends, but a vertical aim settling is
-     not announced to React at all, so a bundle that finished during one
-     would wait for the next trip. While anything is pending — and only then —
-     the routine looks again every 400ms, and stops when the map is empty or
-     the page unmounts (code review round 3, 2026-10-16). */
-  const landPollRef = useRef<number | null>(null);
-  const landPendingAtRest = useCallback(() => {
-    const pending = pendingAgentBundlesRef.current;
-    const stopPoll = () => {
-      if (landPollRef.current !== null) window.clearInterval(landPollRef.current);
-      landPollRef.current = null;
-    };
-    if (pending.size === 0) { stopPoll(); return; }
-    if (simApiRef.current?.navigationState().moving) {
-      if (landPollRef.current === null)
-        landPollRef.current = window.setInterval(() => landPendingAtRestRef.current(), 400);
-      return;
+  /** Which agents' last landed bundle could not read their top of mind. The
+      first load is forgiving — a failed read becomes an empty board rather
+      than no wall — so an empty bundle alone cannot tell "has formed nothing"
+      from "we could not ask". This is the difference, set as a bundle lands
+      and cleared when one lands with its reading (final review, 2026-10-16). */
+  const [agentReadingFailed, setAgentReadingFailed] = useState<ReadonlySet<string>>(() => new Set());
+  /** Per pending bundle: whether its top-of-mind read failed. Lands with it. */
+  const pendingReadingFailedRef = useRef<Map<string, boolean>>(new Map());
+  /** Put fetched bundles on their walls, and their reading's standing with them. */
+  const applyAgentBundles = useCallback((fresh: Map<string, AgentBundle>) => {
+    const failed = new Map<string, boolean>();
+    for (const id of fresh.keys()) {
+      failed.set(id, pendingReadingFailedRef.current.get(id) === true);
+      pendingReadingFailedRef.current.delete(id);
     }
-    stopPoll();
-    const fresh = new Map(pending);
-    pending.clear();
+    const left = new Map(fresh);
     setAgents((prev) => {
       const replaced = (prev ?? []).map((a) => {
-        const f = fresh.get(a.agent.id);
-        fresh.delete(a.agent.id);
+        const f = left.get(a.agent.id);
+        left.delete(a.agent.id);
         return f ?? a;
       });
       /* anything left is a FIRST load — the wall's memory arriving at all */
-      return [...replaced, ...fresh.values()];
+      return [...replaced, ...left.values()];
+    });
+    setAgentReadingFailed((prev) => {
+      const next = new Set(prev);
+      for (const [id, f] of failed) if (f) next.add(id); else next.delete(id);
+      return next.size === prev.size && [...next].every((id) => prev.has(id)) ? prev : next;
     });
   }, []);
-  const landPendingAtRestRef = useRef(landPendingAtRest);
-  landPendingAtRestRef.current = landPendingAtRest;
-  useEffect(() => () => {
-    if (landPollRef.current !== null) window.clearInterval(landPollRef.current);
-    landPollRef.current = null;
-  }, []);
+  /* A FIRST LOAD THAT FINISHES AFTER ARRIVAL LANDS NOW. Arrival is the only
+     moment a pending bundle was applied, so the first visit to an agent whose
+     fetch finished after the camera settled drew its empty wall and said "I
+     haven't formed anything yet" over a reading the server had already
+     returned (screenshot check, 2026-10-16).
+     ONLY A FIRST LOAD, AND ONLY ON ITS OWN WALL. Its wall is empty, so there
+     is nothing on it to shear, and only that agent's bundle lands. A REFRESH
+     — an agent already in `agents` — still lands only at arrival, as it
+     always has: replacing a standing wall's ground is the rebuild the pending
+     map exists to hold back. A gated, polled at-rest version of this was
+     tried and caused more than it fixed (final review, 2026-10-16). */
+  const landFirstLoadIfStandingOn = useCallback((agentId: string) => {
+    const w = atWallRef.current;
+    if (w.kind !== "agent" || w.id !== agentId) return;
+    const fresh = pendingAgentBundlesRef.current.get(agentId);
+    if (!fresh) return;
+    pendingAgentBundlesRef.current.delete(agentId);
+    applyAgentBundles(new Map([[agentId, fresh]]));
+  }, [applyAgentBundles]);
   /** Whether an agent wall's FIRST load is underway or has failed. Success
       needs no entry here — the bundle's presence in `agents` is readiness. */
   const agentFirstLoadRef = useRef<Map<string, "pending" | "failed">>(new Map());
@@ -2805,7 +2804,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
         void loadAgentBundle(entry, { strict: true })
           .then((fresh) => {
             pendingAgentBundlesRef.current.set(agentId, fresh);
-            landPendingAtRest();
+            pendingReadingFailedRef.current.set(agentId, false);
           })
           .catch(() => {
             /* keep the last good ground, and let the very next approach
@@ -2823,12 +2822,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       if (agentFirstLoadRef.current.get(agentId) === "pending") return;
       agentFirstLoadRef.current.set(agentId, "pending");
       agentRefreshBusyRef.current.add(agentId);
-      void loadAgentBundle(entry)
+      let readingFailed = false;
+      void loadAgentBundle(entry, { onReadingFailed: () => { readingFailed = true; } })
         .then((fresh) => {
           agentFirstLoadRef.current.delete(agentId);
           agentRefreshedAtRef.current.set(agentId, Date.now());
           pendingAgentBundlesRef.current.set(agentId, fresh);
-          landPendingAtRest();
+          pendingReadingFailedRef.current.set(agentId, readingFailed);
+          landFirstLoadIfStandingOn(agentId);
         })
         .catch(() => {
           agentFirstLoadRef.current.set(agentId, "failed");
@@ -2837,7 +2838,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           agentRefreshBusyRef.current.delete(agentId);
         });
     },
-    [agentRoster, agents, landPendingAtRest],
+    [agentRoster, agents, landFirstLoadIfStandingOn],
   );
 
   /**
@@ -2863,8 +2864,12 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      rest-convergence with the right wall under it, so the refreshed ground
      settles in place instead of shearing a travel apart. */
   useEffect(() => {
-    landPendingAtRest();
-  }, [atWall, landPendingAtRest]);
+    const pending = pendingAgentBundlesRef.current;
+    if (pending.size === 0) return;
+    const fresh = new Map(pending);
+    pending.clear();
+    applyAgentBundles(fresh);
+  }, [atWall, applyAgentBundles]);
 
   const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
@@ -3885,7 +3890,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     for (const w of walls) {
       if (w.kind === "agent") {
         const a = (agents ?? []).find((x) => x.agent.id === w.id);
-        if (a) m.set(spaceKey(w), deriveAgentChrome(a, nowMs, nowMs));
+        /* in the reader's language: `formingAlt` is a sentence */
+        if (a) m.set(spaceKey(w), deriveAgentChrome(a, nowMs, nowMs, locale));
       } else {
         const at = deriveAmbition(nowMs, adopted, notes);
         m.set(spaceKey(w), {
@@ -3900,7 +3906,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       }
     }
     return m;
-  }, [walls, agents, dial, adopted, notes, emerging, topOfMind, inspirations]);
+  }, [walls, agents, dial, adopted, notes, emerging, topOfMind, inspirations, locale]);
   /** What an agent's wall holds up: its own reading, never yours.
       FROM ITS OWN BUNDLE AT NOW, NOT FROM `chrome`. `chrome` is written by
       `applyChrome` in an effect AFTER `atWall` changes, so the first render on
@@ -3922,7 +3928,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      "no bubble at all while there is nothing true to put in it." A loaded
      bundle with no reading still says the resting line, because then it is
      true (code review round 3, 2026-10-16). */
-  const agentBundleMissing = standingAsAgent && standingBundle === null;
+  /* AND NONE WHILE ITS READING COULD NOT BE READ. A failed top-of-mind read
+     lands as an empty board, which would say "I haven't formed anything yet"
+     over a reading that exists (final review, 2026-10-16). */
+  const agentBundleMissing = standingAsAgent &&
+    (standingBundle === null || agentReadingFailed.has(atWall.id));
   /* AND THE RESTING LINE IS THE AGENT'S AT NOW, from `wallChromeNow`, for the
      same reason `agentSays` is not `chrome`: `chrome.formingAlt` is written
      an effect late and at the dial's T. */

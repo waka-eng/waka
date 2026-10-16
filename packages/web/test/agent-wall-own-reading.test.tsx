@@ -30,8 +30,11 @@ const AGENT_SAYS = vi.hoisted(() => 'I keep the version that survives the runtim
    "first served" reading would pick. The agent's lead is the PINNED one, by
    the same rule as your own bubble's `lead`. */
 const AGENT_NEWER = vi.hoisted(() => 'A later thought the agent has not pinned.');
-/* A REAL AGENT WHOSE FIRST LOAD NEVER FINISHES, for the pending case only. */
-const HOLD = vi.hoisted(() => ({ on: false }));
+/* A REAL AGENT ('agent-held') for the cases that need its reading to be
+   pending, to fail, or to be honestly empty — and the reader's language. */
+const HOLD = vi.hoisted(() => ({
+  on: false, reading: 'hang' as 'hang' | 'fail' | 'empty' | 'board', locale: 'en-US' as 'en-US' | 'ko-KR',
+}));
 
 vi.mock('../src/lib/api/principles', async original => ({
   ...await original<typeof import('../src/lib/api/principles')>(),
@@ -50,7 +53,11 @@ vi.mock('../src/lib/data', async original => {
     ...await original<typeof import('../src/lib/data')>(), ...dataMockFrom(FACTS),
     /* yours when no profile (or yours) is named; the agent's otherwise */
     loadTopOfMind: async (profile?: string) =>
-      HOLD.on && profile === 'agent-held' ? new Promise<never>(() => {})
+      HOLD.on && profile === 'agent-held'
+        ? HOLD.reading === 'hang' ? new Promise<never>(() => {})
+          : HOLD.reading === 'fail' ? Promise.reject(new Error('reading unavailable'))
+          : HOLD.reading === 'empty' ? null
+          : board([entry('agent-newer', AGENT_NEWER, false, 1), entry('agent-lead', AGENT_SAYS, true, 3)])
       : profile && profile !== VIEWER_ID
         ? board([entry('agent-newer', AGENT_NEWER, false, 1), entry('agent-lead', AGENT_SAYS, true, 3)])
         : board([entry('owner-lead', OWNER_SAYS, false, 2)]),
@@ -66,14 +73,14 @@ vi.mock('../src/lib/api', async original => ({
 }));
 vi.mock('../src/lib/auth-context', async original => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
-    profile: { id: VIEWER_ID, name: 'You', type: 'human' }, profiles: [], refresh: async () => undefined, signOut: async () => undefined };
+    profile: { id: VIEWER_ID, name: 'You', type: 'human', get preferredLocale() { return HOLD.locale; } }, profiles: [], refresh: async () => undefined, signOut: async () => undefined };
   return { ...await original<typeof import('../src/lib/auth-context')>(), useOptionalAuth: () => session, useAuth: () => session };
 });
 
 let world: MountedWorld;
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
-afterEach(() => { world?.unmount(); vi.useRealTimers(); HOLD.on = false; });
+afterEach(() => { world?.unmount(); vi.useRealTimers(); Object.assign(HOLD, { on: false, reading: 'hang', locale: 'en-US' }); });
 
 async function settle() {
   for (let turn = 0; turn < 12; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
@@ -84,6 +91,9 @@ const face = (label: string) =>
 const bubble = () => world.container.querySelector('.jar-char-bubble:not(.jar-char-bubble--review)');
 
 it("holds up the agent's own reading on its wall, never the owner's", async () => {
+  /* a REAL agent, so its bundle is a first load from these mocks — the dev
+     fixture's agents arrive preloaded, and a refresh lands only at arrival */
+  Object.assign(HOLD, { on: true, reading: 'board' });
   world = await mountWorld(FACTS); await settle();
   expect(bubble()?.textContent, 'the owner wall should say the owner\'s top of mind').toContain(OWNER_SAYS);
 
@@ -134,4 +144,32 @@ it("says nothing on an agent's wall whose first load is still pending", async ()
   await settle();
   expect(world.audit().wallKind).toBe('agent');
   expect(bubble(), 'a bubble spoke for an agent whose bundle has not arrived').toBeNull();
+});
+
+/* ═══ A READING THAT COULD NOT BE READ IS NOT "NOTHING FORMED" ═════════════
+   The first load forgives a failed top-of-mind read as an empty board, so
+   the wall would say "I haven't formed anything yet" over a reading that
+   exists. It says nothing instead (final review, 2026-10-16). */
+it("says nothing on an agent's wall whose reading failed to load", async () => {
+  Object.assign(HOLD, { on: true, reading: 'fail' });
+  world = await mountWorld(FACTS); await settle();
+  await act(async () => { face('My agent')!.click(); });
+  await settle();
+  expect(world.audit().wallKind).toBe('agent');
+  expect(bubble(), 'a failed read was told as "nothing formed"').toBeNull();
+});
+
+/* ═══ AND THE RESTING LINE IS IN THE READER'S LANGUAGE ═════════════════════
+   `wallChromeNow` derived the agent's chrome without a locale, so a Korean
+   reader's agent said its resting line in English (final review,
+   2026-10-16). */
+it("says an empty agent's resting line in Korean to a Korean reader", async () => {
+  Object.assign(HOLD, { on: true, reading: 'empty', locale: 'ko-KR' });
+  world = await mountWorld(FACTS); await settle();
+  const toAgent = face('내 에이전트');
+  expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
+  await act(async () => { toAgent!.click(); });
+  await settle();
+  expect(world.audit().wallKind).toBe('agent');
+  expect(bubble()?.querySelector('.jar-char-bubble-reading')?.textContent?.trim()).toBe('아직 아무것도 만들어 내지 못했어요');
 });
