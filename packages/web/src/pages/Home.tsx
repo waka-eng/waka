@@ -2490,9 +2490,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      what you have kept — and an agent says it has formed nothing. The poster
      chose between exactly these; the bubble is the poster's new seat, so it
      makes the same choice from the same facts rather than a simpler one. */
-  const restingWord = standingAsAgent
-    ? chrome.formingAlt ?? say("worldFormingNothingAdopted")
-    : say(inspirations?.length || fieldBeyond ? "worldPersonalReadingNotReady" : "worldPersonalReadingEmpty");
+  /* `restingWord` itself is declared below `wallChromeNow`, which its agent
+     half reads (code review round 3, 2026-10-16). */
 
   /* The self wall's NAME is canon ("Me" — it also mints the /w/me address);
      what a person reads is the catalog's word for it. User-given names —
@@ -2740,32 +2739,53 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      camera settled waited for the NEXT trip — the first visit to an agent
      drew its empty wall and said "I haven't formed anything yet" over a
      reading the server had already returned (screenshot check, 2026-10-16).
-     Standing on that wall is the same "at rest" arrival is, so it lands. */
-  /* AT REST, NOT MERELY LAST ARRIVED. `atWallRef` only moves on ARRIVAL, so
-     it still names this agent after you have started travelling away — and
-     a bump then would drain every pending bundle mid-crossing, the very
-     shear the pending map exists to prevent (code review, 2026-10-16). The
-     loop's own `navigationState()` says whether a crossing (or a camera aim)
-     is running and which wall it is on; only when nothing is moving and that
-     wall is this agent does the bundle land now. Otherwise the next arrival
-     lands it, as before.
-     AND ONLY THIS AGENT'S BUNDLE LANDS. Other walls' pending bundles are
-     theirs to land at their own arrival; draining the whole map here would
-     rebuild walls nobody is standing on (code review round 2, 2026-10-16). */
-  const landIfStandingOn = useCallback((agentId: string) => {
-    const nav = simApiRef.current?.navigationState();
-    if (!nav || nav.moving) return;
-    const w = atWallRef.current;
-    if (nav.wall.kind !== "agent" || nav.wall.id !== agentId || w.kind !== "agent" || w.id !== agentId) return;
-    const fresh = pendingAgentBundlesRef.current.get(agentId);
-    if (!fresh) return;
-    pendingAgentBundlesRef.current.delete(agentId);
+     Standing on that wall is the same "at rest" arrival is, so it lands.
+
+     ONE ROUTINE, ONE RULE: the whole pending map lands, exactly as arrival
+     lands it, and only while the loop's own `navigationState()` says nothing
+     is moving — not a crossing, not a camera aim. `atWallRef` is not that
+     signal: it only moves on ARRIVAL, so it still names a wall you have
+     started travelling away from, and landing then rebuilds the world
+     mid-crossing, the shear the pending map exists to prevent (code review,
+     2026-10-16). With no simulation there is no world to shear.
+
+     AND IT POLLS, BRIEFLY, because the moving→rest transition has no event.
+     Arrival is pushed when a crossing ends, but a vertical aim settling is
+     not announced to React at all, so a bundle that finished during one
+     would wait for the next trip. While anything is pending — and only then —
+     the routine looks again every 400ms, and stops when the map is empty or
+     the page unmounts (code review round 3, 2026-10-16). */
+  const landPollRef = useRef<number | null>(null);
+  const landPendingAtRest = useCallback(() => {
+    const pending = pendingAgentBundlesRef.current;
+    const stopPoll = () => {
+      if (landPollRef.current !== null) window.clearInterval(landPollRef.current);
+      landPollRef.current = null;
+    };
+    if (pending.size === 0) { stopPoll(); return; }
+    if (simApiRef.current?.navigationState().moving) {
+      if (landPollRef.current === null)
+        landPollRef.current = window.setInterval(() => landPendingAtRestRef.current(), 400);
+      return;
+    }
+    stopPoll();
+    const fresh = new Map(pending);
+    pending.clear();
     setAgents((prev) => {
-      const list = prev ?? [];
-      return list.some((a) => a.agent.id === agentId)
-        ? list.map((a) => (a.agent.id === agentId ? fresh : a))
-        : [...list, fresh];
+      const replaced = (prev ?? []).map((a) => {
+        const f = fresh.get(a.agent.id);
+        fresh.delete(a.agent.id);
+        return f ?? a;
+      });
+      /* anything left is a FIRST load — the wall's memory arriving at all */
+      return [...replaced, ...fresh.values()];
     });
+  }, []);
+  const landPendingAtRestRef = useRef(landPendingAtRest);
+  landPendingAtRestRef.current = landPendingAtRest;
+  useEffect(() => () => {
+    if (landPollRef.current !== null) window.clearInterval(landPollRef.current);
+    landPollRef.current = null;
   }, []);
   /** Whether an agent wall's FIRST load is underway or has failed. Success
       needs no entry here — the bundle's presence in `agents` is readiness. */
@@ -2785,7 +2805,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
         void loadAgentBundle(entry, { strict: true })
           .then((fresh) => {
             pendingAgentBundlesRef.current.set(agentId, fresh);
-            landIfStandingOn(agentId);
+            landPendingAtRest();
           })
           .catch(() => {
             /* keep the last good ground, and let the very next approach
@@ -2808,7 +2828,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           agentFirstLoadRef.current.delete(agentId);
           agentRefreshedAtRef.current.set(agentId, Date.now());
           pendingAgentBundlesRef.current.set(agentId, fresh);
-          landIfStandingOn(agentId);
+          landPendingAtRest();
         })
         .catch(() => {
           agentFirstLoadRef.current.set(agentId, "failed");
@@ -2817,7 +2837,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           agentRefreshBusyRef.current.delete(agentId);
         });
     },
-    [agentRoster, agents, landIfStandingOn],
+    [agentRoster, agents, landPendingAtRest],
   );
 
   /**
@@ -2843,20 +2863,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      rest-convergence with the right wall under it, so the refreshed ground
      settles in place instead of shearing a travel apart. */
   useEffect(() => {
-    const pending = pendingAgentBundlesRef.current;
-    if (pending.size === 0) return;
-    const fresh = new Map(pending);
-    pending.clear();
-    setAgents((prev) => {
-      const replaced = (prev ?? []).map((a) => {
-        const f = fresh.get(a.agent.id);
-        fresh.delete(a.agent.id);
-        return f ?? a;
-      });
-      /* anything left is a FIRST load — the wall's memory arriving at all */
-      return [...replaced, ...fresh.values()];
-    });
-  }, [atWall]);
+    landPendingAtRest();
+  }, [atWall, landPendingAtRest]);
 
   const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
@@ -3904,9 +3912,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       `direction.current` by the same rule as your bubble's `lead` — pinned,
       else first in the board's order — while the history's newest entry by
       date can be an unpinned later one (code review round 2, 2026-10-16). */
-  const agentSays = standingAsAgent
-    ? (agents ?? []).find((a) => a.agent.id === atWall.id)?.direction.current?.ambition ?? null
+  const standingBundle = standingAsAgent
+    ? (agents ?? []).find((a) => a.agent.id === atWall.id) ?? null
     : null;
+  const agentSays = standingBundle?.direction.current?.ambition ?? null;
+  /* NO BUBBLE UNTIL THE AGENT'S BUNDLE IS HERE. While its first load is
+     pending — or failed — the app does not know whether the agent has formed
+     anything, and "nothing adopted yet" would be a claim about it. Founder:
+     "no bubble at all while there is nothing true to put in it." A loaded
+     bundle with no reading still says the resting line, because then it is
+     true (code review round 3, 2026-10-16). */
+  const agentBundleMissing = standingAsAgent && standingBundle === null;
+  /* AND THE RESTING LINE IS THE AGENT'S AT NOW, from `wallChromeNow`, for the
+     same reason `agentSays` is not `chrome`: `chrome.formingAlt` is written
+     an effect late and at the dial's T. */
+  const restingWord = standingAsAgent
+    ? wallChromeNow.get(spaceKey(atWall))?.formingAlt ?? say("worldFormingNothingAdopted")
+    : say(inspirations?.length || fieldBeyond ? "worldPersonalReadingNotReady" : "worldPersonalReadingEmpty");
 
   /**
    * WHAT EACH WALL'S CLAIM RESTS ON.
@@ -9014,7 +9036,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   that moment's reading there, and neither "on my mind right
                   now" nor "nothing formed yet" is true of a wall showing its
                   history (code review round 2, 2026-10-16). */}
-              {(lead || agentSays || bubbleHoldsTheLine) && !(standingAsAgent && !atNow) ? (
+              {(lead || agentSays || bubbleHoldsTheLine) && !(standingAsAgent && (!atNow || agentBundleMissing)) ? (
                 /* ═══ TWO WEIGHTS OF BUBBLE, AND ONLY TWO ═══════════════
                    Founder, with the reading beside an observation: "the
                    speech bubble that shows the top of mind versus everything
@@ -9191,10 +9213,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                            with a reading fell through to `restingWord`, so it
                            said "nothing adopted yet" over a top of mind the
                            server had returned (screenshot check, 2026-10-16).
-                           Its line is the agent's own `deriveAgentChrome`
-                           reading at now (see `agentSays`), framed in its own
-                           first person, because the creature is wearing its
-                           form.
+                           Its line is the agent's LEAD — `direction.current`
+                           on its own bundle, chosen by the same pinned-else-
+                           first rule as your `lead` (see `agentSays`) — and
+                           not the wall's `chrome`, which lands an effect late
+                           (one render of YOUR sentence here) and holds the
+                           dial's T rather than now. Framed in its own first
+                           person, because the creature is wearing its form.
 
                            NO "LET'S CHAT ABOUT IT" HERE, on purpose.
                            `talkAbout` opens YOUR chat with the text as YOUR

@@ -30,6 +30,8 @@ const AGENT_SAYS = vi.hoisted(() => 'I keep the version that survives the runtim
    "first served" reading would pick. The agent's lead is the PINNED one, by
    the same rule as your own bubble's `lead`. */
 const AGENT_NEWER = vi.hoisted(() => 'A later thought the agent has not pinned.');
+/* A REAL AGENT WHOSE FIRST LOAD NEVER FINISHES, for the pending case only. */
+const HOLD = vi.hoisted(() => ({ on: false }));
 
 vi.mock('../src/lib/api/principles', async original => ({
   ...await original<typeof import('../src/lib/api/principles')>(),
@@ -48,7 +50,8 @@ vi.mock('../src/lib/data', async original => {
     ...await original<typeof import('../src/lib/data')>(), ...dataMockFrom(FACTS),
     /* yours when no profile (or yours) is named; the agent's otherwise */
     loadTopOfMind: async (profile?: string) =>
-      profile && profile !== VIEWER_ID
+      HOLD.on && profile === 'agent-held' ? new Promise<never>(() => {})
+      : profile && profile !== VIEWER_ID
         ? board([entry('agent-newer', AGENT_NEWER, false, 1), entry('agent-lead', AGENT_SAYS, true, 3)])
         : board([entry('owner-lead', OWNER_SAYS, false, 2)]),
   };
@@ -57,6 +60,9 @@ vi.mock('../src/lib/api', async original => ({
   ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),
   fetchPrinciples: vi.fn(async () => []),
   fetchTheWeather: vi.fn(async () => ({ told: null, antechamber: [], days: [] })),
+  fetchProfiles: vi.fn(async () => HOLD.on
+    ? [{ id: 'agent-held', name: 'Held agent', type: 'agent', createdAt: '2026-08-01T00:00:00.000Z' }]
+    : []),
 }));
 vi.mock('../src/lib/auth-context', async original => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
@@ -67,7 +73,7 @@ vi.mock('../src/lib/auth-context', async original => {
 let world: MountedWorld;
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
-afterEach(() => { world?.unmount(); vi.useRealTimers(); });
+afterEach(() => { world?.unmount(); vi.useRealTimers(); HOLD.on = false; });
 
 async function settle() {
   for (let turn = 0; turn < 12; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
@@ -112,4 +118,20 @@ it("holds up the agent's own reading on its wall, never the owner's", async () =
     'the agent wall fell through to the resting line over a reading it holds').toBe(AGENT_SAYS);
   expect(said?.querySelector('.jar-char-bubble-of')?.textContent?.trim()).toBe('This is what’s on my mind right now.');
   expect(said?.textContent ?? '', 'the bubble held the newest entry rather than the pinned lead').not.toContain(AGENT_NEWER);
+});
+
+/* ═══ NO BUBBLE WHILE THE AGENT'S BUNDLE HAS NOT ARRIVED ═══════════════════
+   Its first load is still out, so the app does not know whether the agent
+   has formed anything; "nothing adopted yet" there would be a claim about it.
+   Founder: "no bubble at all while there is nothing true to put in it"
+   (code review round 3, 2026-10-16). */
+it("says nothing on an agent's wall whose first load is still pending", async () => {
+  HOLD.on = true;
+  world = await mountWorld(FACTS); await settle();
+  const toAgent = face('My agent');
+  expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
+  await act(async () => { toAgent!.click(); });
+  await settle();
+  expect(world.audit().wallKind).toBe('agent');
+  expect(bubble(), 'a bubble spoke for an agent whose bundle has not arrived').toBeNull();
 });
