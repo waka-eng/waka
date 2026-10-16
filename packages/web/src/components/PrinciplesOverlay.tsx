@@ -48,7 +48,6 @@ import { PrinciplesGround } from "./PrinciplesGround";
 import { Companion } from "./Companion";
 import { TimelessSky } from "./TimelessSky";
 import { CrossingCompanion, type CreatureSpot } from "./CrossingCompanion";
-import { useFirstVisit } from "../lib/first-visit";
 import { readProfileText, writeProfileText } from "../lib/profile-storage";
 import { fetchPrinciples, type ApiPrinciple } from "../lib/api";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
@@ -118,6 +117,8 @@ function pageCreature(): CreatureSpot | null {
 
 /** How far a pull left on the page travels, in CSS px, before it is the walk home. */
 const PULL_HOME = 56;
+/** The page holds the top three principles, never more. */
+const MAX_HELD = 3;
 
 export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onOpen, onShare, onChat, crossing = null, onCrossed }: {
   locale: SupportedLocale;
@@ -145,7 +146,6 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
   onCrossed?: () => void;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
-  const newHere = useFirstVisit(profileId ? { accountId: "p", profileId } : null, "principles");
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
   /**
    * THE FIRST ONE IS MET, ONCE.
@@ -274,18 +274,16 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
         }}
         onPointerCancel={() => { pull.current = null; }}
         >
-        <header className="waka-over-head">
+        {/* NO TITLE ON THE PAGE; THE CREATURE SAYS WHERE YOU ARE. Founder,
+            2026-10-16: "remove your principles text at the top. ensure the
+            character always mention sth principle so its clear this page is
+            principles". The heading stays for screen readers only; what a
+            sighted reader learns it from is the bubble below. The one-visit
+            "what is this" line went with it — the bubble now says it every
+            visit, in the creature's voice. */}
+        <header className="waka-over-head sr-only">
           <h2 className="waka-over-title">{title}</h2>
         </header>
-
-        {/* SAID ONCE, ON THE SURFACE IT IS ABOUT — see `useFirstVisit`.
-            The permanent version of this line went out under "only the
-            most absolutely necessary things should be shown", and the
-            founder's later question was the other half of the same
-            thought: "how to add the descriptions for like this without
-            overwhelming the space we have?" Borrowed for one visit rather
-            than held forever. */}
-        {newHere ? <p className="waka-over-what">{say("worldPrinciplesWhatIs")}</p> : null}
         {phase === "loading" ? (
           <p className="waka-over-status" role="status">
             {say("worldPrinciplesLoading")}
@@ -318,12 +316,18 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
             /* THE CREATURE COMES WITH YOU, and stays above what it holds.
                Founder: "the character should be a big part of it" — it is the
                one who walked here, so the page keeps it in view. */
-            <div className="waka-held-hero">
+            <div className="waka-ground-hero waka-ground-hero--ready waka-held-hero" style={{ ["--charge" as string]: 1 }}>
+              <div className="jar-char-bubble-body waka-ground-bubble waka-held-says">
+                <span className="jar-char-bubble-reading">{say("worldPrinciplesWhatIs")}</span>
+              </div>
               <span className="waka-ground-being" data-crossing-target="88" style={{ ["--being" as string]: "90px" }}><Companion size={88} /></span>
             </div>
           )}
           <ul className="waka-held">
-            {rows.map((row, index) => {
+            {/* THREE AT MOST, ONE ABOVE THE OTHER. Founder, 2026-10-16:
+                "have max 3 principles only. vertical list of three". The
+                rows arrive ranked, so the three are the top three. */}
+            {rows.slice(0, MAX_HELD).map((row, index) => {
               const since = heldSince(row, locale);
               const from = evidenceCount(row);
               return (

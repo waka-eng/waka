@@ -2432,7 +2432,8 @@
 
 /* THE FIRST PRINCIPLE, MET. One line above it, and the card comes up in
    light — the same light the ground's seats were waiting in. Once. */
-.waka-held-first {
+.waka-held-first,
+.waka-held-says {
   color: var(--waka-on-light);
   font-size: var(--t-lead);
 }
@@ -2455,9 +2456,14 @@
 
 .waka-held {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr));
-  gap: var(--sp-16);
-  margin: 0;
+  /* SMALLER, FOUNDER 2026-10-16: "why are the principle cards so big? make
+     them smaller (card size and font both)" — and then "have max 3
+     principles only. vertical list of three": one column, a reading width. */
+  grid-template-columns: 1fr;
+  width: 100%;
+  max-width: 34rem;
+  gap: var(--sp-12);
+  margin: 0 auto;
   padding: 0;
   list-style: none;
 }
@@ -2466,15 +2472,15 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: var(--sp-24);
+  gap: var(--sp-12);
   width: 100%;
   height: 100%;
   /* A CARD, NOT A LINE — so it has the proportions of the thing it would be
      exported as. Squarish rather than tall: a statement is one or two lines
      and the space under it is what makes the sentence look held rather than
      listed. */
-  min-height: 11rem;
-  padding: var(--sp-24);
+  min-height: 6.5rem;
+  padding: var(--sp-16);
   border: 1px solid var(--line);
   border-radius: var(--waka-r-surface);
   background: var(--cell);
@@ -2545,9 +2551,10 @@
 
 .waka-held-words {
   font-family: var(--waka-face);
-  font-size: var(--t-reading);
+  /* SMALLER, FOUNDER 2026-10-16: lead size, not reading size. */
+  font-size: var(--t-lead);
   font-weight: 300;
-  line-height: 1.25;
+  line-height: 1.3;
   /* The statement is the whole point, so it gets the one typographic luxury
      on the card: tightened tracking at reading size, which is what makes a
      sentence look set rather than typed. */

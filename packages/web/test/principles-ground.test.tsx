@@ -166,3 +166,22 @@ it("lets the page go at once when there is no creature to walk home from", async
   expect(crossed).toHaveBeenCalledTimes(1);
   expect(host.querySelector(".waka-crossing-being")).toBeNull();
 });
+
+/* THE TOP THREE, AND THE CREATURE SAYS WHAT THEY ARE (founder, 2026-10-16):
+   "have max 3 principles only. vertical list of three" and "remove your
+   principles text at the top. ensure the character always mention sth
+   principle". */
+it("holds only the top three, and the creature, not a title, says these are your principles", async () => {
+  const five = ["One.", "Two.", "Three.", "Four.", "Five."].map((statement, index) =>
+    ({ ...PRINCIPLE, id: `44444444-4444-4444-8444-44444444444${index}`, statement, rank: index + 1 }));
+  vi.mocked(fetchPrinciples).mockResolvedValue(five);
+  await act(async () => root.render(
+    <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Agi" title="Principles" onClose={() => {}} onOpen={() => {}} />,
+  ));
+  expect([...host.querySelectorAll(".waka-held-words")].map((node) => node.textContent)).toEqual(["One.", "Two.", "Three."]);
+  expect(host.querySelector(".waka-held-hero .waka-held-says")?.textContent)
+    .toBe("These are your principles: what has stayed true across your top of mind for a long time.");
+  expect(host.querySelector(".waka-held-hero [data-crossing-target]")).not.toBeNull();
+  expect(host.querySelector(".waka-over-head")?.classList.contains("sr-only"), "the title is for screen readers only").toBe(true);
+  expect(host.querySelector(".waka-over-what"), "the one-visit line is gone").toBeNull();
+});
