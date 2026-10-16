@@ -166,3 +166,64 @@ it("lets the page go at once when there is no creature to walk home from", async
   expect(crossed).toHaveBeenCalledTimes(1);
   expect(host.querySelector(".waka-crossing-being")).toBeNull();
 });
+
+/* THE TOP THREE, AND THE CREATURE SAYS WHAT THEY ARE (founder, 2026-10-16):
+   "have max 3 principles only. vertical list of three" and "remove your
+   principles text at the top. ensure the character always mention sth
+   principle". */
+it("holds only the top three, and the creature, not a title, says these are your principles", async () => {
+  const five = ["One.", "Two.", "Three.", "Four.", "Five."].map((statement, index) =>
+    ({ ...PRINCIPLE, id: `44444444-4444-4444-8444-44444444444${index}`, statement, rank: index + 1 }));
+  vi.mocked(fetchPrinciples).mockResolvedValue(five);
+  await act(async () => root.render(
+    <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Agi" title="Principles" onClose={() => {}} onOpen={() => {}} />,
+  ));
+  expect([...host.querySelectorAll(".waka-held-words")].map((node) => node.textContent)).toEqual(["One.", "Two.", "Three."]);
+  expect(host.querySelector(".waka-held-hero .waka-held-says")?.textContent)
+    .toBe("These are your principles: what has stayed true across your top of mind for a long time.");
+  expect(host.querySelector(".waka-held-hero [data-crossing-target]")).not.toBeNull();
+  expect(host.querySelector(".waka-over-head")?.classList.contains("sr-only"), "the title is for screen readers only").toBe(true);
+  expect(host.querySelector(".waka-over-what"), "the one-visit line is gone").toBeNull();
+});
+
+/* AN AGENT'S PRINCIPLES ARE NOT YOURS (review, 2026-10-16): the same page
+   reads an agent's wall, and the bubble must say whose they are. */
+it("says these are your agent's principles on an agent's wall", async () => {
+  vi.mocked(fetchPrinciples).mockResolvedValue([PRINCIPLE]);
+  await act(async () => root.render(
+    <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Bot" title="Your Agent's Principles" whose="agent" onClose={() => {}} onOpen={() => {}} />,
+  ));
+  const said = host.querySelector(".waka-held-hero .waka-held-says")?.textContent ?? "";
+  expect(said).toBe("These are your agent’s principles: what has stayed true across its top of mind for a long time.");
+  expect(said).not.toContain("These are your principles");
+});
+
+it("on an agent's wall, the waiting ground and the first-principle greeting speak of the agent", async () => {
+  const agentPage = () => act(async () => root.render(
+    <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Bot" title="Your Agent's Principles" whose="agent" onClose={() => {}} onOpen={() => {}} />,
+  ));
+  vi.mocked(fetchSignals).mockResolvedValue([]);
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);
+  await agentPage();
+  expect(line()).toBe("Nothing is holding yet. I’m watching for what your agent keeps coming back to.");
+  expect(host.querySelector(".waka-ground-foot")?.textContent).toBe("Your agent’s first principle");
+  expect(host.querySelector(".waka-ground")?.getAttribute("aria-label")).toBe("What your agent’s first principle will grow from");
+
+  vi.mocked(fetchPrinciples).mockResolvedValue([{ ...PRINCIPLE, citedSignals: [{ examples: [{}, {}] }] } as unknown as ApiPrinciple]);
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  await agentPage();
+  expect(host.querySelector(".waka-held-first")?.textContent).toBe("Here it is. Your agent’s first principle.");
+  expect(host.querySelector(".waka-held-proof")?.textContent).toContain("Drawn from two things it kept");
+  expect(host.textContent).not.toMatch(/your (first )?principle|you kept/i);
+});
+
+it("offers no chat about the creature's line on an agent's ground", async () => {
+  vi.mocked(fetchSignals).mockResolvedValue([signal("a", "A.")]);
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);
+  await act(async () => root.render(
+    <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Bot" title="Your Agent's Principles" whose="agent" onClose={() => {}} onOpen={() => {}} onChat={() => {}} />,
+  ));
+  expect(host.querySelector(".waka-ground-bubble")).not.toBeNull();
+  expect(host.querySelector(".waka-ground-bubble .jar-char-bubble-act"), "the agent's line is not yours to open a chat with").toBeNull();
+});

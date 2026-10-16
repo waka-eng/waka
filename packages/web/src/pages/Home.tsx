@@ -11541,6 +11541,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         name={atWall.kind==='agent'?atWall.name:auth?.profile?.name??''}
         title={say(atWall.kind==='agent'?'worldAgentPrinciples':'worldPrinciplesShortcut')}
+        whose={atWall.kind==='agent'?'agent':'own'}
         onClose={leaveOpen}
         /* Opening one REPLACES the overlay rather than stacking on it: the
            principle's own surface is the next thing to read, not a sheet on
@@ -11554,7 +11555,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            already made by pressing share. */
         onShare={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true})}
         /* What the creature said on the waiting page, talked about. */
-        onChat={said => { void talkAbout({ id: '', text: said }); }}
+        /* NOT ON AN AGENT'S WALL (review, 2026-10-16): talkAbout posts the
+           creature's line as YOUR first message, and on an agent's ground that
+           line is about the agent — the defect the agent wall fixed by
+           removing its own act. */
+        onChat={atWall.kind==='agent'?undefined:said => { void talkAbout({ id: '', text: said }); }}
         crossing={principlesCrossing}
         onCrossed={() => setPrinciplesCrossing(null)}/>:null}
       {/* ═══ CHATS DO NOT HAVE AN OWNER THE WAY AN ARCHIVE DOES ══════════

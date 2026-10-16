@@ -54,14 +54,17 @@ const GROUND_SEATS = 3;
 
 type Phase = "loading" | "ready" | "failed";
 
-export function PrinciplesGround({ locale, profileId, onChat }: {
+export function PrinciplesGround({ locale, profileId, whose = "own", onChat }: {
   locale: SupportedLocale;
   profileId?: string | null;
+  /** Whose ground this is — an agent's wall must not say "you keep". */
+  whose?: "own" | "agent";
   /** A chat about what the creature just said. Founder, 2026-10-15: "make
       this also have the chat about it thing." */
   onChat?: (said: string) => void;
 }) {
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
+  const agent = whose === "agent";
   const [phase, setPhase] = useState<Phase>("loading");
   const [holding, setHolding] = useState<ApiSignal[]>([]);
   /* How many seats were lit at the last visit, read once before this visit
@@ -128,16 +131,16 @@ export function PrinciplesGround({ locale, profileId, onChat }: {
      feeling of an exciting anticipation." The state line became its speech:
      the same facts, said by the one who is waiting with you. */
   const line = count === 0
-    ? say("worldGroundNone")
+    ? say(agent ? "worldGroundNoneAgent" : "worldGroundNone")
     : count < GROUND_SEATS
       ? formatMessage(locale, "worldGroundSome", { count, countWords: numWords(count, locale), left: GROUND_SEATS - count })
-      : say("worldGroundReady");
+      : say(agent ? "worldGroundReadyAgent" : "worldGroundReady");
   /* How lit the waiting is, 0 to 1. Light is the only meaning channel: the
      glow around the creature IS the progress, and nothing else measures it. */
   const charge = Math.min(count, GROUND_SEATS) / GROUND_SEATS;
 
   return (
-    <section className="waka-ground" aria-label={say("worldGroundLabel")}>
+    <section className="waka-ground" aria-label={say(agent ? "worldGroundLabelAgent" : "worldGroundLabel")}>
       <div
         className={`waka-ground-hero${count > 0 ? " waka-ground-hero--stirring" : ""}${count >= GROUND_SEATS ? " waka-ground-hero--ready" : ""}`}
         style={{ ["--charge" as string]: charge }}
@@ -177,7 +180,7 @@ export function PrinciplesGround({ locale, profileId, onChat }: {
             );
           })}
         </ol>
-        <p className="waka-ground-foot">{say("worldGroundFoot")}</p>
+        <p className="waka-ground-foot">{say(agent ? "worldGroundFootAgent" : "worldGroundFoot")}</p>
       </div>
     </section>
   );
