@@ -39,6 +39,7 @@ import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { validationDetails } from "../lib/validation.js";
 import {
   listClaimsAwaitingVerdict,
+  listClaimsToAskAgain,
   loadProfileTarget,
   resolveProfileScope,
 } from "./signals.js";
@@ -90,6 +91,8 @@ interface ClaimsRouteDependencies {
   getDatabase?: typeof getDb;
   loadProfile?: typeof loadProfileTarget;
   listClaims?: typeof listClaimsAwaitingVerdict;
+  listAgain?: typeof listClaimsToAskAgain;
+  now?: () => Date;
 }
 
 export function createClaimsRoutes(deps: ClaimsRouteDependencies = {}): Hono<AuthEnv> {
@@ -97,6 +100,8 @@ export function createClaimsRoutes(deps: ClaimsRouteDependencies = {}): Hono<Aut
   const getDatabase = deps.getDatabase ?? getDb;
   const loadProfile = deps.loadProfile ?? loadProfileTarget;
   const listClaims = deps.listClaims ?? listClaimsAwaitingVerdict;
+  const listAgain = deps.listAgain ?? listClaimsToAskAgain;
+  const now = deps.now ?? (() => new Date());
 
   routes.use("*", deps.authMiddleware ?? requireAuth);
   /* A queue is stale the moment it is answered, and a cached one invites a
@@ -128,7 +133,16 @@ export function createClaimsRoutes(deps: ClaimsRouteDependencies = {}): Hono<Aut
     const limit = parsed.data.limit ?? DEFAULT_CLAIM_LIMIT;
     /* One over the bound, so "is there more than this page" is a fact rather
        than a second count query that could disagree with the first. */
-    const rows = await listClaims(db, { profileId: scope.profileId, limit: limit + 1 });
+    const unanswered = await listClaims(db, { profileId: scope.profileId, limit: limit + 1 });
+    /* AND THEN THE YESES THAT HAVE AGED (2026-10-15). Founder: "is this still
+       true? ... obviously things go outdated." The unanswered come first —
+       a reading nobody has ruled on is the more urgent question — and only
+       the room left on the page goes to asking again. `askedAgain` rides on
+       those so the card can say when the last yes was. */
+    const again = unanswered.length > limit
+      ? []
+      : await listAgain(db, { profileId: scope.profileId, limit: limit + 1 - unanswered.length, now: now() });
+    const rows: Array<(typeof unanswered)[number] & { askedAgain?: { lastAnsweredAt: string } }> = [...unanswered, ...again];
     const page = rows.slice(0, limit);
 
     /**

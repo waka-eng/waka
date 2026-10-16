@@ -500,18 +500,121 @@ export async function listClaimsAwaitingVerdict(
        order follows the evidence, and confidence is deliberately not a term.
        Ranking by confidence here would rebuild the bias the queue exists to
        undo. */
-    .orderBy(desc(signals.lastEvidenceAt), desc(signals.createdAt))
+    .orderBy(sql`${signals.lastEvidenceAt} DESC NULLS LAST`, desc(signals.createdAt))
     .limit(input.limit);
 
   /* The origins ride along: a claim shown with no sense of where it came from
      is a horoscope, and "from 4 things you saved" is the cheapest honest
      answer. Owner-scoped by construction — this read is never a group path. */
   const decorated = await decorateSignals(db, input.profileId, rows, true);
+  /* THE QUEUE'S ORDER IS ITS OWN. `decorateSignals` re-sorts by live
+     confidence, which is the right order for the signals list and the wrong
+     one here — the note on the query above says why confidence is not a
+     term. Found 2026-10-15 while adding the re-ask, whose order decoration
+     also scrambled: the first claim on the home screen had been the most
+     confident one, not the most recently evidenced. Restored, not assumed. */
+  const position = new Map(rows.map((row, index) => [row.id, index]));
+  decorated.sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
   /* And the WORDING a verdict would be about. Without it the answer binds to
      revision one and a reworded claim can never be answered — see the field's
      own note on `SignalSummary`. */
   const revisions = new Map(rows.map((row) => [row.id, row.statementRevision.toString()]));
   return decorated.map((row) => ({ ...row, statementRevision: revisions.get(row.id) }));
+}
+
+/**
+ * HOW LONG A "YES" STANDS BEFORE IT IS ASKED AGAIN.
+ *
+ * Founder, 2026-10-15: claims should "revisit my past inspirations to ask
+ * something like 'is this still true?' ... obviously things go outdated."
+ * The unanswered queue above cannot do that: once a reading is answered it
+ * is never reachable again, so a person's yes from last spring stands as
+ * true forever. A season is long enough that asking again is a real
+ * question and short enough that a stale yes does not shape a principle for
+ * a year. Tuned with real data only.
+ */
+export const CLAIM_REASK_DAYS = 90;
+
+/**
+ * THE READINGS WHOSE "YES" HAS AGED — asked again, oldest answer first.
+ *
+ * Active, not set aside, and NOT LOCKED: a locked statement is the person's
+ * own words, and asking the author whether their own sentence is still true
+ * is the tic Law 11's exception names. The last answer on the CURRENT
+ * wording must have been `true` or `partly` and older than
+ * `CLAIM_REASK_DAYS`; a `not_true` is not asked again, because the reading
+ * already knows it was wrong. Answering again writes a new verdict, which
+ * is what takes it off this list for another season.
+ */
+export async function listClaimsToAskAgain(
+  db: WakaDb,
+  input: { profileId: string; limit: number; now?: Date },
+): Promise<Array<SignalSummary & { askedAgain: { lastAnsweredAt: string } }>> {
+  if (input.limit <= 0) return [];
+  const cutoff = new Date((input.now ?? new Date()).getTime() - CLAIM_REASK_DAYS * 86_400_000);
+  /* THE LAST ANSWER, FOUND ONCE PER CLAIM. A lateral lookup on the
+     feedback index (profile, type, target) rather than a correlated
+     subquery repeated in the select, the filter and the order — measured in
+     review at ~900x faster on a profile with 20k other verdicts. The wording
+     must be current: an answer to an older revision of the sentence does not
+     count, and that sentence is asked as unanswered instead.
+
+     NOT A CLAIM THAT GAVE WAY. A reading that yielded when its owner settled
+     a contradiction keeps its old yes, and asking it again could not reopen
+     the pair — so it is not asked. */
+  const rows = await db
+    .select({
+      id: signals.id,
+      statement: signals.statement,
+      status: signals.status,
+      confidence: signals.confidence,
+      lastEvidenceAt: signals.lastEvidenceAt,
+      lockedAt: signals.lockedAt,
+      unsupportedAt: signals.unsupportedAt,
+      dismissedAt: signals.dismissedAt,
+      createdAt: signals.createdAt,
+      statementRevision: signals.statementRevision,
+      lastAnsweredAt: sql<string | Date>`last_answer.created_at`,
+    })
+    .from(signals)
+    .innerJoin(sql`LATERAL (SELECT f.value::text AS value, f.created_at
+        FROM ${feedback} AS f
+        WHERE f.profile_id = ${input.profileId}
+          AND f.target_type = 'signal'
+          AND f.target_id = ${signals.id}
+          AND coalesce(f.target_revision, 1) = ${signals.statementRevision}
+        ORDER BY f.created_at DESC
+        LIMIT 1) AS last_answer`, sql`true`)
+    .where(
+      and(
+        eq(signals.profileId, input.profileId),
+        isNull(signals.dismissedAt),
+        isNull(signals.lockedAt),
+        isNull(signals.unsupportedAt),
+        eq(signals.status, "active"),
+        sql`last_answer.value IN ('true', 'partly')`,
+        sql`last_answer.created_at < ${cutoff.toISOString()}::timestamptz`,
+        sql`NOT EXISTS (SELECT 1 FROM signal_contradictions sc WHERE sc.yielded_signal_id = ${signals.id})`,
+      ),
+    )
+    .orderBy(sql`last_answer.created_at ASC`)
+    .limit(input.limit);
+
+  const decorated = await decorateSignals(db, input.profileId, rows, true);
+  const extra = new Map(rows.map((row) => [row.id, row]));
+  /* The order is this query's — oldest answer first — and decoration is not
+     promised to keep it, so it is restored here rather than assumed. */
+  const position = new Map(rows.map((row, index) => [row.id, index]));
+  decorated.sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
+  return decorated.map((row) => {
+    const source = extra.get(row.id)!;
+    const answered = source.lastAnsweredAt instanceof Date ? source.lastAnsweredAt : new Date(source.lastAnsweredAt);
+    return {
+      ...row,
+      statementRevision: source.statementRevision.toString(),
+      askedAgain: { lastAnsweredAt: answered.toISOString() },
+    };
+  });
 }
 
 export async function getProfileSignal(
