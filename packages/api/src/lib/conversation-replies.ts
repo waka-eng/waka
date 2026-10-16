@@ -10,7 +10,7 @@ import {conversationUsesSavedSources} from './conversation-corrections.js';
 import {GEMINI_EMBEDDING_DIMENSIONS,GEMINI_EMBEDDING_MODEL,GeminiEmbeddingHttpClient,validateEmbeddingVector,type GeminiEmbeddingClient} from './inspiration-embeddings.js';
 import type {ConversationRetrievalTrace} from './conversation-retrieval.js';
 import {enqueueConversationReply,STALE_LOCK_SECONDS,wakeCommittedBackgroundJobs} from './queue.js';
-import {attachmentNote,readMessageAttachments} from './conversation-attachments.js';
+import {attachmentNote,attachmentSearchText,readMessageAttachments} from './conversation-attachments.js';
 type Db=ReturnType<typeof getDb>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
 type Reader=Pick<Db,'select'>;
@@ -71,8 +71,10 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
   const memory=await conversationMemory(db,profileId,conversation);
   const projected=await projectConversationMessages(db,profileId,id,messages.slice(-8),memory);
   const history:ConversationReplyInput['history']=[];let characters=0,contextChanged=messages.length>8||projected.some(row=>row.memoryChanged);
-  // What retrieval searches with: the person's words only. An attachment note
-  // ("photo IMG_2041.jpg") is not a question about their memory.
+  // What retrieval searches with: the person's words. An attachment note
+  // ("[Attached, not read: ...]") is not a question about their memory; for a
+  // photo/file-only message the latest words that exist stand in, and with
+  // none at all, the names of what was attached (`conversationSearchQuery`).
   const searchHistory:Array<{role:string;content:string}>=[];
   // Keep complete messages: truncating a human sentence can drop its negation
   // or correction. Missing earlier context is disclosed to the provider.
@@ -85,7 +87,8 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     searchHistory.unshift({role:row.role,content:row.content});
   }
   let retrievalTrace:ConversationRetrievalTrace|undefined;
-  const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,conversationSearchQuery(searchHistory),conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
+  const searchQuery=conversationSearchQuery(searchHistory,attachmentSearchText(projected.find(row=>row.id===userMessageId)?.attachments??[]));
+  const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,searchQuery,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
   const [profile]=await db.select({locale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId));
   /* Pinning a keep into `sources` puts it in front of the model; pointing
    * `focusSourceNumber` at it is what tells the model that THIS is the one the
@@ -110,7 +113,7 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     sources.findIndex(source=>source.kind==='inspiration'&&source.id===conversation.initialInspirationId),
   ].find(index=>index>=0)??-1;
   const input:ConversationReplyInput={...(memory.perspective!=='mine'?{perspective:memory.perspective}:{}),preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
-  return {input,sources,memory,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
+  return {input,searchQuery,sources,memory,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }
 async function replyState(db:Reader,profileId:string,id:string){
   const now=new Date(),boundary=new Date(now.getTime()-HOUR);
@@ -214,7 +217,7 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
   if(!initial)return;
   let queryVector:number[]|undefined;
   if(initial.semantic){
-    try{queryVector=validateEmbeddingVector(await embeddingClient!.embed(conversationSearchQuery(initial.input.history),'RETRIEVAL_QUERY'));}
+    try{queryVector=validateEmbeddingVector(await embeddingClient!.embed(initial.searchQuery,'RETRIEVAL_QUERY'));}
     catch{ /* Bounded lexical context remains usable when semantic lookup fails. */ }
   }
   // The network call above owns no DB locks. Stop, deletion and edits during

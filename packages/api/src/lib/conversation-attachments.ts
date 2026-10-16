@@ -9,9 +9,10 @@
  * `profile_id`, the link matches (profile, conversation, staged message, id),
  * and once linked the composite FK holds the row to its message.
  */
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
 import { attachments } from '../db/index.js';
 import type { getDb } from './db.js';
+import type { DeleteAttachmentObjects } from './attachment-sweep.js';
 
 type Db = ReturnType<typeof getDb>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -19,8 +20,17 @@ type Reader = Pick<Db, 'select'>;
 
 /** Per message. The note composer allows five; a chat turn a few more photos. */
 export const MAX_MESSAGE_ATTACHMENTS = 6;
-/** Uploaded-but-unsent rows one profile may hold at once, across all drafts. */
+/**
+ * Uploaded-but-unsent rows one profile may stage within
+ * `STAGED_CAP_WINDOW_MS`, across all drafts. Only recent rows count: a draft
+ * abandoned yesterday must not hold the composer shut today, and the daily
+ * sweep removes the rest once they pass `STAGED_KEEP_DAYS`.
+ */
 export const MAX_STAGED_MESSAGE_ATTACHMENTS = 30;
+export const STAGED_CAP_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** A staged upload whose message was never sent is kept this long, then swept. */
+export const STAGED_KEEP_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export class ConversationAttachmentError extends Error {
   constructor(readonly status: 400 | 404 | 409 | 429, message: string) { super(message); }
@@ -105,4 +115,87 @@ export function attachmentNote(list: ReadonlyArray<Pick<MessageAttachment, 'type
   if (!list.length) return '';
   const items = list.map((item) => `${item.type === 'image' ? 'photo' : 'file'} "${(item.name ?? 'untitled').replace(/\s+/g, ' ').replace(/"/g, "'").trim().slice(0, 120)}"`);
   return `[Attached, not read: ${items.join(', ')}]`;
+}
+
+/**
+ * The search words a photo/file-only message offers when no message in the
+ * window has any: its attachments' names, extension dropped
+ * ("kyoto-garden.png" → "kyoto-garden"). Only for retrieval; the model is
+ * told what was attached by `attachmentNote`.
+ */
+export function attachmentSearchText(list: ReadonlyArray<Pick<MessageAttachment, 'name'>>): string {
+  return list.map((item) => (item.name ?? '').replace(/\.[a-z0-9]{1,16}$/i, '').replace(/[\s_]+/g, ' ').trim()).filter(Boolean).join(' ').slice(0, 1000);
+}
+
+/**
+ * Of these keys, the ones no remaining row names. Every door refuses a key
+ * already attached (`assertAttachmentKeysUnused`), but rows written before
+ * those checks may share one; a sweep must never take bytes a row still
+ * shows.
+ */
+export async function unreferencedAttachmentKeys(db: Reader, keys: string[]) {
+  const unique = [...new Set(keys.filter((key) => key.length > 0))];
+  if (!unique.length) return [];
+  const held = new Set((await db.select({ s3Key: attachments.s3Key }).from(attachments).where(inArray(attachments.s3Key, unique)))
+    .map((row) => row.s3Key));
+  return unique.filter((key) => !held.has(key));
+}
+
+/**
+ * DISCARD ONE STAGED UPLOAD — a chip removed from the composer. Only a row
+ * this profile staged (never an inspiration's, never a sent message's) is
+ * removed; the row is locked first, so a send linking it at the same moment
+ * either wins (409 here) or finds it gone (409 there). Returns the S3 key for
+ * the caller to sweep after commit.
+ */
+export async function discardStagedAttachment(tx: Tx, profileId: string, attachmentId: string) {
+  const [row] = await tx.select({ id: attachments.id, messageId: attachments.messageId, stagedMessageId: attachments.stagedMessageId, s3Key: attachments.s3Key })
+    .from(attachments)
+    .where(and(eq(attachments.profileId, profileId), eq(attachments.id, attachmentId), isNotNull(attachments.conversationId), isNull(attachments.inspirationId)))
+    .for('update');
+  if (!row) throw new ConversationAttachmentError(404, 'Attachment not found');
+  if (row.messageId !== null || row.stagedMessageId === null) throw new ConversationAttachmentError(409, 'This attachment was already sent. Delete the conversation to remove it.');
+  await tx.delete(attachments).where(and(eq(attachments.profileId, profileId), eq(attachments.id, row.id), isNotNull(attachments.stagedMessageId)));
+  return row.s3Key;
+}
+
+/** Staged rows created before this moment have outlived their draft. */
+export function stagedAttachmentCutoff(now: Date): Date {
+  return new Date(now.getTime() - STAGED_KEEP_DAYS * DAY_MS);
+}
+
+const STAGED_SWEEP_BATCH = 500;
+const STAGED_SWEEP_MAX_BATCHES = 20;
+
+/**
+ * EVERYONE'S ABANDONED DRAFT UPLOADS, GONE: staged rows older than
+ * `STAGED_KEEP_DAYS` (a message never sent; for a first message, often a
+ * chat that was never created, which no conversation DELETE can reach), and
+ * the bytes behind them. Run by the worker's daily scheduled invocation.
+ *
+ * Bounded batches; `SKIP LOCKED` steps over a row a send is linking right
+ * now (that send moves it out of `staged`). Rows go first, in their own
+ * statement; the objects are swept after, best-effort, and only those no
+ * remaining row names. Bytes left behind by a failed sweep are the
+ * recoverable half, the same policy as every other attachment delete.
+ */
+export async function sweepStaleStagedAttachments(db: Pick<Db, 'select' | 'delete'>, now: Date, deleteObjects: DeleteAttachmentObjects): Promise<number> {
+  const cutoff = stagedAttachmentCutoff(now);
+  const stale = and(isNotNull(attachments.stagedMessageId), isNull(attachments.messageId), isNull(attachments.inspirationId), lt(attachments.createdAt, cutoff));
+  let removed = 0;
+  for (let batch = 0; batch < STAGED_SWEEP_MAX_BATCHES; batch += 1) {
+    const due = db.select({ id: attachments.id }).from(attachments).where(stale)
+      .orderBy(asc(attachments.createdAt)).limit(STAGED_SWEEP_BATCH).for('update', { skipLocked: true });
+    const rows = await db.delete(attachments).where(and(inArray(attachments.id, due), stale)).returning({ s3Key: attachments.s3Key });
+    removed += rows.length;
+    const keys = await unreferencedAttachmentKeys(db, rows.map((row) => row.s3Key).filter((key): key is string => typeof key === 'string'));
+    if (keys.length) await deleteObjects(keys);
+    if (rows.length < STAGED_SWEEP_BATCH) break;
+  }
+  return removed;
+}
+
+/** Recent staged rows count toward the per-profile cap; older ones do not. */
+export function stagedCapCutoff(now: Date): Date {
+  return new Date(now.getTime() - STAGED_CAP_WINDOW_MS);
 }

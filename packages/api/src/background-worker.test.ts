@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler, isScheduledEvent } from "./background-worker.js";
+import { sweepStaleStagedAttachments } from "./lib/conversation-attachments.js";
+import { sweepDeletedShelf } from "./lib/deleted-shelf.js";
 import { runBackgroundJobWorker,readBackgroundJobRecoveryState,hasNearTermBackgroundJobRetry,hasNearTermRequestedReading,type BackgroundJobRetryWake } from "./lib/queue.js";
 
 /** WHAT THIS MOCKS, AND WHY: `runBackgroundJobWorker` supplies completed pass
@@ -18,7 +20,22 @@ vi.mock("./lib/queue.js", async original => ({
   hasNearTermRequestedReading:vi.fn(),
 }));
 
+vi.mock("./lib/conversation-attachments.js", async original => ({
+  ...await original<typeof import('./lib/conversation-attachments.js')>(),
+  sweepStaleStagedAttachments: vi.fn(),
+}));
+vi.mock("./lib/deleted-shelf.js", async original => ({
+  ...await original<typeof import('./lib/deleted-shelf.js')>(),
+  sweepDeletedShelf: vi.fn(),
+}));
+vi.mock("./lib/db.js", async original => ({
+  ...await original<typeof import('./lib/db.js')>(),
+  getDb: vi.fn(() => ({})),
+}));
+
 beforeEach(() => {
+  vi.mocked(sweepStaleStagedAttachments).mockReset().mockResolvedValue(0);
+  vi.mocked(sweepDeletedShelf).mockReset().mockResolvedValue(0);
   // `mockReset` and not `clearAllMocks`, because the tests below queue
   // one-shot results with `mockResolvedValueOnce`. Clearing only forgets the
   // calls; an unconsumed one-shot survives into the next test and answers a
@@ -164,11 +181,40 @@ describe("background worker cron handler", () => {
   });
 });
 
-describe("the deleted shelf's daily sweep", () => {
-  it("is the scheduled cron's alone, never an enqueue or a local wake", () => {
-    expect(isScheduledEvent({ source: "aws.events", "detail-type": "Scheduled Event" })).toBe(true);
+/* Two daily sweeps share the scheduled event: the deleted shelf's expired
+   copies and chat uploads staged for a message never sent. */
+describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads", () => {
+  const scheduled = { source: "aws.events", "detail-type": "Scheduled Event" };
+  it("are the scheduled cron's alone, never an enqueue or a local wake", async () => {
+    expect(isScheduledEvent(scheduled)).toBe(true);
     expect(isScheduledEvent({ mode: "enqueue" })).toBe(false);
     expect(isScheduledEvent(undefined)).toBe(false);
     expect(isScheduledEvent({ source: "aws.events", "detail-type": "Something Else" })).toBe(false);
+    await handler();
+    await handler({ mode: "enqueue" });
+    expect(sweepStaleStagedAttachments).not.toHaveBeenCalled();
+    expect(sweepDeletedShelf).not.toHaveBeenCalled();
+    await handler(scheduled);
+    expect(sweepStaleStagedAttachments).toHaveBeenCalledTimes(1);
+    expect(sweepDeletedShelf).toHaveBeenCalledTimes(1);
+    expect(runBackgroundJobWorker).toHaveBeenCalledTimes(3);
+  });
+  it("a failed staged-upload sweep never costs the queue its pass", async () => {
+    vi.mocked(sweepStaleStagedAttachments).mockRejectedValueOnce(new Error("bucket down"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await expect(handler(scheduled)).resolves.toMatchObject({ passes: 1 });
+    expect(runBackgroundJobWorker).toHaveBeenCalledTimes(1);
+    expect(sweepDeletedShelf).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith("[staged-attachment-sweep] failed", "bucket down");
+    warn.mockRestore();
+  });
+  it("a failed shelf sweep still lets the staged-upload sweep and the queue run", async () => {
+    vi.mocked(sweepDeletedShelf).mockRejectedValueOnce(new Error("db down"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await expect(handler(scheduled)).resolves.toMatchObject({ passes: 1 });
+    expect(sweepStaleStagedAttachments).toHaveBeenCalledTimes(1);
+    expect(runBackgroundJobWorker).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith("[deleted-shelf-sweep] failed", "db down");
+    warn.mockRestore();
   });
 });

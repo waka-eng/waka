@@ -56,9 +56,10 @@ import { getDb } from "../lib/db.js";
 import { type AuthEnv, profileAccessError, requireAuth, asAccountProfile } from "../lib/middleware.js";
 import { enqueueEnrichAttachment, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { attachmentKeyPrefix, attachmentObjectUrl, getAttachmentsBucket } from '../lib/attachment-storage.js';
-import { ALLOWED_ATTACHMENT_CONTENT_TYPE, IMAGE_CONTENT_TYPE, MAX_ATTACHMENT_UPLOAD_BYTES, isAllowedFileContentType } from '../lib/inspiration-attachment-input.js';
-import { InspirationAttachmentError, verifyUploadedAttachment, type AttachmentHead } from '../lib/inspiration-attachments.js';
-import { MAX_MESSAGE_ATTACHMENTS, MAX_STAGED_MESSAGE_ATTACHMENTS, messageAttachmentSelection, serializeMessageAttachment } from '../lib/conversation-attachments.js';
+import { ALLOWED_ATTACHMENT_CONTENT_TYPE, MAX_ATTACHMENT_UPLOAD_BYTES, isAllowedFileContentType, isRasterImageContentType } from '../lib/inspiration-attachment-input.js';
+import { InspirationAttachmentError, assertAttachmentKeysUnused, verifyUploadedAttachment, type AttachmentHead } from '../lib/inspiration-attachments.js';
+import { ConversationAttachmentError, MAX_MESSAGE_ATTACHMENTS, MAX_STAGED_MESSAGE_ATTACHMENTS, discardStagedAttachment, messageAttachmentSelection, serializeMessageAttachment, stagedCapCutoff, unreferencedAttachmentKeys } from '../lib/conversation-attachments.js';
+import { sweepAttachmentObjects, type DeleteAttachmentObjects } from '../lib/attachment-sweep.js';
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { validationDetails } from "../lib/validation.js";
 import { profileQuerySchema } from './inspirations-validation.js';
@@ -198,8 +199,13 @@ const finalizeChatSchema = z.object({
   contentType: z.string().trim().min(1).max(255),
   size: z.number().int().min(1).max(MAX_ATTACHMENT_UPLOAD_BYTES, `size exceeds the ${MAX_ATTACHMENT_UPLOAD_BYTES}-byte cap`),
 }).strict().superRefine((value, context) => {
+  /* A chat photo is a raster photo — never `image/svg+xml`, a document that
+     can carry script. A chat file's list (`isAllowedFileContentType`) holds
+     only the same raster images among its `image/*` entries. The presign is
+     target-agnostic (it never knows a chat is the destination), so this
+     refusal is the gate. */
   const allowed = value.type === "image"
-    ? IMAGE_CONTENT_TYPE.test(value.contentType)
+    ? isRasterImageContentType(value.contentType)
     : isAllowedFileContentType(value.contentType);
   if (!allowed || !ALLOWED_ATTACHMENT_CONTENT_TYPE.test(value.contentType)) {
     context.addIssue({ code: "custom", path: ["contentType"], message: "This file type cannot be attached" });
@@ -457,6 +463,8 @@ export interface AttachmentRouteDependencies {
   previewImage?: typeof fetchLinkPreviewImage;
   /** S3 HEAD for the chat finalize's upload check; injected by tests. */
   attachmentHead?: AttachmentHead;
+  /** S3 delete for a discarded staged upload; injected by tests. */
+  deleteAttachmentObjects?: DeleteAttachmentObjects;
 }
 
 /**
@@ -557,6 +565,43 @@ attachmentsRoutes.get('/:attachmentId/url', async c => {
 });
 
 /**
+ * DELETE /api/attachments/:attachmentId — DISCARD A STAGED CHAT UPLOAD.
+ *
+ * A chip removed from the composer before its message is sent. The same
+ * gates as the chat finalize: the person at a browser only (403 for an agent
+ * session or keeper key), and the owner resolved from `?profile=` with
+ * "write". Then:
+ *
+ *   200 { deleted: true, id }  the staged row is gone; its object is swept
+ *   404                        no staged-or-sent chat attachment of this
+ *                              profile has this id (another's, an
+ *                              inspiration's, or already discarded)
+ *   409                        it was already sent with its message; a sent
+ *                              message's attachments go with the chat
+ */
+attachmentsRoutes.delete('/:attachmentId', async (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  const session = c.get('session');
+  if (session.profile.type !== 'human' || session.keyScoped) return c.json({ error: 'Only the account holder can remove a conversation attachment' }, 403);
+  const id = z.string().uuid().safeParse(c.req.param('attachmentId'));
+  if (!id.success) return c.json({ error: 'Invalid attachment' }, 400);
+  const query = profileQuerySchema.safeParse(c.req.query());
+  if (!query.success) return c.json({ error: 'Invalid profile' }, 400);
+  const db = getDatabase();
+  const target = await resolveTargetProfile(db, session, query.data.profile, 'write');
+  if (!target.ok) return c.json(target.body, target.status);
+  let key: string | null;
+  try { key = await db.transaction((tx) => discardStagedAttachment(tx, target.profileId, id.data.toLowerCase())); }
+  catch (error) {
+    if (error instanceof ConversationAttachmentError) return c.json({ error: error.message }, error.status);
+    throw error;
+  }
+  const keys = await unreferencedAttachmentKeys(db, key ? [key] : []);
+  if (keys.length) await (deps.deleteAttachmentObjects ?? sweepAttachmentObjects)(keys);
+  return c.json({ deleted: true, id: id.data.toLowerCase() });
+});
+
+/**
  * FINALIZE ONTO A CHAT MESSAGE THAT IS ABOUT TO BE SENT (0076).
  *
  *   { conversationId, messageId, type: "image" | "file", key, contentType, size, name? }
@@ -577,7 +622,10 @@ attachmentsRoutes.get('/:attachmentId/url', async c => {
  *      S3's HEAD reports the declared length and type (shared with capture).
  *      One object backs one row, so a delete never sweeps bytes another row
  *      still names.
- *   5. Bounds: six per message, thirty staged per profile.
+ *   5. Bounds: six per message, thirty staged per profile in the last 24
+ *      hours. Older staged rows do not count (a draft abandoned yesterday
+ *      must not hold the composer shut), and the worker's daily sweep
+ *      removes them, bytes and all, after seven days.
  *
  * Locks the profile row, then the conversation row, so it serializes with
  * conversation create (profile lock) and message send (conversation lock):
@@ -607,12 +655,13 @@ async function finalizeChatAttachment(c: Context<AuthEnv>, data: z.infer<typeof 
     if (conversation?.deletedAt) return { refused: { error: 'This conversation was deleted.', status: 410 } };
     const [sent] = await tx.select({ id: conversationMessages.id }).from(conversationMessages).where(eq(conversationMessages.id, data.messageId)).limit(1);
     if (sent) return { refused: { error: 'This message was already sent. Attach to a new message.', status: 409 } };
-    const staged = await tx.select({ conversationId: attachments.conversationId, stagedMessageId: attachments.stagedMessageId }).from(attachments)
+    const staged = await tx.select({ conversationId: attachments.conversationId, stagedMessageId: attachments.stagedMessageId, createdAt: attachments.createdAt }).from(attachments)
       .where(and(eq(attachments.profileId, profileId), isNotNull(attachments.stagedMessageId)));
     const forMessage = staged.filter((row) => row.stagedMessageId === data.messageId);
     if (forMessage.some((row) => row.conversationId !== data.conversationId)) return { refused: { error: 'This message belongs to another conversation.', status: 409 } };
     if (forMessage.length >= MAX_MESSAGE_ATTACHMENTS) return { refused: { error: `A message can carry up to ${MAX_MESSAGE_ATTACHMENTS} attachments.`, status: 409 } };
-    if (staged.length >= MAX_STAGED_MESSAGE_ATTACHMENTS) return { refused: { error: 'Too many unsent attachments. Send or discard a draft first.', status: 429 } };
+    const capFrom = stagedCapCutoff(new Date()).getTime();
+    if (staged.filter((row) => row.createdAt.getTime() > capFrom).length >= MAX_STAGED_MESSAGE_ATTACHMENTS) return { refused: { error: 'Too many unsent attachments. Send or discard a draft first.', status: 429 } };
     const [reused] = await tx.select({ id: attachments.id }).from(attachments).where(eq(attachments.s3Key, data.key)).limit(1);
     if (reused) return { refused: { error: 'This upload is already attached. Upload it again.', status: 409 } };
     const [row] = await tx.insert(attachments).values({
@@ -766,13 +815,22 @@ attachmentsRoutes.post("/", async (c) => {
     };
   }
 
-  const inserted = await db.transaction(async (tx) => {
+  const finalized = await db.transaction(async (tx) => {
+    /* ONE STORED OBJECT, ONE ATTACHMENT — the rule note capture and the chat
+       finalize keep: a second row on an object would lose its bytes when
+       the first row's owner is deleted. */
+    if (rowToInsert.s3Key) {
+      try { await assertAttachmentKeysUnused(tx, [rowToInsert.s3Key]); }
+      catch (error) { if (error instanceof InspirationAttachmentError) return { refused: error }; throw error; }
+    }
     const [row] = await tx.insert(attachments).values(rowToInsert).returning(attachmentSelection);
     if (row?.enrichmentStatus === "pending") await enqueueEnrichAttachment(parent.profileId, row.id, parent.id, tx);
     else if (row) await requestSignalDerivation({ profileId: parent.profileId, inspirationId: parent.id,
       reason: "edited", changedSource: "inspiration" }, tx);
-    return row;
+    return { row };
   });
+  if ('refused' in finalized && finalized.refused) return c.json({ error: finalized.refused.message, code: finalized.refused.code }, finalized.refused.status);
+  const inserted = 'row' in finalized ? finalized.row : undefined;
 
   if (!inserted) {
     return c.json({ error: "Failed to record attachment" }, 500);

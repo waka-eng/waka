@@ -7,8 +7,15 @@ import {effectiveAttachmentStatus,effectiveAttachmentText} from './attachment-ma
 type Reader=Pick<ReturnType<typeof getDb>,'select'>;
 /** Resolve short continuations from human context, never an assistant's
  * unadopted interpretation. The full messages remain unchanged for the reply. */
-export function conversationSearchQuery(history:ReadonlyArray<{role:string;content:string}>){
-  const human=history.filter(row=>row.role==='user'),latest=human.at(-1)?.content??'';
+/**
+ * What retrieval searches with: the person's latest words. A photo- or
+ * file-only message (content '', migration 0076) has none, so the most recent
+ * message that does stands in; with no words anywhere, `fallback` (the
+ * attachments' names) does, so the reply still reads saved material.
+ */
+export function conversationSearchQuery(history:ReadonlyArray<{role:string;content:string}>,fallback=''){
+  const human=history.filter(row=>row.role==='user'&&row.content.trim().length>0),latest=human.at(-1)?.content??'';
+  if(!latest)return fallback.trim().slice(0,1000);
   const isContinuation=(text:string)=>text.length<=120&&(/\b(that|it|those|this idea)\b/i.test(text)||/^(why|how so)[?!.\s]*$/i.test(text)||/(그거|그것|이거|그건|그럼|이것|그 생각|그 얘기)|^왜[?\s]*$/.test(text));
   const prior=isContinuation(latest)?human.slice(0,-1).reverse().find(row=>!isContinuation(row.content)):undefined;
   return (prior?`${latest}\n${prior.content.slice(0,600)}`:latest).slice(0,1000);

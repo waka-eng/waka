@@ -15,3 +15,9 @@ it('does not attach an old topic to an explicit new one and bounds retrieval-onl
   expect(conversationSearchQuery([{role:'user',content:'Quiet mornings'},{role:'user',content:'Explain pottery glazing'}])).toBe('Explain pottery glazing');
   expect(conversationSearchQuery([{role:'user',content:'x'.repeat(4000)}])).toHaveLength(1000);
 });
+it('a photo- or file-only message searches with the latest words that exist, then with what was attached',()=>{
+  const history=[{role:'user',content:'Planning the kitchen remodel'},{role:'assistant',content:'Tell me more.'},{role:'user',content:''}];
+  expect(conversationSearchQuery(history,'tile sample')).toBe('Planning the kitchen remodel');
+  expect(conversationSearchQuery([{role:'user',content:''}],'kyoto garden')).toBe('kyoto garden');
+  expect(conversationSearchQuery([{role:'assistant',content:'Hello'},{role:'user',content:''}])).toBe('');
+});

@@ -147,6 +147,12 @@ export const attachments = pgTable(
     messageIdx: index("attachments_message_idx").on(table.profileId, table.conversationId, table.messageId).where(sql`${table.messageId} IS NOT NULL`),
     stagedIdx: index("attachments_staged_idx").on(table.profileId, table.stagedMessageId).where(sql`${table.stagedMessageId} IS NOT NULL`),
     conversationIdx: index("attachments_conversation_idx").on(table.profileId, table.conversationId).where(sql`${table.conversationId} IS NOT NULL`),
+    /* 0077. Serves "one stored object, one attachment" (`assertAttachmentKeysUnused`
+       and the chat finalize) and the sweeps' still-referenced check. Not
+       unique: rows from before those checks may share a key. */
+    s3KeyIdx: index("attachments_s3_key_idx").on(table.s3Key).where(sql`${table.s3Key} IS NOT NULL`),
+    /* 0077. The daily sweep of staged uploads whose message was never sent. */
+    stagedAgeIdx: index("attachments_staged_age_idx").on(table.createdAt).where(sql`${table.stagedMessageId} IS NOT NULL`),
     ownerCheck: check("attachments_owner_check", sql`(${table.inspirationId} IS NOT NULL AND ${table.conversationId} IS NULL AND ${table.messageId} IS NULL AND ${table.stagedMessageId} IS NULL)
       OR (${table.inspirationId} IS NULL AND ${table.conversationId} IS NOT NULL AND num_nonnulls(${table.messageId},${table.stagedMessageId}) = 1
         AND ${table.type} IN ('image','file') AND ${table.s3Key} IS NOT NULL)`),

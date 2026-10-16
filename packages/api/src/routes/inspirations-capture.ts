@@ -17,7 +17,6 @@
  */
 
 import { Hono } from "hono";
-import { inArray } from "drizzle-orm";
 
 import {
   decisionPrincipleCitations,
@@ -35,7 +34,7 @@ import type { AuthenticatedSession } from "../lib/session.js";
 import { validationDetails } from "../lib/validation.js";
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { enqueueEnrichAttachment, wakeCommittedBackgroundJobs } from "../lib/queue.js";
-import { prepareInspirationAttachments, InspirationAttachmentError, type AttachmentHead } from '../lib/inspiration-attachments.js';
+import { assertAttachmentKeysUnused, prepareInspirationAttachments, InspirationAttachmentError, type AttachmentHead } from '../lib/inspiration-attachments.js';
 import { attachmentSelection, serializeAttachment } from './attachments.js';
 import { inspirationSaveFailure, parseInspirationSaveRequestId, runInspirationSave } from '../lib/inspiration-save-requests.js';
 import { readSavedInspiration } from './inspirations-save-requests.js';
@@ -223,10 +222,7 @@ export function registerCaptureRoutes(
       const keys = media.map((row) => row.s3Key).filter((key): key is string => typeof key === 'string');
       /* (The same object twice in ONE save is already refused by the input
          schema — "An attachment is included twice".) */
-      if (keys.length) {
-        const [reused] = await tx.select({ id: attachments.id }).from(attachments).where(inArray(attachments.s3Key, keys)).limit(1);
-        if (reused) throw new InspirationAttachmentError(409, 'attachment_already_attached', 'This upload is already attached. Upload it again.');
-      }
+      await assertAttachmentKeysUnused(tx, keys);
       const insertedAttachments = media.length ? await tx.insert(attachments).values(media).returning(attachmentSelection) : [];
       for (const attachment of insertedAttachments) {
         if (attachment.enrichmentStatus === 'pending') await enqueueEnrichAttachment(target.profileId, attachment.id, inserted.id, tx);

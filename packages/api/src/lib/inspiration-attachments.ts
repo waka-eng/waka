@@ -1,5 +1,7 @@
 import { HeadObjectCommand, type HeadObjectCommandOutput } from '@aws-sdk/client-s3';
-import type { attachments } from '../db/index.js';
+import { inArray } from 'drizzle-orm';
+import { attachments } from '../db/index.js';
+import type { getDb } from './db.js';
 import { attachmentKeyPrefix, attachmentObjectUrl, getAttachmentsBucket } from './attachment-storage.js';
 import { attachmentsRegion, makeAttachmentsS3Client } from './s3-client.js';
 import type { InspirationAttachmentInput } from './inspiration-attachment-input.js';
@@ -61,4 +63,19 @@ export async function verifyUploadedAttachment(input: { key: string; contentType
   }
   return { s3Key: input.key, contentType: input.contentType, size: input.size,
     url: attachmentObjectUrl(bucket, attachmentsRegion(), input.key) };
+}
+
+/**
+ * ONE STORED OBJECT, ONE ATTACHMENT. Every door that writes an uploaded key
+ * onto a row — note capture, the inspiration finalize, the chat finalize —
+ * refuses a key some row already names, because every delete path sweeps the
+ * bytes behind the rows it removes: a second row on the same object would
+ * have its file deleted out from under it. Call inside the inserting
+ * transaction. (Not a UNIQUE index: rows written before these checks may
+ * hold legacy duplicates; `attachments_s3_key_idx` serves this lookup.)
+ */
+export async function assertAttachmentKeysUnused(db: Pick<ReturnType<typeof getDb>, 'select'>, keys: string[]): Promise<void> {
+  if (!keys.length) return;
+  const [reused] = await db.select({ id: attachments.id }).from(attachments).where(inArray(attachments.s3Key, keys)).limit(1);
+  if (reused) throw new InspirationAttachmentError(409, 'attachment_already_attached', 'This upload is already attached. Upload it again.');
 }

@@ -43,6 +43,18 @@ export function isAllowedFileContentType(value: string): boolean {
   return fileContentTypes.has(value.trim().toLowerCase());
 }
 export const IMAGE_CONTENT_TYPE = /^image\/[a-z0-9.+-]+$/i;
+/**
+ * A PHOTO IN A CHAT is a raster photo: the image entries of the file list
+ * above (jpeg, png, gif, webp, avif, heic, heif) and nothing else. Notably
+ * not `image/svg+xml` — an SVG is a document that can carry script, and a
+ * chat's bytes are opened by the person's own browser through a presigned
+ * GET. (The inspiration finalize keeps its older `image/*` behaviour.)
+ */
+export const RASTER_IMAGE_CONTENT_TYPES = FILE_ATTACHMENT_CONTENT_TYPES.filter((type) => type.startsWith('image/'));
+const rasterImageContentTypes = new Set<string>(RASTER_IMAGE_CONTENT_TYPES);
+export function isRasterImageContentType(value: string): boolean {
+  return rasterImageContentTypes.has(value.trim().toLowerCase());
+}
 
 /**
  * What the presigner will sign. A superset of the file list above: images of
