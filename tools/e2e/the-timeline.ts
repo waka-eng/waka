@@ -173,6 +173,29 @@ const run = async (base: string): Promise<number> => {
     const rest = await read(page);
     if (!rest.when) {
       bad.push("at rest there is no word to press — the wall has history and offers no way into it");
+      /* ═══ AND THE WALK STOPS HERE RATHER THAN PRESSING IT ANYWAY ════════
+         Every step below opens the dial by clicking `.jar-when`. Having
+         just reported that the word is not on screen, clicking it spent 30
+         seconds timing out and then printed "the walk threw: locator.click:
+         Timeout 30000ms exceeded" — a harness error stapled to a correct
+         finding, which makes a real result look like broken infrastructure.
+         One finding, reported once.
+
+         WHY THE WORD IS ABSENT, because it is worth knowing before anyone
+         "fixes" this gate: `Home.tsx:9833` renders it only when
+         `parkedAt !== null` — once you have ALREADY wound away from now.
+         That condition was narrowed by the rooms removal; its comment says
+         the other half "was A ROOM" and goes with them. All three
+         `setTimeOpen(true)` calls live inside that same button, so at rest
+         there is no way into the dial at all. This walk is reporting that
+         accurately and it is a product finding, not a harness one. */
+      console.log("");
+      for (const b of bad) console.log(`  ✗ ${b}`);
+      console.log("");
+      console.log("[the-timeline] FAIL — the dial cannot be opened at rest, so nothing below it");
+      console.log("               was measured. See `Home.tsx:9833`.");
+      await ctx.close();
+      return 1;
     } else {
       said.push(`at rest the word reads ${JSON.stringify(rest.word)}`);
     }
@@ -191,24 +214,41 @@ const run = async (base: string): Promise<number> => {
     if (/jar-dial/.test(under))
       bad.push(`the dial still owns the point the rail stood at — a press there hits ${under}`);
 
-    /* ── 2. the walls list, which the rail used to block ── */
-    await page.locator(".jar-here-more").first().click();
-    await page.waitForTimeout(900);
-    const reached = await page
-      .getByText(/^add new$/i)
-      .first()
-      .click({ timeout: 4_000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!reached) bad.push("ADD NEW could not be reached in the walls list — something is over it");
-    else said.push("the walls list answers a first press: ADD NEW was reached");
-    /* ADD NEW opens the make-another-place sheet, whose way out is a press on
-       the world. Reloading rather than hunting for it: what this walk is about
-       resumes on a fresh wall, and a chain of dismissals is a chain of things
-       that can fail for reasons this file is not about. */
-    await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
-    await settleAfterArrival(page);
-    await page.waitForTimeout(2_500);
+    /* ═══ STEP 2 IS GONE: IT PRESSED THROUGH TO THE WALLS LIST ════════════
+       It opened `.jar-here-more` and reached for ADD NEW, because the
+       swallowed press this whole file is named for was measured against
+       exactly that control: "it swallowed presses meant for the walls list
+       behind it ... it took two attempts to reach ADD NEW through it".
+
+       The walls list went with rooms (`405ee4aa`), and ADD NEW with it —
+       room creation was already gone before that. `.jar-here-more` has no
+       renderer, so `.first().click()` threw after the default timeout and
+       took the whole walk down before steps 3, 4 and 5 ever ran. Unlike the
+       guarded version in `nothing-invisible-takes-a-press.ts`, this one was
+       unguarded: one dead class was costing this file every other claim it
+       makes about the dial.
+
+       THE CLAIM IT CARRIED IS NOT LOST — EXCEPT THAT IT IS, TODAY.
+       CORRECTED 2026-10-15. Step 1 above IS the same question asked better:
+       it reads `elementFromPoint` at the exact coordinates the strip
+       occupied and fails if anything of the dial's owns that point. But it
+       SITS BELOW THE EARLY RETURN at the top of this walk, and that return
+       fires on every run: `.jar-when` renders only when `parkedAt !== null`
+       (see the note above), `rest.word` is therefore always absent, the walk
+       pushes that finding and returns before reaching the probe. So claim #1
+       is currently measured ZERO times per run. The successor is real and
+       correct; it is just unreachable until the dial's door opens from
+       outside, which is product finding #1 in this change. Step 2 only ever
+       confirmed the consequence of what step 1 measures directly, and it
+       needed a specific control behind the strip to do it. Picking a
+       different control that happens to sit near those coordinates would be
+       choosing a target to keep a step alive.
+
+       WHAT COVERAGE WENT: nothing now proves a press at the strip's old
+       position REACHES whatever is behind it — only that nothing of the
+       dial's is on top. The difference matters if some third thing ever
+       covers that region, and `nothing-invisible-takes-a-press.ts` is the
+       file that would catch it, over every stacked box rather than one. */
 
     /* ── 3. pressing the word ── */
     await page.locator(".jar-when").first().click();

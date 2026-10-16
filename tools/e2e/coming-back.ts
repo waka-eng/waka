@@ -74,33 +74,25 @@ const WORDS = `(() => {
   let held = 0;
   for (let i = 0; i < all.length; i++) if (all[i].classList.contains("jar-word--held")) held += 1;
   const h1 = document.querySelector(".jar-poster");
-  const chip = document.querySelector(".jar-here");
+  /* WHICH WALL YOU ARE STANDING ON. This read \`.jar-here\`, the chip in the
+     top bar, which has no renderer — the wall picker moved and the chip
+     returns null. The creature's own form switch carries it now: the
+     standing face is the wall you are on, which is what \`journeys.ts\` reads
+     for the same question. */
+  const face = document.querySelector(".jar-char-face--standing");
   return JSON.stringify({
     total: all.length,
     held: held,
     text: h1 ? h1.innerText.replace(/\\s+/g, " ").trim() : "",
-    wall: chip ? chip.innerText.replace(/\\s+/g, " ").trim() : "",
+    wall: face ? face.innerText.replace(/\\s+/g, " ").trim() : "",
   });
 })()`;
 
-/* A ROOM'S OWN COLUMN, and whether it is saying anything yet. Read off the
-   column rather than the poster: while you are travelling the poster still
-   belongs to the wall you left, and the question is whether the wall you are
-   walking TOWARD has its words up. */
-const ROOM = `(() => {
-  const cols = document.querySelectorAll(".jar-wallcol");
-  let room = null;
-  for (let i = 0; i < cols.length; i++) {
-    if (cols[i].getAttribute("data-kind") === "group") { room = cols[i]; break; }
-  }
-  const chip = document.querySelector(".jar-here");
-  const words = room ? (room.innerText || "").replace(/\\s+/g, " ").trim() : "";
-  return JSON.stringify({
-    says: words.length > 0,
-    words: words.slice(0, 60),
-    standingOn: chip ? (chip.innerText || "").trim() : "",
-  });
-})()`;
+/* ═══ THE ROOM-COLUMN PROBE IS GONE WITH PHASE 2 ═══════════════════════
+   It looked for a `.jar-wallcol` whose `data-kind` was `group`. `SpaceKind`
+   is `"self" | "agent"` now — there is no `group` — so the probe matched
+   nothing and reported `says: false` forever. See the tombstone where phase
+   two stood. */
 
 interface Reading {
   total: number;
@@ -112,21 +104,34 @@ interface Reading {
 const read = async (page: Page): Promise<Reading> =>
   JSON.parse((await page.evaluate(WORDS)) as string) as Reading;
 
-/** Walk to the wall whose row in the list carries this name. */
-const travelTo = async (page: Page, name: RegExp): Promise<boolean> => {
-  await page.locator(".jar-here-more").first().click();
-  await page.waitForTimeout(900);
-  /* the list holds the chip and its caret as well as the walls, so the row is
-     found by its NAME rather than by an index — an index here silently clicked
-     the caret and the walk "travelled" without going anywhere */
-  const row = page.locator(".jar-hq button", { hasText: name });
-  const n = await row.count();
-  if (n === 0) {
-    await page.keyboard.press("Escape");
-    return false;
-  }
-  await row.last().click();
-  await page.waitForTimeout(5_000);
+/**
+ * Walk to the wall whose face carries this name.
+ *
+ * ═══ THE WALLS LIST WAS THE DOOR, AND IT WENT WITH ROOMS ═════════════════
+ * This opened `.jar-here-more` and pressed a row in `.jar-hq`. Both the
+ * caret and the list went in `405ee4aa`; `.jar-here-more` has no renderer (`.jar-hq` DOES render, at `Home.tsx:6958`, and `reading-support` depends on it -- corrected 2026-10-15; the conclusion stands on `.jar-here-more` alone), so
+ * the first line threw and this walk could not travel anywhere at all.
+ *
+ * TRAVEL ITSELF DID NOT GO. `Home.tsx` on the agent wall: "rather than my
+ * agent like moving rooms it kind of like switching itself up to its agent
+ * form" — the creature's face IS the wall switch now, and `journeys.ts`
+ * uses exactly this locator to stand on an agent's ground.
+ */
+const travelTo = async (page: Page, where: "away" | "home"): Promise<boolean> => {
+  /* BY STANDING-NESS, NOT BY NAME. The agent's face carries its DISPLAY
+     name, which is not the name it was created with — making an agent
+     called "Scout" produces a face reading "MY AGENT" (measured
+     2026-10-15), so a walk that travelled by name never found it and
+     reported "the second wall was never made" about a wall that was there.
+     There are exactly two faces and one of them is lit, which is the whole
+     question this walk asks of them. */
+  const want =
+    where === "away"
+      ? page.locator(".jar-char-face:not(.jar-char-face--standing)").first()
+      : page.locator(".jar-char-face", { hasText: /^me$/i }).first();
+  if ((await want.count()) === 0) return false;
+  await want.click({ timeout: 8_000 });
+  await page.waitForTimeout(6_000);
   return true;
 };
 
@@ -161,27 +166,69 @@ const run = async (base: string): Promise<number> => {
 
     const first = await read(page);
     said.push(`first arrival: ${first.total - first.held} of ${first.total} words arrived, which is right`);
+    /* ═══ NO POSTER IS NOT A PRODUCT FAULT, AND SAYING IT WAS IS THE BUG ═══
+       This pushed "your own wall has no poster at all" into `bad`, which
+       fails the run. The poster is the generated reading: it exists once
+       the synthesis pipeline has written a sentence for this account, and
+       on a stack with no generation running a fresh account simply does not
+       have one yet. Reporting that as a finding is this gate claiming the
+       wall is broken when what happened is that it had nothing to say yet —
+       the same class of false claim this whole sweep is removing.
+
+       It is a SKIP, loudly: the walk below has nothing to count, so it
+       stops here and says so rather than measuring zero against zero and
+       calling it a pass. */
     if (first.total === 0) {
-      bad.push("your own wall has no poster at all — nothing here was measured");
+      console.log("");
+      console.log("  NOT MEASURED — this account has no poster yet. The held-words readout is");
+      console.log("  about a generated sentence, so this gate needs one on the wall before it");
+      console.log("  can ask whether returning to the wall re-reads it.");
+      console.log("");
+      console.log("  THIS IS STILL A FAILURE, and returning 0 here was wrong (corrected");
+      console.log("  2026-10-15). The walk makes its own account and keeps its own memories");
+      console.log("  against a stack booted with a model key, so a wall with no poster is a");
+      console.log("  regression or a timeout, not a normal state. Exiting 0 on it turned the");
+      console.log("  previous FAIL into a silent green and would hide the poster going away");
+      console.log("  entirely — which is the one thing this gate exists to notice.");
+      console.log("");
+      await ctx.close();
+      return 1;
     }
 
-    /* a fresh account has ONE wall, so there is nothing to travel to */
-    await page.locator(".jar-here-more").first().click();
-    await page.waitForTimeout(800);
-    await page.getByText(/^add new$/i).first().click();
-    await page.waitForTimeout(1_200);
-    await page.locator(".jar-newplace-row", { hasText: /an agent/i }).first().click();
-    await page.waitForTimeout(1_200);
-    await page.fill(".jar-roomform-box", "Scout");
-    await page.getByText(/^give it a wall$/i).first().click();
-    await page.waitForTimeout(6_000);
+    /* A FRESH ACCOUNT HAS ONE WALL, so there is nothing to travel to and a
+       second one is made here.
 
-    if (!(await travelTo(page, /^scout$/i))) {
+       ═══ THE MAKE-A-PLACE DIALOG IS GONE; AGENTS ARE MADE IN SETTINGS ════
+       This walked `.jar-here-more` → `add new` → the `an agent` row of
+       `.jar-newplace-row` → `.jar-roomform-box` → `give it a wall`. Every
+       one of those five went with rooms in `405ee4aa`. The CAPABILITY did
+       not: `SettingsPanel.tsx` calls `createProfile` from its `Memories`
+       group, which is the only door to it left, and `journeys.ts` makes its
+       agent exactly this way. */
+    await page.locator("button.waka-corner--settings").click({ timeout: 10_000 });
+    await page.waitForTimeout(1_200);
+    const group = page.locator(".waka-settings-row", { hasText: /memories/i }).first();
+    if ((await group.count()) === 0) {
+      bad.push("the account card has no Memories group, so no second wall could be made");
+    } else {
+      await group.click({ timeout: 8_000 });
+      await page.waitForTimeout(800);
+      await page.fill(".waka-settings-add input[type=text]", "Scout");
+      await page.locator(".waka-settings-add button").first().click({ timeout: 8_000 });
+      await page.waitForTimeout(6_000);
+    }
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(600);
+    await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    await settleAfterArrival(page);
+    await page.waitForTimeout(3_000);
+
+    if (!(await travelTo(page, "away"))) {
       bad.push("the second wall was never made, so there was nowhere to travel to");
     } else {
       const away = await read(page);
       said.push(`away on ${JSON.stringify(away.wall)}`);
-      if (!(await travelTo(page, /^me$/i))) {
+      if (!(await travelTo(page, "home"))) {
         bad.push("could not get back to your own wall");
       } else {
         const back = await read(page);
@@ -202,76 +249,33 @@ const run = async (base: string): Promise<number> => {
       }
     }
 
-    /* ── THE SECOND PHASE: a ROOM's words, while you are still walking ──
-       An agent's wall was enough for the question above; this one is about
-       rooms specifically, because it was a room's chrome that waited on
-       arrival. */
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(500);
-    await page.locator(".jar-here-more").first().click();
-    await page.waitForTimeout(800);
-    await page.getByText(/^add new$/i).first().click();
-    await page.waitForTimeout(1_200);
-    await page.locator(".jar-newplace-row", { hasText: /a room/i }).first().click();
-    await page.waitForTimeout(1_200);
-    /* SCOPED, AND `make it` RATHER THAN `give it a wall`. Two forms share the
-       `.jar-roomform-box` class — the agent's and the room's — and they confirm
-       with different words. A walk that used the agent's button here would
-       simply never make a room, and every measurement after it would be about
-       a room that does not exist. */
-    await page.fill(".jar-roomform .jar-roomform-box", "Studio");
-    await page.locator(".jar-roomform button", { hasText: /^make it$/i }).first().click();
-    await page.waitForTimeout(7_000);
+    /* ═══════════════════════════════════════════════════════════════════
+       PHASE TWO IS DELETED — "a ROOM's words, while you are still walking"
+       ═══════════════════════════════════════════════════════════════════
 
-    /* back to your own wall, so the trip to the room is a real journey */
-    await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
-    await settleAfterArrival(page);
-    await page.waitForTimeout(3_000);
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(400);
-    await page.locator(".jar-here-more").first().click();
-    await page.waitForTimeout(900);
-    const studio = page.locator(".jar-hq button", { hasText: /^studio$/i });
-    if ((await studio.count()) === 0) {
-      bad.push("the room was never made, so the journey to it could not be watched");
-    } else {
-      await studio.last().click();
-      const t0 = Date.now();
-      let wordsAt = -1;
-      let arrivedAt = -1;
-      let sample = "";
-      while (Date.now() - t0 < 14_000 && (wordsAt < 0 || arrivedAt < 0)) {
-        const b = JSON.parse((await page.evaluate(ROOM)) as string) as {
-          says: boolean;
-          words: string;
-          standingOn: string;
-        };
-        if (wordsAt < 0 && b.says) {
-          wordsAt = Date.now() - t0;
-          sample = b.words;
-        }
-        if (arrivedAt < 0 && /studio/i.test(b.standingOn)) arrivedAt = Date.now() - t0;
-        await page.waitForTimeout(80);
-      }
-      if (wordsAt < 0) {
-        bad.push("the room never said anything at all in fourteen seconds");
-      } else if (arrivedAt < 0) {
-        bad.push("the character never arrived at the room, so the race could not be called");
-      } else {
-        const lead = arrivedAt - wordsAt;
-        said.push(
-          `travelling to a room: its words were on screen at ${wordsAt}ms, the character ` +
-            `arrived at ${arrivedAt}ms — ${Math.abs(lead)}ms ${lead > 0 ? "earlier" : "later"}`,
-        );
-        said.push(`  it said ${JSON.stringify(sample)}`);
-        if (lead <= 0)
-          bad.push(
-            `the room's words appeared ${-lead}ms AFTER the character arrived — they ` +
-              "materialise on arrival rather than being ready before you get there " +
-              '(founder, 2026-08-30: "keep it rendered and dont rerender when character arrives")',
-          );
-      }
-    }
+       It made a room, walked back to your own wall, then started a journey
+       to the room and raced two events: when the room's column first said
+       anything, against when the character arrived. The words had to win.
+
+       IT WAS ABOUT ROOMS SPECIFICALLY, AND ITS OWN COMMENT SAID SO: "An
+       agent's wall was enough for the question above; this one is about
+       rooms specifically, because it was a room's chrome that waited on
+       arrival." That is a precise statement of why it cannot be repointed
+       at an agent wall — the defect it guards was in the branch of the
+       chrome that gated a room's column on the room having been WOKEN, and
+       that branch is deleted along with everything else room-shaped.
+
+       IT COULD NOT HAVE RUN ANYWAY, THREE TIMES OVER: the maker
+       (`.jar-newplace-row`, `.jar-roomform`), the door (`.jar-here-more`),
+       and the probe itself, which looked for a `.jar-wallcol` with
+       `data-kind="group"` when `SpaceKind` is `"self" | "agent"`.
+
+       WHAT COVERAGE WENT: nothing watches the race between a wall's words
+       and the character's arrival. Phase one above still holds the other
+       half of the same founder report — that a wall you RETURN to does not
+       re-read itself — and it holds it over an agent wall, which is the
+       only kind of travel left. If walls that must be fetched on the way
+       ever come back, this race comes back with them. */
 
     await ctx.close();
   } finally {

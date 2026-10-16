@@ -30,13 +30,15 @@ const { app } = await import('../../packages/api/src/index.js');
 const { signSessionToken, buildSessionCookie } = await import('../../packages/api/src/lib/auth.js');
 const { createSessionRow } = await import('../../packages/api/src/lib/session.js');
 const { getDb } = await import('../../packages/api/src/lib/db.js');
-const { createGroupForProfile, joinGroupByCode } = await import('../../packages/api/src/routes/groups-membership.js');
 const [account] = await fixture.sql`INSERT INTO accounts(email,onboarding_completed_at) VALUES ('navigation@example.test',now()) RETURNING id`;
 const [profile] = await fixture.sql`INSERT INTO profiles(account_id,type,name) VALUES (${account.id},'human','Navigation preview') RETURNING id`;
 const [peerAccount] = await fixture.sql`INSERT INTO accounts(email) VALUES ('navigation-peer@example.test') RETURNING id`;
 const [peer] = await fixture.sql`INSERT INTO profiles(account_id,type,name) VALUES (${peerAccount.id},'human','Bo') RETURNING id`;
-const group = await createGroupForProfile(fixture.db as never, { profileId: profile.id, name: 'Quiet walks' });
-await joinGroupByCode(fixture.db as never, { profileId: peer.id, joinCode: group.joinCode });
+/* THE SEEDED ROOM WENT (2026-10-15). This imported `createGroupForProfile`
+   and `joinGroupByCode` from `routes/groups-membership.js`, deleted with the
+   room routes -- so the dynamic import threw at startup and this preview
+   could not boot at all. `peer` stays: a second human is what the search and
+   navigation QA this tool exists for actually needs. */
 const [older] = await fixture.sql`INSERT INTO inspirations(profile_id,text,visibility,created_at)
   VALUES (${profile.id},'A garden leaves space for things to grow in their own time.','private','2023-01-04T12:00:00Z') RETURNING id`;
 const [answer] = await fixture.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer,created_at)
@@ -45,7 +47,10 @@ await fixture.sql`INSERT INTO reflections(profile_id,inspiration_id,question,ans
   VALUES (${profile.id},${older.id},'Where could you make more space?','A quieter start to a project.','2023-01-04T12:02:00Z')`;
 await fixture.sql`INSERT INTO inspirations(profile_id,text,created_at)
   SELECT ${profile.id}, 'A little observation from walk ' || i, '2024-01-01'::timestamptz + i * interval '1 hour' FROM generate_series(1,2001) AS i`;
-const [publicSource] = await fixture.sql`INSERT INTO inspirations(profile_id,text,visibility)
+/* `publicSource` IS NO LONGER BOUND: its only reader was the deleted
+   `publicInspirationUrl`. The row is still INSERTed -- a public inspiration
+   is ordinary fixture data for search QA -- it just has no name now. */
+await fixture.sql`INSERT INTO inspirations(profile_id,text,visibility)
   VALUES (${peer.id},'Walking without a destination gives me time to notice.','public') RETURNING id`;
 const token = await signSessionToken({ profileId: profile.id, email: 'navigation@example.test' });
 await createSessionRow({ profileId: profile.id, token });
@@ -70,9 +75,12 @@ const server = createServer(async (request, response) => {
   } catch (error) { console.error(error); if (!response.headersSent) response.writeHead(500); response.end('Preview failed'); }
 });
 await new Promise<void>((done) => server.listen(port, '127.0.0.1', done));
+/* `groupUrl`, `publicInspirationUrl` and `groupId` left this report with the
+   room they addressed: the room those URLs addressed is gone (the `/w/:wall/:label?` ROUTE is still declared at `main.tsx:233`; what no longer exists is a room to put in it). `publicSource` is
+   still seeded -- a public inspiration is ordinary fixture data now, not a
+   room's contents. */
 console.log(JSON.stringify({ origin, inspirationUrl: `${origin}/inspirations/${older.id}?reflection=${answer.id}`,
-  groupUrl: `${origin}/w/${group.id}/quiet-walks`, publicInspirationUrl: `${origin}/w/${group.id}/quiet-walks?view=field&inspiration=${publicSource.id}`,
-  schema: fixture.schemaName, groupId: group.id, archiveTotal: 2002 }));
+  schema: fixture.schemaName, archiveTotal: 2002 }));
 let closing = false;
 async function close() {
   if (closing) return; closing = true;
