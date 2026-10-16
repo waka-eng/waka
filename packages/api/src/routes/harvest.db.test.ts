@@ -20,7 +20,7 @@ import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.
 import type { AuthEnv } from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
 import { assembleProfileExport } from "../lib/profile-export.js";
-import { createHarvestRoutes, harvestHash, HARVEST_LAPSE_DAYS, HARVEST_MAX_WAITING } from "./harvest.js";
+import { createHarvestRoutes, harvestHash, harvestSaveRequestId, HARVEST_LAPSE_DAYS, HARVEST_MAX_WAITING } from "./harvest.js";
 
 let t: TestDatabase;
 let seq = 0;
@@ -79,9 +79,14 @@ const propose = (person: Person, ...texts: string[]) =>
   call(person, "POST", "", { candidates: texts.map((text) => ({ text, context: { tool: "claude-code", hour: 22 } })) });
 const waiting = async (person: Person) =>
   ((await call(person, "GET", "")).body.candidates as Array<{ id: string; text: string; lapsesAt: string }>);
-/** A save made now on the test clock — after anything proposed so far. */
-async function saved(person: Person, text: string, at = new Date(clock.getTime() + 1000)): Promise<string> {
-  const [row] = await t.sql`INSERT INTO inspirations (profile_id, text, created_at) VALUES (${person.profileId}, ${text}, ${at.toISOString()}) RETURNING id`;
+/** A save, as the capture route records it: the words and the request id
+    it was made under. `madeFor` names the candidate it was made for — its
+    own words under the candidate's id, corrected words under the derived id. */
+async function saved(person: Person, text: string, madeFor?: { candidate: string; corrected?: boolean }): Promise<string> {
+  const [row] = await t.sql`INSERT INTO inspirations (profile_id, text) VALUES (${person.profileId}, ${text}) RETURNING id`;
+  const requestId = !madeFor ? crypto.randomUUID() : madeFor.corrected ? harvestSaveRequestId(madeFor.candidate, text) : madeFor.candidate;
+  await t.sql`INSERT INTO inspiration_save_requests (profile_id, request_id, operation, request_hash, inspiration_id, processing)
+    VALUES (${person.profileId}, ${requestId}, 'inspiration', ${"0".repeat(64)}, ${row.id}, '{}'::jsonb)`;
   return row.id as string;
 }
 const row = async (id: string) =>
@@ -123,7 +128,7 @@ describe("proposing", () => {
     expect((await call(key, "GET", "")).status, "reading the basket is a browser act").toBe(403);
     const [id] = (await waiting(me)).map((c) => c.id);
     expect((await call(key, "POST", `/${id}/decline`, {})).status).toBe(403);
-    expect((await call(key, "POST", `/${id}/keep`, { inspirationId: await saved(me, "x") })).status).toBe(403);
+    expect((await call(key, "POST", `/${id}/keep`, { inspirationId: await saved(me, "From the collector.", { candidate: id! }) })).status).toBe(403);
     expect((await row(id!)).status, "the key decided nothing").toBe("pending");
   });
 
@@ -160,9 +165,11 @@ describe("keeping", () => {
     const me = await seedPerson("keeper");
     await propose(me, "Keep the reversible door open.");
     const [candidate] = await waiting(me);
-    const inspirationId = await saved(me, "Keep the reversible door open.");
+    const inspirationId = await saved(me, "Keep the reversible door open.", { candidate: candidate!.id });
     expect((await call(me, "POST", `/${candidate!.id}/keep`, { inspirationId })).status).toBe(200);
     expect(await row(candidate!.id)).toMatchObject({ status: "kept", text: null, title: null, inspiration_id: inspirationId });
+    const [{ keptAs }] = await t.sql`SELECT context->>'keptAs' AS "keptAs" FROM harvest_candidates WHERE id = ${candidate!.id}`;
+    expect(keptAs, "what it became outlives the foreign key").toBe(inspirationId);
     expect(await waiting(me)).toEqual([]);
     /* Twice with the same save is the same keep. */
     expect((await call(me, "POST", `/${candidate!.id}/keep`, { inspirationId })).status).toBe(200);
@@ -170,24 +177,47 @@ describe("keeping", () => {
     expect((await propose(me, "Keep the reversible door open.")).body).toEqual({ proposed: 0, skipped: 1 });
   });
 
-  it("refuses an old save, or one another candidate already became", async () => {
-    const me = await seedPerson("old-save");
-    const before = await saved(me, "Written last month.", new Date(clock.getTime() - 86_400_000));
+  it("refuses a save not made for this candidate, or one another candidate already became", async () => {
+    const me = await seedPerson("unrelated");
     await propose(me, "One.", "Two.");
     const [one, two] = await waiting(me);
-    expect((await call(me, "POST", `/${one!.id}/keep`, { inspirationId: before })).body).toMatchObject({ code: "harvest_save_older" });
-    expect((await row(one!.id)).status, "nothing was decided by the refusal").toBe("pending");
-    const fresh = await saved(me, "One.");
+    const unrelated = await saved(me, "Something else entirely.");
+    expect((await call(me, "POST", `/${one!.id}/keep`, { inspirationId: unrelated })).body).toMatchObject({ code: "harvest_save_unrelated" });
+    const forTwo = await saved(me, "Two.", { candidate: two!.id });
+    expect((await call(me, "POST", `/${one!.id}/keep`, { inspirationId: forTwo })).body, "made for another candidate").toMatchObject({ code: "harvest_save_unrelated" });
+    expect((await row(one!.id)).status, "nothing was decided by the refusals").toBe("pending");
+    const fresh = await saved(me, "One.", { candidate: one!.id });
     expect((await call(me, "POST", `/${one!.id}/keep`, { inspirationId: fresh })).status).toBe(200);
-    expect((await call(me, "POST", `/${two!.id}/keep`, { inspirationId: fresh })).body).toMatchObject({ code: "harvest_save_taken" });
+    expect((await call(me, "POST", `/${two!.id}/keep`, { inspirationId: fresh })).body).toMatchObject({ code: "harvest_save_unrelated" });
     expect((await row(two!.id)).status).toBe("pending");
+  });
+
+  it("keeps a save corrected twice after a failed link, by the words it was first made with", async () => {
+    const me = await seedPerson("twice");
+    await propose(me, "Frist draft of a thought.", "Another candidate.");
+    const [candidate, other] = await waiting(me);
+    const inspirationId = await saved(me, "First draft of a thought.", { candidate: candidate!.id, corrected: true });
+    /* the link failed; the person corrects again, and the save takes the new words */
+    await t.sql`UPDATE inspirations SET text = 'First draft of a thought, finished.' WHERE id = ${inspirationId}`;
+    expect((await call(me, "POST", `/${candidate!.id}/keep`, { inspirationId })).body, "the current words alone do not say whose it is").toMatchObject({ code: "harvest_save_unrelated" });
+    expect((await call(me, "POST", `/${other!.id}/keep`, { inspirationId, savedAs: "First draft of a thought." })).body, "another candidate cannot claim it").toMatchObject({ code: "harvest_save_unrelated" });
+    expect((await call(me, "POST", `/${candidate!.id}/keep`, { inspirationId, savedAs: "First draft of a thought." })).status).toBe(200);
+  });
+
+  it("derives one request id per candidate and words, however the words are spaced", () => {
+    const id = "00000000-0000-4000-8000-0000000000aa";
+    expect(harvestSaveRequestId(id, " Cut  right ")).toBe(harvestSaveRequestId(id, "Cut right"));
+    expect(harvestSaveRequestId(id, "Cut right")).not.toBe(harvestSaveRequestId(id, "Cut wrong"));
+    /* The vector the web client's test holds too (test/harvest-request-id.test.ts). */
+    expect(harvestSaveRequestId("00000000-0000-4000-8000-0000000000aa", " First, cut  right ")).toBe("f6b83865-eaaa-5d4e-acd9-db384f5742e4");
+    expect(harvestSaveRequestId(id, "Cut right")).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
   it("lets a kept sentence come back once its save is deleted", async () => {
     const me = await seedPerson("unkept");
     await propose(me, "Kept, then deleted.");
     const [candidate] = await waiting(me);
-    const inspirationId = await saved(me, "Kept, then deleted.");
+    const inspirationId = await saved(me, "Kept, then deleted.", { candidate: candidate!.id });
     await call(me, "POST", `/${candidate!.id}/keep`, { inspirationId });
     await t.sql`DELETE FROM inspirations WHERE id = ${inspirationId}`;
     expect((await propose(me, "Kept, then deleted.")).body).toEqual({ proposed: 1, skipped: 0 });
@@ -222,7 +252,7 @@ describe("letting go", () => {
     expect((await row(candidate!.id)).reason).toBeNull();
     expect((await call(me, "POST", `/${candidate!.id}/decline`, { reason: "private" })).body).toMatchObject({ reason: "private" });
     expect((await call(me, "POST", `/${candidate!.id}/decline`, { reason: "trivial" })).body, "the first reason stands").toMatchObject({ reason: "private" });
-    const inspirationId = await saved(me, "x");
+    const inspirationId = await saved(me, "A private thing.", { candidate: candidate!.id });
     expect((await call(me, "POST", `/${candidate!.id}/keep`, { inspirationId })).status).toBe(409);
   });
 
@@ -326,11 +356,11 @@ describe("a swipe that lets go at once (review, 2026-10-15)", () => {
     await propose(person, "First, cut in the wrong place", "Second, private");
     const [first, second] = await waiting(person);
     expect((await call(person, "POST", `/${first!.id}/decline`, {})).status).toBe(200);
-    const fixed = await saved(person, "First, cut right");
+    const fixed = await saved(person, "First, cut right", { candidate: first!.id, corrected: true });
     expect((await call(person, "POST", `/${first!.id}/keep`, { inspirationId: fixed })).status).toBe(200);
     expect((await row(first!.id)).status).toBe("kept");
     expect((await call(person, "POST", `/${second!.id}/decline`, { reason: "private" })).status).toBe(200);
-    const other = await saved(person, "Second anyway");
+    const other = await saved(person, "Second anyway", { candidate: second!.id, corrected: true });
     expect((await call(person, "POST", `/${second!.id}/keep`, { inspirationId: other })).status).toBe(409);
   });
 });

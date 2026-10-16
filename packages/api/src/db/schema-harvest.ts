@@ -72,6 +72,10 @@ export interface HarvestContext {
   mode?: string;
   readExternal?: boolean;
   exploration?: boolean;
+  /** Written by keep, never by a collector: the id of the save this became.
+      `inspiration_id` empties when that save is deleted; this does not, so a
+      save brought back from the deleted shelf finds its candidate again. */
+  keptAs?: string;
 }
 
 export const harvestCandidates = pgTable(

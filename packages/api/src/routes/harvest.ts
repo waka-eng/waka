@@ -17,13 +17,13 @@
  * second writer would have to copy and would drift from; one path for "this
  * is now a memory" is the rule everything else in the archive follows.
  */
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 import { and, asc, count, eq, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
-import { HARVEST_LAPSE_DAYS, harvestCandidates, harvestReasonValues, inspirations, type HarvestContext } from "../db/index.js";
+import { HARVEST_LAPSE_DAYS, harvestCandidates, harvestReasonValues, inspirationSaveRequests, inspirations, type HarvestContext } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { validationDetails } from "../lib/validation.js";
@@ -69,7 +69,10 @@ const proposeSchema = z
   })
   .strict();
 
-const keepSchema = z.object({ inspirationId: z.string().uuid() }).strict();
+/* `savedAs`: the words the save was first made with, when they were
+   corrected words and the save has been corrected again since — the request
+   id was derived from those, not from what the save says now. */
+const keepSchema = z.object({ inspirationId: z.string().uuid(), savedAs: z.string().max(MAX_WORDS).optional() }).strict();
 /* `other` comes with the person's own words and nothing else does. */
 const declineSchema = z
   .object({ reason: z.enum(harvestReasonValues).optional(), note: z.string().trim().min(1).max(280).optional() })
@@ -87,6 +90,23 @@ export function harvestHash(profileId: string, text: string): string {
   const normal = text.normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
   const secret = process.env.JWT_SECRET ?? process.env.AUTH_SECRET ?? "";
   return createHmac("sha256", `${secret}:harvest:${profileId}`).update(normal).digest("hex");
+}
+
+/**
+ * THE SAVE REQUEST ID A CANDIDATE'S SAVE IS MADE UNDER — the tie between a
+ * candidate and the save it became. The candidate's own words are saved
+ * under the candidate's id; corrected words under an id derived from the
+ * candidate and those words, so a retry of the same words is the same save
+ * and different words are a different one. Keep checks the save it is
+ * given was made under one of the two, so no other save can be recorded as
+ * what this candidate became. The web client computes the same id
+ * (`harvestSaveRequestId` in packages/web/src/lib/harvest.ts); keep them equal.
+ */
+export function harvestSaveRequestId(candidateId: string, words: string): string {
+  const normal = words.normalize("NFC").replace(/\s+/g, " ").trim();
+  const hex = createHash("sha256").update(`${candidateId.toLowerCase()}\n${normal}`).digest("hex");
+  const variant = ((Number.parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 const LAPSE_MS = HARVEST_LAPSE_DAYS * 86_400_000;
@@ -263,15 +283,29 @@ export function createHarvestRoutes(deps: HarvestRouteDependencies = {}): Hono<A
     const db = getDatabase();
     const profileId = c.get("session").profile.id;
     const [owned] = await db
-      .select({ id: inspirations.id, createdAt: inspirations.createdAt })
+      .select({ id: inspirations.id, text: inspirations.text })
       .from(inspirations)
       .where(and(eq(inspirations.profileId, profileId), eq(inspirations.id, parsed.data.inspirationId)));
     if (!owned) return c.json({ error: "That save is not in your archive" }, 404);
     /* THE SAVE MUST BE THE ONE MADE FOR THIS CANDIDATE. Ownership alone let
        any old save be recorded as what the candidate became — the words
        deleted, the hash blocking the sentence for good, and nothing of it
-       anywhere. So: no other candidate already points at it, and it was
-       made after this candidate was proposed. */
+       anywhere. So the save must have been made under this candidate's
+       request id (`harvestSaveRequestId`: its own words, or corrected words
+       carried in the id), and no other candidate may already point at it. */
+    const [request] = await db
+      .select({ requestId: inspirationSaveRequests.requestId })
+      .from(inspirationSaveRequests)
+      .where(and(eq(inspirationSaveRequests.profileId, profileId), eq(inspirationSaveRequests.inspirationId, owned.id), eq(inspirationSaveRequests.operation, "inspiration")))
+      .limit(1);
+    /* Checked against the candidate, not only the current words: a save made
+       under corrected words A and then corrected to B still carries the id
+       derived from A, and the client says so in `savedAs`. Any words derived
+       with this candidate's id belong to this candidate; no other's can. */
+    const madeFor = request && (request.requestId === id.data.toLowerCase()
+      || request.requestId === harvestSaveRequestId(id.data, owned.text)
+      || (parsed.data.savedAs !== undefined && request.requestId === harvestSaveRequestId(id.data, parsed.data.savedAs)));
+    if (!madeFor) return c.json({ error: "That save was not made for this candidate", code: "harvest_save_unrelated" }, 409);
     const [linked] = await db
       .select({ id: harvestCandidates.id })
       .from(harvestCandidates)
@@ -281,25 +315,24 @@ export function createHarvestRoutes(deps: HarvestRouteDependencies = {}): Hono<A
 
     const [kept] = await db
       .update(harvestCandidates)
-      .set({ status: "kept", text: null, title: null, inspirationId: owned.id, decidedAt: now() })
+      .set({ status: "kept", text: null, title: null, inspirationId: owned.id, decidedAt: now(),
+        context: sql`${harvestCandidates.context} || jsonb_build_object('keptAs', ${owned.id}::text)` })
       /* Pending, or let go only a moment ago: the swipe declines at once
          (so a closed tab cannot leave it waiting), and "cut wrong — keep
          these words instead" can still follow it. A decline with any other
          reason stays a decline. */
       .where(and(eq(harvestCandidates.id, id.data), eq(harvestCandidates.profileId, profileId),
-        lte(harvestCandidates.createdAt, owned.createdAt),
         or(eq(harvestCandidates.status, "pending"),
           and(eq(harvestCandidates.status, "declined"), or(isNull(harvestCandidates.reason), eq(harvestCandidates.reason, "miscut"))))))
       .returning({ id: harvestCandidates.id });
     if (kept) return c.json({ id: kept.id, status: "kept" });
 
     const [row] = await db
-      .select({ status: harvestCandidates.status, inspirationId: harvestCandidates.inspirationId, createdAt: harvestCandidates.createdAt })
+      .select({ status: harvestCandidates.status, inspirationId: harvestCandidates.inspirationId })
       .from(harvestCandidates)
       .where(and(eq(harvestCandidates.id, id.data), eq(harvestCandidates.profileId, profileId)));
     if (!row) return c.json({ error: "Unknown candidate" }, 404);
     if (row.status === "kept" && row.inspirationId === parsed.data.inspirationId) return c.json({ id: id.data, status: "kept" });
-    if (row.createdAt > owned.createdAt) return c.json({ error: "That save was made before this candidate", code: "harvest_save_older" }, 409);
     return c.json({ error: "This candidate was already decided", code: "harvest_decided", status: row.status }, 409);
   });
 
