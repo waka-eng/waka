@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {and,asc,desc,eq,gte,inArray,sql} from 'drizzle-orm';
 import {backgroundJobs,conversationMessages,conversationReplyRequests,conversations,generationRevisions,inspirationEmbeddings,profiles,type BackgroundJob,type ConversationReference} from '../db/index.js';
 import type {getDb} from './db.js';
-import {CONVERSATION_LIMITS,conversationHash,conversationRepliesEnabled,currentConversationReferences,currentConversationReferenceGroups,readConversationContext,conversationPromptSources} from './conversation-context.js';
+import {CONVERSATION_LIMITS,conversationHash,conversationMemory,conversationRepliesEnabled,currentConversationReferences,currentConversationReferenceGroups,memoryProfiles,readPerspectiveContext,conversationPromptSources} from './conversation-context.js';
 import {getDefaultModelProvider,type ConversationReplyInput} from './model-provider.js';
 import {parseConversationReply} from '../queue/gemini.js';
 import {conversationSearchQuery} from './conversation-material.js';
@@ -19,6 +19,12 @@ export class ConversationReplyError extends Error{constructor(readonly status:40
 async function owned(db:Reader,profileId:string,id:string){
   const [row]=await db.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
   if(!row)throw new ConversationReplyError(404,'Conversation not found.');if(row.deletedAt)throw new ConversationReplyError(410,'This conversation was deleted.');return row;
+}
+/** The profiles a chat's citations may come from — its own, its agent's, or both. */
+async function memoryOf(db:Reader,profileId:string,id:string){
+  const [row]=await db.select({perspective:conversations.perspective,agentProfileId:conversations.agentProfileId}).from(conversations)
+    .where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
+  return memoryProfiles(await conversationMemory(db,profileId,row??{}));
 }
 async function lockConversation(tx:Tx,profileId:string,id:string){
   await tx.select({id:conversations.id}).from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id))).for('update');
@@ -40,11 +46,11 @@ async function effectiveStatus(db:Reader,row:Request){
   const [job]=row.jobId?await db.select().from(backgroundJobs).where(and(eq(backgroundJobs.profileId,row.profileId),eq(backgroundJobs.id,row.jobId))):[];
   return statusWithJob(row.status,job);
 }
-export async function projectConversationMessages(db:Reader,profileId:string,id:string,messages:Array<typeof conversationMessages.$inferSelect>){
+export async function projectConversationMessages(db:Reader,profileId:string,id:string,messages:Array<typeof conversationMessages.$inferSelect>,memory?:string[]){
   const requests=await requestsFor(db,profileId,id);
   const byMessage=new Map<string,Request>();
   for(const request of requests)if(request.status==='ready'&&request.assistantMessageId&&!byMessage.has(request.assistantMessageId))byMessage.set(request.assistantMessageId,request);
-  const groups=await currentConversationReferenceGroups(db,profileId,messages.map(message=>message.role==='assistant'?byMessage.get(message.id)?.references??[]:[]));
+  const groups=await currentConversationReferenceGroups(db,memory??await memoryOf(db,profileId,id),messages.map(message=>message.role==='assistant'?byMessage.get(message.id)?.references??[]:[]));
   return messages.map((message,index)=>{
     if(message.role==='user')return {...message,followUpQuestion:null,memoryChanged:false,replyRequestId:null,citations:[]};
     const request=byMessage.get(message.id),current=groups[index];
@@ -59,7 +65,8 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     .where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id))).orderBy(asc(conversationMessages.position));
   const anchor=messages.find(row=>row.id===userMessageId&&row.role==='user');
   if(!anchor||anchor.position!==conversation.revision)return null;
-  const projected=await projectConversationMessages(db,profileId,id,messages.slice(-8));
+  const memory=await conversationMemory(db,profileId,conversation);
+  const projected=await projectConversationMessages(db,profileId,id,messages.slice(-8),memoryProfiles(memory));
   const history:ConversationReplyInput['history']=[];let characters=0,contextChanged=messages.length>8||projected.some(row=>row.memoryChanged);
   // Keep complete messages: truncating a human sentence can drop its negation
   // or correction. Missing earlier context is disclosed to the provider.
@@ -70,7 +77,7 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     history.unshift({role:row.role,content,...(row.correctsMessageId?{correction:true}:{})});characters+=content.length;
   }
   let retrievalTrace:ConversationRetrievalTrace|undefined;
-  const context=conversationUsesSavedSources(history)?await readConversationContext(db,profileId,conversationSearchQuery(history),undefined,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
+  const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,conversationSearchQuery(history),conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
   const [profile]=await db.select({locale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId));
   /* Pinning a keep into `sources` puts it in front of the model; pointing
    * `focusSourceNumber` at it is what tells the model that THIS is the one the
@@ -94,7 +101,7 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     sources.findIndex(source=>source.kind==='principle'&&source.id===conversation.initialPrincipleId),
     sources.findIndex(source=>source.kind==='inspiration'&&source.id===conversation.initialInspirationId),
   ].find(index=>index>=0)??-1;
-  const input:ConversationReplyInput={preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
+  const input:ConversationReplyInput={...(memory.perspective!=='mine'?{perspective:memory.perspective}:{}),preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
   return {input,sources,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }
 async function replyState(db:Reader,profileId:string,id:string){
@@ -156,7 +163,7 @@ export async function readConversationReference(db:Db,profileId:string,id:string
   return db.transaction(async tx=>{
     await owned(tx,profileId,id);const [request]=await tx.select().from(conversationReplyRequests).where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,id),eq(conversationReplyRequests.id,requestId),eq(conversationReplyRequests.status,'ready')));
     const reference=request?.references[index];if(!reference)throw new ConversationReplyError(404,'Reference not found.');
-    const [source]=await currentConversationReferences(tx,profileId,[reference]);if(!source)throw new ConversationReplyError(409,'This memory changed since the reply.');
+    const [source]=await currentConversationReferences(tx,await memoryOf(tx,profileId,id),[reference]);if(!source)throw new ConversationReplyError(409,'This memory changed since the reply.');
     if(!Number.isInteger(reference.quoteStart)||!Number.isInteger(reference.quoteLength)||reference.quoteStart!<0||reference.quoteLength!<4||reference.quoteLength!>300||reference.quoteStart!+reference.quoteLength!>source.text.length)throw new ConversationReplyError(409,'This reference cannot be verified.');
     return {profileId,conversationId:id,requestId,index,source:{kind:source.kind,id:source.id,text:source.text,state:source.state,supportCurrent:source.supportCurrent,recordedAt:source.recordedAt,historical:source.historical,artifactVersion:source.artifactVersion,
       quote:source.text.slice(reference.quoteStart??0,(reference.quoteStart??0)+(reference.quoteLength??0))}};

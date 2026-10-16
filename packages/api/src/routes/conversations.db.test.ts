@@ -213,3 +213,18 @@ it('refuses a create replay whose first words match but whose picked inspiration
   expect((await f.send('',{id:f.id,inspirationId:one.id,firstMessage})).status).toBe(200);
   expect(await t.sql`SELECT id FROM conversation_messages`).toHaveLength(1);
 });
+/* WHOSE MEMORY A CHAT READS (2026-10-15): only an agent of the same account
+   may be chosen, and the choice is returned with the chat. */
+it('starts a chat with your own agent or both, and refuses anyone else\'s agent',async()=>{
+  const f=await fixture(),other=await fixture();
+  const [mine]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${f.accountId},'agent','Mine') RETURNING id`;
+  const [theirs]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${other.accountId},'agent','Theirs') RETURNING id`;
+  expect((await f.send('',{id:randomUUID(),perspective:'both',agentId:theirs.id})).status).toBe(404);
+  expect((await f.send('',{id:randomUUID(),perspective:'agent'})).status).toBe(400);
+  expect((await f.send('',{id:randomUUID(),perspective:'agent',agentId:f.profileId})).status,'a person is not an agent').toBe(404);
+  const response=await f.send('',{id:f.id,perspective:'both',agentId:mine.id});expect(response.status).toBe(200);
+  const body=await response.json() as {conversation:{perspective:string;agentProfileId:string;profileId:string}};
+  expect(body.conversation).toMatchObject({perspective:'both',agentProfileId:mine.id,profileId:f.profileId});
+  const plain=await (await f.send('',{id:randomUUID()})).json() as {conversation:{perspective:string}};
+  expect(plain.conversation.perspective,'every chat before this reads your own memory').toBe('mine');
+});

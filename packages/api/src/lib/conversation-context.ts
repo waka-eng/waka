@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {and,asc,desc,eq,inArray,sql} from 'drizzle-orm';
-import {inspirations,principles,type ConversationReference} from '../db/index.js';
+import {inspirations,principles,profiles,type ConversationPerspective,type ConversationReference} from '../db/index.js';
 import type {getDb} from './db.js';
 import {personalPrincipleReadable,personalPrincipleSupportCurrent} from './personal-output.js';
 import {PRINCIPLE_MIN_SIGNALS} from './principle-generation.js';
@@ -14,13 +14,14 @@ export const conversationRepliesEnabled=()=>process.env.WAKA_CONVERSATION_REPLIE
 export const conversationCapabilities=()=>({generationEnabled:conversationRepliesEnabled(),limits:{...CONVERSATION_LIMITS,modelCalls:conversationRepliesEnabled()?CONVERSATION_LIMITS.modelCalls:0}});
 type Reader=Pick<ReturnType<typeof getDb>,'select'>;
 export const conversationHash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-export interface ConversationSource {kind:'principle'|'top_of_mind_entry'|'inspiration';id:string;text:string;hash:string;legacyHash?:string;revision?:string;recordedAt?:string;artifactVersion?:number;historical?:boolean;state?:string;rank?:number;locked?:boolean;supportCurrent?:boolean;truncated:boolean}
+export interface ConversationSource {kind:'principle'|'top_of_mind_entry'|'inspiration';id:string;text:string;hash:string;owner?:'person'|'agent';legacyHash?:string;revision?:string;recordedAt?:string;artifactVersion?:number;historical?:boolean;state?:string;rank?:number;locked?:boolean;supportCurrent?:boolean;truncated:boolean}
 /** The provider receives dated prose, not private record IDs or proof hashes. */
 export function conversationPromptSources(sources:ConversationSource[]):ConversationReplyInput['sources']{
-  return sources.map(({kind,text,recordedAt,artifactVersion,historical,state,rank,locked,supportCurrent,truncated})=>({kind,text,...(recordedAt?{recordedAt}:{}),...(artifactVersion?{artifactVersion,historical}:{}),state,rank,locked,supportCurrent,truncated}));
+  return sources.map(({kind,text,owner,recordedAt,artifactVersion,historical,state,rank,locked,supportCurrent,truncated})=>({kind,text,...(owner?{owner}:{}),...(recordedAt?{recordedAt}:{}),...(artifactVersion?{artifactVersion,historical}:{}),state,rank,locked,supportCurrent,truncated}));
 }
-/** Reuse exactly the serving predicates; no cached excerpts or model calls. */
 /**
+ * Reuse exactly the serving predicates; no cached excerpts or model calls.
+ *
  * `initialInspirationId` is the keep the person has pointed this conversation
  * at, and it is PINNED rather than ranked: present in `inspirations` whether
  * or not either retrieval path would have found it, and first in the list.
@@ -97,13 +98,20 @@ async function readConversationReferenceSources(db:Reader,profileId:string,refer
 }
 const matchesReference=(source:ConversationSource,reference:ConversationReference)=>source.kind===reference.kind&&source.id===reference.id&&
   (source.hash===reference.hash||source.kind==='top_of_mind_entry'&&source.legacyHash===reference.hash);
-export async function currentConversationReferences(db:Reader,profileId:string,references:ConversationReference[]):Promise<Array<ConversationSource|null>>{
-  const available=await readConversationReferenceSources(db,profileId,references);
+/** A chat that reads two memories re-proves its citations against both: ids
+ * are unique across profiles, so a source is found in whichever one holds it. */
+async function referenceSourcesIn(db:Reader,profileIds:string|string[],references:ConversationReference[]):Promise<ConversationSource[]>{
+  const out:ConversationSource[]=[];
+  for(const profileId of Array.isArray(profileIds)?profileIds:[profileIds])out.push(...await readConversationReferenceSources(db,profileId,references));
+  return out;
+}
+export async function currentConversationReferences(db:Reader,profileId:string|string[],references:ConversationReference[]):Promise<Array<ConversationSource|null>>{
+  const available=await referenceSourcesIn(db,profileId,references);
   return references.map(reference=>available.find(source=>matchesReference(source,reference))??null);
 }
 /** Per-read batching, never a cross-request source cache. Three identities per
  * chunk fit every existing excerpt allowance, even with full-length sources. */
-export async function currentConversationReferenceGroups(db:Reader,profileId:string,groups:ConversationReference[][]):Promise<Array<Array<ConversationSource|null>>>{
+export async function currentConversationReferenceGroups(db:Reader,profileId:string|string[],groups:ConversationReference[][]):Promise<Array<Array<ConversationSource|null>>>{
   if(groups.length>CONVERSATION_LIMITS.messages||groups.some(group=>group.length>3))throw new Error('Conversation reference bounds');
   const key=(source:{kind:string;id:string})=>`${source.kind}:${source.id}`;
   const identities=new Map<string,ConversationReference>();
@@ -114,9 +122,67 @@ export async function currentConversationReferenceGroups(db:Reader,profileId:str
   }
   const selected=[...identities.values()],available=new Map<string,ConversationSource[]>();
   for(let offset=0;offset<selected.length;offset+=3){
-    for(const source of await readConversationReferenceSources(db,profileId,selected.slice(offset,offset+3))){
+    for(const source of await referenceSourcesIn(db,profileId,selected.slice(offset,offset+3))){
       const rows=available.get(key(source))??[];rows.push(source);available.set(key(source),rows);
     }
   }
   return groups.map(group=>group.map(reference=>available.get(key(reference))?.find(source=>matchesReference(source,reference))??null));
+}
+
+/* ═══ WHOSE MEMORY A CHAT READS ═══════════════════════════════════════════
+   Founder, 2026-10-15: "new chat should also let you select if you want to
+   chat with me vs my agent or both perspectives." See `conversations.
+   perspective`. The chat stays the person's; this decides which memory the
+   reply stands on. */
+export interface ConversationMemory{perspective:ConversationPerspective;personId:string;agentId:string|null}
+/** The memory a chat reads, re-checked every time: an agent that has since
+ * been removed, or that is not this person's, falls back to their own. */
+export async function conversationMemory(db:Reader,profileId:string,conversation:{perspective?:string|null;agentProfileId?:string|null}):Promise<ConversationMemory>{
+  const wanted=conversation.perspective==='agent'||conversation.perspective==='both'?conversation.perspective:'mine';
+  if(wanted==='mine'||!conversation.agentProfileId)return {perspective:'mine',personId:profileId,agentId:null};
+  const agentId=await accountAgent(db,profileId,conversation.agentProfileId);
+  return agentId?{perspective:wanted,personId:profileId,agentId}:{perspective:'mine',personId:profileId,agentId:null};
+}
+/** `agentId`, when it is an agent of the same account as `profileId` and
+ * `profileId` is that account's person; otherwise null. The one ownership
+ * rule for a chat's agent: checked when the chat is started, and again every
+ * time it is read. */
+export async function accountAgent(db:Reader,profileId:string,agentId:string):Promise<string|null>{
+  const [owner]=await db.select({accountId:profiles.accountId,type:profiles.type}).from(profiles).where(eq(profiles.id,profileId));
+  if(!owner?.accountId||owner.type!=='human')return null;
+  const [agent]=await db.select({id:profiles.id}).from(profiles)
+    .where(and(eq(profiles.id,agentId),eq(profiles.accountId,owner.accountId),eq(profiles.type,'agent')));
+  return agent?.id??null;
+}
+/** Every profile whose sources this chat may cite. */
+export function memoryProfiles(memory:ConversationMemory):string[]{
+  return memory.perspective==='mine'||!memory.agentId?[memory.personId]:memory.perspective==='agent'?[memory.agentId]:[memory.personId,memory.agentId];
+}
+/* Two memories in one reply, without growing the reply: each kind is
+   interleaved — yours, then the agent's, then yours — and held to the same
+   character allowance and a source count under the prompt's ceiling, so a
+   'both' chat costs what a 'mine' chat costs. */
+const PERSPECTIVE_CAPS={principle:{chars:8000,count:8},top_of_mind_entry:{chars:4000,count:4},inspiration:{chars:4000,count:6}} as const;
+function interleave(kind:ConversationSource['kind'],a:ConversationSource[],b:ConversationSource[]):ConversationSource[]{
+  const out:ConversationSource[]=[];let chars=0;
+  for(let i=0;i<Math.max(a.length,b.length);i++)for(const row of [a[i],b[i]]){
+    if(!row||out.length>=PERSPECTIVE_CAPS[kind].count)continue;
+    if(chars+row.text.length>PERSPECTIVE_CAPS[kind].chars)continue;
+    chars+=row.text.length;out.push(row);
+  }
+  return out;
+}
+export async function readPerspectiveContext(db:Reader,memory:ConversationMemory,question:string,initialPrincipleId?:string|null,initialInspirationId?:string|null,queryVector?:number[],onRetrievalTrace?:(trace:ConversationRetrievalTrace)=>void){
+  if(memory.perspective==='mine'||!memory.agentId)
+    return readConversationContext(db,memory.personId,question,undefined,initialPrincipleId,initialInspirationId,queryVector,onRetrievalTrace);
+  const tag=(owner:'person'|'agent',rows:ConversationSource[])=>rows.map(row=>({...row,owner}));
+  /* The pins belong to the person's own memory; the agent's is read plain. */
+  const agent=await readConversationContext(db,memory.agentId,question,undefined,null,null,queryVector,memory.perspective==='agent'?onRetrievalTrace:undefined);
+  if(memory.perspective==='agent')
+    return {...agent,principles:tag('agent',agent.principles),reading:tag('agent',agent.reading),inspirations:tag('agent',agent.inspirations)};
+  const mine=await readConversationContext(db,memory.personId,question,undefined,initialPrincipleId,initialInspirationId,queryVector,onRetrievalTrace);
+  return {...mine,
+    principles:interleave('principle',tag('person',mine.principles),tag('agent',agent.principles)),
+    reading:interleave('top_of_mind_entry',tag('person',mine.reading),tag('agent',agent.reading)),
+    inspirations:interleave('inspiration',tag('person',mine.inspirations),tag('agent',agent.inspirations))};
 }

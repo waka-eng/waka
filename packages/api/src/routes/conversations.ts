@@ -1,12 +1,12 @@
 import {Hono} from 'hono';
 import {z} from 'zod';
 import {and,asc,desc,eq,gte,isNull,sql} from 'drizzle-orm';
-import {conversationMessages,conversationReplyRequests,conversations,inspirationConversationOrigins,inspirations,principles,profiles} from '../db/index.js';
+import {conversationMessages,conversationPerspectiveValues,conversationReplyRequests,conversations,inspirationConversationOrigins,inspirations,principles,profiles} from '../db/index.js';
 import {getDb} from '../lib/db.js';
 import {requireAuth,humanSessionsOnly,type AuthEnv} from '../lib/middleware.js';
 import {resolveTargetProfile} from './inspirations-tenancy.js';
 import {profileQuerySchema} from './inspirations-validation.js';
-import {CONVERSATION_LIMITS,conversationCapabilities,conversationRepliesEnabled,currentConversationReferences,readConversationContext,type ConversationSource} from '../lib/conversation-context.js';
+import {CONVERSATION_LIMITS,accountAgent,conversationCapabilities,conversationMemory,conversationRepliesEnabled,currentConversationReferences,memoryProfiles,readPerspectiveContext,type ConversationSource} from '../lib/conversation-context.js';
 import {conversationSearchQuery} from '../lib/conversation-material.js';
 import {CONVERSATION_STARTERS,conversationPreview} from '../lib/conversation-preview.js';
 import {ConversationReplyError,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
@@ -111,7 +111,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
   });
   routes.post('/',async c=>{
     const window=messageWindow(c.req.query('from'),c.req.query('limit'));
-    const input=z.object({id:uuid,principleId:uuid.optional(),inspirationId:uuid.optional(),firstMessage:messageInput.omit({revision:true,correctsMessageId:true}).optional()}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
+    const input=z.object({id:uuid,principleId:uuid.optional(),inspirationId:uuid.optional(),perspective:z.enum(conversationPerspectiveValues).optional(),agentId:uuid.optional(),firstMessage:messageInput.omit({revision:true,correctsMessageId:true}).optional()}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
     const profileId=c.get('conversationProfileId');
     const row=await database().transaction(async tx=>{
       await tx.select({id:profiles.id}).from(profiles).where(eq(profiles.id,profileId)).for('update');
@@ -150,7 +150,17 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       if(input.data.principleId){const [source]=await tx.select({id:principles.id}).from(principles).where(and(eq(principles.profileId,profileId),eq(principles.id,input.data.principleId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)));if(!source)throw new ConversationError('This principle is not available.',404);}
       if(input.data.inspirationId)await requireOwnedInspiration(tx,profileId,input.data.inspirationId);
       const first=input.data.firstMessage;
-      await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null,initialInspirationId:input.data.inspirationId??null,revision:first?1:0});
+      /* WHOSE MEMORY IT READS, chosen once, at the start. An agent of this
+         account, or nothing: a stranger's profile or a person's is refused
+         rather than quietly read as yours. */
+      const perspective=input.data.perspective??'mine';
+      let agentProfileId:string|null=null;
+      if(perspective!=='mine'){
+        if(!input.data.agentId)throw new ConversationError('Choose which agent to talk with.',400);
+        agentProfileId=await accountAgent(tx,profileId,input.data.agentId);
+        if(!agentProfileId)throw new ConversationError('That agent is not yours to talk with.',404);
+      }
+      await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null,initialInspirationId:input.data.inspirationId??null,perspective,agentProfileId,revision:first?1:0});
       if(first){
         await tx.insert(conversationMessages).values({id:first.id,profileId,conversationId:input.data.id,position:1,role:'user',content:first.content});
         if(first.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,input.data.id,{messageId:first.id,afterRequestId:null});
@@ -233,14 +243,15 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       .where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,row.id),eq(conversationReplyRequests.userMessageId,lastUser.id)))
       .orderBy(desc(conversationReplyRequests.createdAt),desc(conversationReplyRequests.id)).limit(1):[];
     if(request?.sources){
-      const sources=(await currentConversationReferences(tx,profileId,request.sources)).filter((source):source is ConversationSource=>source!==null);
+      const memory=memoryProfiles(await conversationMemory(tx,profileId,row));
+      const sources=(await currentConversationReferences(tx,memory,request.sources)).filter((source):source is ConversationSource=>source!==null);
       const bound=(kind:ConversationSource['kind'],remaining:number)=>sources.filter(source=>source.kind===kind).flatMap(source=>{
         if(remaining<=0)return [];const text=source.text.slice(0,remaining);remaining-=text.length;
         return [{...source,text,truncated:source.truncated||text.length<source.text.length}];
       });
       return {profileId,principles:bound('principle',8000),reading:bound('top_of_mind_entry',4000),inspirations:bound('inspiration',4000),...conversationCapabilities()};
     }
-    return readConversationContext(tx,profileId,conversationSearchQuery(row.messages),undefined,row.initialPrincipleId,row.initialInspirationId);
+    return readPerspectiveContext(tx,await conversationMemory(tx,profileId,row),conversationSearchQuery(row.messages),row.initialPrincipleId,row.initialInspirationId);
   },{isolationLevel:'repeatable read',accessMode:'read only'})));
   routes.post('/:id/messages',async c=>{
     const window=messageWindow(c.req.query('from'),c.req.query('limit'));
