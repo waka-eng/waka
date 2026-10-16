@@ -116,6 +116,16 @@ export default defineConfig({
     setupFiles: [resolve(__dirname, "test/setup.ts")],
 
     /**
+     * ONCE BEFORE EVERYTHING AND ONCE AFTER, for the two cases that need a
+     * whole database rather than a schema. `CREATE`/`DROP DATABASE` are
+     * cluster-wide and contend with concurrency — measured here at 0.25s
+     * idle against 14-25s under this suite — so their cleanup runs when the
+     * cluster is quiet instead of racing a hook timeout. See the file for
+     * the measurements and why a longer timeout was the wrong answer twice.
+     */
+    globalSetup: [resolve(__dirname, "test/global-database-provision.ts")],
+
+    /**
      * Default test timeout. Most specs hit Hono in-process and complete
      * in <100ms, but the queue/classifier path can fan out to mocked
      * Gemini + Drizzle and benefit from a slightly more generous budget.

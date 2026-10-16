@@ -117,12 +117,42 @@ async function saveThreeAnswers() {
   return { ...f, path, source, saved, keys, status };
 }
 
+/**
+ * DRAIN UNTIL THE QUEUE IS QUIET, NOT ONCE.
+ *
+ * This made a SINGLE pass and then read the result as though the pipeline
+ * had finished. It has not: this journey is multi-stage — `derive_signals`
+ * enqueues the work that writes the top of mind — so a follow-up row
+ * created DURING the pass is simply left sitting there. Whether one pass
+ * happened to be enough depended on timing, which is why it passed alone in
+ * under a second and failed about one run in three under the full suite:
+ * `getLiveTopOfMind` came back `undefined` at line 144 and the assertion
+ * read "expected undefined to deeply equal [ Array(1) ]" — a sentence about
+ * nothing, in a test that is not about queue scheduling at all.
+ *
+ * Looping until a pass claims nothing is what the caller already believed
+ * it was getting. The pass count is bounded so a job that reschedules
+ * itself forever fails loudly here instead of hanging the file, and the
+ * three guarantees are asserted against the TOTAL rather than against
+ * whichever pass happened to be last.
+ */
 async function drain() {
-  const result = await drainBackgroundJobs({ limit: 10, now: new Date(Date.now() + 1000) });
-  expect(result.retried).toBe(0);
-  expect(result.failed).toBe(0);
-  expect(result.deferred).toBe(0);
-  return result;
+  const total = { claimed: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
+  let passes = 0;
+  for (; passes < 12; passes++) {
+    const pass = await drainBackgroundJobs({ limit: 10, now: new Date(Date.now() + 1000) });
+    total.claimed += pass.claimed;
+    total.succeeded += pass.succeeded;
+    total.retried += pass.retried;
+    total.failed += pass.failed;
+    total.deferred += pass.deferred;
+    if (pass.claimed === 0) break;
+  }
+  expect(passes, "the queue never went quiet — a job is rescheduling itself").toBeLessThan(12);
+  expect(total.retried).toBe(0);
+  expect(total.failed).toBe(0);
+  expect(total.deferred).toBe(0);
+  return total;
 }
 
 describe('personal learning journey', () => {
