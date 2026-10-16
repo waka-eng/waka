@@ -4,12 +4,14 @@
  * group reads too, until rooms were removed on 2026-10-12),
  * `lib/api/principles` supplies principle reads, `lib/auth-context` supplies the
  * session. `helpers/render-home` and `helpers/canvas-stub` replace canvas/viewport/clock/randomness, but the real
- * world simulation and React Router history run. Appearance/SQL are not claimed. */
+ * world simulation and React Router history run. `helpers/note-top-row` replaces
+ * nothing: it is a DOM query over the tree this suite rendered. Appearance/SQL are not claimed. */
 import { act } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressChatCorner, closeOverlay, keepBox, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressChatCorner, closeOverlay, keepBox, barShape, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { pressesInTopRow } from './helpers/note-top-row';
 import { loadInspirations, loadInspiration, type InspirationDetail } from '../src/lib/data';
 import {fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
 
@@ -113,24 +115,21 @@ it('offers places in the dock, and nothing that is already on the screen',async(
      "HOME" IS NOT A PLACE IN THIS PRODUCT (founder: "I don't like the word
      'home'"). It is `Now` — which is what that screen is, and what the world
      already calls it everywhere underneath: `atNow`, the present wall, the
-     dial's end. Four nouns rather than three nouns and a piece of app
-     furniture.
+     dial's end.
 
-     AND A FIFTH CONTROL THAT IS NOT A PLACE. The plus is the one verb on the
-     bar; it is drawn rather than written and carries its name only in
-     `aria-label`, which is why this reads the accessible name. It must stay
-     unnamed-by-text and unlit: a verb that lights like a destination would
-     say you were standing somewhere. */
+     TWO WORDS SINCE 2026-10-15. Founder: "at the bottom bar just keep
+     inspiration and chat and clicking on it leads to new inspiration and new
+     chat" — and "principle is sth user can only get by dragging". So Now,
+     the plus and Principles all left the bar: the lit row pressed again is
+     the way home, each word makes a new one, and Principles is walked to.
+     Both words are written, not drawn, and on Now neither is lit — you are
+     standing in neither. */
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
   const dock=[...world.container.querySelectorAll('.waka-dock .waka-dock-item')];
   const rows=dock.map(node=>(node.textContent?.trim()||node.getAttribute('aria-label')?.trim())??'');
-  /* "CHATS", NOT "CONVERSATIONS" — founder: "change conversation to chat in
-     bottom navigation as well". A dock row is read in a glance and in a
-     thumb's width; the longer word was the longest thing on the bar and the
-     one nobody calls it out loud. */
-  expect(rows).toEqual(['Now','Inspirations','Make something','Chats','Principles']);
-  expect(dock[2]!.textContent?.trim(),'the plus is drawn, not written').toBe('');
-  expect(dock[2]!.getAttribute('aria-current'),'a verb is never a place you are at').toBeNull();
+  expect(rows).toEqual(['Inspiration','Chat']);
+  expect(dock.map(node=>node.getAttribute('aria-current')),'on Now, the bar names nowhere you are standing').toEqual([null,null]);
+  expect(rows,'Principles is walked to, never a tab').not.toContain('Principles');
   expect(rows,'a claim is answered on home; the dock must not offer a second way in').not.toContain('Claims');
 });
 
@@ -257,8 +256,10 @@ it('starts a review beside the personal reading and restores home through Back',
      printed again in the reading's own heading sixty pixels below it, which
      is the duplication the switcher replaced — so the name is asserted where
      it now lives. */
+  /* Since 2026-10-15 Now has no row, so at home nothing on the bar is lit —
+     a lit row would claim you were on a new note or a chat. */
   expect([...world.container.querySelectorAll('.waka-dock .waka-dock-item--here')].map(n=>n.textContent?.trim()))
-    .toEqual(['Now']);
+    .toEqual([]);
   /* Review is not offered any more. It was an activity card beside the
      character, then a menu row, and it is now merged away: Claims is the one
      place that asks a person to rule on their own material, and two surfaces
@@ -323,16 +324,18 @@ it('records explicit reflection opening immediately, before the world observer d
   expect(open).toBeDefined(); await act(async()=>open.click());
   expect(location.search).toContain('reflection=open');
 });
-it('a greeting cannot close its own selected card after the person starts interacting with it', async()=>{
+it('a returning visitor is greeted by the creature, and no card opens by itself', async()=>{
+  /* Founder, 2026-10-16: "once in a while the inspiration card keeps coming
+     up in the main page but dont have that." The greeting used to open the
+     newest memory's card for 2.6s; now it only speaks. */
   localStorage.setItem('waka.seen','1');
   vi.mocked(loadInspiration).mockResolvedValue({...detail,id:'loaded'});
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>}); await settle();
   await act(async()=>{await vi.advanceTimersByTimeAsync(1500);}); await settle();
-  const panel=world.container.querySelector('[aria-label="A saved inspiration"]'); expect(panel).not.toBeNull();
-  await act(async()=>panel!.dispatchEvent(new Event('pointerdown',{bubbles:true})));
+  expect(world.container.querySelector('[aria-label="A saved inspiration"]'), 'the greeting opened a card').toBeNull();
   await act(async()=>{await vi.advanceTimersByTimeAsync(4000);}); await settle();
-  expect(world.container.querySelector('[aria-label="A saved inspiration"]')).not.toBeNull();
-  expect(location.search).toContain('inspiration=loaded');
+  expect(world.container.querySelector('[aria-label="A saved inspiration"]'), 'a card opened by itself').toBeNull();
+  expect(location.search).not.toContain('inspiration=');
 });
 
 it('restores an older card, its earlier reflection and date across Back/Forward without booting again', async () => {
@@ -525,20 +528,16 @@ it('lights neither face on the chats page, and still lights one on the archive',
  * So this presses the X and asserts the ADDRESS, not the markup. A test that
  * checked the button was on screen would have passed throughout.
  *
- * IT OPENS THE CONVERSATION THROUGH THE DOCK NOW. It used to press a "New
- * chat" pill at the top of the chats list, which is gone: that pill was the
- * only boxed control on any of the four destinations and the dock's plus
- * already offers the same two verbs from everywhere. Pressing the door that
- * exists is also the more honest setup — a test that reaches a surface by a
- * control nobody else can reach it by proves the surface works and not that
- * anyone can get to it.
+ * IT OPENS THE CONVERSATION THROUGH THE DOCK. Since 2026-10-15 that is the
+ * bar's own "Chat" row, which makes a NEW chat (founder: "clicking on it
+ * leads to new inspiration and new chat"). Pressing the door that exists is
+ * the honest setup — a test that reaches a surface by a control nobody else
+ * can reach it by proves the surface works and not that anyone can get to it.
  */
 async function openANewChat(root: HTMLElement) {
-  await act(async () => root.querySelector<HTMLButtonElement>('.waka-dock-item--new')!.click());
-  await settle();
-  const rows = [...root.querySelectorAll<HTMLButtonElement>('.waka-new-one')];
-  const chat = rows.at(-1);
-  expect(chat, 'the plus offers no way to start a chat').toBeTruthy();
+  const chat = [...root.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item')]
+    .find(row => row.textContent?.trim() === 'Chat');
+  expect(chat, 'the bar offers no way to start a chat').toBeTruthy();
   await act(async () => chat!.click());
   await settle();
 }
@@ -551,14 +550,19 @@ it('closes a conversation from its own X, which the overlay handler could not', 
   /* THE X IS GONE FROM EVERY DESTINATION. Founder: "how do we even need the
      close button for inspiration and chat? There's no reason for there to be
      an X button when we're just moving across the pages." So what this
-     presses is the control that replaced it — the dock's own first row,
-     which is visible the whole time a conversation is open and is the way
-     out the law is actually satisfied by. The assertion is unchanged: an
-     address, not a rendered button. */
-  const now = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock-item')][0];
-  expect(now, 'the bar a conversation leans on for its way out is not there').toBeTruthy();
-  await act(async () => now!.click()); await settle();
+     presses is the control that replaced it — since 2026-10-15 ("say all
+     chats and then close") the word Close, last in the chat's own bar, which
+     is visible the whole time a conversation is open and is the way out the
+     law is actually satisfied by. Nothing in the bar is lit on a chat: the
+     chat is not a list. The assertion is unchanged: an address, not a
+     rendered button. */
+  expect(world.container.querySelector('.waka-dock .waka-dock-item[aria-current="page"]'),
+    'a chat lights a bar row, as if it were the chats list').toBeNull();
+  const close = world.container.querySelector<HTMLButtonElement>('.waka-dock button.waka-dock-item--close');
+  expect(close?.textContent?.trim(), 'a conversation offers no Close in its bar').toBe('Close');
+  await act(async () => close!.click()); await settle();
   expect(location.pathname, 'the dock still does nothing from a conversation').not.toContain('/chat/');
+  expect(new URLSearchParams(location.search).get('open'), 'Close on a chat did not go home').toBeNull();
 });
 
 /**
@@ -574,25 +578,31 @@ it('closes a conversation from its own X, which the overlay handler could not', 
  * Pressed, not counted — `six-laws.md` Law 8: the previous one-press return
  * in this product rendered, read correctly, was enabled, and did nothing.
  */
-it('steps back from a conversation to the list of them', async () => {
+it('steps from a new chat to the list of them', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
   await openANewChat(world.container);
   expect(location.pathname.startsWith('/chat/'), 'the conversation never opened').toBe(true);
 
-  /* ═══ THE WAY BACK IS THE BAR, AND IT IS STILL PRESSED ═══════════════
-     Founder, of the notepad's chevron: "I still don't get why you have
-     this carrot button ... I can just go to all the inspirations using the
-     bottom panel." Law 7 carried that to this surface: the glyph here
-     pointed at a room the dock's "Chats" row names in a word.
+  /* ═══ THE WAY TO THE LIST IS ON THE NEW CHAT, AND IT IS PRESSED ═══════
+     Founder, 2026-10-15: "user can go to inspiration list and chat list
+     ONLY from that new page." The bar's word makes a new chat, so the list's
+     one door is the new chat's own "All chats", in words.
 
      WHAT THIS CASE IS FOR DOES NOT CHANGE. Law 8 — "pressed, not counted"
      — is why it exists: the previous one-press return in this product
      rendered, read correctly, was enabled, and did nothing. A different
      control is pressed; the assertion that you end up on the list is the
-     same, and it is now covering the control people will actually use. */
-  const back = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock-item')]
-    .find((row) => /^chats$/i.test(row.textContent ?? ''));
-  expect(back, 'the bar offers no way back to the list of chats').toBeTruthy();
+     same, and it is now covering the control people will actually use.
+
+     ═══ AND THE DOOR MOVED FROM THE CORNER TO THE BAR ═════════════════
+     Founder, the same day: "never put something on any corners" — and of a
+     chat's bar, "all chats and then ... close." The header above the chat is
+     gone; the list's door is the first word of the chat's own bar. */
+  expect(world.container.querySelector('header.jar-chat-top, .jar-chat-see-all'),
+    'the All chats header came back above the chat').toBeNull();
+  const back = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item')]
+    .find(node => node.textContent?.trim() === 'All chats');
+  expect(back, 'a new chat offers no way to the list of chats').toBeTruthy();
   await act(async () => back!.click()); await settle();
   expect(location.pathname, 'it stayed in the conversation').not.toContain('/chat/');
   expect(
@@ -666,4 +676,318 @@ it('renders no engineering comment as text on screen', async () => {
       'hundred words over every surface in the product and went unnoticed ' +
       'for weeks because an opaque page happened to be covering them.\n',
   ).toEqual([]);
+});
+
+/**
+ * ═══ THE TWO-WORD BAR, PRESSED (2026-10-15) ═════════════════════════════
+ *
+ * Founder: "at the bottom bar just keep inspiration and chat and clicking on
+ * it leads to new inspiration and new chat, and user can go to inspiration
+ * list and chat list ONLY from that new page" — and "principle is sth user
+ * can only get by dragging". Each route that ruling made is pressed here and
+ * the ADDRESS is asserted — Law 8: pressed, not counted.
+ */
+const open = () => new URLSearchParams(location.search).get('open');
+const lit = () => world.container.querySelector<HTMLButtonElement>('.waka-dock .waka-dock-item[aria-current="page"]');
+const row = (name: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item')]
+  .find(node => node.textContent?.trim() === name)!;
+const key = async (target: EventTarget, name: string) => {
+  await act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); });
+  await settle();
+};
+const pull = async (node: HTMLElement, dx: number) => {
+  const fire = (type: string, x: number) => node.dispatchEvent(new window.PointerEvent(type,
+    { bubbles: true, cancelable: true, pointerId: 7, clientX: x, clientY: 300, button: 0, buttons: 1 }));
+  await act(async () => { fire('pointerdown', 400); fire('pointermove', 400 + dx / 2); fire('pointerup', 400 + dx); });
+  await settle();
+};
+
+it('walks to Principles on → from Now, and home again on ←', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await key(document.body, 'ArrowRight');
+  expect(open(), '→ on Now did not walk to Principles').toBe('principles');
+  expect(lit(), 'Principles is walked to, so no bar row may light there').toBeNull();
+  await key(document.body, 'ArrowLeft');
+  expect(open(), '← on Principles did not walk home').toBeNull();
+});
+
+it('walks to Principles when the creature is pulled right, and home when the page is pulled left', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  const creature = world.container.querySelector<HTMLButtonElement>('.jar-char-press');
+  expect(creature, 'the creature is not on Now').toBeTruthy();
+  await pull(creature!, 30);
+  expect(open(), 'a pull shorter than the threshold walked anyway').toBeNull();
+  await pull(creature!, 90);
+  expect(open(), 'pulling the creature right did not walk to Principles').toBe('principles');
+  const page = world.container.querySelector<HTMLElement>('.waka-over[data-jar-surface]');
+  expect(page, 'Principles is not on screen as a page').toBeTruthy();
+  await pull(page!, -90);
+  expect(open(), 'pulling the Principles page left did not walk home').toBeNull();
+});
+
+it('leaves Principles by Escape, and by a bar row in one visible press', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await key(document.body, 'ArrowRight'); expect(open()).toBe('principles');
+  await key(world.container.querySelector('.waka-over[data-jar-surface]')!, 'Escape');
+  expect(open(), 'Escape no longer closes Principles').toBeNull();
+
+  await key(document.body, 'ArrowRight'); expect(open()).toBe('principles');
+  await act(async () => row('Chat').click()); await settle();
+  expect(open(), 'Chat on Principles left Principles in place').toBeNull();
+  expect(location.pathname, 'Chat on Principles did not open a new chat').toBe('/chat/new');
+});
+
+it('does not walk to Principles on → while a field has the key', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  /* Now holds no field of its own (capture is a door), so the test brings
+     one: the guard reads the key's target, whoever rendered it. */
+  const box = document.createElement('input');
+  box.type = 'text';
+  world.container.append(box);
+  box.focus();
+  await key(box, 'ArrowRight');
+  expect(open(), '→ inside a field walked to Principles').toBeNull();
+  box.remove();
+  /* The same key off the field still walks, so the case above is the guard
+     and not a dead listener. */
+  await key(document.body, 'ArrowRight');
+  expect(open(), '→ on Now stopped walking at all').toBe('principles');
+  await key(document.body, 'ArrowLeft');
+  /* And a chord is not the walk either — ⌥→ is a word jump everywhere. */
+  await act(async () => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true, cancelable: true })); });
+  await settle();
+  expect(open(), '⌥→ walked to Principles').toBeNull();
+});
+
+/* CLOSE IS THE MAKING PAGE'S WAY HOME (2026-10-15): "have Close button and
+   then clicking close brings the user back to the main screen." Not the lit
+   row any more — a new note lights nothing; the lit row is a LIST's. */
+const close = () => world.container.querySelector<HTMLButtonElement>('.waka-dock button.waka-dock-item--close');
+
+it('makes a new note from Inspiration, and its Close goes home with the draft kept', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await act(async () => row('Inspiration').click()); await settle();
+  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text');
+  expect(field, 'Inspiration did not open a new note').toBeTruthy();
+  expect(new URLSearchParams(location.search).get('compose')).toBe('1');
+  expect(lit(), 'a new note lights a bar row, as if it were the archive').toBeNull();
+  expect(close()?.textContent?.trim(), 'a new note offers no Close in its bar').toBe('Close');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'half a thought');
+    field!.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await settle();
+
+  await act(async () => close()!.click()); await settle();
+  expect(new URLSearchParams(location.search).get('compose'), 'Close did not leave the note').toBeNull();
+  expect(open(), 'Close on a note went somewhere other than home').toBeNull();
+  expect(world.container.querySelector('textarea.jar-composer-text'), 'the note is still up').toBeNull();
+  expect(lit(), 'home lights a bar row').toBeNull();
+  expect(close(), 'home still offers a Close').toBeNull();
+  expect(barShape(world.container), 'home is not back to the two words').toEqual(['Inspiration', 'Chat']);
+
+  await act(async () => row('Inspiration').click()); await settle();
+  expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value,
+    'going home threw the draft away').toBe('half a thought');
+});
+
+it('reaches the archive only from a new note\'s bar, and the chats only from a chat\'s bar', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  /* ON NOW THE BAR IS THE TWO WORDS AND NOTHING ELSE — no list door, no
+     Close, no rule. */
+  expect(barShape(world.container), 'Now\'s bar is not exactly Inspiration and Chat').toEqual(['Inspiration', 'Chat']);
+
+  await act(async () => row('Inspiration').click()); await settle();
+  /* NOTHING IN THE CORNER (2026-10-15): the archive's door is the first
+     word of the note's own bar, not a word beside its date. */
+  expect(world.container.querySelector('.jar-note-see-all, .jar-note-lead'), 'the archive door is back in the note\'s corner').toBeNull();
+  expect(pressesInTopRow(world.container), 'something pressable stands beside a new note\'s date').toEqual([]);
+  const seeAll = row('All inspirations');
+  expect(seeAll, 'a new note offers no way to the archive').toBeTruthy();
+  await act(async () => seeAll!.click()); await settle();
+  expect(open(), 'All inspirations did not open the archive').toBe('saves');
+  /* ON A LIST THE BAR IS ↩ │ CLOSE (2026-10-15), and Close goes home. */
+  expect(barShape(world.container), 'the archive\'s bar is not ↩ │ Close').toEqual(['↩', '│', 'Close']);
+  await act(async () => close()!.click()); await settle();
+  expect(open(), 'Close on the archive did not go home').toBeNull();
+
+  await act(async () => row('Chat').click()); await settle();
+  expect(location.pathname, 'Chat did not open a NEW chat').toBe('/chat/new');
+  expect(world.container.querySelector('header.jar-chat-top, .jar-chat-see-all'), 'the All chats header is back above the chat').toBeNull();
+  const allChats = row('All chats');
+  expect(allChats, 'a new chat offers no way to the chats').toBeTruthy();
+  await act(async () => allChats!.click()); await settle();
+  expect(open(), 'All chats did not open the chats list').toBe('conversations');
+  expect(barShape(world.container), 'the chats list\'s bar is not ↩ │ Close').toEqual(['↩', '│', 'Close']);
+  await act(async () => close()!.click()); await settle();
+  expect(open(), 'Close on the chats list did not go home').toBeNull();
+  expect(location.pathname, 'Close on the chats list left a chat up').not.toContain('/chat/');
+});
+
+/**
+ * ═══ ON A LIST, THE BAR IS ↩ │ CLOSE (2026-10-15) ═════════════════════
+ *
+ * Founder: "from all inspirations, the bottom bar should just be a return
+ * icon | close." The same for All chats — one ruling for the class. ↩ steps
+ * back where the list was opened from (the new note or chat), or from a
+ * saved note open in the archive back to the list; Close goes home. The
+ * Inspiration and Chat words are not in the bar on a list, and nothing is
+ * lit there any more.
+ */
+const returnRow = () => world.container.querySelector<HTMLButtonElement>('.waka-dock button.waka-dock-item[aria-label="Back"]');
+
+it('gives both lists the bar ↩ │ Close, with no Inspiration or Chat in it', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  for (const [door, list, entry] of [['Inspiration', 'saves', 'All inspirations'], ['Chat', 'conversations', 'All chats']] as const) {
+    await act(async () => row(door).click()); await settle();
+    await act(async () => row(entry)!.click()); await settle();
+    expect(open(), `${entry} did not open its list`).toBe(list);
+    expect(barShape(world.container), `the ${list} list's bar is not ↩ │ Close`).toEqual(['↩', '│', 'Close']);
+    expect(world.container.querySelectorAll('nav.waka-dock span.waka-dock-sep[aria-hidden="true"]'),
+      `the ${list} list's one rule is not hidden from a screen reader`).toHaveLength(1);
+    /* ↩ IS DRAWN, NOT WRITTEN, and named for a screen reader. */
+    const back = returnRow();
+    expect(back, `the ${list} list has no return row`).toBeTruthy();
+    expect(back!.textContent?.trim(), 'the return row prints a word').toBe('');
+    expect(back!.querySelector('svg[aria-hidden="true"]'), 'the return row is not drawn as an icon').toBeTruthy();
+    expect(back!.closest('span.waka-dock-slot'), 'the return row is not the bar\'s slot').toBeTruthy();
+    expect(lit(), `the ${list} list lights a bar row`).toBeNull();
+    await act(async () => close()!.click()); await settle();
+    expect(open(), `Close on the ${list} list did not go home`).toBeNull();
+    expect(barShape(world.container), 'home is not back to the two words').toEqual(['Inspiration', 'Chat']);
+  }
+});
+
+it('steps back from the archive to the new note it was opened from, draft and all, on ↩', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await act(async () => row('Inspiration').click()); await settle();
+  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text');
+  expect(field, 'Inspiration did not open a new note').toBeTruthy();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'half a thought');
+    field!.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await settle();
+  await act(async () => row('All inspirations')!.click()); await settle();
+  expect(open(), 'All inspirations did not open the archive').toBe('saves');
+
+  await act(async () => returnRow()!.click()); await settle();
+  expect(open(), '↩ left the archive up').toBeNull();
+  expect(new URLSearchParams(location.search).get('compose'), '↩ did not step back to the new note').toBe('1');
+  expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value,
+    '↩ came back to the note without its draft').toBe('half a thought');
+  expect(barShape(world.container).slice(0, 2), 'the note\'s bar did not come back').toEqual(['All inspirations', '│']);
+});
+
+it('steps back from the chats list to the chat it was opened from on ↩', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await act(async () => row('Chat').click()); await settle();
+  expect(location.pathname).toBe('/chat/new');
+  await act(async () => row('All chats')!.click()); await settle();
+  expect(open(), 'All chats did not open the chats list').toBe('conversations');
+  await act(async () => returnRow()!.click()); await settle();
+  expect(open(), '↩ left the chats list up').toBeNull();
+  expect(location.pathname, '↩ did not step back to the chat').toBe('/chat/new');
+  /* All chats │ its tools │ Close — the ＋ (and the mic, where the browser
+     can listen) lent to the panel since 2026-10-16; see `chat-bar.test.tsx`. */
+  expect(barShape(world.container), 'the chat\'s bar did not come back').toEqual(['All chats', '│', 'Add photo or file', '│', 'Close']);
+});
+
+it('goes home on ↩ from a list reached some other way, since there is nothing to step back to', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await navigate('/?open=saves');
+  expect(open(), 'the archive did not open from its address').toBe('saves');
+  expect(barShape(world.container), 'the archive\'s bar is not ↩ │ Close').toEqual(['↩', '│', 'Close']);
+  await act(async () => returnRow()!.click()); await settle();
+  expect(open(), '↩ left the archive up').toBeNull();
+  expect(new URLSearchParams(location.search).get('compose'), '↩ invented a note to step back to').toBeNull();
+  expect(location.pathname, '↩ invented a chat to step back to').toBe('/');
+});
+
+it('steps back from a saved note open in the archive to the archive\'s list on ↩, the note\'s tools beside it', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await chooseFromMenu(world.container, 'Inspirations'); await settle();
+  expect(open()).toBe('saves');
+  const saved = world.container.querySelector<HTMLButtonElement>('.waka-list-row');
+  expect(saved, 'the archive shows no saved row to open').toBeTruthy();
+  await act(async () => saved!.click()); await settle();
+  expect(world.container.querySelector('.jar-note-top'), 'the saved note did not open as a note page').toBeTruthy();
+
+  /* ↩ │ THE NOTE'S TOOLS │ CLOSE. The tools ride in the return row's slot. */
+  const shape = barShape(world.container);
+  const seps = shape.flatMap((part, at) => (part === '│' ? [at] : []));
+  expect(seps, 'a saved note\'s bar is not three groups with a rule between each').toHaveLength(2);
+  expect(shape.slice(0, seps[0]), 'the first group is not ↩ alone').toEqual(['↩']);
+  expect(shape.slice(seps[1]! + 1), 'the last group is not Close alone').toEqual(['Close']);
+  const slot = returnRow()!.closest('span.waka-dock-slot');
+  expect(slot?.querySelector('#waka-note-tools.waka-dock-making[role="group"]'), 'the note\'s tools are not in the return row\'s slot').toBeTruthy();
+  expect(shape, 'Inspiration is in the bar on a saved note').not.toContain('Inspiration');
+  expect(shape, 'Chat is in the bar on a saved note').not.toContain('Chat');
+
+  await act(async () => returnRow()!.click()); await settle();
+  expect(world.container.querySelector('.jar-note-top'), '↩ left the saved note up').toBeNull();
+  expect(open(), '↩ from a saved note left the archive').toBe('saves');
+  expect(world.container.querySelector('.waka-list-row'), '↩ did not come back to the archive\'s list').toBeTruthy();
+  expect(barShape(world.container), 'the archive\'s bar is not ↩ │ Close again').toEqual(['↩', '│', 'Close']);
+});
+
+it('gives the saved note in the archive no All inspirations, since it is already there', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await chooseFromMenu(world.container, 'Inspirations'); await settle();
+  expect(open()).toBe('saves');
+  const saved = world.container.querySelector<HTMLButtonElement>('.waka-list-row');
+  expect(saved, 'the archive shows no saved row to open').toBeTruthy();
+  await act(async () => saved!.click()); await settle();
+  expect(world.container.querySelector('.jar-note-top'), 'the saved note did not open as a note page').toBeTruthy();
+  expect(pressesInTopRow(world.container), 'something pressable stands beside a saved note\'s date').toEqual([]);
+  expect(world.container.querySelector('.jar-note-see-all'), 'a saved note grew a door to the archive it is in').toBeNull();
+});
+
+/**
+ * ═══ A NEW NOTE'S BAR IS THE NOTE'S OWN (2026-10-15) ═══════════════════
+ *
+ * Founder: "the first item is always either ... all inspiration or all chat
+ * And then after that, let's have | And then for inspirations it would be
+ * the dictate button, the photo button, the save button and after that have
+ * another | and say close." Read in the order a person meets it, with the
+ * rules as `│`: the archive's door, the note's tools ending in Save, Close —
+ * and Chat stepped out, because a door to the other room on a making page
+ * would be a second way out that is not Close.
+ */
+it('gives a new note the bar All inspirations │ its tools │ Close, with no Chat in it', async () => {
+  /* THE MIC IS OFFERED ONLY WHERE THE BROWSER CAN LISTEN, so the probe is
+     given a yes here — the same stand-in `one-dock-two-notes` uses — or the
+     row would honestly be one tool short and the order unproven. */
+  class StubRecognition { start(): void {} stop(): void {} abort(): void {} }
+  (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition = StubRecognition;
+  try {
+    world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+    await act(async () => row('Inspiration').click()); await settle();
+    const shape = barShape(world.container);
+    const seps = shape.flatMap((part, at) => (part === '│' ? [at] : []));
+    expect(seps, 'a new note\'s bar is not three groups with a rule between each').toHaveLength(2);
+    expect(world.container.querySelectorAll('nav.waka-dock span.waka-dock-sep[aria-hidden="true"]'),
+      'the rules are not hidden from a screen reader').toHaveLength(2);
+    expect(shape.slice(0, seps[0]), 'the first group is not the archive\'s door alone').toEqual(['All inspirations']);
+    expect(shape.slice(seps[1]! + 1), 'the last group is not Close alone').toEqual(['Close']);
+    const tools = shape.slice(seps[0]! + 1, seps[1]);
+    /* THE PHOTO BECAME ＋ (2026-10-16): "All inspirations │ dictate · ＋ ·
+       save │ Close". Its two rows are not in the bar until it is pressed —
+       `note-add-menu.test.tsx` opens it. */
+    expect(tools, 'the note\'s tools are not the mic, the ＋ and Save, in that order').toEqual(['Speak', 'Add photo or file', 'Save inspiration']);
+    /* The tools are the making-slot's, and Save is the disk-drawn keep. */
+    const making = world.container.querySelector('nav.waka-dock .waka-dock-making');
+    expect(making?.querySelector('button.waka-dock-tool--keep [data-home-action-icon="keep"]'), 'Save lost its keep icon').toBeTruthy();
+    /* A disk, not a download ("instead of download have a save icon"): the
+       disk's label is the one closed shape the tray-and-arrow never had. */
+    expect(making?.querySelector('button.waka-dock-tool--keep [data-home-action-icon="keep"] rect'), 'Save is drawn as a download again').toBeTruthy();
+    expect(making?.querySelectorAll('button.waka-dock-tool').length, 'a tool in the middle is not a dock tool').toBe(tools.length);
+    expect(making?.querySelector('button.waka-dock-tool [data-home-action-icon="record"]'), 'the mic is not drawn as one').toBeTruthy();
+    expect(making?.querySelector('button.waka-dock-tool[aria-haspopup="menu"] [data-home-action-icon="plus"]'), 'the ＋ is not drawn as one, or opens no menu').toBeTruthy();
+    expect(making?.querySelector('[data-home-action-icon="photo"]'), 'the photo glyph is back in the bar').toBeNull();
+    expect(shape, 'Chat is still in the bar while a note is being written').not.toContain('Chat');
+    expect(shape, 'the bar still says Inspiration on a new note').not.toContain('Inspiration');
+  } finally {
+    delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+  }
 });

@@ -36,7 +36,9 @@ import { NotePage } from './NotePage';
 import { AuthoredSaveNotice } from './AuthoredSaveNotice';
 import {inspirationWithPendingLink} from '../lib/inspiration-input';
 import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
+import { fileSizeWords } from '../lib/api/file-accept';
 import { formatMessage, t, type SupportedLocale } from '../lib/locales';
+import { attachmentLabel } from '../lib/attachment-label';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { useAuthoredSave } from '../lib/use-authored-save';
 import type { useAudioRecording } from '../lib/use-audio-recording';
@@ -79,10 +81,13 @@ import type { useAudioRecording } from '../lib/use-audio-recording';
  *   play or pause, the same shape as every other tile.
  */
 function MediaTile({
-  item, disabled, recording, uploading, onRemove, onRetry,
+  item, name, disabled, recording, uploading, onRemove, onRetry,
   removeLabel, retryLabel, playLabel, pauseLabel,
 }: {
   item: InspirationDraftMedia;
+  /** What to call it: its own name, or "Photo" / "File" / "Recording" when
+      it has none (`attachmentLabel`) — said here, never stored on `item`. */
+  name: string;
   disabled: boolean;
   /** A running recorder pauses playback: two audio streams at once is noise. */
   recording: boolean;
@@ -138,9 +143,9 @@ function MediaTile({
        it is — but on the one occasion you DO want it, hovering is where
        the reference puts it. Nothing is shown until you ask. */
     <li className={`jar-tile${wrong ? ' jar-tile--wrong' : ''}${uploading ? ' jar-tile--busy' : ''}`}
-      title={item.name}>
+      title={name}>
       {item.type === 'image' && url && !failedPreview ? (
-        <img src={url} alt={item.name} onError={() => setFailedPreview(true)} />
+        <img src={url} alt={name} onError={() => setFailedPreview(true)} />
       ) : item.type === 'audio' && url ? (
         <>
           {/* THE TILE IS THE PLAYER. No `controls`, so the browser draws
@@ -163,15 +168,28 @@ function MediaTile({
             {clock ? <span className="jar-tile-clock">{clock}</span> : null}
           </button>
         </>
+      ) : item.type === 'file' ? (
+        /* ═══ A FILE IS ITS NAME AND ITS SIZE (2026-10-16) ════════════════
+           Founder: a file shows "as a small tile (icon + name + size) where
+           image thumbnails show". A PDF has no picture to stand in for it,
+           so the tile says what it is — the page glyph, the name, and how
+           big — which is the one place the size note above is overruled:
+           for a photo the size was storage trivia; for a document it is
+           the difference between a letter and a report. */
+        <span className="jar-tile-face jar-tile-file">
+          <HomeActionIcon kind="file" />
+          <span className="jar-tile-file-name">{name}</span>
+          {item.blob?.size ? <span className="jar-tile-clock">{fileSizeWords(item.blob.size)}</span> : null}
+        </span>
       ) : item.type === 'link' && item.url ? (
         <a className="jar-tile-face jar-tile-link" href={item.url} target="_blank" rel="noreferrer">
-          {item.name}
+          {name}
         </a>
       ) : (
         /* A FILE THIS BROWSER CANNOT DRAW — a HEIC on a browser with no
            decoder for it, most often. It still uploads and still saves, so
            the tile says what it is rather than disappearing. */
-        <span className="jar-tile-face jar-tile-name">{item.name}</span>
+        <span className="jar-tile-face jar-tile-name">{name}</span>
       )}
 
       {retryable ? (
@@ -307,7 +325,7 @@ export function InspirationComposer(props: {
      dragging out of the WINDOW gives a null `relatedTarget`, which
      `contains` reports as outside, so that case still clears. */
   const overheadOff = () => setOverhead(false);
-  return <DialogSurface className="jar-seek jar-inspiration-composer" aria-label={say('worldCaptureInspiration')} onClose={props.onClose} data-jar-chrome="1"
+  return <DialogSurface className="jar-seek jar-inspiration-composer" motion="modal" aria-label={say('worldCaptureInspiration')} onClose={props.onClose} data-jar-chrome="1"
     data-dropping={overhead ? '1' : undefined}
     onDragOver={event => {
       if (!event.dataTransfer.types.includes('Files')) return;
@@ -396,17 +414,18 @@ export function InspirationComposer(props: {
         it the group name above would be announced over three loose items
         rather than over a set of three. */}
     {props.media.length ? <ul className="jar-shelf" role="list"
-      aria-label={say('worldComposerAttachments')}>{props.media.map(item => (
-      <MediaTile key={item.id} item={item} disabled={blocked}
+      aria-label={say('worldComposerAttachments')}>{props.media.map(item => {
+      const name = attachmentLabel(props.locale, item.type, item.name);
+      return <MediaTile key={item.id} item={item} name={name} disabled={blocked}
         recording={props.recording.phase !== 'idle'}
         uploading={props.uploadingId === item.id}
-        removeLabel={formatMessage(props.locale, 'worldComposerRemoveFile', { name: item.name })}
-        retryLabel={formatMessage(props.locale, 'worldComposerRetryFile', { name: item.name })}
-        playLabel={formatMessage(props.locale, 'worldComposerPlayFile', { name: item.name })}
-        pauseLabel={formatMessage(props.locale, 'worldComposerPauseFile', { name: item.name })}
+        removeLabel={formatMessage(props.locale, 'worldComposerRemoveFile', { name })}
+        retryLabel={formatMessage(props.locale, 'worldComposerRetryFile', { name })}
+        playLabel={formatMessage(props.locale, 'worldComposerPlayFile', { name })}
+        pauseLabel={formatMessage(props.locale, 'worldComposerPauseFile', { name })}
         onRemove={() => props.onRemove(item.id)}
-        onRetry={() => props.onRetryFile(item.id)} />
-    ))}</ul> : null}
+        onRetry={() => props.onRetryFile(item.id)} />;
+    })}</ul> : null}
     {/* ═══ AND THE TWO SENTENCES UNDER THE ROWS ARE IN THE BAR ══════════
         Founder: "states should show and disappear in the bottom bar only."
 

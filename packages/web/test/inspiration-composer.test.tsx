@@ -107,9 +107,25 @@ it('opens straight into the words, under the moment and the way back',async()=>{
      AND ASKED ABOUT THE SLOT RATHER THAN THE SPELLING. It used to read
      `.jar-note-back`, a class that no longer exists in `src`, so the
      assertion had become a sentence about nothing; `pressesInTopRow` sees a
-     way back under any name. See that helper for the whole argument. */
-  expect(pressesInTopRow(host), 'something pressable appeared beside the date').toEqual([]);
-  expect(host.textContent).not.toContain('All inspirations');
+     way back under any name. See that helper for the whole argument.
+
+     ═══ AND THEN ONE DOOR, IN WORDS, BECAUSE THE BAR STOPPED NAMING IT ═══
+     Founder, 2026-10-15: "at the bottom bar just keep inspiration and chat
+     and clicking on it leads to new inspiration and new chat, and user can
+     go to inspiration list and chat list ONLY from that new page." The bar's
+     word now makes a new note, so this page is the archive's only way in.
+     So the row held EXACTLY that one press — "All inspirations", in words.
+
+     ═══ AND THEN NOTHING, BECAUSE NOTHING SITS IN A CORNER ════════════════
+     Founder, the same day: "never put something on any corners. So at the
+     bottom, write X inspirations ... and then have Close button." The
+     archive's door is the first word of the note's own bar now, and Close
+     its last (`home-navigation.test.tsx` presses both). So this row is back
+     to holding nothing at all, and the door, the chevron, or anything else
+     arriving beside the date fails. */
+  expect(pressesInTopRow(host), 'something is pressable beside the date on a new note').toEqual([]);
+  expect(host.querySelector('.jar-note-see-all, .jar-note-lead'), 'the archive door came back into the corner').toBeNull();
+  expect(props.onClose).not.toHaveBeenCalled();
   /* The one fact a blank page can state. Not asserted to an exact string —
      it is the clock — but it must be a real stamp rather than an empty node,
      which is what a missing `momentStamp` would leave behind. */
@@ -163,6 +179,23 @@ it('keeps an unsupported browser preview saveable and gives the failed file its 
      `validationError`, so `whyNotKept` returns null for it. See
      `keep-ready.test.ts`. A preview failure is this page's business; whether
      it blocks a save is not. */
+});
+/* AN UNNAMED UPLOAD IS CALLED WHAT IT IS, ON SCREEN ONLY. The draft keeps
+   no name (so none is sent); the tile says "Photo", "File" or "Recording" —
+   and a recording is never called a photo. */
+it('labels unnamed photos, files and recordings by kind, in the reader\'s language', async () => {
+  props.media = [
+    { id: 'p', type: 'image', blob: new Blob(['p'], { type: 'image/png' }) },
+    { id: 'f', type: 'file', blob: new Blob(['f'], { type: 'application/pdf' }) },
+    { id: 'a', type: 'audio', blob: new Blob(['a'], { type: 'audio/webm' }) },
+  ];
+  await mount();
+  expect([...host.querySelectorAll('.jar-tile')].map(tile => tile.getAttribute('title'))).toEqual(['Photo', 'File', 'Recording']);
+  expect(host.querySelector('[aria-label="Remove Recording"]'), 'the recording\'s × does not say what it removes').toBeTruthy();
+  expect(host.querySelector('[aria-label="Play Recording"]')).toBeTruthy();
+  expect(props.media.every(item => item.name === undefined), 'a label was written into the draft').toBe(true);
+  props.locale = 'ko-KR'; await mount();
+  expect([...host.querySelectorAll('.jar-tile')].map(tile => tile.getAttribute('title'))).toEqual(['사진', '파일', '녹음']);
 });
 /* ═══ WHICH FILE IS IN FLIGHT, SHOWN RATHER THAN COUNTED ═══════════════
    "Uploading file 1 of 1… Keep this window open." is gone. A person cannot
@@ -251,6 +284,8 @@ it('refuses unsafe link schemes without submitting or discarding the draft',asyn
 it('renders exactly one of each corner, never two', async () => {
   props.text = ''; props.media = []; await mount();
   const count = (selector: string) => host.querySelectorAll(selector).length;
+  /* Nothing in the corner (2026-10-15: "never put something on any
+     corners") — not one door, and so certainly not two. */
   expect(pressesInTopRow(host), 'the chevron came back, or something else did').toEqual([]);
   expect(count('.jar-note-when'), 'the moment is doubled').toBe(1);
   /* AND THE ATTACH CORNER IS NOT HERE AT ALL ANY MORE. Record and photo

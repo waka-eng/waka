@@ -51,8 +51,11 @@ export function createAttachmentTranscriptRoutes(getDatabase: typeof getDb) {
     const input = editSchema.safeParse(await c.req.json().catch(() => null));
     if (!input.success) return c.json({ error: 'Enter a valid transcript correction' }, 400);
     const saved = await getDatabase().transaction(async tx => {
+      // Recordings are inspiration attachments only; a chat attachment is never audio.
+      const inspirationId = allowed.row.inspirationId;
+      if (!inspirationId) return null;
       const [parent] = await tx.select({ id: inspirations.id }).from(inspirations)
-        .where(and(eq(inspirations.id, allowed.row.inspirationId), eq(inspirations.profileId, allowed.row.profileId))).for('update');
+        .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, allowed.row.profileId))).for('update');
       if (!parent) return null;
       const [current] = await tx.select().from(attachments).where(and(eq(attachments.id, allowed.row.id), eq(attachments.profileId, allowed.row.profileId))).for('update');
       if (!current || current.type !== 'audio') return null;
@@ -61,7 +64,7 @@ export function createAttachmentTranscriptRoutes(getDatabase: typeof getDb) {
       const [next] = await tx.update(attachments).set({ transcriptCorrection: input.data.correction,
         transcriptRevision: current.transcriptRevision + 1, transcriptCorrectedAt: input.data.correction === null ? null : new Date(), updatedAt: new Date() })
         .where(eq(attachments.id, current.id)).returning();
-      await requestSignalDerivation({ profileId: current.profileId, inspirationId: current.inspirationId, reason: 'edited', changedSource: 'inspiration' }, tx);
+      await requestSignalDerivation({ profileId: current.profileId, inspirationId, reason: 'edited', changedSource: 'inspiration' }, tx);
       return next!;
     });
     if (!saved) return c.json({ error: 'Recording not found' }, 404);

@@ -1,21 +1,35 @@
 import {Hono} from 'hono';
 import {z} from 'zod';
-import {and,asc,desc,eq,gte,isNull,sql} from 'drizzle-orm';
-import {conversationMessages,conversationPerspectiveValues,conversationReplyRequests,conversations,inspirationConversationOrigins,inspirations,principles,profiles} from '../db/index.js';
+import {and,asc,desc,eq,gte,isNotNull,isNull,sql} from 'drizzle-orm';
+import {attachments,conversationMessages,conversationPerspectiveValues,conversationReplyRequests,conversations,inspirationConversationOrigins,inspirations,principles,profiles} from '../db/index.js';
 import {getDb} from '../lib/db.js';
 import {requireAuth,humanSessionsOnly,type AuthEnv} from '../lib/middleware.js';
 import {resolveTargetProfile} from './inspirations-tenancy.js';
 import {profileQuerySchema} from './inspirations-validation.js';
 import {CONVERSATION_LIMITS,accountAgent,conversationCapabilities,conversationMemory,conversationRepliesEnabled,currentConversationReferences,readPerspectiveContext,type ConversationSource} from '../lib/conversation-context.js';
-import {conversationSearchQuery} from '../lib/conversation-material.js';
 import {CONVERSATION_STARTERS,conversationPreview} from '../lib/conversation-preview.js';
-import {ConversationReplyError,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
+import {ConversationReplyError,conversationReplyWindow,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
 import {wakeCommittedBackgroundJobs} from '../lib/queue.js';
 import {personalPrincipleReadable} from '../lib/personal-output.js';
 import {PRINCIPLE_MIN_SIGNALS} from '../lib/principle-generation.js';
+import {ConversationAttachmentError,MAX_MESSAGE_ATTACHMENTS,conversationAttachmentKeys,linkMessageAttachments} from '../lib/conversation-attachments.js';
+import {sweepAttachmentObjects,type DeleteAttachmentObjects} from '../lib/attachment-sweep.js';
 
 const uuid=z.string().uuid().transform(value=>value.toLowerCase());
-const messageInput=z.object({id:uuid,content:z.string().min(1).max(CONVERSATION_LIMITS.inputCharacters).refine(value=>value.trim().length>0),revision:z.number().int().min(0).max(CONVERSATION_LIMITS.messages),requestReply:z.boolean().optional(),correctsMessageId:uuid.optional()}).strict();
+/* PHOTOS AND FILES GO WITH THE MESSAGE (0076). `attachmentIds` name uploads
+   already finalized onto this message id (`POST /api/attachments` with
+   `{conversationId, messageId}`); the send links them in its own transaction.
+   Words are optional only when something is attached — the CHECK cannot see
+   the attachments table, so this refine and the link below are the rule. */
+const attachmentIdsInput=z.array(uuid).min(1).max(MAX_MESSAGE_ATTACHMENTS).refine(ids=>new Set(ids).size===ids.length,'An attachment is included twice');
+const messageFields=z.object({id:uuid,content:z.string().max(CONVERSATION_LIMITS.inputCharacters),revision:z.number().int().min(0).max(CONVERSATION_LIMITS.messages),requestReply:z.boolean().optional(),correctsMessageId:uuid.optional(),attachmentIds:attachmentIdsInput.optional()}).strict();
+const wordsOrAttachments=(value:{content:string;attachmentIds?:string[]})=>value.content.trim().length>0||Boolean(value.attachmentIds?.length);
+const messageInput=messageFields.refine(wordsOrAttachments);
+const firstMessageInput=messageFields.omit({revision:true,correctsMessageId:true}).refine(wordsOrAttachments);
+/** A photo-only message stores exactly '' — never whitespace the CHECK would refuse. */
+const storedContent=(content:string)=>content.trim().length>0?content:'';
+const sameAttachments=(existing:ReadonlyArray<{id:string}>,requested:string[]|undefined)=>
+  existing.map(row=>row.id).sort().join()===[...(requested??[])].sort().join();
 type ConversationEnv=AuthEnv&{Variables:{conversationProfileId:string}};
 class ConversationError extends Error{constructor(message:string,readonly status:400|404|409|410|429){super(message);}}
 type MessageWindow={from?:number;limit?:number};
@@ -63,7 +77,7 @@ async function readConversation(db:Reader,profileId:string,id:string,window?:Mes
   const saved=await db.select({messageId:inspirationConversationOrigins.messageId,inspirationId:inspirationConversationOrigins.inspirationId}).from(inspirationConversationOrigins)
     .where(and(eq(inspirationConversationOrigins.profileId,profileId),eq(inspirationConversationOrigins.conversationId,id)));
   const topic=window?await db.select({role:conversationMessages.role,content:conversationMessages.content}).from(conversationMessages)
-    .where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id),eq(conversationMessages.role,'user')))
+    .where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id),eq(conversationMessages.role,'user'),sql`length(trim(${conversationMessages.content}))>0`))
     .orderBy(sql`CASE WHEN trim(${conversationMessages.content}) IN (${sql.join(CONVERSATION_STARTERS.map(value=>sql`${value}`),sql`, `)}) THEN 1 ELSE 0 END`,asc(conversationMessages.position)).limit(1):messages;
   /* Whose memory it reads, worked out once and handed to the projection, and
      reported as it is now: an agent since removed reads as 'mine'. */
@@ -86,13 +100,14 @@ async function requireOwnedInspiration(db:Reader,profileId:string,inspirationId:
   if(!source)throw new ConversationError('This inspiration is not available.',404);
 }
 
-export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMiddleware?:typeof requireAuth}={}){
-  const routes=new Hono<ConversationEnv>(),database=deps.getDatabase??getDb;
+export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMiddleware?:typeof requireAuth;deleteAttachmentObjects?:DeleteAttachmentObjects}={}){
+  const routes=new Hono<ConversationEnv>(),database=deps.getDatabase??getDb,sweep=deps.deleteAttachmentObjects??sweepAttachmentObjects;
   routes.use('*',async(c,next)=>{c.header('Cache-Control','private, no-store');await next();});
   routes.use('*',deps.authMiddleware??requireAuth,humanSessionsOnly);
   routes.onError((error,c)=>{
     if(error instanceof ConversationError)return c.json({error:error.message},error.status);
     if(error instanceof ConversationReplyError)return c.json({error:error.message},error.status);
+    if(error instanceof ConversationAttachmentError)return c.json(error.body(),error.status);
     const code=(error as {code?:string;cause?:{code?:string}}).cause?.code??(error as {code?:string}).code;
     if(['23505','40001','40P01','55P03'].includes(code??''))return c.json({error:'The conversation changed. Check your saved messages before retrying.'},409);
     console.error('[conversations]',{code:typeof code==='string'&&/^[0-9A-Z]{5}$/.test(code)?code:'unknown'});
@@ -107,15 +122,15 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     const profileId=c.get('conversationProfileId');
     const rows=await database().select({id:conversations.id,profileId:conversations.profileId,updatedAt:conversations.updatedAt,revision:conversations.revision,
       preview:sql<string>`coalesce((SELECT left(trim(m.content),120) FROM conversation_messages m
-        WHERE m.profile_id=${profileId}::uuid AND m.conversation_id=conversations.id AND m.role='user'
+        WHERE m.profile_id=${profileId}::uuid AND m.conversation_id=conversations.id AND m.role='user' AND length(trim(m.content))>0
         ORDER BY CASE WHEN trim(m.content) IN (${sql.join(CONVERSATION_STARTERS.map(value=>sql`${value}`),sql`, `)}) THEN 1 ELSE 0 END,m.position LIMIT 1),'')`})
       .from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt))).orderBy(desc(conversations.updatedAt),asc(conversations.id)).limit(CONVERSATION_LIMITS.conversations);
     return c.json({profileId,conversations:rows,...conversationCapabilities()});
   });
   routes.post('/',async c=>{
     const window=messageWindow(c.req.query('from'),c.req.query('limit'));
-    const input=z.object({id:uuid,principleId:uuid.optional(),inspirationId:uuid.optional(),perspective:z.enum(conversationPerspectiveValues).optional(),agentId:uuid.optional(),firstMessage:messageInput.omit({revision:true,correctsMessageId:true}).optional()}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
-    const profileId=c.get('conversationProfileId');
+    const input=z.object({id:uuid,principleId:uuid.optional(),inspirationId:uuid.optional(),perspective:z.enum(conversationPerspectiveValues).optional(),agentId:uuid.optional(),firstMessage:firstMessageInput.optional()}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
+    const profileId=c.get('conversationProfileId');let dropped:string[]=[];
     const row=await database().transaction(async tx=>{
       await tx.select({id:profiles.id}).from(profiles).where(eq(profiles.id,profileId)).for('update');
       const [existing]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,input.data.id)));
@@ -154,7 +169,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
           // switch until the conversation exists — and a 409 here is
           // recoverable by re-reading, whereas storing a created-with value
           // purely to answer replays would add a column nothing else reads.
-          if(current.initialPrincipleId!==null&&current.initialPrincipleId!==(input.data.principleId??null)||current.initialInspirationId!==null&&current.initialInspirationId!==(input.data.inspirationId??null)||!first||first.role!=='user'||first.id!==input.data.firstMessage.id||first.content!==input.data.firstMessage.content)
+          if(current.initialPrincipleId!==null&&current.initialPrincipleId!==(input.data.principleId??null)||current.initialInspirationId!==null&&current.initialInspirationId!==(input.data.inspirationId??null)||!first||first.role!=='user'||first.id!==input.data.firstMessage.id||first.content!==storedContent(input.data.firstMessage.content)||!sameAttachments(first.attachments,input.data.firstMessage.attachmentIds))
             throw new ConversationError('This conversation already began with different words.',409);
         }
         return windowedConversation(current,window,input.data.firstMessage?.id);
@@ -180,11 +195,13 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       }
       await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null,initialInspirationId:input.data.inspirationId??null,perspective,agentProfileId,revision:first?1:0});
       if(first){
-        await tx.insert(conversationMessages).values({id:first.id,profileId,conversationId:input.data.id,position:1,role:'user',content:first.content});
+        await tx.insert(conversationMessages).values({id:first.id,profileId,conversationId:input.data.id,position:1,role:'user',content:storedContent(first.content)});
+        dropped=await linkMessageAttachments(tx,{profileId,conversationId:input.data.id,messageId:first.id,attachmentIds:first.attachmentIds??[]});
         if(first.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,input.data.id,{messageId:first.id,afterRequestId:null});
       }
       return windowedConversation(await readConversation(tx,profileId,input.data.id),window,input.data.firstMessage?.id);
     });
+    await sweep(dropped);
     if(input.data.firstMessage?.requestReply&&conversationRepliesEnabled())await wakeCommittedBackgroundJobs();
     return c.json({conversation:row,...conversationCapabilities()});
   });
@@ -270,24 +287,27 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       });
       return {profileId,principles:bound('principle',8000),reading:bound('top_of_mind_entry',4000),inspirations:bound('inspiration',4000),...conversationCapabilities()};
     }
-    return readPerspectiveContext(tx,await conversationMemory(tx,profileId,row),conversationSearchQuery(row.messages),row.initialPrincipleId,row.initialInspirationId);
+    // The words the reply would search with — its own selection of the
+    // transcript, not every message this read happens to hold.
+    return readPerspectiveContext(tx,await conversationMemory(tx,profileId,row),conversationReplyWindow(row.messages).searchQuery,row.initialPrincipleId,row.initialInspirationId);
   },{isolationLevel:'repeatable read',accessMode:'read only'})));
   routes.post('/:id/messages',async c=>{
     const window=messageWindow(c.req.query('from'),c.req.query('limit'));
-    const input=messageInput.safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Write a message of up to 4,000 characters.'},400);
-    const profileId=c.get('conversationProfileId'),id=c.req.param('id');
+    const input=messageInput.safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Write a message of up to 4,000 characters, or add a photo or file.'},400);
+    const profileId=c.get('conversationProfileId'),id=c.req.param('id'),content=storedContent(input.data.content);let dropped:string[]=[];
     const row=await database().transaction(async tx=>{
       await tx.select({id:conversations.id}).from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id))).for('update');
       const current=await readConversation(tx,profileId,id),existing=current.messages.find(message=>message.id===input.data.id);
-      if(existing){if(existing.role!=='user'||existing.content!==input.data.content||existing.correctsMessageId!==(input.data.correctsMessageId??null))throw new ConversationError('This message id already holds different words.',409);return windowedConversation(current,window,input.data.id);}
+      if(existing){if(existing.role!=='user'||existing.content!==content||existing.correctsMessageId!==(input.data.correctsMessageId??null)||!sameAttachments(existing.attachments,input.data.attachmentIds))throw new ConversationError('This message id already holds different words.',409);return windowedConversation(current,window,input.data.id);}
       if(current.revision!==input.data.revision)throw new ConversationError('New messages arrived. Check the conversation before sending.',409);
       if(current.revision>=(input.data.requestReply&&conversationRepliesEnabled()?CONVERSATION_LIMITS.messages-1:CONVERSATION_LIMITS.messages))throw new ConversationError('This conversation is full. Start another one.',429);
       if(input.data.correctsMessageId&&!current.messages.some(message=>message.id===input.data.correctsMessageId&&message.role==='assistant'))throw new ConversationError('Choose a reply in this conversation to correct.',409);
-      await tx.insert(conversationMessages).values({id:input.data.id,profileId,conversationId:id,position:current.revision+1,role:'user',content:input.data.content,correctsMessageId:input.data.correctsMessageId??null});
+      await tx.insert(conversationMessages).values({id:input.data.id,profileId,conversationId:id,position:current.revision+1,role:'user',content,correctsMessageId:input.data.correctsMessageId??null});
+      dropped=await linkMessageAttachments(tx,{profileId,conversationId:id,messageId:input.data.id,attachmentIds:input.data.attachmentIds??[]});
       await tx.update(conversations).set({revision:current.revision+1,updatedAt:new Date()}).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
       if(input.data.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,id,{messageId:input.data.id,afterRequestId:null});
       return windowedConversation(await readConversation(tx,profileId,id),window,input.data.id);
-    });if(input.data.requestReply&&conversationRepliesEnabled())await wakeCommittedBackgroundJobs();return c.json({conversation:row,...conversationCapabilities()});
+    });await sweep(dropped);if(input.data.requestReply&&conversationRepliesEnabled())await wakeCommittedBackgroundJobs();return c.json({conversation:row,...conversationCapabilities()});
   });
   routes.get('/:id/reply',async c=>c.json(await readConversationReplyState(database(),c.get('conversationProfileId'),c.req.param('id'))));
   routes.post('/:id/replies',async c=>{
@@ -306,15 +326,21 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
   });
   routes.delete('/:id',async c=>{
     const id=uuid.safeParse(c.req.param('id'));if(!id.success)return c.json({error:'Invalid conversation'},400);
-    const profileId=c.get('conversationProfileId');
+    const profileId=c.get('conversationProfileId');let keys:string[]=[];
     await database().transaction(async tx=>{
       const [row]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id.data))).for('update');
       if(!row)throw new ConversationError('Conversation not found.',404);
+      /* The chat's photos and files go with it. Linked rows cascade with
+         their messages below; staged ones (uploaded, never sent) have no
+         message to cascade from, so they are removed here. The bytes of
+         both are swept after commit. */
+      keys=await conversationAttachmentKeys(tx,profileId,id.data);
+      await tx.delete(attachments).where(and(eq(attachments.profileId,profileId),eq(attachments.conversationId,id.data),isNotNull(attachments.stagedMessageId)));
       await tx.update(conversationReplyRequests).set({status:'stopped',userMessageId:null,assistantMessageId:null,references:[],contextSources:[],followUpQuestion:null,contextHash:'',failureCode:null,finishedAt:new Date()})
         .where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,id.data)));
       await tx.delete(conversationMessages).where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id.data)));
       await tx.update(conversations).set({deletedAt:row.deletedAt??new Date(),updatedAt:new Date()}).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id.data)));
-    });return c.json({deleted:true});
+    });await sweep(keys);return c.json({deleted:true});
   });
   return routes;
 }

@@ -37,6 +37,22 @@ export const EYE_R = 0.038;
     illustration, not interface text, and it is the same brown-black at every
     aliveness. */
 export const EYE_INK = "#2b2822";
+/** Reading glasses, worn only while reviewing — "big soft rounds", the
+    founder's pick of six drawn pairs (2026-10-15). A lens's radius, as a
+    fraction of the body: oversized, so the pair nearly meets over the nose. */
+export const GLASS_R = 0.135;
+/** A rim's stroke, as a fraction of the body: thick, then softened by
+    `GLASS_RIM_ALPHA`. Drawn in `EYE_INK` — the glasses belong to the same
+    illustration as the eyes, not to the interface. */
+export const GLASS_W = 0.021;
+/** How much of the eyes' ink the rim keeps: soft, not a hard outline. */
+export const GLASS_RIM_ALPHA = 0.85;
+/** The lens's own faint tint, painted under the eyes. */
+export const GLASS_TINT = "rgba(196, 208, 245, 0.24)";
+/** The glint at each lens's upper left. */
+export const GLASS_GLINT = "rgba(255, 255, 255, 0.75)";
+/** Behind a lens the eye reads this much larger, as through glass. */
+export const GLASS_MAGNIFY = 1.12;
 /** A nub's seat: a quarter turn either side, at this height on the body. */
 export const NUB_LON = Math.PI / 2;
 export const NUB_X = 0.42;

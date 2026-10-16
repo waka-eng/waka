@@ -533,6 +533,20 @@
       "when": 1792089485615,
       "tag": "0075_conversation_perspective",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1792089545615,
+      "tag": "0076_chat_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1792089605615,
+      "tag": "0077_attachment_hygiene",
+      "breakpoints": true
     }
   ]
 }

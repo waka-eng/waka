@@ -34,6 +34,7 @@
 // ---------------------------------------------------------------------------
 import {invalidateSourceRequest} from '../inspiration-snapshots';
 import { apiFetch } from './transport';
+import { MAX_MESSAGE_ATTACHMENTS } from './file-accept';
 
 /**
  * Field-level validation errors as emitted by Hono handlers via zod's
@@ -52,20 +53,30 @@ export class ApiError extends Error {
   readonly status: number;
   readonly fieldErrors?: ApiFieldErrors;
   readonly code?: string;
+  /** A chat send refused as `attachment_not_ready` names the attachment ids
+      the server no longer has staged, so the composer can drop just those. */
+  readonly missingAttachmentIds?: string[];
 
   constructor(input: {
     status: number;
     message: string;
     fieldErrors?: ApiFieldErrors;
     code?: string;
+    missingAttachmentIds?: string[];
   }) {
     super(input.message);
     this.name = "ApiError";
     this.status = input.status;
     this.fieldErrors = input.fieldErrors;
     this.code = input.code;
+    if (input.missingAttachmentIds) this.missingAttachmentIds = input.missingAttachmentIds;
   }
 }
+
+/** Ids, or nothing: a refusal's list is read only when it is a list of strings
+    no longer than a message can carry. */
+const idList = (value: unknown): string[] | undefined =>
+  Array.isArray(value) && value.length <= MAX_MESSAGE_ATTACHMENTS && value.every((item) => typeof item === "string") ? value as string[] : undefined;
 
 // ---------------------------------------------------------------------------
 // API path helper
@@ -231,7 +242,9 @@ export async function writeJson<T>(
       error?: string;
       details?: ApiFieldErrors;
       code?: string;
+      missingAttachmentIds?: unknown;
     };
+    const missingAttachmentIds = idList(errorBody.missingAttachmentIds);
     throw new ApiError({
       status: res.status,
       message:
@@ -239,6 +252,7 @@ export async function writeJson<T>(
         `${fallbackMessage} (HTTP ${res.status}). Please try again.`,
       fieldErrors: errorBody.details,
       code: typeof errorBody.code === 'string' ? errorBody.code : undefined,
+      ...(missingAttachmentIds ? { missingAttachmentIds } : {}),
     });
   }
 

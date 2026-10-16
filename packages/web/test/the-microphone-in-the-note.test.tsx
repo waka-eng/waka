@@ -122,8 +122,6 @@ afterEach(() => {
 async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
-const named = (name: string) => [...world.container.querySelectorAll<HTMLButtonElement>('button')]
-  .find(button => (button.getAttribute('aria-label') ?? button.textContent ?? '').trim() === name);
 /** The one transient line the bar shows while a note is open. */
 const bar = () => world.container.querySelector('.waka-dock-state')?.textContent ?? '';
 const field = () => world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
@@ -133,11 +131,14 @@ const engine = () => FakeEngine.all[FakeEngine.all.length - 1]!;
 /** Whether an authored save began — one network act, before any decision. */
 const savesStarted = () => vi.mocked(fetchInspirationSaveRequest).mock.calls.length;
 
-/** The notepad, reached the way a person reaches it: the plus, then the row. */
+/** The notepad, reached the way a person reaches it: the bar's Inspiration,
+    which since 2026-10-15 makes a new note in one press (the plus is gone). */
 async function openNotepad(words = ''): Promise<void> {
   world = await mountWorld(FACTS); await settle();
-  await act(async () => named('Make something')!.click()); await settle();
-  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-new-one')!.click()); await settle();
+  const inspiration = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item')]
+    .find(row => row.textContent?.trim() === 'Inspiration');
+  expect(inspiration, 'the bar offers no Inspiration row').toBeTruthy();
+  await act(async () => inspiration!.click()); await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad did not open').toBeTruthy();
   if (words) {
     await act(async () => {

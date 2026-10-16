@@ -106,7 +106,10 @@ export const conversationMessages=pgTable('conversation_messages',{
   correctionRole:check('conversation_messages_correction_role',sql`${table.correctsMessageId} IS NULL OR (${table.role}='user' AND ${table.correctsMessageId}<>${table.id})`),
   conversationFk:foreignKey({columns:[table.profileId,table.conversationId],foreignColumns:[conversations.profileId,conversations.id],name:'conversation_messages_conversation_fk'}).onDelete('cascade'),
   positionUnique:unique('conversation_messages_position_unique').on(table.profileId,table.conversationId,table.position),
-  bounds:check('conversation_messages_bounds',sql`${table.position} BETWEEN 1 AND 200 AND ${table.role} IN ('user','assistant') AND length(trim(${table.content})) > 0 AND length(${table.content}) <= 4000`),
+  bounds:check('conversation_messages_bounds',sql`${table.position} BETWEEN 1 AND 200 AND ${table.role} IN ('user','assistant') AND length(${table.content}) <= 4000 AND (length(trim(${table.content})) > 0 OR (${table.role}='user' AND ${table.content}=''))`),
+  /* '' is allowed for a USER message only, and only exactly '' — the photo- or
+     file-only message (0076). "Only when it has attachments" lives in the
+     routes: the attachments are another table, and a CHECK sees one row. */
 }));
 
 export type ConversationReference={kind:'principle'|'top_of_mind_entry'|'inspiration';id:string;hash:string;quoteStart?:number;quoteLength?:number;historical?:boolean};

@@ -34,7 +34,7 @@ import type { AuthenticatedSession } from "../lib/session.js";
 import { validationDetails } from "../lib/validation.js";
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { enqueueEnrichAttachment, wakeCommittedBackgroundJobs } from "../lib/queue.js";
-import { prepareInspirationAttachments, InspirationAttachmentError, type AttachmentHead } from '../lib/inspiration-attachments.js';
+import { assertAttachmentKeysUnused, prepareInspirationAttachments, InspirationAttachmentError, type AttachmentHead } from '../lib/inspiration-attachments.js';
 import { attachmentSelection, serializeAttachment } from './attachments.js';
 import { inspirationSaveFailure, parseInspirationSaveRequestId, runInspirationSave } from '../lib/inspiration-save-requests.js';
 import { readSavedInspiration } from './inspirations-save-requests.js';
@@ -166,6 +166,7 @@ export function registerCaptureRoutes(
     const persistInspiration = () =>
       runInspirationSave(db, {
         profileId: target.profileId, requestId: parseInspirationSaveRequestId(c.req.header('Idempotency-Key')), operation: 'inspiration',
+        attachmentKeys: (parsed.data.attachments ?? []).flatMap((input) => input.type === 'link' ? [] : [input.key]),
         material: { text: parsed.data.text, kind: parsed.data.kind ?? null, source, visibility: visibility ?? 'private',
           ...(parsed.data.fromConversation?{fromConversation:parsed.data.fromConversation}:{}),
           ...(parsed.data.attachments ? { attachments: parsed.data.attachments } : {}),
@@ -214,6 +215,15 @@ export function registerCaptureRoutes(
 
       const media = parsed.data.attachments?.length ? await prepareInspirationAttachments(parsed.data.attachments,
         { uploaderProfileId: session.profile.id, profileId: target.profileId, inspirationId: inserted.id }, attachmentHead) : [];
+      /* ONE STORED OBJECT, ONE ATTACHMENT — the rule the chat finalize already
+         keeps. Without it a note could name an object one of the same
+         person's chat messages already carries, and deleting the note would
+         delete the chat's file with it. Found by the 2026-10-16 security
+         review of the attachments work. */
+      const keys = media.map((row) => row.s3Key).filter((key): key is string => typeof key === 'string');
+      /* (The same object twice in ONE save is already refused by the input
+         schema — "An attachment is included twice".) */
+      await assertAttachmentKeysUnused(tx, keys);
       const insertedAttachments = media.length ? await tx.insert(attachments).values(media).returning(attachmentSelection) : [];
       for (const attachment of insertedAttachments) {
         if (attachment.enrichmentStatus === 'pending') await enqueueEnrichAttachment(target.profileId, attachment.id, inserted.id, tx);

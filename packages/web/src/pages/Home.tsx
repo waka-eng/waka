@@ -65,7 +65,7 @@ import { PrincipleRead } from "../components/PrincipleRead";
 import { publicWebOrigin } from '../lib/public-origins';
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { createConversation } from "../lib/api/conversations";
-import { DialogSurface } from "../components/DialogSurface";
+import { DialogSurface, leaveAsModal } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { useNavigate } from "react-router-dom";
 import { useViewNavigation } from '../lib/use-view-navigation';
@@ -81,6 +81,7 @@ import { useAuthoredSave } from '../lib/use-authored-save';
 import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
+import { attachmentLabel } from '../lib/attachment-label';
 import { Menu } from '../components/Menu';
 import { usePageMenu, wallAgnosticView } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
@@ -111,6 +112,8 @@ import { deriveAgentChrome } from "../space-kinds/agent";
 import { buildPalette, type Palette } from "../canvas/palette";
 import { SavesOverlay } from "../components/SavesOverlay";
 import { DOCK_SLOT } from "../components/NoteTools";
+import { AddMenu } from "../components/AddMenu";
+import { inspectAttachmentFile, FileRefused } from "../lib/api/file-accept";
 import { deleteAccount } from "../lib/api/auth";
 import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
@@ -120,7 +123,7 @@ import { ClaimSlip } from "../components/ClaimSlip";
 import { HarvestReasons } from "../components/HarvestReasons";
 import { AgentPick } from "../components/AgentPick";
 import { ConversationsOverlay } from "../components/ConversationsOverlay";
-import { ConversationPanel } from "../components/ConversationPanel";
+import { ConversationPanel, CHAT_TOOLS_SLOT } from "../components/ConversationPanel";
 import type { ApiConversation } from "../lib/api/conversations";
 import { useMeasured } from "../canvas/measured";
 /* THE CANVAS SIDE OF `SimApi`, which used to be 5,637 lines of this file.
@@ -286,6 +289,8 @@ const SPEAK_GRACE_MS = 220;
    fetch on a normal connection, so the light and the sentence read as one
    event rather than two. */
 const LIT_MS = 1400;
+/** How far the creature is pulled right, in CSS px, before the pull is the walk to Principles. */
+const CREATURE_PULL = 56;
 
 /* HOW LONG A PAUSE IN TYPING COUNTS AS FINISHING A NAME. Long enough that
    a normal hesitation mid-word does not write, short enough that closing
@@ -1294,11 +1299,9 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      it stays here — putting it in the URL would make "I was about to make
      something" a page you could link to and come back to. */
   /** The picker the dock's making-slot opens while a note is being written. */
-  const dockFileInput = useRef<HTMLInputElement>(null);
   /** Which saves the archive is showing, when it was opened by asking a
       claim where it came from. Cleared by its own control and by leaving. */
   const [savesFocus, setSavesFocus] = useState<{ label: string; ids: readonly string[] } | null>(null);
-  const [makingNew, setMakingNew] = useState(false);
   /* The box's own measured height, kept across frames so the layout pass can
      place the box before it has re-measured it this frame. `MOUTH_H` is the
      first-paint fallback and nothing more. */
@@ -1738,8 +1741,34 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * are deleted after a week unchosen, and a reading has no clock.
    */
   const [harvestQueue, setHarvestQueue] = useState<ApiHarvestCandidate[]>([]);
+  /* ═══ REVIEW IS SOMETHING YOU STEP INTO ═══════════════════════════════════
+     Founder, 2026-10-15: "the entry point into the card swipe left and right
+     should be the agent should say 'there are x things to review!' and the
+     CTA becomes 'Dive into review' or sth like this, which makes the card
+     swipe be the main action of the page." So the cards are not lying on the
+     home screen waiting to be noticed: the creature says how many there are,
+     and the press is the way in. While `reviewing`, the cards are the page —
+     the top-of-mind bubble steps aside — and the mode ends when the queue
+     runs out or on Esc. */
+  const [reviewing, setReviewing] = useState(false);
   /** A candidate that was swiped away and is being asked "why not". */
   const [harvestWhy, setHarvestWhy] = useState<{ candidate: ApiHarvestCandidate; busy: boolean; failed: boolean } | null>(null);
+  /** What the invitation counts: your agent's picks and WAKA's readings, both swiped the same way. */
+  const toReview = harvestQueue.length + claimQueue.length;
+  const startReview = useCallback(() => { setReviewing(true); }, []);
+  /* THE SITTING ENDS WHEN THERE IS NOTHING LEFT TO ASK — after the last
+     card's own goodbye (`worldSittingDone`), not on top of a "why not" the
+     person is still answering. */
+  useEffect(() => { if (reviewing && toReview === 0 && !harvestWhy) setReviewing(false); }, [reviewing, toReview, harvestWhy]);
+  /* THE FIRST CARD HAS FOCUS ON THE WAY IN, so ← and → answer it at once —
+     the card owns its arrows only while it is focused (see `ClaimSlip`). */
+  useEffect(() => {
+    if (!reviewing) return;
+    /* `.jar-pick-slip`, not `.jar-pick`: the wrapper takes no focus; the slip
+       is what holds `tabIndex` and the keys. */
+    const frame = requestAnimationFrame(() => document.querySelector<HTMLElement>('.jar-pick-slip')?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  }, [reviewing]);
   /* THE CREATURE STEPS ASIDE WHILE THE AGENT ASKS. Founder, 2026-10-15,
      approved: on a phone the why-not list covered the lower half of the
      creature, and two characters stacked on each other muddy who is
@@ -1749,26 +1778,17 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   useEffect(() => {
     simApiRef.current?.stepAside(Boolean(harvestWhy) && !mouthOpen);
   }, [harvestWhy, mouthOpen]);
+  /* GLASSES ON FOR THE SITTING. The creature reads with you while you review
+     — see `think` — and takes them off when the cards run out or you step
+     out of it. */
+  useEffect(() => {
+    simApiRef.current?.think(reviewing && !mouthOpen);
+  }, [reviewing, mouthOpen]);
   /* A candidate whose card is mid-trip, and those whose keep failed while it
      was: a failure that lands before the card has gone is held until it
      has, so the queue is never rewritten from under a card in flight. */
   const harvestLeavingRef = useRef(new Set<string>());
   const harvestReturnRef = useRef(new Set<string>());
-  /** After a reading is answered "Not anymore": one line that says it was
-      noted and offers the conversation. Clears on its own, or when the door is taken. */
-  const [claimReceipt, setClaimReceipt] = useState<{ statement: string } | null>(null);
-  useEffect(() => {
-    if (!claimReceipt) return;
-    /* It does not leave while somebody is on it: a receipt whose button has
-       focus waits until focus moves on (review, 2026-10-15). */
-    let timer = 0;
-    const leave = () => {
-      if (document.activeElement?.closest('.jar-char-claim-receipt')) { timer = window.setTimeout(leave, 1500); return; }
-      setClaimReceipt(null);
-    };
-    timer = window.setTimeout(leave, 9000);
-    return () => window.clearTimeout(timer);
-  }, [claimReceipt]);
   /**
    * CORRECTING A CLAIM — THE ONLY PLACE IN THE PRODUCT THAT TAKES TYPING
    * BESIDES THE ONE BOX.
@@ -2069,6 +2089,15 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const principlesOpen = viewNavigation.view?.open === 'principles';
   const atNowView = !viewNavigation.view?.open && !viewNavigation.view?.conversationId &&
     !viewNavigation.view?.compose && !viewNavigation.view?.sharePrinciple && !viewNavigation.view?.principleId;
+  /** What is being made right now, if anything — the bar becomes that page's own (see the dock). */
+  const making: 'inspiration' | 'talk' | null = viewNavigation.view?.compose ? 'inspiration'
+    : viewNavigation.view?.conversationId ? 'talk' : null;
+  /** On one of the two lists (reached from a new note or chat): the bar is ↩ │ Close. */
+  const listing = !making && (viewNavigation.view?.open === 'saves' || viewNavigation.view?.open === 'conversations');
+  /** Which bar row the page's own groups (rules, tools, Close) hang off. */
+  const barOwner: 'inspiration' | 'talk' | 'return' | null = making ?? (listing ? 'return' : null);
+  /** Where a list was opened from by the bar's "All …", so ↩ can go back there (see the dock). */
+  const listOrigin = useRef<{ kind: 'note' } | { kind: 'chat'; id: string } | null>(null);
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
   const [principlesCrossing, setPrinciplesCrossing] = useState<{ going: 'in' | 'out'; home: CreatureSpot | null } | null>(null);
   if (crossSeen.open !== principlesOpen || crossSeen.now !== atNowView) {
@@ -3392,8 +3421,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.principleId || requested?.conversationId) {
       stamp(); return undefined;
     }
-    const interactionAtGreeting = navigationInteraction.current;
-    const greetingHref = viewNavigationRef.current.href;
     /* ═══ AND WHOSE ARRIVAL THIS IS, WHICH IS THE THIRD RACE ═══════════
        Founder, reporting the same thing for the second time after both of
        the other two were fixed and shipped: "sometimes the speech bubble
@@ -3451,47 +3478,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (askedOnArrival !== speechEpoch) return;
       if (toldRef.current) setCharSay(asSentence(toldRef.current, localeRef.current));
     };
-    const fresh = inspirations.filter((c) => c.capturedMs > since);
-    if (fresh.length === 0) {
-      /* nothing to glide to — but the loop may still have worked (a refusal,
-         a held poster). The world is drawn; the whisper may come. */
-      timers.push(window.setTimeout(tell, 1400));
-      stamp();
-      return () => timers.forEach((id) => window.clearTimeout(id));
-    }
-    const newest = fresh.reduce((a, b) => (b.capturedMs > a.capturedMs ? b : a));
-    timers.push(
-      window.setTimeout(() => {
-        if (navigationInteraction.current !== interactionAtGreeting || viewNavigationRef.current.href !== greetingHref) { stamp(); return; }
-        simApiRef.current?.select(newest.id);
-        /* AND BACK OUT, ALL THE WAY. Not just letting the selection go — the
-           camera returns to headquarters, because travelling between walls is
-           only possible from there, and a greeting that leaves you unable to
-           walk left or right would be an ambush rather than a welcome. */
-        timers.push(
-          window.setTimeout(() => {
-            /* UNLESS YOU HAVE TAKEN OVER, and this is the whole of the bug it
-               fixes. The greeting selects a memory, waits its beat and then
-               undoes itself — and it undid whatever was selected AT THAT
-               MOMENT, not what it had selected itself. Anyone who pressed a
-               caret, walked the reach or tapped another orb inside those 2.6
-               seconds watched their own card close and the camera leave, with
-               nothing on screen to explain it (it looked exactly like paging
-               being broken; found live 2026-08-27). A greeting may take back
-               its own gesture and nothing else. */
-            if (selectedIdRef.current !== newest.id || navigationInteraction.current !== interactionAtGreeting) {
-              tell();
-              return;
-            }
-            simApiRef.current?.release();
-            simApiRef.current?.toTop();
-            /* home again: the telling rides the end of the return */
-            tell();
-          }, 2600),
-        );
-        stamp();
-      }, 1400),
-    );
+    /* THE GREETING NO LONGER OPENS A CARD. It used to glide to the newest
+       thing kept while you were away, open its card, hold it 2.6s and close
+       it again. Founder, 2026-10-16: "once in a while the inspiration card
+       keeps coming up in the main page but dont have that." So coming back
+       is the whisper alone — the creature tells you what happened — and a
+       card opens only when you open one. */
+    timers.push(window.setTimeout(tell, 1400));
+    stamp();
     return () => timers.forEach((id) => window.clearTimeout(id));
   }, [inspirations, phase]);
 
@@ -4255,10 +4249,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      every tap — see the note on `.jar-panel`. `simApi.place()` survives for
      the sim's own use; nothing in the page asks it where to put a panel. */
 
-  /* the companion's line is a whisper, not a status bar: it goes after 4s */
+  /* the companion's line is a whisper, not a status bar: it goes after 4s —
+     6s for "I'm inspired!", which carries a button worth reaching for */
   useEffect(() => {
     if (!charSay) return undefined;
-    const id = window.setTimeout(() => setCharSay(""), 4000);
+    const id = window.setTimeout(() => setCharSay(""), charSay === say('worldImInspired') ? 6000 : 4000);
     return () => window.clearTimeout(id);
   }, [charSay]);
 
@@ -5077,7 +5072,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       return () => { if (!remaining && !preserveNewer && !composerDraft.current.current.media.length) {
         setMouthOpen(false);
         if (initiated) simApiRef.current?.acknowledge('kept');
-        setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : say('worldSavedToYourWall'));
+        /* "I'M INSPIRED!", SAID BY THE ONE WHO JUST JUMPED. Founder,
+           2026-10-16: "saved and lets chat about it should come from the
+           agent's speech bubble. as soon as user saves inspiration, i love
+           how the character jumps up and down, but for a few sec, make that
+           say 'I'm inspired!' and the CTA should be let's chat about it." The
+           bubble's act is the chat about THIS save (see the bubble below). */
+        setCharSay(atWallRef.current.kind === 'self' ? say('worldImInspired') : say('worldSavedToYourWall'));
         if(initiated&&storageScope)setRecentInspiration({owner:`${storageScope.accountId}:${storageScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
         viewNavigationRef.current.closeComposer();
       } };
@@ -5360,9 +5361,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       await composerDraft.flush(); current();
       if (initialMedia.some(item => item.blob && !item.uploaded)) await uploadDraftFiles(initialMedia, controller, current);
       const attachments: NonNullable<CreateInspirationRequest['attachments']> = composerDraft.current.current.media.map(item => {
-        if (item.type === 'link' && item.url) return { type: 'link', url: item.url, name: item.name };
+        // An unnamed upload is sent unnamed; its label is the reader's to say.
+        const name = item.name ? { name: item.name } : {};
+        if (item.type === 'link' && item.url) return { type: 'link', url: item.url, ...name };
         if (!item.uploaded || item.type === 'link') throw new Error('This attachment has not uploaded yet.');
-        return { type: item.type, ...item.uploaded, name: item.name };
+        return { type: item.type, ...item.uploaded, ...name };
       });
       for (const { url } of inspirationLinks(text)) {
         if (!url) continue;
@@ -5370,7 +5373,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       }
       if (attachments.length > 5) throw new Error('Keep up to five attachments in one inspiration.');
       const reference = await composerDraft.flush(); current();
-      const kind = attachments.length === 1 && !text ? attachments[0]!.type : attachments.length ? 'mixed' : 'note';
+      /* A FILE DOES NOT NAME A KIND. There is no 'file' kind on the server, and
+         a PDF kept with words is still a note — so files are left out of the
+         count, and a note of files alone is 'note'. A file beside a photo is
+         'mixed', the nearest true thing the list has. */
+      const kinded = attachments.filter(item => item.type !== 'file');
+      const only = attachments.length === 1 && !text ? attachments[0]!.type : null;
+      const kind = only && only !== 'file' ? only : kinded.length ? 'mixed' : 'note';
       /* Said at upload, kept with the thing it is about. Unanswered is not
          recorded at all: an empty reflection row is a question the person was
          asked and did not answer, which is a different fact from one they
@@ -5389,7 +5398,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   }, [inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
 
-  const addInspirationFiles = async (files: File[], audio = false) => {
+  /* ═══ THREE DOORS INTO ONE DRAFT ═══════════════════════════════════════
+     'photo' is the chooser, the drop and the paste: every file is sniffed.
+     'audio' is the recorder's own clip. 'file' is the ＋'s "Add file"
+     (2026-10-16): `inspectAttachmentFile` reads the name and the declared
+     type against the server's list and the 25 MB cap, BEFORE anything is
+     uploaded. A photo chosen through "Add file" is still a photo, so it is
+     handed to the sniffer and kept as one — a picture shown as a filename
+     would be the tile describing the thing instead of showing it.
+
+     A FILE IS STORED UNDER THE TYPE IT WAS CHECKED AS. Browsers report no
+     type for a `.md` and a vendor alias for a `.csv`; the upload presigns
+     with `blob.type`, so the blob is re-wrapped with the verdict's type and
+     every later step — presign, PUT, the save — says the same thing. */
+  const addInspirationFiles = async (files: File[], door: 'photo' | 'audio' | 'file' = 'photo') => {
+    const audio = door === 'audio';
     const epoch = fileOwnerEpoch.current;
     checkingFilesCount.current += 1; setCheckingFiles(true);
     const accepted: InspirationDraftMedia[] = [], problems: string[] = [];
@@ -5397,12 +5420,29 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       for (const file of files) {
         try {
           if (audio && (!file.size || file.size > 25 * 1024 * 1024 || !file.type.startsWith('audio/'))) throw new Error('Choose a recording under 25 MB.');
+          const verdict = door === 'file' ? inspectAttachmentFile(file) : null;
+          if (verdict?.kind === 'file') {
+            if (epoch !== fileOwnerEpoch.current) return;
+            /* NO NAME IS KEPT AS NO NAME: "File" is said on the tile
+               (`attachmentLabel`), never saved as this file's name. */
+            accepted.push({ id: crypto.randomUUID(), type: 'file', ...(file.name ? { name: file.name.slice(0, 255) } : {}),
+              blob: file.type === verdict.contentType ? file : new File([file], file.name, { type: verdict.contentType, lastModified: file.lastModified }) });
+            continue;
+          }
           const checked = audio ? file : await inspectInspirationPhoto(file);
           if (epoch !== fileOwnerEpoch.current) return;
-          accepted.push({ id: crypto.randomUUID(), type: audio ? 'audio' : 'image', name: checked.name.slice(0, 255) || 'Photo', blob: checked });
+          accepted.push({ id: crypto.randomUUID(), type: audio ? 'audio' : 'image', ...(checked.name ? { name: checked.name.slice(0, 255) } : {}), blob: checked });
         } catch (reason) {
+          /* A REFUSED FILE STAYS ON THE SHELF, MARKED, as a refused photo
+             does — so the person sees which one and can take it off. The
+             reason is said in their language: `FileRefused` carries a code. */
+          if (reason instanceof FileRefused) {
+            accepted.push({ id: crypto.randomUUID(), type: 'file', ...(file.name ? { name: file.name.slice(0, 255) } : {}), blob: file,
+              validationError: say(reason.reason === 'too_large' ? 'worldAttachTooLarge' : reason.reason === 'empty' ? 'worldPhotoEmpty' : 'worldAttachUnsupported') });
+            continue;
+          }
           const message = reason instanceof Error ? reason.message : 'Couldn’t read this file.';
-          if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', name: file.name.slice(0, 255) || 'Photo', blob: file, validationError: message });
+          if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', ...(file.name ? { name: file.name.slice(0, 255) } : {}), blob: file, validationError: message });
           else problems.push(`${file.name}: ${message}`);
         }
       }
@@ -5422,7 +5462,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (!file.size || file.size > 25 * 1024 * 1024 || !file.type.startsWith('audio/')) {
       setMouthNote(hasRecording ? 'Could not keep this recording. Your previous clip is unchanged.' : 'Could not keep this recording. Please try again.'); return;
     }
-    if (!hasRecording) return addInspirationFiles([file], true);
+    if (!hasRecording) return addInspirationFiles([file], 'audio');
     composerDraft.setRecordingCandidate({ id: crypto.randomUUID(), type: 'audio', name: file.name, blob: file });
     try { await composerDraft.flush(); setMouthNote(''); }
     catch (reason) { setMouthNote(reason instanceof Error ? reason.message : 'Could not keep this draft on your device.'); }
@@ -6507,6 +6547,48 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   /** Search reads the whole archive; opening a result does not depend on the
       bounded field already containing its orb. Queries stay out of the URL. */
   const [seek, setSeek] = useState<string | null>(null);
+
+  /* ═══ PRINCIPLES IS REACHED BY GOING, NOT BY A TAB ══════════════════════
+     Founder, 2026-10-15: the bar keeps only Inspiration and Chat, and
+     "principle is sth user can only get by dragging" — the creature pulled
+     right, or → — while the claim cards keep their own left and right.
+     `openOverHome('principles')` from Now is what starts the walk (see
+     `principlesCrossing`), so the gesture needs nothing of its own to move
+     the creature. ← (or Esc) on Principles walks it home the same way.
+
+     WHO ELSE OWNS AN ARROW, and is left alone: a focused claim card (keep /
+     not), the reach over the ground, the group radios, an open memory card,
+     menus, and anything you can type into. Capture phase, so the world's
+     own arrow handler — which only ever travels between walls, switched off
+     — never sees a key this took. */
+  const creatureDrag = useRef<{ id: number; x: number; y: number } | null>(null);
+  const creatureDragged = useRef(false);
+  const toPrinciples = useCallback(() => { commitOpenNote(); openOverHome('principles'); }, [commitOpenNote, openOverHome]);
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft' && event.key !== 'Escape') return;
+      if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (isEditableTarget(event.target)) return;
+      /* `prov` too: the claim's roots open as a sheet OVER review, and its own
+         Escape must close it rather than end the sitting under it. */
+      const nothingOpen = !panelOpen && !mouthOpen && !savedNoteOpen && seek === null && !thingShare && !prov;
+      /* Esc steps out of review — the cards go, the invitation comes back. */
+      if (event.key === 'Escape') {
+        if (reviewing && atNowView && nothingOpen && !harvestWhy) { event.preventDefault(); event.stopPropagation(); setReviewing(false); }
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('.jar-pick, .jar-reach, .jar-grounds, .jar-panel, .jar-dial, [role="menu"], [role="radiogroup"], [role="slider"]')) return;
+      if (event.key === 'ArrowRight' && atNowView && nothingOpen && !reviewing) {
+        event.preventDefault(); event.stopPropagation(); toPrinciples();
+      } else if (event.key === 'ArrowLeft' && principlesOpen && !principlesCrossing) {
+        event.preventDefault(); event.stopPropagation(); openOverHome(null);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [phase, atNowView, principlesOpen, principlesCrossing, panelOpen, mouthOpen, savedNoteOpen, seek, thingShare, prov, toPrinciples, openOverHome, reviewing, harvestWhy]);
   /** read by the loop's key handler, which is built once */
   const openSeekRef = useRef<() => void>(() => undefined);
   openSeekRef.current = () => setSeek((s) => (s === null ? "" : s));
@@ -8446,10 +8528,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   <ul className="waka-drawer-items">
                     {inputMedia.map(item => (
                       <li key={item.id}>
-                        <span>{item.name}</span>
+                        <span>{attachmentLabel(locale, item.type, item.name)}</span>
                         <button
                           type="button"
-                          aria-label={`${say('worldRemoveLower')} ${item.name}`}
+                          aria-label={`${say('worldRemoveLower')} ${attachmentLabel(locale, item.type, item.name)}`}
                           onClick={() => composerDraft.setMedia(composerDraft.current.current.media.filter(row => row.id !== item.id))}
                         >
                           ×
@@ -8752,7 +8834,69 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               illustration register — the same place the body and its aura
               live — not a UI icon set, which this product still does not have
               and is not getting. */}
-          {!mouthOpen && !charSay && !turning ? (
+          {/* THE INVITATION INTO REVIEW, in the top-of-mind slot and its full
+              weight, because it is the page's main act while anything waits
+              (see `reviewing`). */}
+          {!mouthOpen && !charSay && !turning && !reviewing && toReview > 0 ? (
+            <div className="jar-char-bubble jar-char-bubble--review" data-jar-chrome="1" data-jar-interactive="1">
+              <span className="jar-char-bubble-body">
+                <span className="jar-char-bubble-reading" role="status">
+                  {formatMessage(locale, 'worldReviewWaiting', { count: toReview })}
+                </span>
+                <span className="jar-char-bubble-acts">
+                  <button type="button" className="jar-char-bubble-act" onClick={startReview}>
+                    {say('worldReviewDive')}
+                  </button>
+                </span>
+              </span>
+            </div>
+          ) : null}
+          {/* ═══ THE CREATURE IS ALWAYS THERE TO PRESS — AND TO PULL ═══════
+              It stood inside the top-of-mind bubble's block, so whenever the
+              bubble stepped aside (a line being said, the review invitation,
+              review itself) the press went with it — and with it the only
+              touch way to Principles (code review, 2026-10-16). It stands on
+              its own now. NOT ON AN AGENT'S WALL, for the reason the note in
+              the bubble block below gives: a press that offers to save into
+              someone else's archive is a control that can never work.
+
+              DRAG IT RIGHT AND IT WALKS TO PRINCIPLES. Founder, 2026-10-15:
+              "principle is sth user can only get by dragging." A press is
+              still a press (the creature speaks); a pull of `CREATURE_PULL`
+              px rightward that is more across than down is the walk, and the
+              click that follows the release is swallowed so it does not also
+              speak. The swallow is reset on every new press: some touch
+              browsers send no click after a moved touch, and a stale flag
+              would eat the next real tap. */}
+          {!mouthOpen && atWall.kind !== 'agent' ? (
+            <button
+              type="button"
+              className={`jar-char-press${lit ? ' jar-char-press--lit' : ''}`}
+              aria-label={say('worldCreatureSpeak')}
+              aria-keyshortcuts="ArrowRight"
+              data-jar-chrome="1"
+              data-jar-interactive="1"
+              onPointerDown={event => {
+                creatureDragged.current = false;
+                if (!atNowView) return;
+                creatureDrag.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
+                event.currentTarget.setPointerCapture?.(event.pointerId);
+              }}
+              onPointerUp={event => {
+                const start = creatureDrag.current;
+                creatureDrag.current = null;
+                if (!start || start.id !== event.pointerId) return;
+                const dx = event.clientX - start.x, dy = event.clientY - start.y;
+                if (dx >= CREATURE_PULL && Math.abs(dy) < dx) { creatureDragged.current = true; toPrinciples(); }
+              }}
+              onPointerCancel={() => { creatureDrag.current = null; }}
+              onClick={() => {
+                if (creatureDragged.current) { creatureDragged.current = false; return; }
+                creatureSpeaks();
+              }}
+            />
+          ) : null}
+          {!mouthOpen && !charSay && !turning && !reviewing && toReview === 0 ? (
             <>
               {/* NOT ON AN AGENT'S WALL. Founder, pressing the creature over
                   there and being offered "Feeling inspired? Save one.":
@@ -8769,21 +8913,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   creature, which is the same wall offering two different
                   answers about whose archive you are standing in.
 
-                  So the press is ABSENT here rather than inert. Its
-                  accessible name is "Save inspiration" — a name for an act
-                  that does not exist on this wall — and a disabled control
-                  with a lying label is worse than no control. The bubble
-                  still speaks; it simply has nothing to offer. */}
-              {atWall.kind === 'agent' ? null : (
-              <button
-                type="button"
-                className={`jar-char-press${lit ? ' jar-char-press--lit' : ''}`}
-                aria-label={say('worldCreatureSpeak')}
-                data-jar-chrome="1"
-                data-jar-interactive="1"
-                onClick={creatureSpeaks}
-              />
-              )}
+                  So the press is ABSENT there rather than inert — see the
+                  press itself, which now stands outside this block. */}
               {/* ═══ WHAT THE CREATURE IS HOLDING UP ═══════════════════════
                   Three things, in this order, and the order is the whole
                   design:
@@ -9044,12 +9175,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               ) : null}
             </>
           ) : null}
-          {!mouthOpen && charSay && charSay !== say('worldSavedWord') ? (
-            /* ALWAYS THE LIGHTER WEIGHT. Nothing that reaches `charSay` is
-               the top of mind — it is the record talking, a result, or a
-               failure — so this bubble never takes the full white. See the
-               note on `--aside` above. */
-            <div className="jar-char-bubble jar-char-bubble--aside" data-jar-chrome="1" data-jar-interactive="1">
+          {!mouthOpen && charSay ? (
+            /* THE SAME WHITE AS THE TOP OF MIND. This bubble wore a lighter
+               fill (`--aside`) to step back from the reading; founder,
+               2026-10-15: "make all ... the speech bubbles be the same color
+               ... as the top of mind ... don't do that." */
+            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
               <div className="jar-char-bubble-body">
                 {/* THE SENTENCE IS THE DOOR — there is no longer a second
                     line under it offering to open one.
@@ -9087,7 +9218,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     what it is asking for is the next thing kept, so it
                     opens the notepad. On the agent's wall that second kind
                     offers nothing, because only the agent writes there. */}
-                {sayIsAboutNothing(charSay) ? (
+                {/* AFTER A SAVE, THE CHAT IS ABOUT WHAT WAS SAVED — not about
+                    the words "I'm inspired!". A keep with no words (a file and
+                    nothing else) has nothing to talk about yet, so no act. */}
+                {charSay === say('worldImInspired') ? (
+                  visibleInspiration?.text.trim() ? (
+                    <span className="jar-char-bubble-acts">
+                      <button type="button" className="jar-char-bubble-act"
+                        disabled={talking}
+                        onClick={() => { void talkAbout(visibleInspiration); }}>
+                        {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
+                      </button>
+                    </span>
+                  ) : null
+                ) : sayIsAboutNothing(charSay) ? (
                   standingAsAgent ? null : (
                     <span className="jar-char-bubble-acts">
                       <button type="button" className="jar-char-bubble-act"
@@ -9203,7 +9347,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 happens next. A kept candidate becomes an ordinary save; a
                 let-go one asks why, because a collector that only hears
                 "no" cannot pick better tomorrow. */}
-            {!mouthOpen && !harvestWhy && harvestQueue[0] ? (
+            {reviewing && !mouthOpen && !harvestWhy && harvestQueue[0] ? (
               /* NOT THE READING'S TONE, ON PURPOSE. Founder, 2026-10-15: type
                  two needs "a very clear distinction" — these are what the
                  agent thought mattered, not what WAKA reads in you. So a line
@@ -9252,7 +9396,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 }}
               />
             ) : null}
-            {!mouthOpen && !harvestWhy && !harvestQueue[0] && claimQueue[0] ? (
+            {reviewing && !mouthOpen && !harvestWhy && !harvestQueue[0] && claimQueue[0] ? (
               /* THE SAME SLIP AS YOUR AGENT'S PICK, IN THE OTHER MATERIAL.
                  Founder, 2026-10-15: "let's have this design for 'keep it or
                  not it' for the first type of claim too ... better than the
@@ -9270,9 +9414,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 labelNot={say('worldNotAnymore')}
                 /* NO CHAT DOOR ON THE CARD. Founder, 2026-10-15: "remove chat
                    about it under the claim." The card asks one thing — still
-                   true or not anymore — and the slip no longer has a chat
-                   door, pull-down or ArrowDown to offer. After a no, the
-                   receipt line still offers "Say what's true". */
+                   true or not anymore — so `labelChat`/`onChat` are left off,
+                   which also drops the pull-down and ArrowDown into a chat.
+                   (The "Say what's true" receipt after a no went too.) */
                 more={claimQueue.length > 1}
                 /* A TAP GOES DEEPER: the reading and the saves it stands on,
                    in the same room the top of mind's "built from" opens. */
@@ -9284,12 +9428,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                      trip. `partly` is not reachable from here; see the note
                      above. */
                   sayVerdict(claim.id, answer === 'keep' ? 'true' : 'not_true', undefined, claim.contested, claim.statementRevision);
-                  /* THE RECEIPT OFFERS THE DOOR. After a no, one line under
-                     the slot says it was noted and offers the conversation
-                     the soft answers used to open by force. After a yes
-                     there is nothing to add to agreeing, so there is no
-                     line. */
-                  setClaimReceipt(answer === 'not' ? { statement: claim.statement } : null);
+                  /* NO RECEIPT AFTER A NO. There was one — "Noted. Say what's
+                     true", a door into a chat under the slot — and the
+                     founder took it out, 2026-10-15: "note * say whats true
+                     instead -> remove this flow." The answer is filed; the
+                     next card comes up. */
                 }}
                 onLeft={() => {
                   /* ═══ THE SITTING ENDS ON SOMETHING ════════════════════
@@ -9347,22 +9490,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 ) : null}
               </ClaimSlip>
             ) : null}
-            {!mouthOpen && claimReceipt ? (
-              <p className="jar-char-claim-receipt" role="status">
-                {say('worldClaimNoted')}{' '}
-                <button type="button" className="jar-char-claim-receipt-act"
-                  onClick={() => {
-                    const receipt = claimReceipt;
-                    setClaimReceipt(null);
-                    /* Seeded with the claim, the shape the other doors into
-                       a conversation use; the verdict already filed reaches
-                       the reply through `recentFeedback()`. */
-                    void talkAbout({ id: '', text: receipt.statement });
-                  }}>
-                  {say('worldSayWhatsTrue')}
-                </button>
-              </p>
-            ) : null}
             {/* ═══ AND THE SEAT DOES NOT SIT THERE EMPTY ═══════════════════
                 Founder, on a bordered box with nothing inside it: "there
                 isn't anything the user needs to engage with, so why is this
@@ -9408,9 +9535,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 moment is actually for.
                 It is offered only when there are words to talk about: a keep
                 that is a file and nothing else has not said anything yet. */}
-            {!mouthOpen&&visibleInspiration?<div className="jar-capture-receipt"><span role="status">{say('worldSavedWord')}</span>
-              {visibleInspiration.text.trim()?<button type="button" disabled={talking} onClick={()=>{void talkAbout(visibleInspiration);}}>{say(talking?'worldTalkOpening':'worldTalkAboutThis')}</button>:null}
-            </div>:null}
+            {/* THE RECEIPT UNDER THE BOX IS GONE. Founder, 2026-10-16: "remove
+                the saved and lets chat about it at the bottom" — the creature
+                says it now ("I'm inspired!", with the chat as its act). */}
           </div>
         </div>
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
@@ -10625,7 +10752,72 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                dark — the two rows that could tell you where you are, both
                wrong, on the one surface that already had the worst record
                for leaving people lost. */
-            { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open && !viewNavigation.view?.compose && !viewNavigation.view?.conversationId, go: () => { commitOpenNote(); if (viewNavigation.view?.compose) saveAsDraft(); else openOverHome(null); } },
+            /* ═══ TWO WORDS, BOTH OF THEM "A NEW ONE" ═════════════════════
+               Founder, 2026-10-15: "at the bottom bar just keep inspiration
+               and chat and clicking on it leads to new inspiration and new
+               chat, and user can go to inspiration list and chat list only
+               from that new page." And Principles leaves the bar: "principle
+               is sth user can only get by dragging" — the creature dragged
+               right, or →, from Now (see `toPrinciples`).
+
+               PRESSING THE LIT ONE AGAIN IS THE WAY HOME. With Now gone from
+               the bar, the row that says where you are is also the way back:
+               on a new note or the archive, Inspiration again goes home (the
+               note folds into a draft, an open saved note commits first);
+               on a chat or the chats list, Chat again goes home. Esc still
+               closes every page, and Principles walks home on ← or a drag
+               left. */
+            /* ═══ WHILE MAKING SOMETHING, THE BAR IS THAT PAGE'S OWN ═══════
+               Founder, 2026-10-15: "never put something on any corners. So at
+               the bottom, write X inspirations so the bottom bar should be X
+               inspirations the microphone the image instead of download have
+               a save icon and then have Close button and then clicking close
+               brings the user back to the main screen" — and of a chat: "say
+               all chats and then close."
+
+               So on a new note the row is: how many you have kept (the way to
+               the list), the note's own tools, and Close. On a chat it is All
+               chats, then Close. The other place's word steps out of the row
+               while you are making something: the bar is the page's, and a
+               door to the other room would be a second way out that is not
+               Close. On Now and on the two lists the row is Inspiration and
+               Chat as before, and the lit one pressed again goes home. */
+            /* WHILE REVIEWING, THE BAR IS THE WAY OUT OF IT. Founder,
+               2026-10-15: "in the review mode, bottom bar should say exit
+               review mode." The cards are the page then, so the two doors
+               to other rooms step out and the one word left ends the sitting
+               (Esc does the same) and brings the invitation back. */
+            ...(reviewing && !making ? [{ id: 'review', label: 'worldReviewExit' as const, here: false,
+              go: () => { setReviewing(false); } }] : []),
+            /* ON A LIST, ↩ │ CLOSE. Founder, 2026-10-15: "from all
+               inspirations, the bottom bar should just be a return icon |
+               close." ↩ goes back where the list was opened from — the new
+               note (its draft comes back with it) or the chat — or, from a
+               saved note open in the archive, back to the list; Close goes
+               home. The same for All chats: one ruling for the class.
+
+               BY A REMEMBERED ORIGIN, NOT BY HISTORY. Opening a list from a
+               page you are standing on REPLACES that page's entry (see
+               `openOverHome`), so there is nothing behind the list to step
+               back to; `listOrigin` is set by the bar's own "All …" press. */
+            ...(listing ? [{ id: 'return', label: 'worldBack' as const, here: false,
+              go: () => {
+                const close = closeSavedNote.current;
+                if (close) { close(); return; }
+                const origin = listOrigin.current;
+                listOrigin.current = null;
+                if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id);
+                else { openOverHome(null); if (origin?.kind === 'note') startNewInspiration(); }
+              } }] : []),
+            ...(making === 'talk' || listing || (reviewing && !making) ? [] : [{ id: 'inspiration', label: 'worldDockSaves' as const,
+              here: false,
+              go: () => {
+                commitOpenNote();
+                /* On a new note this is "All inspirations": the archive comes
+                   up and the note folds into a draft on the way. */
+                if (making === 'inspiration') { listOrigin.current = { kind: 'note' }; openOverHome('saves'); }
+                else startNewInspiration();
+              } }]),
             /* SAVE IS NOT A TAB. Founder: "home, inspirations -> let see list
                of past inspirations with main CTA to save new, chat -> see
                list of past chats with main CTA to start new chat,
@@ -10658,19 +10850,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                Closing commits what was typed — see `onNoteOpen` in
                `SavesOverlay`, which hands up `leaveNote` rather than a
                flag, precisely so this press cannot discard an edit. */
-            { id: 'saves', label: 'worldDockSaves' as const, here: viewNavigation.view?.open === 'saves',
-              go: () => { const close = closeSavedNote.current; if (close) close(); else openOverHome('saves'); } },
             /* THE PLUS. Not a place, so it does not light and does not take
                `aria-current`: it is the only verb in a row of nouns, and the
                sheet it raises is where the verb is chosen. */
-            { id: 'new', label: 'worldDockNew' as const, here: false, go: () => setMakingNew(value => !value) },
             /* CONVERSATIONS BEFORE PRINCIPLES, by the founder's own order:
                "home, inspirations, conversations, and principles". It is also
                the ladder's order — what you kept, what you said about it,
                what has endured — so the row reads left to right the way the
                material actually moves. */
-            { id: 'talk', label: 'worldDockTalk' as const, here: viewNavigation.view?.open === 'conversations' || Boolean(viewNavigation.view?.conversationId), go: () => { commitOpenNote(); openOverHome('conversations'); } },
-            { id: 'principles', label: 'worldDockPrinciples' as const, here: viewNavigation.view?.open === 'principles', go: () => { commitOpenNote(); openOverHome('principles'); } },
+            ...(making === 'inspiration' || listing || (reviewing && !making) ? [] : [{ id: 'talk', label: 'worldDockTalk' as const,
+              here: false,
+              go: () => {
+                commitOpenNote();
+                /* On a chat this is "All chats". */
+                if (making === 'talk') { listOrigin.current = { kind: 'chat', id: viewNavigation.view?.conversationId ?? 'new' }; openOverHome('conversations'); }
+                else openTalk(null);
+              } }]),
           ]).map(item => (
             /* THE SHEET HANGS OFF THE PLUS, not off the middle of the screen.
                Founder, with a screenshot: "this not being aligned with the +
@@ -10699,7 +10894,42 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                "Chats", then "Principles", then a full-screen invisible
                dismiss target, and only then to "New inspiration". Beside the
                plus in source order, Tab goes straight into it. */
-            <span key={item.id} className={item.id === 'new' ? 'waka-dock-slot' : undefined}>
+            <span key={item.id} className="waka-dock-slot">
+            {/* EVERY ROW'S SLOT IS THE SAME BOX. Only Inspiration's and ↩'s were
+                flex; Chat's was a bare inline span, so its two rules (1px wide,
+                a fixed height) collapsed to nothing — founder, 2026-10-16:
+                "for chats, you're missing the | | — the bottom bar should be
+                identical for inspiration and chat." */}
+            {/* THE WORD STAYS WHILE THE TOOLS ARRIVE. The tools used to take
+                the plus's place; with the plus gone they ride beside the
+                word — which on a new note says how many you have kept and
+                opens them — and Close comes last. */}
+            <button
+              type="button"
+              className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}`}
+              aria-current={item.here ? 'page' : undefined}
+              aria-label={item.id === 'return' ? say('worldBack') : undefined}
+              onClick={item.go}
+            >
+              {item.id === 'return'
+                ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                    <path d="M9 14 4.5 9.5 9 5"/><path d="M4.5 9.5H14a5.5 5.5 0 0 1 0 11h-3"/>
+                  </svg>
+                : making === 'inspiration' && item.id === 'inspiration'
+                  ? say('worldBackToAll')
+                  : making === 'talk' && item.id === 'talk'
+                    ? say('worldAllChats')
+                    : say(item.label)}
+            </button>
+            {/* ═══ THREE GROUPS, AND A RULE BETWEEN EACH ═══════════════════
+                Founder, 2026-10-15: "the first item is always either ... all
+                inspiration or all chat And then after that, let's have | And
+                then for inspirations it would be the dictate button, the photo
+                button, the save button and after that have another | and say
+                close." So on a page you are making something on, the row reads
+                where-you-came-from │ the making │ Close. The rules are drawn,
+                not typed: a `|` character would be read aloud. */}
+            {barOwner && item.id === barOwner ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
             {/* ═══ THE BAR TRANSFORMS, IN THE ONE SLOT THAT SHOULD ═══════
                 Founder: "when the user is in inspirations, maybe this
                 bottom bar should transform so that the icons turn into the
@@ -10743,10 +10973,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 and `view.open === 'saves'` are different addresses, so the
                 two are never on screen together. The order of the branches
                 says which wins if that ever stops being true. */}
-            {item.id === 'new' && !viewNavigation.view?.compose && savedNoteOpen ? (
+            {item.id === 'return' && viewNavigation.view?.open === 'saves' && savedNoteOpen ? (
               <span className="waka-dock-making" role="group" id={DOCK_SLOT}
                 aria-label={say('worldCaptureInspiration')} />
-            ) : item.id === 'new' && viewNavigation.view?.compose ? (
+            ) : item.id === 'inspiration' && viewNavigation.view?.compose ? (
               <span className="waka-dock-making" role="group" aria-label={say('worldCaptureInspiration')}>
                 {/* ═══ THE MICROPHONE SPEAKS INTO THE NOTE WHERE IT CAN ════
                     Founder: "is it not possible to do speech to text
@@ -10819,28 +11049,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     </>
                   )
                 ) : null}
-                <button type="button" className="waka-dock-tool" aria-label={say('worldComposerPhoto')}
-                  disabled={!composerDraft.available || recording.phase !== 'idle'}
-                  onClick={() => dockFileInput.current?.click()}><HomeActionIcon kind="photo"/></button>
-                {/* THE OFFERED SET IS QUOTED, NOT RETYPED. This string was
-                    byte-identical to `lib/inspiration-photo.ts`'s by hand,
-                    which is how four copies of one list came to exist and how
-                    the fourth (the memory card's picker, which said
-                    `image/*`) came to disagree with the other three. The
-                    accepted set is a property of the sniffer's rule, so it is
-                    stated where the sniffer is. `one-photo-accept-list.test.ts`
-                    now fails on any `accept="…"` written out by hand.
+                {/* ═══ THE PHOTO BECAME ＋ (2026-10-16) ═════════════════════
+                    Founder: "the bar's PHOTO icon becomes ＋. Pressing ＋
+                    opens a small pop-up menu with two rows: 'Add photo' and
+                    'Add file'." So the row reads All inspirations │ dictate ·
+                    ＋ · save │ Close, and a note can carry a PDF as readily
+                    as a picture.
 
-                    AND THIS PATH DOES HAVE THE LOCK: every file here goes
-                    through `addInspirationFiles`, which calls
-                    `inspectInspirationPhoto` on each one — as do the drop and
-                    the paste handlers on the note, which is the point, since a
-                    drag and a paste never pass a chooser and so never see an
-                    `accept` at all. */}
-                <input ref={dockFileInput} type="file" multiple hidden
-                  accept={PHOTO_ACCEPT}
-                  onChange={event => { const files = [...event.target.files ?? []]; event.target.value = '';
-                    if (files.length) void addInspirationFiles(files); }} />
+                    THE PHOTO ROW IS THE OLD BUTTON, UNCHANGED BEHIND IT:
+                    `PHOTO_ACCEPT` at the chooser and `addInspirationFiles`
+                    sniffing every file — as do the drop and the paste
+                    handlers on the note, which never pass a chooser and so
+                    never see an `accept` at all. The file row goes through
+                    the same function by the 'file' door, where
+                    `inspectAttachmentFile` is the lock instead. Both pickers
+                    and their `accept` live in `AddMenu`, quoted from the
+                    rules (`one-photo-accept-list.test.ts`). */}
+                <AddMenu buttonClassName="waka-dock-tool" multiple
+                  label={say('worldAddMenu')} photoLabel={say('worldAddPhoto')} fileLabel={say('worldAddFile')}
+                  disabled={!composerDraft.available || recording.phase !== 'idle'}
+                  onPhotos={files => { void addInspirationFiles(files); }}
+                  onFiles={files => { void addInspirationFiles(files, 'file'); }} />
 
                 {/* ═══ KEEPING IT IS A BAR ACTION NOW ═══════════════════════
                     Founder, with the pale pill in the bottom-right corner of
@@ -10962,61 +11191,39 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   <span className="waka-dock-state" role="status">{composerState}</span>
                 ) : null}
               </span>
-            ) : (
-            <button
-              type="button"
-              className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}${item.id === 'new' ? ' waka-dock-item--new' : ''}`}
-              aria-current={item.here ? 'page' : undefined}
-              aria-expanded={item.id === 'new' ? makingNew : undefined}
-              aria-label={item.id === 'new' ? say('worldDockNew') : undefined}
-              onClick={item.go}
-            >
-              {item.id === 'new'
-                ? <svg width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false">
-                    <path d="M8.5 2.6v11.8M2.6 8.5h11.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                : say(item.label)}
-            </button>
-            )}
-            {item.id === 'new' && makingNew ? (
-              <div className="waka-new" role="menu" aria-label={say('worldDockNew')} data-jar-chrome="1" data-jar-interactive="1"
-                onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setMakingNew(false); } }}>
-                {/* "NEW X", BOTH OF THEM. Founder: "new inspiration, new chat."
-                    The two rows said "Save inspiration" and "New conversation" —
-                    a verb beside a noun, for two moves that are the same move
-                    aimed at two things. Under a plus, every row is "a new one of
-                    these"; saying it twice the same way is what makes the pair
-                    read as a pair. */}
-                <button type="button" role="menuitem" className="waka-new-one"
-                  onClick={() => { setMakingNew(false); startNewInspiration(); }}>
-                  {say('worldNewInspiration')}
-                </button>
-                <button type="button" role="menuitem" className="waka-new-one"
-                  onClick={() => { setMakingNew(false); openTalk(null); }}>
-                  {say('worldConversationNew')}
-                </button>
-              </div>
+            ) : item.id === 'talk' && making === 'talk' ? (
+              /* ═══ AND A CHAT'S TOOLS COME INTO THE BAR TOO (2026-10-16) ═══
+                 Founder: "bar becomes All chats │ dictate · ＋ │ Close. The
+                 dictate button and ＋ move OUT of the chat box INTO the bar's
+                 middle group (the box keeps the text field and Send)."
+
+                 THE SAME LOAN THE ARCHIVE'S NOTE TAKES. The draft, the
+                 microphone and the uploads all belong to `ConversationPanel`
+                 — lifting them here would put a second copy of the unsent
+                 message in the world — so the bar lends an empty group and
+                 the panel portals its two tools into it, as `NoteTools` does
+                 for an open saved note. What the earlier note about "a chat
+                 does not get this" was refusing still holds: the FIELD does
+                 not come into the bar, and that was the arithmetic. Two
+                 glyphs fit where two glyphs already sit on a note. */
+              <span className="waka-dock-making" role="group" id={CHAT_TOOLS_SLOT}
+                aria-label={say('worldConversationMessage')} />
+            ) : null}
+            {/* CLOSE, LAST IN THE ROW, on the page you are making something
+                on: back to the main screen, the note kept as a draft. A chat
+                has its middle group again since 2026-10-16 — the mic and the
+                ＋, lent to the panel (above) — so it reads All chats │ tools
+                │ Close like a note does. */}
+            {barOwner && item.id === barOwner && (making !== null || (viewNavigation.view?.open === 'saves' && savedNoteOpen)) ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
+            {barOwner && item.id === barOwner ? (
+              <button type="button" className="waka-dock-item waka-dock-item--close"
+                onClick={() => leaveAsModal(making === 'inspiration' ? saveAsDraft : () => { commitOpenNote(); openOverHome(null); })}>
+                {say('worldClose')}
+              </button>
             ) : null}
             </span>
           ))}
         </nav>
-      ) : null}
-      {/* ═══ THE GROUND THAT TAKES THE DISMISSING PRESS ═════════════════
-          The sheet itself now hangs off the plus inside the dock — see the
-          note there. What stays out here is the full-screen target that
-          closes it, because that is the one part of this which genuinely
-          belongs to the whole window rather than to the button.
-
-          Nothing is drawn on it: dimming the world to ask a two-word
-          question is the modal weight this product spends its time
-          removing. It is `tabIndex={-1}` because it is a window-sized
-          invisible button, and it sat in the tab order between the bar and
-          the two rows the plus had just raised. The mouse is the only hand
-          it was ever for; Escape on the sheet and the plus itself are the
-          keyboard's way out. */}
-      {phase==='ready'&&makingNew ? (
-        <button type="button" className="waka-new-away" aria-label={say('worldClose')} tabIndex={-1}
-          onClick={() => setMakingNew(false)} />
       ) : null}
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
@@ -11300,7 +11507,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               `ConversationPanel` renders its own `<main className="chat-page">`
               inside this, and a `<main>` in a `<main>` is two primary
               landmarks. See `DialogSurface`'s header. */}
-          <DialogSurface className="waka-over waka-over--talk" aria-label={say('worldMenuTalk')}
+          <DialogSurface className="waka-over waka-over--talk" motion="modal" aria-label={say('worldMenuTalk')}
             data-way-out="talk"
             modal={false}
             onClose={viewNavigation.closeConversation}>
@@ -11344,6 +11551,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
               agent={agentWall ? { id: agentWall.id, name: agentWall.name } : null}
+              /* The bar's middle group, lent for the mic and the ＋. */
+              toolsSlot={CHAT_TOOLS_SLOT}
               onCreated={row=>{if(row.profileId===storageScope.profileId)committedTalk.current={owner,row};}}
               /* `replace` on the new-to-id hop so dismissing does not land
                  back on the blank conversation you just started. */

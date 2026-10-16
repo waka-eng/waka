@@ -236,8 +236,14 @@ it('keeps the surface to a transcript, a box and nothing at rest',async()=>{
      founder, cutting it: "let's get rid of the side part and referencing
      inspiration ... it's too complicated right now" — and this line is the
      ledger of that. If a fifteenth button is ever added here, this is still
-     the test that should stop it. */
-  expect(named()).toEqual(['Send']);
+     the test that should stop it.
+
+     AND THE ＋ BESIDE IT (2026-10-16). Founder: a chat's ＋ offers "Add
+     photos" and "Add file". Standing alone — no bar lending it a slot — the
+     panel keeps it in its own footer, beside Send; on the home page it rides
+     in the bar (`chat-bar.test.tsx`). Its two rows are not buttons until it
+     is pressed. */
+  expect(named()).toEqual(['Add photo or file','Send']);
   expect(host.querySelector('textarea')!.value).toBe('A sentence in the box');
 });
 it('keeps the full-page composer within the visible keyboard viewport',async()=>{
@@ -270,7 +276,7 @@ it('sends one durable reply intent and displays the follow-up',async()=>{
   expect(host.textContent).toContain('Thinking about that…');completeReply();await tick();expect(host.textContent).toContain('Which condition matters most today?');
   /* The reply arrived, so nothing is being waited for and the one other
      control on the surface goes away with the sentence it interrupted. */
-  expect(host.textContent).not.toContain('Thinking about that…');expect(named()).toEqual(['Send']);
+  expect(host.textContent).not.toContain('Thinking about that…');expect(named()).toEqual(['Add photo or file','Send']);
 });
 it('stops a pending reply and still shows that the message was saved',async()=>{
   stored.generationEnabled=true;await mount();await type('Keep this question');await click('Send');
@@ -279,7 +285,7 @@ it('stops a pending reply and still shows that the message was saved',async()=>{
   /* AND NO WAY TO RE-RUN THE GENERATOR. "Retry reply" was the other half of
      this test; a stopped reply now ends in a sentence, and asking again means
      saying something again through the box. */
-  expect(named()).toEqual(['Send']);
+  expect(named()).toEqual(['Add photo or file','Send']);
   expect(host.querySelector('textarea')!.disabled).toBe(false);
 });
 it('does not jump away from older messages when a new reply arrives',async()=>{

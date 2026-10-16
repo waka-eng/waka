@@ -116,14 +116,15 @@ describe("one accepted set of photos, stated once", () => {
     ).toEqual(sorted(BY_HAND));
   });
 
-  it("knows that exactly three upload paths consult the sniffer", () => {
+  it("knows that exactly four upload paths consult the sniffer", () => {
     /**
      * AND THE HALF THAT IS NOT ABOUT THE PICKER AT ALL.
      *
      * `accept` is a hint to the operating system's chooser and can be
      * defeated by renaming, dragging or pasting — so the rule is only
      * actually enforced where `inspectInspirationPhoto` is called. Counted:
-     * THREE calls — two in `Home.tsx`, one in `SavesOverlay.tsx`.
+     * FOUR calls — two in `Home.tsx`, one in `SavesOverlay.tsx`, one in
+     * `ConversationPanel.tsx`.
      *
      *   `addInspirationFiles` — the notepad's picker, its drop handler and
      *   its paste handler. The last two never pass a chooser at all, which
@@ -153,6 +154,12 @@ describe("one accepted set of photos, stated once", () => {
      *   so a caller that forgets gets sniffed and refused rather than
      *   trusted.
      *
+     *   `ConversationPanel`'s `checkPick` — THE FOURTH, 2026-10-16: a
+     *   chat's ＋ → "Add photos", and a photo that arrives by "Add file",
+     *   both sniffed before `uploadMessageAttachment` stages them. The
+     *   notepad's and the archive note's "Add file" rows reach the sniffer
+     *   through the two calls already counted, by their 'file' door.
+     *
      * THERE IS NO UNCOUNTED PATH LEFT. When this paragraph said there was,
      * it named `SavesOverlay`; `grep -rn "finalizeAttachment" src` now
      * reaches only call sites that appear in this count.
@@ -168,6 +175,6 @@ describe("one accepted set of photos, stated once", () => {
       calls.length,
       "the number of upload paths that sniff the bytes changed. If it went UP, somebody closed " +
         "another path — raise this number and name it. If it went DOWN, a path stopped checking.",
-    ).toBe(3);
+    ).toBe(4);
   });
 });

@@ -218,7 +218,7 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
           changes — Escape still leaves, and there is no scrim to press
           away on, because `.waka-page` is the ground rather than a film
           over one. */}
-      <DialogSurface className="waka-over" aria-label={title} modal={false} onClose={onClose}>
+      <DialogSurface className="waka-over" motion="modal" aria-label={title} modal={false} onClose={onClose}>
         <header className="waka-over-head">
           <h2 className="waka-over-title">{title}</h2>
         </header>

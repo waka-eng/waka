@@ -10,6 +10,7 @@ import {conversationUsesSavedSources} from './conversation-corrections.js';
 import {GEMINI_EMBEDDING_DIMENSIONS,GEMINI_EMBEDDING_MODEL,GeminiEmbeddingHttpClient,validateEmbeddingVector,type GeminiEmbeddingClient} from './inspiration-embeddings.js';
 import type {ConversationRetrievalTrace} from './conversation-retrieval.js';
 import {enqueueConversationReply,STALE_LOCK_SECONDS,wakeCommittedBackgroundJobs} from './queue.js';
+import {attachmentNote,readMessageAttachments} from './conversation-attachments.js';
 type Db=ReturnType<typeof getDb>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
 type Reader=Pick<Db,'select'>;
@@ -51,14 +52,44 @@ export async function projectConversationMessages(db:Reader,profileId:string,id:
   const byMessage=new Map<string,Request>();
   for(const request of requests)if(request.status==='ready'&&request.assistantMessageId&&!byMessage.has(request.assistantMessageId))byMessage.set(request.assistantMessageId,request);
   const groups=await currentConversationReferenceGroups(db,memory??await memoryOf(db,profileId,id),messages.map(message=>message.role==='assistant'?byMessage.get(message.id)?.references??[]:[]));
+  // Photos and files sent with the person's messages (0076); [] for every other message.
+  const media=await readMessageAttachments(db,profileId,id,messages.filter(message=>message.role==='user').map(message=>message.id));
   return messages.map((message,index)=>{
-    if(message.role==='user')return {...message,followUpQuestion:null,memoryChanged:false,replyRequestId:null,citations:[]};
+    if(message.role==='user')return {...message,attachments:media.get(message.id)??[],followUpQuestion:null,memoryChanged:false,replyRequestId:null,citations:[]};
     const request=byMessage.get(message.id),current=groups[index];
     const memoryChanged=!request||current.some((row,index)=>row===null||row.historical===true&&request.references[index]?.historical!==true);
-    return {...message,followUpQuestion:request?.followUpQuestion??null,memoryChanged,replyRequestId:request?.id??null,
+    return {...message,attachments:[],followUpQuestion:request?.followUpQuestion??null,memoryChanged,replyRequestId:request?.id??null,
       citations:request?.references.map((reference,index)=>({index,kind:reference.kind,id:reference.id,available:current[index]!==null,
         ...(current[index]?{preview:current[index]!.text.replace(/\s+/g,' ').slice(0,96),...(current[index]!.historical?{historical:true,recordedAt:current[index]!.recordedAt}:{} )}:{})}))??[]};
   });
+}
+/**
+ * WHAT A REPLY READS, AND THE WORDS IT SEARCHES WITH — one selection of the
+ * transcript, so the reply and `GET /:id/context` cannot disagree about what
+ * a chat is about. The newest eight messages, newest first, until 8,000
+ * characters; an assistant turn whose memory changed is left out.
+ *
+ * Retrieval searches with the person's words only: an attachment note
+ * ("[Attached, not read: ...]") is not a question about their memory. For a
+ * photo/file-only message the latest words IN THIS SELECTION stand in, and
+ * with none, the names of what was attached (`conversationSearchQuery`) —
+ * never words from further back than the reply itself can see.
+ */
+export function conversationReplyWindow(messages:ReadonlyArray<{role:'user'|'assistant';content:string;followUpQuestion:string|null;memoryChanged:boolean;
+  correctsMessageId:string|null;attachments:ReadonlyArray<{type:'image'|'file';name:string|null}>}>){
+  const history:ConversationReplyInput['history']=[];let characters=0,cut=false;
+  const searchHistory:Array<{role:string;content:string;attachments:ReadonlyArray<{name:string|null}>}>=[];
+  // Keep complete messages: truncating a human sentence can drop its negation
+  // or correction. Missing earlier context is disclosed to the provider.
+  for(const row of messages.slice(-8).reverse()){
+    if(row.role==='assistant'&&row.memoryChanged)continue;
+    const note=attachmentNote(row.attachments);
+    const content=row.content+(row.followUpQuestion?'\n'+row.followUpQuestion:'')+(note?(row.content?'\n':'')+note:'');
+    if(characters+content.length>8000){cut=true;break;}
+    history.unshift({role:row.role,content,...(row.correctsMessageId?{correction:true}:{})});characters+=content.length;
+    searchHistory.unshift({role:row.role,content:row.content,attachments:row.attachments});
+  }
+  return {history,cut,searchQuery:conversationSearchQuery(searchHistory)};
 }
 async function inputFor(db:Reader,profileId:string,id:string,userMessageId:string,queryVector?:number[]){
   const conversation=await owned(db,profileId,id),messages=await db.select().from(conversationMessages)
@@ -67,17 +98,10 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
   if(!anchor||anchor.position!==conversation.revision)return null;
   const memory=await conversationMemory(db,profileId,conversation);
   const projected=await projectConversationMessages(db,profileId,id,messages.slice(-8),memory);
-  const history:ConversationReplyInput['history']=[];let characters=0,contextChanged=messages.length>8||projected.some(row=>row.memoryChanged);
-  // Keep complete messages: truncating a human sentence can drop its negation
-  // or correction. Missing earlier context is disclosed to the provider.
-  for(const row of [...projected].reverse()){
-    if(row.role==='assistant'&&row.memoryChanged)continue;
-    const content=row.content+(row.followUpQuestion?'\n'+row.followUpQuestion:'');
-    if(characters+content.length>8000){contextChanged=true;break;}
-    history.unshift({role:row.role,content,...(row.correctsMessageId?{correction:true}:{})});characters+=content.length;
-  }
+  const window=conversationReplyWindow(projected),history=window.history,searchQuery=window.searchQuery;
+  const contextChanged=messages.length>8||window.cut||projected.some(row=>row.memoryChanged);
   let retrievalTrace:ConversationRetrievalTrace|undefined;
-  const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,conversationSearchQuery(history),conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
+  const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,searchQuery,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
   const [profile]=await db.select({locale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId));
   /* Pinning a keep into `sources` puts it in front of the model; pointing
    * `focusSourceNumber` at it is what tells the model that THIS is the one the
@@ -102,7 +126,7 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     sources.findIndex(source=>source.kind==='inspiration'&&source.id===conversation.initialInspirationId),
   ].find(index=>index>=0)??-1;
   const input:ConversationReplyInput={...(memory.perspective!=='mine'?{perspective:memory.perspective}:{}),preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
-  return {input,sources,memory,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
+  return {input,searchQuery,sources,memory,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }
 async function replyState(db:Reader,profileId:string,id:string){
   const now=new Date(),boundary=new Date(now.getTime()-HOUR);
@@ -206,7 +230,7 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
   if(!initial)return;
   let queryVector:number[]|undefined;
   if(initial.semantic){
-    try{queryVector=validateEmbeddingVector(await embeddingClient!.embed(conversationSearchQuery(initial.input.history),'RETRIEVAL_QUERY'));}
+    try{queryVector=validateEmbeddingVector(await embeddingClient!.embed(initial.searchQuery,'RETRIEVAL_QUERY'));}
     catch{ /* Bounded lexical context remains usable when semantic lookup fails. */ }
   }
   // The network call above owns no DB locks. Stop, deletion and edits during

@@ -33,7 +33,8 @@ export const CONVERSATION_STARTERS=[
 ] as const;
 
 export function conversationPreview(messages:ReadonlyArray<{role:string;content:string}>):string {
-  const human=messages.filter(message=>message.role==='user');
+  // A photo- or file-only message (0076) has no words to name a thread by.
+  const human=messages.filter(message=>message.role==='user'&&message.content.trim().length>0);
   const topic=human.find(message=>!CONVERSATION_STARTERS.some(starter=>starter===message.content.trim()));
   return (topic??human[0])?.content.trim().slice(0,120)??'';
 }

@@ -1,6 +1,9 @@
 import {ApiError,apiPath,deleteJson,getJson,postJson} from './http';
+import {isApiMessageAttachment,type ApiMessageAttachment} from './attachments';
 export type ConversationSourceKind='principle'|'top_of_mind_entry'|'inspiration';
-export interface ApiConversationMessage{id:string;profileId:string;conversationId:string;position:number;role:'user'|'assistant';content:string;createdAt:string;correctsMessageId?:string|null;savedInspirationIds?:string[];followUpQuestion?:string|null;memoryChanged?:boolean;replyRequestId?:string|null;citations?:Array<{index:number;kind:ConversationSourceKind;id:string;available:boolean;preview?:string;historical?:boolean;recordedAt?:string}>}
+export interface ApiConversationMessage{id:string;profileId:string;conversationId:string;position:number;role:'user'|'assistant';content:string;createdAt:string;correctsMessageId?:string|null;savedInspirationIds?:string[];followUpQuestion?:string|null;memoryChanged?:boolean;replyRequestId?:string|null;
+  /** Photos and files sent with a user message (`attachmentIds`); [] when none. Open one with `fetchAttachmentUrl(id)`. A message may be attachments only: `content` is then ''. */
+  attachments?:ApiMessageAttachment[];citations?:Array<{index:number;kind:ConversationSourceKind;id:string;available:boolean;preview?:string;historical?:boolean;recordedAt?:string}>}
 export interface ApiConversation{id:string;profileId:string;revision:number;perspective?:'mine'|'agent'|'both';agentProfileId?:string|null;createdAt:string;updatedAt:string;messages:ApiConversationMessage[];messageWindowStart?:number;preview?:string;generationEnabled?:boolean;initialPrinciple?:{id:string;statement:string;state:string}|null;
   /* WHAT THIS CONVERSATION IS PINNED TO. Founder: "user can pick an
      inspiration on the right ... and then when the user specifically brings
@@ -35,13 +38,16 @@ function checked(body:{conversation:ApiConversation;generationEnabled:boolean},p
   if(row.messages.some(message=>message.followUpQuestion!=null&&typeof message.followUpQuestion!=='string'||message.memoryChanged!==undefined&&typeof message.memoryChanged!=='boolean'||message.citations!==undefined&&(!Array.isArray(message.citations)||message.citations.length>3||message.citations.some(citation=>!['principle','top_of_mind_entry','inspiration'].includes(citation.kind)||typeof citation.id!=='string'||!Number.isInteger(citation.index)||citation.index<0||citation.index>2||typeof citation.available!=='boolean'))))throw invalid();
   if(row.messages.some(message=>message.citations?.some(citation=>citation.preview!==undefined&&(typeof citation.preview!=='string'||citation.preview.length>96||!citation.available))))throw invalid();
   if(row.messages.some(message=>message.citations?.some(reference=>!historicalMetadataValid(reference))))throw invalid();
+  // A message's attachments are its own: right conversation, right message, never staged once sent, at most six.
+  if(row.messages.some(message=>message.attachments!==undefined&&(!Array.isArray(message.attachments)||message.attachments.length>6||
+    message.attachments.some(item=>!isApiMessageAttachment(item)||item.conversationId!==id||item.messageId!==message.id||item.staged))))throw invalid();
   return {...row,generationEnabled:body.generationEnabled};
 }
 export async function listConversations(profile:string,signal?:AbortSignal){const body=await getJson<{profileId:string;conversations:ConversationSummary[];generationEnabled:boolean}>(path(profile),'Could not load conversations.',signal);if(body?.profileId!==profile||typeof body.generationEnabled!=='boolean'||!Array.isArray(body.conversations)||body.conversations.length>100||body.conversations.some(row=>row.profileId!==profile||typeof row.id!=='string'||typeof row.preview!=='string'))throw invalid();return body;}
 export async function fetchConversation(profile:string,id:string,signal?:AbortSignal,from?:number){return checked(await readWindow(profile,`/${encodeURIComponent(id)}`,signal,from),profile,id);}
 /** `talkWith` picks whose memory the reply reads — see `conversations.perspective`
     on the server. Absent is the person's own, as every chat before it. */
-export async function createConversation(profile:string,id:string,signal?:AbortSignal,principleId?:string,firstMessage?:{id:string;content:string;requestReply?:boolean},talkWith?:{perspective:'agent'|'both';agentId:string}){return checked(await writeWindow(profile,'',{id,...(principleId?{principleId}:{}),...(firstMessage?{firstMessage}:{}),...(talkWith?talkWith:{})},'Could not start the conversation.',signal),profile,id);}
+export async function createConversation(profile:string,id:string,signal?:AbortSignal,principleId?:string,firstMessage?:{id:string;content:string;requestReply?:boolean;attachmentIds?:string[]},talkWith?:{perspective:'agent'|'both';agentId:string}){return checked(await writeWindow(profile,'',{id,...(principleId?{principleId}:{}),...(firstMessage?{firstMessage}:{}),...(talkWith?talkWith:{})},'Could not start the conversation.',signal),profile,id);}
 /* `pinConversationInspiration` WENT WITH THE DRAWER THAT CALLED IT.
    Founder: "let's get rid of the side part and referencing inspiration ...
    it's too complicated right now." The ROUTE is live and tested — PATCH
@@ -49,7 +55,7 @@ export async function createConversation(profile:string,id:string,signal?:AbortS
    `initialInspiration` still arrives on the row below, so bringing this
    back is one wrapper and one panel. See the long note at the removal
    site in `ConversationPanel`. */
-export async function saveConversationMessage(profile:string,id:string,input:{id:string;content:string;revision:number;requestReply?:boolean;correctsMessageId?:string},signal?:AbortSignal,from?:number){return checked(await writeWindow(profile,`/${encodeURIComponent(id)}/messages`,input,'Could not confirm this message. Check your saved messages before retrying.',signal,from),profile,id);}
+export async function saveConversationMessage(profile:string,id:string,input:{id:string;content:string;revision:number;requestReply?:boolean;correctsMessageId?:string;attachmentIds?:string[]},signal?:AbortSignal,from?:number){return checked(await writeWindow(profile,`/${encodeURIComponent(id)}/messages`,input,'Could not confirm this message. Check your saved messages before retrying.',signal,from),profile,id);}
 /* DELETING A CONVERSATION LEFT WITH THE `···` MENU IT WAS HIDDEN IN.
  * Founder on the surface that held it: "so many different buttons that I have
  * no idea what its supposed to do."

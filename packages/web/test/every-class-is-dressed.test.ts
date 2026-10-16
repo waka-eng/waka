@@ -55,8 +55,13 @@ import { describe, expect, it } from "vitest";
 
 const SRC = resolve(__dirname, "../src");
 
-/** Classes that legitimately carry no declarations of their own. */
-const DRESSED_BY_SOMETHING_ELSE = 14;
+/** Classes that legitimately carry no declarations of their own.
+    15th, 2026-10-15: `jar-char-bubble--review` — a hook naming the review
+    invitation's bubble (read by the review tests and `diveIntoReview`). It
+    is dressed by `.jar-char-bubble` and its act by `.jar-char-bubble-act`;
+    its own weight was taken off on the founder's word ("dive into review
+    should have same font as lets chat about it"). */
+const DRESSED_BY_SOMETHING_ELSE = 15;
 
 function files(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {

@@ -295,14 +295,16 @@ export function registerRecallRoutes(
 
     const summaryByInspiration = new Map<string, AttachmentSummaryEntry[]>();
     for (const attachment of attachmentRows) {
-      const bucket = summaryByInspiration.get(attachment.inspirationId) ?? [];
+      const inspirationId = attachment.inspirationId;
+      if (!inspirationId) continue; // filtered by inArray above; narrows the 0076 nullable
+      const bucket = summaryByInspiration.get(inspirationId) ?? [];
       if (bucket.length >= MAX_SUMMARY_ATTACHMENTS) continue;
       bucket.push({
         id: attachment.id,
         type: attachment.type,
         label: attachmentLabel(attachment),
       });
-      summaryByInspiration.set(attachment.inspirationId, bucket);
+      summaryByInspiration.set(inspirationId, bucket);
     }
 
     const reflectionCounts = new Map(

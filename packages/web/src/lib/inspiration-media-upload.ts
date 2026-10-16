@@ -16,7 +16,7 @@ export async function uploadInspirationMedia(input: {
     input.uploading(item.id);
     let uploaded: InspirationDraftMedia['uploaded'];
     try {
-      const signed = await presignAttachment({ filename: item.name, contentType: item.blob.type, size: item.blob.size }, input.signal, { profile: input.profileId });
+      const signed = await presignAttachment({ filename: item.name || 'attachment', contentType: item.blob.type, size: item.blob.size }, input.signal, { profile: input.profileId });
       input.assertCurrent();
       await uploadToPresignedUrl(signed.uploadUrl, item.blob, signed.headers, input.signal);
       input.assertCurrent();

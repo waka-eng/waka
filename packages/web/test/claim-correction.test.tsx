@@ -5,9 +5,9 @@
  * are the seams the world reads itself through — the claim comes from
  * `listClaims` and the answer leaves through `createFeedback`, and both have
  * to be observable for a press to be checkable at all. `lib/api/conversations`
- * stays mocked because a conversation is still one thing an answer can lead
- * to — now by a second press on the receipt, never by the answer itself — so
- * it has to be watchable to assert both halves. `lib/auth-context` supplies
+ * stays mocked so the suite can assert that no answer opens a conversation —
+ * not by itself, and since the receipt went (2026-10-15) not by a second
+ * press either. `lib/auth-context` supplies
  * the viewer. `helpers/render-home` and `helpers/canvas-stub` replace time,
  * frames, randomness and drawing, not Home's behavior.
  *
@@ -30,9 +30,10 @@
  * named on either side under it and "Chat about it" between them. What the earlier
  * cases guarded is kept where it still applies: the verdict reaches the
  * server IMMEDIATELY, and yes stays on this screen so the sitting can go on.
- * What changed, and is asserted below: a no no longer opens a conversation
- * by itself — it offers one, on the receipt, with a second press — and
- * `partly` is not reachable from this slot at all.
+ * What changed, and is asserted below: a no no longer opens a conversation,
+ * and since 2026-10-15 it leaves no receipt either (the "Noted. Say what’s
+ * true instead" line and its door went: "remove this flow") — and `partly`
+ * is not reachable from this slot at all.
  *
  * TOMBSTONES, kept so the next person knows they were considered. The
  * correction textarea (four cases) went on 2026-10-11 when the soft answers
@@ -40,9 +41,10 @@
  * partly left the slot. `correctionText` is still produced by nothing.
  */
 import { act } from "react";
+import { useLocation } from "react-router-dom";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
-import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
+import { apiMockFrom, dataMockFrom, diveIntoReview, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 import { createFeedback, listClaims } from "../src/lib/api";
 import { loadSignal } from "../src/lib/data";
 import { createConversation } from "../src/lib/api/conversations";
@@ -115,11 +117,19 @@ function direction(label: string): HTMLButtonElement {
 const card = () => world.container.querySelector<HTMLDivElement>(".jar-pick-slip");
 /* The FRONT slip's sentence: the next claim is previewed behind it. */
 const statement = () => world.container.querySelector(".jar-pick-slip .jar-pick-statement")?.textContent ?? "";
-const receiptDoor = () => world.container.querySelector<HTMLButtonElement>(".jar-char-claim-receipt-act");
+/** THE RECEIPT IS GONE (2026-10-15): no line, no "Noted.", no door into a chat. */
+function expectNoReceipt(after: string) {
+  expect(world.container.querySelector(".jar-char-claim-receipt, .jar-char-claim-receipt-act"), `a receipt line came back after ${after}`).toBeNull();
+  const text = world.container.textContent ?? "";
+  expect(text, `"Noted." is on screen after ${after}`).not.toContain("Noted.");
+  expect(text, `"Say what’s true" is on screen after ${after}`).not.toContain("Say what’s true");
+}
 
 async function withClaims(...claims: Array<typeof CLAIM>) {
   vi.mocked(listClaims).mockResolvedValue({ claims, more: false });
   world = await mountWorld(FACTS);
+  /* The cards are behind the invitation since 2026-10-15; see `diveIntoReview`. */
+  await diveIntoReview(world.container, world.step);
   expect(statement(), "the claim queue is not on screen, so nothing below presses anything").toContain(claims[0]!.statement);
 }
 
@@ -165,7 +175,7 @@ it("files true at once when the slip goes right, and the next claim comes up", a
   expect(statement(), "the next claim did not come up").toContain(SECOND.statement);
 });
 
-it("files not true when the slip goes left, opens nothing, and offers the conversation on the receipt", async () => {
+it("files not true when the slip goes left, opens nothing, and leaves no receipt", async () => {
   vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
   vi.mocked(createConversation).mockResolvedValue({} as Awaited<ReturnType<typeof createConversation>>);
   await withClaims(CLAIM, SECOND);
@@ -176,16 +186,32 @@ it("files not true when the slip goes left, opens nothing, and offers the conver
   /* NOTHING CARRIES A CORRECTION. The field is gone; a `correctionText` here
      would mean some other path had started producing one silently. */
   expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).not.toHaveProperty("correctionText");
-  /* A NO COSTS WHAT A YES COSTS. The chat is offered, not forced. */
-  expect(openedChat(), "letting the slip go left opened a conversation on its own").toBeUndefined();
+  /* A NO COSTS WHAT A YES COSTS. Nothing opens on its own. */
+  expect(openedChat(), "a down-swipe opened a conversation on its own").toBeUndefined();
+  /* AND NOTHING IS OFFERED AFTER IT. Founder, 2026-10-15: "note * say whats
+     true instead -> remove this flow." The verdict is filed; the next card
+     comes up. */
+  expectNoReceipt("a left swipe");
+  await cardLeaves();
+  expectNoReceipt("a left swipe, once the card has gone");
+  expect(statement(), "the next claim did not come up").toContain(SECOND.statement);
+  expect(openedChat(), "something opened a conversation after the no").toBeUndefined();
+});
 
-  const door = receiptDoor();
-  expect(door, "the receipt offered no way to say what is true instead").toBeTruthy();
-  await act(async () => door!.click());
-  /* Seeded with the claim — the shape the other doors into a conversation
-     use. The verdict already filed reaches the reply through
-     `recentFeedback()`. */
-  expect(openedChat()?.[4]).toMatchObject({ content: CLAIM.statement });
+it("files not true on Not anymore, opens nothing, and leaves no receipt", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  vi.mocked(createConversation).mockResolvedValue({} as Awaited<ReturnType<typeof createConversation>>);
+  await withClaims(CLAIM, SECOND);
+
+  await act(async () => direction("Not anymore").click());
+
+  expect(createFeedback).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "not_true", targetRevision: "7" });
+  expect(openedChat(), "Not anymore opened a conversation").toBeUndefined();
+  expectNoReceipt("Not anymore");
+  await cardLeaves();
+  expectNoReceipt("Not anymore, once the card has gone");
+  expect(statement(), "the next claim did not come up").toContain(SECOND.statement);
 });
 
 it("settles back and files nothing when the drag stops short", async () => {
@@ -282,4 +308,116 @@ it("does not open the roots after a drag that settles back", async () => {
   await withClaims(CLAIM, SECOND);
   await drag(card()!, 10);
   expect(loadSignal).not.toHaveBeenCalled();
+});
+
+/**
+ * ═══ REVIEW IS SOMETHING YOU STEP INTO (2026-10-15) ═════════════════════
+ *
+ * Founder: "the entry point into the card swipe left and right should be the
+ * agent should say 'there are x things to review!' and the CTA becomes 'Dive
+ * into review' or sth like this, which makes the card swipe be the main
+ * action of the page." So the cards are not on home until that press, the
+ * invitation counts honestly, Esc steps back out to it, and the sitting ends
+ * on its own when there is nothing left to ask.
+ *
+ * WHETHER THE SITTING IS STILL ON is read through the one thing it changes
+ * that is not a card: → on Now walks to Principles only when NOT reviewing
+ * (Home.tsx, "PRINCIPLES IS REACHED BY GOING"), so the address after a → is
+ * the observable form of the mode.
+ */
+let where: ReturnType<typeof useLocation>;
+function Where() { where = useLocation(); return null; }
+const invite = () => world.container.querySelector(".jar-char-bubble--review");
+const inviteSays = () => invite()?.querySelector(".jar-char-bubble-reading")?.textContent?.trim() ?? "";
+const walkedToPrinciples = () => new URLSearchParams(where.search).get("open") === "principles";
+async function mountQueue(...claims: Array<typeof CLAIM>) {
+  vi.mocked(listClaims).mockResolvedValue({ claims, more: false });
+  world = await mountWorld(FACTS, { routerTools: <Where /> });
+}
+async function press(target: EventTarget, key: string) {
+  await act(async () => { target.dispatchEvent(new window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })); });
+  await world.step(4);
+}
+
+it("counts what waits in the invitation, in the singular and the plural", async () => {
+  await mountQueue(CLAIM);
+  expect(inviteSays()).toBe("There is 1 thing to review!");
+  expect(invite()?.querySelector("button.jar-char-bubble-act")?.textContent?.trim()).toBe("Dive into review");
+  world.unmount();
+
+  await mountQueue(CLAIM, SECOND, { ...CLAIM, id: "claim-3", statement: "You finish what you start." });
+  expect(inviteSays()).toBe("There are 3 things to review!");
+});
+
+it("shows no card until the dive, and the first card has the keys once in", async () => {
+  await mountQueue(CLAIM, SECOND);
+  expect(card(), "a claim card is lying on home before anyone asked for review").toBeNull();
+  expect(world.container.querySelector(".jar-pick"), "a pick is lying on home before anyone asked for review").toBeNull();
+
+  await diveIntoReview(world.container, world.step);
+  expect(invite(), "the invitation stayed up over the cards").toBeNull();
+  expect(statement()).toContain(CLAIM.statement);
+  /* THE SLIP, not the card's wrapper: `.jar-pick-slip` is the element with
+     `tabIndex` and the key handler, so it is what "← and → answer at once"
+     needs to be holding focus. */
+  expect(document.activeElement, "the first card's slip does not have focus on the way in, so ← and → do not answer it")
+    .toBe(world.container.querySelector(".jar-pick-slip"));
+});
+
+it("steps back out to the invitation on Escape", async () => {
+  await mountQueue(CLAIM, SECOND);
+  await diveIntoReview(world.container, world.step);
+  expect(card()).toBeTruthy();
+  await press(document.body, "Escape");
+  expect(card(), "Escape left the cards up").toBeNull();
+  expect(inviteSays(), "Escape did not bring the invitation back").toBe("There are 2 things to review!");
+});
+
+it("makes the bar one way out while reviewing: Exit review mode", async () => {
+  /* Founder, 2026-10-15: "in the review mode, bottom bar should say exit
+     review mode." */
+  const bar = () => [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")].map((n) => n.textContent?.trim());
+  await mountQueue(CLAIM, SECOND);
+  expect(bar(), "the bar before review").toEqual(["Inspiration", "Chat"]);
+  await diveIntoReview(world.container, world.step);
+  expect(bar(), "the bar while reviewing").toEqual(["Exit review mode"]);
+  const exit = [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")].find((n) => n.textContent?.trim() === "Exit review mode")!;
+  await act(async () => { exit.click(); });
+  expect(card(), "Exit review mode left the cards up").toBeNull();
+  expect(inviteSays(), "Exit review mode did not bring the invitation back").toBe("There are 2 things to review!");
+  expect(bar(), "the bar after review").toEqual(["Inspiration", "Chat"]);
+});
+
+it("keeps → for the card while reviewing, and gives it back to Principles when the last card is answered", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  await mountQueue(CLAIM);
+  await diveIntoReview(world.container, world.step);
+
+  /* ON THE FOCUSED CARD, → IS THE CARD'S: it answers, and nobody walks. */
+  const node = card()!;
+  node.focus();
+  await press(node, "ArrowRight");
+  expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "true" });
+  expect(walkedToPrinciples(), "→ on a claim card walked to Principles").toBe(false);
+
+  /* AND THE SITTING ENDS ON ITS OWN once nothing is left to ask: no card,
+     no invitation (there is nothing to count), and → walks again. */
+  await cardLeaves(); await world.step(4);
+  expect(card(), "a card is still up after the last answer").toBeNull();
+  expect(invite(), "the invitation came back with nothing to count").toBeNull();
+  await press(document.body, "ArrowRight");
+  expect(walkedToPrinciples(), "the review never ended, so → still does not walk").toBe(true);
+});
+
+it("does not walk to Principles on → off the card while reviewing", async () => {
+  await mountQueue(CLAIM, SECOND);
+  await diveIntoReview(world.container, world.step);
+  await press(document.body, "ArrowRight");
+  expect(walkedToPrinciples(), "→ walked away in the middle of a review").toBe(false);
+  expect(card(), "the review was dropped").toBeTruthy();
+  /* And after Escape, the same key walks — so the case above is the mode,
+     not a dead listener. */
+  await press(document.body, "Escape");
+  await press(document.body, "ArrowRight");
+  expect(walkedToPrinciples(), "→ on Now does not walk to Principles out of review").toBe(true);
 });

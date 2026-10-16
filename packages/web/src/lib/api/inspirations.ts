@@ -104,7 +104,11 @@ export interface CreateReflectionRequest {
 
 export interface CreateInspirationRequest {
   fromConversation?:{conversationId:string;messageId:string;selectedText:string;adopted:boolean};
-  attachments?: Array<{ type: 'link'; url: string; name?: string } | { type: 'image' | 'audio'; key: string; contentType: string; size: number; name?: string }>;
+  /* `{ type: 'file' }` (2026-10-15, `FILE_ATTACHMENT_CONTENT_TYPES` in
+     `./file-accept`) is in the union now that the note composer has "Add
+     file". There is no 'file' KIND, so a note whose attachments are files
+     and words is sent as 'note' — see `kind` in `Home.tsx`'s `keepIt`. */
+  attachments?: Array<{ type: 'link'; url: string; name?: string } | { type: 'image' | 'audio' | 'file'; key: string; contentType: string; size: number; name?: string }>;
   text: string;
   kind?: ApiInspirationKind;
   source?: ApiInspirationSource;

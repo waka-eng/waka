@@ -32,11 +32,11 @@
  * and still saves; it simply cannot take an attachment, which is honest —
  * there is nowhere to put the control.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { AddMenu } from "./AddMenu";
 import { HomeActionIcon } from "./HomeActionIcon";
-import { PHOTO_ACCEPT } from "../lib/inspiration-photo";
 import { supportedRecordingType, type useAudioRecording } from "../lib/use-audio-recording";
 
 /** The id `Home` gives the dock slot this renders into. */
@@ -51,7 +51,10 @@ export function NoteTools(props: {
   uploading: string;
   recordLabel: string;
   stopLabel: string;
+  /** The ＋'s name, and its two rows: "Add photo" and "Add file". */
+  addLabel: string;
   photoLabel: string;
+  fileLabel: string;
   /** Named for the act, not the page: it is the notepad's word, on purpose. */
   keepLabel: string;
   /**
@@ -104,9 +107,8 @@ export function NoteTools(props: {
       stored from `file.type` and never calls `inspectInspirationPhoto` —
       `Home`'s `attachTo`, the same shape, was fixed; this one is reported
       rather than edited because the file is under other hands.) */
-  onFile: (file: File) => void;
+  onFile: (file: File, door: "photo" | "file") => void;
 }): JSX.Element | null {
-  const file = useRef<HTMLInputElement>(null);
   /* THE SLOT IS FOUND AFTER THE FIRST PAINT, NOT DURING RENDER. `Home`
      mounts it in the same commit this component first renders in, and the
      order of two siblings' effects is not something to rely on — so the
@@ -139,32 +141,23 @@ export function NoteTools(props: {
           </button>
         )
       ) : null}
-      <button type="button" className="waka-dock-tool"
-        disabled={busy || props.recording.phase !== "idle"}
-        aria-label={props.photoLabel}
-        onClick={() => file.current?.click()}><HomeActionIcon kind="photo" /></button>
-      {/* WHAT THE CHOOSER MAY OFFER IS THE PHOTO RULE'S OWN BUSINESS, so it
-          is quoted from where that rule lives rather than typed out here.
-          This list was identical to `lib/inspiration-photo.ts`'s by hand, and
-          identical-by-hand is the state a list is in just before it stops
-          being identical: the same string existed at four file inputs and the
-          fourth said `image/*`, so a TIFF was selectable from one picker in
-          this product and refused with a sentence at the other three.
+      {/* ═══ THE PHOTO BECAME ＋, HERE AS ON THE NOTEPAD (2026-10-16) ═════
+          Founder: "the bar's PHOTO icon becomes ＋ … two rows: 'Add photo'
+          and 'Add file'" — on a new note and on a saved one open in the
+          archive, because the two are one page.
 
-          AND IT IS STILL ONLY THE DOOR. `accept` greys out what the operating
-          system's file chooser will not hand over; it is defeated by a
-          rename, by a drag and by a paste, so nothing here is a check. The
-          lock is `inspectInspirationPhoto`, which reads the first 64 bytes —
-          and on THIS path that call belongs to the overlay's `attach`, not to
-          this component, because the same `onFile` also carries the
-          recorder's audio. See the note on `onFile` above. */}
-      <input ref={file} type="file" hidden
-        accept={PHOTO_ACCEPT}
-        onChange={(event) => {
-          const picked = event.target.files?.[0];
-          event.target.value = "";
-          if (picked) props.onFile(picked);
-        }} />
+          WHAT THE CHOOSER MAY OFFER IS STILL THE RULES' OWN BUSINESS, quoted
+          inside `AddMenu` from where each rule lives. And it is still only
+          the door: the lock is `inspectInspirationPhoto` for a photo and
+          `inspectAttachmentFile` for a file, and on THIS path both belong to
+          the overlay's `attach`, not to this component, because the same
+          `onFile` also carries the recorder's audio. One at a time: `attach`
+          lands each file on the row before the next is chosen. */}
+      <AddMenu buttonClassName="waka-dock-tool"
+        label={props.addLabel} photoLabel={props.photoLabel} fileLabel={props.fileLabel}
+        disabled={busy || props.recording.phase !== "idle"}
+        onPhotos={(picked) => { if (picked[0]) props.onFile(picked[0], "photo"); }}
+        onFiles={(picked) => { if (picked[0]) props.onFile(picked[0], "file"); }} />
       {/* ═══ AND THE SAVE, IN THE SAME SEAT IT HAS ON THE NOTEPAD ═════════
           Founder: "this button should appear when I'm editing old
           inspirations as well. So when I'm looking at past saved

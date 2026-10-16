@@ -32,9 +32,11 @@ export async function recoverAttachmentAnalysis(tx: Tx, input: {
 }): Promise<Attachment | null | 'conflict' | 'rate_limited'> {
   const [snapshot] = await tx.select({ inspirationId: attachments.inspirationId }).from(attachments)
     .where(and(eq(attachments.id, input.attachmentId), eq(attachments.profileId, input.profileId))).limit(1);
-  if (!snapshot) return null;
+  // A chat attachment (no inspiration) has no analysis to recover.
+  if (!snapshot?.inspirationId) return null;
+  const inspirationId = snapshot.inspirationId;
   const [parent] = await tx.select({ id: inspirations.id }).from(inspirations)
-    .where(and(eq(inspirations.id, snapshot.inspirationId), eq(inspirations.profileId, input.profileId))).for('update');
+    .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, input.profileId))).for('update');
   if (!parent) return null;
   const [current] = await tx.select().from(attachments)
     .where(and(eq(attachments.id, input.attachmentId), eq(attachments.profileId, input.profileId))).for('update');
@@ -54,6 +56,6 @@ export async function recoverAttachmentAnalysis(tx: Tx, input: {
     ...(current.type === 'audio' ? { transcriptRevision: current.transcriptRevision + 1 } : {}),
     enrichmentRetryCount: window.count + 1, enrichmentRetryWindowAt: window.windowAt, updatedAt: new Date(),
   }).where(eq(attachments.id, current.id)).returning();
-  await enqueueEnrichAttachment(current.profileId, current.id, current.inspirationId, tx);
+  await enqueueEnrichAttachment(current.profileId, current.id, inspirationId, tx);
   return next!;
 }

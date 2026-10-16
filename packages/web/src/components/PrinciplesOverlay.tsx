@@ -116,6 +116,9 @@ function pageCreature(): CreatureSpot | null {
   return { x: box.left + box.width / 2, y: box.top + box.height / 2, size };
 }
 
+/** How far a pull left on the page travels, in CSS px, before it is the walk home. */
+const PULL_HOME = 56;
+
 export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onOpen, onShare, onChat, crossing = null, onCrossed }: {
   locale: SupportedLocale;
   profileId?: string | null;
@@ -157,6 +160,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
   const arrivalScope = profileId ? { accountId: "p", profileId } : null;
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
+  const pull = useRef<{ id: number; x: number; y: number } | null>(null);
   /* LATCHED. The walk in is decided once, on arrival; the walk out arrives
      later, as a new prop on a page that is already up. The sky reads the
      same object for the whole stay, so finishing a walk never restarts it. */
@@ -249,6 +253,26 @@ export function PrinciplesOverlay({ locale, profileId, name, title, onClose, onO
         aria-label={title}
         modal={false}
         onClose={onClose}
+        /* A PULL LEFT WALKS HOME — the mirror of the pull right that came
+           here (founder, 2026-10-15: Principles is reached by dragging, not
+           by a tab). Only from the page itself, never from a control, so a
+           drag that starts on a button or a field is that control's own. */
+        onPointerDown={event => {
+          const target = event.target instanceof Element ? event.target : null;
+          if (target?.closest('button, a, input, textarea, select, [role="slider"], [data-jar-interactive]')) return;
+          pull.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
+        }}
+        onPointerUp={event => {
+          const start = pull.current;
+          pull.current = null;
+          if (!start || start.id !== event.pointerId) return;
+          const dx = event.clientX - start.x, dy = event.clientY - start.y;
+          /* A drag that left text selected was a selection — of a principle
+             someone wanted to copy — not a pull home. */
+          const selected = typeof window.getSelection === "function" && (window.getSelection()?.toString().length ?? 0) > 0;
+          if (!selected && -dx >= PULL_HOME && Math.abs(dy) < -dx) onClose();
+        }}
+        onPointerCancel={() => { pull.current = null; }}
         >
         <header className="waka-over-head">
           <h2 className="waka-over-title">{title}</h2>

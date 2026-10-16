@@ -14,9 +14,10 @@
  * be a claim about them that nobody made.
  */
 
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   bigint,
+  check,
   foreignKey,
   index,
   integer,
@@ -27,6 +28,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import { conversationMessages } from "./schema-conversations";
 import { inspirations } from "./schema-inspirations";
 import { profiles } from "./schema-profiles";
 
@@ -67,7 +69,22 @@ export const attachments = pgTable(
       .notNull()
       .references(() => profiles.id, { onDelete: "cascade" }),
 
-    inspirationId: uuid("inspiration_id").notNull(),
+    /**
+     * EXACTLY ONE OWNER (`attachments_owner_check`, migration 0076): an
+     * inspiration, or a chat message. Every row before 0076 is an inspiration
+     * attachment and keeps this set.
+     */
+    inspirationId: uuid("inspiration_id"),
+    /**
+     * A CHAT ATTACHMENT. `conversationId` is set in both of its states;
+     * `stagedMessageId` while it waits in the composer for a message that has
+     * not been sent (no FK can name a row that does not exist yet), and
+     * `messageId` once the send moved it over in the message's own
+     * transaction — the composite FK below then holds it to that message.
+     */
+    conversationId: uuid("conversation_id"),
+    messageId: uuid("message_id"),
+    stagedMessageId: uuid("staged_message_id"),
 
     type: attachmentTypeEnum("type").notNull(),
 
@@ -120,6 +137,25 @@ export const attachments = pgTable(
       foreignColumns: [inspirations.profileId, inspirations.id],
       name: "attachments_inspiration_fk",
     }).onDelete("cascade"),
+    // A chat attachment cannot hang off another profile's or another
+    // conversation's message, and goes when its message goes.
+    messageFk: foreignKey({
+      columns: [table.profileId, table.conversationId, table.messageId],
+      foreignColumns: [conversationMessages.profileId, conversationMessages.conversationId, conversationMessages.id],
+      name: "attachments_message_fk",
+    }).onDelete("cascade"),
+    messageIdx: index("attachments_message_idx").on(table.profileId, table.conversationId, table.messageId).where(sql`${table.messageId} IS NOT NULL`),
+    stagedIdx: index("attachments_staged_idx").on(table.profileId, table.stagedMessageId).where(sql`${table.stagedMessageId} IS NOT NULL`),
+    conversationIdx: index("attachments_conversation_idx").on(table.profileId, table.conversationId).where(sql`${table.conversationId} IS NOT NULL`),
+    /* 0077. Serves "one stored object, one attachment" (`assertAttachmentKeysUnused`
+       and the chat finalize) and the sweeps' still-referenced check. Not
+       unique: rows from before those checks may share a key. */
+    s3KeyIdx: index("attachments_s3_key_idx").on(table.s3Key).where(sql`${table.s3Key} IS NOT NULL`),
+    /* 0077. The daily sweep of staged uploads whose message was never sent. */
+    stagedAgeIdx: index("attachments_staged_age_idx").on(table.createdAt).where(sql`${table.stagedMessageId} IS NOT NULL`),
+    ownerCheck: check("attachments_owner_check", sql`(${table.inspirationId} IS NOT NULL AND ${table.conversationId} IS NULL AND ${table.messageId} IS NULL AND ${table.stagedMessageId} IS NULL)
+      OR (${table.inspirationId} IS NULL AND ${table.conversationId} IS NOT NULL AND num_nonnulls(${table.messageId},${table.stagedMessageId}) = 1
+        AND ${table.type} IN ('image','file') AND ${table.s3Key} IS NOT NULL)`),
   }),
 );
 

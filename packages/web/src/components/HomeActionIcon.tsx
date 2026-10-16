@@ -75,9 +75,16 @@
    `share` ARRIVED 2026-10-15. Founder: "i also dont see option to share a
    specfici inspiration." An arrow leaving an open tray — the shape both
    phone systems already taught for "send this somewhere", so it needs no
-   label beside it. It is `keep` turned inside out on purpose: keep brings a
-   thing down into the tray, share lifts it out. */
-export function HomeActionIcon({kind,className}:{kind:'capture'|'chat'|'record'|'photo'|'play'|'pause'|'keep'|'erase'|'send'|'stop'|'share';className?:string}){
+   label beside it. (It was drawn as `keep` turned inside out; `keep` is a
+   disk now — see its own note — and share keeps its tray.)
+
+   `plus` AND `file` ARRIVED 2026-10-16. Founder, 2026-10-15: in a note the
+   photo button "becomes ＋" with "Add photo" and "Add file", and the chat
+   gets the same ＋. The plus is the bar's one door to a choice rather than
+   an act, so it is the plainest mark there is; `file` is a page with its
+   corner folded — the shape both phone systems use for "a document" — and
+   it stands beside a name on every tile, so it never has to carry one. */
+export function HomeActionIcon({kind,className}:{kind:'capture'|'chat'|'record'|'photo'|'plus'|'file'|'play'|'pause'|'keep'|'erase'|'send'|'stop'|'share';className?:string}){
   return <svg className={className} data-home-action-icon={kind} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
     {kind==='capture'?<><path className="jar-spark-core" d="m12 5 1.8 5.2L19 12l-5.2 1.8L12 19l-1.8-5.2L5 12l5.2-1.8z" fill="currentColor" strokeWidth=".8"/>
         <g className="jar-spark-rays" strokeWidth="1.4"><path d="m3 3 2 2m14 14 2 2M3 21l2-2M19 5l2-2"/></g></>
@@ -85,11 +92,17 @@ export function HomeActionIcon({kind,className}:{kind:'capture'|'chat'|'record'|
       :kind==='send'?<path d="M4.5 12h14m0 0-5.5-5.5M18.5 12 13 17.5" fill="none" stroke="currentColor" strokeWidth="1.9"/>
       :kind==='stop'?<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none"/>
       :kind==='share'?<><path d="M12 14.2V4.4"/><path d="m8.6 7.6 3.4-3.4 3.4 3.4"/><path d="M7.5 10.5H6.2a1.4 1.4 0 0 0-1.4 1.4v6.4a1.4 1.4 0 0 0 1.4 1.4h11.6a1.4 1.4 0 0 0 1.4-1.4v-6.4a1.4 1.4 0 0 0-1.4-1.4h-1.3"/></>
-      :kind==='keep'?<><path d="M12 4v9.2"/><path d="m8.6 10 3.4 3.4L15.4 10"/><path d="M5 18.5h14"/></>
+      /* `keep` IS A SAVE, NOT A DOWNLOAD. Founder, 2026-10-15: "instead of
+         download have a save icon." The arrow into a tray read as a file
+         landing on your disk; this is the one shape everyone already reads
+         as Save — a disk, its shutter at the top, its label below. */
+      :kind==='keep'?<><path d="M6 4.5h10.4L19.5 7.6V18a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V6A1.5 1.5 0 0 1 6 4.5z"/><path d="M8.2 4.5v4h7v-4"/><rect x="7.6" y="12.6" width="8.8" height="6.9" rx=".8"/></>
       :kind==='erase'?<><path d="M4.8 6.8h14.4"/><path d="M9.6 6.8V5.1a1.2 1.2 0 0 1 1.2-1.2h2.4a1.2 1.2 0 0 1 1.2 1.2v1.7"/>
         <path d="m6.6 6.8.85 11.3a1.7 1.7 0 0 0 1.7 1.6h5.7a1.7 1.7 0 0 0 1.7-1.6l.85-11.3"/></>
       :kind==='play'?<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>
       :kind==='pause'?<><rect x="7.5" y="5.5" width="3.4" height="13" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.1" y="5.5" width="3.4" height="13" rx="1.2" fill="currentColor" stroke="none"/></>
+      :kind==='plus'?<path d="M12 5v14M5 12h14"/>
+      :kind==='file'?<><path d="M13.8 3.5H7.5A1.5 1.5 0 0 0 6 5v14a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 19V7.7z"/><path d="M13.8 3.5v4.2H18"/></>
       :kind==='photo'?<><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="m4 17 4.5-4.5a2 2 0 0 1 2.8 0L16 17"/><path d="m14 15 1.6-1.6a2 2 0 0 1 2.8 0L20 15"/></>
       :<><path d="M20 11a3 3 0 0 1-3 3H9l-5 4V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3z"/><path d="M10 18h7l4 3v-5"/><path d="M8 8h8"/></>}
   </svg>;

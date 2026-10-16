@@ -2,8 +2,11 @@ import { profileStorageKey, type ProfileStorageScope } from './profile-storage';
 
 export interface InspirationDraftMedia {
   id: string;
-  type: 'image' | 'audio' | 'link';
-  name: string;
+  /** 'file' since 2026-10-16: a document chosen through the note's ＋ → Add file. */
+  type: 'image' | 'audio' | 'link' | 'file';
+  /** Absent when the file came with none. "Photo", "File" and "Recording"
+      are said when it is drawn (`attachmentLabel`), never stored or sent. */
+  name?: string;
   url?: string;
   blob?: Blob;
   uploadError?: string;
@@ -63,7 +66,7 @@ function readStored(value: unknown, owner: string): StoredDraft | null {
   if (row.owner !== owner || typeof row.id !== 'string' || row.key !== `${owner}:${row.id}` || !Number.isSafeInteger(row.revision) ||
     typeof row.text !== 'string' || (row.linkText !== undefined && typeof row.linkText !== 'string') || !Array.isArray(row.media) || !Number.isFinite(row.updatedAt)) throw new Error('Unverifiable draft');
   if (row.recordingCandidate && (row.recordingCandidate.type !== 'audio' || typeof row.recordingCandidate.id !== 'string' ||
-    typeof row.recordingCandidate.name !== 'string' || !(row.recordingCandidate.blob instanceof Blob))) throw new Error('Unverifiable recording draft');
+    (row.recordingCandidate.name !== undefined && typeof row.recordingCandidate.name !== 'string') || !(row.recordingCandidate.blob instanceof Blob))) throw new Error('Unverifiable recording draft');
   return row;
 }
 export function newInspirationDraft(text = ''): InspirationDraft {

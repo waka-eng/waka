@@ -72,6 +72,10 @@ export function NotePage({
   return (
     <>
       <div className="jar-note-top">
+        {/* ═══ AND NOTHING IN THE CORNER, EVER ════════════════════════
+            Founder, 2026-10-15: "never put something on any corners." The
+            archive's door on a new note is "N inspirations" in the bar, not
+            a word in this first track — which stays empty, as below. */}
         {/* ═══ AND THE WAY BACK IS THE BAR ═══════════════════════════
             Founder: "I still don't get why you have this carrot button
             when I do new inspiration, because I can just go to all the
