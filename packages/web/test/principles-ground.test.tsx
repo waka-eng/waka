@@ -194,7 +194,7 @@ it("says these are your agent's principles on an agent's wall", async () => {
     <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Bot" title="Your Agent's Principles" whose="agent" onClose={() => {}} onOpen={() => {}} />,
   ));
   const said = host.querySelector(".waka-held-hero .waka-held-says")?.textContent ?? "";
-  expect(said).toBe("These are your agent's principles: what has stayed true across its top of mind for a long time.");
+  expect(said).toBe("These are your agent’s principles: what has stayed true across its top of mind for a long time.");
   expect(said).not.toContain("These are your principles");
 });
 
@@ -216,4 +216,14 @@ it("on an agent's wall, the waiting ground and the first-principle greeting spea
   expect(host.querySelector(".waka-held-first")?.textContent).toBe("Here it is. Your agent’s first principle.");
   expect(host.querySelector(".waka-held-proof")?.textContent).toContain("Drawn from two things it kept");
   expect(host.textContent).not.toMatch(/your (first )?principle|you kept/i);
+});
+
+it("offers no chat about the creature's line on an agent's ground", async () => {
+  vi.mocked(fetchSignals).mockResolvedValue([signal("a", "A.")]);
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);
+  await act(async () => root.render(
+    <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Bot" title="Your Agent's Principles" whose="agent" onClose={() => {}} onOpen={() => {}} onChat={() => {}} />,
+  ));
+  expect(host.querySelector(".waka-ground-bubble")).not.toBeNull();
+  expect(host.querySelector(".waka-ground-bubble .jar-char-bubble-act"), "the agent's line is not yours to open a chat with").toBeNull();
 });

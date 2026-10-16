@@ -312,7 +312,10 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           </>
         ) : rows.length === 0 ? (
           /* THE WAIT IS THE GROUND BEING LAID — see `PrinciplesGround`. */
-          <PrinciplesGround locale={locale} profileId={profileId} whose={whose} onChat={onChat} />
+          /* No chat act on an agent's ground: the chat would open with the
+             agent's line posted as the owner's own first message. Home omits
+             it too; this holds even when a caller does not. */
+          <PrinciplesGround locale={locale} profileId={profileId} whose={whose} onChat={agent ? undefined : onChat} />
         ) : (
           <>
           {/* THE CREATURE THAT WAITED WITH YOU PRESENTS IT. Same body, same
