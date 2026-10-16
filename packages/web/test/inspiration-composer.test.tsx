@@ -20,7 +20,7 @@ beforeEach(() => {
     locale: 'en-US', public: false, ready: true, fileDraftsAvailable: true, busy: false, error: '', uploadingId: null, inputRef: null,
     save: { phase: 'idle', pending: null, busy: false, start: vi.fn(), retry: vi.fn(), check: vi.fn(), dismiss: vi.fn(), resetInvalid: vi.fn(), editRejected: vi.fn() },
     recording: { phase: 'idle', seconds: 0, error: '', notice: '', start: vi.fn(), stop: vi.fn(), cancel: vi.fn() },
-    onText: vi.fn(), onFiles: vi.fn(), onRetryFile: vi.fn(), onChooseRecording: vi.fn(), onRemove: vi.fn(), onVisibility: vi.fn(), onClose: vi.fn(), onSubmit: vi.fn(), onSeeAll: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(),
+    onText: vi.fn(), onFiles: vi.fn(), onRetryFile: vi.fn(), onChooseRecording: vi.fn(), onRemove: vi.fn(), onVisibility: vi.fn(), onClose: vi.fn(), onSubmit: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(),
   };
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
@@ -114,13 +114,17 @@ it('opens straight into the words, under the moment and the way back',async()=>{
      and clicking on it leads to new inspiration and new chat, and user can
      go to inspiration list and chat list ONLY from that new page." The bar's
      word now makes a new note, so this page is the archive's only way in.
-     So the row holds EXACTLY that one press — "All inspirations", in words —
-     and the chevron, or anything else, arriving beside it still fails. */
-  expect(pressesInTopRow(host), 'something other than the archive door is pressable beside the date').toEqual(['jar-note-see-all']);
-  const seeAll = host.querySelector<HTMLButtonElement>('.jar-note-top .jar-note-lead > button.jar-note-see-all');
-  expect(seeAll?.textContent?.trim(), 'the way to the archive does not say where it goes').toBe('All inspirations');
-  await act(async () => seeAll!.click());
-  expect(props.onSeeAll).toHaveBeenCalledTimes(1);
+     So the row held EXACTLY that one press — "All inspirations", in words.
+
+     ═══ AND THEN NOTHING, BECAUSE NOTHING SITS IN A CORNER ════════════════
+     Founder, the same day: "never put something on any corners. So at the
+     bottom, write X inspirations ... and then have Close button." The
+     archive's door is the first word of the note's own bar now, and Close
+     its last (`home-navigation.test.tsx` presses both). So this row is back
+     to holding nothing at all, and the door, the chevron, or anything else
+     arriving beside the date fails. */
+  expect(pressesInTopRow(host), 'something is pressable beside the date on a new note').toEqual([]);
+  expect(host.querySelector('.jar-note-see-all, .jar-note-lead'), 'the archive door came back into the corner').toBeNull();
   expect(props.onClose).not.toHaveBeenCalled();
   /* The one fact a blank page can state. Not asserted to an exact string —
      it is the clock — but it must be a real stamp rather than an empty node,
@@ -263,8 +267,9 @@ it('refuses unsafe link schemes without submitting or discarding the draft',asyn
 it('renders exactly one of each corner, never two', async () => {
   props.text = ''; props.media = []; await mount();
   const count = (selector: string) => host.querySelectorAll(selector).length;
-  /* One door to the archive (2026-10-15) and nothing else — not two. */
-  expect(pressesInTopRow(host), 'the chevron came back, or something else did').toEqual(['jar-note-see-all']);
+  /* Nothing in the corner (2026-10-15: "never put something on any
+     corners") — not one door, and so certainly not two. */
+  expect(pressesInTopRow(host), 'the chevron came back, or something else did').toEqual([]);
   expect(count('.jar-note-when'), 'the moment is doubled').toBe(1);
   /* AND THE ATTACH CORNER IS NOT HERE AT ALL ANY MORE. Record and photo
      moved into the dock's making-slot — founder, of this corner, "I don't

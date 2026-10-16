@@ -511,6 +511,20 @@ function dockRows(container: HTMLElement): HTMLButtonElement[] {
 const accessibleName = (node: HTMLElement) =>
   (node.textContent?.trim() || node.getAttribute("aria-label")?.trim()) ?? "";
 
+/**
+ * THE WHOLE BAR, IN THE ORDER A PERSON MEETS IT: every press by accessible
+ * name, a chat's field as `field`, and each drawn rule between groups as
+ * `│`. On Now and the two lists this is the two words; on a page you are
+ * making something on it is the list's door │ the making │ Close (founder,
+ * 2026-10-15).
+ */
+export function barShape(container: HTMLElement): string[] {
+  const bar = container.querySelector("nav.waka-dock");
+  if (!bar) throw new Error("the bar is not on screen");
+  return [...bar.querySelectorAll<HTMLElement>("button, textarea, span.waka-dock-sep")].map((node) =>
+    node.matches("span.waka-dock-sep") ? "│" : node.matches("textarea") ? "field" : accessibleName(node));
+}
+
 /** Press the bar row named exactly `label`, or say what the bar offers. */
 export async function pressDockRow(container: HTMLElement, label: string): Promise<void> {
   const rows = dockRows(container);
@@ -519,6 +533,44 @@ export async function pressDockRow(container: HTMLElement, label: string): Promi
     throw new Error(`no dock row named ${label}. The dock offers: ${rows.map(accessibleName).join(", ")}`);
   }
   await act(async () => row.click());
+}
+
+/**
+ * Press the bar row named `label` once it is in the bar. A new note and a new
+ * chat each open through an effect and a history write, so the row that
+ * becomes theirs ("All inspirations", "All chats", "Close") can land a flush
+ * after the press that opened the page.
+ */
+async function pressDockRowWhenItAppears(container: HTMLElement, label: string, what: string): Promise<void> {
+  for (let turn = 0; turn < 40; turn += 1) {
+    const row = dockRows(container).find((node) => accessibleName(node) === label);
+    if (row) {
+      await act(async () => row.click());
+      return;
+    }
+    await act(async () => { await Promise.resolve(); });
+  }
+  throw new Error(`${what} (the bar's ${label}) never appeared. The dock offers: ${dockRows(container).map(accessibleName).join(", ")}`);
+}
+
+/** The bar's Close, on a page you are making something on, or null. */
+function dockClose(container: HTMLElement): HTMLButtonElement | null {
+  return container.querySelector<HTMLButtonElement>(".waka-dock button.waka-dock-item--close");
+}
+
+/**
+ * THE CHAT'S FIELD, IN THE BAR. Inside Home a chat lends its textarea, mic
+ * and send to the bar's middle group (`#waka-chat-composer`, founder
+ * 2026-10-15), and the slot is found after paint — so this waits a few
+ * flushes for the portal to land before saying it is not there.
+ */
+export async function dockChatField(container: HTMLElement): Promise<HTMLTextAreaElement> {
+  for (let turn = 0; turn < 40; turn += 1) {
+    const field = container.querySelector<HTMLTextAreaElement>(".waka-dock #waka-chat-composer textarea");
+    if (field) return field;
+    await act(async () => { await Promise.resolve(); });
+  }
+  throw new Error("the chat's field never arrived in the bar (#waka-chat-composer)");
 }
 
 /**
@@ -559,18 +611,20 @@ async function pressKey(container: HTMLElement, key: string): Promise<void> {
  * chat, and user can go to inspiration list and chat list ONLY from that new
  * page" — and "principle is sth user can only get by dragging". So:
  *   - "Inspirations" / "Your inspirations" → the bar's Inspiration (a new
- *     note), then that note's "All inspirations";
- *   - "Chats" → the bar's Chat (a new chat), then that chat's "All chats";
+ *     note), then "All inspirations" — the first word of that note's bar
+ *     since "never put something on any corners" (2026-10-15);
+ *   - "Chats" → the bar's Chat (a new chat), then "All chats" in its bar;
  *   - "Principles" → ArrowRight on Now, the keyboard twin of pulling the
  *     creature right;
- *   - "Now" → the lit bar row pressed again, which is the way home. Already
- *     home, nothing is lit and nothing is pressed.
+ *   - "Now" → Close when a page you are making something on is up (a note
+ *     or a chat), else the lit bar row pressed again (the archive, the chats
+ *     list), else Escape (Principles). Already home, nothing is pressed.
  * Any other label presses the bar row of exactly that name.
  */
 export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
   if (label === "Inspirations" || label === "Your inspirations") {
     await pressDockRow(container, "Inspiration");
-    await pressWhenItAppears(container, ".jar-note-see-all", "a new note's All inspirations");
+    await pressDockRowWhenItAppears(container, "All inspirations", "a new note's All inspirations");
     return;
   }
   if (label === "Chats") {
@@ -582,8 +636,9 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
     return;
   }
   if (label === "Now") {
-    const lit = container.querySelector<HTMLButtonElement>('.waka-dock .waka-dock-item[aria-current="page"]');
-    if (lit) await act(async () => lit.click());
+    if (!container.querySelector(".waka-over[data-jar-surface]") && !dockClose(container)
+      && !container.querySelector('.waka-dock .waka-dock-item[aria-current="page"]')) return;
+    await closeOverlay(container);
     return;
   }
   await pressDockRow(container, label);
@@ -594,11 +649,12 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
  * conversations door reads the same; the door is two presses now.
  *
  * Founder, 2026-10-15: the bar's Chat opens a NEW chat, and the list of chats
- * is reached only from that new chat's "All chats".
+ * is reached from a chat's bar, whose first word is "All chats" — not from a
+ * header above it, since nothing sits in a corner any more.
  */
 export async function pressChatCorner(container: HTMLElement): Promise<void> {
   await pressDockRow(container, "Chat");
-  await pressWhenItAppears(container, "button.jar-chat-see-all", "a new chat's All chats");
+  await pressDockRowWhenItAppears(container, "All chats", "a new chat's All chats");
 }
 
 /**
@@ -608,13 +664,20 @@ export async function pressChatCorner(container: HTMLElement): Promise<void> {
  * we're just moving across the pages." The point of Law 2 is unchanged and so
  * is this helper's: the way out it presses is one a person can SEE.
  *
- * SINCE 2026-10-15 THAT IS THE LIT ROW. Now left the bar, and the row that
- * says where you are (`aria-current="page"`) is the way home when pressed
- * again. Principles has no row — it is walked to — so there the way out is
- * Escape; its ← and its pull left are `home-navigation.test.tsx`'s to test.
+ * SINCE 2026-10-15 THAT IS CLOSE, OR THE LIT ROW. On a page you are making
+ * something on — a note, a chat — the bar ends in Close, which goes home (a
+ * note kept as a draft). On the two lists the row that says where you are
+ * (`aria-current="page"`) is the way home when pressed again. Principles has
+ * no row — it is walked to — so there the way out is Escape; its ← and its
+ * pull left are `home-navigation.test.tsx`'s to test.
  */
 export async function closeOverlay(container: HTMLElement): Promise<void> {
   if (!container.querySelector(".waka-dock")) throw new Error("no visible way out: the dock is not on screen");
+  const close = dockClose(container);
+  if (close) {
+    await act(async () => close.click());
+    return;
+  }
   const lit = container.querySelector<HTMLButtonElement>('.waka-dock .waka-dock-item[aria-current="page"]');
   if (lit) {
     await act(async () => lit.click());

@@ -345,6 +345,88 @@
   color: var(--ink);
 }
 
+/* THE RULE BETWEEN THE THREE GROUPS on a page you are making something on —
+   where you came from │ the making │ Close (founder, 2026-10-15). A hairline
+   at the labels' own height in the bar's muted ink: a pause in the row, not
+   a wall across it. */
+.waka-dock-sep {
+  flex: none;
+  width: 1px;
+  height: calc(var(--waka-corner) * 0.42);
+  margin: 0 var(--sp-4);
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+}
+
+/* ═══ A CHAT'S MIDDLE GROUP: THE FIELD, THE MIC, THE SEND ══════════════════
+   Founder, 2026-10-15: on a chat the bar is "all chats │ ... type something
+   or dictate and then send │ close." The field is the widest thing in the
+   row because it is the thing the page is for; it starts one line tall and
+   grows UP to a few lines as the message does, the bar growing with it, so
+   the send never slides away from the words. No border of its own: the bar
+   is already the one raised object on the screen, and a boxed field inside
+   a pill is the "double layer" this product keeps removing. */
+.waka-dock-chat {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.waka-dock-chat-body {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  /* As wide as the row leaves it: the bar's own words and two buttons take
+     about 16rem, so the field is what is left, never under 7rem and never
+     past 32rem. Fluid, so there is no phone breakpoint to measure. */
+  width: clamp(7rem, calc(100vw - 16rem), 32rem);
+  min-width: 0;
+}
+.waka-dock-chat-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+}
+.waka-dock-chat-label > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.waka-dock-chat-label textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--waka-corner);
+  max-height: 7.5em;
+  field-sizing: content;
+  resize: none;
+  margin: 0;
+  padding: calc((var(--waka-corner) - 1.4em) / 2) var(--sp-12);
+  border: 0;
+  border-radius: calc(var(--waka-corner) / 2);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-body);
+  line-height: 1.4;
+}
+.waka-dock-chat-label textarea::placeholder {
+  color: var(--muted);
+}
+.waka-dock-chat-label textarea:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+.waka-dock-chat .chat-dictate--on {
+  color: var(--ink);
+}
+
+/* CLOSE IS SAID IN FULL INK. It is the way back to the main screen from a
+   page you are making something on, so it reads as the way out rather than
+   as one more muted word in the row. */
+.waka-dock-item--close {
+  color: var(--ink);
+}
+
 /**
  * ═══ THE PLUS — the one verb in a row of nouns ══════════════════════════
  *
@@ -5199,13 +5281,13 @@
  * brightness back at its edge, which is where the eye lands first — the same
  * note the fill above already carries.
  */
-.jar-char-bubble--aside .jar-char-bubble-body {
-  --bubble-fill: color-mix(in srgb, var(--jar-live) 70%, var(--jar-deep));
-  box-shadow:
-    0 0 12px color-mix(in srgb, var(--jar-live) 12%, transparent),
-    0 0 34px color-mix(in srgb, var(--jar-live) 6%, transparent),
-    0 0 76px color-mix(in srgb, var(--jar-live) 3%, transparent);
-}
+/* ═══ AND THEN ONE WEIGHT AGAIN ═══════════════════════════════════════════
+ * Founder, 2026-10-15: "make all the top of all the speech bubbles be the
+ * same color and color as the top of mind. I know I asked you to lower
+ * opacity for other ones but don't do that." The `--aside` modifier and its
+ * 70% fill are gone; every bubble wears the reading's own 84% white and its
+ * full halo. The measurement above is kept as the record of what was tried
+ * and why it was a fill and not an opacity. */
 
 /**
  * THE SAME EMULSION THE CREATURE WEARS.

@@ -236,7 +236,17 @@ const LEFT_BY_THE_DOCK: Record<string, string> = {
      'inspiration', the chats list lights 'talk'. Two entries have no row and
      are proved another way below: Principles ("principle is sth user can only
      get by dragging") walks home on ← or a pull left, and leaves by either
-     bar row; claims is reached from the home screen. */
+     bar row; claims is reached from the home screen.
+
+     ═══ AND CLOSE, ON A PAGE YOU ARE MAKING SOMETHING ON, 2026-10-15 ════
+     Founder: "never put something on any corners ... have Close button and
+     then clicking close brings the user back to the main screen" — and of a
+     chat, "say all chats and then close." So on the notepad and on a chat
+     the bar is that page's own: the list's door (All inspirations / All
+     chats), the making, and Close. The value stays the row the page's bar
+     KEEPS — 'inspiration' on the notepad, whose row says All inspirations
+     there — and the dock check below proves the Close beside it. On the two
+     lists the value is still the lit row, pressed again to go home. */
   "components/InspirationComposer.tsx": "inspiration",
   "components/SavesOverlay.tsx": "inspiration",
   "components/ConversationsOverlay.tsx": "talk",
@@ -425,11 +435,15 @@ describe("every surface has a way out you can see", () => {
        floor: a third row coming back is a design change, not drift. */
     expect(dock, "the dock's item list could not be read out of Home.tsx, or it is not the two rows").toEqual(["inspiration", "talk"]);
 
-    /* AND THE LIT ROW IS ITS OWN WAY HOME. With Now gone from the bar, the
-       one-press visible exit from every page a row lights is that row pressed
-       again — so each row must (a) light somewhere, and (b) in that state
-       walk home rather than make another new one. Read out of each row's own
-       entry, so moving the home step out of a row fails here. */
+    /* WHAT IS BEING MADE, read where the bar reads it. Since 2026-10-15
+       ("never put something on any corners") the bar is the making page's
+       own while a note is being written or a chat is open, so the whole map
+       below hangs on this one derivation being the notepad and the chat. */
+    expect(code(home), "the bar no longer knows a note or a chat is being made").toMatch(
+      /const making[^=]*= viewNavigation\.view\?\.compose \? 'inspiration'\s*: viewNavigation\.view\?\.conversationId \? 'talk' : null/);
+
+    /* EACH ROW'S OWN ENTRY, read out of the source, so moving a step out of
+       a row fails here rather than in a person's hand. */
     const rowSource = (id: string): string => {
       const start = home.indexOf(`{ id: '${id}', label: 'worldDock`);
       const rest = home.slice(start + 1);
@@ -437,11 +451,38 @@ describe("every surface has a way out you can see", () => {
       return code(rest.slice(0, next));
     };
     const inspiration = rowSource("inspiration"), talk = rowSource("talk");
-    expect(inspiration, "Inspiration no longer lights on a new note or the archive").toMatch(/here:[^\n]*view\?\.compose[^\n]*open === 'saves'/);
-    expect(inspiration, "Inspiration pressed on a new note no longer folds it into a draft and goes home").toMatch(/view\?\.compose\)[^;\n]*saveAsDraft\b/);
+
+    /* THE OTHER PLACE'S WORD STEPS OUT WHILE YOU MAKE SOMETHING. A door to
+       the other room on a making page would be a second way out that is not
+       Close. */
+    expect(home, "Inspiration still stands in the bar on a chat").toMatch(/\.\.\.\(making === 'talk' \? \[\] : \[\{ id: 'inspiration', label: 'worldDock/);
+    expect(home, "Chat still stands in the bar on a new note").toMatch(/\.\.\.\(making === 'inspiration' \? \[\] : \[\{ id: 'talk', label: 'worldDock/);
+
+    /* ON A LIST, THE LIT ROW IS ITS OWN WAY HOME. With Now gone from the
+       bar, the one-press visible exit from the archive and the chats list is
+       that row pressed again — so each row must (a) light on its list and
+       only there, and (b) in that state walk home rather than make another
+       new one. */
+    expect(inspiration, "Inspiration no longer lights on the archive alone").toMatch(/here: !making && [^\n]*open === 'saves'/);
+    expect(inspiration, "Inspiration lights on a new note again — the note's way out is Close").not.toMatch(/here:[^\n]*compose/);
     expect(inspiration, "Inspiration pressed on the archive no longer goes home").toMatch(/open === 'saves'\)[^;\n]*openOverHome\(null\)/);
-    expect(talk, "Chat no longer lights on the chats list or a conversation").toMatch(/here:[^\n]*open === 'conversations'[^\n]*conversationId/);
-    expect(talk, "Chat pressed on the chats or a conversation no longer goes home").toMatch(/conversationId\)[^;\n]*openOverHome\(null\)/);
+    expect(inspiration, "Inspiration pressed on Now no longer opens a new note").toMatch(/else startNewInspiration\(\)/);
+    expect(talk, "Chat no longer lights on the chats list alone").toMatch(/here: !making && [^\n]*open === 'conversations'/);
+    expect(talk, "Chat lights on a conversation again — the chat's way out is Close").not.toMatch(/here:[^\n]*conversationId/);
+    expect(talk, "Chat pressed on the chats list no longer goes home").toMatch(/open === 'conversations'\)[^;\n]*openOverHome\(null\)/);
+    expect(talk, "Chat pressed on Now no longer opens a new chat").toMatch(/else openTalk\(null\)/);
+
+    /* ON A MAKING PAGE, THE KEPT ROW IS THE LIST'S DOOR, IN WORDS. */
+    expect(inspiration, "the note's row no longer opens the archive").toMatch(/making === 'inspiration'\) openOverHome\('saves'\)/);
+    expect(talk, "the chat's row no longer opens the chats list").toMatch(/making === 'talk'\) openOverHome\('conversations'\)/);
+    expect(code(home), "the note's row no longer says All inspirations").toMatch(/making === 'inspiration' && item\.id === 'inspiration'\s*\? say\('worldBackToAll'\)/);
+    expect(code(home), "the chat's row no longer says All chats").toMatch(/making === 'talk' && item\.id === 'talk'\s*\? say\('worldAllChats'\)/);
+
+    /* AND CLOSE, LAST, THE MAKING PAGE'S ONE-PRESS WAY HOME: the note goes
+       down as a draft, a chat simply goes home. Rendered beside the making
+       page's own row and nowhere else. */
+    const close = /\{making && item\.id === making \? \(\s*<button[^>]*className="waka-dock-item waka-dock-item--close"\s*onClick=\{\(\) => leaveAsModal\(making === 'inspiration' \? saveAsDraft : \(\) => openOverHome\(null\)\)\}>\s*\{say\('worldClose'\)\}/;
+    expect(code(home), "a making page's bar no longer ends in a Close that goes home (with the note kept)").toMatch(close);
 
     /* The condition the dock renders under. A destination may only lean on
        the bar if the bar is actually up while it is open — which is exactly

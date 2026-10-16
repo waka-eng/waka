@@ -230,8 +230,6 @@ export function InspirationComposer(props: {
      looking for the control that honours it. The way out of this page is
      the dock, which `way-out.test.ts` is the gate for. */
   onClose: () => void; onSubmit: () => void;
-  /** Open the archive — this page is its only door now (see `NotePage`). */
-  onSeeAll: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null), linkInput = useRef<HTMLInputElement>(null);
@@ -333,8 +331,7 @@ export function InspirationComposer(props: {
         NO TRAILING VERB HERE. A note that does not exist yet cannot be
         deleted; the slot is for a verb ABOUT the note and a new one has
         none. */}
-    <NotePage locale={props.locale} whenMs={when.current}
-      leading={<button type="button" className="jar-note-see-all" onClick={props.onSeeAll}>{say('worldBackToAll')}</button>}>
+    <NotePage locale={props.locale} whenMs={when.current}>
     <div className="jar-composer-body">
     <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={4} value={props.text} readOnly={props.busy || !props.ready || props.recording.phase !== 'idle'}
       aria-label={say('worldCaptureInspiration')} placeholder={say('worldCapturePrompt')}

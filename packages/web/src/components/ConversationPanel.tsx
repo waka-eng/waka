@@ -80,6 +80,7 @@
  * saying which. A quiet surface is not the same as a quiet failure.
  */
 import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import {createConversation,fetchConversation,listConversations,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
 import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage';
 import {useConversationReply} from '../lib/use-conversation-reply';
@@ -93,9 +94,18 @@ import {fetchPrinciples,type ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
 import {readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft as Draft,type StoredConversationDraft} from '../lib/conversation-drafts';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,agent=null}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;
+/** The bar slot a chat's field, mic and send are lent to inside Home (founder, 2026-10-15). */
+export const CHAT_DOCK_SLOT = "waka-chat-composer";
+
+export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,agent=null,dockSlot}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;
   /** The account's agent, when it has one: a new chat may talk with it, or with both. */
-  agent?:{id:string;name:string}|null}){
+  agent?:{id:string;name:string}|null;
+  /** The id of an element in the page's bar to lend the field, mic and send to (see `CHAT_DOCK_SLOT`). */
+  dockSlot?:string}){
+  /* The bar's middle group, found after paint the way `NoteTools` finds its
+     slot: it is rendered by Home in the same commit, so it exists by then. */
+  const [dockTarget,setDockTarget]=useState<HTMLElement|null>(null);
+  useEffect(()=>{const found=dockSlot?document.getElementById(dockSlot):null;setDockTarget(current=>current===found?current:found);});
   /* ═══ WHO YOU ARE TALKING WITH ═══════════════════════════════════════
      Founder, 2026-10-15: "new chat should also let you select if you want
      to chat with me vs my agent or both perspectives." Chosen before the
@@ -531,7 +541,39 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         {!generationEnabled?<p className="chat-reply-status" role="status">{say('worldConversationRepliesUnavailable')}</p>:null}
         {storageFailed?<p className="chat-reply-status" role="alert">{say('worldConversationDraftFailed')}</p>:null}
         {full?<p className="chat-reply-status">{say('worldConversationFull')}</p>:null}
-        <div className="chat-composer-body">
+        {dockTarget?createPortal(
+          /* ═══ IN THE BAR, WHEN THERE IS ONE ═══════════════════════════
+             Founder, 2026-10-15: on a chat the bottom bar is "all chats and
+             then the same format but then in the middle would be where the
+             user can ... type something or dictate and then send and then
+             end it with the same | and close." So inside Home the field, the
+             mic and the send are lent to the dock's middle group (`dockSlot`,
+             the same lend the saved note's tools use) and the statuses above
+             stay here, on the page. Standalone, the panel keeps its own
+             footer exactly as before. The placeholder is "Let's chat" there:
+             the bar's field is the chat's only invitation, and "What would
+             you like to explore?" was the founder's "new thing" to replace. */
+          <span className="waka-dock-chat-body">
+            <label className="waka-dock-chat-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldChatLetsChat')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
+            {dictationAvailable()?<button type="button"
+              className={`waka-dock-tool chat-dictate${dictation.listening?' chat-dictate--on':''}`}
+              aria-pressed={dictation.listening}
+              aria-label={say(dictation.listening?'worldComposerDictateStop':'worldComposerDictate')}
+              disabled={busy||draft?.pending}
+              onClick={()=>dictation.listening?dictation.stop():dictation.start()}>
+              <HomeActionIcon kind="record"/></button>:null}
+            {replyPending
+              ?<button type="button" className="waka-dock-tool chat-send chat-send--stop" aria-label={say('worldConversationStop')}
+                 disabled={reply.busy} onClick={()=>void reply.stop()}><HomeActionIcon kind="stop"/></button>
+              :<button type="button" className="waka-dock-tool chat-send"
+                 aria-label={say(draft?.pending?'worldConversationRetry':'worldConversationSend')}
+                 title={say(whyNoSend??(draft?.pending?'worldConversationRetry':'worldConversationSend'))}
+                 disabled={Boolean(whyNoSend)}
+                 onClick={()=>void save()}><HomeActionIcon kind="send"/></button>}
+          </span>,
+          dockTarget,
+        ):null}
+        {dockTarget?null:<div className="chat-composer-body">
           <label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
           <div className="chat-composer-footer">
             {/* ═══ THE SEND ACTIONS, AND DICTATION IS ONE OF THEM ═══════
@@ -580,7 +622,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
                  disabled={Boolean(whyNoSend)}
                  onClick={()=>void save()}><HomeActionIcon kind="send"/></button>}
           </div>
-        </div>
+        </div>}
         {/* A SAVE THAT WAS NOT CONFIRMED KEEPS ITS ONE WAY OUT. This reads
             the conversation back rather than writing again, which is why it
             survived the sweep of retry-shaped controls: it is the only way to

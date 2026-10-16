@@ -120,7 +120,7 @@ import { ClaimSlip } from "../components/ClaimSlip";
 import { HarvestReasons } from "../components/HarvestReasons";
 import { AgentPick } from "../components/AgentPick";
 import { ConversationsOverlay } from "../components/ConversationsOverlay";
-import { ConversationPanel } from "../components/ConversationPanel";
+import { CHAT_DOCK_SLOT, ConversationPanel } from "../components/ConversationPanel";
 import type { ApiConversation } from "../lib/api/conversations";
 import { useMeasured } from "../canvas/measured";
 /* THE CANVAS SIDE OF `SimApi`, which used to be 5,637 lines of this file.
@@ -2102,6 +2102,9 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const principlesOpen = viewNavigation.view?.open === 'principles';
   const atNowView = !viewNavigation.view?.open && !viewNavigation.view?.conversationId &&
     !viewNavigation.view?.compose && !viewNavigation.view?.sharePrinciple && !viewNavigation.view?.principleId;
+  /** What is being made right now, if anything — the bar becomes that page's own (see the dock). */
+  const making: 'inspiration' | 'talk' | null = viewNavigation.view?.compose ? 'inspiration'
+    : viewNavigation.view?.conversationId ? 'talk' : null;
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
   const [principlesCrossing, setPrinciplesCrossing] = useState<{ going: 'in' | 'out'; home: CreatureSpot | null } | null>(null);
   if (crossSeen.open !== principlesOpen || crossSeen.now !== atNowView) {
@@ -9158,11 +9161,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             </>
           ) : null}
           {!mouthOpen && charSay && charSay !== say('worldSavedWord') ? (
-            /* ALWAYS THE LIGHTER WEIGHT. Nothing that reaches `charSay` is
-               the top of mind — it is the record talking, a result, or a
-               failure — so this bubble never takes the full white. See the
-               note on `--aside` above. */
-            <div className="jar-char-bubble jar-char-bubble--aside" data-jar-chrome="1" data-jar-interactive="1">
+            /* THE SAME WHITE AS THE TOP OF MIND. This bubble wore a lighter
+               fill (`--aside`) to step back from the reading; founder,
+               2026-10-15: "make all ... the speech bubbles be the same color
+               ... as the top of mind ... don't do that." */
+            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
               <div className="jar-char-bubble-body">
                 {/* THE SENTENCE IS THE DOOR — there is no longer a second
                     line under it offering to open one.
@@ -9527,9 +9530,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           </div>
         </div>
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
-          /* The note goes down as a draft and the archive comes up — what the
-             bar's Inspirations row did from here before the bar lost it. */
-          onSeeAll={() => openOverHome('saves')}
           linkText={composerDraft.draft.linkText ?? ''} onLinkText={composerDraft.setLinkText}
           recordingCandidate={composerDraft.draft.recordingCandidate}
           onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => setMouthNote(String(reason))); }}
@@ -10756,14 +10756,31 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                on a chat or the chats list, Chat again goes home. Esc still
                closes every page, and Principles walks home on ← or a drag
                left. */
-            { id: 'inspiration', label: 'worldDockSaves' as const,
-              here: Boolean(viewNavigation.view?.compose) || viewNavigation.view?.open === 'saves',
+            /* ═══ WHILE MAKING SOMETHING, THE BAR IS THAT PAGE'S OWN ═══════
+               Founder, 2026-10-15: "never put something on any corners. So at
+               the bottom, write X inspirations so the bottom bar should be X
+               inspirations the microphone the image instead of download have
+               a save icon and then have Close button and then clicking close
+               brings the user back to the main screen" — and of a chat: "say
+               all chats and then close."
+
+               So on a new note the row is: how many you have kept (the way to
+               the list), the note's own tools, and Close. On a chat it is All
+               chats, then Close. The other place's word steps out of the row
+               while you are making something: the bar is the page's, and a
+               door to the other room would be a second way out that is not
+               Close. On Now and on the two lists the row is Inspiration and
+               Chat as before, and the lit one pressed again goes home. */
+            ...(making === 'talk' ? [] : [{ id: 'inspiration', label: 'worldDockSaves' as const,
+              here: !making && viewNavigation.view?.open === 'saves',
               go: () => {
                 commitOpenNote();
-                if (viewNavigation.view?.compose) leaveAsModal(saveAsDraft);
+                /* On a new note this is "N inspirations": the archive comes
+                   up and the note folds into a draft on the way. */
+                if (making === 'inspiration') openOverHome('saves');
                 else if (viewNavigation.view?.open === 'saves') leaveAsModal(() => openOverHome(null));
                 else startNewInspiration();
-              } },
+              } }]),
             /* SAVE IS NOT A TAB. Founder: "home, inspirations -> let see list
                of past inspirations with main CTA to save new, chat -> see
                list of past chats with main CTA to start new chat,
@@ -10804,14 +10821,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                the ladder's order — what you kept, what you said about it,
                what has endured — so the row reads left to right the way the
                material actually moves. */
-            { id: 'talk', label: 'worldDockTalk' as const,
-              here: viewNavigation.view?.open === 'conversations' || Boolean(viewNavigation.view?.conversationId),
+            ...(making === 'inspiration' ? [] : [{ id: 'talk', label: 'worldDockTalk' as const,
+              here: !making && viewNavigation.view?.open === 'conversations',
               go: () => {
                 commitOpenNote();
-                if (viewNavigation.view?.compose) saveAsDraft();
-                if (viewNavigation.view?.open === 'conversations' || viewNavigation.view?.conversationId) leaveAsModal(() => openOverHome(null));
+                /* On a chat this is "All chats". */
+                if (making === 'talk') openOverHome('conversations');
+                else if (viewNavigation.view?.open === 'conversations') leaveAsModal(() => openOverHome(null));
                 else openTalk(null);
-              } },
+              } }]),
           ]).map(item => (
             /* THE SHEET HANGS OFF THE PLUS, not off the middle of the screen.
                Founder, with a screenshot: "this not being aligned with the +
@@ -10843,16 +10861,29 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <span key={item.id} className={item.id === 'inspiration' ? 'waka-dock-slot' : undefined}>
             {/* THE WORD STAYS WHILE THE TOOLS ARRIVE. The tools used to take
                 the plus's place; with the plus gone they ride beside the
-                Inspiration word instead, and the word stays because pressing
-                it again is how a new note goes home. */}
+                word — which on a new note says how many you have kept and
+                opens them — and Close comes last. */}
             <button
               type="button"
               className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}`}
               aria-current={item.here ? 'page' : undefined}
               onClick={item.go}
             >
-              {say(item.label)}
+              {making === 'inspiration' && item.id === 'inspiration'
+                ? say('worldBackToAll')
+                : making === 'talk' && item.id === 'talk'
+                  ? say('worldAllChats')
+                  : say(item.label)}
             </button>
+            {/* ═══ THREE GROUPS, AND A RULE BETWEEN EACH ═══════════════════
+                Founder, 2026-10-15: "the first item is always either ... all
+                inspiration or all chat And then after that, let's have | And
+                then for inspirations it would be the dictate button, the photo
+                button, the save button and after that have another | and say
+                close." So on a page you are making something on, the row reads
+                where-you-came-from │ the making │ Close. The rules are drawn,
+                not typed: a `|` character would be read aloud. */}
+            {making && item.id === making ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
             {/* ═══ THE BAR TRANSFORMS, IN THE ONE SLOT THAT SHOULD ═══════
                 Founder: "when the user is in inspirations, maybe this
                 bottom bar should transform so that the icons turn into the
@@ -11115,6 +11146,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   <span className="waka-dock-state" role="status">{composerState}</span>
                 ) : null}
               </span>
+            ) : item.id === 'talk' && making === 'talk' ? (
+              /* THE CHAT'S MIDDLE GROUP, lent to `ConversationPanel` exactly
+                 as `DOCK_SLOT` is lent to the saved note: empty here, filled
+                 from there with the field, the mic and the send. */
+              <span className="waka-dock-making waka-dock-chat" role="group" id={CHAT_DOCK_SLOT}
+                aria-label={say('worldConversationMessage')} />
+            ) : null}
+            {/* CLOSE, LAST IN THE ROW, on the page you are making something
+                on: back to the main screen, the note kept as a draft. */}
+            {making && item.id === making ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
+            {making && item.id === making ? (
+              <button type="button" className="waka-dock-item waka-dock-item--close"
+                onClick={() => leaveAsModal(making === 'inspiration' ? saveAsDraft : () => openOverHome(null))}>
+                {say('worldClose')}
+              </button>
             ) : null}
             </span>
           ))}
@@ -11441,26 +11487,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   THE HEADER GOES WITH IT, because the chevron was all it
                   held. An empty header above a conversation would be a
                   reserved row for nothing. */}
-              {/* ═══ AND COMES BACK ON A NEW CHAT, AS ITS ONLY DOOR ══════
-                  Founder, 2026-10-15: the bar keeps "inspiration and chat"
-                  as NEW ones, and "user can go to inspiration list and chat
-                  list only from that new page." The bar no longer names the
-                  list, so the reason the header left has turned round: on a
-                  new chat this word is the list's one way in, not a second.
-                  On an open chat it stays gone — Chat in the bar (pressed
-                  again) is that page's way home. */}
-              {!talkId ? (
-                <header className="jar-chat-top">
-                  <button type="button" className="jar-chat-see-all" onClick={() => openOverHome('conversations')}>
-                    {say('worldAllChats')}
-                  </button>
-                </header>
-              ) : null}
             <ConversationPanel key={`${owner}:${talkId??'new'}:${viewNavigation.view.principleId??''}`}
               scope={storageScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
               agent={agentWall ? { id: agentWall.id, name: agentWall.name } : null}
+              dockSlot={CHAT_DOCK_SLOT}
               onCreated={row=>{if(row.profileId===storageScope.profileId)committedTalk.current={owner,row};}}
               /* `replace` on the new-to-id hop so dismissing does not land
                  back on the blank conversation you just started. */

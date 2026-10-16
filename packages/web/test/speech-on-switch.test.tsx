@@ -57,9 +57,14 @@ const face = (label: string) =>
    so the bubble's `textContent` is the sentence with "Let's talk about it"
    welded to it. `.jar-char-bubble-reading` is the said thing, which is
    what this suite is about: whether a stale sentence survives a wall
-   switch. Presence of the bubble itself is asserted separately below. */
+   switch. Presence of the bubble itself is asserted separately below.
+   Found by its `role="status"` line: the `--aside` class that marked this
+   bubble went when every bubble took the top of mind's white (2026-10-15).
+   The review invitation (`--review`) also speaks in a status line and sits
+   EARLIER in the tree, so it is excluded by name: a count of cards to review
+   is not the sentence a wall switch might leave behind. */
 const speech = () => world.container
-  .querySelector('.jar-char-bubble--aside .jar-char-bubble-reading')?.textContent?.trim() ?? null;
+  .querySelector('.jar-char-bubble:not(.jar-char-bubble--review) .jar-char-bubble-reading[role="status"]')?.textContent?.trim() ?? null;
 const press = () => world.container.querySelector<HTMLButtonElement>('.jar-char-press');
 
 /**

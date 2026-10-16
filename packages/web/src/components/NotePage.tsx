@@ -58,8 +58,6 @@ export interface NotePageProps {
   locale: SupportedLocale;
   /** When this note is, in milliseconds. */
   whenMs: number;
-  /** The way to the archive — on a NEW note only. See the note in the row. */
-  leading?: ReactNode;
   /** One verb ABOUT this note — Delete on a saved one, nothing on a new. */
   trailing?: ReactNode;
   children: ReactNode;
@@ -68,22 +66,16 @@ export interface NotePageProps {
 export function NotePage({
   locale,
   whenMs,
-  leading,
   trailing,
   children,
 }: NotePageProps): JSX.Element {
   return (
     <>
       <div className="jar-note-top">
-        {/* ═══ THE FIRST TRACK HAS A TENANT AGAIN, ON A NEW NOTE ════════
-            Founder, 2026-10-15: "at the bottom bar just keep inspiration and
-            chat and clicking on it leads to new inspiration and new chat, and
-            user can go to inspiration list and chat list ONLY from that new
-            page." The bar no longer names the archive, so the one-door rule
-            below now points the other way: this is the archive's only door,
-            not a second one. Words, not a chevron — the chevron lost on
-            being a glyph that says nothing about where it goes. */}
-        {leading ? <span className="jar-note-lead">{leading}</span> : null}
+        {/* ═══ AND NOTHING IN THE CORNER, EVER ════════════════════════
+            Founder, 2026-10-15: "never put something on any corners." The
+            archive's door on a new note is "N inspirations" in the bar, not
+            a word in this first track — which stays empty, as below. */}
         {/* ═══ AND THE WAY BACK IS THE BAR ═══════════════════════════
             Founder: "I still don't get why you have this carrot button
             when I do new inspiration, because I can just go to all the
