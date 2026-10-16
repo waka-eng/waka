@@ -10890,7 +10890,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                "Chats", then "Principles", then a full-screen invisible
                dismiss target, and only then to "New inspiration". Beside the
                plus in source order, Tab goes straight into it. */
-            <span key={item.id} className={item.id === 'inspiration' || item.id === 'return' ? 'waka-dock-slot' : undefined}>
+            <span key={item.id} className="waka-dock-slot">
+            {/* EVERY ROW'S SLOT IS THE SAME BOX. Only Inspiration's and ↩'s were
+                flex; Chat's was a bare inline span, so its two rules (1px wide,
+                a fixed height) collapsed to nothing — founder, 2026-10-16:
+                "for chats, you're missing the | | — the bottom bar should be
+                identical for inspiration and chat." */}
             {/* THE WORD STAYS WHILE THE TOOLS ARRIVE. The tools used to take
                 the plus's place; with the plus gone they ride beside the
                 word — which on a new note says how many you have kept and

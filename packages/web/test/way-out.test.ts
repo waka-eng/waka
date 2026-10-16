@@ -512,8 +512,12 @@ describe("every surface has a way out you can see", () => {
     expect(code(home), "the return row lost its name for a screen reader").toMatch(/aria-label=\{item\.id === 'return' \? say\('worldBack'\) : undefined\}/);
     expect(code(home), "the return row is no longer drawn as the return icon").toMatch(
       /\{item\.id === 'return'\s*\? <svg [^>]*aria-hidden="true"[^>]*>\s*<path[^>]*\/><path[^>]*\/>\s*<\/svg>/);
-    expect(code(home), "the return row is not the bar's slot, so a saved note's tools cannot ride beside it").toMatch(
-      /className=\{item\.id === 'inspiration' \|\| item\.id === 'return' \? 'waka-dock-slot' : undefined\}/);
+    /* EVERY ROW IS THE SAME SLOT (2026-10-16): Chat's row was a bare inline
+       span and its two rules collapsed — "the bottom bar should be identical
+       for inspiration and chat". So the return row, Inspiration and Chat all
+       stand in `.waka-dock-slot`, and tools and rules can ride beside any. */
+    expect(code(home), "a bar row is not the bar's slot, so its tools and rules cannot ride beside it").toMatch(
+      /<span key=\{item\.id\} className="waka-dock-slot">/);
     expect(code(home), "a saved note open in the archive no longer lends its tools to the return row's slot").toMatch(
       /\{item\.id === 'return' && viewNavigation\.view\?\.open === 'saves' && savedNoteOpen \? \(\s*<span className="waka-dock-making" role="group" id=\{DOCK_SLOT\}/);
 
