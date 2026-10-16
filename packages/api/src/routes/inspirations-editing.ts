@@ -22,7 +22,7 @@ import {
 } from "@aws-sdk/client-s3";
 
 import { makeAttachmentsS3Client } from "../lib/s3-client.js";
-import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from 'zod';
 
@@ -35,6 +35,8 @@ import {
   signals,
   profiles,
   backgroundJobs,
+  deletedInspirations,
+  DELETED_KEEP_DAYS,
   type Inspiration,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
@@ -287,7 +289,7 @@ export function registerEditingRoutes(
     // Collect the object keys before the cascade removes the rows that name
     // them; a link attachment has no key and is skipped by the predicate.
     const s3KeyRows = await db
-      .select({ s3Key: attachments.s3Key })
+      .select({ s3Key: attachments.s3Key, type: attachments.type })
       .from(attachments)
       .innerJoin(inspirations, eq(inspirations.id, attachments.inspirationId))
       .where(
@@ -324,6 +326,37 @@ export function registerEditingRoutes(
         );
       if (citingRows.length) await tx.select({ id: signals.id }).from(signals)
         .where(inArray(signals.id, citingRows.map((row) => row.signalId))).orderBy(asc(signals.id)).for("no key update");
+
+      /* THE COPY ON THE DELETED SHELF, written in the same transaction as
+         the delete so there is never a moment the words are in neither
+         place. See db/schema-deleted.ts for why it is a shelf and not a
+         flag on this row.
+
+         ONLY A PERSON'S OWN DELETE, and only one with words in it. The shelf
+         is read by the person at a browser (`/deleted` is human-only and
+         reads the session's own profile), so a copy filed under an agent —
+         an agent deleting its own, or `?profile=` to an agent — could never
+         be seen, brought back, forgotten or lapsed: it would be retained
+         text with no way out. And a save with no words has nothing a restore
+         could bring back, since its picture is swept from storage below. */
+      const ownDelete = session.profile.type === "human" && !session.keyScoped && target.profileId === session.profile.id;
+      /* Whatever on this shelf has passed its month goes now, whether or not
+         anybody opens the shelf again. */
+      await tx.delete(deletedInspirations).where(and(eq(deletedInspirations.profileId, target.profileId),
+        lt(deletedInspirations.deletedAt, new Date(Date.now() - DELETED_KEEP_DAYS * 86_400_000))));
+      const [whole] = !ownDelete ? [] : await tx.select({ text: inspirations.text, kind: inspirations.kind, category: inspirations.category,
+        source: inspirations.source, visibility: inspirations.visibility, createdAt: inspirations.createdAt })
+        .from(inspirations).where(and(eq(inspirations.id, idCheck.data), eq(inspirations.profileId, target.profileId)));
+      if (whole && whole.text.trim()) {
+        const said = await tx.select({ question: reflections.question, answer: reflections.answer, skipped: reflections.skipped })
+          .from(reflections).where(and(eq(reflections.inspirationId, idCheck.data), eq(reflections.profileId, target.profileId)))
+          .orderBy(asc(reflections.createdAt), asc(reflections.id));
+        const copy = { profileId: target.profileId, text: whole.text, kind: whole.kind, category: whole.category,
+          source: whole.source, visibility: whole.visibility, reflections: said, hadPhoto: s3KeyRows.some((row) => row.type === "image"),
+          keptAt: whole.createdAt, deletedAt: new Date() };
+        await tx.insert(deletedInspirations).values({ id: idCheck.data, ...copy })
+          .onConflictDoUpdate({ target: deletedInspirations.id, set: copy });
+      }
 
       const removed = await tx
         .delete(inspirations)
