@@ -12,7 +12,7 @@
  * `inspirations.ts` imports them from here and not the other way round.
  */
 
-import { ApiError, apiPath, getJson, patchJson, postJson } from "./http";
+import { ApiError, apiPath, deleteJson, getJson, patchJson, postJson } from "./http";
 
 // ---------------------------------------------------------------------------
 // What an attachment is
@@ -332,6 +332,20 @@ export async function finalizeAttachment(
  * sniffer's verdict (`file.type` after `inspectInspirationPhoto`) for "Add
  * photos". Send the returned `id` in the message's `attachmentIds`.
  */
+/**
+ * DISCARD AN UNSENT CHAT UPLOAD — the chip's ×. `DELETE /api/attachments/:id`
+ * removes a STAGED row and its object (a sent one is 409, someone else's 404).
+ * Best effort by design: the send already deletes every staged row the
+ * message does not name, and a daily sweep clears week-old ones, so a discard
+ * that fails offline costs nothing but a little storage until then.
+ */
+export async function discardMessageAttachment(id: string, options: { profile?: string; signal?: AbortSignal } = {}): Promise<void> {
+  await deleteJson<{ deleted: true; id: string }>(
+    apiPath(`/attachments/${encodeURIComponent(id)}${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ""}`),
+    undefined, "Could not remove this attachment", options.signal,
+  );
+}
+
 export async function uploadMessageAttachment(
   input: { profile: string; conversationId: string; messageId: string; file: File | Blob; name?: string; contentType: string; type: "image" | "file" },
   signal?: AbortSignal,

@@ -121,7 +121,8 @@ const REGISTER: Record<string, string> = {
      thing the person has to find and undo. */
   retryInspirationProcessing: "RULED: resumes failed processing of already-kept material without creating another capture or answer; existing words remain editable or removable, and opening the resulting reading is a separate choice",
   presignAttachment: "RULED: one half of a single upload, not a state a person is left in",
-  uploadMessageAttachment: "RULED: stages a photo or file on a message not yet sent; the chip's × takes it off the draft, and the send deletes every staged row the message did not name",
+  uploadMessageAttachment: "discardMessageAttachment",
+  discardMessageAttachment: "RULED: discards a staged upload the person just removed with ×; picking the file again through ＋ is the way back, and nothing sent can be discarded (409)",
   finalizeAttachment: "RULED: the other half of that upload",
   correctAttachmentTranscript: "RULED: edit again or use original wording (a null correction); neither operation changes the recording or the retained machine transcript",
   retryAttachmentTranscript: "RULED: resumes analysis of an existing recording without creating authored content; corrections stay authoritative and the recording remains removable",

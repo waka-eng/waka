@@ -34,10 +34,10 @@ import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ConversationPanel} from '../src/components/ConversationPanel';
 import {createConversation,fetchConversation,fetchConversationReply,listConversations,saveConversationMessage,type ApiConversation} from '../src/lib/api/conversations';
-import {fetchAttachmentUrl,uploadMessageAttachment,type ApiMessageAttachment} from '../src/lib/api/attachments';
+import {discardMessageAttachment,fetchAttachmentUrl,uploadMessageAttachment,type ApiMessageAttachment} from '../src/lib/api/attachments';
 import {readConversationDrafts} from '../src/lib/conversation-drafts';
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
-vi.mock('../src/lib/api/attachments',async original=>({...await original<typeof import('../src/lib/api/attachments')>(),uploadMessageAttachment:vi.fn(),fetchAttachmentUrl:vi.fn()}));
+vi.mock('../src/lib/api/attachments',async original=>({...await original<typeof import('../src/lib/api/attachments')>(),uploadMessageAttachment:vi.fn(),fetchAttachmentUrl:vi.fn(),discardMessageAttachment:vi.fn()}));
 
 const scope={accountId:'owner',profileId:'profile'},chat='11111111-1111-4111-8111-111111111111',choose=vi.fn();
 let root:Root,host:HTMLDivElement,stored:ApiConversation;
@@ -144,12 +144,15 @@ it('keeps the message id while it carries something, so words typed after a phot
   expect(readConversationDrafts(scope,chat)[0]!.value.id).toBe(upload.messageId);
 });
 
-it('takes a chip off the message on ×', async()=>{
+it('takes a chip off the message on ×, and discards its upload at once', async()=>{
+  vi.mocked(discardMessageAttachment).mockResolvedValue(undefined);
   await mount();await flush();
   await pick('photos',[png()]);
   expect(chips()).toHaveLength(1);
+  const staged=readConversationDrafts(scope,chat)[0]!.value.attachments![0]!.id;
   await act(async()=>chips()[0]!.querySelector<HTMLButtonElement>('button[aria-label="Remove sky.png"]')!.click());
   expect(chips(),'× did not take the chip off').toHaveLength(0);
+  expect(discardMessageAttachment,'× left the upload staged on the server').toHaveBeenCalledWith(staged,{profile:scope.profileId});
   expect(readConversationDrafts(scope,chat)[0]!.value.attachments,'the removed photo is still on the draft').toEqual([]);
   expect(send().disabled,'Send is pressable with nothing left in the box').toBe(true);
 });

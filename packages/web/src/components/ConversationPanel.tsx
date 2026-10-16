@@ -95,7 +95,7 @@ import {t,type SupportedLocale} from '../lib/locales';
 import {readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft as Draft,type ConversationDraftAttachment,type StoredConversationDraft} from '../lib/conversation-drafts';
 import {AddMenu} from './AddMenu';
 import {MessageAttachments} from './MessageAttachments';
-import {fetchAttachmentUrl,uploadMessageAttachment} from '../lib/api/attachments';
+import {discardMessageAttachment,fetchAttachmentUrl,uploadMessageAttachment} from '../lib/api/attachments';
 import {FileRefused,fileSizeWords,inspectAttachmentFile} from '../lib/api/file-accept';
 import {inspectInspirationPhoto,PhotoRefused} from '../lib/inspiration-photo';
 import {formatMessage,type MessageKey} from '../lib/locales';
@@ -396,10 +396,14 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       catch(reason){setAttachNote(refusalOf(reason));}
     }
   };
-  /* × TAKES IT OFF THIS MESSAGE. An uploaded one stays staged on the server
-     until the send, which deletes every staged row the message did not name. */
+  /* × TAKES IT OFF THIS MESSAGE, AND OFF THE SERVER. The upload is discarded
+     at once (`DELETE /api/attachments/:id`); if that fails — offline, say — the
+     send still deletes every staged row the message did not name, and a daily
+     sweep clears week-old ones, so the chip goes either way and nothing is
+     said about the miss. */
   const unattach=(attachmentId:string)=>{const current=draftRef.current;if(!current||current.pending)return;
-    keep({...current,updatedAt:Date.now(),attachments:(current.attachments??[]).filter(item=>item.id!==attachmentId)});};
+    keep({...current,updatedAt:Date.now(),attachments:(current.attachments??[]).filter(item=>item.id!==attachmentId)});
+    void discardMessageAttachment(attachmentId,{profile:scope.profileId}).catch(()=>undefined);};
 
   /* ═══ SPEAKING INTO THE FIELD ═════════════════════════════════════════
      The same hook the notepad uses, pointed at this draft. `use-dictation`
