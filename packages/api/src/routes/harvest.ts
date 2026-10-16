@@ -17,19 +17,18 @@
  * second writer would have to copy and would drift from; one path for "this
  * is now a memory" is the rule everything else in the archive follows.
  */
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 
-import { and, asc, count, eq, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
-import { harvestCandidates, harvestReasonValues, inspirations, type HarvestContext } from "../db/index.js";
+import { HARVEST_LAPSE_DAYS, harvestCandidates, harvestReasonValues, inspirations, type HarvestContext } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { validationDetails } from "../lib/validation.js";
 
-/** How long an unchosen candidate waits before its words are deleted. */
-export const HARVEST_LAPSE_DAYS = 7;
+export { HARVEST_LAPSE_DAYS };
 /** At most this many waiting at once; a collector that floods is refused. */
 export const HARVEST_MAX_WAITING = 30;
 const MAX_PER_PROPOSAL = 10;
@@ -79,12 +78,15 @@ const declineSchema = z
 const idSchema = z.string().uuid();
 
 /**
- * The same sentence, however it was spaced or cased, is the same candidate.
- * Exported pure so the rule is a unit test away.
+ * The same sentence, however it was spaced or cased, is the same candidate
+ * for the same person. Keyed by the server's secret and the profile, so the
+ * hash a refused sentence leaves behind cannot be checked against guesses by
+ * anyone holding the table without the secret, nor matched across people.
  */
-export function harvestHash(text: string): string {
+export function harvestHash(profileId: string, text: string): string {
   const normal = text.normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
-  return createHash("sha256").update(normal).digest("hex");
+  const secret = process.env.JWT_SECRET ?? process.env.AUTH_SECRET ?? "";
+  return createHmac("sha256", `${secret}:harvest:${profileId}`).update(normal).digest("hex");
 }
 
 const LAPSE_MS = HARVEST_LAPSE_DAYS * 86_400_000;
@@ -94,10 +96,30 @@ function harvestLapsesAt(createdAt: Date): Date {
   return new Date(createdAt.getTime() + LAPSE_MS);
 }
 
-/** Whether a candidate made at `createdAt` has lapsed by `now`. The GET
-    route asks the same question in SQL, against the same `LAPSE_MS`. */
-export function harvestLapsed(createdAt: Date, now: Date): boolean {
-  return now.getTime() >= harvestLapsesAt(createdAt).getTime();
+type HarvestWriter = Pick<ReturnType<typeof getDb>, "update">;
+
+/**
+ * THE WEEK IS UP: words, title and hash go. Run wherever the basket is read
+ * or filled — the GET, the propose (inside its lock, before counting, so an
+ * unopened basket cannot fill with week-old rows and refuse new ones
+ * forever) and the export — because there is no clock job, and those are
+ * the only places the difference can show.
+ *
+ * AND A KEPT SENTENCE WHOSE SAVE IS GONE may be asked about again: the
+ * hash stayed so a kept line is not proposed twice, but once the person has
+ * deleted that save (the foreign key empties `inspiration_id`) nothing would
+ * otherwise ever let it back.
+ */
+export async function lapseHarvest(db: HarvestWriter, profileId: string, at: Date): Promise<void> {
+  const cutoff = new Date(at.getTime() - LAPSE_MS);
+  await db
+    .update(harvestCandidates)
+    .set({ status: "lapsed", text: null, title: null, sourceHash: null, decidedAt: at })
+    .where(and(eq(harvestCandidates.profileId, profileId), eq(harvestCandidates.status, "pending"), lte(harvestCandidates.createdAt, cutoff)));
+  await db
+    .update(harvestCandidates)
+    .set({ sourceHash: null })
+    .where(and(eq(harvestCandidates.profileId, profileId), eq(harvestCandidates.status, "kept"), isNull(harvestCandidates.inspirationId), sql`${harvestCandidates.sourceHash} IS NOT NULL`));
 }
 
 export interface HarvestRouteDependencies {
@@ -128,7 +150,9 @@ export function createHarvestRoutes(deps: HarvestRouteDependencies = {}): Hono<A
     /* THE KEEPER KEY IS ADMITTED ON PURPOSE, and named so the decision is
        visible: it is the person's own credential, and carrying sentences in
        from a terminal is its job. Deciding on them is not — the routes below
-       use `humanSessionsOnly`, which refuses it. */
+       use `humanSessionsOnly`, which refuses it. The `keyScoped` clause is
+       that admission; the profile check is what refuses an agent's session
+       (a keeper key always stands as the human, so it needs no second ask). */
     const mayPropose = session.keyScoped === true || session.profile.type === "human";
     if (!mayPropose) {
       return c.json({ error: "Only your own sessions can propose candidates" }, 403);
@@ -151,59 +175,54 @@ export function createHarvestRoutes(deps: HarvestRouteDependencies = {}): Hono<A
        fill the basket past its limit; the lock makes the count true for the
        inserts that follow it. */
     const { proposed, skipped } = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"harvest:" + profileId}))`);
-    const [{ waiting }] = await tx
-      .select({ waiting: count() })
-      .from(harvestCandidates)
-      .where(and(eq(harvestCandidates.profileId, profileId), eq(harvestCandidates.status, "pending")));
-    let space = Math.max(0, HARVEST_MAX_WAITING - Number(waiting));
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"harvest:" + profileId}))`);
+      const at = now();
+      await lapseHarvest(tx, profileId, at);
+      const [{ waiting }] = await tx
+        .select({ waiting: count() })
+        .from(harvestCandidates)
+        .where(and(eq(harvestCandidates.profileId, profileId), eq(harvestCandidates.status, "pending")));
+      let space = Math.max(0, HARVEST_MAX_WAITING - Number(waiting));
 
-    let proposed = 0;
-    let skipped = 0;
-    for (const candidate of parsed.data.candidates) {
-      if (space === 0) {
-        skipped += 1;
-        continue;
+      let proposed = 0;
+      let skipped = 0;
+      for (const candidate of parsed.data.candidates) {
+        if (space === 0) {
+          skipped += 1;
+          continue;
+        }
+        const rows = await tx
+          .insert(harvestCandidates)
+          .values({
+            profileId,
+            text: candidate.text,
+            title: candidate.title ?? null,
+            context: (candidate.context ?? {}) as HarvestContext,
+            sourceHash: harvestHash(profileId, candidate.text),
+            createdAt: at,
+          })
+          /* Already waiting, already kept, or already refused: the same
+             sentence is not asked about twice. */
+          .onConflictDoNothing({ target: [harvestCandidates.profileId, harvestCandidates.sourceHash] })
+          .returning({ id: harvestCandidates.id });
+        if (rows.length) {
+          proposed += 1;
+          space -= 1;
+        } else {
+          skipped += 1;
+        }
       }
-      const rows = await tx
-        .insert(harvestCandidates)
-        .values({
-          profileId,
-          text: candidate.text,
-          title: candidate.title ?? null,
-          context: (candidate.context ?? {}) as HarvestContext,
-          sourceHash: harvestHash(candidate.text),
-          createdAt: now(),
-        })
-        /* Already waiting, already kept, or already refused: the same
-           sentence is not asked about twice. */
-        .onConflictDoNothing({ target: [harvestCandidates.profileId, harvestCandidates.sourceHash] })
-        .returning({ id: harvestCandidates.id });
-      if (rows.length) {
-        proposed += 1;
-        space -= 1;
-      } else {
-        skipped += 1;
-      }
-    }
-    return { proposed, skipped };
+      return { proposed, skipped };
     });
     return c.json({ proposed, skipped }, proposed ? 201 : 200);
   });
 
   /* WHAT IS WAITING. The ones past their week are lapsed first, in the same
-     request — there is no clock job for this, because the only moment the
-     difference shows is the moment somebody looks. */
+     request — see `lapseHarvest`. */
   routes.get("/", humanSessionsOnly, async (c) => {
     const db = getDatabase();
     const profileId = c.get("session").profile.id;
-    const at = now();
-    /* `harvestLapsed`, said in SQL: made at or before the cutoff. */
-    const cutoff = new Date(at.getTime() - LAPSE_MS);
-    await db
-      .update(harvestCandidates)
-      .set({ status: "lapsed", text: null, title: null, sourceHash: null, decidedAt: at })
-      .where(and(eq(harvestCandidates.profileId, profileId), eq(harvestCandidates.status, "pending"), lte(harvestCandidates.createdAt, cutoff)));
+    await lapseHarvest(db, profileId, now());
     const rows = await db
       .select({ id: harvestCandidates.id, text: harvestCandidates.text, title: harvestCandidates.title, context: harvestCandidates.context, createdAt: harvestCandidates.createdAt })
       .from(harvestCandidates)
@@ -244,30 +263,43 @@ export function createHarvestRoutes(deps: HarvestRouteDependencies = {}): Hono<A
     const db = getDatabase();
     const profileId = c.get("session").profile.id;
     const [owned] = await db
-      .select({ id: inspirations.id })
+      .select({ id: inspirations.id, createdAt: inspirations.createdAt })
       .from(inspirations)
       .where(and(eq(inspirations.profileId, profileId), eq(inspirations.id, parsed.data.inspirationId)));
     if (!owned) return c.json({ error: "That save is not in your archive" }, 404);
+    /* THE SAVE MUST BE THE ONE MADE FOR THIS CANDIDATE. Ownership alone let
+       any old save be recorded as what the candidate became — the words
+       deleted, the hash blocking the sentence for good, and nothing of it
+       anywhere. So: no other candidate already points at it, and it was
+       made after this candidate was proposed. */
+    const [linked] = await db
+      .select({ id: harvestCandidates.id })
+      .from(harvestCandidates)
+      .where(and(eq(harvestCandidates.profileId, profileId), eq(harvestCandidates.inspirationId, owned.id), ne(harvestCandidates.id, id.data)))
+      .limit(1);
+    if (linked) return c.json({ error: "That save already belongs to another candidate", code: "harvest_save_taken" }, 409);
 
     const [kept] = await db
       .update(harvestCandidates)
-      .set({ status: "kept", text: null, title: null, inspirationId: parsed.data.inspirationId, decidedAt: now() })
+      .set({ status: "kept", text: null, title: null, inspirationId: owned.id, decidedAt: now() })
       /* Pending, or let go only a moment ago: the swipe declines at once
          (so a closed tab cannot leave it waiting), and "cut wrong — keep
          these words instead" can still follow it. A decline with any other
          reason stays a decline. */
       .where(and(eq(harvestCandidates.id, id.data), eq(harvestCandidates.profileId, profileId),
+        lte(harvestCandidates.createdAt, owned.createdAt),
         or(eq(harvestCandidates.status, "pending"),
           and(eq(harvestCandidates.status, "declined"), or(isNull(harvestCandidates.reason), eq(harvestCandidates.reason, "miscut"))))))
       .returning({ id: harvestCandidates.id });
     if (kept) return c.json({ id: kept.id, status: "kept" });
 
     const [row] = await db
-      .select({ status: harvestCandidates.status, inspirationId: harvestCandidates.inspirationId })
+      .select({ status: harvestCandidates.status, inspirationId: harvestCandidates.inspirationId, createdAt: harvestCandidates.createdAt })
       .from(harvestCandidates)
       .where(and(eq(harvestCandidates.id, id.data), eq(harvestCandidates.profileId, profileId)));
     if (!row) return c.json({ error: "Unknown candidate" }, 404);
     if (row.status === "kept" && row.inspirationId === parsed.data.inspirationId) return c.json({ id: id.data, status: "kept" });
+    if (row.createdAt > owned.createdAt) return c.json({ error: "That save was made before this candidate", code: "harvest_save_older" }, 409);
     return c.json({ error: "This candidate was already decided", code: "harvest_decided", status: row.status }, 409);
   });
 
@@ -309,7 +341,7 @@ export function createHarvestRoutes(deps: HarvestRouteDependencies = {}): Hono<A
           eq(harvestCandidates.id, id.data),
           eq(harvestCandidates.profileId, profileId),
           eq(harvestCandidates.status, "declined"),
-          sql`${harvestCandidates.reason} IS NULL`,
+          isNull(harvestCandidates.reason),
         ))
         .returning({ id: harvestCandidates.id });
       if (explained) return c.json({ id: explained.id, status: "declined", reason });

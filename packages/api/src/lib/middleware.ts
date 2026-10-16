@@ -161,7 +161,7 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
  *
  * None of it was reachable, and that is the thinnest kind of safe: the only
  * thing in front of those nine was `keeperKeyMayPass` — ONE positive list,
- * in ONE middleware, naming ten GET prefixes and one POST. A defence whose
+ * in ONE middleware, naming ten GET prefixes and two POSTs. A defence whose
  * whole strength is an allowlist nobody has widened yet is a defence that
  * ends the first time someone widens it, and the widening will look like a
  * one-line product change rather than like granting a config file the power

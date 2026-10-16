@@ -19,7 +19,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
-import { createHarvestRoutes, harvestHash, harvestLapsed, HARVEST_LAPSE_DAYS, HARVEST_MAX_WAITING } from "./harvest.js";
+import { assembleProfileExport } from "../lib/profile-export.js";
+import { createHarvestRoutes, harvestHash, HARVEST_LAPSE_DAYS, HARVEST_MAX_WAITING } from "./harvest.js";
 
 let t: TestDatabase;
 let seq = 0;
@@ -78,8 +79,9 @@ const propose = (person: Person, ...texts: string[]) =>
   call(person, "POST", "", { candidates: texts.map((text) => ({ text, context: { tool: "claude-code", hour: 22 } })) });
 const waiting = async (person: Person) =>
   ((await call(person, "GET", "")).body.candidates as Array<{ id: string; text: string; lapsesAt: string }>);
-async function saved(person: Person, text: string): Promise<string> {
-  const [row] = await t.sql`INSERT INTO inspirations (profile_id, text) VALUES (${person.profileId}, ${text}) RETURNING id`;
+/** A save made now on the test clock — after anything proposed so far. */
+async function saved(person: Person, text: string, at = new Date(clock.getTime() + 1000)): Promise<string> {
+  const [row] = await t.sql`INSERT INTO inspirations (profile_id, text, created_at) VALUES (${person.profileId}, ${text}, ${at.toISOString()}) RETURNING id`;
   return row.id as string;
 }
 const row = async (id: string) =>
@@ -97,14 +99,12 @@ afterAll(async () => {
 });
 
 describe("the rules, without a database", () => {
-  it("treats the same sentence, however spaced or cased, as the same candidate", () => {
-    expect(harvestHash("  The first move   small. ")).toBe(harvestHash("the FIRST move small."));
-    expect(harvestHash("one sentence")).not.toBe(harvestHash("another sentence"));
-  });
-  it("lapses at exactly a week", () => {
-    const made = new Date("2026-10-01T00:00:00Z");
-    expect(harvestLapsed(made, new Date(made.getTime() + HARVEST_LAPSE_DAYS * 86_400_000 - 1))).toBe(false);
-    expect(harvestLapsed(made, new Date(made.getTime() + HARVEST_LAPSE_DAYS * 86_400_000))).toBe(true);
+  it("treats the same sentence, however spaced or cased, as the same candidate, for one person only", () => {
+    const a = "00000000-0000-4000-8000-000000000001";
+    const b = "00000000-0000-4000-8000-000000000002";
+    expect(harvestHash(a, "  The first move   small. ")).toBe(harvestHash(a, "the FIRST move small."));
+    expect(harvestHash(a, "one sentence")).not.toBe(harvestHash(a, "another sentence"));
+    expect(harvestHash(a, "one sentence"), "the hash is keyed per person").not.toBe(harvestHash(b, "one sentence"));
   });
 });
 
@@ -170,6 +170,29 @@ describe("keeping", () => {
     expect((await propose(me, "Keep the reversible door open.")).body).toEqual({ proposed: 0, skipped: 1 });
   });
 
+  it("refuses an old save, or one another candidate already became", async () => {
+    const me = await seedPerson("old-save");
+    const before = await saved(me, "Written last month.", new Date(clock.getTime() - 86_400_000));
+    await propose(me, "One.", "Two.");
+    const [one, two] = await waiting(me);
+    expect((await call(me, "POST", `/${one!.id}/keep`, { inspirationId: before })).body).toMatchObject({ code: "harvest_save_older" });
+    expect((await row(one!.id)).status, "nothing was decided by the refusal").toBe("pending");
+    const fresh = await saved(me, "One.");
+    expect((await call(me, "POST", `/${one!.id}/keep`, { inspirationId: fresh })).status).toBe(200);
+    expect((await call(me, "POST", `/${two!.id}/keep`, { inspirationId: fresh })).body).toMatchObject({ code: "harvest_save_taken" });
+    expect((await row(two!.id)).status).toBe("pending");
+  });
+
+  it("lets a kept sentence come back once its save is deleted", async () => {
+    const me = await seedPerson("unkept");
+    await propose(me, "Kept, then deleted.");
+    const [candidate] = await waiting(me);
+    const inspirationId = await saved(me, "Kept, then deleted.");
+    await call(me, "POST", `/${candidate!.id}/keep`, { inspirationId });
+    await t.sql`DELETE FROM inspirations WHERE id = ${inspirationId}`;
+    expect((await propose(me, "Kept, then deleted.")).body).toEqual({ proposed: 1, skipped: 0 });
+  });
+
   it("refuses to link someone else's save", async () => {
     const me = await seedPerson("linker");
     const them = await seedPerson("other");
@@ -187,7 +210,7 @@ describe("letting go", () => {
     const [candidate] = await waiting(me);
     expect((await call(me, "POST", `/${candidate!.id}/decline`, { reason: "trivial" })).body).toMatchObject({ status: "declined", reason: "trivial" });
     expect(await row(candidate!.id)).toMatchObject({ status: "declined", text: null, title: null, reason: "trivial" });
-    expect((await row(candidate!.id)).source_hash, "the hash stays so it is not proposed again").toBe(harvestHash("Lunch, maybe noodles."));
+    expect((await row(candidate!.id)).source_hash, "the hash stays so it is not proposed again").toBe(harvestHash(me.profileId, "Lunch, maybe noodles."));
     expect((await propose(me, "Lunch, maybe noodles.")).body).toEqual({ proposed: 0, skipped: 1 });
   });
 
@@ -221,6 +244,27 @@ describe("lapsing", () => {
     expect(await row(candidate!.id)).toMatchObject({ status: "lapsed", text: null, title: null, source_hash: null });
     expect((await propose(me, "A thought from last week.")).body, "unchosen is not refused").toEqual({ proposed: 1, skipped: 0 });
   });
+
+  it("lapses at exactly a week, not a millisecond before", async () => {
+    const me = await seedPerson("edge");
+    await propose(me, "On the edge.");
+    const start = clock;
+    clock = new Date(start.getTime() + HARVEST_LAPSE_DAYS * 86_400_000 - 1);
+    expect(await waiting(me)).toHaveLength(1);
+    clock = new Date(start.getTime() + HARVEST_LAPSE_DAYS * 86_400_000);
+    expect(await waiting(me)).toEqual([]);
+  });
+
+  it("lapses an unopened basket when it is filled, so week-old rows never block new ones", async () => {
+    const me = await seedPerson("unopened");
+    for (let i = 0; i < HARVEST_MAX_WAITING; i += 10) {
+      await propose(me, ...Array.from({ length: 10 }, (_, j) => `old ${i + j}`));
+    }
+    clock = new Date(clock.getTime() + HARVEST_LAPSE_DAYS * 86_400_000);
+    expect((await propose(me, "new after a week away", "old 0")).body, "the full basket lapsed first, and an unchosen line may return").toEqual({ proposed: 2, skipped: 0 });
+    const [{ n }] = await t.sql`SELECT count(*)::int AS n FROM harvest_candidates WHERE profile_id = ${me.profileId} AND text IS NOT NULL`;
+    expect(n).toBe(2);
+  });
 });
 
 describe("the constraint under all of it", () => {
@@ -228,6 +272,16 @@ describe("the constraint under all of it", () => {
     const me = await seedPerson("constraint");
     await expect(t.sql`INSERT INTO harvest_candidates (profile_id, text, status) VALUES (${me.profileId}, 'words', 'declined')`).rejects.toThrow();
     await expect(t.sql`INSERT INTO harvest_candidates (profile_id, text, status) VALUES (${me.profileId}, NULL, 'pending')`).rejects.toThrow();
+  });
+
+  it("is in the export, without the words of a candidate past its week", async () => {
+    const me = await seedPerson("exported");
+    clock = new Date(Date.now() - HARVEST_LAPSE_DAYS * 86_400_000 - 60_000);
+    await propose(me, "Stale and unopened.");
+    clock = new Date();
+    await propose(me, "Still waiting.");
+    const exported = await assembleProfileExport(t.db as never, me.profileId);
+    expect(exported.harvestCandidates.map((c) => [c.status, c.text])).toEqual([["lapsed", null], ["pending", "Still waiting."]]);
   });
 
   it("goes with the person when they erase their account", async () => {

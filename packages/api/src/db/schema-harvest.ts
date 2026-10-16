@@ -28,7 +28,9 @@
  * protects what a person kept; a candidate was never kept, and holding
  * unchosen lines from private conversations indefinitely would be the larger
  * breach. The hash goes on lapse so a sentence that stays true may be
- * proposed again; it stays on decline so a refused sentence is not.
+ * proposed again; it stays on decline so a refused sentence is not, and on
+ * keep until the save it became is deleted (see `lapseHarvest`). It is keyed
+ * by the server secret and the profile, so it confirms no guesses.
  *
  * ── WHO MAY WRITE WHAT ──────────────────────────────────────────────────
  *
@@ -43,6 +45,9 @@ import { check, foreignKey, index, jsonb, pgTable, text, timestamp, uniqueIndex,
 
 import { inspirations } from "./schema-inspirations";
 import { profiles } from "./schema-profiles";
+
+/** How long an unchosen candidate waits before its words are deleted. */
+export const HARVEST_LAPSE_DAYS = 7;
 
 export const harvestStatusValues = ["pending", "kept", "declined", "lapsed"] as const;
 export type HarvestStatus = (typeof harvestStatusValues)[number];

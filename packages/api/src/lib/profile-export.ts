@@ -32,6 +32,7 @@ import {
   attachments,
   consultations,
   decisionPrincipleCitations,
+  HARVEST_LAPSE_DAYS,
   harvestCandidates,
   feedback,
   inspirations,
@@ -200,10 +201,15 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
     /* The sentences waiting in the person's basket or decided there — theirs,
        and an export that left them out would say less than the product
        keeps (found in review, 2026-10-15). */
-    harvestCandidates: await db.select({ id: harvestCandidates.id, text: harvestCandidates.text, title: harvestCandidates.title, context: harvestCandidates.context,
+    /* A candidate past its week has lapsed whether or not the basket was
+       opened since, so its words are not exported as if they were waiting. */
+    harvestCandidates: (await db.select({ id: harvestCandidates.id, text: harvestCandidates.text, title: harvestCandidates.title, context: harvestCandidates.context,
       status: harvestCandidates.status, reason: harvestCandidates.reason, reasonNote: harvestCandidates.reasonNote, inspirationId: harvestCandidates.inspirationId,
       createdAt: harvestCandidates.createdAt, decidedAt: harvestCandidates.decidedAt })
-      .from(harvestCandidates).where(eq(harvestCandidates.profileId, profileId)).orderBy(asc(harvestCandidates.createdAt), asc(harvestCandidates.id)),
+      .from(harvestCandidates).where(eq(harvestCandidates.profileId, profileId)).orderBy(asc(harvestCandidates.createdAt), asc(harvestCandidates.id)))
+      .map((row) => row.status === "pending" && Date.now() - row.createdAt.getTime() >= HARVEST_LAPSE_DAYS * 86_400_000
+        ? { ...row, status: "lapsed" as const, text: null, title: null }
+        : row),
     inspirationConversationOrigins:await db.select().from(inspirationConversationOrigins).where(eq(inspirationConversationOrigins.profileId,profileId)).orderBy(asc(inspirationConversationOrigins.createdAt),asc(inspirationConversationOrigins.inspirationId)),
     attachments: attachmentRows,
     reflections: reflectionRows,
