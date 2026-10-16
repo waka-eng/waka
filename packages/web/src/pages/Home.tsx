@@ -65,7 +65,7 @@ import { PrincipleRead } from "../components/PrincipleRead";
 import { publicWebOrigin } from '../lib/public-origins';
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { createConversation } from "../lib/api/conversations";
-import { DialogSurface } from "../components/DialogSurface";
+import { DialogSurface, leaveAsModal } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { useNavigate } from "react-router-dom";
 import { useViewNavigation } from '../lib/use-view-navigation';
@@ -286,6 +286,8 @@ const SPEAK_GRACE_MS = 220;
    fetch on a normal connection, so the light and the sentence read as one
    event rather than two. */
 const LIT_MS = 1400;
+/** How far the creature is pulled right, in CSS px, before the pull is the walk to Principles. */
+const CREATURE_PULL = 56;
 
 /* HOW LONG A PAUSE IN TYPING COUNTS AS FINISHING A NAME. Long enough that
    a normal hesitation mid-word does not write, short enough that closing
@@ -1298,7 +1300,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** Which saves the archive is showing, when it was opened by asking a
       claim where it came from. Cleared by its own control and by leaving. */
   const [savesFocus, setSavesFocus] = useState<{ label: string; ids: readonly string[] } | null>(null);
-  const [makingNew, setMakingNew] = useState(false);
   /* The box's own measured height, kept across frames so the layout pass can
      place the box before it has re-measured it this frame. `MOUTH_H` is the
      first-paint fallback and nothing more. */
@@ -1738,8 +1739,34 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * are deleted after a week unchosen, and a reading has no clock.
    */
   const [harvestQueue, setHarvestQueue] = useState<ApiHarvestCandidate[]>([]);
+  /* ═══ REVIEW IS SOMETHING YOU STEP INTO ═══════════════════════════════════
+     Founder, 2026-10-15: "the entry point into the card swipe left and right
+     should be the agent should say 'there are x things to review!' and the
+     CTA becomes 'Dive into review' or sth like this, which makes the card
+     swipe be the main action of the page." So the cards are not lying on the
+     home screen waiting to be noticed: the creature says how many there are,
+     and the press is the way in. While `reviewing`, the cards are the page —
+     the top-of-mind bubble steps aside — and the mode ends when the queue
+     runs out or on Esc. */
+  const [reviewing, setReviewing] = useState(false);
   /** A candidate that was swiped away and is being asked "why not". */
   const [harvestWhy, setHarvestWhy] = useState<{ candidate: ApiHarvestCandidate; busy: boolean; failed: boolean } | null>(null);
+  /** What the invitation counts: your agent's picks and WAKA's readings, both swiped the same way. */
+  const toReview = harvestQueue.length + claimQueue.length;
+  const startReview = useCallback(() => { setReviewing(true); }, []);
+  /* THE SITTING ENDS WHEN THERE IS NOTHING LEFT TO ASK — after the last
+     card's own goodbye (`worldSittingDone`), not on top of a "why not" the
+     person is still answering. */
+  useEffect(() => { if (reviewing && toReview === 0 && !harvestWhy) setReviewing(false); }, [reviewing, toReview, harvestWhy]);
+  /* THE FIRST CARD HAS FOCUS ON THE WAY IN, so ← and → answer it at once —
+     the card owns its arrows only while it is focused (see `ClaimSlip`). */
+  useEffect(() => {
+    if (!reviewing) return;
+    /* `.jar-pick-slip`, not `.jar-pick`: the wrapper takes no focus; the slip
+       is what holds `tabIndex` and the keys. */
+    const frame = requestAnimationFrame(() => document.querySelector<HTMLElement>('.jar-pick-slip')?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  }, [reviewing]);
   /* THE CREATURE STEPS ASIDE WHILE THE AGENT ASKS. Founder, 2026-10-15,
      approved: on a phone the why-not list covered the lower half of the
      creature, and two characters stacked on each other muddy who is
@@ -1749,6 +1776,12 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   useEffect(() => {
     simApiRef.current?.stepAside(Boolean(harvestWhy) && !mouthOpen);
   }, [harvestWhy, mouthOpen]);
+  /* GLASSES ON FOR THE SITTING. The creature reads with you while you review
+     — see `think` — and takes them off when the cards run out or you step
+     out of it. */
+  useEffect(() => {
+    simApiRef.current?.think(reviewing && !mouthOpen);
+  }, [reviewing, mouthOpen]);
   /* A candidate whose card is mid-trip, and those whose keep failed while it
      was: a failure that lands before the card has gone is held until it
      has, so the queue is never rewritten from under a card in flight. */
@@ -6507,6 +6540,46 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   /** Search reads the whole archive; opening a result does not depend on the
       bounded field already containing its orb. Queries stay out of the URL. */
   const [seek, setSeek] = useState<string | null>(null);
+
+  /* ═══ PRINCIPLES IS REACHED BY GOING, NOT BY A TAB ══════════════════════
+     Founder, 2026-10-15: the bar keeps only Inspiration and Chat, and
+     "principle is sth user can only get by dragging" — the creature pulled
+     right, or → — while the claim cards keep their own left and right.
+     `openOverHome('principles')` from Now is what starts the walk (see
+     `principlesCrossing`), so the gesture needs nothing of its own to move
+     the creature. ← (or Esc) on Principles walks it home the same way.
+
+     WHO ELSE OWNS AN ARROW, and is left alone: a focused claim card (keep /
+     not), the reach over the ground, the group radios, an open memory card,
+     menus, and anything you can type into. Capture phase, so the world's
+     own arrow handler — which only ever travels between walls, switched off
+     — never sees a key this took. */
+  const creatureDrag = useRef<{ id: number; x: number; y: number } | null>(null);
+  const creatureDragged = useRef(false);
+  const toPrinciples = useCallback(() => { commitOpenNote(); openOverHome('principles'); }, [commitOpenNote, openOverHome]);
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft' && event.key !== 'Escape') return;
+      if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (isEditableTarget(event.target)) return;
+      const nothingOpen = !panelOpen && !mouthOpen && !savedNoteOpen && seek === null && !thingShare;
+      /* Esc steps out of review — the cards go, the invitation comes back. */
+      if (event.key === 'Escape') {
+        if (reviewing && atNowView && nothingOpen && !harvestWhy) { event.preventDefault(); event.stopPropagation(); setReviewing(false); }
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('.jar-pick, .jar-reach, .jar-grounds, .jar-panel, .jar-dial, [role="menu"], [role="radiogroup"], [role="slider"]')) return;
+      if (event.key === 'ArrowRight' && atNowView && nothingOpen && !reviewing) {
+        event.preventDefault(); event.stopPropagation(); toPrinciples();
+      } else if (event.key === 'ArrowLeft' && principlesOpen && !principlesCrossing) {
+        event.preventDefault(); event.stopPropagation(); openOverHome(null);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [phase, atNowView, principlesOpen, principlesCrossing, panelOpen, mouthOpen, savedNoteOpen, seek, thingShare, toPrinciples, openOverHome, reviewing, harvestWhy]);
   /** read by the loop's key handler, which is built once */
   const openSeekRef = useRef<() => void>(() => undefined);
   openSeekRef.current = () => setSeek((s) => (s === null ? "" : s));
@@ -8752,7 +8825,24 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               illustration register — the same place the body and its aura
               live — not a UI icon set, which this product still does not have
               and is not getting. */}
-          {!mouthOpen && !charSay && !turning ? (
+          {/* THE INVITATION INTO REVIEW, in the top-of-mind slot and its full
+              weight, because it is the page's main act while anything waits
+              (see `reviewing`). */}
+          {!mouthOpen && !charSay && !turning && !reviewing && toReview > 0 ? (
+            <div className="jar-char-bubble jar-char-bubble--review" data-jar-chrome="1" data-jar-interactive="1">
+              <span className="jar-char-bubble-body">
+                <span className="jar-char-bubble-reading" role="status">
+                  {formatMessage(locale, 'worldReviewWaiting', { count: toReview })}
+                </span>
+                <span className="jar-char-bubble-acts">
+                  <button type="button" className="jar-char-bubble-act" onClick={startReview}>
+                    {say('worldReviewDive')}
+                  </button>
+                </span>
+              </span>
+            </div>
+          ) : null}
+          {!mouthOpen && !charSay && !turning && !reviewing && toReview === 0 ? (
             <>
               {/* NOT ON AN AGENT'S WALL. Founder, pressing the creature over
                   there and being offered "Feeling inspired? Save one.":
@@ -8779,9 +8869,32 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 type="button"
                 className={`jar-char-press${lit ? ' jar-char-press--lit' : ''}`}
                 aria-label={say('worldCreatureSpeak')}
+                aria-keyshortcuts="ArrowRight"
                 data-jar-chrome="1"
                 data-jar-interactive="1"
-                onClick={creatureSpeaks}
+                /* DRAG IT RIGHT AND IT WALKS TO PRINCIPLES. Founder,
+                   2026-10-15: "principle is sth user can only get by
+                   dragging." A press is still a press (the creature speaks);
+                   a pull of `CREATURE_PULL` px rightward that is more across
+                   than down is the walk, and the click that follows the
+                   release is swallowed so it does not also speak. */
+                onPointerDown={event => {
+                  if (!atNowView) return;
+                  creatureDrag.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
+                  event.currentTarget.setPointerCapture?.(event.pointerId);
+                }}
+                onPointerUp={event => {
+                  const start = creatureDrag.current;
+                  creatureDrag.current = null;
+                  if (!start || start.id !== event.pointerId) return;
+                  const dx = event.clientX - start.x, dy = event.clientY - start.y;
+                  if (dx >= CREATURE_PULL && Math.abs(dy) < dx) { creatureDragged.current = true; toPrinciples(); }
+                }}
+                onPointerCancel={() => { creatureDrag.current = null; }}
+                onClick={() => {
+                  if (creatureDragged.current) { creatureDragged.current = false; return; }
+                  creatureSpeaks();
+                }}
               />
               )}
               {/* ═══ WHAT THE CREATURE IS HOLDING UP ═══════════════════════
@@ -9203,7 +9316,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 happens next. A kept candidate becomes an ordinary save; a
                 let-go one asks why, because a collector that only hears
                 "no" cannot pick better tomorrow. */}
-            {!mouthOpen && !harvestWhy && harvestQueue[0] ? (
+            {reviewing && !mouthOpen && !harvestWhy && harvestQueue[0] ? (
               /* NOT THE READING'S TONE, ON PURPOSE. Founder, 2026-10-15: type
                  two needs "a very clear distinction" — these are what the
                  agent thought mattered, not what WAKA reads in you. So a line
@@ -9252,7 +9365,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 }}
               />
             ) : null}
-            {!mouthOpen && !harvestWhy && !harvestQueue[0] && claimQueue[0] ? (
+            {reviewing && !mouthOpen && !harvestWhy && !harvestQueue[0] && claimQueue[0] ? (
               /* THE SAME SLIP AS YOUR AGENT'S PICK, IN THE OTHER MATERIAL.
                  Founder, 2026-10-15: "let's have this design for 'keep it or
                  not it' for the first type of claim too ... better than the
@@ -9414,6 +9527,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           </div>
         </div>
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
+          /* The note goes down as a draft and the archive comes up — what the
+             bar's Inspirations row did from here before the bar lost it. */
+          onSeeAll={() => openOverHome('saves')}
           linkText={composerDraft.draft.linkText ?? ''} onLinkText={composerDraft.setLinkText}
           recordingCandidate={composerDraft.draft.recordingCandidate}
           onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => setMouthNote(String(reason))); }}
@@ -10625,7 +10741,29 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                dark — the two rows that could tell you where you are, both
                wrong, on the one surface that already had the worst record
                for leaving people lost. */
-            { id: 'home', label: 'worldDockHome' as const, here: !viewNavigation.view?.open && !viewNavigation.view?.compose && !viewNavigation.view?.conversationId, go: () => { commitOpenNote(); if (viewNavigation.view?.compose) saveAsDraft(); else openOverHome(null); } },
+            /* ═══ TWO WORDS, BOTH OF THEM "A NEW ONE" ═════════════════════
+               Founder, 2026-10-15: "at the bottom bar just keep inspiration
+               and chat and clicking on it leads to new inspiration and new
+               chat, and user can go to inspiration list and chat list only
+               from that new page." And Principles leaves the bar: "principle
+               is sth user can only get by dragging" — the creature dragged
+               right, or →, from Now (see `toPrinciples`).
+
+               PRESSING THE LIT ONE AGAIN IS THE WAY HOME. With Now gone from
+               the bar, the row that says where you are is also the way back:
+               on a new note or the archive, Inspiration again goes home (the
+               note folds into a draft, an open saved note commits first);
+               on a chat or the chats list, Chat again goes home. Esc still
+               closes every page, and Principles walks home on ← or a drag
+               left. */
+            { id: 'inspiration', label: 'worldDockSaves' as const,
+              here: Boolean(viewNavigation.view?.compose) || viewNavigation.view?.open === 'saves',
+              go: () => {
+                commitOpenNote();
+                if (viewNavigation.view?.compose) leaveAsModal(saveAsDraft);
+                else if (viewNavigation.view?.open === 'saves') leaveAsModal(() => openOverHome(null));
+                else startNewInspiration();
+              } },
             /* SAVE IS NOT A TAB. Founder: "home, inspirations -> let see list
                of past inspirations with main CTA to save new, chat -> see
                list of past chats with main CTA to start new chat,
@@ -10658,19 +10796,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                Closing commits what was typed — see `onNoteOpen` in
                `SavesOverlay`, which hands up `leaveNote` rather than a
                flag, precisely so this press cannot discard an edit. */
-            { id: 'saves', label: 'worldDockSaves' as const, here: viewNavigation.view?.open === 'saves',
-              go: () => { const close = closeSavedNote.current; if (close) close(); else openOverHome('saves'); } },
             /* THE PLUS. Not a place, so it does not light and does not take
                `aria-current`: it is the only verb in a row of nouns, and the
                sheet it raises is where the verb is chosen. */
-            { id: 'new', label: 'worldDockNew' as const, here: false, go: () => setMakingNew(value => !value) },
             /* CONVERSATIONS BEFORE PRINCIPLES, by the founder's own order:
                "home, inspirations, conversations, and principles". It is also
                the ladder's order — what you kept, what you said about it,
                what has endured — so the row reads left to right the way the
                material actually moves. */
-            { id: 'talk', label: 'worldDockTalk' as const, here: viewNavigation.view?.open === 'conversations' || Boolean(viewNavigation.view?.conversationId), go: () => { commitOpenNote(); openOverHome('conversations'); } },
-            { id: 'principles', label: 'worldDockPrinciples' as const, here: viewNavigation.view?.open === 'principles', go: () => { commitOpenNote(); openOverHome('principles'); } },
+            { id: 'talk', label: 'worldDockTalk' as const,
+              here: viewNavigation.view?.open === 'conversations' || Boolean(viewNavigation.view?.conversationId),
+              go: () => {
+                commitOpenNote();
+                if (viewNavigation.view?.compose) saveAsDraft();
+                if (viewNavigation.view?.open === 'conversations' || viewNavigation.view?.conversationId) leaveAsModal(() => openOverHome(null));
+                else openTalk(null);
+              } },
           ]).map(item => (
             /* THE SHEET HANGS OFF THE PLUS, not off the middle of the screen.
                Founder, with a screenshot: "this not being aligned with the +
@@ -10699,7 +10840,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                "Chats", then "Principles", then a full-screen invisible
                dismiss target, and only then to "New inspiration". Beside the
                plus in source order, Tab goes straight into it. */
-            <span key={item.id} className={item.id === 'new' ? 'waka-dock-slot' : undefined}>
+            <span key={item.id} className={item.id === 'inspiration' ? 'waka-dock-slot' : undefined}>
+            {/* THE WORD STAYS WHILE THE TOOLS ARRIVE. The tools used to take
+                the plus's place; with the plus gone they ride beside the
+                Inspiration word instead, and the word stays because pressing
+                it again is how a new note goes home. */}
+            <button
+              type="button"
+              className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}`}
+              aria-current={item.here ? 'page' : undefined}
+              onClick={item.go}
+            >
+              {say(item.label)}
+            </button>
             {/* ═══ THE BAR TRANSFORMS, IN THE ONE SLOT THAT SHOULD ═══════
                 Founder: "when the user is in inspirations, maybe this
                 bottom bar should transform so that the icons turn into the
@@ -10743,10 +10896,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 and `view.open === 'saves'` are different addresses, so the
                 two are never on screen together. The order of the branches
                 says which wins if that ever stops being true. */}
-            {item.id === 'new' && !viewNavigation.view?.compose && savedNoteOpen ? (
+            {item.id === 'inspiration' && !viewNavigation.view?.compose && savedNoteOpen ? (
               <span className="waka-dock-making" role="group" id={DOCK_SLOT}
                 aria-label={say('worldCaptureInspiration')} />
-            ) : item.id === 'new' && viewNavigation.view?.compose ? (
+            ) : item.id === 'inspiration' && viewNavigation.view?.compose ? (
               <span className="waka-dock-making" role="group" aria-label={say('worldCaptureInspiration')}>
                 {/* ═══ THE MICROPHONE SPEAKS INTO THE NOTE WHERE IT CAN ════
                     Founder: "is it not possible to do speech to text
@@ -10962,61 +11115,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   <span className="waka-dock-state" role="status">{composerState}</span>
                 ) : null}
               </span>
-            ) : (
-            <button
-              type="button"
-              className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}${item.id === 'new' ? ' waka-dock-item--new' : ''}`}
-              aria-current={item.here ? 'page' : undefined}
-              aria-expanded={item.id === 'new' ? makingNew : undefined}
-              aria-label={item.id === 'new' ? say('worldDockNew') : undefined}
-              onClick={item.go}
-            >
-              {item.id === 'new'
-                ? <svg width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false">
-                    <path d="M8.5 2.6v11.8M2.6 8.5h11.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                : say(item.label)}
-            </button>
-            )}
-            {item.id === 'new' && makingNew ? (
-              <div className="waka-new" role="menu" aria-label={say('worldDockNew')} data-jar-chrome="1" data-jar-interactive="1"
-                onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setMakingNew(false); } }}>
-                {/* "NEW X", BOTH OF THEM. Founder: "new inspiration, new chat."
-                    The two rows said "Save inspiration" and "New conversation" —
-                    a verb beside a noun, for two moves that are the same move
-                    aimed at two things. Under a plus, every row is "a new one of
-                    these"; saying it twice the same way is what makes the pair
-                    read as a pair. */}
-                <button type="button" role="menuitem" className="waka-new-one"
-                  onClick={() => { setMakingNew(false); startNewInspiration(); }}>
-                  {say('worldNewInspiration')}
-                </button>
-                <button type="button" role="menuitem" className="waka-new-one"
-                  onClick={() => { setMakingNew(false); openTalk(null); }}>
-                  {say('worldConversationNew')}
-                </button>
-              </div>
             ) : null}
             </span>
           ))}
         </nav>
-      ) : null}
-      {/* ═══ THE GROUND THAT TAKES THE DISMISSING PRESS ═════════════════
-          The sheet itself now hangs off the plus inside the dock — see the
-          note there. What stays out here is the full-screen target that
-          closes it, because that is the one part of this which genuinely
-          belongs to the whole window rather than to the button.
-
-          Nothing is drawn on it: dimming the world to ask a two-word
-          question is the modal weight this product spends its time
-          removing. It is `tabIndex={-1}` because it is a window-sized
-          invisible button, and it sat in the tab order between the bar and
-          the two rows the plus had just raised. The mouse is the only hand
-          it was ever for; Escape on the sheet and the plus itself are the
-          keyboard's way out. */}
-      {phase==='ready'&&makingNew ? (
-        <button type="button" className="waka-new-away" aria-label={say('worldClose')} tabIndex={-1}
-          onClick={() => setMakingNew(false)} />
       ) : null}
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
@@ -11300,7 +11402,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               `ConversationPanel` renders its own `<main className="chat-page">`
               inside this, and a `<main>` in a `<main>` is two primary
               landmarks. See `DialogSurface`'s header. */}
-          <DialogSurface className="waka-over waka-over--talk" aria-label={say('worldMenuTalk')}
+          <DialogSurface className="waka-over waka-over--talk" motion="modal" aria-label={say('worldMenuTalk')}
             data-way-out="talk"
             modal={false}
             onClose={viewNavigation.closeConversation}>
@@ -11339,6 +11441,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   THE HEADER GOES WITH IT, because the chevron was all it
                   held. An empty header above a conversation would be a
                   reserved row for nothing. */}
+              {/* ═══ AND COMES BACK ON A NEW CHAT, AS ITS ONLY DOOR ══════
+                  Founder, 2026-10-15: the bar keeps "inspiration and chat"
+                  as NEW ones, and "user can go to inspiration list and chat
+                  list only from that new page." The bar no longer names the
+                  list, so the reason the header left has turned round: on a
+                  new chat this word is the list's one way in, not a second.
+                  On an open chat it stays gone — Chat in the bar (pressed
+                  again) is that page's way home. */}
+              {!talkId ? (
+                <header className="jar-chat-top">
+                  <button type="button" className="jar-chat-see-all" onClick={() => openOverHome('conversations')}>
+                    {say('worldAllChats')}
+                  </button>
+                </header>
+              ) : null}
             <ConversationPanel key={`${owner}:${talkId??'new'}:${viewNavigation.view.principleId??''}`}
               scope={storageScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}

@@ -93,7 +93,7 @@ import { bakeBeing, buildPalette, MACHINE_CELLS, type BeingSprites, type Palette
 import { renderScale } from "./scale";
 import { VIGNETTE, mix, rgbCss } from "./sprites";
 import type { Measured } from "./measured";
-import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, FACE_R, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
+import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, FACE_R, GLASS_R, GLASS_W, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import {
@@ -474,6 +474,13 @@ const MOOD_BOB_FLOOR = 0.4;
  */
 const MOOD_RATE = 0.45;
 const MOOD_BLINK = 0.4;
+/* THINKING (see `think`). The gaze in px, in the same units as the hover's
+   ±2 — up and to one side, held. The blink comes 1.6× less often, and the
+   eyes narrow to this share of their height: weighing, not dozing. */
+const THINK_EYE_X = 1.5;
+const THINK_EYE_Y = -1.9;
+const THINK_BLINK = 1.6;
+const THINK_SQUINT = 0.74;
 const MOOD_GLANCE = 0.45;
 /**
  * HOW LONG THE COMPANION TAKES TO BECOME THE ONE WHOSE WALL THIS IS.
@@ -686,6 +693,15 @@ export interface SimApi {
    * the question is answered.
    */
   stepAside: (on: boolean) => void;
+  /**
+   * Reviewing with you. Founder, 2026-10-15: "when in the reviewing mode,
+   * make the agent wear glasses and the face expression should indicate that
+   * it is thinking." This creature has no brows and no mouth (see
+   * `character/body.ts`), so the thinking is said with what it has: the eyes
+   * drift up and to one side and hold there over the pointer, narrow a
+   * little, and blink slower — and a pair of reading glasses goes on.
+   */
+  think: (on: boolean) => void;
   /**
    * Where the companion stands on screen right now — its centre in viewport
    * pixels and its body width. The crossing into Principles draws its own
@@ -1827,6 +1843,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       ant: 0,
       /** the slow one: -1 … 1, half-life MOOD_HALF_LIFE_MS, rhythm only */
       mood: 0,
+      /** reviewing with you: glasses on, eyes up and aside, slower blink — see `think` */
+      thinking: false,
     };
     /* AND SO DOES THE CREATURE. Every field above is a number, a boolean or a
        string — no canvas, no node, nothing bound to the palette this run baked
@@ -4301,14 +4319,22 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         const lat = clamp(-companion.pitch * PITCH_LOOK + companion.eyeY * 0.06, -0.9, 0.9);
         const cosLat = Math.cos(lat);
         const eyY = -bh * 0.06 + Math.sin(lat) * bh * FACE_R + companion.eyeY;
+        /* where each visible eye landed, for the glasses drawn over them */
+        const lenses: Array<{ x: number; rx: number; ry: number; alpha: number; ca: number }> = [];
         for (const lon of [-EYE_LON, EYE_LON]) {
           const a = companion.yaw + lon;
           const ca = Math.cos(a);
           if (ca <= 0) continue;
           /* at the edge a blink is a flicker, so it is suppressed there */
-          const eh = ca < 0.3 ? 1 : Math.max(0.12, 1 - companion.blink);
+          const eh = (ca < 0.3 ? 1 : Math.max(0.12, 1 - companion.blink)) * (companion.thinking ? THINK_SQUINT : 1);
           ctx!.globalAlpha = clamp01(ca / Math.sin(0.25));
           const ex = Math.sin(a) * bw * FACE_R * cosLat + companion.eyeX * ca;
+          if (companion.thinking) {
+            /* the lens sits where the eye sits at rest, not where it looks:
+               glasses stay on the face while the eyes move behind them */
+            const lx = Math.sin(a) * bw * FACE_R * cosLat;
+            lenses.push({ x: lx, rx: companion.size * GLASS_R * Math.max(ca * cosLat, 0.2), ry: companion.size * GLASS_R * Math.max(cosLat, 0.35), alpha: ctx!.globalAlpha, ca });
+          }
           if (formMachine) {
             /*
              * A MACHINE'S EYE IS MADE OF CELLS, AND SO IS ITS BLINK.
@@ -4357,6 +4383,50 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             TAU,
           );
           ctx!.fill();
+        }
+        /* ═══ READING GLASSES, WHILE REVIEWING ═══════════════════════════
+           Two rims and a bridge in the eyes' own ink, on the same turning
+           surface the eyes sit on: each lens foreshortens with its eye and
+           fades with it at the edge, and the bridge is drawn only while both
+           are in view. The lens stays where the eye RESTS, so eyes turned
+           up and aside in thought sit high and to one side inside it.
+           A machine's glasses are made of cells, like everything else it is. */
+        if (lenses.length) {
+          const lensY = -bh * 0.06 + Math.sin(lat) * bh * FACE_R;
+          ctx!.strokeStyle = EYE_INK;
+          ctx!.fillStyle = EYE_INK;
+          if (formMachine) {
+            const cx = bw / MACHINE_CELLS;
+            const cy = bh / MACHINE_CELLS;
+            for (const lens of lenses) {
+              ctx!.globalAlpha = lens.alpha;
+              const wC = Math.max(3, Math.round((2 * lens.rx) / cx));
+              const hC = Math.max(3, Math.round((2 * lens.ry) / cy));
+              const left = Math.round((lens.x - (wC * cx) / 2) / cx) * cx;
+              const top = Math.round((lensY - (hC * cy) / 2) / cy) * cy;
+              const t = Math.max(1, Math.min(cx, cy) * 0.5);
+              ctx!.fillRect(left, top, wC * cx, t);
+              ctx!.fillRect(left, top + hC * cy - t, wC * cx, t);
+              ctx!.fillRect(left, top, t, hC * cy);
+              ctx!.fillRect(left + wC * cx - t, top, t, hC * cy);
+            }
+          } else {
+            ctx!.lineWidth = companion.size * GLASS_W;
+            for (const lens of lenses) {
+              ctx!.globalAlpha = lens.alpha;
+              ctx!.beginPath();
+              ctx!.ellipse(lens.x, lensY, lens.rx, lens.ry, 0, 0, TAU);
+              ctx!.stroke();
+            }
+            if (lenses.length === 2) {
+              const [l, r] = lenses[0]!.x < lenses[1]!.x ? [lenses[0]!, lenses[1]!] : [lenses[1]!, lenses[0]!];
+              ctx!.globalAlpha = Math.min(l.alpha, r.alpha);
+              ctx!.beginPath();
+              ctx!.moveTo(l.x + l.rx, lensY);
+              ctx!.quadraticCurveTo((l.x + r.x) / 2, lensY - Math.min(l.ry, r.ry) * 0.45, r.x - r.rx, lensY);
+              ctx!.stroke();
+            }
+          }
         }
         ctx!.globalAlpha = 1;
         ctx!.restore();
@@ -4758,7 +4828,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           easing = true;
         }
         /* presence, not cartoon tracking: at most a couple of pixels */
-        const glanceY = now < companion.glanceUntil ? -2 : companion.eyeTY;
+        const glanceY = now < companion.glanceUntil && !companion.thinking ? -2 : companion.eyeTY;
         companion.eyeX = lerp(companion.eyeX, companion.eyeTX, 1 - Math.pow(0.05, dt));
         companion.eyeY = lerp(companion.eyeY, glanceY, 1 - Math.pow(0.05, dt));
         /* RHYTHM, THE THIRD THING THE CROSSING QUANTIZES.
@@ -4785,7 +4855,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           /* LOW MOOD BLINKS SLOWER. The being's own interval is still the
              thing being bent — identity first, disposition on top of it — so
              two creatures in the same mood still blink at their own rates. */
-          const base = wornBeing().blinkMs * (1 - companion.mood * MOOD_BLINK);
+          const base = wornBeing().blinkMs * (1 - companion.mood * MOOD_BLINK) * (companion.thinking ? THINK_BLINK : 1);
           const jitter = 0.8 + Math.random() * 0.4;
           companion.blinkAt = now + base * lerp(jitter, 1, clamp01(mech));
           companion.blink = 1;
@@ -5173,6 +5243,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       const dy = e.clientY + cam.y - companion.y;
       const d = Math.hypot(dx, dy) || 1;
       if (performance.now() < companion.attendUntil) return; /* it is looking at something */
+      if (companion.thinking) return; /* it is thinking: the gaze is turned inward, not to the pointer */
       companion.eyeTX = clamp((dx / d) * 2, -2, 2);
       companion.eyeTY = clamp((dy / d) * 2, -2, 2);
       /* The cursor says what a tap would do. Every other move is plenty for a
@@ -5597,6 +5668,15 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         /* Up by most of a body: enough to clear a question asked beneath it
            on a phone, measured at 390 × 844, and not so far that it leaves. */
         companion.aside = on ? -companion.size * 0.95 : 0;
+        wake();
+      },
+      think: (on: boolean) => {
+        if (companion.thinking === on) return;
+        companion.thinking = on;
+        /* Up and to one side, the way a person looks while weighing
+           something — and back to you when it is done. */
+        companion.eyeTX = on ? THINK_EYE_X : 0;
+        companion.eyeTY = on ? THINK_EYE_Y : 0;
         wake();
       },
       acknowledge: (moment: Moment = "touch") => {

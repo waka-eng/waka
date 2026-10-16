@@ -230,6 +230,8 @@ export function InspirationComposer(props: {
      looking for the control that honours it. The way out of this page is
      the dock, which `way-out.test.ts` is the gate for. */
   onClose: () => void; onSubmit: () => void;
+  /** Open the archive — this page is its only door now (see `NotePage`). */
+  onSeeAll: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null), linkInput = useRef<HTMLInputElement>(null);
@@ -307,7 +309,7 @@ export function InspirationComposer(props: {
      dragging out of the WINDOW gives a null `relatedTarget`, which
      `contains` reports as outside, so that case still clears. */
   const overheadOff = () => setOverhead(false);
-  return <DialogSurface className="jar-seek jar-inspiration-composer" aria-label={say('worldCaptureInspiration')} onClose={props.onClose} data-jar-chrome="1"
+  return <DialogSurface className="jar-seek jar-inspiration-composer" motion="modal" aria-label={say('worldCaptureInspiration')} onClose={props.onClose} data-jar-chrome="1"
     data-dropping={overhead ? '1' : undefined}
     onDragOver={event => {
       if (!event.dataTransfer.types.includes('Files')) return;
@@ -331,7 +333,8 @@ export function InspirationComposer(props: {
         NO TRAILING VERB HERE. A note that does not exist yet cannot be
         deleted; the slot is for a verb ABOUT the note and a new one has
         none. */}
-    <NotePage locale={props.locale} whenMs={when.current}>
+    <NotePage locale={props.locale} whenMs={when.current}
+      leading={<button type="button" className="jar-note-see-all" onClick={props.onSeeAll}>{say('worldBackToAll')}</button>}>
     <div className="jar-composer-body">
     <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={4} value={props.text} readOnly={props.busy || !props.ready || props.recording.phase !== 'idle'}
       aria-label={say('worldCaptureInspiration')} placeholder={say('worldCapturePrompt')}

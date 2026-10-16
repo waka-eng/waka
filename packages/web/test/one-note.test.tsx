@@ -128,7 +128,7 @@ function composerProps(): ComponentProps<typeof InspirationComposer> {
       start: vi.fn(), stop: vi.fn(), cancel: vi.fn() },
     onText: vi.fn(), onFiles: vi.fn(), onRetryFile: vi.fn(), onChooseRecording: vi.fn(),
     onRemove: vi.fn(), onVisibility: vi.fn(), onClose: vi.fn(),
-    onSubmit: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(),
+    onSubmit: vi.fn(), onSeeAll: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(),
   };
 }
 
@@ -154,19 +154,25 @@ async function savedNote(onNoteOpen = vi.fn()): Promise<void> {
 function shape() {
   const top = host.querySelector(".jar-note-top");
   return {
-    /* NO WAY BACK ON EITHER PAGE. Founder: "I can just go to all the
-       inspirations using the bottom panel. So don't do that." Read on both
-       so that one page growing a control the other does not have fails
-       here — which is the whole subject of this file. */
+    /* WHAT IS PRESSABLE BESIDE THE DATE. Read on both so that one page
+       growing a control the other does not have fails here — which is the
+       whole subject of this file. Since 2026-10-15 the two DO differ here,
+       by exactly one press: the new note carries the archive's only door
+       ("All inspirations"); the saved note, already in the archive, does
+       not. The test below spells out that one difference. */
     topPresses: pressesInTopRow(host),
     /* WHERE IN THE ROW THE MOMENT IS — the same place on both pages,
        which is all jsdom can be asked. It is centred on the PAGE by an
-       explicit `grid-column: 2` rather than by being the second child; the
-       chevron that used to hold the first track is gone, and a filler
-       element whose only job is to be nothing was the alternative. The
-       browser walk in `tools/e2e` is what measured the centring. */
+       explicit `grid-column: 2`, not by its order, so the index is read
+       among the row's children OTHER than the new note's lead (which sits
+       in `grid-column: 1`). The browser walk in `tools/e2e` is what
+       measured the centring. */
     whens: host.querySelectorAll(".jar-note-when").length,
-    whenIndex: top ? [...top.children].findIndex((n) => n.classList.contains("jar-note-when")) : -1,
+    whenIndex: top
+      ? [...top.children].filter((n) => !n.classList.contains("jar-note-lead"))
+        .findIndex((n) => n.classList.contains("jar-note-when"))
+      : -1,
+    leads: top ? top.querySelectorAll(":scope > .jar-note-lead").length : -1,
   };
 }
 
@@ -176,11 +182,16 @@ it("gives a new note and a saved one the same chrome in the same order", async (
   await savedNote();
   const kept = shape();
 
-  expect(fresh).toEqual(kept);
+  /* The same chrome, bar the one door that only the new note may have. */
+  expect({ ...fresh, topPresses: [], leads: 0 }).toEqual({ ...kept, topPresses: [], leads: 0 });
   /* Spelled out as well as compared, so a regression that breaks BOTH pages
      identically still fails. `toEqual` alone would pass for two pages that
      had each lost their date. */
-  expect(fresh.topPresses, "something pressable appeared beside the date").toEqual([]);
+  expect(fresh.topPresses, "the new note's top row is not exactly the archive door").toEqual(["jar-note-see-all"]);
+  expect(fresh.leads, "the archive door is not in the first track").toBe(1);
+  expect(kept.topPresses, "something pressable appeared beside a saved note's date").toEqual([]);
+  expect(kept.leads, "a saved note, already in the archive, grew a door to it").toBe(0);
+  expect(host.textContent, "a saved note says All inspirations").not.toContain("All inspirations");
   expect(fresh.whens).toBe(1);
   expect(fresh.whenIndex).toBe(0);
 });

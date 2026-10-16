@@ -147,7 +147,7 @@
  * out-ranks fourteen of this sheet's (0,1,0) class rules that state a
  * `cursor`. Every one is inert, for one of three reasons, and all three were
  * checked rather than argued: the control is never `disabled` in any renderer
- * (`.waka-dock-item`, `.waka-corner`, `.waka-new-one`, `.waka-list-row`,
+ * (`.waka-dock-item`, `.waka-corner`, `.waka-list-row`,
  * `.waka-menu-scrim`, `.waka-settings-row`, `.jar-char-press` — which is
  * rendered or ABSENT, never inert); or claims.css has its own `:disabled`
  * rule at (0,2,0) (`.waka-dock-tool`, `.waka-composer-mic/-ask/-send`,

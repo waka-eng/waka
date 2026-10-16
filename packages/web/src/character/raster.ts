@@ -37,6 +37,14 @@ export const EYE_R = 0.038;
     illustration, not interface text, and it is the same brown-black at every
     aliveness. */
 export const EYE_INK = "#2b2822";
+/** Reading glasses, worn only while reviewing (founder, 2026-10-15: "make the
+    agent wear glasses and the face expression should indicate that it is
+    thinking"). A rim's radius, as a fraction of the body — about 2.3 eyes,
+    so the dot sits in the lens with air round it. */
+export const GLASS_R = 0.088;
+/** A rim's stroke, as a fraction of the body. Drawn in `EYE_INK`: the glasses
+    are part of the same illustration as the eyes, not an interface badge. */
+export const GLASS_W = 0.014;
 /** A nub's seat: a quarter turn either side, at this height on the body. */
 export const NUB_LON = Math.PI / 2;
 export const NUB_X = 0.42;

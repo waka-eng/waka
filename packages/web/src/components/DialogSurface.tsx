@@ -4,6 +4,13 @@ interface DialogSurfaceProps extends HTMLAttributes<HTMLDivElement> {
   onClose: () => void;
   active?: boolean;
   /**
+   * `"modal"` — it rises in when it mounts and drops back out before it
+   * closes (see `leaveAsModal`). Founder, 2026-10-15: "inspirations and chat
+   * should feel like opening a new modal and closing it." Only the note, the
+   * chat and their two lists wear it; Principles is walked to, not raised.
+   */
+  motion?: "modal";
+  /**
    * `true` (the default) — a SHEET. It opens over the thing you are still in,
    * it is the only thing you can touch while it is up, and the way out of it
    * is inside it. `role="dialog"`, `aria-modal`, Tab wrapped at both ends.
@@ -148,8 +155,25 @@ function focusableWithin(root: HTMLElement): HTMLElement[] {
  * is a sheet. A `<div role="dialog">` is the honest spelling of a dialog —
  * there is no HTML element for one.
  */
+/** How long the drop-out takes; `claims.css` `waka-modal-out` is the same. */
+export const MODAL_LEAVE_MS = 180;
+
+/**
+ * CLOSE A RAISED PAGE THE WAY IT OPENED: it drops back out, then `then` runs.
+ * With no raised page on screen, under reduced motion, or where the platform
+ * cannot animate (jsdom has no `getAnimations`), `then` runs at once — so a
+ * close is never held up by a page that is not going to move.
+ */
+export function leaveAsModal(then: () => void, from?: Element | null): void {
+  const node = (from ?? document.querySelector('[data-motion="modal"]')) as HTMLElement | null;
+  const still = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!node || still || typeof node.getAnimations !== "function" || node.dataset.leaving) { then(); return; }
+  node.dataset.leaving = "1";
+  window.setTimeout(then, MODAL_LEAVE_MS);
+}
+
 export const DialogSurface = forwardRef<HTMLDivElement, DialogSurfaceProps>(function DialogSurface(
-  { active = true, modal = true, onClose, onKeyDown, children, role, ...props }, forwardedRef,
+  { active = true, modal = true, motion, onClose, onKeyDown, children, role, ...props }, forwardedRef,
 ) {
   const surface = useRef<HTMLDivElement>(null);
   const opener = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -220,6 +244,7 @@ export const DialogSurface = forwardRef<HTMLDivElement, DialogSurfaceProps>(func
     "aria-hidden": active ? undefined : true,
     tabIndex: -1,
     "data-jar-surface": "1",
+    "data-motion": motion,
     onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
       onKeyDown?.(event);
       if (!active || event.defaultPrevented || event.nativeEvent.isComposing ||
@@ -227,7 +252,8 @@ export const DialogSurface = forwardRef<HTMLDivElement, DialogSurfaceProps>(func
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
-        onClose();
+        if (motion === "modal") leaveAsModal(onClose, event.currentTarget);
+        else onClose();
       } else if (event.key === "Tab" && modal) {
         /* ═══ THE TRAP, AND ONLY FOR A SHEET ══════════════════════════════
            A trap is a true statement about a dialog: the rest of the screen

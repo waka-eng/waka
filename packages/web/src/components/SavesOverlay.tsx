@@ -841,6 +841,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
            also the worst place to be held: a search field, a category
            row and a chapter-grouped list of everything you have ever
            kept, and the way out of all of it was a key nobody can see. */
+        motion="modal"
         modal={false}
         onClose={onClose}
         >

@@ -9,6 +9,14 @@
  * don't do that." The row holds a date, and on a saved note one verb about
  * the note, and nothing else you can press.
  *
+ * AND THEN THE BAR STOPPED NAMING THE ARCHIVE (2026-10-15). Founder: "at the
+ * bottom bar just keep inspiration and chat and clicking on it leads to new
+ * inspiration and new chat, and user can go to inspiration list and chat
+ * list ONLY from that new page." So a NEW note now holds exactly one press
+ * up here — `.jar-note-see-all`, "All inspirations", in words — and a saved
+ * note still holds none. Callers assert the exact list (`['jar-note-see-all']`
+ * or `[]`), so a chevron or anything else arriving beside it still fails.
+ *
  * THIS REPLACES THREE COUNTS OF THREE DEAD CLASS NAMES. `one-note.test.tsx`
  * and `inspiration-composer.test.tsx` between them asserted that
  * `.jar-note-back`, `.waka-over-back`, `.jar-note-tools` and `.jar-note-save`

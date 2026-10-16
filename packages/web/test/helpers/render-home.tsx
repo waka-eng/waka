@@ -502,92 +502,139 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
   };
 }
 
-/**
- * REACH A DESTINATION THE WAY A PERSON NOW DOES.
- *
- * The home page used to wear its destinations: a bottom nav with Home,
- * Inspirations, Principles and Find, and two activity cards for Review and
- * Talk. The founder moved all six behind the hamburger, so a suite that still
- * queries `.jar-personal-navigation` is asserting against a shape the product
- * no longer has.
- *
- * What those suites were actually testing — that the verb works, that the
- * section is recorded for Back, that Capture survives a reload — is unchanged
- * and still worth testing. Only the route to the control moved, so this helper
- * carries that one difference and the assertions stay where they were.
- */
-export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
-  /* THE PLACES MOVED TO THE BOTTOM. Founder: "have a bottom navbar." The
-     four rungs across the top are gone and the dock holds what is left — and
-     what is left is PLACES, which is why two of the four did not survive the
-     move: claims are answered on the home screen and saves are moving there.
-     What every suite using this helper tests is unchanged; only where the
-     control lives is. */
-  const rows = [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")];
-  /* BY LABEL, NOT BY TEXT ALONE. The dock's plus is drawn rather than
-     written — it is the one verb in a row of nouns — so its `textContent` is
-     empty and only its `aria-label` names it. Reading the accessible name is
-     also the better question to ask of any control: it is what a person
-     navigating by voice or by screen reader would say out loud. */
-  const name = (node: HTMLButtonElement) =>
-    (node.textContent?.trim() || node.getAttribute("aria-label")?.trim()) ?? "";
-  const row = rows.find((node) => name(node).startsWith(label));
+/** The bar's rows. */
+function dockRows(container: HTMLElement): HTMLButtonElement[] {
+  return [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")];
+}
+/* BY ACCESSIBLE NAME, which is what a person navigating by voice or by
+   screen reader would say out loud. */
+const accessibleName = (node: HTMLElement) =>
+  (node.textContent?.trim() || node.getAttribute("aria-label")?.trim()) ?? "";
+
+/** Press the bar row named exactly `label`, or say what the bar offers. */
+export async function pressDockRow(container: HTMLElement, label: string): Promise<void> {
+  const rows = dockRows(container);
+  const row = rows.find((node) => accessibleName(node) === label);
   if (!row) {
-    throw new Error(
-      `no dock row named ${label}. The dock offers: ${rows.map(name).join(", ")}`,
-    );
+    throw new Error(`no dock row named ${label}. The dock offers: ${rows.map(accessibleName).join(", ")}`);
   }
   await act(async () => row.click());
 }
 
 /**
- * THE LEFT CORNER — chat history, one press.
+ * Press `selector` once it is on screen. A new note and a new chat each open
+ * through an effect and a history write, so the door on them can land a
+ * flush after the press that opened the page.
+ */
+async function pressWhenItAppears(container: HTMLElement, selector: string, what: string): Promise<void> {
+  for (let turn = 0; turn < 40; turn += 1) {
+    const node = container.querySelector<HTMLElement>(selector);
+    if (node) {
+      await act(async () => node.click());
+      return;
+    }
+    await act(async () => { await Promise.resolve(); });
+  }
+  throw new Error(`${what} (${selector}) never appeared`);
+}
+
+/** A key pressed where a person's would land: on the open page, else the body. */
+async function pressKey(container: HTMLElement, key: string): Promise<void> {
+  const target = container.querySelector<HTMLElement>(".waka-over[data-jar-surface]") ?? document.body;
+  await act(async () => {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  });
+}
+
+/**
+ * REACH A DESTINATION THE WAY A PERSON NOW DOES.
  *
- * Founder: "top left button should be chat history since moving between
- * inspirations, top of mind, principles is done with the middle center
- * dropdown." So the corner is a single act again, not a menu: pressing it
- * holds the conversations list up over the world. The three views went back
- * to `chooseFromMenu`, where they started.
+ * What the suites using this test — that the verb works, that the section is
+ * recorded for Back, that Capture survives a reload — is unchanged. Only the
+ * route to the control moves, so this helper carries that one difference and
+ * the assertions stay where they were.
+ *
+ * THE ROUTES SINCE 2026-10-15. Founder: "at the bottom bar just keep
+ * inspiration and chat and clicking on it leads to new inspiration and new
+ * chat, and user can go to inspiration list and chat list ONLY from that new
+ * page" — and "principle is sth user can only get by dragging". So:
+ *   - "Inspirations" / "Your inspirations" → the bar's Inspiration (a new
+ *     note), then that note's "All inspirations";
+ *   - "Chats" → the bar's Chat (a new chat), then that chat's "All chats";
+ *   - "Principles" → ArrowRight on Now, the keyboard twin of pulling the
+ *     creature right;
+ *   - "Now" → the lit bar row pressed again, which is the way home. Already
+ *     home, nothing is lit and nothing is pressed.
+ * Any other label presses the bar row of exactly that name.
+ */
+export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
+  if (label === "Inspirations" || label === "Your inspirations") {
+    await pressDockRow(container, "Inspiration");
+    await pressWhenItAppears(container, ".jar-note-see-all", "a new note's All inspirations");
+    return;
+  }
+  if (label === "Chats") {
+    await pressChatCorner(container);
+    return;
+  }
+  if (label === "Principles") {
+    await pressKey(container, "ArrowRight");
+    return;
+  }
+  if (label === "Now") {
+    const lit = container.querySelector<HTMLButtonElement>('.waka-dock .waka-dock-item[aria-current="page"]');
+    if (lit) await act(async () => lit.click());
+    return;
+  }
+  await pressDockRow(container, label);
+}
+
+/**
+ * THE CHATS LIST. The name is kept so every suite reaching for the
+ * conversations door reads the same; the door is two presses now.
+ *
+ * Founder, 2026-10-15: the bar's Chat opens a NEW chat, and the list of chats
+ * is reached only from that new chat's "All chats".
  */
 export async function pressChatCorner(container: HTMLElement): Promise<void> {
-  /* CHAT MOVED OUT OF THE CORNER AND INTO THE DOCK. Founder: "switch between
-     me and my agent should go in top left now that we have new entry point
-     for chat" — the corner holds the form switch now, and conversations are a
-     dock row like the other places. The name stays so every suite that
-     reaches for the conversations door keeps reading the same; only where
-     that door is has changed. */
-  const row = [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")]
-    /* "Chats" SINCE 2026-10-11 — founder: "change conversation to chat in
-       bottom navigation as well." The helper's NAME still says chat, which it
-       always did, so every suite reaching for this door is unchanged. */
-    .find((node) => node.textContent?.trim() === "Chats");
-  if (!row) {
-    const had = [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")]
-      .map((node) => node.textContent?.trim())
-      .join(" | ");
-    throw new Error(`no Chats row in the dock. The dock offers: ${had}`);
-  }
-  await act(async () => row.click());
+  await pressDockRow(container, "Chat");
+  await pressWhenItAppears(container, "button.jar-chat-see-all", "a new chat's All chats");
 }
 
 /**
  * Leaving a destination the way a person does, which stopped being an X.
  *
- * Founder, 2026-10-11: "how do we even need the close button for inspiration
- * and chat? It's supposed to just be moving around. I mean for principles
- * too. There's no reason for there to be an X button when we're just moving
- * across the pages." The dock is visible the whole time a destination is
- * open and its first row is called Now, so the X was a second control doing
- * what a permanent one already did.
+ * Founder, 2026-10-11: "There's no reason for there to be an X button when
+ * we're just moving across the pages." The point of Law 2 is unchanged and so
+ * is this helper's: the way out it presses is one a person can SEE.
  *
- * The point of Law 2 is unchanged and so is this helper's: the way out it
- * presses is one a person can SEE. It is simply the bar now, which is the
- * same control on every surface instead of one per sheet.
+ * SINCE 2026-10-15 THAT IS THE LIT ROW. Now left the bar, and the row that
+ * says where you are (`aria-current="page"`) is the way home when pressed
+ * again. Principles has no row — it is walked to — so there the way out is
+ * Escape; its ← and its pull left are `home-navigation.test.tsx`'s to test.
  */
 export async function closeOverlay(container: HTMLElement): Promise<void> {
-  const now = container.querySelector<HTMLButtonElement>(".waka-dock .waka-dock-item");
-  if (!now) throw new Error("no visible way out: the dock is not on screen");
-  await act(async () => now.click());
+  if (!container.querySelector(".waka-dock")) throw new Error("no visible way out: the dock is not on screen");
+  const lit = container.querySelector<HTMLButtonElement>('.waka-dock .waka-dock-item[aria-current="page"]');
+  if (lit) {
+    await act(async () => lit.click());
+    return;
+  }
+  await pressKey(container, "Escape");
+}
+
+/**
+ * STEP INTO REVIEW, the way a person now reaches a claim card or a pick.
+ *
+ * Founder, 2026-10-15: "the entry point into the card swipe left and right
+ * should be the agent should say 'there are x things to review!' and the CTA
+ * becomes 'Dive into review'". The cards no longer lie on home waiting; the
+ * creature's bubble counts them and this press is the way in. Pass the
+ * world's `step` to run the frame that hands the first card focus.
+ */
+export async function diveIntoReview(container: HTMLElement, step?: (frames?: number) => Promise<void>): Promise<void> {
+  await pressWhenItAppears(container, ".jar-char-bubble--review button.jar-char-bubble-act", "the review invitation's Dive into review");
+  if (step) await step(2);
 }
 
 /** The capture entry is a field now, not a button that opens one. */

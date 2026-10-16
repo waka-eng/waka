@@ -227,11 +227,20 @@ const LEFT_BY_THE_DOCK: Record<string, string> = {
      which is where the chevron went. The checks below then hold the claim
      to the product — the row has to exist, and the bar has to be up while
      this page is open, which the compose check further down now asserts
-     directly rather than by implication. */
-  "components/InspirationComposer.tsx": "saves",
-  "components/SavesOverlay.tsx": "saves",
-  "components/ConversationsOverlay.tsx": "conversations",
-  "components/PrinciplesOverlay.tsx": "principles",
+     directly rather than by implication.
+
+     ═══ THE VALUES ARE BAR ROW IDS SINCE 2026-10-15 ═════════════════════
+     Founder: "at the bottom bar just keep inspiration and chat". Each value
+     is now the id of the row that LIGHTS on that page, because the lit row
+     pressed again is the page's way home: the notepad and the archive light
+     'inspiration', the chats list lights 'talk'. Two entries have no row and
+     are proved another way below: Principles ("principle is sth user can only
+     get by dragging") walks home on ← or a pull left, and leaves by either
+     bar row; claims is reached from the home screen. */
+  "components/InspirationComposer.tsx": "inspiration",
+  "components/SavesOverlay.tsx": "inspiration",
+  "components/ConversationsOverlay.tsx": "talk",
+  "components/PrinciplesOverlay.tsx": "walked",
   "components/ClaimsOverlay.tsx": "claims",
 };
 
@@ -410,7 +419,29 @@ describe("every surface has a way out you can see", () => {
     const dock = /className=\{`waka-dock-item/.test(home)
       ? [...home.matchAll(/\{ id: '([a-z]+)', label: 'worldDock/g)].map((hit) => hit[1]!)
       : [];
-    expect(dock.length, "the dock's item list could not be read out of Home.tsx").toBeGreaterThanOrEqual(4);
+    /* TWO ROWS SINCE 2026-10-15. Founder: "at the bottom bar just keep
+       inspiration and chat and clicking on it leads to new inspiration and
+       new chat" — Now, the plus and Principles left the bar. Exact, not a
+       floor: a third row coming back is a design change, not drift. */
+    expect(dock, "the dock's item list could not be read out of Home.tsx, or it is not the two rows").toEqual(["inspiration", "talk"]);
+
+    /* AND THE LIT ROW IS ITS OWN WAY HOME. With Now gone from the bar, the
+       one-press visible exit from every page a row lights is that row pressed
+       again — so each row must (a) light somewhere, and (b) in that state
+       walk home rather than make another new one. Read out of each row's own
+       entry, so moving the home step out of a row fails here. */
+    const rowSource = (id: string): string => {
+      const start = home.indexOf(`{ id: '${id}', label: 'worldDock`);
+      const rest = home.slice(start + 1);
+      const next = rest.search(/\{ id: '[a-z]+', label: 'worldDock|\]\)\.map\(item/);
+      return code(rest.slice(0, next));
+    };
+    const inspiration = rowSource("inspiration"), talk = rowSource("talk");
+    expect(inspiration, "Inspiration no longer lights on a new note or the archive").toMatch(/here:[^\n]*view\?\.compose[^\n]*open === 'saves'/);
+    expect(inspiration, "Inspiration pressed on a new note no longer folds it into a draft and goes home").toMatch(/view\?\.compose\)[^;\n]*saveAsDraft\b/);
+    expect(inspiration, "Inspiration pressed on the archive no longer goes home").toMatch(/open === 'saves'\)[^;\n]*openOverHome\(null\)/);
+    expect(talk, "Chat no longer lights on the chats list or a conversation").toMatch(/here:[^\n]*open === 'conversations'[^\n]*conversationId/);
+    expect(talk, "Chat pressed on the chats or a conversation no longer goes home").toMatch(/conversationId\)[^;\n]*openOverHome\(null\)/);
 
     /* The condition the dock renders under. A destination may only lean on
        the bar if the bar is actually up while it is open — which is exactly
@@ -448,19 +479,35 @@ describe("every surface has a way out you can see", () => {
         .toContain(id);
     }
 
+    /* STRICTER THAN IT WAS. This read `!dock.includes(id) && !DialogSurface`,
+       which let a value naming no row pass as long as the file was still a
+       surface. With the values now being the lit row, a value that names no
+       row is a page whose way home does not exist, so it fails on its own. */
     const orphans = Object.entries(LEFT_BY_THE_DOCK).filter(([file, id]) => {
       let text: string;
       try { text = readFileSync(join("src", file), "utf8"); } catch { return true; }
+      if (!text.includes("<DialogSurface")) return true;
       /* `claims` is reached from the home screen rather than from a row of
-         its own, so it is allowed to be absent from the bar — but it must
-         still be a surface that exists. */
-      return id !== "claims" && !dock.includes(id) && !text.includes("<DialogSurface");
+         its own, and `walked` is Principles, whose home step is proved just
+         below — both are allowed to be absent from the bar. */
+      return id !== "claims" && id !== "walked" && !dock.includes(id);
     });
     expect(
       orphans.map(([file]) => file),
       "these surfaces say the dock is their way out, and the dock does not " +
         "offer them. Either restore the row or give the surface its own exit.",
     ).toEqual([]);
+
+    /* ═══ PRINCIPLES, WHICH IS WALKED TO AND WALKED BACK FROM ═══════════
+       It used to be "the dock holds Principles". Since 2026-10-15 it does
+       not — "principle is sth user can only get by dragging" — so the new
+       truth is held instead: the way home is the walk's mirror (← on the
+       page, a pull left on the page), Esc still closes it, and the bar stays
+       up over it (the render condition above) so either row leaves it in one
+       visible press. `home-navigation.test.tsx` presses ← and the bar row. */
+    const principles = code(readFileSync(join("src", "components", "PrinciplesOverlay.tsx"), "utf8"));
+    expect(principles, "Principles lost its pull-left walk home").toMatch(/onPointerUp=\{[\s\S]{0,400}?-dx >= PULL_HOME[\s\S]{0,80}?onClose\(\)/);
+    expect(code(home), "← on Principles no longer walks home").toMatch(/event\.key === 'ArrowLeft' && principlesOpen[^\n]*\)\s*\{[^}]*openOverHome\(null\)/);
   });
 
   it("leaves the dock reachable from inside every destination that leans on it", () => {

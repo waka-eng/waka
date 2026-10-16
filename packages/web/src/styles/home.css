@@ -4446,6 +4446,44 @@
      explain, and it survives the next change to what is in this row. */
   .jar-note-when { grid-column: 2; }
 
+  /* THE ARCHIVE'S ONE DOOR, on a new note. In the first track, started at
+     its left edge, and in the date's own register — a word you can press,
+     not a control drawn as one. */
+  .jar-note-lead {
+    grid-column: 1;
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* A new chat's one row above the talk: the list's door, at the start. */
+  .jar-chat-top {
+    display: flex;
+    align-items: center;
+    padding: var(--sp-12) var(--sp-16) 0;
+  }
+  .jar-note-see-all,
+  .jar-chat-see-all {
+    appearance: none;
+    -webkit-appearance: none;
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: var(--waka-face);
+    font-size: var(--t-meta);
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--jar-muted);
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+  .jar-note-see-all:hover,
+  .jar-note-see-all:focus-visible,
+  .jar-chat-see-all:hover,
+  .jar-chat-see-all:focus-visible {
+    color: var(--jar-ink, var(--ink));
+  }
+
   /* ═══ THE ROW IS THE SAME HEIGHT WITH OR WITHOUT THE VERB ═════════════
      Measured in a browser: a new note's row was the date's own 18px and a
      saved note's was 32, because Delete is a control and controls are

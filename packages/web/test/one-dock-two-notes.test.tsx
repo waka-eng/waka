@@ -186,6 +186,14 @@ async function notepad(words: string): Promise<ReturnType<typeof dockPresses>> {
   world = await mountWorld(FACTS, { initialEntries: ["/?compose=1"] });
   await settle();
   expect(world.container.querySelector(".jar-inspiration-composer"), "the notepad did not open").toBeTruthy();
+  /* THE TOOLS RIDE BESIDE THE WORD (2026-10-15). With the plus gone, the
+     making-slot lives in the Inspiration row's own slot, and the word stays
+     lit beside it because pressing it again is how a new note goes home. */
+  const slot = world.container.querySelector(".waka-dock span.waka-dock-slot");
+  const word = slot?.querySelector<HTMLButtonElement>(":scope > button.waka-dock-item");
+  expect(word?.textContent?.trim(), "the Inspiration word left its slot while the tools are up").toBe("Inspiration");
+  expect(word?.getAttribute("aria-current"), "a new note does not light Inspiration").toBe("page");
+  expect(slot?.querySelector(":scope > .waka-dock-making"), "the note's tools are not beside the Inspiration word").toBeTruthy();
   return dockPresses();
 }
 

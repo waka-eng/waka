@@ -17,7 +17,7 @@
 import { act } from "react";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
-import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
+import { apiMockFrom, dataMockFrom, diveIntoReview, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration } from "../src/lib/api";
 import { SLIP_LEAVE_MS as LEAVE_MS } from "../src/components/ClaimSlip";
 
@@ -80,6 +80,8 @@ async function withBasket(candidates: Array<typeof CANDIDATE>, claims: Array<typ
   vi.mocked(keepHarvest).mockResolvedValue(undefined);
   vi.mocked(declineHarvest).mockResolvedValue(undefined);
   world = await mountWorld(FACTS);
+  /* The cards are behind the invitation since 2026-10-15; see `diveIntoReview`. */
+  await diveIntoReview(world.container, world.step);
 }
 
 it("asks about a picked sentence before any reading, in the agent's voice, and says where it came from", async () => {

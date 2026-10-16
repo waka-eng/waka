@@ -40,9 +40,10 @@
  * partly left the slot. `correctionText` is still produced by nothing.
  */
 import { act } from "react";
+import { useLocation } from "react-router-dom";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
-import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
+import { apiMockFrom, dataMockFrom, diveIntoReview, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 import { createFeedback, listClaims } from "../src/lib/api";
 import { loadSignal } from "../src/lib/data";
 import { createConversation } from "../src/lib/api/conversations";
@@ -120,6 +121,8 @@ const receiptDoor = () => world.container.querySelector<HTMLButtonElement>(".jar
 async function withClaims(...claims: Array<typeof CLAIM>) {
   vi.mocked(listClaims).mockResolvedValue({ claims, more: false });
   world = await mountWorld(FACTS);
+  /* The cards are behind the invitation since 2026-10-15; see `diveIntoReview`. */
+  await diveIntoReview(world.container, world.step);
   expect(statement(), "the claim queue is not on screen, so nothing below presses anything").toContain(claims[0]!.statement);
 }
 
@@ -282,4 +285,101 @@ it("does not open the roots after a drag that settles back", async () => {
   await withClaims(CLAIM, SECOND);
   await drag(card()!, 10);
   expect(loadSignal).not.toHaveBeenCalled();
+});
+
+/**
+ * ═══ REVIEW IS SOMETHING YOU STEP INTO (2026-10-15) ═════════════════════
+ *
+ * Founder: "the entry point into the card swipe left and right should be the
+ * agent should say 'there are x things to review!' and the CTA becomes 'Dive
+ * into review' or sth like this, which makes the card swipe be the main
+ * action of the page." So the cards are not on home until that press, the
+ * invitation counts honestly, Esc steps back out to it, and the sitting ends
+ * on its own when there is nothing left to ask.
+ *
+ * WHETHER THE SITTING IS STILL ON is read through the one thing it changes
+ * that is not a card: → on Now walks to Principles only when NOT reviewing
+ * (Home.tsx, "PRINCIPLES IS REACHED BY GOING"), so the address after a → is
+ * the observable form of the mode.
+ */
+let where: ReturnType<typeof useLocation>;
+function Where() { where = useLocation(); return null; }
+const invite = () => world.container.querySelector(".jar-char-bubble--review");
+const inviteSays = () => invite()?.querySelector(".jar-char-bubble-reading")?.textContent?.trim() ?? "";
+const walkedToPrinciples = () => new URLSearchParams(where.search).get("open") === "principles";
+async function mountQueue(...claims: Array<typeof CLAIM>) {
+  vi.mocked(listClaims).mockResolvedValue({ claims, more: false });
+  world = await mountWorld(FACTS, { routerTools: <Where /> });
+}
+async function press(target: EventTarget, key: string) {
+  await act(async () => { target.dispatchEvent(new window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })); });
+  await world.step(4);
+}
+
+it("counts what waits in the invitation, in the singular and the plural", async () => {
+  await mountQueue(CLAIM);
+  expect(inviteSays()).toBe("There is 1 thing to review!");
+  expect(invite()?.querySelector("button.jar-char-bubble-act")?.textContent?.trim()).toBe("Dive into review");
+  world.unmount();
+
+  await mountQueue(CLAIM, SECOND, { ...CLAIM, id: "claim-3", statement: "You finish what you start." });
+  expect(inviteSays()).toBe("There are 3 things to review!");
+});
+
+it("shows no card until the dive, and the first card has the keys once in", async () => {
+  await mountQueue(CLAIM, SECOND);
+  expect(card(), "a claim card is lying on home before anyone asked for review").toBeNull();
+  expect(world.container.querySelector(".jar-pick"), "a pick is lying on home before anyone asked for review").toBeNull();
+
+  await diveIntoReview(world.container, world.step);
+  expect(invite(), "the invitation stayed up over the cards").toBeNull();
+  expect(statement()).toContain(CLAIM.statement);
+  /* THE SLIP, not the card's wrapper: `.jar-pick-slip` is the element with
+     `tabIndex` and the key handler, so it is what "← and → answer at once"
+     needs to be holding focus. */
+  expect(document.activeElement, "the first card's slip does not have focus on the way in, so ← and → do not answer it")
+    .toBe(world.container.querySelector(".jar-pick-slip"));
+});
+
+it("steps back out to the invitation on Escape", async () => {
+  await mountQueue(CLAIM, SECOND);
+  await diveIntoReview(world.container, world.step);
+  expect(card()).toBeTruthy();
+  await press(document.body, "Escape");
+  expect(card(), "Escape left the cards up").toBeNull();
+  expect(inviteSays(), "Escape did not bring the invitation back").toBe("There are 2 things to review!");
+});
+
+it("keeps → for the card while reviewing, and gives it back to Principles when the last card is answered", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  await mountQueue(CLAIM);
+  await diveIntoReview(world.container, world.step);
+
+  /* ON THE FOCUSED CARD, → IS THE CARD'S: it answers, and nobody walks. */
+  const node = card()!;
+  node.focus();
+  await press(node, "ArrowRight");
+  expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "true" });
+  expect(walkedToPrinciples(), "→ on a claim card walked to Principles").toBe(false);
+
+  /* AND THE SITTING ENDS ON ITS OWN once nothing is left to ask: no card,
+     no invitation (there is nothing to count), and → walks again. */
+  await cardLeaves(); await world.step(4);
+  expect(card(), "a card is still up after the last answer").toBeNull();
+  expect(invite(), "the invitation came back with nothing to count").toBeNull();
+  await press(document.body, "ArrowRight");
+  expect(walkedToPrinciples(), "the review never ended, so → still does not walk").toBe(true);
+});
+
+it("does not walk to Principles on → off the card while reviewing", async () => {
+  await mountQueue(CLAIM, SECOND);
+  await diveIntoReview(world.container, world.step);
+  await press(document.body, "ArrowRight");
+  expect(walkedToPrinciples(), "→ walked away in the middle of a review").toBe(false);
+  expect(card(), "the review was dropped").toBeTruthy();
+  /* And after Escape, the same key walks — so the case above is the mode,
+     not a dead listener. */
+  await press(document.body, "Escape");
+  await press(document.body, "ArrowRight");
+  expect(walkedToPrinciples(), "→ on Now does not walk to Principles out of review").toBe(true);
 });
