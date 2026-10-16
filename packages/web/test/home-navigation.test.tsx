@@ -804,9 +804,10 @@ it('reaches the archive only from a new note\'s bar, and the chats only from a c
   expect(seeAll, 'a new note offers no way to the archive').toBeTruthy();
   await act(async () => seeAll!.click()); await settle();
   expect(open(), 'All inspirations did not open the archive').toBe('saves');
-  expect(lit()?.textContent?.trim(), 'the archive does not light Inspiration').toBe('Inspiration');
-  await act(async () => lit()!.click()); await settle();
-  expect(open(), 'the lit Inspiration on the archive did not go home').toBeNull();
+  /* ON A LIST THE BAR IS ↩ │ CLOSE (2026-10-15), and Close goes home. */
+  expect(barShape(world.container), 'the archive\'s bar is not ↩ │ Close').toEqual(['↩', '│', 'Close']);
+  await act(async () => close()!.click()); await settle();
+  expect(open(), 'Close on the archive did not go home').toBeNull();
 
   await act(async () => row('Chat').click()); await settle();
   expect(location.pathname, 'Chat did not open a NEW chat').toBe('/chat/new');
@@ -815,9 +816,115 @@ it('reaches the archive only from a new note\'s bar, and the chats only from a c
   expect(allChats, 'a new chat offers no way to the chats').toBeTruthy();
   await act(async () => allChats!.click()); await settle();
   expect(open(), 'All chats did not open the chats list').toBe('conversations');
-  expect(lit()?.textContent?.trim(), 'the chats list does not light Chat').toBe('Chat');
-  await act(async () => lit()!.click()); await settle();
-  expect(open(), 'the lit Chat on the chats list did not go home').toBeNull();
+  expect(barShape(world.container), 'the chats list\'s bar is not ↩ │ Close').toEqual(['↩', '│', 'Close']);
+  await act(async () => close()!.click()); await settle();
+  expect(open(), 'Close on the chats list did not go home').toBeNull();
+  expect(location.pathname, 'Close on the chats list left a chat up').not.toContain('/chat/');
+});
+
+/**
+ * ═══ ON A LIST, THE BAR IS ↩ │ CLOSE (2026-10-15) ═════════════════════
+ *
+ * Founder: "from all inspirations, the bottom bar should just be a return
+ * icon | close." The same for All chats — one ruling for the class. ↩ steps
+ * back where the list was opened from (the new note or chat), or from a
+ * saved note open in the archive back to the list; Close goes home. The
+ * Inspiration and Chat words are not in the bar on a list, and nothing is
+ * lit there any more.
+ */
+const returnRow = () => world.container.querySelector<HTMLButtonElement>('.waka-dock button.waka-dock-item[aria-label="Back"]');
+
+it('gives both lists the bar ↩ │ Close, with no Inspiration or Chat in it', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  for (const [door, list, entry] of [['Inspiration', 'saves', 'All inspirations'], ['Chat', 'conversations', 'All chats']] as const) {
+    await act(async () => row(door).click()); await settle();
+    await act(async () => row(entry)!.click()); await settle();
+    expect(open(), `${entry} did not open its list`).toBe(list);
+    expect(barShape(world.container), `the ${list} list's bar is not ↩ │ Close`).toEqual(['↩', '│', 'Close']);
+    expect(world.container.querySelectorAll('nav.waka-dock span.waka-dock-sep[aria-hidden="true"]'),
+      `the ${list} list's one rule is not hidden from a screen reader`).toHaveLength(1);
+    /* ↩ IS DRAWN, NOT WRITTEN, and named for a screen reader. */
+    const back = returnRow();
+    expect(back, `the ${list} list has no return row`).toBeTruthy();
+    expect(back!.textContent?.trim(), 'the return row prints a word').toBe('');
+    expect(back!.querySelector('svg[aria-hidden="true"]'), 'the return row is not drawn as an icon').toBeTruthy();
+    expect(back!.closest('span.waka-dock-slot'), 'the return row is not the bar\'s slot').toBeTruthy();
+    expect(lit(), `the ${list} list lights a bar row`).toBeNull();
+    await act(async () => close()!.click()); await settle();
+    expect(open(), `Close on the ${list} list did not go home`).toBeNull();
+    expect(barShape(world.container), 'home is not back to the two words').toEqual(['Inspiration', 'Chat']);
+  }
+});
+
+it('steps back from the archive to the new note it was opened from, draft and all, on ↩', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await act(async () => row('Inspiration').click()); await settle();
+  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text');
+  expect(field, 'Inspiration did not open a new note').toBeTruthy();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'half a thought');
+    field!.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await settle();
+  await act(async () => row('All inspirations')!.click()); await settle();
+  expect(open(), 'All inspirations did not open the archive').toBe('saves');
+
+  await act(async () => returnRow()!.click()); await settle();
+  expect(open(), '↩ left the archive up').toBeNull();
+  expect(new URLSearchParams(location.search).get('compose'), '↩ did not step back to the new note').toBe('1');
+  expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value,
+    '↩ came back to the note without its draft').toBe('half a thought');
+  expect(barShape(world.container).slice(0, 2), 'the note\'s bar did not come back').toEqual(['All inspirations', '│']);
+});
+
+it('steps back from the chats list to the chat it was opened from on ↩', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await act(async () => row('Chat').click()); await settle();
+  expect(location.pathname).toBe('/chat/new');
+  await act(async () => row('All chats')!.click()); await settle();
+  expect(open(), 'All chats did not open the chats list').toBe('conversations');
+  await act(async () => returnRow()!.click()); await settle();
+  expect(open(), '↩ left the chats list up').toBeNull();
+  expect(location.pathname, '↩ did not step back to the chat').toBe('/chat/new');
+  expect(barShape(world.container), 'the chat\'s bar did not come back').toEqual(['All chats', '│', 'Close']);
+});
+
+it('goes home on ↩ from a list reached some other way, since there is nothing to step back to', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await navigate('/?open=saves');
+  expect(open(), 'the archive did not open from its address').toBe('saves');
+  expect(barShape(world.container), 'the archive\'s bar is not ↩ │ Close').toEqual(['↩', '│', 'Close']);
+  await act(async () => returnRow()!.click()); await settle();
+  expect(open(), '↩ left the archive up').toBeNull();
+  expect(new URLSearchParams(location.search).get('compose'), '↩ invented a note to step back to').toBeNull();
+  expect(location.pathname, '↩ invented a chat to step back to').toBe('/');
+});
+
+it('steps back from a saved note open in the archive to the archive\'s list on ↩, the note\'s tools beside it', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await chooseFromMenu(world.container, 'Inspirations'); await settle();
+  expect(open()).toBe('saves');
+  const saved = world.container.querySelector<HTMLButtonElement>('.waka-list-row');
+  expect(saved, 'the archive shows no saved row to open').toBeTruthy();
+  await act(async () => saved!.click()); await settle();
+  expect(world.container.querySelector('.jar-note-top'), 'the saved note did not open as a note page').toBeTruthy();
+
+  /* ↩ │ THE NOTE'S TOOLS │ CLOSE. The tools ride in the return row's slot. */
+  const shape = barShape(world.container);
+  const seps = shape.flatMap((part, at) => (part === '│' ? [at] : []));
+  expect(seps, 'a saved note\'s bar is not three groups with a rule between each').toHaveLength(2);
+  expect(shape.slice(0, seps[0]), 'the first group is not ↩ alone').toEqual(['↩']);
+  expect(shape.slice(seps[1]! + 1), 'the last group is not Close alone').toEqual(['Close']);
+  const slot = returnRow()!.closest('span.waka-dock-slot');
+  expect(slot?.querySelector('#waka-note-tools.waka-dock-making[role="group"]'), 'the note\'s tools are not in the return row\'s slot').toBeTruthy();
+  expect(shape, 'Inspiration is in the bar on a saved note').not.toContain('Inspiration');
+  expect(shape, 'Chat is in the bar on a saved note').not.toContain('Chat');
+
+  await act(async () => returnRow()!.click()); await settle();
+  expect(world.container.querySelector('.jar-note-top'), '↩ left the saved note up').toBeNull();
+  expect(open(), '↩ from a saved note left the archive').toBe('saves');
+  expect(world.container.querySelector('.waka-list-row'), '↩ did not come back to the archive\'s list').toBeTruthy();
+  expect(barShape(world.container), 'the archive\'s bar is not ↩ │ Close again').toEqual(['↩', '│', 'Close']);
 });
 
 it('gives the saved note in the archive no All inspirations, since it is already there', async () => {

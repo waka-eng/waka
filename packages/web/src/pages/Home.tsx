@@ -120,7 +120,7 @@ import { ClaimSlip } from "../components/ClaimSlip";
 import { HarvestReasons } from "../components/HarvestReasons";
 import { AgentPick } from "../components/AgentPick";
 import { ConversationsOverlay } from "../components/ConversationsOverlay";
-import { CHAT_DOCK_SLOT, ConversationPanel } from "../components/ConversationPanel";
+import { ConversationPanel } from "../components/ConversationPanel";
 import type { ApiConversation } from "../lib/api/conversations";
 import { useMeasured } from "../canvas/measured";
 /* THE CANVAS SIDE OF `SimApi`, which used to be 5,637 lines of this file.
@@ -1787,21 +1787,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      has, so the queue is never rewritten from under a card in flight. */
   const harvestLeavingRef = useRef(new Set<string>());
   const harvestReturnRef = useRef(new Set<string>());
-  /** After a reading is answered "Not anymore": one line that says it was
-      noted and offers the conversation. Clears on its own, or when the door is taken. */
-  const [claimReceipt, setClaimReceipt] = useState<{ statement: string } | null>(null);
-  useEffect(() => {
-    if (!claimReceipt) return;
-    /* It does not leave while somebody is on it: a receipt whose button has
-       focus waits until focus moves on (review, 2026-10-15). */
-    let timer = 0;
-    const leave = () => {
-      if (document.activeElement?.closest('.jar-char-claim-receipt')) { timer = window.setTimeout(leave, 1500); return; }
-      setClaimReceipt(null);
-    };
-    timer = window.setTimeout(leave, 9000);
-    return () => window.clearTimeout(timer);
-  }, [claimReceipt]);
   /**
    * CORRECTING A CLAIM — THE ONLY PLACE IN THE PRODUCT THAT TAKES TYPING
    * BESIDES THE ONE BOX.
@@ -2105,6 +2090,12 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** What is being made right now, if anything — the bar becomes that page's own (see the dock). */
   const making: 'inspiration' | 'talk' | null = viewNavigation.view?.compose ? 'inspiration'
     : viewNavigation.view?.conversationId ? 'talk' : null;
+  /** On one of the two lists (reached from a new note or chat): the bar is ↩ │ Close. */
+  const listing = !making && (viewNavigation.view?.open === 'saves' || viewNavigation.view?.open === 'conversations');
+  /** Which bar row the page's own groups (rules, tools, Close) hang off. */
+  const barOwner: 'inspiration' | 'talk' | 'return' | null = making ?? (listing ? 'return' : null);
+  /** Where a list was opened from by the bar's "All …", so ↩ can go back there (see the dock). */
+  const listOrigin = useRef<{ kind: 'note' } | { kind: 'chat'; id: string } | null>(null);
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
   const [principlesCrossing, setPrinciplesCrossing] = useState<{ going: 'in' | 'out'; home: CreatureSpot | null } | null>(null);
   if (crossSeen.open !== principlesOpen || crossSeen.now !== atNowView) {
@@ -9386,9 +9377,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 labelNot={say('worldNotAnymore')}
                 /* NO CHAT DOOR ON THE CARD. Founder, 2026-10-15: "remove chat
                    about it under the claim." The card asks one thing — still
-                   true or not anymore — and the slip no longer has a chat
-                   door, pull-down or ArrowDown to offer. After a no, the
-                   receipt line still offers "Say what's true". */
+                   true or not anymore — so `labelChat`/`onChat` are left off,
+                   which also drops the pull-down and ArrowDown into a chat.
+                   (The "Say what's true" receipt after a no went too.) */
                 more={claimQueue.length > 1}
                 /* A TAP GOES DEEPER: the reading and the saves it stands on,
                    in the same room the top of mind's "built from" opens. */
@@ -9400,12 +9391,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                      trip. `partly` is not reachable from here; see the note
                      above. */
                   sayVerdict(claim.id, answer === 'keep' ? 'true' : 'not_true', undefined, claim.contested, claim.statementRevision);
-                  /* THE RECEIPT OFFERS THE DOOR. After a no, one line under
-                     the slot says it was noted and offers the conversation
-                     the soft answers used to open by force. After a yes
-                     there is nothing to add to agreeing, so there is no
-                     line. */
-                  setClaimReceipt(answer === 'not' ? { statement: claim.statement } : null);
+                  /* NO RECEIPT AFTER A NO. There was one — "Noted. Say what's
+                     true", a door into a chat under the slot — and the
+                     founder took it out, 2026-10-15: "note * say whats true
+                     instead -> remove this flow." The answer is filed; the
+                     next card comes up. */
                 }}
                 onLeft={() => {
                   /* ═══ THE SITTING ENDS ON SOMETHING ════════════════════
@@ -9462,22 +9452,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   </button>
                 ) : null}
               </ClaimSlip>
-            ) : null}
-            {!mouthOpen && claimReceipt ? (
-              <p className="jar-char-claim-receipt" role="status">
-                {say('worldClaimNoted')}{' '}
-                <button type="button" className="jar-char-claim-receipt-act"
-                  onClick={() => {
-                    const receipt = claimReceipt;
-                    setClaimReceipt(null);
-                    /* Seeded with the claim, the shape the other doors into
-                       a conversation use; the verdict already filed reaches
-                       the reply through `recentFeedback()`. */
-                    void talkAbout({ id: '', text: receipt.statement });
-                  }}>
-                  {say('worldSayWhatsTrue')}
-                </button>
-              </p>
             ) : null}
             {/* ═══ AND THE SEAT DOES NOT SIT THERE EMPTY ═══════════════════
                 Founder, on a bordered box with nothing inside it: "there
@@ -10771,14 +10745,40 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                door to the other room would be a second way out that is not
                Close. On Now and on the two lists the row is Inspiration and
                Chat as before, and the lit one pressed again goes home. */
-            ...(making === 'talk' ? [] : [{ id: 'inspiration', label: 'worldDockSaves' as const,
-              here: !making && viewNavigation.view?.open === 'saves',
+            /* WHILE REVIEWING, THE BAR IS THE WAY OUT OF IT. Founder,
+               2026-10-15: "in the review mode, bottom bar should say exit
+               review mode." The cards are the page then, so the two doors
+               to other rooms step out and the one word left ends the sitting
+               (Esc does the same) and brings the invitation back. */
+            ...(reviewing && !making ? [{ id: 'review', label: 'worldReviewExit' as const, here: false,
+              go: () => { setReviewing(false); } }] : []),
+            /* ON A LIST, ↩ │ CLOSE. Founder, 2026-10-15: "from all
+               inspirations, the bottom bar should just be a return icon |
+               close." ↩ goes back where the list was opened from — the new
+               note (its draft comes back with it) or the chat — or, from a
+               saved note open in the archive, back to the list; Close goes
+               home. The same for All chats: one ruling for the class.
+
+               BY A REMEMBERED ORIGIN, NOT BY HISTORY. Opening a list from a
+               page you are standing on REPLACES that page's entry (see
+               `openOverHome`), so there is nothing behind the list to step
+               back to; `listOrigin` is set by the bar's own "All …" press. */
+            ...(listing ? [{ id: 'return', label: 'worldBack' as const, here: false,
+              go: () => {
+                const close = closeSavedNote.current;
+                if (close) { close(); return; }
+                const origin = listOrigin.current;
+                listOrigin.current = null;
+                if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id);
+                else { openOverHome(null); if (origin?.kind === 'note') startNewInspiration(); }
+              } }] : []),
+            ...(making === 'talk' || listing || (reviewing && !making) ? [] : [{ id: 'inspiration', label: 'worldDockSaves' as const,
+              here: false,
               go: () => {
                 commitOpenNote();
-                /* On a new note this is "N inspirations": the archive comes
+                /* On a new note this is "All inspirations": the archive comes
                    up and the note folds into a draft on the way. */
-                if (making === 'inspiration') openOverHome('saves');
-                else if (viewNavigation.view?.open === 'saves') leaveAsModal(() => openOverHome(null));
+                if (making === 'inspiration') { listOrigin.current = { kind: 'note' }; openOverHome('saves'); }
                 else startNewInspiration();
               } }]),
             /* SAVE IS NOT A TAB. Founder: "home, inspirations -> let see list
@@ -10821,13 +10821,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                the ladder's order — what you kept, what you said about it,
                what has endured — so the row reads left to right the way the
                material actually moves. */
-            ...(making === 'inspiration' ? [] : [{ id: 'talk', label: 'worldDockTalk' as const,
-              here: !making && viewNavigation.view?.open === 'conversations',
+            ...(making === 'inspiration' || listing || (reviewing && !making) ? [] : [{ id: 'talk', label: 'worldDockTalk' as const,
+              here: false,
               go: () => {
                 commitOpenNote();
                 /* On a chat this is "All chats". */
-                if (making === 'talk') openOverHome('conversations');
-                else if (viewNavigation.view?.open === 'conversations') leaveAsModal(() => openOverHome(null));
+                if (making === 'talk') { listOrigin.current = { kind: 'chat', id: viewNavigation.view?.conversationId ?? 'new' }; openOverHome('conversations'); }
                 else openTalk(null);
               } }]),
           ]).map(item => (
@@ -10858,7 +10857,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                "Chats", then "Principles", then a full-screen invisible
                dismiss target, and only then to "New inspiration". Beside the
                plus in source order, Tab goes straight into it. */
-            <span key={item.id} className={item.id === 'inspiration' ? 'waka-dock-slot' : undefined}>
+            <span key={item.id} className={item.id === 'inspiration' || item.id === 'return' ? 'waka-dock-slot' : undefined}>
             {/* THE WORD STAYS WHILE THE TOOLS ARRIVE. The tools used to take
                 the plus's place; with the plus gone they ride beside the
                 word — which on a new note says how many you have kept and
@@ -10867,13 +10866,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               type="button"
               className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}`}
               aria-current={item.here ? 'page' : undefined}
+              aria-label={item.id === 'return' ? say('worldBack') : undefined}
               onClick={item.go}
             >
-              {making === 'inspiration' && item.id === 'inspiration'
-                ? say('worldBackToAll')
-                : making === 'talk' && item.id === 'talk'
-                  ? say('worldAllChats')
-                  : say(item.label)}
+              {item.id === 'return'
+                ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                    <path d="M9 14 4.5 9.5 9 5"/><path d="M4.5 9.5H14a5.5 5.5 0 0 1 0 11h-3"/>
+                  </svg>
+                : making === 'inspiration' && item.id === 'inspiration'
+                  ? say('worldBackToAll')
+                  : making === 'talk' && item.id === 'talk'
+                    ? say('worldAllChats')
+                    : say(item.label)}
             </button>
             {/* ═══ THREE GROUPS, AND A RULE BETWEEN EACH ═══════════════════
                 Founder, 2026-10-15: "the first item is always either ... all
@@ -10883,7 +10887,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 close." So on a page you are making something on, the row reads
                 where-you-came-from │ the making │ Close. The rules are drawn,
                 not typed: a `|` character would be read aloud. */}
-            {making && item.id === making ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
+            {barOwner && item.id === barOwner ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
             {/* ═══ THE BAR TRANSFORMS, IN THE ONE SLOT THAT SHOULD ═══════
                 Founder: "when the user is in inspirations, maybe this
                 bottom bar should transform so that the icons turn into the
@@ -10927,7 +10931,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 and `view.open === 'saves'` are different addresses, so the
                 two are never on screen together. The order of the branches
                 says which wins if that ever stops being true. */}
-            {item.id === 'inspiration' && !viewNavigation.view?.compose && savedNoteOpen ? (
+            {item.id === 'return' && viewNavigation.view?.open === 'saves' && savedNoteOpen ? (
               <span className="waka-dock-making" role="group" id={DOCK_SLOT}
                 aria-label={say('worldCaptureInspiration')} />
             ) : item.id === 'inspiration' && viewNavigation.view?.compose ? (
@@ -11146,19 +11150,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   <span className="waka-dock-state" role="status">{composerState}</span>
                 ) : null}
               </span>
-            ) : item.id === 'talk' && making === 'talk' ? (
-              /* THE CHAT'S MIDDLE GROUP, lent to `ConversationPanel` exactly
-                 as `DOCK_SLOT` is lent to the saved note: empty here, filled
-                 from there with the field, the mic and the send. */
-              <span className="waka-dock-making waka-dock-chat" role="group" id={CHAT_DOCK_SLOT}
-                aria-label={say('worldConversationMessage')} />
             ) : null}
             {/* CLOSE, LAST IN THE ROW, on the page you are making something
-                on: back to the main screen, the note kept as a draft. */}
-            {making && item.id === making ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
-            {making && item.id === making ? (
+                on: back to the main screen, the note kept as a draft. A chat
+                has no middle group — founder, 2026-10-15: "lets just make the
+                bottom be All chats | close and bring back the chat box that
+                used to be there" — so its row is the door, one rule, Close. */}
+            {barOwner && item.id === barOwner && (making === 'inspiration' || (viewNavigation.view?.open === 'saves' && savedNoteOpen)) ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
+            {barOwner && item.id === barOwner ? (
               <button type="button" className="waka-dock-item waka-dock-item--close"
-                onClick={() => leaveAsModal(making === 'inspiration' ? saveAsDraft : () => openOverHome(null))}>
+                onClick={() => leaveAsModal(making === 'inspiration' ? saveAsDraft : () => { commitOpenNote(); openOverHome(null); })}>
                 {say('worldClose')}
               </button>
             ) : null}
@@ -11492,7 +11493,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
               agent={agentWall ? { id: agentWall.id, name: agentWall.name } : null}
-              dockSlot={CHAT_DOCK_SLOT}
               onCreated={row=>{if(row.profileId===storageScope.profileId)committedTalk.current={owner,row};}}
               /* `replace` on the new-to-id hop so dismissing does not land
                  back on the blank conversation you just started. */

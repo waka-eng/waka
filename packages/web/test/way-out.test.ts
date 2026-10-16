@@ -245,11 +245,18 @@ const LEFT_BY_THE_DOCK: Record<string, string> = {
      the bar is that page's own: the list's door (All inspirations / All
      chats), the making, and Close. The value stays the row the page's bar
      KEEPS — 'inspiration' on the notepad, whose row says All inspirations
-     there — and the dock check below proves the Close beside it. On the two
-     lists the value is still the lit row, pressed again to go home. */
+     there — and the dock check below proves the Close beside it.
+
+     ═══ AND ↩ │ CLOSE ON THE TWO LISTS, 2026-10-15 ════════════════════════
+     Founder: "from all inspirations, the bottom bar should just be a return
+     icon | close" — and the same for All chats. The lit row went: on a list
+     Inspiration and Chat step out, and the bar is the 'return' row (↩, back
+     where the list was opened from, or out of a saved note to the list), one
+     rule, and Close home. So both lists name 'return', and the dock check
+     below proves the row, its ↩ and the Close beside it. */
   "components/InspirationComposer.tsx": "inspiration",
-  "components/SavesOverlay.tsx": "inspiration",
-  "components/ConversationsOverlay.tsx": "talk",
+  "components/SavesOverlay.tsx": "return",
+  "components/ConversationsOverlay.tsx": "return",
   "components/PrinciplesOverlay.tsx": "walked",
   "components/ClaimsOverlay.tsx": "claims",
 };
@@ -434,6 +441,12 @@ describe("every surface has a way out you can see", () => {
        new chat" — Now, the plus and Principles left the bar. Exact, not a
        floor: a third row coming back is a design change, not drift. */
     expect(dock, "the dock's item list could not be read out of Home.tsx, or it is not the two rows").toEqual(["inspiration", "talk"]);
+    /* AND THE TWO ROWS THAT STAND IN FOR THEM, each on one kind of page
+       (2026-10-15): ↩ on a list, Exit review mode while reviewing. Exact,
+       for the same reason. */
+    const standIns = [...home.matchAll(/\[\{ id: '([a-z]+)', label: 'world(?!Dock)[A-Za-z]+' as const, here: false,/g)].map((hit) => hit[1]!);
+    expect(standIns, "the bar's stand-in rows could not be read out of Home.tsx, or they are not ↩ and Exit review mode").toEqual(["review", "return"]);
+    const rows = [...dock, ...standIns];
 
     /* WHAT IS BEING MADE, read where the bar reads it. Since 2026-10-15
        ("never put something on any corners") the bar is the making page's
@@ -452,37 +465,97 @@ describe("every surface has a way out you can see", () => {
     };
     const inspiration = rowSource("inspiration"), talk = rowSource("talk");
 
-    /* THE OTHER PLACE'S WORD STEPS OUT WHILE YOU MAKE SOMETHING. A door to
-       the other room on a making page would be a second way out that is not
-       Close. */
-    expect(home, "Inspiration still stands in the bar on a chat").toMatch(/\.\.\.\(making === 'talk' \? \[\] : \[\{ id: 'inspiration', label: 'worldDock/);
-    expect(home, "Chat still stands in the bar on a new note").toMatch(/\.\.\.\(making === 'inspiration' \? \[\] : \[\{ id: 'talk', label: 'worldDock/);
+    /* ON A LIST, read where the bar reads it (2026-10-15: "from all
+       inspirations, the bottom bar should just be a return icon | close").
+       Either list, and only when nothing is being made — and the row the
+       page's groups hang off is the making page's own, or the return row on
+       a list. */
+    expect(code(home), "the bar no longer knows it is on one of the two lists").toMatch(
+      /const listing = !making && \(viewNavigation\.view\?\.open === 'saves' \|\| viewNavigation\.view\?\.open === 'conversations'\);/);
+    expect(code(home), "the bar's groups no longer hang off the making row, or the return row on a list").toMatch(
+      /const barOwner: 'inspiration' \| 'talk' \| 'return' \| null = making \?\? \(listing \? 'return' : null\);/);
 
-    /* ON A LIST, THE LIT ROW IS ITS OWN WAY HOME. With Now gone from the
-       bar, the one-press visible exit from the archive and the chats list is
-       that row pressed again — so each row must (a) light on its list and
-       only there, and (b) in that state walk home rather than make another
-       new one. */
-    expect(inspiration, "Inspiration no longer lights on the archive alone").toMatch(/here: !making && [^\n]*open === 'saves'/);
-    expect(inspiration, "Inspiration lights on a new note again — the note's way out is Close").not.toMatch(/here:[^\n]*compose/);
-    expect(inspiration, "Inspiration pressed on the archive no longer goes home").toMatch(/open === 'saves'\)[^;\n]*openOverHome\(null\)/);
+    /* THE OTHER PLACE'S WORD STEPS OUT WHILE YOU MAKE SOMETHING, ON A LIST,
+       AND WHILE REVIEWING. A door to the other room on any of those would be
+       a second way out that is not the page's own. Exact, so a fourth
+       condition (or one dropped) is a decision and not drift. */
+    expect(home, "Inspiration still stands in the bar on a chat, a list or a review").toMatch(
+      /\.\.\.\(making === 'talk' \|\| listing \|\| \(reviewing && !making\) \? \[\] : \[\{ id: 'inspiration', label: 'worldDock/);
+    expect(home, "Chat still stands in the bar on a new note, a list or a review").toMatch(
+      /\.\.\.\(making === 'inspiration' \|\| listing \|\| \(reviewing && !making\) \? \[\] : \[\{ id: 'talk', label: 'worldDock/);
+
+    /* AND WHILE REVIEWING, THE BAR IS ONLY ITS OWN WAY OUT. Founder,
+       2026-10-15: "in the review mode, bottom bar should say exit review
+       mode." Both doors to other rooms step out, and the one row left ends
+       the sitting — and Esc ends it too. */
+    expect(home, "the review bar has no Exit review mode row").toMatch(/\.\.\.\(reviewing && !making \? \[\{ id: 'review', label: 'worldReviewExit' as const, here: false,\s*go: \(\) => \{ setReviewing\(false\); \} \}\] : \[\]\)/);
+    expect(code(home), "Esc no longer ends the review").toMatch(
+      /if \(event\.key === 'Escape'\) \{\s*if \(reviewing && atNowView && nothingOpen && !harvestWhy\) \{[^}]*setReviewing\(false\); \}/);
+
+    /* ON A LIST THE WAY OUT IS ↩ │ CLOSE. ↩ steps back where the list was
+       opened from — out of a saved note open in the archive first (which
+       commits it); else to the chat or the new note the bar's "All …" press
+       recorded in `listOrigin` (not history: the list REPLACES the page it
+       was opened from); else, reached some other way, home. It is drawn, not
+       written, and named for a screen reader. On a list nothing is lit any
+       more: the rows that could light are not in the bar there. */
+    const back = code(home.slice(home.indexOf("...(listing ? [{ id: 'return'"), home.indexOf("[{ id: 'inspiration', label: 'worldDock")));
+    expect(back, "a list's bar has no return row").toMatch(/^\.\.\.\(listing \? \[\{ id: 'return', label: 'worldBack' as const, here: false,/);
+    expect(back, "↩ no longer steps out of a saved note to the list first").toMatch(
+      /go: \(\) => \{\s*const close = closeSavedNote\.current;\s*if \(close\) \{ close\(\); return; \}/);
+    expect(back, "↩ no longer reads where the list was opened from, once").toMatch(
+      /const origin = listOrigin\.current;\s*listOrigin\.current = null;/);
+    expect(back, "↩ no longer steps back to the chat the list was opened from").toMatch(
+      /if \(origin\?\.kind === 'chat'\) openTalk\(origin\.id === 'new' \? null : origin\.id\);/);
+    expect(back, "↩ no longer steps back to the new note (or, from nowhere, home)").toMatch(
+      /else \{ openOverHome\(null\); if \(origin\?\.kind === 'note'\) startNewInspiration\(\); \}/);
+    expect(code(home), "the return row lost its name for a screen reader").toMatch(/aria-label=\{item\.id === 'return' \? say\('worldBack'\) : undefined\}/);
+    expect(code(home), "the return row is no longer drawn as the return icon").toMatch(
+      /\{item\.id === 'return'\s*\? <svg [^>]*aria-hidden="true"[^>]*>\s*<path[^>]*\/><path[^>]*\/>\s*<\/svg>/);
+    expect(code(home), "the return row is not the bar's slot, so a saved note's tools cannot ride beside it").toMatch(
+      /className=\{item\.id === 'inspiration' \|\| item\.id === 'return' \? 'waka-dock-slot' : undefined\}/);
+    expect(code(home), "a saved note open in the archive no longer lends its tools to the return row's slot").toMatch(
+      /\{item\.id === 'return' && viewNavigation\.view\?\.open === 'saves' && savedNoteOpen \? \(\s*<span className="waka-dock-making" role="group" id=\{DOCK_SLOT\}/);
+
+    /* EACH WORD ON NOW STILL MAKES A NEW ONE. */
     expect(inspiration, "Inspiration pressed on Now no longer opens a new note").toMatch(/else startNewInspiration\(\)/);
-    expect(talk, "Chat no longer lights on the chats list alone").toMatch(/here: !making && [^\n]*open === 'conversations'/);
-    expect(talk, "Chat lights on a conversation again — the chat's way out is Close").not.toMatch(/here:[^\n]*conversationId/);
-    expect(talk, "Chat pressed on the chats list no longer goes home").toMatch(/open === 'conversations'\)[^;\n]*openOverHome\(null\)/);
     expect(talk, "Chat pressed on Now no longer opens a new chat").toMatch(/else openTalk\(null\)/);
+    expect(inspiration, "Inspiration lights on a new note again — the note's way out is Close").not.toMatch(/here:[^\n]*compose/);
+    expect(talk, "Chat lights on a conversation again — the chat's way out is Close").not.toMatch(/here:[^\n]*conversationId/);
 
     /* ON A MAKING PAGE, THE KEPT ROW IS THE LIST'S DOOR, IN WORDS. */
-    expect(inspiration, "the note's row no longer opens the archive").toMatch(/making === 'inspiration'\) openOverHome\('saves'\)/);
-    expect(talk, "the chat's row no longer opens the chats list").toMatch(/making === 'talk'\) openOverHome\('conversations'\)/);
+    expect(inspiration, "the note's row no longer opens the archive, remembering the note for ↩").toMatch(
+      /making === 'inspiration'\) \{ listOrigin\.current = \{ kind: 'note' \}; openOverHome\('saves'\); \}/);
+    expect(talk, "the chat's row no longer opens the chats list, remembering the chat for ↩").toMatch(
+      /making === 'talk'\) \{ listOrigin\.current = \{ kind: 'chat', id: viewNavigation\.view\?\.conversationId \?\? 'new' \}; openOverHome\('conversations'\); \}/);
     expect(code(home), "the note's row no longer says All inspirations").toMatch(/making === 'inspiration' && item\.id === 'inspiration'\s*\? say\('worldBackToAll'\)/);
     expect(code(home), "the chat's row no longer says All chats").toMatch(/making === 'talk' && item\.id === 'talk'\s*\? say\('worldAllChats'\)/);
 
-    /* AND CLOSE, LAST, THE MAKING PAGE'S ONE-PRESS WAY HOME: the note goes
-       down as a draft, a chat simply goes home. Rendered beside the making
-       page's own row and nowhere else. */
-    const close = /\{making && item\.id === making \? \(\s*<button[^>]*className="waka-dock-item waka-dock-item--close"\s*onClick=\{\(\) => leaveAsModal\(making === 'inspiration' \? saveAsDraft : \(\) => openOverHome\(null\)\)\}>\s*\{say\('worldClose'\)\}/;
-    expect(code(home), "a making page's bar no longer ends in a Close that goes home (with the note kept)").toMatch(close);
+    /* THE RULES. One after the row's own word, on every bar that has an
+       owner; a second, before Close, only where there is a middle group —
+       the note's tools, or a saved note's tools in the archive. A chat and a
+       bare list are door │ Close. */
+    expect(code(home), "the first rule no longer follows the bar owner's row").toMatch(
+      /\{barOwner && item\.id === barOwner \? <span className="waka-dock-sep" aria-hidden="true" \/> : null\}/);
+    expect(code(home), "the second rule is drawn where there is no middle group (a chat, or a bare list)").toMatch(
+      /\{barOwner && item\.id === barOwner && \(making === 'inspiration' \|\| \(viewNavigation\.view\?\.open === 'saves' && savedNoteOpen\)\) \? <span className="waka-dock-sep" aria-hidden="true" \/> : null\}/);
+
+    /* AND CLOSE, LAST, THE ONE-PRESS WAY HOME on a making page and on a
+       list: the note goes down as a draft; a chat, a list, or a saved note
+       in the archive (committed first) simply goes home. Rendered beside
+       the bar owner's row and nowhere else. */
+    const close = /\{barOwner && item\.id === barOwner \? \(\s*<button[^>]*className="waka-dock-item waka-dock-item--close"\s*onClick=\{\(\) => leaveAsModal\(making === 'inspiration' \? saveAsDraft : \(\) => \{ commitOpenNote\(\); openOverHome\(null\); \}\)\}>\s*\{say\('worldClose'\)\}/;
+    expect(code(home), "a making page's or a list's bar no longer ends in a Close that goes home (with the note kept)").toMatch(close);
+
+    /* THE CHAT WRITES ON ITS OWN PAGE AGAIN. The chat-in-the-bar composer
+       was reverted the same day ("lets just make the bottom be All chats |
+       close and bring back the chat box that used to be there"): no slot in
+       the bar, no slot lent to the panel, and the panel draws its own
+       footer composer. */
+    expect(code(home), "the bar lends a chat a composer slot again").not.toMatch(/CHAT_DOCK_SLOT|waka-dock-chat|dockSlot=/);
+    const panel = code(readFileSync(join("src", "components", "ConversationPanel.tsx"), "utf8"));
+    expect(panel, "the chat panel takes a bar slot again").not.toMatch(/dockSlot|CHAT_DOCK_SLOT/);
+    expect(panel, "the chat panel no longer draws its own composer").toMatch(/<footer className="chat-composer">/);
 
     /* The condition the dock renders under. A destination may only lean on
        the bar if the bar is actually up while it is open — which is exactly
@@ -531,7 +604,7 @@ describe("every surface has a way out you can see", () => {
       /* `claims` is reached from the home screen rather than from a row of
          its own, and `walked` is Principles, whose home step is proved just
          below — both are allowed to be absent from the bar. */
-      return id !== "claims" && id !== "walked" && !dock.includes(id);
+      return id !== "claims" && id !== "walked" && !rows.includes(id);
     });
     expect(
       orphans.map(([file]) => file),

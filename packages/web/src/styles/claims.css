@@ -357,69 +357,6 @@
   background: color-mix(in srgb, var(--muted) 45%, transparent);
 }
 
-/* ═══ A CHAT'S MIDDLE GROUP: THE FIELD, THE MIC, THE SEND ══════════════════
-   Founder, 2026-10-15: on a chat the bar is "all chats │ ... type something
-   or dictate and then send │ close." The field is the widest thing in the
-   row because it is the thing the page is for; it starts one line tall and
-   grows UP to a few lines as the message does, the bar growing with it, so
-   the send never slides away from the words. No border of its own: the bar
-   is already the one raised object on the screen, and a boxed field inside
-   a pill is the "double layer" this product keeps removing. */
-.waka-dock-chat {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.waka-dock-chat-body {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--sp-2);
-  /* As wide as the row leaves it: the bar's own words and two buttons take
-     about 16rem, so the field is what is left, never under 7rem and never
-     past 32rem. Fluid, so there is no phone breakpoint to measure. */
-  width: clamp(7rem, calc(100vw - 16rem), 32rem);
-  min-width: 0;
-}
-.waka-dock-chat-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-}
-.waka-dock-chat-label > span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-.waka-dock-chat-label textarea {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: var(--waka-corner);
-  max-height: 7.5em;
-  field-sizing: content;
-  resize: none;
-  margin: 0;
-  padding: calc((var(--waka-corner) - 1.4em) / 2) var(--sp-12);
-  border: 0;
-  border-radius: calc(var(--waka-corner) / 2);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: var(--ink);
-  font-family: var(--waka-face);
-  font-size: var(--t-body);
-  line-height: 1.4;
-}
-.waka-dock-chat-label textarea::placeholder {
-  color: var(--muted);
-}
-.waka-dock-chat-label textarea:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: -2px;
-}
-.waka-dock-chat .chat-dictate--on {
-  color: var(--ink);
-}
-
 /* CLOSE IS SAID IN FULL INK. It is the way back to the main screen from a
    page you are making something on, so it reads as the way out rather than
    as one more muted word in the row. */
@@ -4501,42 +4438,6 @@
   }
 }
 
-/* AFTER A NO, ONE LINE. It says the answer was taken and offers the
-   conversation the soft answers used to open by force. Same register as the
-   verdict receipt the reading's grounds wear. */
-.jar-char-claim-receipt {
-  margin: 0;
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  text-align: center;
-}
-
-.jar-char-claim-receipt-act {
-  min-height: 44px;
-  padding: 0 var(--sp-8);
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.jar-char-claim-receipt-act:hover,
-.jar-char-claim-receipt-act:focus-visible {
-  color: var(--ink);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .jar-char-claim-receipt-act {
-    transition: none;
-  }
-}
-
 /* The opened card wears `.jar-panel`'s own inner classes, so its type and
    spacing come from the stylesheet that defines that design. Only the things
    the world's panel gets from being IN the world are restated here. */
@@ -5130,15 +5031,9 @@
   background: color-mix(in srgb, var(--waka-on-light) 6%, transparent);
 }
 
-/* THE ONE BUBBLE WHOSE FOOT IS THE PAGE'S MAIN ACT. Founder, 2026-10-15: "Dive
-   into review ... makes the card swipe be the main action of the page." The
-   row stays small (the ruling above still holds — the sentence is the
-   loudest thing), but it is spoken in full ink rather than the foot's muted
-   one, so the way in reads as the way in and not as an aside. */
-.jar-char-bubble--review .jar-char-bubble-act {
-  color: var(--waka-on-light);
-  font-weight: 500;
-}
+/* "Dive into review" wears the foot row's own type, exactly like "Let's chat
+   about it" — founder, 2026-10-15: "dive into review should have same font as
+   lets chat about it." It briefly had full ink and weight 500; it does not. */
 
 .jar-char-bubble-act--quiet {
   font-weight: 300;

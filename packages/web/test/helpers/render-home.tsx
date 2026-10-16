@@ -513,16 +513,22 @@ const accessibleName = (node: HTMLElement) =>
 
 /**
  * THE WHOLE BAR, IN THE ORDER A PERSON MEETS IT: every press by accessible
- * name, a chat's field as `field`, and each drawn rule between groups as
- * `│`. On Now and the two lists this is the two words; on a page you are
- * making something on it is the list's door │ the making │ Close (founder,
- * 2026-10-15).
+ * name, a field as `field`, the drawn return row as `↩`, and each drawn rule
+ * between groups as `│`. On Now this is the two words; on a new note it is
+ * All inspirations │ the note's tools │ Close; on a chat All chats │ Close;
+ * on either list ↩ │ Close (founder, 2026-10-15).
  */
 export function barShape(container: HTMLElement): string[] {
   const bar = container.querySelector("nav.waka-dock");
   if (!bar) throw new Error("the bar is not on screen");
   return [...bar.querySelectorAll<HTMLElement>("button, textarea, span.waka-dock-sep")].map((node) =>
-    node.matches("span.waka-dock-sep") ? "│" : node.matches("textarea") ? "field" : accessibleName(node));
+    node.matches("span.waka-dock-sep") ? "│" : node.matches("textarea") ? "field" : isReturnRow(node) ? "↩" : accessibleName(node));
+}
+
+/** A list's return row: a bar row drawn as an icon, no word, named Back. */
+function isReturnRow(node: HTMLElement): boolean {
+  return node.matches("button.waka-dock-item") && !node.textContent?.trim()
+    && Boolean(node.querySelector("svg")) && node.getAttribute("aria-label") === "Back";
 }
 
 /** Press the bar row named exactly `label`, or say what the bar offers. */
@@ -553,24 +559,25 @@ async function pressDockRowWhenItAppears(container: HTMLElement, label: string, 
   throw new Error(`${what} (the bar's ${label}) never appeared. The dock offers: ${dockRows(container).map(accessibleName).join(", ")}`);
 }
 
-/** The bar's Close, on a page you are making something on, or null. */
+/** The bar's Close — on a page you are making something on, or a list — or null. */
 function dockClose(container: HTMLElement): HTMLButtonElement | null {
   return container.querySelector<HTMLButtonElement>(".waka-dock button.waka-dock-item--close");
 }
 
 /**
- * THE CHAT'S FIELD, IN THE BAR. Inside Home a chat lends its textarea, mic
- * and send to the bar's middle group (`#waka-chat-composer`, founder
- * 2026-10-15), and the slot is found after paint — so this waits a few
- * flushes for the portal to land before saying it is not there.
+ * THE CHAT'S FIELD, ON THE PAGE. The chat-in-the-bar composer was reverted
+ * (founder, 2026-10-15: "lets just make the bottom be All chats | close and
+ * bring back the chat box that used to be there"), so the field is the
+ * panel's own footer composer again. A new chat opens through an effect and
+ * a history write, so this waits a few flushes before saying it is not there.
  */
-export async function dockChatField(container: HTMLElement): Promise<HTMLTextAreaElement> {
+export async function chatField(container: HTMLElement): Promise<HTMLTextAreaElement> {
   for (let turn = 0; turn < 40; turn += 1) {
-    const field = container.querySelector<HTMLTextAreaElement>(".waka-dock #waka-chat-composer textarea");
+    const field = container.querySelector<HTMLTextAreaElement>(".chat-composer .chat-composer-body textarea");
     if (field) return field;
     await act(async () => { await Promise.resolve(); });
   }
-  throw new Error("the chat's field never arrived in the bar (#waka-chat-composer)");
+  throw new Error("the chat's own field never arrived (.chat-composer .chat-composer-body textarea)");
 }
 
 /**
@@ -616,9 +623,9 @@ async function pressKey(container: HTMLElement, key: string): Promise<void> {
  *   - "Chats" → the bar's Chat (a new chat), then "All chats" in its bar;
  *   - "Principles" → ArrowRight on Now, the keyboard twin of pulling the
  *     creature right;
- *   - "Now" → Close when a page you are making something on is up (a note
- *     or a chat), else the lit bar row pressed again (the archive, the chats
- *     list), else Escape (Principles). Already home, nothing is pressed.
+ *   - "Now" → the bar's Close when it has one (a note, a chat, and since
+ *     2026-10-15 either list, whose bar is ↩ │ Close), else the lit bar
+ *     row, else Escape (Principles). Already home, nothing is pressed.
  * Any other label presses the bar row of exactly that name.
  */
 export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
@@ -664,12 +671,12 @@ export async function pressChatCorner(container: HTMLElement): Promise<void> {
  * we're just moving across the pages." The point of Law 2 is unchanged and so
  * is this helper's: the way out it presses is one a person can SEE.
  *
- * SINCE 2026-10-15 THAT IS CLOSE, OR THE LIT ROW. On a page you are making
- * something on — a note, a chat — the bar ends in Close, which goes home (a
- * note kept as a draft). On the two lists the row that says where you are
- * (`aria-current="page"`) is the way home when pressed again. Principles has
- * no row — it is walked to — so there the way out is Escape; its ← and its
- * pull left are `home-navigation.test.tsx`'s to test.
+ * SINCE 2026-10-15 THAT IS CLOSE. On a page you are making something on — a
+ * note, a chat — and on either list (whose bar is ↩ │ Close) the bar ends in
+ * Close, which goes home (a note kept as a draft). A lit row, if a bar ever
+ * lights one again, is the fallback. Principles has no row — it is walked
+ * to — so there the way out is Escape; its ← and its pull left are
+ * `home-navigation.test.tsx`'s to test.
  */
 export async function closeOverlay(container: HTMLElement): Promise<void> {
   if (!container.querySelector(".waka-dock")) throw new Error("no visible way out: the dock is not on screen");
