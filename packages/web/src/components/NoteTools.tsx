@@ -46,7 +46,8 @@ export function NoteTools(props: {
   attaching: boolean;
   saving: boolean;
   recording: ReturnType<typeof useAudioRecording>;
-  /** Said in the bar when a write failed; empty is the success state. */
+  /** Said in the bar when a write or the recorder failed, in the reader's
+      language; empty is the success state. */
   failed: string;
   uploading: string;
   recordLabel: string;
@@ -244,8 +245,10 @@ export function NoteTools(props: {
             {props.cancelEraseLabel}
           </button>
         </span>
-      ) : props.failed || props.recording.error ? (
-        <span className="waka-dock-state" role="alert">{props.failed || props.recording.error}</span>
+      ) : props.failed ? (
+        /* the recorder's own problem arrives inside `failed`, already said:
+           `recording.error` is a catalogue key and this has no locale */
+        <span className="waka-dock-state" role="alert">{props.failed}</span>
       ) : props.attaching ? (
         <span className="waka-dock-state" role="status">{props.uploading}</span>
       ) : null}

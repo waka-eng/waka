@@ -79,6 +79,7 @@ import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
 import { useInspirationProcessing } from '../lib/use-inspiration-processing';
 import { useAuthoredSave } from '../lib/use-authored-save';
 import { useInspirationDraft } from '../lib/use-inspiration-draft';
+import { DraftProblem, draftProblem } from '../lib/draft-problem';
 import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { attachmentLabel } from '../lib/attachment-label';
@@ -99,7 +100,7 @@ import type { CreateInspirationRequest } from '../lib/api';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
 import { candidateSaveRequestId } from '../lib/harvest';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
-import { inspectInspirationPhoto, PHOTO_ACCEPT } from '../lib/inspiration-photo';
+import { inspectInspirationPhoto, PHOTO_ACCEPT, PhotoRefused } from '../lib/inspiration-photo';
 import { uploadInspirationMedia } from '../lib/inspiration-media-upload';
 import { restoreInspirationDraft, settleInspirationDraft } from '../lib/authored-save-drafts';
 import { AuthoredSaveNotice } from '../components/AuthoredSaveNotice';
@@ -5203,7 +5204,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   // The immutable, owned intent is durable before anything is sent. A newer
   // draft can be written meanwhile, but cannot replace an unresolved save.
   const uploadDraftFiles = async (media: InspirationDraftMedia[], controller: AbortController, current: () => void) => {
-    if (!storageScope) throw new Error('Sign in before uploading a file.');
+    if (!storageScope) throw new DraftProblem('worldComposerUploadFailed');
     await uploadInspirationMedia({ media, profileId: storageScope.profileId, signal: controller.signal,
       assertCurrent: current, uploading: setUploadingMediaId,
       persist: async (id, update) => {
@@ -5221,7 +5222,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const epoch = ++composerEpoch.current, controller = new AbortController(); uploadController.current = controller;
     const current = () => { if (controller.signal.aborted || composerEpoch.current !== epoch) throw new Error('Save owner changed'); };
     try { await composerDraft.flush(); current(); await uploadDraftFiles([item], controller, current); }
-    catch { if (composerEpoch.current === epoch) setMouthNote('Couldn’t upload this file yet. Your draft is still here.'); }
+    catch { if (composerEpoch.current === epoch) setMouthNote(say('worldComposerUploadFailed')); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   };
   /* ═══ WHETHER SAVE CAN BE PRESSED, AND WHAT THE BAR IS SAYING ═════════
@@ -5403,12 +5404,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        Nothing that was standing BEFORE the press can outrank it, because the
        press on the microphone clears `mouthNote` itself. */
     || (dictation.firstTime && dictation.listening ? say('worldComposerDictateCloud') : '')
-    || composerDraft.error || recording.error
+    /* both are catalogue keys, said here in the reader's language */
+    || (composerDraft.error ? say(composerDraft.error) : '') || (recording.error ? say(recording.error) : '')
     || (dictation.error === 'dictation-denied' ? say('worldComposerDictateDenied') : '')
     || (dictation.error === 'dictation-failed' ? say('worldComposerDictateFailed') : '')
     || (!composerDraft.ready ? say('worldComposerOpening') : '')
     || (uploadingMediaId ? say('worldComposerUploading') : '')
-    || (recording.phase === 'idle' ? recording.notice : '');
+    || (recording.phase === 'idle' && recording.notice ? say(recording.notice) : '');
 
   const keepIt = useCallback(async () => {
     let text = draftRef.current.trim();
@@ -5468,14 +5470,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         // An unnamed upload is sent unnamed; its label is the reader's to say.
         const name = item.name ? { name: item.name } : {};
         if (item.type === 'link' && item.url) return { type: 'link', url: item.url, ...name };
-        if (!item.uploaded || item.type === 'link') throw new Error('This attachment has not uploaded yet.');
+        if (!item.uploaded || item.type === 'link') throw new DraftProblem('worldComposerNotUploaded');
         return { type: item.type, ...item.uploaded, ...name };
       });
       for (const { url } of inspirationLinks(text)) {
         if (!url) continue;
         if (!attachments.some(item => item.type === 'link' && item.url === url)) attachments.push({ type: 'link', url });
       }
-      if (attachments.length > 5) throw new Error('Keep up to five attachments in one inspiration.');
+      if (attachments.length > 5) throw new DraftProblem('worldComposerTooManyFiles');
       const reference = await composerDraft.flush(); current();
       /* A FILE DOES NOT NAME A KIND. There is no 'file' kind on the server, and
          a PDF kept with words is still a note — so files are left out of the
@@ -5498,7 +5500,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         ...(reference ? { draft: reference } : {}) });
       setMomentWhy('');
       setCharSay('');
-    } catch (reason) { if (composerEpoch.current === epoch) setMouthNote(reason instanceof ApiError ? say('worldComposerUploadFailed') : reason instanceof Error ? reason.message : 'Could not save this inspiration. Your draft is here.'); }
+    } catch (reason) { if (composerEpoch.current === epoch) setMouthNote(reason instanceof ApiError ? say('worldComposerUploadFailed') : say(draftProblem(reason, 'worldComposerSaveFailed'))); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   }, [inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
 
@@ -5523,7 +5525,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     try {
       for (const file of files) {
         try {
-          if (audio && (!file.size || file.size > 25 * 1024 * 1024 || !file.type.startsWith('audio/'))) throw new Error('Choose a recording under 25 MB.');
+          if (audio && (!file.size || file.size > 25 * 1024 * 1024 || !file.type.startsWith('audio/'))) throw new DraftProblem('worldRecordingKeepFailed');
           const verdict = door === 'file' ? inspectAttachmentFile(file) : null;
           if (verdict?.kind === 'file') {
             if (epoch !== fileOwnerEpoch.current) return;
@@ -5545,18 +5547,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               validationError: say(reason.reason === 'too_large' ? 'worldAttachTooLarge' : reason.reason === 'empty' ? 'worldPhotoEmpty' : 'worldAttachUnsupported') });
             continue;
           }
-          const message = reason instanceof Error ? reason.message : 'Couldn’t read this file.';
+          /* Said, not printed: a `PhotoRefused` carries a catalogue key as its
+             message, and `reason.message` put that key itself on the tile. */
+          const message = reason instanceof PhotoRefused ? whyOf(reason, locale) : say(draftProblem(reason, 'worldAttachUnsupported'));
           if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', ...(file.name ? { name: file.name.slice(0, 255) } : {}), blob: file, validationError: message });
           else problems.push(`${file.name}: ${message}`);
         }
       }
       if (epoch !== fileOwnerEpoch.current) return;
       const media = composerDraft.current.current.media;
-      if (audio && media.some(item => item.type === 'audio')) { setMouthNote('Keep one recording in each inspiration.'); return; }
+      if (audio && media.some(item => item.type === 'audio')) { setMouthNote(say('worldRecordingOnlyOne')); return; }
       if (accepted.length && composerDraft.setMedia([...media, ...accepted])) await composerDraft.flush();
       setMouthNote(problems.join(' '));
     } catch (reason) {
-      if (epoch === fileOwnerEpoch.current) setMouthNote(reason instanceof Error ? reason.message : 'Could not keep this draft on your device.');
+      if (epoch === fileOwnerEpoch.current) setMouthNote(say(draftProblem(reason)));
     } finally {
       if (epoch === fileOwnerEpoch.current) { checkingFilesCount.current -= 1; setCheckingFiles(checkingFilesCount.current > 0); }
     }
@@ -5564,12 +5568,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   onRecorded.current = async file => {
     const hasRecording = composerDraft.current.current.media.some(item => item.type === 'audio');
     if (!file.size || file.size > 25 * 1024 * 1024 || !file.type.startsWith('audio/')) {
-      setMouthNote(hasRecording ? 'Could not keep this recording. Your previous clip is unchanged.' : 'Could not keep this recording. Please try again.'); return;
+      setMouthNote(say(hasRecording ? 'worldRecordingKeepFailedKept' : 'worldRecordingKeepFailed')); return;
     }
     if (!hasRecording) return addInspirationFiles([file], 'audio');
     composerDraft.setRecordingCandidate({ id: crypto.randomUUID(), type: 'audio', name: file.name, blob: file });
     try { await composerDraft.flush(); setMouthNote(''); }
-    catch (reason) { setMouthNote(reason instanceof Error ? reason.message : 'Could not keep this draft on your device.'); }
+    catch (reason) { setMouthNote(say(draftProblem(reason))); }
   };
 
   const onMouthKey = useCallback(
@@ -8655,7 +8659,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         >
                           ×
                         </button>
-                        {item.uploadError ? <small role="alert">{item.uploadError}</small> : null}
+                        {item.uploadError ? <small role="alert">{say('worldComposerUploadFailed')}</small> : null}
                       </li>
                     ))}
                   </ul>
@@ -8810,7 +8814,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   ) : null}
                   {recording.error || recording.notice ? (
                     <span className="waka-composer-recording-why" role={recording.error ? 'alert' : 'status'}>
-                      {recording.error || recording.notice}
+                      {recording.error ? say(recording.error) : recording.notice ? say(recording.notice) : null}
                     </span>
                   ) : null}
                   {/* WHAT IS NOT IN THIS FOOTER ANY MORE.
@@ -9693,9 +9697,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
           linkText={composerDraft.draft.linkText ?? ''} onLinkText={composerDraft.setLinkText}
           recordingCandidate={composerDraft.draft.recordingCandidate}
-          onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => setMouthNote(String(reason))); }}
+          onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => setMouthNote(say(draftProblem(reason)))); }}
           locale={locale} ready={composerDraft.ready} fileDraftsAvailable={composerDraft.available} busy={preparingInspiration || checkingFiles}
-          uploadingId={uploadingMediaId} error={mouthNote || composerDraft.error}
+          uploadingId={uploadingMediaId} error={mouthNote || (composerDraft.error ? say(composerDraft.error) : '')}
           save={inspirationSave} recording={recording} inputRef={mouthFieldRef}
           onText={(text, caret) => { mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
           onFiles={files => { void addInspirationFiles(files); }}

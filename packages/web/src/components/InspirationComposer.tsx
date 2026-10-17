@@ -82,7 +82,7 @@ import type { useAudioRecording } from '../lib/use-audio-recording';
  */
 function MediaTile({
   item, name, disabled, recording, uploading, onRemove, onRetry,
-  removeLabel, retryLabel, playLabel, pauseLabel,
+  removeLabel, retryLabel, playLabel, pauseLabel, uploadFailedLabel,
 }: {
   item: InspirationDraftMedia;
   /** What to call it: its own name, or "Photo" / "File" / "Recording" when
@@ -113,6 +113,8 @@ function MediaTile({
      the same reason: Korean puts the verb last. */
   playLabel: string;
   pauseLabel: string;
+  /** What a failed upload says, already in the reader's language. */
+  uploadFailedLabel: string;
 }) {
   const [url, setUrl] = useState('');
   const [failedPreview, setFailedPreview] = useState(false);
@@ -131,7 +133,9 @@ function MediaTile({
      tile never carries two marks. A file the server refused and a file too
      large are both "this one needs attention"; which it is belongs in the
      tooltip, not in a second badge. */
-  const wrong = item.validationError || item.uploadError || '';
+  /* `uploadError` is a flag, said in the reader's language (see
+     `lib/inspiration-media-upload`), never printed as stored. */
+  const wrong = item.validationError || (item.uploadError ? uploadFailedLabel : '');
   const retryable = Boolean(item.uploadError) && !item.validationError && !uploading;
   const clock = seconds === null ? '' :
     `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
@@ -423,6 +427,7 @@ export function InspirationComposer(props: {
         retryLabel={formatMessage(props.locale, 'worldComposerRetryFile', { name })}
         playLabel={formatMessage(props.locale, 'worldComposerPlayFile', { name })}
         pauseLabel={formatMessage(props.locale, 'worldComposerPauseFile', { name })}
+        uploadFailedLabel={say('worldComposerUploadFailed')}
         onRemove={() => props.onRemove(item.id)}
         onRetry={() => props.onRetryFile(item.id)} />;
     })}</ul> : null}

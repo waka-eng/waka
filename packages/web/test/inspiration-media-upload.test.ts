@@ -27,7 +27,7 @@ it('preserves completed receipts and all originals when a later file fails, then
   vi.mocked(uploadToPresignedUrl).mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('offline'));
   await expect(f.run()).rejects.toThrow('offline');
   expect(f.media[0]?.uploaded?.key).toBe('objects/first.png');
-  expect(f.media[1]?.uploadError).toContain('still in this draft');
+  expect(f.media[1]?.uploadError, 'a flag the surface says in the reader’s language, never a sentence').toBe('worldComposerUploadFailed');
   expect(f.media.every(row => row.blob?.size === 5)).toBe(true);
   expect(presignAttachment).toHaveBeenCalledTimes(2);
   await f.run();
@@ -50,6 +50,6 @@ it('stops before the next upload if making the first receipt durable fails', asy
   await expect(f.run()).rejects.toThrow('Storage full'); expect(presignAttachment).toHaveBeenCalledOnce();
 });
 it('does not upload a selected file with a validation problem', async () => {
-  const f = fixture(); await expect(f.run([{...f.media[0]!, validationError:'Too large'}])).rejects.toThrow('Too large');
+  const f = fixture(); await expect(f.run([{...f.media[0]!, validationError:'Too large'}])).rejects.toThrow('worldComposerFileNeedsAttention');
   expect(presignAttachment).not.toHaveBeenCalled(); expect(uploadToPresignedUrl).not.toHaveBeenCalled();
 });

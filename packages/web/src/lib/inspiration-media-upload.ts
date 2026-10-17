@@ -1,5 +1,6 @@
 import { presignAttachment, uploadToPresignedUrl } from './api';
 import type { InspirationDraftMedia } from './inspiration-draft-store';
+import { DraftProblem } from './draft-problem';
 
 /** Each successful object ticket is made durable before starting another.
  * A failed object does not erase the first one or discard the selected files. */
@@ -11,7 +12,7 @@ export async function uploadInspirationMedia(input: {
 }) {
   for (const item of input.media) {
     input.assertCurrent();
-    if (item.validationError) throw new Error(item.validationError);
+    if (item.validationError) throw new DraftProblem('worldComposerFileNeedsAttention');
     if (!item.blob || item.uploaded) continue;
     input.uploading(item.id);
     let uploaded: InspirationDraftMedia['uploaded'];
@@ -23,7 +24,13 @@ export async function uploadInspirationMedia(input: {
       uploaded = { key: signed.key, contentType: item.blob.type, size: item.blob.size };
     } catch (reason) {
       input.assertCurrent();
-      await input.persist(item.id, { uploadError: 'Upload didn’t finish. Your file is still in this draft.' });
+      /* A FLAG, WRITTEN AS THE KEY THAT SAYS IT. This was an English sentence
+         stored on the draft and printed as stored, so it reached a Korean
+         screen in English — and, being durable, kept doing so after a reload.
+         Surfaces treat any `uploadError` as "this one did not upload" and
+         say `worldComposerUploadFailed` in the reader's language, which also
+         covers a draft written before this change. */
+      await input.persist(item.id, { uploadError: 'worldComposerUploadFailed' });
       throw reason;
     }
     await input.persist(item.id, { uploaded, uploadError: undefined });

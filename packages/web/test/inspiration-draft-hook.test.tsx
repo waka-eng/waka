@@ -60,6 +60,9 @@ it('offers a separate draft after a competing tab wins without overwriting it', 
     await expect(hook.flush()).rejects.toThrow('another tab');
   });
   expect(hook.draft.text).toBe('My new words');
+  /* a catalogue key, said by the surface in the reader's language — the
+     store's own English never reaches the screen */
+  expect(hook.error).toBe('worldDraftChangedElsewhere');
   await act(async () => hook.fork());
   expect(hook.draft.id).not.toBe(original.id); expect(hook.error).toBe('');
   expect((await loadInspirationDraft(scope, original.id))?.text).toBe('Other tab');
