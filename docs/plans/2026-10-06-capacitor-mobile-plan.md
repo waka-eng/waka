@@ -80,7 +80,7 @@ The documented attachment limit is 25 MiB and inline transcription limit is
 12 MiB. Carry these distinctions into native capture: preserving an original
 file does not guarantee it is eligible for transcription.
 
-Sources: [earlier probe](../../tools/e2e/native-capture-spike/README.md),
+Sources: earlier probe (`tools/e2e/native-capture-spike`, removed 2026-10-17),
 [capture findings](../decisions/2026-10-02-audio-capture-spike.md),
 [HTTP client](../../packages/web/src/lib/api/http.ts),
 [auth client](../../packages/web/src/lib/api/auth.ts),
