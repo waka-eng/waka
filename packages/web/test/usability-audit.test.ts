@@ -37,6 +37,20 @@ describe("the chosen shelf tab keeps its label under the pointer (#39)", () => {
   });
 });
 
+describe("the bar and the corners light up when the keyboard reaches them (#5)", () => {
+  /* Their `outline` lost to the unlayered floor in layers.css, and the
+     brightness filter alone moved pale text a few levels: no visible focus.
+     The answer has to be LIGHT (a background), never an outline — the floor
+     exists because the founder banned the ring. */
+  for (const control of [".waka-dock-item", ".waka-dock-tool", ".waka-corner"]) {
+    it(`${control}:focus-visible draws light, not a ring`, () => {
+      const focus = rules(sheet("claims.css"), (s) => s === `${control}:focus-visible`);
+      expect(focus.some(([, body]) => /background\s*:/.test(body))).toBe(true);
+      for (const [, body] of focus) expect(body).not.toMatch(/outline\s*:/);
+    });
+  }
+});
+
 describe("the principles creature never stands between a press and a card", () => {
   it("its aura box takes no press (#3: it swallowed clicks on the first principle)", () => {
     const being = rules(sheet("claims.css"), (s) => s === ".waka-ground-being");

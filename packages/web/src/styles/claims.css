@@ -335,10 +335,22 @@
    bar says WHERE YOU ARE with light; it says WHAT YOU HAVE REACHED with a
    ring, which is a different channel for a different question and the only
    way both can be true at once. */
-.waka-dock-item:focus-visible {
+/* ═══ AND THE RING WAS NEVER DRAWN (audit f2afcbe2) ═══════════════════════
+   The `outline` that stood here — and on `.waka-dock-tool` and `.waka-corner`
+   — lost to `layers.css`'s unlayered `:focus-visible { outline: none }`, the
+   floor kept there on the founder's "never show this white border
+   ANYWHERE". What reached these controls was only `.jar :focus-visible`'s
+   brightness, and brightening text that is already pale moves it a few
+   levels: measured, Tab onto "Chat" or the cog changed nothing a person
+   could see. So focus here says what everything in this world says — the
+   thing lights up — as a soft pool of the creature's own light behind it.
+   Light, not a ring: no edge, no rectangle, the control's own round shape. */
+.waka-dock-item:focus-visible,
+.waka-dock-tool:focus-visible,
+.waka-corner:focus-visible {
   color: var(--ink);
-  outline: 2px solid var(--ink);
-  outline-offset: -2px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--jar-live, var(--moon-warm)) 30%, transparent), color-mix(in srgb, var(--jar-live, var(--moon-warm)) 10%, transparent) 70%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--jar-live, var(--moon-warm)) 22%, transparent);
 }
 
 .waka-dock-item--here {
@@ -620,11 +632,6 @@
   cursor: pointer;
 }
 
-.waka-dock-tool:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: -2px;
-}
-
 /* THE SLOT INSPIRATION STANDS IN. While a note is being written (or a saved
  * one is open) the note's tools ride here beside the word, so the bar grows
  * by the tools rather than trading the word away for them. */
@@ -771,11 +778,6 @@
 .waka-corner--settings {
   position: relative;
   z-index: 61;
-}
-
-.waka-corner:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
 }
 
 /* ---------------------------------------------------------------------------
