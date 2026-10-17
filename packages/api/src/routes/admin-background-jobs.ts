@@ -76,7 +76,7 @@ export interface AdminBackgroundJobSummary {
   payloadSummary: Record<string, string>;
 }
 
-export function isAdminBackgroundJobsEnabled(): boolean {
+function isAdminBackgroundJobsEnabled(): boolean {
   return (
     process.env.WAKA_ENABLE_ADMIN_ROUTES === "true" ||
     process.env.WAKA_ENABLE_BACKGROUND_JOBS_ADMIN === "true"

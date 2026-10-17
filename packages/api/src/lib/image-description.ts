@@ -151,9 +151,10 @@ export async function describeImage(input: {
 
   if (!response.ok) {
     const details = await safeGeminiErrorDetails(response);
-    // 429 and 5xx are worth another attempt; a 400 means this image and this
-    // request will never be accepted.
-    const transient = response.status === 429 || response.status >= 500;
+    // 408, 429 and 5xx are worth another attempt (as in audio-transcription);
+    // a 400 means this image and this request will never be accepted.
+    const transient =
+      response.status === 408 || response.status === 429 || response.status >= 500;
     throw new ImageDescriptionError(
       formatSafeGeminiError("Image description failed", details),
       { transient },
