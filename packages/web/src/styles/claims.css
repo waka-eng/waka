@@ -2520,7 +2520,10 @@
   cursor: pointer;
 }
 
-.waka-tab:hover {
+/* Not on the lit tab. `.waka-tab:hover` (two classes' weight) outranks
+   `.waka-tab--on` (one), so hovering the chosen tab painted ink text on its
+   own ink fill and the label vanished (audit f2afcbe2, #39). */
+.waka-tab:not(.waka-tab--on):hover {
   color: var(--ink);
 }
 
