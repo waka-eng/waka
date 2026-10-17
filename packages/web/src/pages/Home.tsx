@@ -2408,6 +2408,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [settingsLocaleBusy, setSettingsLocaleBusy] = useState(false);
   const [settingsFailed, setSettingsFailed] = useState(false);
   const nameTimer = useRef<number | null>(null);
+  /* NAME WRITES GO ONE AT A TIME, AND ONLY THE LAST ONE SPEAKS. With the
+     field typeable during a write, a second pause can fire a second write
+     while the first is out. Sent side by side they could land out of order —
+     the account left holding the older name — and the first to settle
+     cleared "busy" while the second was still going. So each write waits
+     for the one before it, and only the newest decides busy, failed and the
+     field. */
+  const nameWrites = useRef<{ chain: Promise<void>; latest: number }>({ chain: Promise.resolve(), latest: 0 });
   useEffect(() => () => { if (nameTimer.current !== null) window.clearTimeout(nameTimer.current); }, []);
   /* The field shows what you typed while you are typing and the account's
      own name the rest of the time, so another tab renaming you is not
@@ -2433,14 +2441,18 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
          between two keystrokes. */
       if (!trimmed || trimmed === accountName) return;
       nameTimer.current = window.setTimeout(() => {
+        const writes = nameWrites.current, mine = ++writes.latest;
         setSettingsNameBusy(true);
-        void auth.updateProfile({ name: trimmed, preferredLocale: locale })
-          /* Hand the field back to the account's name ONLY if it still holds
-             what was sent. Clearing it unconditionally threw away whatever
-             was typed while the write was out. */
-          .then(() => setSettingsName(current => (current === value ? null : current)))
-          .catch(() => setSettingsFailed(true))
-          .finally(() => setSettingsNameBusy(false));
+        writes.chain = writes.chain
+          .then(() => auth.updateProfile({ name: trimmed, preferredLocale: locale }))
+          .then(
+            /* Hand the field back to the account's name ONLY if it still
+               holds what was sent. Clearing it unconditionally threw away
+               whatever was typed while the write was out. */
+            () => { if (mine === writes.latest) setSettingsName(current => (current === value ? null : current)); },
+            () => { if (mine === writes.latest) setSettingsFailed(true); },
+          )
+          .finally(() => { if (mine === writes.latest) setSettingsNameBusy(false); });
       }, NAME_SETTLE_MS);
     },
     onLocale: (next: SupportedLocale) => {
