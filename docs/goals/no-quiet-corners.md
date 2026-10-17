@@ -320,7 +320,7 @@ Postgres. No new infrastructure, no new dependencies.
   archive, which can predate a room by months; a version the room never
   had reads as an honest blank wall with the month beside it, never as
   today's sentence over a month that did not have it; and **the door's
-  marks are hinges** — `goals/room-timeline.md` names that as the phase's
+  marks are hinges** — `goals/room-timeline.md` (since removed) names that as the phase's
   unmet thesis ("a join is visually identical to a refresh"), and they
   are now a notch in the rail at full ink while a version boundary gets
   no tick, because winding past one already SHOWS the sentence change and

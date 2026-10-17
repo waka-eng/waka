@@ -21,8 +21,8 @@ import { t, type SupportedLocale } from "../lib/i18n";
  * a sentence per stage, and a restricted branch for a room you could no
  * longer read.
  *
- * It rests on `goals/room-timeline.md`'s ruling that every room would grow
- * its own philosophies and values. That is now a ruling about a thing that
+ * It rests on the ruling in `goals/room-timeline.md` (since removed) that
+ * every room would grow its own philosophies and values. That is now a ruling about a thing that
  * does not exist. Your own sky is untouched, which is where this started.
  */
 export function PrincipleRead({ active, locale, onRead }: {

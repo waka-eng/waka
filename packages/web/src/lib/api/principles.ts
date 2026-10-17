@@ -61,7 +61,7 @@ export async function fetchPrincipleStatements(id:string,profileId:string,signal
 
 /* THE OPTIONAL `groupId` IS GONE FROM BOTH OF THESE. It switched the path
    onto `/groups/:id/principles` — a room's own philosophies and values,
-   which `goals/room-timeline.md` had ruled every room would eventually grow.
+   which `goals/room-timeline.md` (since removed) had ruled every room would eventually grow.
    Rooms are gone (founder, 2026-10-12: "방 없애"), the route is unmounted,
    and the only caller passed `undefined` by the end. `retry` is now the
    first parameter rather than the second, which is the whole change at the

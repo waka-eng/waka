@@ -1,6 +1,6 @@
 # The goals, and which ones are live
 
-`docs/goals/` is 11,000+ lines across 30 documents — the largest thing in the
+`docs/goals/` is 16,000+ lines across 37 goal documents — the largest thing in the
 repository after `Home.tsx`, and until this index existed there was no way to
 tell, without opening all of them, that `three-layers.md` is a finished
 account of work that shipped in August and `everything-in-the-world.md` is
