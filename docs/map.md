@@ -235,6 +235,10 @@ principles or garden pass) are settled unrun by `retiredGroupJob` in
 their stored artifacts stay in the database untouched, as does the
 `refresh_group_top_of_mind` enum value, pending a decision to drop them;
 `lib/account-erasure.ts` still sweeps a person's room rows on erasure.
+One consequence is accepted until then (`docs/known-issues.md`): deleting or
+privatising a memory no longer refreshes room top-of-mind rows derived from
+it. They are unreadable — nothing serves a room — but account erasure
+keeps a room's record by design, so they persist until the drop is decided.
 
 ---
 
