@@ -44,6 +44,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DialogSurface } from "./DialogSurface";
+import { ReadingPausedNotice } from "./ReadingPausedNotice";
+import { useReadingPaused } from "../lib/use-reading-paused";
 import { PrinciplesGround } from "./PrinciplesGround";
 import { Companion } from "./Companion";
 import { TimelessSky } from "./TimelessSky";
@@ -159,6 +161,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
      title for screen readers only, the page's own words are the only
      attribution left, so on an agent's wall none of them may say "your". */
   const agent = whose === "agent";
+  const readingPaused = useReadingPaused(!agent);
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
   /**
    * THE FIRST ONE IS MET, ONCE.
@@ -297,6 +300,13 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
         <header className="waka-over-head sr-only">
           <h2 className="waka-over-title">{title}</h2>
         </header>
+        {/* A PAUSED READING SAYS SO HERE TOO. Principles are written from
+            the reading, so when the model stops answering this page waited
+            forever in the creature's patient voice — "the ground is being
+            laid" — over work nothing was doing. Own principles only: the
+            retry restarts the session's own reading and cannot speak for an
+            agent's. */}
+        {!agent ? <ReadingPausedNotice state={readingPaused} locale={locale} className="waka-over-status" /> : null}
         {phase === "loading" ? (
           <p className="waka-over-status" role="status">
             {say("worldPrinciplesLoading")}

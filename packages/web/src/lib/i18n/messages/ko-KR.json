@@ -604,5 +604,9 @@
   "unreachableChecking": "확인하는 중…",
   "sessionEndedTitle": "로그아웃되었어요.",
   "sessionEndedSubtitle": "다시 로그인하면 있던 곳으로 돌아가요. 쓰던 글은 그대로 남아 있어요.",
-  "worldWhyOutOfCredit": "지금은 읽기가 잠시 멈춰 있어요. 저장한 것은 안전해요."
+  "worldWhyOutOfCredit": "지금은 읽기가 잠시 멈춰 있어요. 저장한 것은 안전해요.",
+  "readingPausedNotice": "읽기가 잠시 멈췄어요 — 저장한 것은 안전해요.",
+  "readingPausedRetry": "다시 시도",
+  "readingPausedRetrying": "다시 시작하는 중…",
+  "readingPausedRetryFailed": "다시 시작하지 못했어요. 잠시 후 다시 시도해 주세요."
 }

@@ -220,6 +220,8 @@ import {
   ApiError,
 } from "../lib/api";
 import { LoadingHome } from "../components/LoadingHome";
+import { ReadingPausedNotice } from "../components/ReadingPausedNotice";
+import { useReadingPaused } from "../lib/use-reading-paused";
 import {
   loadInspiration,
   loadInspirations,
@@ -7118,6 +7120,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setReflectOpen(false); setSelectedId(null);
     simApiRef.current?.goToWall(0); simApiRef.current?.toTop(); setPosterAsk(true);
   });
+  /* A FAILED READING USED TO BE SILENT HERE — see `use-reading-paused.ts`. */
+  const readingPaused = useReadingPaused(phase === 'ready' && !offline);
   const sourceNotice = !offline && !readingRefresh.busy && inspirationSave.phase === 'idle' ? <InspirationProcessingNotice
     processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null;
   const showHomeProcessing = Boolean(sourceProcessing.active && sourceProcessing.phase !== 'idle' && !offline && !readingRefresh.busy &&
@@ -8202,6 +8206,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         vanished mid-work would take its own progress report
                         with it. */}
                     {here && w.kind === 'self' && !showHomeProcessing && !reflectOpen && !editing.open ? sourceNotice : null}
+                    {here && w.kind === "self" && !offline && !readingMessage && !showHomeProcessing ? (
+                      <ReadingPausedNotice state={readingPaused} locale={locale} />
+                    ) : null}
                     {here && w.kind === "self" && !offline && !lead && readingMessage ? (
                       <p className="jar-board-acts jar-reading-status" role="status" data-jar-chrome="1">
                         {readingMessage === "worldReadingSupportChanged" ? null : say(readingMessage)}

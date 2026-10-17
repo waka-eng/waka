@@ -41,6 +41,10 @@ export interface ApiPrincipleStatus {
   restricted?: boolean;
   supportPending?: boolean;
   phase: "waiting" | "pending" | "processing" | "ready" | "failed";
+  /** The latest reading or principles job failed (see `readingPausedFor` in
+      the API's `lib/principle-status.ts`). Optional so an older server that
+      never sends it reads as "not paused" rather than as an error. */
+  readingPaused?: boolean;
   eligible: boolean;
   signalCount: number;
   topOfMindCount: number;
@@ -75,6 +79,16 @@ export async function fetchPrincipleRead(): Promise<{
     getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded"),
   ]);
   return { principles: rows.principles, status: state.status };
+}
+
+/** GET /principles/status alone — what the "reading is paused" notice reads. */
+export async function fetchPrincipleStatus(signal?: AbortSignal): Promise<ApiPrincipleStatus> {
+  return (await getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded", signal)).status;
+}
+
+/** POST /principles/refresh?retry=1 — restarts a failed reading and principles. */
+export async function retryPausedReading(): Promise<ApiPrincipleStatus> {
+  return (await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted")).status;
 }
 
 export async function requestPrincipleRead(retry = false): Promise<void> {

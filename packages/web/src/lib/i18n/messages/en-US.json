@@ -604,5 +604,9 @@
   "unreachableChecking": "Checking…",
   "sessionEndedTitle": "You were signed out.",
   "sessionEndedSubtitle": "Sign in again and you’ll go back to where you were. Anything you were writing is still here.",
-  "worldWhyOutOfCredit": "Reading is paused on our side. Your saves are safe."
+  "worldWhyOutOfCredit": "Reading is paused on our side. Your saves are safe.",
+  "readingPausedNotice": "Reading is paused — your saves are safe.",
+  "readingPausedRetry": "Retry",
+  "readingPausedRetrying": "Restarting…",
+  "readingPausedRetryFailed": "Couldn’t restart it. Try again in a moment."
 }
