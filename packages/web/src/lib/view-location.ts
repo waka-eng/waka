@@ -79,6 +79,12 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
   view.memberId = id(params.get('member'));
   const open = params.get('open');
   view.open = OPEN.find((name) => name === open) ?? null;
+  /* AN `open` THIS BUILD DOES NOT KNOW IS A DEAD LINK, NOT A HOME LINK. It
+     was dropped silently, so `?open=reading` — a page that went — opened
+     plain home with nothing to say the page asked for was gone. Returning
+     null routes it to the same "this view couldn't be opened" notice an old
+     `/review/...` gets, for the reason given above. */
+  if (open !== null && view.open === null) return null;
   view.find = params.get('find') === '1';
   view.compose = params.get('compose') === '1';
   const section = params.get('view');

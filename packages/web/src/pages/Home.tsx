@@ -118,7 +118,7 @@ import { deleteAccount } from "../lib/api/auth";
 import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
-import { ClaimsOverlay } from "../components/ClaimsOverlay";
+import { useBackCloses } from "../lib/back-closes";
 import { ClaimSlip } from "../components/ClaimSlip";
 import { HarvestReasons } from "../components/HarvestReasons";
 import { AgentPick } from "../components/AgentPick";
@@ -1774,6 +1774,32 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      card's own goodbye (`worldSittingDone`), not on top of a "why not" the
      person is still answering. */
   useEffect(() => { if (reviewing && toReview === 0 && !harvestWhy) setReviewing(false); }, [reviewing, toReview, harvestWhy]);
+  /* REVIEW IS A PLACE BACK CAN LEAVE. It was a state with no history entry,
+     so Back — the phone's edge swipe — left WAKA altogether instead of
+     stepping out of the cards. See `lib/back-closes.ts`. */
+  useBackCloses(reviewing, () => setReviewing(false), 'review');
+  /* ═══ /?open=claims IS REVIEW NOW ═══════════════════════════════════════
+     The claims page was the queue's own room until 2026-10-15, when review
+     became something you step into from home ("Dive into review") and the
+     same claims are answered there, one card at a time. Nothing in the
+     product linked to the old page after that — the menu passes no items —
+     so it was reachable only by an address somebody had saved, and it had
+     no bar of its own: a page with no way back. An old link now lands where
+     its claims actually are. The queue arrives after the page does, so the
+     request is held until there is something to review; with nothing
+     waiting, home is the honest answer and the creature says so. */
+  const claimsAsked = useRef(false);
+  const viewOpen = viewNavigation.view?.open ?? null;
+  useEffect(() => {
+    if (phase !== 'ready' || viewOpen !== 'claims') return;
+    claimsAsked.current = true;
+    viewNavigationRef.current.write({ ...EMPTY_VIEW }, { replace: true });
+  }, [phase, viewOpen]);
+  useEffect(() => {
+    if (!claimsAsked.current || toReview === 0) return;
+    claimsAsked.current = false;
+    setReviewing(true);
+  }, [toReview]);
   /* THE FIRST CARD HAS FOCUS ON THE WAY IN, so ← and → answer it at once —
      the card owns its arrows only while it is focused (see `ClaimSlip`). */
   useEffect(() => {
@@ -11548,36 +11574,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            corner's pair stood behind this sheet's own left edge, clipped to
            "MY AGE". The act survives; the duplicate does not. */
         onClose={leaveOpen}/>:null}
-      {/* THE QUEUE, where answering eight in a row is a different activity
-          from being asked one. The creature keeps asking its single claim on
-          the home screen — that is the product's character and it stays — and
-          this is where a person goes to sit down and work through them. See
-          `ClaimsOverlay` for why this rung needed a door.
-
-          `sayVerdict` is passed down rather than reimplemented: a verdict is
-          filed by whoever is standing here, and a second writer could
-          disagree with the world about who that is. */}
-      {storageScope&&viewNavigation.view?.open==='claims'?<ClaimsOverlay
-        key={`${storageScope.accountId}:${storageScope.profileId}:claims`}
-        locale={locale}
-        onClose={leaveOpen}
-        answered={verdicts}
-        /* THE ROOM HANDS A CLAIM TO THE CREATURE; IT NEVER ANSWERS ONE.
-           Founder: "your claims are duplicated so that's like even bad." The
-           rule every shipping product follows is that a queue has exactly one
-           surface where an item is answerable, and other surfaces may only
-           advertise that it exists — GitHub's badge carries no item content,
-           Anki never renders a card on the deck screen. So pressing a row
-           here moves that claim to the front of the creature's queue and
-           closes the room, which makes the duplication impossible rather than
-           merely discouraged. */
-        onAsk={id=>{
-          setClaimQueue(queue=>{
-            const picked=queue.find(claim=>claim.id===id);
-            return picked?[picked,...queue.filter(claim=>claim.id!==id)]:queue;
-          });
-          leaveOpen();
-        }}/>:null}
       {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}

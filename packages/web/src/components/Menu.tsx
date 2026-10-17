@@ -33,6 +33,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { HowItWorksPanel } from "./HowItWorksPanel";
 import { SettingsPanel, type SettingsPanelProps } from "./SettingsPanel";
+import { useBackCloses } from "../lib/back-closes";
 import { t, type MessageKey, type SupportedLocale } from "../lib/locales";
 
 export interface MenuItem {
@@ -53,6 +54,17 @@ export interface MenuItem {
   disabled?: boolean;
   /** Carried onto the row so the field's own styles and tests still find it. */
   className?: string;
+  /**
+   * THE ROW THE ONE-PRESS WAY BACK GOES TO — your own top of mind.
+   *
+   * The back control on a page that is none of the views pressed `items[0]`,
+   * on the grounds that the list is ordered you-first. Then the ladder grew
+   * a rung on the left — Inspirations, Claims, top of mind, Principles — and
+   * `items[0]` became Inspirations, so a button reading "Your top of mind"
+   * opened the archive instead. A label and a destination decided by two
+   * different facts drift apart; this flag makes them the same fact.
+   */
+  home?: boolean;
   /**
    * HOW THIS VIEW IS MADE, in plain lines, shown on hover of the switcher.
    *
@@ -214,6 +226,15 @@ export function Menu({ locale, items, current, label, left, account, settings, o
    * is already there. A visible "×" in a corner card would be the one piece
    * of chrome the founder's standing rule rules out: "only the most
    * absolutely necessary things should be shown."
+   *
+   * ── EXCEPT ON TOUCH, WHERE THE SCRIM IS NOT FINDABLE (2026-10-17) ──────
+   * The scrim is invisible by design, and on a phone the card covers most of
+   * the screen, so "tap outside" means tapping a sliver nobody can see is a
+   * target. The mobile audit watched people swipe Back instead — which left
+   * the app. So on a coarse pointer the card carries a plain "Close" inside
+   * itself (the corner stays the corner's: no new control lands there), and
+   * on every device Back now closes the card rather than the page
+   * (`useBackCloses`). A fine pointer keeps the card as it was.
    */
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const infoTrigger = useRef<HTMLButtonElement>(null);
@@ -256,6 +277,8 @@ export function Menu({ locale, items, current, label, left, account, settings, o
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [corner]);
+
+  useBackCloses(corner !== null, () => setCorner(null), "corner");
 
   if (hidden) return null;
 
@@ -304,7 +327,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
                  is ordered you-first by construction in `lib/page-menu`, and
                  the fallback below means this cannot become a dead press
                  again even if the shape changes under it. */
-              onClick={() => (items[0] ?? items.find((item) => item.id === current))?.onSelect()}
+              onClick={() => (items.find((item) => item.home) ?? items[0] ?? items.find((item) => item.id === current))?.onSelect()}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false">
                 <path
@@ -474,19 +497,32 @@ export function Menu({ locale, items, current, label, left, account, settings, o
               name-and-address check really IS a note, and keeps it. */}
           {corner === "info" ? (
             <span className="waka-account">
+              <button type="button" className="waka-account-close" onClick={close}>{t(locale, "worldClose")}</button>
               <HowItWorksPanel locale={locale} />
             </span>
           ) : settings ? (
             <span className="waka-account">
+              <button type="button" className="waka-account-close" onClick={close}>{t(locale, "worldClose")}</button>
               <SettingsPanel {...settings} locale={locale}
                 email={account?.email ?? null}
                 onSignOut={onSignOut ?? (() => undefined)}
                 onClose={close} />
             </span>
           ) : (
-            <span className="waka-account" role="note">
+            /* THE BARE CARD STILL OFFERS THE WAY OUT when the page has one.
+               A page without the full settings (your days) showed who you
+               are and nothing else, so the corner a person reaches for to
+               leave could not leave. It is a group, not a note, once it
+               holds a control — a note is static commentary. */
+            <span className="waka-account" role={onSignOut ? "group" : "note"}
+              aria-label={onSignOut ? t(locale, "worldSettingsOpen") : undefined}>
               {account?.name ? <span className="waka-account-name">{account.name}</span> : null}
               {account?.email ? <span className="waka-account-email">{account.email}</span> : null}
+              {onSignOut ? (
+                <button type="button" className="waka-account-out" onClick={() => { close(); onSignOut(); }}>
+                  {t(locale, "worldSignOutLower")}
+                </button>
+              ) : null}
             </span>
           )}
           </>

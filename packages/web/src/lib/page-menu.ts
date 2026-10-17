@@ -252,6 +252,8 @@ export function usePageMenu(
          stored stance, so a row cannot promise one person's material and open
          another's. */
       label: owner ? row.agentLabel : row.label,
+      /* `null` is your top of mind — where the one-press way back goes. */
+      ...(row.what === null ? { home: true } : {}),
       onSelect: () =>
         onOpen
           ? onOpen(row.what)

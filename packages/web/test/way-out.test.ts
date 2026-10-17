@@ -257,7 +257,6 @@ const LEFT_BY_THE_DOCK: Record<string, string> = {
   "components/SavesOverlay.tsx": "return",
   "components/ConversationsOverlay.tsx": "return",
   "components/PrinciplesOverlay.tsx": "walked",
-  "components/ClaimsOverlay.tsx": "claims",
 };
 
 /**

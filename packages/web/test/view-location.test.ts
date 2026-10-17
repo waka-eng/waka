@@ -26,6 +26,13 @@ it('accepts direct inspiration links, ignores malformed metadata and refuses inv
   expect(readViewLocation('/w/%ZZ')).toBeNull();
   expect(readViewLocation('/unrelated')).toBeNull();
 });
+/* An `open` this build does not know was dropped silently and opened plain
+   home; it is a dead link now, and Home says so in words. */
+it('refuses an open page this build does not know, and keeps the ones it does', () => {
+  expect(readViewLocation('/', '?open=reading')).toBeNull();
+  expect(readViewLocation('/', '?open=saves')).toMatchObject({ open: 'saves' });
+  expect(readViewLocation('/', '?open=claims')).toMatchObject({ open: 'claims' });
+});
 /* THE TWO REVIEW SUITES THAT STOOD HERE ARE REPLACED, NOT DROPPED
    (2026-10-10). They asserted that `/review/:id` round-tripped and that
    `?thought=` carried one exact answer id. Both are deleted with the review
