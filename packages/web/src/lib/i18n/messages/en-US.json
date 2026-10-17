@@ -41,7 +41,7 @@
   "onboardingTitle": "Set up your archive.",
   "profileBackHome": "Back home",
   "profileDelete": "Delete account",
-  "profileDeleteHint": "This permanently deletes your account and saved data for the current user only. Type DELETE to confirm.",
+  "profileDeleteHint": "This permanently deletes your account and saved data for the current user only. Press Delete account, then Delete it anyway to confirm.",
   "profileLanguageLabel": "Language",
   "profileMemoriesError": "Your memories could not be loaded.",
   "profileMemoriesTitle": "Memories",

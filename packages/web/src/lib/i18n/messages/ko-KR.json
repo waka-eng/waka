@@ -41,7 +41,7 @@
   "onboardingTitle": "나의 기록을 준비하세요.",
   "profileBackHome": "홈으로",
   "profileDelete": "계정 삭제",
-  "profileDeleteHint": "이 계정과 저장된 데이터를 영구히 지워요. 확인하려면 DELETE를 입력해 주세요.",
+  "profileDeleteHint": "이 계정과 저장된 데이터를 영구히 지워요. 계정 삭제를 누른 다음 그래도 지우기를 한 번 더 눌러야 지워져요.",
   "profileLanguageLabel": "언어",
   "profileMemoriesError": "기억을 불러오지 못했어요.",
   "profileMemoriesTitle": "기억",
