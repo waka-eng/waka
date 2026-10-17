@@ -337,6 +337,8 @@
   "worldNothingSaysThat": "Nothing here says that",
   "worldNotMine": "Doesn’t describe me",
   "worldNotNow": "Not now",
+  "worldNoteOpening": "Opening this note…",
+  "worldNoteOpenFailed": "This note didn’t open. Nothing was changed.",
   "worldNotSaved": "That was not saved.",
   "worldNotTrue": "Not true",
   "worldNotAnymore": "Not anymore",

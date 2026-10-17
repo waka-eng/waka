@@ -49,6 +49,16 @@ export function NoteTools(props: {
   /** Said in the bar when a write failed; empty is the success state. */
   failed: string;
   uploading: string;
+  /** THE NOTE'S FULL TEXT IS STILL BEING READ. A saved note is opened from a
+      list row that carries only a 220-character preview, so the words are
+      read in full before they can be edited (see `stored` in
+      `SavesOverlay`). Empty once they are here, and on the notepad. */
+  reading?: string;
+  /** The full-text read failed: the note stays read-only and this says so,
+      with Try again beside it. Empty is "nothing failed". */
+  readFailed?: string;
+  retryLabel?: string;
+  onRetry?: () => void;
   recordLabel: string;
   stopLabel: string;
   /** The ＋'s name, and its two rows: "Add photo" and "Add file". */
@@ -120,6 +130,30 @@ export function NoteTools(props: {
   useEffect(() => { setSlot(document.getElementById(DOCK_SLOT)); });
   if (!slot) return null;
 
+  /* ═══ UNTIL THE NOTE IS READ, THE BAR SAYS ONLY THAT ════════════════════
+     While the full text is on its way, or after it failed, none of the tools
+     has a note to act on — Save cannot write what has not been read, and a
+     photo or a delete aimed at a page that may never open is the wrong press
+     to offer. So the group is the one line of state (and Try again), which is
+     also what lets that line fit: on a 320px phone the five tools leave no
+     room beside them for a sentence (P0, 2026-10-17). */
+  if (props.reading || props.readFailed) {
+    return createPortal(
+      props.readFailed ? (
+        <span className="waka-dock-state" role="alert">
+          {props.readFailed}
+          {props.onRetry && props.retryLabel ? (
+            <button type="button" className="waka-dock-undo" onClick={props.onRetry}>
+              {props.retryLabel}
+            </button>
+          ) : null}
+        </span>
+      ) : (
+        <span className="waka-dock-state" role="status">{props.reading}</span>
+      ),
+      slot,
+    );
+  }
   const busy = props.attaching || props.saving;
   return createPortal(
     <>

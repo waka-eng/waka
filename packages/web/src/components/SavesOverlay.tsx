@@ -67,7 +67,7 @@ import { ShareSheet, inspirationShareTarget, type ShareTarget } from "./ShareShe
    the invariant that a total is never smaller than what arrived. Reaching
    past it to the HTTP layer would have been a second way to read one thing,
    with its own pagination and its own idea of what the archive holds. */
-import { loadInspirations, type Inspiration } from "../lib/data";
+import { loadInspiration, loadInspirations, type Inspiration } from "../lib/data";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { inspectInspirationPhoto } from "../lib/inspiration-photo";
 import { inspectAttachmentFile } from "../lib/api/file-accept";
@@ -216,6 +216,24 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [open, setOpen] = useState<Inspiration | null>(null);
+  /* ═══ THE WORDS AS STORED, READ IN FULL BEFORE ANY OF THEM CAN BE WRITTEN ══
+     P0, 2026-10-17: editing a long save from this list destroyed the rest of
+     it. A row here is a LIST row — `textPreview` is cut at 220 characters on
+     the server and ends in "…", and for a save with no words it is an
+     attachment label ("Photo", a link's title) instead. The note used to seed
+     its editor with that preview and PATCH it back on Save or on the way
+     out, so typing one word into a 1,000-character save stored 220
+     characters of it plus the word, and typing into a photo-only save stored
+     "Photo" as its text.
+
+     SO THE EDITOR IS SEEDED FROM THE DETAIL READ, and from nothing else.
+     `stored.text` is `null` while it is in flight and after it fails; every
+     write path below refuses to run until it is a string, and compares the
+     draft against IT rather than against the preview. A failed read keeps
+     the note read-only with Try again in the bar — never a save from what
+     the list happened to show. */
+  const [stored, setStored] = useState<{ id: string; text: string | null; failed: boolean } | null>(null);
+  const reading = useRef<AbortController | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   /* ═══ DELETE AT ONCE, UNDO FOR A MOMENT, THE SHELF FOR A MONTH ═══════════
      Founder: "just delete when user clicks on this, but give option to undo
@@ -432,7 +450,10 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     const note = open;
     const words = draft.trim();
     if (!note || saving) return;
-    if (!words || words === note.preview) { setOpen(null); return; }
+    /* Not read yet (or the read failed): nothing typed can have reached the
+       draft, and the preview is not the note — so leaving writes nothing. */
+    const base = stored && stored.id === note.id ? stored.text : null;
+    if (base === null || !words || words === base.trim()) { setOpen(null); return; }
     setSaving(true);
     setSaveFailed(false);
     try {
@@ -447,7 +468,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     } finally {
       if (mounted.current) setSaving(false);
     }
-  }, [draft, open, saving]);
+  }, [draft, open, saving, stored]);
 
   /**
    * ═══ AND NOW THERE IS A SAVE TO PRESS, WITH THE NET STILL UNDER IT ═════
@@ -514,6 +535,10 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     const words = draft.trim();
     const state = keepReady.current;
     if (!note || !state || !canKeep(state)) return;
+    /* `canKeep` already refuses an unread note through `hasWords`; this is
+       the same fact asked at the write, so no future change to that field can
+       make a preview reach the server. */
+    if (!stored || stored.id !== note.id || stored.text === null) return;
     setSaving(true);
     setSaveFailed(false);
     try {
@@ -525,12 +550,48 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
          saved or the button never dims. */
       setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: words } : row)));
       setOpen((card) => (card && card.id === note.id ? { ...card, preview: words } : card));
+      /* What is stored now, which is what dims the button again. */
+      setStored((held) => (held && held.id === note.id ? { ...held, text: words } : held));
     } catch {
       if (mounted.current) setSaveFailed(true);
     } finally {
       if (mounted.current) setSaving(false);
     }
-  }, [draft, open, saving]);
+  }, [draft, open, saving, stored]);
+
+  /* READ ONE NOTE IN FULL. A newer read (another note, or Try again) aborts
+     the older, and a reply for a note no longer open is dropped by id — so a
+     slow answer can never seed the wrong page. */
+  const readNote = useCallback((id: string) => {
+    reading.current?.abort();
+    const controller = new AbortController();
+    reading.current = controller;
+    setStored({ id, text: null, failed: false });
+    loadInspiration(id, profileId ?? undefined, controller.signal)
+      .then((detail) => {
+        if (!mounted.current || controller.signal.aborted) return;
+        setStored((held) => (held && held.id === id ? { id, text: detail.text, failed: false } : held));
+        setDraft(detail.text);
+      })
+      .catch(() => {
+        if (!mounted.current || controller.signal.aborted) return;
+        setStored((held) => (held && held.id === id ? { id, text: null, failed: true } : held));
+      });
+  }, [profileId]);
+  const openNote = useCallback((row: Inspiration) => {
+    setOpen(row);
+    setDraft("");
+    setSaveFailed(false);
+    readNote(row.id);
+  }, [readNote]);
+  /* Closed, by any route: the read in flight has no page to land on. */
+  useEffect(() => {
+    if (open) return;
+    reading.current?.abort();
+    reading.current = null;
+    setStored(null);
+  }, [open]);
+  useEffect(() => () => reading.current?.abort(), []);
 
 
   /**
@@ -674,6 +735,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
    * omission — and so that a field added to `KeepReadiness` tomorrow is a
    * type error here rather than a second opinion.
    */
+  /* The full text is in the editor — the one condition for writing it. */
+  const loaded = Boolean(open) && stored?.id === open?.id && typeof stored?.text === "string";
   const keepState: KeepReadiness = {
     /* `hasWords` MEANS "THERE IS SOMETHING TO KEEP", and on a note that is
        already stored that means the words have CHANGED. An unchanged note has
@@ -684,7 +747,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        TRIMMED ON BOTH SIDES OF THE COMPARISON, which is the whole subject of
        the comment above `keepOpenNote`: a typed trailing space must not light
        a button whose write would then return early. */
-    hasWords: Boolean(open) && draft.trim().length > 0 && draft.trim() !== open?.preview,
+    hasWords: loaded && draft.trim().length > 0 && draft.trim() !== (stored?.text ?? "").trim(),
     /* `ready` IS THE DRAFT STORE HAVING OPENED — "before that there is
        nowhere to write". This page has no draft store: the words live in
        React state and the destination is a row that already exists, so there
@@ -1158,6 +1221,13 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           saving={saving}
           recording={recording}
           failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : ""}
+          /* THE FULL-TEXT READ'S TWO STATES, in the bar with every other
+             state (founder: "states should show and disappear in the bottom
+             bar only"). See `stored`. */
+          reading={!loaded && !stored?.failed ? say("worldNoteOpening") : ""}
+          readFailed={stored?.failed ? say("worldNoteOpenFailed") : ""}
+          retryLabel={say("surfaceUnavailableRetry")}
+          onRetry={() => readNote(open.id)}
           uploading={say("worldComposerUploading")}
           recordLabel={say("worldComposerRecord")}
           stopLabel={say("worldComposerStop")}
@@ -1196,8 +1266,10 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             commitErase({ row: open, at });
           }}
           /* Only a note with words has a card to make. */
-          shareLabel={(draft.trim() || open.preview.trim()) ? say("worldShareInspirationTitle") : undefined}
-          onShare={() => setShareOf(inspirationShareTarget(locale, { text: draft.trim() || open.preview, capturedMs: open.capturedMs, attachments: open.attachments }))}
+          /* Only a note with words has a card to make — its own words, read
+             in full, never the list's cut of them. */
+          shareLabel={loaded && draft.trim() ? say("worldShareInspirationTitle") : undefined}
+          onShare={() => setShareOf(inspirationShareTarget(locale, { text: draft.trim(), capturedMs: open.capturedMs, attachments: open.attachments }))}
           onFile={(file, door) => void attach(file, door)}
         /> : null}
         {open ? (
@@ -1279,8 +1351,12 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                   ten months old. */}
               <textarea
                 className="jar-panel-text waka-note-page"
-                value={draft}
-                readOnly={saving}
+                /* UNTIL THE FULL TEXT ARRIVES the list's preview stands in,
+                   read-only, so the page does not open blank — and nothing
+                   typed can land in it, because there is no draft yet. */
+                value={loaded ? draft : open.preview}
+                readOnly={saving || !loaded}
+                aria-busy={!loaded && !stored?.failed}
                 aria-label={say("worldCaptureInspiration")}
                 onChange={(event) => { setDraft(event.target.value); setSaveFailed(false); }}
               />
@@ -1408,7 +1484,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                     return (
                       <li key={row.id}>
                         <button type="button" className="waka-list-row"
-                          onClick={() => { setOpen(row); setDraft(row.preview); setSaveFailed(false); }}>
+                          onClick={() => openNote(row)}>
                           <span className="waka-list-lead">{lead}</span>
                           <span className="waka-list-meta">
                             {/* WHICH ONE THIS IS, AND IT IS A NAME RATHER THAN

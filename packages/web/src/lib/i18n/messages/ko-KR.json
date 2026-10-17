@@ -337,6 +337,8 @@
   "worldNothingSaysThat": "여기엔 그런 말이 없어요",
   "worldNotMine": "나를 설명하지 않아요",
   "worldNotNow": "다음에",
+  "worldNoteOpening": "노트를 여는 중…",
+  "worldNoteOpenFailed": "노트를 열지 못했어요. 바뀐 건 없어요.",
   "worldNotSaved": "저장되지 않았어요.",
   "worldNotTrue": "아니에요",
   "worldNotAnymore": "이제는 아니에요",

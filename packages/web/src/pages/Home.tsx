@@ -6907,6 +6907,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const beginPanelEdit = useCallback(
     (ev: ReactMouseEvent<HTMLParagraphElement>) => {
       if (!panelId || editing.open) return;
+      /* NEVER AN EDIT SEEDED FROM THE LIST'S PREVIEW (P0, 2026-10-17). This
+         used to fall back to `panelBall.textPreview` while the detail read
+         was in flight or after it failed — a 220-character cut ending in "…"
+         (or an attachment label) that the editor then PATCHed back as the
+         whole text, deleting the rest of the save. Until the full text has
+         arrived for THIS memory the words are read-only; the press is simply
+         not an edit yet, and `panel.partial` already says the rest is
+         missing when the read failed. */
+      if (!panel?.detail || panel.id !== panelId) return;
       /* THE CARET GOES WHERE THE FINGER WENT. Without this the press lands
          you at the end of a page of text and you scroll back to the sentence
          you meant — which is the same "find your place again" cost the
@@ -6932,10 +6941,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       editing.begin(
         "memory",
         panelId,
-        panel?.detail ? panel.detail.text : panelBall?.textPreview ?? "",
+        panel.detail.text,
       );
     },
-    [panelId, editing, panel, panelBall],
+    [panelId, editing, panel],
   );
 
   /* ═══ `togglePublic` AND `publishing` ARE GONE ══════════════════════════

@@ -23,7 +23,9 @@ const shelf = vi.hoisted(() => ({ rows: [] as Array<Record<string, unknown>> }))
 vi.mock("../src/lib/data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/data")>();
   const row = (id: string, text: string, daysAgo: number) => ({ id, preview: text, text, capturedMs: Date.now() - daysAgo * 86_400_000, attachments: [], category: null });
-  return { ...actual, loadInspirations: async () => ({ inspirations: [row("b", "Second thing", 1), row("a", "First thing", 2)].reverse(), total: 2, short: false }) };
+  /* The full-text read a note now waits on before it can be edited. */
+  const all = [row("b", "Second thing", 1), row("a", "First thing", 2)];
+  return { ...actual, loadInspiration: async (id: string) => ({ ...all.find((item) => item.id === id)!, reflections: [] }), loadInspirations: async () => ({ inspirations: [row("b", "Second thing", 1), row("a", "First thing", 2)].reverse(), total: 2, short: false }) };
 });
 vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();

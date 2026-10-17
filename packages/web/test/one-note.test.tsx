@@ -111,6 +111,8 @@ vi.mock("../src/lib/data", async (importOriginal) => {
   return {
     ...actual,
     loadInspirations: async () => ({ inspirations: [ROW], total: 1, short: false }),
+    /* The full-text read a note now waits on before it can be edited. */
+    loadInspiration: async () => ({ ...ROW, text: ROW.preview, reflections: [] }),
   };
 });
 

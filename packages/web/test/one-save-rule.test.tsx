@@ -115,6 +115,8 @@ vi.mock("../src/lib/api", async (importOriginal) => {
 vi.mock("../src/lib/data", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/lib/data")>()),
   loadInspirations: async () => ({ inspirations: [ROW], total: 1, short: false }),
+  /* The full-text read a note now waits on before it can be edited. */
+  loadInspiration: async () => ({ ...ROW, text: ROW.preview, reflections: [] }),
 }));
 
 /** The recorder a browser would supply, with its wires brought out. */
