@@ -148,6 +148,17 @@ it('restores unsent words after reopening and forks edits instead of overwriting
   expect(host.querySelector('textarea')!.value).toBe('Original draft');await type('Another tab version');
   expect(readConversationDrafts(scope,id).map(row=>row.value.content).sort()).toEqual(['Another tab version','Original draft']);
 });
+it('does not bring back a sent message on the next reload',async()=>{
+  /* Reopening forks the restored draft under a new key; sending the fork used
+     to clear only the new key, so the next reload restored the old one — the
+     words just sent, back in the box as if unsent. */
+  await mount();await type('Original draft');await act(async()=>root.unmount());root=createRoot(host);await mount();
+  await type('Original draft, finished');await click('Send');
+  expect(stored.messages.map(row=>row.content)).toEqual(['Original draft, finished']);
+  expect(readConversationDrafts(scope,id),'the draft it forked from is still on disk').toEqual([]);
+  await act(async()=>root.unmount());root=createRoot(host);await mount();
+  expect(host.querySelector('textarea')!.value).toBe('');
+});
 it('never restores another account’s draft',async()=>{
   await mount();await type('PRIVATE_DRAFT');await mount(id,{...scope,accountId:'different-account'});
   expect(host.querySelector('textarea')!.value).toBe('');expect(host.textContent).not.toContain('PRIVATE_DRAFT');
