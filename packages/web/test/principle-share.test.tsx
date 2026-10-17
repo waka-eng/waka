@@ -8,7 +8,7 @@
 import {act} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {PrincipleShare} from '../src/components/PrincipleShare';
+import {PrincipleShare,principleShareProof} from '../src/components/PrincipleShare';
 import {fetchPrinciples,fetchPrincipleStatements,updatePrinciple,reorderPrinciples,type ApiPrinciple} from '../src/lib/api';
 import {ArtifactLayoutError,renderShareCard} from '../src/lib/principle-artifact';
 import {readPrincipleArtifactDrafts} from '../src/lib/principle-artifact-drafts';
@@ -52,7 +52,8 @@ it('starts with an exportable preview and keeps editing and customization option
 });
 it('edits only the card and never renders private evidence or the hidden name',async()=>{
   await mount();await settle();await type('My card words');await settle();
-  expect(renderShareCard).toHaveBeenLastCalledWith({items:[{text:'My card words'}],name:'',appearance:'dark',format:'square'});
+  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({items:[{text:'My card words'}],name:'',appearance:'dark',format:'square'}));
+  expect(JSON.stringify(vi.mocked(renderShareCard).mock.calls.at(-1))).not.toContain('PRIVATE_SENTINEL');
   expect(host.textContent).not.toContain('PRIVATE_SENTINEL');expect(updatePrinciple).not.toHaveBeenCalled();expect(reorderPrinciples).not.toHaveBeenCalled();
   expect(readPrincipleArtifactDrafts(scope,id)[0].value.entries[0].originalStatement).toBe(source.statement);
 });
@@ -145,54 +146,53 @@ it('does not fabricate a change card when the principle has no saved earlier wor
   vi.mocked(fetchPrincipleStatements).mockResolvedValue({profileId:scope.profileId,principleId:id,currentStatementId:null,statements:[]});
   await mount();await changeMode();await settle();expect(host.textContent).toContain('needs two saved wordings');expect(button('Save image').disabled).toBe(true);
 });
-/* THE SET ARRIVES COMPLETE, so this no longer presses "Add another
-   principle" to build one — there is nothing to add. Founder: "how we can
-   make the principal page something that people would want to like share on
-   their social media and stuff." One principle posted alone is a fortune
-   cookie a stranger cannot tell from something typed that morning; three are
-   a portrait, and they invite the comparison that is the whole mechanism of
-   anything people post about themselves. What this case protects is
-   unchanged and is all still here: the pressed principle leads, the cap is
-   three, an edit touches one entry only, removing takes the chosen one, and
-   nothing about the card writes back to the principles themselves. */
-it('opens with the set, led by the pressed one, capped at three and edited separately',async()=>{
+/* THE CARD OPENS WITH THE ONE YOU PRESSED (audit f2afcbe2, desk/77). It
+   used to open with the set — the pressed principle and the next two by rank
+   — so "Make a share card" on one principle put every principle on the card.
+   What this case still protects: the pressed principle leads, the set is one
+   choice away and capped at three, an edit touches one entry only, removing
+   takes the chosen one, and nothing about the card writes back to the
+   principles themselves. */
+it('opens with only the pressed principle, and the set is the person\'s to add, capped at three',async()=>{
   const extra={...source,id:'22222222-2222-4222-8222-222222222222',statement:'두 번째 원칙.'},third={...source,id:'33333333-3333-4333-8333-333333333333',statement:'Third principle.'},
     fourth={...source,id:'44444444-4444-4444-8444-444444444444',statement:'Fourth principle.'};
-  /* `source` is not first in the reading's order, so "led by the pressed one"
-     is a real assertion rather than one the fixture satisfies by accident. */
   vi.mocked(fetchPrinciples).mockResolvedValue([extra,source,third,fourth]);await mount();
   await type('Only my card edit');await settle();
-  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({name:'',appearance:'dark',format:'square',
-    items:[{text:'Only my card edit'},{text:extra.statement},{text:third.statement}]}));
-  /* The cap holds and the fourth never arrives, so there is nothing left to
-     add — which is why the control that used to build this is absent. */
+  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({name:'',appearance:'dark',format:'square',items:[{text:'Only my card edit'}]}));
+  const add=async(principle:string)=>act(async()=>{const select=[...host.querySelectorAll('select')].find(row=>row.closest('label')?.textContent?.includes('Add another principle'))!;
+    select.value=principle;select.dispatchEvent(new Event('change',{bubbles:true}));});
+  await add(extra.id);await settle();await add(third.id);await settle();
+  expect([...host.querySelectorAll('textarea')].map(node=>node.value)).toEqual(['Only my card edit',extra.statement,third.statement]);
+  /* The cap holds: with three on the card there is nothing left to add. */
   expect(host.textContent).not.toContain('Add another principle');
-  /* On the CARD, not on the page: the fourth is still offered by the
-     "choose a principle" selector, which swaps which one leads rather than
-     adding a fourth. Asserting its absence from the whole document would be
-     asserting that control away too. */
-  expect([...host.querySelectorAll('textarea')].map(node=>node.value)).toEqual(
-    ['Only my card edit',extra.statement,third.statement]);
   expect(updatePrinciple).not.toHaveBeenCalled();expect(reorderPrinciples).not.toHaveBeenCalled();
   await act(async()=>[...host.querySelectorAll('button')].find(row=>row.textContent==='Remove from card')!.click());await settle();
   expect(host.querySelectorAll('textarea')).toHaveLength(2);expect(host.querySelectorAll('textarea')[1].value).toBe(third.statement);
 });
-it('puts the proof on the card, counting each save once across the set',async()=>{
-  /* THE HEADLINE, AND THE ONE NUMBER A STRANGER CANNOT CHECK. The postable
-     fact is not the sentiment but that it was earned, so the card carries the
-     saves and the span. Two principles standing on the SAME evidence must not
-     let it count twice: the one figure nobody can verify is the one the card
-     must never inflate. */
+it('puts the proof on the card, counting each save once',async()=>{
+  /* THE HEADLINE, AND THE ONE NUMBER A STRANGER CANNOT CHECK. Two signals
+     standing on the SAME save must not let it count twice: the one figure
+     nobody can verify is the one the card must never inflate. */
   const shared={text:'A save behind both.',createdAt:'2026-04-01T12:00:00Z'};
-  const held='2026-04-01T12:00:00Z';
-  const a={...source,heldSince:held,citedSignals:[{id:'s1',statement:'x',examples:[shared,{text:'Only mine.',createdAt:'2026-05-01T12:00:00Z'}]}]};
-  const b={...source,id:'22222222-2222-4222-8222-222222222222',statement:'Second.',heldSince:held,
-    citedSignals:[{id:'s2',statement:'y',examples:[shared]}]};
-  vi.mocked(fetchPrinciples).mockResolvedValue([a,b]);await mount();await settle();
+  const a={...source,heldSince:'2026-04-01T12:00:00Z',citedSignals:[{id:'s1',statement:'x',examples:[shared,{text:'Only mine.',createdAt:'2026-05-01T12:00:00Z'}]},
+    {id:'s2',statement:'y',examples:[shared]}]};
+  vi.mocked(fetchPrinciples).mockResolvedValue([a]);await mount();await settle();
   const last=vi.mocked(renderShareCard).mock.calls.at(-1)![0];
   expect(last.proof,'the card carries no proof, so it is a sentiment with nothing behind it').toBeTruthy();
-  /* Two distinct saves, not three: the shared one is counted once. */
   expect(last.proof).toContain('2 things I kept');
+});
+/* "6 things I kept over 1 month" was printed for six saves made that morning:
+   the span was max(1, months) from `heldSince`. It is the saves' own span now,
+   in plain units, and absent when there is none worth naming. */
+it('says the span honestly: none under a week, weeks under two months, then months',async()=>{
+  const day=86_400_000,now=Date.parse('2026-10-17T12:00:00Z');
+  const at=(daysAgo:number)=>({...source,citedSignals:[{id:'s',statement:'x',examples:[{text:'one',createdAt:new Date(now-daysAgo*day).toISOString()},{text:'two',createdAt:new Date(now-day/2).toISOString()}]}]});
+  expect(principleShareProof('en-US',[at(0.5)],now)).toBe('2 things I kept. This is what stayed.');
+  expect(principleShareProof('en-US',[at(20)],now)).toBe('2 things I kept over 2 weeks. This is what stayed.');
+  expect(principleShareProof('en-US',[at(7)],now)).toBe('2 things I kept over 1 week. This is what stayed.');
+  expect(principleShareProof('en-US',[at(200)],now)).toBe('2 things I kept over 6 months. This is what stayed.');
+  expect(principleShareProof('en-US',[at(200),{...at(200),id:'other'}],now)).toContain('These are what stayed.');
+  expect(principleShareProof('ko-KR',[at(0.5)],now)).not.toMatch(/개월|주 동안/);
 });
 
 it('retries a failed history read without showing the previous regular-card preview',async()=>{
