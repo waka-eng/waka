@@ -11140,11 +11140,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     is which one the bare microphone should do. */}
                 {dictationAvailable() ? (
                   dictation.listening ? (
-                    /* THE SAME SHAPE THE RECORDER'S STOP HAS: a word, not a
-                       second glyph. "Speaking" with a press on it says both
-                       what is happening and how to end it. */
-                    <button type="button" className="waka-dock-tool waka-dock-tool--wide"
-                      onClick={() => dictation.stop()}>{say('worldComposerDictateStop')}</button>
+                    /* ═══ STOP IS WHERE THE MICROPHONE WAS (audit f2afcbe2) ══
+                       This was a wide word, "Stop", and the bar is centred:
+                       the wider button and the disclosure line beside it
+                       re-laid the whole bar, so Stop landed ~110px left of
+                       where the microphone had been (675 → 561 at 1440) and
+                       a second press on the same spot hit ＋. Now the SAME
+                       button stays in the SAME slot at the SAME size, lit
+                       and breathing while it listens (`--live`), and the
+                       press that started it is the press that ends it. */
+                    <button type="button" className="waka-dock-tool waka-dock-tool--live"
+                      aria-pressed="true" aria-label={say('worldComposerDictateStop')}
+                      onClick={() => dictation.stop()}><HomeActionIcon kind="record"/></button>
                   ) : (
                     <button type="button" className="waka-dock-tool"
                       aria-label={say('worldComposerDictate')}
@@ -11169,24 +11176,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       disabled={!composerDraft.available}
                       onClick={() => void recording.start()}><HomeActionIcon kind="record"/></button>
                   ) : (
-                    <>
-                      {/* STOP KEEPS IT, CANCEL THROWS IT AWAY — both, because a
-                          recording you can start and stop but not discard is
-                          worse than one you cannot start. The clock is words
-                          rather than a glyph for the reason the composer gave:
-                          a red dot cannot say how long you have been talking. */}
-                      <button type="button" className="waka-dock-tool waka-dock-tool--wide"
-                        aria-label={say('worldComposerStop')}
-                        disabled={recording.phase === 'finishing'}
-                        onClick={() => void recording.stop()}>
-                        {Math.floor(recording.seconds / 60)}:{String(recording.seconds % 60).padStart(2, '0')}
-                      </button>
-                      <button type="button" className="waka-dock-tool waka-dock-tool--wide"
-                        disabled={recording.phase === 'finishing'}
-                        onClick={() => void recording.cancel()}>
-                        {say('worldComposerCancelRecording')}
-                      </button>
-                    </>
+                    /* STOP KEEPS IT, CANCEL THROWS IT AWAY — both, because a
+                       recording you can start and stop but not discard is
+                       worse than one you cannot start. Stop stands in the
+                       microphone's own slot for the reason dictation's does
+                       (above); the clock — words, because a red dot cannot
+                       say how long you have been talking — and Cancel ride
+                       in the live caption over the bar, so neither widens it. */
+                    <button type="button" className="waka-dock-tool waka-dock-tool--live"
+                      aria-label={say('worldComposerStop')}
+                      disabled={recording.phase === 'finishing'}
+                      onClick={() => void recording.stop()}><HomeActionIcon kind="stop"/></button>
                   )
                 ) : null}
                 {/* ═══ THE PHOTO BECAME ＋ (2026-10-16) ═════════════════════
@@ -11327,7 +11327,24 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
                     `role="status"` so it is still announced; it is the
                     position that changed, not whether it is said. */}
-                {composerState ? (
+                {/* WHILE THE MICROPHONE IS OPEN, THE LINE RISES OFF THE BAR.
+                    In the row it widened a centred bar and moved every
+                    button under a pointer that was about to press Stop, and
+                    its 14rem cap cut the cloud disclosure — the one sentence
+                    this bar is obliged to show — to "Your browser sends
+                    speech to its own …". As the bar's caption it is still
+                    the bar's (it sits on it and leaves with it), it wraps
+                    instead of truncating, and nothing in the row moves. */}
+                {dictation.listening || recording.phase !== 'idle' ? (
+                  <span className="waka-dock-state waka-dock-state--live" role="status">
+                    {composerState ? <span>{composerState}</span> : null}
+                    {recording.phase !== 'idle' ? <>
+                      <span>{Math.floor(recording.seconds / 60)}:{String(recording.seconds % 60).padStart(2, '0')}</span>
+                      <button type="button" className="waka-dock-undo" disabled={recording.phase === 'finishing'}
+                        onClick={() => void recording.cancel()}>{say('worldComposerCancelRecording')}</button>
+                    </> : null}
+                  </span>
+                ) : composerState ? (
                   <span className="waka-dock-state" role="status">{composerState}</span>
                 ) : null}
               </span>

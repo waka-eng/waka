@@ -471,13 +471,53 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
   cursor: default;
 }
 
-/* Wide enough for the running clock, which is the one state that is words
-   rather than a glyph — a red dot cannot say how long you have been
-   talking. */
-.waka-dock-tool--wide {
-  width: auto;
-  padding: 0 var(--sp-12);
+/* ═══ A LIVE MICROPHONE, IN THE MICROPHONE'S OWN SEAT ═════════════════════
+   `--wide` stood here: the running clock and "Stop" as words, in a button
+   that grew when recording began. The bar is centred, so growing one button
+   moved every other one, and Stop landed where ＋ had been a moment before
+   (audit f2afcbe2: Speak at x=675, Stop at x=561). The control now keeps its
+   size and place and says it is listening with light — lit, and breathing
+   slowly, which is motion that explains (it is live) rather than decorates.
+   The clock moved to the live caption (`.waka-dock-state--live`). */
+.waka-dock-tool--live {
+  color: var(--ink);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--jar-live, var(--moon-warm)) 34%, transparent), transparent);
+  animation: waka-live-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes waka-live-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--jar-live, var(--moon-warm)) 0%, transparent); }
+  50% { box-shadow: 0 0 14px 2px color-mix(in srgb, var(--jar-live, var(--moon-warm)) 30%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waka-dock-tool--live { animation: none; }
+}
+
+/* THE BAR'S CAPTION WHILE THE MICROPHONE IS OPEN. Still the bar's — it sits
+   on the bar's top edge and leaves with the bar — but out of the row, so it
+   can never widen it, and free to wrap, so the cloud disclosure is read in
+   full rather than cut at 14rem. */
+.waka-dock-state.waka-dock-state--live {
+  position: absolute;
+  bottom: calc(100% + var(--sp-12));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  width: max-content;
+  max-width: min(26rem, calc(100vw - var(--sp-32)));
+  padding: var(--sp-6) var(--sp-12);
+  border-radius: var(--r-pill);
+  background: var(--waka-raised);
+  white-space: normal;
+  overflow: visible;
+  text-align: center;
   font-variant-numeric: tabular-nums;
+  pointer-events: auto;
 }
 
 /* ═══ THE ONE FILLED CONTROL IN THE BAR ═══════════════════════════════════

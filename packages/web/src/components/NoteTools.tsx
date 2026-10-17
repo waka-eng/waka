@@ -129,16 +129,20 @@ export function NoteTools(props: {
             aria-label={props.recordLabel}
             onClick={() => void props.recording.start()}><HomeActionIcon kind="record" /></button>
         ) : (
-          /* THE CLOCK IS THE STOP, as it is on the notepad: a red dot
-             cannot say how long you have been talking, and two controls
-             for one act is one too many in a slot this size. */
-          <button type="button" className="waka-dock-tool waka-dock-tool--wide"
-            aria-label={props.stopLabel}
-            disabled={props.recording.phase === "finishing"}
-            onClick={() => void props.recording.stop()}>
-            {Math.floor(props.recording.seconds / 60)}:
-            {String(props.recording.seconds % 60).padStart(2, "0")}
-          </button>
+          /* STOP STANDS WHERE THE MICROPHONE WAS, as it does on the
+             notepad (audit f2afcbe2): a wide clock-button re-laid the
+             centred bar under the pointer. The clock — words, because a red
+             dot cannot say how long you have been talking — rides in the
+             live caption over the bar instead. */
+          <>
+            <button type="button" className="waka-dock-tool waka-dock-tool--live"
+              aria-label={props.stopLabel}
+              disabled={props.recording.phase === "finishing"}
+              onClick={() => void props.recording.stop()}><HomeActionIcon kind="stop" /></button>
+            <span className="waka-dock-state waka-dock-state--live" role="status">
+              {Math.floor(props.recording.seconds / 60)}:{String(props.recording.seconds % 60).padStart(2, "0")}
+            </span>
+          </>
         )
       ) : null}
       {/* ═══ THE PHOTO BECAME ＋, HERE AS ON THE NOTEPAD (2026-10-16) ═════
