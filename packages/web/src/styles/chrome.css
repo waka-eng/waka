@@ -1793,8 +1793,8 @@ button.jar-tile-face,
 .jar-thing-share .jar-share-actions { margin-inline:auto; }
 /* Two plain icons, no fill and no border: the icon is the button. */
 .jar-thing-share .jar-share-actions { gap:var(--sp-24); }
-.jar-thing-share .jar-share-icon { display:grid; place-items:center; width:var(--sp-44); min-width:var(--sp-44); height:var(--sp-44); padding:0; border:0; border-radius:50%; background:none; color:var(--w-ink); }
-.jar-thing-share .jar-share-icon:disabled { opacity:.35; }
+.jar-thing-share .jar-share-icon { display:grid; place-items:center; width:var(--sp-44); min-width:var(--sp-44); height:var(--sp-44); padding:0; border:0; border-radius:50%; background:none; color:var(--w-ink); opacity:.7; }
+.jar-thing-share .jar-share-icon:disabled { opacity:.3; }
 /* A link, not a button: it opens something optional. */
 .jar-thing-share .jar-share-link { border:0; padding-inline:var(--sp-4); color:var(--w-muted); text-decoration:underline; text-underline-offset:.2em; }
 .jar-share-link:hover,.jar-share-link:focus-visible { color:var(--w-ink); }
