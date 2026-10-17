@@ -357,16 +357,13 @@ describe("applying explicit support decisions", () => {
      that a room's regeneration is billed to a PERSON, because a room's mind
      has no account to charge.
 
-     CORRECTION (2026-10-15). An earlier version of this note said the job was
-     "retired" and that there was therefore nothing left to bill. THAT WAS
-     WRONG. `refresh_group_top_of_mind` is still a live job type
-     (`lib/queue.ts`, `db/schema-background-jobs.ts`) and is still dispatched
-     to `refreshTopOfMindForGroup`; only the ROUTES into rooms were removed,
-     never the engine. What actually justifies dropping this case is narrower:
-     no door remains through which a person can ask for that regeneration, so
-     the billing-owner path is unreachable from outside. The rule it pinned is
-     consequently UNTESTED rather than retired, and if a door is ever reopened
-     this case has to come back with it. */
+     CORRECTION (2026-10-15), THEN SETTLED (2026-10-17). On 10-15 the job
+     was still live and this rule was untested rather than retired. It is
+     retired now: `refreshTopOfMindForGroup` is deleted, the room support
+     review path is gone (`applySignalSupportReview` refuses a report landing
+     on another profile), and a queued `refresh_group_top_of_mind` settles
+     unrun — pinned in `retired-group-jobs.db.test.ts`. If rooms ever return,
+     their billing rule returns with them. */
 
   it.each(["held", "contested"])("preserves edited %s principles and recovers their support", async (state) => {
     const f = await fixture();

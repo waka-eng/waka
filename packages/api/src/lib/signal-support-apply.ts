@@ -2,13 +2,12 @@
  * source snapshots are accepted. Automatic derivation remains a separate gate. */
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { groupMembers, principleSignals, profiles, signalEvidence, signals, signalSupportReviews } from "../db/index.js";
+import { principleSignals, signalEvidence, signals, signalSupportReviews } from "../db/index.js";
 import { getDb } from "./db.js";
-import { GROUP_INPUT_POLICY } from "./group-inputs.js";
 import { hashEmbeddingInput } from "./inspiration-embeddings.js";
 import { loadInspirationMaterial } from "./inspiration-material.js";
 import { promoteIfDemonstrated, reconcilePrinciplesAfterSignalLoss } from "./principle-generation.js";
-import { enqueueGroupTopOfMindRefresh, enqueueTopOfMindRefresh, type EnqueueResult } from "./queue.js";
+import { enqueueTopOfMindRefresh, type EnqueueResult } from "./queue.js";
 import { reconcileSignalsAfterEvidenceLoss, refreshSignalLifecycle } from "./signal-lifecycle.js";
 import { acquireSignalDerivationLock } from "./signal-match-or-mint.js";
 import { loadSupportClaims, SIGNAL_SUPPORT_REVIEW_POLICY, SUPPORT_REVIEW_BATCH_SIZE, supportClaimsHash, supportReviewSources } from "./signal-support-review.js";
@@ -41,8 +40,10 @@ export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
   const reportHash = hashEmbeddingInput(JSON.stringify(report));
   if (new Set(report.items.map((row) => row.signalId)).size !== report.items.length) throw new Error("Duplicate support review claims");
   if (report.signalIds && new Set(report.signalIds).size !== report.signalIds.length) throw new Error('Duplicate support batch scope');
-  const isGroup = report.profileId !== report.ownerProfileId;
-  if (report.material.scope !== (isGroup ? "public" : "personal")) throw new Error("Support review scope mismatch");
+  // Only personal reports exist: a report landing on another profile (a room
+  // mind, over public material) came from the retired room engine.
+  if (report.profileId !== report.ownerProfileId) throw new Error("Room support reviews are retired");
+  if (report.material.scope !== "personal") throw new Error("Support review scope mismatch");
 
   return db.transaction(async (tx) => {
     await acquireSignalDerivationLock(tx, report.profileId);
@@ -53,16 +54,10 @@ export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
       return { alreadyApplied: true, withdrawn: [] as string[], restored: [] as string[], jobId: null as string | null };
     }
 
-    const [membership] = isGroup ? await tx.select({ id: groupMembers.id, groupId: groupMembers.groupId })
-      .from(groupMembers).innerJoin(profiles, and(eq(profiles.groupId, groupMembers.groupId), eq(profiles.type, "group")))
-      .where(and(eq(profiles.id, report.profileId), eq(groupMembers.profileId, report.ownerProfileId)))
-      .for("share") : [];
-    if (isGroup && (!membership || membership.id !== report.membershipId)) throw new Error("Support review membership changed");
-    if (!isGroup && report.membershipId !== null) throw new Error("Unexpected support review membership");
+    if (report.membershipId !== null) throw new Error("Unexpected support review membership");
     const material = await loadInspirationMaterial(tx, report.ownerProfileId, report.inspirationId, report.material.scope, true);
     if (!material || material.identity.hash !== report.material.hash ||
-      (report.material.revision !== undefined && material.identity.revision !== report.material.revision) ||
-      (isGroup && material.inspiration.visibility !== "public")) throw new Error("Support review material changed");
+      (report.material.revision !== undefined && material.identity.revision !== report.material.revision)) throw new Error("Support review material changed");
 
     const selected = report.signalIds ? new Set(report.signalIds) : null;
     const beforeLocks = (await loadSupportClaims(tx, report.profileId, report.ownerProfileId, report.inspirationId))
@@ -74,7 +69,7 @@ export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
     const current = (await loadSupportClaims(tx, report.profileId, report.ownerProfileId, report.inspirationId))
       .filter((claim) => !selected || selected.has(claim.signalId));
     if (supportClaimsHash(current) !== report.claimsHash) throw new Error("Support review claims changed");
-    const allowed = current.filter((row) => !isGroup || row.inputPolicy === GROUP_INPUT_POLICY);
+    const allowed = current;
     if (allowed.length !== report.items.length) throw new Error("Support review claim coverage mismatch");
     const sources = new Set(supportReviewSources(material).map((row) => row.id));
     const withdrawn: string[] = [];
@@ -127,9 +122,7 @@ export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
       for (const row of affected) await promoteIfDemonstrated(tx, report.profileId, row.id, now);
     }
     const changed = withdrawn.length + restored.length > 0;
-    const job = !changed ? null : membership
-      ? await enqueueGroupTopOfMindRefresh(report.ownerProfileId, membership.groupId, "signals_changed", tx)
-      : await enqueueTopOfMindRefresh(report.profileId, "signals_changed", tx);
+    const job = !changed ? null : await enqueueTopOfMindRefresh(report.profileId, "signals_changed", tx);
     if (job) await deps.onReadingRequested?.(tx, job);
     return { alreadyApplied: false, withdrawn, restored, jobId: job?.jobId ?? null };
   });

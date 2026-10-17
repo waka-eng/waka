@@ -181,10 +181,10 @@ export const READING_LINES: ReadingLine[] = [
      fourth's contract test (`routes/room-decline.db.test.ts`) was deleted
      in this same pass and `the-reading.test.ts` failed on it immediately,
      which is the gate working exactly as designed. The other three are
-     still backed by live constants — `GROUP_DRAFT_MIN_AFFIRMED` and its two
-     companions have not been removed from `top-of-mind-synthesis.ts` yet —
-     so they would have stayed GREEN while describing something a reader can
-     no longer do. That is worse than a red build, and it is why they are
+     still backed by live constants at the time — `GROUP_DRAFT_MIN_AFFIRMED`
+     and its two companions only left `top-of-mind-synthesis.ts` with the
+     room engine on 2026-10-17 — so they would have stayed GREEN while
+     describing something a reader can no longer do. That is worse than a red build, and it is why they are
      leaving by hand rather than waiting for a test to notice.
 
      A reading that says "a room first speaks after three" to somebody with

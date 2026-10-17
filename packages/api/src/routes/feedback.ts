@@ -39,7 +39,6 @@ import {
 } from "../db/index.js";
 import { resolveContestedPairs } from "../lib/contested-pairs.js";
 import { getDb } from "../lib/db.js";
-import { enqueueGroupTopOfMindRefresh } from "../lib/queue.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 import { enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
@@ -392,48 +391,9 @@ async function persistFeedback(tx: WakaTx, input: CreateFeedbackInput): Promise<
         and(eq(principles.id, input.targetId), eq(principles.profileId, input.profileId)),
       );
   }
-  /**
-   * AGREEING WITH A ROOM'S STATEMENT ASKS THE ROOM TO THINK AGAIN.
-   *
-   * A room used to wait for a person to write a proposal. Under the goal it
-   * should draft when enough shared, affirmed material has accumulated — so
-   * the moment somebody agrees with a statement said in a room, that room is
-   * asked to re-synthesise.
-   *
-   * WHERE THE THRESHOLD LIVES. Not here. `enqueueGroupTopOfMindRefresh` is
-   * keyed on the group, so repeat agreements coalesce into one pending job
-   * rather than one per click, and synthesis itself decides whether there is
-   * enough to say — which is the layer that already knows, and the layer that
-   * refuses to speak from thin evidence. Putting a count in this function
-   * would be a second opinion about the same question, in the wrong place.
-   *
-   * Every deliberate reaction changes the room's standing input. Queue one
-   * coalesced pass for each currently accessible room, including room-grown
-   * signals; this never injects the reaction into a personal prompt.
-   */
-  if (row && input.targetType === "signal") {
-    const ownerSeat = alias(groupMembers, 'feedback_owner_seat');
-    const sharedInto = await tx
-      .select({ groupId: signalShares.groupId })
-      .from(signalShares)
-      .innerJoin(groupMembers, eq(groupMembers.groupId, signalShares.groupId))
-      .innerJoin(ownerSeat, and(eq(ownerSeat.groupId, signalShares.groupId), eq(ownerSeat.profileId, signalShares.profileId)))
-      .where(
-        and(
-          eq(signalShares.signalId, input.targetId),
-          eq(groupMembers.profileId, input.profileId),
-        ),
-      ).for('key share', { of: [signalShares, groupMembers, ownerSeat] });
-    const grownInto = await tx.select({ groupId: profiles.groupId }).from(profiles)
-      .innerJoin(groupMembers, and(eq(groupMembers.groupId, profiles.groupId), eq(groupMembers.profileId, input.profileId)))
-      .where(and(eq(profiles.id, target.profileId), eq(profiles.type, 'group')))
-      .for('key share', { of: groupMembers });
-    const groups = new Set([...sharedInto.map((group) => group.groupId), ...grownInto.flatMap((group) => group.groupId ? [group.groupId] : [])]);
-    for (const groupId of groups) {
-      await enqueueGroupTopOfMindRefresh(input.profileId, groupId, "shares_changed", tx);
-    }
-  }
-
+  /* A verdict on a statement used to also wake every room it stood in
+     (`refresh_group_top_of_mind`). The room engine retired on 2026-10-17;
+     the personal refresh below is the whole of what feedback asks for. */
   if (row && target.profileId === input.profileId) await enqueueTopOfMindRefresh(input.profileId, 'manual', tx);
   return row ? serializeFeedback(row) : null;
 }

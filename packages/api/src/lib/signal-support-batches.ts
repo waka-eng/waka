@@ -4,7 +4,6 @@ import { sql } from 'drizzle-orm';
 import type { getDb } from './db.js';
 import type { AssessSignalSupportPayload } from '../db/index.js';
 import { BackgroundJobHeldError } from './background-job-hold.js';
-import { GROUP_INPUT_POLICY, assertGroupInputCurrent } from './group-inputs.js';
 import { hashEmbeddingInput } from './inspiration-embeddings.js';
 import { assertMaterialCurrent, loadInspirationMaterial } from './inspiration-material.js';
 import { acquireSignalDerivationLock } from './signal-match-or-mint.js';
@@ -16,13 +15,13 @@ type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 export async function ensureSupportBatchCoverage(db: Database, input: {
-  ownerProfileId: string; inspirationId: string; deriveIntoProfileId?: string;
+  ownerProfileId: string; inspirationId: string;
   provider: Pick<ModelProvider, 'assessSignalSupport'>;
   beforeCommit: (tx: Transaction) => Promise<void>;
 }) {
-  const destination = input.deriveIntoProfileId ?? input.ownerProfileId;
-  const claims = (await loadSupportClaims(db, destination, input.ownerProfileId, input.inspirationId))
-    .filter((claim) => !input.deriveIntoProfileId || claim.inputPolicy === GROUP_INPUT_POLICY);
+  // Personal coverage only: room destinations retired with the room engine.
+  const destination = input.ownerProfileId;
+  const claims = await loadSupportClaims(db, destination, input.ownerProfileId, input.inspirationId);
   if (claims.length <= SUPPORT_REVIEW_BATCH_SIZE) return;
   const report = await reviewSignalSupport(db, { ...input, maxCalls: 0, reuseCurrentAssessments: true });
   if (report.status !== 'current') throw new Error('Support inputs changed before planning');
@@ -36,11 +35,6 @@ export async function ensureSupportBatchCoverage(db: Database, input: {
       throw new Error('Support material changed before planning');
     }
     await assertMaterialCurrent(tx, material, []);
-    if (input.deriveIntoProfileId && report.membershipId) await assertGroupInputCurrent(tx, {
-      mindProfileId: destination, membershipId: report.membershipId, inspiration: material.inspiration,
-      attachments: material.attachmentRows.filter((row) => row.status === 'ready' && row.text !== null)
-        .map(({ id, kind, text, hostname, name }) => ({ id, kind, text, hostname, name })), related: [],
-    });
     const current = await loadSupportClaims(tx, destination, input.ownerProfileId, input.inspirationId);
     if (claims.some((claim) => !current.some((row) => row.signalId === claim.signalId && row.statementRevision === claim.statementRevision))) {
       throw new Error('Support statements changed before planning');
@@ -50,7 +44,7 @@ export async function ensureSupportBatchCoverage(db: Database, input: {
       const batch = claims.slice(start, start + SUPPORT_REVIEW_BATCH_SIZE);
       if (!batch.some((claim) => pending.has(claim.signalId))) continue;
       const payload: AssessSignalSupportPayload = {
-        inspirationId: input.inspirationId, ...(input.deriveIntoProfileId ? { deriveIntoProfileId: input.deriveIntoProfileId } : {}),
+        inspirationId: input.inspirationId,
         signalIds: batch.map((claim) => claim.signalId), materialRevision: report.material.revision!, materialHash: report.material.hash,
         membershipId: report.membershipId,
         statements: batch.map((claim) => ({ id: claim.signalId, revision: claim.statementRevision, hash: hashEmbeddingInput(claim.statement) })),
@@ -68,13 +62,13 @@ export async function ensureSupportBatchCoverage(db: Database, input: {
 }
 
 export async function supportBatchInputsCurrent(db: Database, ownerProfileId: string, payload: AssessSignalSupportPayload) {
-  const destination = payload.deriveIntoProfileId ?? ownerProfileId;
-  const claims = await loadSupportClaims(db, destination, ownerProfileId, payload.inspirationId);
+  // A batch aimed at a room mind is retired room work; the worker settles it
+  // before this is reached, and it can never verify as current here.
+  if (payload.deriveIntoProfileId) return false;
+  const claims = await loadSupportClaims(db, ownerProfileId, ownerProfileId, payload.inspirationId);
   if (payload.signalIds.some((id) => !claims.some((claim) => claim.signalId === id))) return false;
-  if (payload.deriveIntoProfileId && payload.signalIds.some((id) =>
-    claims.some((claim) => claim.signalId === id && claim.inputPolicy !== GROUP_INPUT_POLICY))) return false;
   const report = await reviewSignalSupport(db, { ownerProfileId, inspirationId: payload.inspirationId,
-    deriveIntoProfileId: payload.deriveIntoProfileId, maxCalls: 0, signalIds: payload.signalIds,
+    maxCalls: 0, signalIds: payload.signalIds,
     provider: { assessSignalSupport: async () => { throw new Error('Input verification makes no model call'); } },
   });
   if (report.status !== 'current' || report.material.revision !== payload.materialRevision || report.material.hash !== payload.materialHash ||

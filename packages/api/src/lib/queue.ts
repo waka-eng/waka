@@ -34,7 +34,8 @@
  *   enrich_attachment          → read what was saved (page body, image text)
  *   derive_signals             → extract → embed → match-or-mint (layer 2)
  *   refresh_top_of_mind        → re-synthesize a profile's artifact (layer 3)
- *   refresh_group_top_of_mind  → the same for a group's shared signals
+ *   refresh_group_top_of_mind  → RETIRED with the room engine (2026-10-17);
+ *                                the worker settles any queued row unrun
  *
  * The fifth, `reembed_signal`, is here for the budget rather than for the
  * pipeline. It is the one model call a person's own request used to make
@@ -131,7 +132,6 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {
   type BackgroundJob,
   type BackgroundJobResult,
-  groupMembers,
   backgroundJobs,
   backgroundJobTypeValues,
   type BackgroundJobStatus,
@@ -142,7 +142,6 @@ import {
   type GenerateReflectionQuestionPayload,
   type GenerateReviewQuestionPayload,
   type ReembedSignalPayload,
-  type RefreshGroupTopOfMindPayload,
   type RefreshTopOfMindPayload,
   profiles,
   inspirations,
@@ -159,7 +158,7 @@ import {QUEUE_RECOVERY_LIMITS,type QueueRecoveryState} from './queue-recovery.js
 import { loadPendingSignalSupportSources } from './signal-support-state.js';
 import { reviewSignalSupport, SUPPORT_REVIEW_BATCH_SIZE } from './signal-support-review.js';
 import { applySignalSupportReview } from './signal-support-apply.js';
-import { GroupInputUnavailableError } from './group-inputs.js';
+import { SupportSourceUnavailableError } from './signal-support-review.js';
 import { bindInspirationSupportReading } from './inspiration-processing.js';
 import { getDefaultModelProvider } from "./model-provider.js";
 import { InspirationProcessingUnavailableError, recordInspirationProcessingRequest, recordInspirationReadingResult, type InspirationProcessingReceipt } from "./inspiration-processing.js";
@@ -180,7 +179,6 @@ import { loadReviewQuestionContext } from './review-dialogue-context.js';
 import { refreshPrinciplesForProfile } from "./principle-generation.js";
 import { tendSignalGarden } from "./signal-gardener.js";
 import {
-  refreshTopOfMindForGroup,
   refreshTopOfMindForProfile,
   type TopOfMindRefreshDependencies,
 } from "./top-of-mind-synthesis.js";
@@ -348,7 +346,6 @@ async function enqueueKeyedJob(input: {
     | "derive_signals"
     | "review_signal_support"
     | "assess_signal_support"
-    | "refresh_group_top_of_mind"
     | "refresh_principles"
     | "reembed_signal"
     | "tend_signal_garden"
@@ -361,7 +358,6 @@ async function enqueueKeyedJob(input: {
     | DeriveSignalsPayload
     | ReviewSignalSupportPayload
     | AssessSignalSupportPayload
-    | RefreshGroupTopOfMindPayload
     | { profileId: string }
     | ReembedSignalPayload
     | GenerateReflectionQuestionPayload
@@ -429,16 +425,11 @@ export async function enqueueRefreshPrinciples(
 ): Promise<EnqueueResult> {
   const db = transaction ?? getDb();
   const key = `refresh_principles:${profileId}:${materialKey}`;
-  const [target] = await db.select({ groupId: profiles.groupId }).from(profiles)
-    .where(eq(profiles.id, profileId)).limit(1);
-  const [member] = target?.groupId ? await db.select({ profileId: groupMembers.profileId })
-    .from(groupMembers).where(eq(groupMembers.groupId, target.groupId))
-    .orderBy(asc(groupMembers.profileId)).limit(1) : [];
-  const ownerProfileId = target?.groupId ? member?.profileId : profileId;
-  if (!ownerProfileId) throw new Error("No current member can request room principles");
+  // Principles are billed to the profile they are for. (A room mind's were
+  // billed to a member; that branch retired with the room engine.)
+  const ownerProfileId = profileId;
   if (transaction) {
-    // A group publication may already hold membership rows. Never wait back
-    // on a billing profile being erased while that erase waits on membership.
+    // Never wait back on a billing profile that is being erased.
     const [owner] = await db.select({ id: profiles.id }).from(profiles)
       .where(eq(profiles.id, ownerProfileId)).for("key share", { noWait: true });
     if (!owner) throw new Error("Principle request owner is no longer available");
@@ -515,30 +506,22 @@ export async function enqueueDeriveSignals(
   profileId: string,
   inspirationId: string,
   reason: DeriveSignalsPayload["reason"],
-  /** where the signals land when not on the inspiration's own profile — a
-      room's mind; part of the key, or the personal pass and every room's
-      pass over one capture would collapse into whichever enqueued first */
-  deriveIntoProfileId?: string,
   transaction?: Pick<ReturnType<typeof getDb>, "execute">,
 ): Promise<EnqueueResult & { receipt: InspirationProcessingReceipt }> {
   const persist = async (tx: Pick<ReturnType<typeof getDb>, "execute">) => {
     // Source deletion locks its parent before cancelling jobs. Take the same
-    // order before binding a new receipt, including standalone room backfills.
+    // order before binding a new receipt.
     const source = await tx.execute(sql`SELECT id FROM inspirations WHERE id = ${inspirationId}::uuid
       AND profile_id = ${profileId}::uuid FOR KEY SHARE`);
     if (!source.length) throw new InspirationProcessingUnavailableError();
     const job = await enqueueKeyedJob({
       profileId,
       type: "derive_signals",
-      payload: deriveIntoProfileId
-        ? { inspirationId, reason, deriveIntoProfileId }
-        : { inspirationId, reason },
-      idempotencyKey: deriveIntoProfileId
-        ? `derive_signals:${inspirationId}:${deriveIntoProfileId}`
-        : `derive_signals:${inspirationId}`,
+      payload: { inspirationId, reason },
+      idempotencyKey: `derive_signals:${inspirationId}`,
     }, tx);
     const receipt = await recordInspirationProcessingRequest(tx, { ownerProfileId: profileId, inspirationId,
-      profileId: deriveIntoProfileId ?? profileId, job });
+      profileId, job });
     return { ...job, receipt };
   };
   if (transaction) return persist(transaction);
@@ -551,11 +534,9 @@ export async function enqueueDeriveSignals(
  * source's full derivation. Its key cannot absorb ordinary capture work. */
 export async function enqueueSignalSupportReview(profileId: string, inspirationId: string,
   transaction: Pick<ReturnType<typeof getDb>, 'execute'>,
-  deriveIntoProfileId?: string,
 ): Promise<EnqueueResult> {
   return enqueueKeyedJob({ profileId, type: 'review_signal_support',
-    payload: { inspirationId, ...(deriveIntoProfileId ? { deriveIntoProfileId } : {}) },
-    idempotencyKey: `review_signal_support:${inspirationId}${deriveIntoProfileId ? `:${deriveIntoProfileId}` : ''}` }, transaction);
+    payload: { inspirationId }, idempotencyKey: `review_signal_support:${inspirationId}` }, transaction);
 }
 
 export async function enqueueSignalSupportBatch(profileId: string, payload: AssessSignalSupportPayload,
@@ -568,11 +549,13 @@ export async function enqueueSignalSupportBatch(profileId: string, payload: Asse
 export async function recoverPendingSignalSupport(db: Pick<ReturnType<typeof getDb>, 'execute'>, profileId: string) {
   const sources = await loadPendingSignalSupportSources(db, profileId);
   for (const source of sources) {
-    const destination = source.ownerProfileId === profileId ? undefined : profileId;
-    const key = `review_signal_support:${source.inspirationId}${destination ? `:${destination}` : ''}`;
+    // Sources are the profile's own (loadPendingSignalSupportSources reads
+    // owned evidence only since the room engine retired), so the review is
+    // always the personal one.
+    const key = `review_signal_support:${source.inspirationId}`;
     const [job] = await db.execute<{ status: string }>(sql`SELECT status::text FROM background_jobs
       WHERE idempotency_key = ${key} AND profile_id = ${source.ownerProfileId}::uuid`);
-    if (!job || job.status === 'failed') await enqueueSignalSupportReview(source.ownerProfileId, source.inspirationId, db, destination);
+    if (!job || job.status === 'failed') await enqueueSignalSupportReview(source.ownerProfileId, source.inspirationId, db);
     await db.execute(sql`UPDATE background_jobs SET status = 'pending', attempts = 0, locked_at = NULL,
       request_version = request_version + 1, run_after = now(), last_error = NULL, result = NULL, rerun_requested = false
       WHERE type::text = 'assess_signal_support' AND status::text = 'failed'
@@ -641,40 +624,6 @@ export async function enqueueTopOfMindRefresh(
     else await wakeBackgroundWorker([{id:job.id,profileId,requestVersion:job.requestVersion}]);
   }
   return { jobId: job.id, requestVersion: job.requestVersion, created: job.created };
-}
-
-/**
- * Re-synthesize a group's top of mind from the signals its members share.
- *
- * Keyed on the group rather than on the group and the reason: whatever moved
- * — a new share, a member joining, an accepted proposal — the work is the
- * same single pass over that group's current shared set, and a live job for
- * it already covers a second request.
- *
- * The owning profile is the member whose action prompted the pass. It is the
- * job's tenant for audit and cleanup; the synthesis itself reads the group.
- */
-export async function enqueueGroupTopOfMindRefresh(
-  profileId: string,
-  groupId: string,
-  reason: RefreshGroupTopOfMindPayload["reason"],
-  transaction?: Pick<ReturnType<typeof getDb>, "execute">,
-): Promise<EnqueueResult> {
-  if (reason === 'manual' && !transaction) {
-    const result = await getDb().transaction((tx) => enqueueGroupTopOfMindRefresh(profileId, groupId, reason, tx));
-    await wakeCommittedBackgroundJobs(); return result;
-  }
-  if (reason === 'manual' && transaction) {
-    const [mind] = await transaction.execute<{ id: string }>(sql`SELECT id FROM profiles
-      WHERE group_id = ${groupId}::uuid AND type::text = 'group'`);
-    if (mind) await recoverPendingSignalSupport(transaction, mind.id);
-  }
-  return enqueueKeyedJob({
-    profileId,
-    type: "refresh_group_top_of_mind",
-    payload: { groupId, reason },
-    idempotencyKey: `refresh_group_top_of_mind:${groupId}`,
-  }, transaction);
 }
 
 /** One generated follow-up per saved answer, even across repeated opens. */
@@ -1022,6 +971,7 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
     if(job.type==='refresh_top_of_mind')await (await import('./review-processing.js')).recordReviewReadingResult(tx,{...publication,jobId:job.id,requestVersion:job.requestVersion.toString()});
     await (await import('./principle-status.js')).enqueuePrinciplesAfterReading(tx, publication.profileId);
   };
+  if (await retiredGroupJob(job)) return settleRetiredGroupJob(job);
   switch (job.type) {
     case 'assess_signal_support': {
       const payload = parseAssessSignalSupportPayload(job.payload);
@@ -1033,17 +983,17 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       try {
         if (!await (await import('./signal-support-batches.js')).supportBatchInputsCurrent(db, job.profileId, payload)) return dropPoisonPayload(job);
       } catch (error) {
-        if (error instanceof GroupInputUnavailableError) return dropPoisonPayload(job);
+        if (error instanceof SupportSourceUnavailableError) return dropPoisonPayload(job);
         throw error;
       }
       const report = await reviewSignalSupport(db, { ownerProfileId: job.profileId, inspirationId: payload.inspirationId,
-        deriveIntoProfileId: payload.deriveIntoProfileId, signalIds: payload.signalIds,
+        signalIds: payload.signalIds,
         expectedInputs: payload,
         maxCalls: 1, reuseCurrentAssessments: true, provider: await getDefaultModelProvider() });
       if (report.status !== 'current') throw new Error('Support batch inputs changed');
       await applySignalSupportReview(db, report, { beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
         onReadingRequested: (tx, reading) => bindInspirationSupportReading(tx, {
-          ownerProfileId: job.profileId, profileId: payload.deriveIntoProfileId ?? job.profileId,
+          ownerProfileId: job.profileId, profileId: job.profileId,
           inspirationId: payload.inspirationId, materialRevision: report.material.revision!,
         }, reading),
       });
@@ -1127,13 +1077,9 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
     }
     case "refresh_principles": {
       const profileId = readString(job.payload, "profileId") ?? job.profileId;
-      if (profileId !== job.profileId) {
-        const groupId = await groupIdOfMind(profileId);
-        if (!groupId) return dropPoisonPayload(job);
-        const [member] = await getDb().select({ id: groupMembers.id }).from(groupMembers)
-          .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.profileId, job.profileId))).limit(1);
-        if (!member) throw new Error("Room principles require a current member");
-      }
+      // Only a room mind's principles were ever requested on someone else's
+      // behalf; that is retired room work (see retiredGroupJob), not a poison.
+      if (profileId !== job.profileId) return settleRetiredGroupJob(job);
       await refreshPrinciplesForProfile({ profileId }, {jobId:job.id,billingProfileId:job.profileId,
         expectedMaterialKey:job.idempotencyKey?.startsWith(`refresh_principles:${profileId}:`)?job.idempotencyKey.slice(`refresh_principles:${profileId}:`.length):undefined,
         beforeProgress:tx=>assertBackgroundJobOwnership(tx,job,true),beforeCommit:tx=>assertBackgroundJobOwnership(tx,job,true)});
@@ -1222,18 +1168,10 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       };
     }
 
-    case "refresh_group_top_of_mind": {
-      const payload = parseRefreshGroupTopOfMindPayload(job.payload);
-      if (!payload) return dropPoisonPayload(job);
-
-      await refreshTopOfMindForGroup({
-        groupId: payload.groupId,
-        reason: payload.reason,
-      }, { beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job),
-        onPublished: onReadingPublished,
-      });
-      return;
-    }
+    case "refresh_group_top_of_mind":
+      // Unreachable: retiredGroupJob settles every row of this type above.
+      // The case stays so the switch remains exhaustive over the enum.
+      return settleRetiredGroupJob(job);
 
     case "reembed_signal": {
       const payload = parseReembedSignalPayload(job.payload);
@@ -1280,6 +1218,56 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
 }
 
 /**
+ * THE ROOM ENGINE IS RETIRED, AND ITS QUEUED WORK SETTLES UNRUN (2026-10-17).
+ *
+ * Rooms left the product on 2026-10-15 (every door, `/api/groups` included)
+ * and nothing enqueues room work any more. But rows enqueued before that are
+ * still sitting in dev and prod `background_jobs`, and a worker meeting one
+ * must neither run it nor throw: running it would keep regenerating rooms
+ * nobody can see, and throwing would burn three attempts and leave a `failed`
+ * row for every room. So each is marked done with no work, like a poison
+ * payload but logged as what it is.
+ *
+ * The enum value `refresh_group_top_of_mind` stays — removing it is an
+ * `ALTER TYPE` migration, and the data-dropping phase has not been decided.
+ * What counts as room work, all of it shapes only the room engine wrote:
+ *   - any `refresh_group_top_of_mind`;
+ *   - derive/review/assess work landing on a room's mind (`deriveIntoProfileId`);
+ *   - principles requested for a profile other than the job's tenant (a
+ *     mind's, billed to a member) or for a group profile;
+ *   - a signal-garden pass over a group profile.
+ * Personal and agent jobs never carry these shapes, so they run unchanged.
+ */
+async function retiredGroupJob(job: BackgroundJob): Promise<boolean> {
+  switch (job.type) {
+    case "refresh_group_top_of_mind":
+      return true;
+    case "derive_signals":
+    case "review_signal_support":
+    case "assess_signal_support":
+      return readString(job.payload, "deriveIntoProfileId") !== null;
+    case "refresh_principles":
+    case "tend_signal_garden": {
+      const target = job.type === "refresh_principles"
+        ? readString(job.payload, "profileId") ?? job.profileId : job.profileId;
+      if (target !== job.profileId) return true;
+      const [row] = await getDb().select({ type: profiles.type }).from(profiles)
+        .where(eq(profiles.id, target)).limit(1);
+      return row?.type === "group";
+    }
+    default:
+      return false;
+  }
+}
+
+function settleRetiredGroupJob(job: BackgroundJob): void {
+  console.info("[background-jobs] settling retired room job without running it", {
+    jobId: job.id,
+    type: job.type,
+  });
+}
+
+/**
  * A payload that cannot be parsed will not parse on retry either. Marking the
  * job succeeded stops the loop; the sanitized warning is what makes the drop
  * visible.
@@ -1311,20 +1299,6 @@ function parseGenerateReflectionQuestionPayload(payload: unknown): GenerateRefle
   const afterReflectionId = readString(payload, "afterReflectionId");
   if (!inspirationId || !afterReflectionId) return null;
   return { inspirationId, afterReflectionId };
-}
-
-/**
- * Which room a mind profile belongs to. Read at most once per room-derive
- * job, to route the synthesis that follows it; null for a profile that is
- * not a mind (a poisoned payload rather than a crash).
- */
-async function groupIdOfMind(profileId: string): Promise<string | null> {
-  const [row] = await getDb()
-    .select({ groupId: profiles.groupId })
-    .from(profiles)
-    .where(and(eq(profiles.id, profileId), eq(profiles.type, "group")))
-    .limit(1);
-  return row?.groupId ?? null;
 }
 
 function parseDeriveSignalsPayload(payload: unknown): DeriveSignalsPayload | null {
@@ -1361,24 +1335,6 @@ function parseReembedSignalPayload(payload: unknown): ReembedSignalPayload | nul
   const signalId = readString(payload, "signalId");
   if (!signalId) return null;
   return { signalId };
-}
-
-function parseRefreshGroupTopOfMindPayload(
-  payload: unknown,
-): RefreshGroupTopOfMindPayload | null {
-  const groupId = readString(payload, "groupId");
-  const reason = readString(payload, "reason");
-  if (!groupId) return null;
-  if (
-    reason !== "shares_changed" &&
-    reason !== "membership_changed" &&
-    reason !== "proposal_accepted" &&
-    reason !== "signals_changed" &&
-    reason !== "manual"
-  ) {
-    return null;
-  }
-  return { groupId, reason };
 }
 
 // ---------------------------------------------------------------------------

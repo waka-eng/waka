@@ -33,7 +33,6 @@ import {
   reflections,
   signalEvidence,
   signals,
-  profiles,
   backgroundJobs,
   deletedInspirations,
   type Inspiration,
@@ -42,7 +41,7 @@ import { getDb } from "../lib/db.js";
 import { deletedShelfCutoff } from "../lib/deleted-shelf.js";
 import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
 import type { AuthEnv } from "../lib/middleware.js";
-import { enqueueTopOfMindRefresh, enqueueGroupTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
+import { enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import {
   acquireSignalDerivationLock,
   reconcileSignalsAfterEvidenceLoss,
@@ -211,7 +210,7 @@ export function registerEditingRoutes(
       .returning(inspirationSelection);
       if (!row) return undefined;
       const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: row.id,
-        reason: "edited", changedSource: "inspiration", previousVisibility: previous.visibility }, tx);
+        reason: "edited", changedSource: "inspiration" }, tx);
       return { ...row, processing: processing.receipt };
     });
 
@@ -381,11 +380,10 @@ export function registerEditingRoutes(
         const signalIds = citingRows.filter((row) => row.profileId === profileId).map((row) => row.signalId);
         await reconcileSignalsAfterEvidenceLoss(tx, { profileId, signalIds });
         await reconcilePrinciplesAfterSignalLoss(tx, { profileId, signalIds });
+        // A room mind's signals citing this memory still lose that evidence
+        // above (deletion integrity, and the data is kept), but no room
+        // refresh is asked for: the room engine is retired.
         if (profileId === target.profileId) await enqueueTopOfMindRefresh(profileId, "signals_changed", tx);
-        else {
-          const [destination] = await tx.select({ groupId: profiles.groupId }).from(profiles).where(eq(profiles.id, profileId));
-          if (destination?.groupId) await enqueueGroupTopOfMindRefresh(target.profileId, destination.groupId, "signals_changed", tx);
-        }
       }
       return removed;
     });
