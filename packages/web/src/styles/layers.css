@@ -326,18 +326,17 @@
  * it, don't do that." A container focused by the code is not a thing the
  * person moved to, so it does not light up; everything inside it still does.
  */
-.jar [tabindex="-1"]:focus-visible {
-  filter: none;
-}
 /*
  * NOR THE SHARE CARD'S WORDS. On the share sheet the words are edited inside
  * the card's own bubble (founder, 2026-10-16: "edit wording in the speech
  * bubble directly"), and a textarea is focus-visible the moment it takes
- * focus — so the rule above turned the cream bubble flat white as soon as
+ * focus — so the brightening turned the cream bubble flat white as soon as
  * you started typing in it. The field's focus is the bubble taking its own
  * colour (`.jar-share-inline:focus` in chrome.css). Here and not there
- * because this block is unlayered and beats every layer.
+ * because this block is unlayered and beats every layer; one rule with the
+ * page exception, so the unlayered count does not grow.
  */
+.jar [tabindex="-1"]:focus-visible,
 .jar .jar-share-inline:focus-visible {
   filter: none;
 }
