@@ -289,7 +289,10 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
      creature and gone by one and a half; the card used to spread it twice
      as far. */
   const glow=ctx.createRadialGradient(width/2,beingTop+being*0.55,being*0.2,width/2,beingTop+being*0.55,being*(said?1.35:2.1));
-  glow.addColorStop(0,`rgba(${ink.glow},${dark?0.34:0.55})`);glow.addColorStop(0.45,`rgba(${ink.glow},${dark?0.1:0.2})`);glow.addColorStop(1,`rgba(${ink.glow},0)`);
+  /* The home halo, measured at matching points, is about twice the card's
+     old one; the top of mind takes the home strength. */
+  const glowCore=said&&dark?0.72:dark?0.34:0.55,glowMid=said&&dark?0.22:dark?0.1:0.2;
+  glow.addColorStop(0,`rgba(${ink.glow},${glowCore})`);glow.addColorStop(0.45,`rgba(${ink.glow},${glowMid})`);glow.addColorStop(1,`rgba(${ink.glow},0)`);
   ctx.fillStyle=glow;ctx.fillRect(0,0,width,height);
   const bx0=said?Math.round((width-bubbleW)/2):inset;
   const x0=bx0,y0=bubbleY,x1=bx0+bubbleW,y1=bubbleY+bubbleH,cx=width/2;
@@ -404,6 +407,17 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
   const markWidth=ctx.measureText(SHARE_MARK).width;
   ctx.fillText(SHARE_MARK,width-margin-markWidth,height-margin-24);
 
+  /* THE HOME SCREEN'S GRAIN, on the top of mind: the world, the creature
+     and the bubble there all carry a fine paper grain, and a clean canvas
+     next to it read as a different material. Seeded, so the same words
+     always make the same card. */
+  if(said){
+    try{
+      const image=ctx.getImageData(0,0,width,height),data=image.data;let seed=29;
+      for(let i=0;i<data.length;i+=4){seed=(seed*16807)%2147483647;const n=((seed/2147483647)-0.5)*14;data[i]=Math.max(0,Math.min(255,data[i]!+n));data[i+1]=Math.max(0,Math.min(255,data[i+1]!+n));data[i+2]=Math.max(0,Math.min(255,data[i+2]!+n));}
+      ctx.putImageData(image,0,0);
+    }catch{/* a tainted or unavailable canvas keeps its clean surface */}
+  }
   const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new ArtifactLayoutError('unavailable')),'image/png'));
   /* The editor covers the words: under the frame line when there is one, so
      the line stays visible while you type. Each line of a field sits half its
