@@ -426,11 +426,6 @@ describe("one class, one thing", () => {
        teaches people to edit the gate. */
     const home = blocksIn("home.css").filter((b) => BARE_CLASS.test(b.selector));
     expect(home.length).toBeGreaterThan(150);
-    /* and the conditional half is really excluded: `.jar-values` is
-       re-declared inside `@media (max-width: 560px)`, which is not a
-       collision and must not be counted as one */
-    const values = home.filter((b) => b.selector === ".jar-values" && b.solo);
-    expect(values.length).toBe(1);
     expect(home.every((b) => b.line > 0)).toBe(true);
     expect(home.some((b) => b.line > 500)).toBe(true);
   });

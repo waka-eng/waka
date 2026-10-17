@@ -4,14 +4,14 @@ import {readFileSync} from 'node:fs';
 import {expect,it} from 'vitest';
 const css=readFileSync(new URL('../src/styles/chrome.css',import.meta.url),'utf8');
 
-it('uses short one-shot effects rather than continuous motion or a delayed action',()=>{
-  const effects=[...css.matchAll(/animation:jar-capture-\w+ (\d+)ms ([^;]+);/g)];
-  expect(effects).toHaveLength(3);
-  for(const effect of effects){expect(Number(effect[1])).toBeLessThanOrEqual(700);expect(effect[2]).not.toContain('infinite');}
+/* The composer's own spark and its three one-shot keyframes went with the
+   heading row that wore it (2026-10-17); what is left is the shortcut. */
+it('uses no continuous motion and parks the capture shortcut',()=>{
+  expect(css).not.toMatch(/animation:jar-capture-[^;]*infinite/);
   expect(css).toContain('.jar .jar-capture-shortcut { inset:auto; transform:none; }');
 });
 it('leaves a static spark when reduced motion is requested',()=>{
   const guard=css.match(/@media \(prefers-reduced-motion:reduce\) \{([\s\S]*?)\n\}/)?.[1]??'';
-  expect(guard).toContain('.jar-spark-core');expect(guard).toContain('.jar-composer-spark::before');
+  expect(guard).toContain('.jar-spark-core');
   expect(guard).toContain('animation:none !important');expect(guard).toContain('transition:none !important');expect(guard).toContain('transform:none !important');
 });

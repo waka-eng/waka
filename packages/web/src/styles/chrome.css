@@ -42,15 +42,10 @@
      `.jar-conversation-
        actions`, `.jar-citation-preview` (3)
 
-   AND TWO ARE DELIBERATELY STILL HERE, which is the honest half of this.
-   `.jar-home-activities` and `.jar-activity-title` dress the grid whose five
-   row classes just went out, and no `.tsx` renders either — but
-   `tools/performance/run.ts` and `tools/e2e/web-quality.ts` still NAME them
-   in their own selectors, so deleting the rules would be deleting the only
-   remaining description of a surface two harnesses are still trying to click.
-   That is a `Home.tsx` decision (the grid was replaced by
-   `.jar-personal-shortcuts`), not a stylesheet one, and the rule for this
-   sweep was: a selector is dead only when NOTHING in the tree names it. */
+   `.jar-home-activities` and `.jar-activity-title` were kept back that day
+   because `tools/e2e/web-quality.ts` still named them. That harness was
+   deleted on 2026-10-17 (it targeted the flat screens), and the two rules
+   went with it; `tools/performance/run.ts` names them only in a comment. */
 /*
  * THE FLAT SCREENS, WEARING THE WORLD'S SKIN.
  *
@@ -1368,8 +1363,6 @@ body .login-shell .login-footer {
    foot sat flush. A dead track is invisible; its gap is not. */
 .jar-panel-head { grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-8); }
 .jar-panel-when { min-width:0; overflow-wrap:anywhere; }
-.jar-audience-note { color:var(--w-muted); font-size:var(--t-ui); line-height:1.5; margin:var(--sp-8) 0; }
-.jar-composer-footer > .jar-audience-note { flex-basis:100%; margin-bottom:0; }
 @media (max-width:600px) {
   .jar-panel-head { grid-template-columns:minmax(0,1fr) auto; }
   .jar-panel-head > .jar-panel-when { grid-column:1 / -1; }
@@ -1393,10 +1386,8 @@ body .login-shell .login-footer {
 
 .jar-inspiration-composer { display: flex; flex-direction: column; width: min(640px, calc(100vw - var(--sp-44))); max-height: calc(var(--jar-vh, 100dvh) - var(--sp-44)); overflow-y: auto; padding: var(--sp-24); color: var(--w-ink); font-size: var(--t-body); text-align: left; }
 .jar-composer-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; }
-.jar-composer-heading, .jar-composer-footer { flex-shrink: 0; }
 .jar-seek.jar-inspiration-composer[data-visual-viewport],
 .jar-seek.jar-inspiration-search[data-visual-viewport],
-.jar-seek.jar-review[data-visual-viewport],
 .jar-seek.jar-principle-share[data-visual-viewport],
 .jar-seek.jar-reflect-room[data-visual-viewport] {
   position: fixed;
@@ -1404,8 +1395,6 @@ body .login-shell .login-footer {
   max-height: calc(var(--dialog-visible-height) - var(--sp-44));
   box-sizing: border-box;
 }
-.jar-composer-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
-.jar-composer-heading h2 { margin: 0; font-size: var(--t-body); font-weight: 500; }
 .jar-inspiration-composer button { min-height: var(--sp-44); min-width: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: none; color: var(--w-ink); font: inherit; font-size: var(--t-ui); cursor: pointer; }
 .jar-inspiration-composer button:disabled { opacity: .5; cursor: default; }
 /* ═══ THE NOTEPAD'S CHEVRON IS GONE, AND THIS WAS THE SURVIVING HALF ═══
@@ -1434,9 +1423,7 @@ body .login-shell .login-footer {
    `git show ea1727db:packages/web/src/styles/chrome.css`, lines 1373-1444. */
 .jar-inspiration-composer button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
 .jar-inspiration-composer .jar-composer-text { position: static; display: block; width: 100%; max-width: none; min-height: calc(var(--sp-44) * 3); max-height: calc(var(--sp-44) * 6); margin: var(--sp-12) 0; padding: var(--sp-8) 0; background: none; border: 0; border-bottom: 1px solid var(--w-muted); border-radius: 0; color: var(--w-ink); font-size: var(--t-input); line-height: 1.6; letter-spacing: normal; text-transform: none; text-align: left; resize: vertical; }
-.jar-composer-tools, .jar-composer-actions, .jar-composer-visibility { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
-.jar-composer-tools { margin-bottom: var(--sp-12); }
-.jar-inspiration-composer .jar-composer-save { background:var(--w-ink); color:var(--w-ground); border-color:var(--w-ink); }
+.jar-composer-actions { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
 .jar-composer-storage-note { color: var(--w-muted); font-size: var(--t-ui); line-height: 1.5; }
 .jar-composer-link { display: flex; gap: var(--sp-8); margin: var(--sp-12) 0; }
 .jar-composer-link input { min-width: 0; flex: 1; min-height: var(--sp-44); padding: var(--sp-8); border: 1px solid var(--w-edge); border-radius: var(--sp-8); background: transparent; color: var(--w-ink); }
@@ -1614,9 +1601,6 @@ button.jar-tile-face,
 .jar-tile--busy { opacity: 0.55; }
 .jar-recording-choice { padding-block: var(--sp-12); border-bottom: 1px solid var(--w-edge); }
 .jar-recording-choice audio { width: 100%; margin-bottom: var(--sp-12); }
-.jar-composer-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--sp-12); margin-top: var(--sp-22); }
-.jar-composer-visibility button { border-color: transparent; }
-.jar-composer-visibility button[aria-pressed="true"] { background: var(--w-raised); border-color: var(--w-muted); }
 .jar-saved-attachment { margin: var(--sp-12) 0; font-size: var(--t-ui); }
 .jar-saved-attachment img { display: block; max-width: 100%; max-height: 320px; object-fit: contain; border-radius: var(--sp-8); }
 .jar-saved-attachment audio { width: 100%; }
@@ -1630,32 +1614,7 @@ button.jar-tile-face,
 .jar-attachment-excerpt { white-space: pre-wrap; overflow-wrap: anywhere; }
 .jar-saved-attachment img { image-orientation: from-image; }
 .jar-review-backdrop { position:absolute; inset:0; z-index:7; border:0; background:rgba(0,0,0,.2); }
-.jar-seek.jar-review { box-sizing:border-box; z-index:8; width:min(640px,calc(100vw - var(--sp-44))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-44)); display:flex; flex-direction:column; color:var(--w-ink); font-size:var(--t-body); text-align:left; }
-.jar-review[aria-hidden="true"] { visibility:hidden; }
-.jar-review ~ .jar-inspiration-search { z-index:9; }
-.jar-review header,.jar-review footer { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-12); flex-wrap:wrap; flex-shrink:0; }
-.jar-review h2 { margin:0; font-size:var(--t-lead); font-weight:500; }
-.jar-review h3 { font-size:var(--t-lead); font-weight:500; }
-.jar-review button { min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8) var(--sp-12); margin:var(--sp-4); border:1px solid var(--w-edge); border-radius:var(--sp-12); background:none; color:var(--w-ink); font:inherit; font-size:var(--t-ui); cursor:pointer; }
-/* The label stays a label; see the doorway's note above for the bug this is
-   the same shape as. A sheet's verbs sit on no fill, so nothing needs dimming
-   but the ink, and `progress` is the honest cursor for a button that is busy
-   rather than forbidden. */
-.jar-review button:disabled { color:var(--w-muted); cursor:progress; }
-.jar-review button:hover:not(:disabled) { background:var(--w-raised); }
-.jar-review-card { outline:none; touch-action:pan-y pinch-zoom; }
-.jar-review-card:focus-visible { outline:1px solid var(--w-edge); outline-offset:var(--sp-4); }
 .jar-review-context { color:var(--w-muted); font-size:var(--t-ui); line-height:1.5; }
-.jar-review-item-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-8); margin-top:var(--sp-22); padding-top:var(--sp-16); border-top:1px solid var(--w-edge); }
-.jar-review-item-actions button { margin:0; font-size:var(--t-body); }
-.jar-item-actions { position:relative; margin-left:auto; font-size:var(--t-ui); }
-.jar-item-actions > summary { display:flex; align-items:center; min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8); list-style:none; color:var(--w-muted); cursor:pointer; }
-.jar-item-actions > summary::-webkit-details-marker { display:none; }
-.jar-item-actions > summary:hover,.jar-item-actions > summary:focus-visible { color:var(--w-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
-.jar-item-actions-options { display:flex; flex-wrap:wrap; gap:var(--sp-8); padding:var(--sp-4) 0; }
-.jar-review summary { min-height:var(--sp-44); cursor:pointer; }
-.jar-review footer { display:flex; flex-direction:column; align-items:stretch; gap:var(--sp-4); }
-.jar-review ul { padding-left:var(--sp-22); }
 .jar-seek.jar-reading-comparison { box-sizing:border-box; z-index:8; width:min(640px,calc(100vw - var(--sp-24))); max-height:calc(100dvh - var(--sp-24)); overflow-y:auto; overscroll-behavior:contain; padding:var(--sp-24); font-size:var(--t-body); line-height:1.6; color:var(--w-ink); text-align:left; user-select:text; touch-action:pan-y; }
 .jar-reading-comparison header { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-16); }
 .jar-reading-comparison h2,.jar-reading-comparison h3 { font:inherit; font-weight:500; }
@@ -1737,7 +1696,7 @@ button.jar-tile-face,
 .jar-share-swatch--light .jar-share-swatch-line { color:var(--moon-ground); }
 .jar-share-swatch-line--short { width:60%; }
 @media (prefers-reduced-motion: reduce) { .jar-share-look { transition:none; } }
-@media (max-width:680px) { .jar-share-columns { grid-template-columns:minmax(0,1fr); } .jar-share-preview { grid-row:1; } .jar-share-controls { grid-column:1; grid-row:2; } }.jar-review select { box-sizing:border-box; width:100%; min-height:var(--sp-44); font:inherit; font-size:var(--t-lead); color:var(--w-ink); background:var(--w-raised); border:1px solid var(--w-edge); border-radius:var(--sp-12); padding:var(--sp-12); }.jar-reflection-flow .jar-reflection-turn button { min-height: var(--sp-44); }
+@media (max-width:680px) { .jar-share-columns { grid-template-columns:minmax(0,1fr); } .jar-share-preview { grid-row:1; } .jar-share-controls { grid-column:1; grid-row:2; } }.jar-reflection-flow .jar-reflection-turn button { min-height: var(--sp-44); }
 .jar-attachment-transcript { margin-top: var(--sp-16); font-size: var(--t-ui); line-height: 1.6; }
 .jar-attachment-transcript header { display: flex; align-items: baseline; gap: var(--sp-12); }
 .jar-attachment-transcript h3 { font-size: var(--t-body); font-weight: 500; margin: 0; }
@@ -1749,7 +1708,7 @@ button.jar-tile-face,
 @media (max-width: 600px) { .jar-attachment-transcript textarea { font-size: var(--t-lead); } }
 .jar-saved-attachment a { color: var(--w-ink); overflow-wrap: anywhere; }
 .jar-saved-attachment button { min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); color: var(--w-ink); background: none; border: 1px solid var(--w-edge); border-radius: var(--sp-8); font: inherit; cursor: pointer; }
-@media (max-width: 600px) { .jar-inspiration-composer { padding: var(--sp-16); } .jar-composer-footer { align-items: stretch; flex-direction: column; } .jar-composer-actions { justify-content: flex-end; } .jar-inspiration-composer .jar-composer-text { font-size: var(--t-input); } }
+@media (max-width: 600px) { .jar-inspiration-composer { padding: var(--sp-16); } .jar-composer-actions { justify-content: flex-end; } .jar-inspiration-composer .jar-composer-text { font-size: var(--t-input); } }
 
 /* Personal actions share a readable scale; the world and its artwork stay quiet. */
 /* ═══ THE PADDING LEFT THIS LIST, AND ONLY THE PADDING ════════════════════
@@ -1829,31 +1788,19 @@ button.jar-tile-face,
 .jar-mouth-rest:not(.jar-mouth-rest--said):hover .jar-spark-rays,.jar-mouth-rest:not(.jar-mouth-rest--said):focus-visible .jar-spark-rays,.jar-mouth-rest:not(.jar-mouth-rest--said):active .jar-spark-rays,
 .jar .jar-capture-shortcut:hover .jar-spark-rays,.jar .jar-capture-shortcut:focus-visible .jar-spark-rays,.jar .jar-capture-shortcut:active .jar-spark-rays { opacity:1; transform:scale(1.12); }
 .jar-mouth-rest:not(.jar-mouth-rest--said):active .jar-spark-core,.jar .jar-capture-shortcut:active .jar-spark-core { transform:scale(1.1); }
-.jar-composer-heading h2 { display:flex; align-items:center; gap:var(--sp-8); min-width:0; }
-.jar-composer-spark { display:inline-grid; place-items:center; flex-shrink:0; width:var(--sp-24); height:var(--sp-24); position:relative; isolation:isolate; color:var(--w-warm); }
-.jar-composer-spark::before { content:""; position:absolute; inset:calc(-1 * var(--sp-12)); border-radius:50%; pointer-events:none; z-index:-1; background:radial-gradient(circle,color-mix(in srgb,var(--w-warm) 30%,transparent),transparent 70%); animation:jar-capture-light 620ms ease-out both; }
-.jar-composer-spark .jar-spark-core { animation:jar-capture-ignite 420ms ease-out both; }
-.jar-composer-spark .jar-spark-rays { animation:jar-capture-burst 620ms ease-out both; }
-@keyframes jar-capture-ignite { from { opacity:.45; transform:scale(.7); } 45% { opacity:1; transform:scale(1.15); } to { opacity:1; transform:scale(1); } }
-@keyframes jar-capture-burst { from { opacity:0; transform:scale(.35); } 30% { opacity:1; transform:scale(.9); } to { opacity:.6; transform:scale(1); } }
-@keyframes jar-capture-light { from { opacity:.1; transform:scale(.6); } 35% { opacity:.7; transform:scale(1); } to { opacity:.3; transform:scale(1.1); } }
 @media (prefers-reduced-motion:reduce) {
-  .jar-spark-core,.jar-spark-rays,.jar-composer-spark::before,
+  .jar-spark-core,.jar-spark-rays,
   .jar-mouth-rest:not(.jar-mouth-rest--said)::before,.jar .jar-capture-shortcut::before { animation:none !important; transition:none !important; transform:none !important; }
-  .jar-composer-spark::before { opacity:.3; }
 }
-.jar-values { min-height:var(--sp-44); color:var(--w-ink); --t-label-size:var(--t-body); }
-.jar-here,.jar-when,.jar-account,.jar-saved { min-height:var(--sp-44); }
+.jar-when,.jar-saved { min-height:var(--sp-44); }
 .jar-way { min-height:var(--sp-44); display:flex; align-items:center; }
 .jar-reading-actions { flex-direction:column; gap:var(--sp-4); }
 .jar-reading-heading { align-items:center; }
 .jar-reading-heading .jar-reading-changes { margin-left:auto; min-height:var(--sp-44); padding:var(--sp-8) var(--sp-4); border:0; border-radius:var(--sp-8); color:var(--w-muted); background:none; font:inherit; cursor:pointer; pointer-events:auto; }
 .jar-reading-heading .jar-reading-changes:hover,.jar-reading-heading .jar-reading-changes:focus-visible { color:var(--w-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
-.jar-home-activities { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--sp-32); margin-top:var(--sp-32); pointer-events:auto; }
 .jar-hq-inner.jar-hq-inner--compact { margin-top:calc(clamp(48px,10.6vh,72px) + env(safe-area-inset-top)); padding-top:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; pointer-events:auto; touch-action:pan-y; }
 .jar-hq-inner--compact:focus-visible { outline:1px solid var(--w-muted); outline-offset:-2px; }
-.jar-activity-title { font-size:var(--t-body); line-height:1.5; font-weight:400; overflow-wrap:anywhere; }
-@media (max-width:560px) { .jar-hq-inner.jar-hq-inner--compact { margin-top:calc(118px + env(safe-area-inset-top)); } .jar-home-activities { grid-template-columns:minmax(0,1fr); gap:var(--sp-4); margin-top:var(--sp-24); } }
+@media (max-width:560px) { .jar-hq-inner.jar-hq-inner--compact { margin-top:calc(118px + env(safe-area-inset-top)); } }
 .jar-source-details { font-size:var(--t-ui); }
 .jar-source-details summary { min-height:var(--sp-44); display:flex; align-items:center; cursor:pointer; color:var(--w-muted); }
 .jar-panel .jar-panel-foot button,.jar-panel .jar-panel-askrow button,.jar-reflection-flow button { min-height:var(--sp-44); }

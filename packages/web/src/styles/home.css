@@ -212,11 +212,7 @@
    steps. Non-interactive eyebrows still use the ten-pixel default. */
 .jar-way,
 .jar-saved,
-.jar-values,
 .jar-when,
-.jar-here,
-.jar-account,
-.jar-here-row,
 .jar-dial-stop {
   --t-label-size: var(--t-meta);
 }
@@ -1068,13 +1064,11 @@
    it would take presses meant for the orbs behind it. A target is grown
    because it is small, never because it is nearby. */
 .jar-way,
-.jar-values,
 .jar-saved,
 .jar-up {
   position: relative;
 }
 .jar-way::after,
-.jar-values::after,
 .jar-saved::after,
 .jar-up::after {
   content: "";
@@ -1082,64 +1076,6 @@
   /* from a line of text toward a finger's width, and no further: these sit
      over the field, and every pixel of halo is a pixel an orb cannot have */
   inset: -11px -12px;
-}
-
-/* ---------- what is forming overhead: philosophies and values ----------
-   Top of mind is CURRENT — what this wall is holding today. Above it is the
-   timeless half: what a person keeps coming back to whatever the day is. It
-   takes a long time to form, so for now the door is the honest part: a caret
-   and two words at the top of headquarters, in the same register as every
-   other signpost in this world, and a room above that says what will live
-   there and why it is slow.
-
-   A PLACE, NOT A TOOLTIP. A promise you can walk into and find empty is
-   honest; a promise that only exists as hover text is a roadmap. */
-.jar-values {
-  position: absolute;
-  z-index: 6;
-  left: 50%;
-  transform: translateX(-50%);
-  /* THE SAME MARGIN THE WAYS SIDEWAYS KEEP (founder, 2026-08-25: "place both
-     closer towards edge with equal margin as left and right things"). Those
-     stand 16px in from their column's edge, so this stands 16px down from the
-     top and the count stands 16px up from the dial. Four signposts, one
-     inset, measured from whatever edge each of them is nearest. */
-  top: calc(10px + env(safe-area-inset-top));
-  /* A ROW, not a column — the same construction as the count at the bottom:
-     words, then the caret that says which way they lead. */
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 1px solid var(--jar-faint);
-  border-radius: var(--sp-24);
-  margin: 0;
-  padding: 5px var(--sp-12);
-  min-height: 32px;
-  background: color-mix(in srgb,var(--jar-ink) 4%,transparent);
-  font-family: inherit;
-  /* THE SAME INK AS A WAY OUT (founder, 2026-08-25: "same font and opacity
-     as ROOM1 and the other one"). The type already matched on all four —
-     10px, 0.16em, uppercase. The COLOUR did not, and not in the direction it
-     looked: a way sideways is the QUIETEST of the four at `--jar-faint`,
-     because a later rule in this file re-states it after the block that sets
-     it muted. This sign's own words were a tier brighter (`.jar-label` paints
-     them muted) and the count was brighter still (it painted nothing and
-     inherited the world's ink). Three tiers, four signposts.
-
-     All four sit at faint now, and the parts inside inherit it rather than
-     re-declaring — which is what let them drift apart in the first place. */
-  /* the same lit tier as the count (founder, 2026-08-27: "left, top, right
-     things should all be this color as well" — pointing at the count) */
-  color: var(--jar-muted);
-  cursor: pointer;
-  pointer-events: auto;
-  transition: color 0.22s ease;
-}
-.jar-values:hover,
-.jar-values:focus-visible {
-  color: var(--jar-ink);
 }
 /* INHERIT, never re-declare. `.jar-label` paints its own colour, so a span
    wearing it inside a signpost silently overrode the sign's ink — which is
@@ -2371,44 +2307,6 @@
   gap: var(--sp-8);
   align-items: center;
 }
-.jar-back {
-  pointer-events: auto;
-  /* A <button> brings two things an <a> does not: the UA's own border, and no
-     inherited font-family. Both pills at the top of the screen wear this class
-     and both are buttons now, so the resets belong HERE rather than on
-     whichever one happened to be written first.
-     The border is not cosmetic trivia: with `box-sizing: border-box` its 2px
-     top and bottom made the account pill four pixels taller than the space
-     pill beside it, and read on screen as a stray ring around one of them. */
-  border: 0;
-  font-family: inherit;
-  text-decoration: none;
-  /* WIDER THAN THE WORDS (founder, 2026-08-25: "add more left and right
-     padding to both buttons"). A name set in tracked uppercase already carries
-     air between its letters, and at 14px of side padding the pill fit it like
-     a label rather than holding it like a control.
-     Then one step back (founder, 2026-08-27: "reduce left and right margins
-     of all the buttons by just a tiny bit") — 20 overshot into a lozenge;
-     16 still holds the word without fitting it. */
-  padding: 7px var(--sp-16);
-  min-height: 32px;
-  border-radius: 999px;
-  background: var(--jar-card);
-  transition:
-    background 0.2s ease,
-    color 0.2s ease,
-    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
-/* NO LIFT (founder, 2026-08-25: "dont change vertical placement when hovering
-   and clicking"). A one-pixel `translateY` on hover explained nothing — motion
-   explains, never decorates — and on the SPLIT pill at the top left it was
-   worse than decoration: the name and its caret are two buttons wearing this
-   class, so hovering either half lifted that half alone and the pill came
-   apart down the middle. Light does the whole job. */
-.jar-back:hover {
-  color: var(--jar-ink);
-  background: var(--jar-card-hover);
-}
 
 /* ---------- the offline marker (dev only) ----------
    Shown only while the page is drawing the fixture it falls back to when the
@@ -2427,60 +2325,6 @@
   text-wrap: balance;
   color: var(--jar-faint);
   pointer-events: none;
-}
-
-/* WHICH ROOM YOU ARE IN. Sits in the same meta register as .jar-offline
-   beside it — same padding, same alignment — because they answer the same
-   kind of question: what am I looking at. Unlike that one it IS pressable,
-   so it takes ink rather than faint, and it is the only thing in this corner
-   that responds. */
-/* WHERE YOU ARE — top left, and the way into this space's settings.
-   `pointer-events: auto` because `.jar-topbar` is a pass-through so the canvas
-   underneath stays draggable; anything in the bar that is a control has to
-   take its own events back, which is what `.jar-back` has always done. */
-.jar-here {
-  /* ONE PILL, ONE OWNER. This used to restate `.jar-back`'s padding, radius,
-     background and transition, and then set `font: inherit` — a shorthand,
-     which wiped `.jar-label`'s size, weight, tracking and uppercase, so the
-     two pills at the top of the screen were different sizes and different
-     colours while claiming to be the same control.
-
-     It wears `jar-back jar-label` now, exactly as the account link does, and
-     keeps only what a <button> needs that an <a> does not, plus the truncation
-     a space's name can require. `font-family` rather than `font`: the button
-     needs the page's face, and nothing else about the label's type. */
-  cursor: pointer;
-  max-width: 40ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* open is a state, and it reads the same way hovering does */
-.jar-here[aria-expanded="true"] {
-  color: var(--jar-ink);
-  background: var(--jar-card-hover);
-}
-
-/* THE WAY OUT, on the other side. Left is where you are, right is how you
-   leave; at opposite ends neither can hide the other, which is what happened
-   when one slot tried to be both.
-
-   NOT `.jar-out`: that name once belonged to an unrelated absolutely
-   positioned panel earlier in this file, and reusing it inherited that
-   panel's `position: absolute; left: 16px; top: 58px` and dropped this pill
-   onto a second row. The panel itself has since been removed as dead code,
-   so the collision is gone — the name stays retired anyway, because it
-   describes a slot rather than a thing.
-
-   `margin-left: auto` rather than absolute positioning: `.jar-topbar` is
-   already a flex row, so this rides its layout instead of fighting it. */
-
-.jar-account {
-  pointer-events: auto;
-  margin-left: auto;
-  align-self: flex-start;
-  flex: 0 0 auto;
 }
 
 /* ---------- this space's settings ----------
@@ -2870,60 +2714,13 @@
   will-change: opacity, transform;
   pointer-events: none;
 }
-
-/* ═══════════ THE TWO SHEETS THAT HANG OFF THE BUTTON THAT OPENED THEM ═══════
-   Founder, 2026-08-28: "when clicking on the top left and top right button,
-   those cards should just appear right below the button rather than in the
-   center."
-
-   THIS NARROWS AN EARLIER RULING RATHER THAN OVERTURNING IT. On 2026-08-25,
-   pointing at a memory's card: "all modals must be centered and have same
-   style as this one." The STYLE half stands untouched — these two still wear
-   `.jar-modal-surface`, the same ground, radius, padding and hairline as
-   every other modal, and that is the part that was actually four different
-   answers. What changes is placement, for the two sheets that belong to a
-   control rather than to the world.
-
-   And it is the right distinction. A memory's card is about a thing you
-   picked out of the field, so the middle is where your eyes already are. The
-   wall's settings and your account are about the BUTTON — they are that
-   button's contents, and a menu that opens across the room from its own
-   handle makes you re-find the thread every time.
-
-   It also removes a collision `e2e:phone` kept finding and I kept reading as
-   flake: at 390px the centred settings sheet lands on top of the centred
-   memory card, so the walk measured a memory's controls as "covered" by
-   `.jar-settings-head` — true, and only true because both wanted the middle.
-
-   THE TRANSFORM SLOT IS SPOKEN FOR, so these cannot simply drop it. The
-   entrance animates `--jar-panel-rise` as a custom property and the shared
-   block spends `transform` on the centring; an anchored sheet keeps the rise
-   and gives up only the centring.
-
-   Written after the shared block on purpose — same specificity, later wins,
-   which is the rule this file has been bitten by three times. */
-.jar-settings--at-right {
-  /* clear of the chrome row, which ends at 40px, by the same 8 the buttons
-     themselves keep from the left edge */
-  top: calc(48px + env(safe-area-inset-top));
-  transform: translateY(var(--jar-panel-rise));
-  /* on a narrow screen it stays inside the glass rather than hanging off the
-     side it is anchored to */
-  max-width: calc(100vw - 16px);
-}
-.jar-settings--at-right {
-  /* 8, measured off the account pill itself: it sits x 1300..1432 in a 1440
-     frame, so its inset from the right edge is 8 and not the 10 the four
-     signposts keep. Aligned to the button, not to a rule about edges. */
-  right: 8px;
-  left: auto;
-}
-/* AND THE THIRD SHEET IS THE DATES. Same case exactly: it belongs to the word
-   that says `now`, not to the world, so it opens under that word. The `left`
+/* THE DATES SHEET HANGS OFF ITS WORD (founder, 2026-08-28: those cards
+   "should just appear right below the button rather than in the center").
+   It belongs to the word that says `now`, not to the world, so it opens
+   under that word. The `left`
    is a placeholder — `hangRail` writes the real one inline, from the word's
    own box, because the word sits after the wall chip and moves with the
-   wall's name. `top` is the anchored sheets' own, so all three clear the
-   chrome row on the same line rather than on three guesses. */
+   wall's name. `top` clears the chrome row, which ends at 40px. */
 .jar-dial {
   top: calc(48px + env(safe-area-inset-top));
   left: var(--sp-24);
@@ -3115,15 +2912,6 @@
   min-height: 32px;
   padding: var(--sp-6) 0;
 }
-.jar-reflection-turns {
-  margin-bottom: var(--sp-16);
-  color: var(--jar-muted);
-  font-size: var(--t-ui);
-}
-.jar-reflection-turns summary {
-  cursor: pointer;
-  min-height: 32px;
-}
 .jar-reflection-turn {
   padding: var(--sp-12) 0;
   border-top: 1px solid var(--jar-panel-edge);
@@ -3236,7 +3024,6 @@
     animation: none;
     opacity: 1;
   }
-  .jar-back,
   .jar-way,
   .jar-mouth-rest,
   .jar-mouth-slot {
@@ -3546,36 +3333,9 @@
      because the 17-not-16 arithmetic applies to every 11px word this sheet
      ever grows into a touch target. */
   /* the two signposts on the vertical axis: 21px -> 27px, past WCAG's 24 */
-  .jar-values,
   .jar-saved {
     padding-top: var(--sp-8);
     padding-bottom: var(--sp-8);
-  }
-  /* the chrome pills sit at 25-26px and already clear 24; `.jar-here-more` is
-     the one under it on the short axis, at 42px wide */
-  .jar-here-more {
-    padding-left: var(--sp-20);
-    padding-right: var(--sp-20);
-  }
-  /* AND THE TWO HALVES OF THE SPLIT HAVE TO BE APART FROM EACH OTHER.
-     Sizing a target is only half of 2.5.8; the other half is that two targets
-     under 44px must not sit inside 44px of each other, because then one of
-     them absorbs the misses meant for the other. These two are different
-     acts — the left opens THIS wall's settings, the right opens the list of
-     other walls — so a thumb that misses the caret lands in settings, which
-     is not a near miss, it is a different place.
-
-     They were far enough apart until the founder ruled the pills should
-     breathe in ("reduce left and right margins of all the buttons by just a
-     tiny bit", 2026-08-27). That took `.jar-back` from 20px of side padding
-     to 16, which is right, and took 8px off the width of each of these two,
-     which nobody was watching: their centres closed from 50px to 42. The
-     ruling stands exactly as made — on a desktop nothing here moves — and
-     the thumb gets the six pixels back. `e2e:phone` found it, four commits
-     and one whole day after the change that caused it, because it was not in
-     CI. It is now. */
-  .jar-here-split {
-    gap: 6px;
   }
 }
 
@@ -3654,40 +3414,6 @@
    The count at the bottom is untouched — it has that edge to itself at every
    width. */
 @media (max-width: 560px) {
-  .jar-values {
-    /* 16px clear of the chrome row, which ends at 40px — the same inset the
-       four signposts keep from whatever edge each is nearest. It was 8, which
-       is not an inset, it is a near miss: the signpost read as attached to the
-       chrome above it rather than as its own thing. */
-    top: calc(56px + env(safe-area-inset-top));
-    /* AND IT IS CENTRED, LIKE THE COUNT IT IS THE OTHER HALF OF.
-       Founder, 2026-09-08: "philosophies and value is not centered."
-
-       WHAT WAS HERE BEFORE, AND WHY IT WENT. On 2026-08-28 the same founder
-       said "so ugly" over two phone screenshots, and this rule answered by
-       pinning the signpost to the column's left edge at x 8 so its words
-       lined up with the claim's first letter. The reasoning was that a
-       centred label over a full-width claim is two alignment systems
-       stacked. That reasoning was measured on a wall with NOTHING on it —
-       one short italic line hanging at the far edge — and it does not
-       survive a wall that has a claim on it: with three full lines of poster
-       under it, the signpost stopped reading as the claim's label and
-       started reading as the only thing on the top half of the screen that
-       had slipped.
-
-       The pair is the argument. `.jar-values` and `.jar-saved` are one axis
-       — the way up and the count, top and bottom — and the block at 2966
-       already treats them as one thing. The count is centred at every width.
-       Left-aligning only the top of that pair is the asymmetry the founder's
-       eye caught, and centring is what makes them a pair again.
-
-       WHAT IS KEPT. The step DOWN to its own line, which is what actually
-       fixed the defect the phone walk found in August: at 390px the four
-       controls along the top edge cannot share a line, and a centred
-       signpost up there intercepted the pointer for `.jar-when`. That was
-       never solved by moving left — it was solved by `top` above. `e2e:phone`
-       hit-tests every control's own centre and is the proof. */
-  }
   /* AND THE COLUMN MAKES ROOM FOR THE SIGNPOST THAT STEPPED INTO IT.
      `.jar-hq-inner` pads 72px from the top, and that number was set for a
      desktop, where `.jar-values` floats at 10px — far above the column, with
@@ -4057,59 +3783,6 @@
   color: var(--jar-ink);
 }
 
-.jar-here-split {
-  position: relative;
-  display: inline-flex;
-  align-items: stretch;
-  pointer-events: auto;
-}
-.jar-here-split .jar-here {
-  border-radius: 999px 0 0 999px;
-  padding-right: var(--sp-8);
-}
-.jar-here-more {
-  border-radius: 0 999px 999px 0;
-  /* WIDER AND BIGGER (founder, 2026-08-25). A 9px glyph in a narrow well read
-     as a smudge beside a name set at label size — it is the control that opens
-     every other wall, and it was the smallest mark on the bar. */
-  padding: var(--sp-6) var(--sp-18) var(--sp-6) var(--sp-16);
-  font-size: var(--t-meta);
-  box-shadow: inset 1px 0 0 0 var(--jar-panel-edge);
-}
-/* `.jar-here-list` WAS THE SHEET THESE ROWS HUNG IN, and nothing renders it:
-   the rows are in the menu's own surface now. They keep their rules because
-   `.jar-here-row` is still worn — the container died and its contents did
-   not, which is the opposite of the usual way a component goes. */
-.jar-here-row {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: none;
-  padding: 7px var(--sp-12);
-  min-height: 32px;
-  border-radius: 9px;
-  text-align: left;
-  white-space: nowrap;
-  color: var(--jar-muted);
-  cursor: pointer;
-  pointer-events: auto;
-}
-.jar-here-row:hover,
-.jar-here-row:focus-visible {
-  background: var(--jar-row-hover);
-  color: var(--jar-ink);
-  outline: none;
-}
-/* AND `add new` IS QUIETER THAN A WALL THAT EXISTS — which it was not, for as
-   long as this rule sat 2,560 lines ABOVE the base class it modifies. Same
-   specificity, and `.jar-here-row` wrote `color` later, so the modifier lost
-   every time and the way to make a place read exactly as loud as the places
-   you already have. A modifier belongs beside what it modifies; written far
-   from it, nothing about either rule looks wrong. */
-.jar-here-row--make {
-  color: var(--jar-faint);
-}
-
 /* ================= the mouth is chrome, not a form =================
    THE LAYER COLLISION THAT SURVIVED THREE ATTEMPTED FIXES.
 
@@ -4260,11 +3933,6 @@
    * own reading step and `--jar-faint`, which is the tier reserved for text
    * that is present without being read — exactly what a placeholder is.
    */
-  /* The heading row is gone from the markup; this stays for the moment a
-     restored draft still carries one in a cached bundle. */
-  .jar-inspiration-composer .jar-composer-heading {
-    display: none;
-  }
 
   /**
    * ═══ THE TOP OF THE NOTE — three corners, no bar ═══════════════════════
