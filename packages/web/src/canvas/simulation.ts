@@ -1101,6 +1101,16 @@ export interface SimulationOptions {
   panelArrowRef: MutableRefObject<(dir: -1 | 1) => boolean>;
   /** The camera came to rest on a wall — the loop's opinion, pushed to React. */
   pushArrivedRef: MutableRefObject<(wall: Space) => void>;
+  /**
+   * The world came to REST — the loop's own moving/still edge, pushed to
+   * React. Arrival is one kind of rest, but not the only one: an aim up to
+   * the top or down to the ground ends on the SAME wall, and nothing about
+   * it changes `atWall`. A first-load bundle that finished while the camera
+   * was aiming waited for an arrival that never came, and the wall stayed
+   * empty over a reading the server had returned (retro review of #436,
+   * 2026-10-17). This is the moment it may land instead.
+   */
+  pushRestedRef: MutableRefObject<() => void>;
   /* THREE OF THE NINE THINGS THE LOOP ASKED SOMEBODY ELSE TO DO WERE ABOUT
      ROOMS, AND ALL THREE ARE GONE. `loadGroupRef` fetched a room's board and
      ground as travel toward it began; `openGroupMemberRef` opened one
@@ -1209,6 +1219,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     panelArrowRef,
     parkedRef,
     pushArrivedRef,
+    pushRestedRef,
     sayLineRef,
     sayLineKeyRef,
     selectedIdRef,
@@ -1545,6 +1556,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         cam.aiming = false;
       }
     }
+
+    /** Whether the last frame was moving — the edge `pushRestedRef` fires on. */
+    let wasMoving = false;
 
     /** Which one-time hints have already been said, so they are said once. */
     const hinted = {
@@ -5021,6 +5035,17 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
 
       draw(now);
       syncDom();
+
+      /* THE MOVING/STILL EDGE, said once per stop. Moving is what
+         `navigationState()` calls moving — a trip or an aim — plus a finger
+         still down or a snap still owed, because a release is followed by
+         the settle onto a section and the world is not at rest until that
+         has ended too. One comparison a frame; it fires on the frame motion
+         ends, wherever it ended: arrival, an aim's commit, an aim a touch
+         interrupted and a release that needed no snap. */
+      const movingNow = trip.active || cam.aiming || gesture.down || gesture.snapAt > 0;
+      if (wasMoving && !movingNow) pushRestedRef.current();
+      wasMoving = movingNow;
 
       /* The field drifts continuously, so there is no longer an idle state to
          fall into while it is visible: the loop rests only when the document

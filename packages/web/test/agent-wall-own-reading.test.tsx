@@ -33,7 +33,9 @@ const AGENT_NEWER = vi.hoisted(() => 'A later thought the agent has not pinned.'
 /* A REAL AGENT ('agent-held') for the cases that need its reading to be
    pending, to fail, or to be honestly empty — and the reader's language. */
 const HOLD = vi.hoisted(() => ({
-  on: false, reading: 'hang' as 'hang' | 'fail' | 'empty' | 'board', locale: 'en-US' as 'en-US' | 'ko-KR',
+  on: false, reading: 'hang' as 'hang' | 'fail' | 'empty' | 'board' | 'defer', locale: 'en-US' as 'en-US' | 'ko-KR',
+  /* 'defer': the reading waits until the test says so, through this */
+  release: null as null | (() => void),
 }));
 
 vi.mock('../src/lib/api/principles', async original => ({
@@ -55,6 +57,10 @@ vi.mock('../src/lib/data', async original => {
     loadTopOfMind: async (profile?: string) =>
       HOLD.on && profile === 'agent-held'
         ? HOLD.reading === 'hang' ? new Promise<never>(() => {})
+          : HOLD.reading === 'defer'
+            ? new Promise<ReturnType<typeof board>>((resolve) => {
+                HOLD.release = () => resolve(board([entry('agent-newer', AGENT_NEWER, false, 1), entry('agent-lead', AGENT_SAYS, true, 3)]));
+              })
           : HOLD.reading === 'fail' ? Promise.reject(new Error('reading unavailable'))
           : HOLD.reading === 'empty' ? null
           : board([entry('agent-newer', AGENT_NEWER, false, 1), entry('agent-lead', AGENT_SAYS, true, 3)])
@@ -80,7 +86,7 @@ vi.mock('../src/lib/auth-context', async original => {
 let world: MountedWorld;
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
-afterEach(() => { world?.unmount(); vi.useRealTimers(); Object.assign(HOLD, { on: false, reading: 'hang', locale: 'en-US' }); });
+afterEach(() => { world?.unmount(); vi.useRealTimers(); Object.assign(HOLD, { on: false, reading: 'hang', locale: 'en-US', release: null }); });
 
 async function settle() {
   for (let turn = 0; turn < 12; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
@@ -172,4 +178,32 @@ it("says an empty agent's resting line in Korean to a Korean reader", async () =
   await settle();
   expect(world.audit().wallKind).toBe('agent');
   expect(bubble()?.querySelector('.jar-char-bubble-reading')?.textContent?.trim()).toBe('아직 아무것도 만들어 내지 못했어요');
+});
+
+/* ═══ A FIRST LOAD THAT FINISHES MID-AIM LANDS WHEN THE AIM ENDS ═══════════
+   Landing waits for rest, and the only rest it used to hear about was an
+   ARRIVAL. Aiming down to the ground and back up stops on the same wall, so
+   `atWall` never changes: the reading that came back mid-aim sat pending and
+   the wall stayed silent over it (retro review of #436, 2026-10-17). */
+it("lands an agent's first load that finished while the camera was aiming", async () => {
+  Object.assign(HOLD, { on: true, reading: 'defer' });
+  world = await mountWorld(FACTS); await settle();
+  await act(async () => { face('My agent')!.click(); });
+  await settle();
+  expect(world.audit().wallKind).toBe('agent');
+  expect(bubble(), 'the reading was released before the test released it').toBeNull();
+  expect(HOLD.release, 'the agent\'s reading was never asked for').toBeTruthy();
+
+  const sim = (window as unknown as { wakaSim: () => { toGround(): void; toTop(): void; navigationState(): { moving: boolean } } }).wakaSim()!;
+  await act(async () => { sim.toGround(); });
+  await world.step(2);
+  expect(sim.navigationState().moving, 'the aim had already ended — this would test arrival, not rest').toBe(true);
+  /* the reading arrives WHILE THE CAMERA IS AIMING, so it cannot land yet */
+  await act(async () => { HOLD.release!(); await Promise.resolve(); });
+  await settle();
+  await act(async () => { sim.toTop(); });
+  await settle();
+  expect(world.audit().wallKind, 'the aim crossed walls — this would test arrival, not rest').toBe('agent');
+  expect(bubble()?.querySelector('.jar-char-bubble-reading')?.textContent?.trim(),
+    'a first load that finished mid-aim never landed on the wall it was standing on').toBe(AGENT_SAYS);
 });
