@@ -20,6 +20,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const WRITE = vi.hoisted(() => ({
   settle: null as null | { resolve: () => void; reject: (error: unknown) => void },
+  all: [] as Array<{ resolve: () => void; reject: (error: unknown) => void }>,
 }));
 
 vi.mock("../src/lib/api", async (importOriginal) => {
@@ -29,6 +30,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     updateInspiration: () =>
       new Promise((resolve, reject) => {
         WRITE.settle = { resolve: () => resolve(null), reject };
+        WRITE.all.push(WRITE.settle);
       }),
   };
 });
@@ -59,6 +61,7 @@ function Harness() {
 
 beforeEach(async () => {
   WRITE.settle = null;
+  WRITE.all = [];
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement("div");
   document.body.append(host);
@@ -98,4 +101,21 @@ it("still answers the edit it was pressed on", async () => {
   await act(async () => WRITE.settle!.resolve());
 
   expect(editing.open).toMatchObject({ id: "a", saving: false, saved: true });
+});
+
+it("ignores an earlier keep's late answer to the same words, and applies the newer keep's own", async () => {
+  /* Keep, leave, reopen the same memory, keep again: kind, id and `saving`
+     all match, so only the keep's own number tells the two answers apart. */
+  await act(async () => editing.begin("memory", "a", "first words"));
+  await act(async () => editing.keep());
+  await act(async () => editing.leave());
+  await act(async () => editing.begin("memory", "a", "second words"));
+  await act(async () => editing.keep());
+  const [first, second] = WRITE.all;
+
+  await act(async () => first!.resolve());
+  expect(editing.open, "the first keep's answer stamped the second").toMatchObject({ text: "second words", saving: true, saved: false });
+
+  await act(async () => second!.resolve());
+  expect(editing.open).toMatchObject({ text: "second words", saving: false, saved: true });
 });

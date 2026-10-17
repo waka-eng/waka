@@ -182,6 +182,11 @@ export function useEditing(deps: EditingDeps): Editing {
   /* The draft, again, where a callback can reach it. Written by `put` and by
      nothing else, so it cannot fall behind the state it mirrors. */
   const heldRef = useRef<OpenEdit | null>(null);
+  /* Which keep is the current one. Kind, id and `saving` cannot tell two
+     keeps of the SAME words apart — leave, reopen, keep again — so a late
+     answer to the first would stamp the second `saved` before its own write
+     had landed. Each keep takes a number; only the newest one's answer acts. */
+  const keepToken = useRef(0);
   const put = useCallback((next: OpenEdit | null) => {
     heldRef.current = next;
     setOpen(next);
@@ -225,6 +230,7 @@ export function useEditing(deps: EditingDeps): Editing {
     if (text === "") return;
     const d = depsRef.current;
     put({ ...held, saving: true });
+    const token = ++keepToken.current;
     /**
      * THE BEAT BETWEEN WRITTEN AND GONE.
      *
@@ -244,6 +250,7 @@ export function useEditing(deps: EditingDeps): Editing {
        closing a draft mid-sentence. `begin` always opens with `saving: false`,
        so a fresh edit of the same thing is not mistaken for this one either. */
     const ours = (still: OpenEdit | null): still is OpenEdit =>
+      token === keepToken.current &&
       still !== null && still.kind === held.kind && still.id === held.id && still.saving;
     const done = () => {
       const still = heldRef.current;
