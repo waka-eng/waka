@@ -157,13 +157,16 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
 
   /* GROUND: a night that is a little lighter at the top, or warm paper. */
   const ground=ctx.createLinearGradient(0,0,0,height);
-  ground.addColorStop(0,dark?ink.night0:ink.paper0);ground.addColorStop(1,dark?ink.night1:ink.paper1);
+  /* The top of mind sits on the home screen's own night (sampled: 7,13,22 at
+     the top to 2,4,9 at the edges); the other cards keep theirs. */
+  const homeNight=content.kind==='topOfMind'&&dark;
+  ground.addColorStop(0,homeNight?'#070d16':dark?ink.night0:ink.paper0);ground.addColorStop(1,homeNight?'#02040a':dark?ink.night1:ink.paper1);
   ctx.fillStyle=ground;ctx.fillRect(0,0,width,height);
 
   /* THE CREATURE'S PLACE, measured before the words so they fit above it. */
-  const being=Math.round(content.format==='portrait'?250:200);
+  let being=Math.round(content.format==='portrait'?250:200);
   let beingTop=height-margin-64-being;
-  const beingLeft=(width-being)/2;
+  let beingLeft=(width-being)/2;
   /* DUST, on the night only: the faint specks the home screen's sky is made
      of, seeded so the same card always has the same sky. */
   if(dark){
@@ -212,7 +215,7 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
   const inset=held?112:margin;
   const pad=held?64:56;
   let bubbleW=width-inset*2;const textW=bubbleW-pad*2;
-  const sizeMax=held?48:66,sizeMin=held?28:36,leading=spoken?1.4:held?1.42:1.32;
+  const sizeMax=held?48:66,sizeMin=held?28:36,leading=spoken?18.85/13:held?1.42:1.32;
   const photo=content.photo&&content.photo.width>0&&content.photo.height>0?content.photo:null;
   const photoH=photo?Math.round(Math.min((bubbleBottomMax-bubbleTop)*0.42,textW*photo.height/photo.width)):0;
   const photoSpace=photo?photoH+36:0;
@@ -220,24 +223,39 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
   let selected:{size:number;height:number;items:Array<{lines:string[];label?:string;date?:string}>}|null=null;
   let said:{s:number;padTop:number;padBottom:number;padX:number;frameSize:number;frameH:number;gap:number}|null=null;
   if(spoken){
-    for(let size=40;size>=24;size-=2){
-      const s=size/13,padX=Math.round(16*s),padTop=Math.round(12*s),padBottom=Math.round(12*s),gap=Math.round(6*s);
-      const frameSize=Math.round(12*s),frameH=frame?Math.round(frameSize*1.4):0;
-      const maxText=width-inset*2-padX*2;
-      ctx.font=`400 ${size}px ${family}`;
-      const items=content.items.map(item=>({...item,lines:wrapArtifactText(item.text,maxText,value=>ctx.measureText(value).width)}));
-      const widest=Math.max(...items.flatMap(item=>item.lines.map(line=>ctx.measureText(line).width)));
-      ctx.font=`400 ${frameSize}px ${family}`;
-      const frameW=frame?ctx.measureText(frame).width:0;
-      const textH=items.reduce((sum,item)=>sum+item.lines.length*size*leading,0);
-      const h=padTop+(frame?frameH+gap:0)+textH+padBottom;
-      if(h<=bubbleBottomMax-bubbleTop&&frameW<=maxText){
-        selected={size,height:textH,items};
-        said={s,padTop,padBottom,padX,frameSize,frameH,gap};
-        bubbleW=Math.ceil(Math.max(widest,frameW))+padX*2;
-        break;
-      }
-    }
+    /* ═══ THE HOME SCREEN, SCALED — NOT RE-DESIGNED ═══════════════════
+       Founder, 2026-10-16, of the first attempt: "definitely not the same
+       … I want the exact ratio of the character and the speech bubble,
+       like just copy and paste exactly what it is in there." Measured off
+       the live home screen at 1:1 (CSS px): the bubble is 352 wide, its
+       words wrap at 320 in 13px on 18.85px lines under a 12px frame line
+       18px tall, padding 12/16/10, a 6px gap; the tail's tip is 6 below
+       the bubble; the creature's body begins 26 below that tip and is 107
+       wide. One factor `k` carries every one of those onto the card, so
+       the line breaks, the bubble's proportions and the creature's size
+       beside it are the home screen's, only larger. */
+    const H={bubbleMax:352,wrap:320,size:13,line:18.85,frame:12,frameLine:18,padTop:12,padX:16,padBottom:10,gap:6,tail:6,toBody:26,body:107};
+    ctx.font=`400 ${H.size}px ${family}`;
+    const homeItems=content.items.map(item=>({...item,lines:wrapArtifactText(item.text,H.wrap,value=>ctx.measureText(value).width)}));
+    const homeWidest=Math.max(...homeItems.flatMap(item=>item.lines.map(line=>ctx.measureText(line).width)));
+    ctx.font=`400 ${H.frame}px ${family}`;
+    const homeFrameW=frame?ctx.measureText(frame).width:0;
+    const homeW=Math.min(H.bubbleMax,Math.ceil(Math.max(homeWidest,homeFrameW))+H.padX*2);
+    const lineCount=homeItems.reduce((sum,item)=>sum+item.lines.length,0);
+    const homeBubbleH=H.padTop+(frame?H.frameLine+H.gap:0)+lineCount*H.line+H.padBottom;
+    /* The creature, in its drawing box: the body is ~0.855 of the box wide
+       and its visible top ~0.17 of the box down (measured on this renderer). */
+    const homeBeing=H.body/0.855;
+    const homeGroupH=homeBubbleH+H.tail+H.toBody+homeBeing*0.8;
+    const room={top:margin+proofSpace,bottom:height-margin-40};
+    const k=Math.min(2.6,(width-margin*2)/homeW,(room.bottom-room.top)/homeGroupH);
+    if(k<1.2)throw new ArtifactLayoutError('too_long');
+    const size=H.size*k;
+    selected={size,height:lineCount*H.line*k,items:homeItems};
+    said={s:k,padTop:H.padTop*k,padBottom:H.padBottom*k,padX:H.padX*k,frameSize:H.frame*k,frameH:frame?H.frameLine*k:0,gap:H.gap*k};
+    bubbleW=Math.round(homeW*k);
+    being=Math.round(homeBeing*k);
+    beingLeft=(width-being)/2;
   }else{
     for(let size=sizeMax;size>=sizeMin;size-=2){
       ctx.font=`${wordWeight} ${size}px ${family}`;
@@ -252,12 +270,25 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
      card. Anchored to the foot, a short sentence on the tall card left half
      the picture empty above it; the pair is lifted by a little under half
      the room left over, so it sits just below centre, where the eye rests. */
-  const free=Math.max(0,bubbleBottomMax-bubbleH-bubbleTop);
-  const lift=Math.round(free*0.45);
-  beingTop-=lift;
-  const bubbleY=bubbleBottomMax-bubbleH-lift;
+  let bubbleY:number;
+  if(said){
+    /* The home group — bubble, tail, gap, creature — centred in the room
+       between the date line and the mark. */
+    const k=said.s,groupH=bubbleH+(6+26)*k+being*(0.8-0.17);
+    const roomTop=margin+proofSpace,roomBottom=height-margin-40;
+    bubbleY=Math.round(roomTop+Math.max(0,(roomBottom-roomTop-groupH)/2));
+    beingTop=Math.round(bubbleY+bubbleH+(6+26)*k-being*0.17);
+  }else{
+    const free=Math.max(0,bubbleBottomMax-bubbleH-bubbleTop);
+    const lift=Math.round(free*0.45);
+    beingTop-=lift;
+    bubbleY=bubbleBottomMax-bubbleH-lift;
+  }
   /* its light, laid on the ground before the bubble and the body */
-  const glow=ctx.createRadialGradient(width/2,beingTop+being*0.55,being*0.2,width/2,beingTop+being*0.55,being*2.1);
+  /* The home glow is tight: bright to about one body-width from the
+     creature and gone by one and a half; the card used to spread it twice
+     as far. */
+  const glow=ctx.createRadialGradient(width/2,beingTop+being*0.55,being*0.2,width/2,beingTop+being*0.55,being*(said?1.35:2.1));
   glow.addColorStop(0,`rgba(${ink.glow},${dark?0.34:0.55})`);glow.addColorStop(0.45,`rgba(${ink.glow},${dark?0.1:0.2})`);glow.addColorStop(1,`rgba(${ink.glow},0)`);
   ctx.fillStyle=glow;ctx.fillRect(0,0,width,height);
   const bx0=said?Math.round((width-bubbleW)/2):inset;
