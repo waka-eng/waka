@@ -103,6 +103,16 @@ it('opens your own material over a world that never leaves, and the world is one
   expect(new URLSearchParams(location.search).get('open')).toBe('conversations');
 });
 
+/* Audit f2afcbe2: the first Tab stops landed on a "Details" button inside the
+   height-zero band, with nothing on screen to show where focus went. */
+it('takes the collapsed band out of focus order while it yields to the creature',async()=>{
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
+  const yielded=[...world.container.querySelectorAll<HTMLElement>('.jar-hq-inner--yielded')];
+  expect(yielded.length).toBeGreaterThan(0);
+  for(const band of yielded){expect(band.hasAttribute('inert')).toBe(true);expect(band.getAttribute('aria-hidden')).toBe('true');}
+  for(const band of world.container.querySelectorAll<HTMLElement>('.jar-hq-inner:not(.jar-hq-inner--yielded)'))expect(band.hasAttribute('inert')).toBe(false);
+});
+
 it('offers places in the dock, and nothing that is already on the screen',async()=>{
   /* THE FOUR RUNGS ACROSS THE TOP ARE GONE. Founder: "have a bottom navbar."
      Two of those four named rooms a person is already standing in — claims

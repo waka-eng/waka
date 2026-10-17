@@ -7690,6 +7690,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                        it stays and the agent's bubble steps out instead (code
                        review round 2, 2026-10-16). */
                     ref={w.kind === "self" ? measured.hqInner : undefined}
+                    /* A COLLAPSED BAND IS UNSEEN, SO IT IS UNREACHABLE TOO.
+                       Height zero hid its contents from the eye but not from
+                       Tab or a screen reader: the audit at f2afcbe2 tabbed
+                       onto a "Details" button inside it with nothing on
+                       screen to show where focus had gone. `inert` takes the
+                       whole band out of focus order and the accessibility
+                       tree while it yields (React 18 has no typed prop for
+                       it, hence the spread of a plain attribute). */
+                    {...(here&&(w.kind==='self'||(w.kind==='agent'&&atNow))&&!mouthOpen ? { inert: '', 'aria-hidden': true } : {})}
                   >
                     {/* R01 makes the personal reading explicit while keeping
                         the existing field, headline and companion layout. */}
@@ -8166,7 +8175,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         progress keeps them mounted regardless: a control that
                         vanished mid-work would take its own progress report
                         with it. */}
-                    {here && w.kind === 'self' && !showHomeProcessing && !reflectOpen && !editing.open ? sourceNotice : null}
+                    {/* Only while the band is open (`mouthOpen`): on the
+                        yielded band "Saved. WAKA will revisit this…" was
+                        rendered at height zero, unseen. The save is already
+                        confirmed where the eye is — the creature's own "I'm
+                        inspired!" in the bubble. */}
+                    {here && w.kind === 'self' && mouthOpen && !showHomeProcessing && !reflectOpen && !editing.open ? sourceNotice : null}
                     {here && w.kind === "self" && !offline && !lead && readingMessage ? (
                       <p className="jar-board-acts jar-reading-status" role="status" data-jar-chrome="1">
                         {readingMessage === "worldReadingSupportChanged" ? null : say(readingMessage)}
