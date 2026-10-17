@@ -169,6 +169,16 @@ it('leaves another open tab’s draft alone when this tab sends',async()=>{
   await type('Words in this tab');await click('Send');
   expect(readConversationDrafts(scope,id).map(row=>row.value.content)).toEqual(['Words in the other tab']);
 });
+it('clears a closed session’s draft once its words are sent from a new tab',async()=>{
+  /* Coming back tomorrow is a new tab and a new writer. The draft restored
+     from yesterday is forked on the first keystroke; once the fork is sent,
+     yesterday's copy is the same words already sent, and nothing open is
+     still writing it — `pagehide` is the old tab letting go of its lease. */
+  await mount();await type('Words from yesterday');await act(async()=>root.unmount());
+  window.dispatchEvent(new Event('pagehide'));sessionStorage.clear();root=createRoot(host);await mount();
+  await type('Words from yesterday, finished');await click('Send');
+  expect(readConversationDrafts(scope,id),'the closed tab’s copy came back as unsent').toEqual([]);
+});
 it('never restores another account’s draft',async()=>{
   await mount();await type('PRIVATE_DRAFT');await mount(id,{...scope,accountId:'different-account'});
   expect(host.querySelector('textarea')!.value).toBe('');expect(host.textContent).not.toContain('PRIVATE_DRAFT');

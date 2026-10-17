@@ -100,7 +100,7 @@ import {FileRefused,MAX_MESSAGE_ATTACHMENTS,fileSizeWords,inspectAttachmentFile}
 import {attachmentLabel} from '../lib/attachment-label';
 import {inspectInspirationPhoto,PhotoRefused} from '../lib/inspiration-photo';
 import {formatMessage,type MessageKey} from '../lib/locales';
-import {tabWriterId} from '../lib/tab-writer';
+import {tabWriterId,writerIsLive} from '../lib/tab-writer';
 
 /** The id `Home` gives the bar's middle group on a chat; see `toolsSlot`. */
 export const CHAT_TOOLS_SLOT='waka-chat-tools';
@@ -174,6 +174,13 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      writing its own draft in place; another tab still forks. */
   const [tabWriter]=useState(tabWriterId);
   const conversationRef=useRef<ApiConversation|null>(initial),writer=useRef(tabWriter),receipt=useRef<StoredConversationDraft>();
+  /* THE DRAFTS THIS ONE FORKED FROM. Editing a draft another writer left
+     forks it under a new key, and once the fork is sent the original is the
+     same words, already sent — restored as unsent by the next visit if it
+     stays. It is cleared with the fork, but ONLY if no open tab is still
+     writing as its writer (`writerIsLive`): a draft from a tab that is still
+     open is that tab's unsent words, not a leftover. */
+  const forkedFrom=useRef<StoredConversationDraft[]>([]);
   const [generationEnabled,setGenerationEnabled]=useState<boolean|null>(initial?.generationEnabled??null);
   const root=useRef<HTMLElement>(null),body=useRef<HTMLDivElement>(null),editor=useRef<HTMLTextAreaElement>(null),nearBottom=useRef(true);
   const restoredScroll=useRef<{top:number;nearBottom:boolean;messageWindowStart?:number}|null>(null),scrollKey=profileStorageKey(scope,`conversationScroll:${journal}`)!;
@@ -216,7 +223,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     try{if(owner.signal.aborted)throw new Error('Conversation request stopped');const value=await Promise.race([work(request.signal),canceled]);if(request.signal.aborted||owner.signal.aborted)throw new Error('Conversation request stopped');return value;}
     finally{window.clearTimeout(timer);owner.signal.removeEventListener('abort',abort);request.signal.removeEventListener('abort',stopped);}
   };
-  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{receipt.current=storeConversationDraft(scope,journal,next,receipt.current);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
+  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{const previous=receipt.current;receipt.current=storeConversationDraft(scope,journal,next,previous);if(previous&&previous.key!==receipt.current.key)forkedFrom.current.push(previous);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
   const observe=(next:ApiConversation)=>{
     if(conversationRef.current?.id===next.id&&conversationRef.current.profileId===next.profileId&&conversationRef.current.revision>next.revision)next=conversationRef.current;
     conversationRef.current=next;setConversation(next);setGenerationEnabled(next.generationEnabled??false);
@@ -228,7 +235,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        forever the day the copy drifted.) */
     const pending=draftRef.current;
     if(pending?.pending&&next.messages.some(message=>message.id===pending.id)){
-      try{if(receipt.current)clearConversationDraft(receipt.current);}catch{setStorageFailed(true);}
+      try{if(receipt.current)clearConversationDraft(receipt.current);for(const row of forkedFrom.current)if(row.value.writer!==writer.current&&!writerIsLive(row.value.writer))clearConversationDraft(row);}catch{setStorageFailed(true);}
+      forkedFrom.current=[];
       receipt.current=undefined;draftRef.current=null;setDraft(null);setError(null);
       if(!id){onCreated?.(next);onChoose(next.id);}
     }
@@ -328,7 +336,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     }catch{if(mine(owner))setEarlierFailed(true);}finally{if(mine(owner))setEarlierBusy(false);}
   };
   useEffect(()=>{
-    lifecycle.current=new AbortController();
+    lifecycle.current=new AbortController();forkedFrom.current=[];
     /* THE NEWEST UNSENT SENTENCE, WITHOUT ASKING WHICH. Two tabs each fork
        their own draft and both are still on disk; what went is the `<select>`
        that offered them to you by their first fifty characters, which is a

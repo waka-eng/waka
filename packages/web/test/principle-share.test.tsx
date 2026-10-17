@@ -82,6 +82,14 @@ it('leaves another open tab’s card draft alone when this tab discards',async()
   await act(async()=>button('Discard draft').click());
   expect(readPrincipleArtifactDrafts(scope,id).map(row=>row.value.entries[0].text)).toEqual(['Card words in the other tab']);
 });
+it('clears a closed session’s card draft when a new tab discards its fork',async()=>{
+  await mount();await type('Card words from yesterday');await act(async()=>root.unmount());
+  window.dispatchEvent(new Event('pagehide'));sessionStorage.clear();root=createRoot(host);await mount();
+  await type('Card words from today');
+  vi.spyOn(window,'confirm').mockReturnValue(true);
+  await act(async()=>button('Discard draft').click());
+  expect(readPrincipleArtifactDrafts(scope,id),'the closed tab’s card came back').toEqual([]);
+});
 it('never enables export from a late preview of earlier wording',async()=>{
   let resolve!:(value:Awaited<ReturnType<typeof renderShareCard>>)=>void;
   vi.mocked(renderShareCard).mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));await mount();await settle();
