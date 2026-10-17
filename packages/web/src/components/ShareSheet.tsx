@@ -197,7 +197,10 @@ export function ShareSheet({ target, name, locale, onClose }: {
     top: `${(layout.bubble.y / layout.height) * 100}%`,
     width: `${(layout.bubble.w / layout.width) * 100}%`,
     height: `${(layout.bubble.h / layout.height) * 100}%`,
-    padding: `${cq(layout.text.y - layout.bubble.y, layout.width)} ${cq(layout.text.x - layout.bubble.x, layout.width)}`,
+    /* The canvas sets each line from its top; a field adds half the leading
+       above the first line, so the top padding gives that half back and the
+       words do not jump when the field takes over. */
+    padding: `${cq(layout.text.y - layout.bubble.y - ((layout.text.leading - 1) * layout.text.size) / 2, layout.width)} ${cq(layout.text.x - layout.bubble.x, layout.width)}`,
     borderRadius: cq(layout.bubble.radius, layout.width),
     fontFamily: layout.text.family,
     fontWeight: layout.text.weight,
