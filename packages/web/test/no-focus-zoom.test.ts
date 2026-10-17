@@ -79,15 +79,55 @@ function fieldClasses(): Set<string> {
   return out;
 }
 
+/** Every custom property any stylesheet defines, by name — so a size that
+    names a token is read through to what the token says. */
+function tokens(): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const f of readdirSync(dir).filter((n) => n.endsWith('.css')))
+    for (const m of blank(read(f)).matchAll(/(--[\w-]+)\s*:\s*([^;{}]+)/g)) if (!out.has(m[1]!)) out.set(m[1]!, m[2]!.trim());
+  return out;
+}
+
+/** The LARGEST pixel size `value` can resolve to, best effort: px as is,
+    rem/em at 16, a `var()` read through its token, `clamp`/`min`/`max` at
+    their largest length and `calc` as the sum of its lengths. Viewport and
+    percentage units are not lengths here; a value with no length is null. */
+function largestPx(value: string, defs: Map<string, string>, seen = new Set<string>()): number | null {
+  const vars = [...value.matchAll(/var\((--[\w-]+)\s*(?:,([^()]*))?\)/g)].map((m) => {
+    if (seen.has(m[1]!)) return null;
+    const def = defs.get(m[1]!) ?? m[2];
+    return def ? largestPx(def, defs, new Set([...seen, m[1]!])) : null;
+  });
+  const lengths = [...value.replace(/var\([^()]*\)/g, ' ').matchAll(/(?<![\w.-])(\d*\.?\d+)(px|rem|em)\b/g)]
+    .map((m) => Number(m[1]) * (m[2] === 'px' ? 1 : 16));
+  const all = [...lengths, ...vars.filter((v): v is number => v !== null)];
+  if (all.length === 0) return null;
+  return /^\s*calc\(/.test(value) ? all.reduce((a, b) => a + b, 0) : Math.max(...all);
+}
+
+it('reads a field size through rem, em, clamp, calc and tokens', () => {
+  const defs = new Map([['--big', 'clamp(16px, 1.2vw, 19px)'], ['--small', 'max(16px, 15px)'], ['--via', 'var(--big)']]);
+  expect(largestPx('1.0625rem', defs)).toBe(17);
+  expect(largestPx('1em', defs)).toBe(16);
+  expect(largestPx('var(--big)', defs)).toBe(19);
+  expect(largestPx('var(--via)', defs)).toBe(19);
+  expect(largestPx('var(--small)', defs)).toBe(16);
+  expect(largestPx('calc(1rem + 2px)', defs)).toBe(18);
+  expect(largestPx('min(20px, 5vw)', defs)).toBe(20);
+  expect(largestPx('inherit', defs)).toBeNull();
+});
+
 /* AND A NEW LARGER FIELD CANNOT SKIP THE LIST. Any rule in any stylesheet
    that gives a field `--t-lead` or a larger step (or more than 16px) without
    `!important` will be flattened by the floor unless it is restated — so it
-   has to appear in the restatement, here. Best effort: the field is read off
+   has to appear in the restatement, here. "Larger" is read through rem, em,
+   clamp, calc and every `--t-*` token (`largestPx`). Best effort: the field is read off
    the selector's last compound (a tag, or a class the TSX puts on a field),
    and the size off the LAST font-size or `font` in the block. */
 it('finds every stylesheet rule that sizes a field above the floor in the restatement', () => {
   const classes = fieldClasses();
-  const LARGE = /var\(--t-(lead|reading|home-reading|display)\)|(?<![\w.-])(1[7-9]|[2-9]\d|\d{3,})(\.\d+)?px\b/;
+  const defs = tokens();
+  const above = (size: string) => (largestPx(size, defs) ?? 0) > 16;
   const norm = (sel: string) => sel.replace(/^body\s+/, '').replace(/:not\((?:[^()]|\([^()]*\))*\)/g, '').trim();
   const listed = new Set(restatements().all.map(norm));
   const missing: string[] = [];
@@ -95,7 +135,7 @@ it('finds every stylesheet rule that sizes a field above the floor in the restat
     for (const rule of blank(read(f)).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
       const sizes = rule[2]!.split(';').map((d) => /^\s*(?:font|font-size)\s*:\s*([\s\S]*)$/i.exec(d)?.[1]?.trim()).filter(Boolean) as string[];
       const size = sizes.at(-1);
-      if (!size || /!\s*important/.test(size) || !LARGE.test(size)) continue;
+      if (!size || /!\s*important/.test(size) || !above(size)) continue;
       for (const sel of rule[1]!.split(',').map((s) => s.trim())) {
         const last = norm(sel).split(/[\s>+~]+/).filter(Boolean).at(-1) ?? '';
         const isField = /^(input|textarea|select)(?![\w-])/.test(last)
