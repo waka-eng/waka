@@ -32,7 +32,7 @@
  * and still saves; it simply cannot take an attachment, which is honest —
  * there is nowhere to put the control.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { AddMenu } from "./AddMenu";
@@ -59,6 +59,9 @@ export function NoteTools(props: {
   readFailed?: string;
   retryLabel?: string;
   onRetry?: () => void;
+  /** The overflow's name on a narrow phone, where Share and Delete fold into
+      it so every remaining act keeps its 44px target. */
+  moreLabel?: string;
   recordLabel: string;
   stopLabel: string;
   /** The ＋'s name, and its two rows: "Add photo" and "Add file". */
@@ -130,27 +133,52 @@ export function NoteTools(props: {
   useEffect(() => { setSlot(document.getElementById(DOCK_SLOT)); });
   if (!slot) return null;
 
-  /* ═══ UNTIL THE NOTE IS READ, THE BAR SAYS ONLY THAT ════════════════════
-     While the full text is on its way, or after it failed, none of the tools
-     has a note to act on — Save cannot write what has not been read, and a
-     photo or a delete aimed at a page that may never open is the wrong press
-     to offer. So the group is the one line of state (and Try again), which is
-     also what lets that line fit: on a 320px phone the five tools leave no
-     room beside them for a sentence (P0, 2026-10-17). */
+  /* THE WAY OUT OF A NOTE IS ALWAYS IN THE BAR. Delete needs only the
+     note's id, so it is offered in every state below — loading and failed
+     included (review, 2026-10-17: hiding it there left a note that would not
+     open with no way to remove it). */
+  const erase = (
+    <button type="button" className="waka-dock-tool waka-dock-tool--erase"
+      aria-label={props.erasePending && props.eraseConfirmLabel ? props.eraseConfirmLabel : props.eraseLabel}
+      disabled={props.saving}
+      onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
+  );
+  const eraseAsk = props.erasePending && props.eraseQuestion ? (
+    <span className="waka-dock-state" role="status">
+      {props.eraseQuestion}
+      <button type="button" className="waka-dock-undo" onClick={props.onCancelErase}>
+        {props.cancelEraseLabel}
+      </button>
+    </span>
+  ) : null;
+
+  /* ═══ UNTIL THE NOTE IS READ, THE BAR SAYS THAT — AND KEEPS ITS EXITS ═══
+     While the full text is on its way, or after it failed, the making tools
+     have nothing to act on: Save cannot write what has not been read, and a
+     photo aimed at a page that may never open is the wrong press to offer.
+     So the group is one short line of state, Try again when the read failed,
+     and Delete.
+
+     TRY AGAIN IS ITS OWN CONTROL, NOT A LINK INSIDE THE SENTENCE. Inside the
+     state span (which ellipsizes) it was clipped off-screen at every width,
+     and inside `role="alert"` it was read out as part of the error. The
+     alert holds the sentence only; the press is a dock item with the 44px
+     floor beside it. */
   if (props.reading || props.readFailed) {
     return createPortal(
-      props.readFailed ? (
-        <span className="waka-dock-state" role="alert">
-          {props.readFailed}
-          {props.onRetry && props.retryLabel ? (
-            <button type="button" className="waka-dock-undo" onClick={props.onRetry}>
-              {props.retryLabel}
-            </button>
-          ) : null}
-        </span>
-      ) : (
-        <span className="waka-dock-state" role="status">{props.reading}</span>
-      ),
+      <>
+        {eraseAsk ?? (props.readFailed ? (
+          <span className="waka-dock-state" role="alert">{props.readFailed}</span>
+        ) : (
+          <span className="waka-dock-state" role="status">{props.reading}</span>
+        ))}
+        {props.readFailed && props.onRetry && props.retryLabel ? (
+          <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.onRetry}>
+            {props.retryLabel}
+          </button>
+        ) : null}
+        {erase}
+      </>,
       slot,
     );
   }
@@ -260,30 +288,89 @@ export function NoteTools(props: {
           The note is the one place a single inspiration is fully on screen,
           so it is where showing it to somebody starts — the same image the
           top of mind makes, from the same sheet. */}
-      {props.onShare && props.shareLabel ? (
-        <button type="button" className="waka-dock-tool"
-          aria-label={props.shareLabel} disabled={props.saving}
-          onClick={props.onShare}><HomeActionIcon kind="share" /></button>
-      ) : null}
-      <button type="button" className="waka-dock-tool waka-dock-tool--erase"
-        aria-label={props.erasePending && props.eraseConfirmLabel ? props.eraseConfirmLabel : props.eraseLabel}
-        disabled={props.saving}
-        onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
+      {/* ═══ ON A NARROW PHONE, SHARE AND DELETE FOLD INTO ONE ⋯ ═══════════
+          Measured 2026-10-17: Back, five 44px tools, Close and two rules are
+          319px, and a 320px phone's dock holds 296. Narrowing the tools to
+          fit put every act under the 44px floor — beside a one-press
+          Delete. So below 360px the two verbs ABOUT the note (as opposed to
+          the three that make it) move into an overflow, and every control
+          left in the row keeps the full target. Both copies are rendered and
+          the stylesheet chooses (`.waka-dock-roomy` / `.waka-dock-more`), so
+          the switch is a width, not a script. */}
+      <span className="waka-dock-roomy">
+        {props.onShare && props.shareLabel ? (
+          <button type="button" className="waka-dock-tool"
+            aria-label={props.shareLabel} disabled={props.saving}
+            onClick={props.onShare}><HomeActionIcon kind="share" /></button>
+        ) : null}
+        {erase}
+      </span>
+      <MoreMenu label={props.moreLabel ?? "More"} disabled={props.saving}
+        rows={[
+          ...(props.onShare && props.shareLabel ? [{ label: props.shareLabel, icon: "share" as const, act: props.onShare }] : []),
+          { label: props.erasePending && props.eraseConfirmLabel ? props.eraseConfirmLabel : props.eraseLabel, icon: "erase" as const, act: props.onErase },
+        ]} />
       {/* ONE LINE, THE SAME SLOT THE NOTEPAD'S STATE USES. Founder: "states
           should show and disappear in the bottom bar only." */}
-      {props.erasePending && props.eraseQuestion ? (
-        <span className="waka-dock-state" role="status">
-          {props.eraseQuestion}
-          <button type="button" className="waka-dock-undo" onClick={props.onCancelErase}>
-            {props.cancelEraseLabel}
-          </button>
-        </span>
-      ) : props.failed || props.recording.error ? (
+      {eraseAsk ? eraseAsk : props.failed || props.recording.error ? (
         <span className="waka-dock-state" role="alert">{props.failed || props.recording.error}</span>
       ) : props.attaching ? (
         <span className="waka-dock-state" role="status">{props.uploading}</span>
       ) : null}
     </>,
     slot,
+  );
+}
+
+/**
+ * THE OVERFLOW, for the verbs about a note on a phone too narrow to show
+ * them at full size. The same pattern and the same classes as `AddMenu`'s
+ * ＋ (a button, a lifted column of 44px rows, Escape and an outside press
+ * close it), because it is the same kind of object in the same bar.
+ */
+function MoreMenu(props: {
+  label: string;
+  disabled?: boolean;
+  rows: Array<{ label: string; icon: "share" | "erase"; act: () => void }>;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const menuId = useId();
+  const wrap = useRef<HTMLSpanElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (props.disabled) setOpen(false); }, [props.disabled]);
+  useEffect(() => {
+    if (!open) return;
+    /* Into the menu on open, as `AddMenu` does, so Escape and the arrows
+       reach it from the keyboard that opened it. */
+    menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    const outside = (event: PointerEvent) => {
+      if (wrap.current && event.target instanceof Node && !wrap.current.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", outside, true);
+    return () => document.removeEventListener("pointerdown", outside, true);
+  }, [open]);
+  return (
+    <span ref={wrap} className="waka-add waka-dock-more">
+      <button ref={button} type="button" className="waka-dock-tool" aria-label={props.label}
+        aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
+        disabled={props.disabled} onClick={() => setOpen((was) => !was)}>
+        <HomeActionIcon kind="more" />
+      </button>
+      {open ? (
+        <div ref={menu} id={menuId} className="waka-add-menu" role="menu" aria-label={props.label}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); button.current?.focus(); }
+            if (event.key === "Tab") setOpen(false);
+          }}>
+          {props.rows.map((row) => (
+            <button key={row.icon} type="button" role="menuitem" className="waka-add-row"
+              onClick={() => { setOpen(false); row.act(); }}>
+              <HomeActionIcon kind={row.icon} /><span>{row.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </span>
   );
 }

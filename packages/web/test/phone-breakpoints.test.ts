@@ -247,6 +247,12 @@ describe("the four breaks that a browser found and reading did not", () => {
       "the dock no longer tightens on a phone. At the desktop spacing the " +
         "open-save row is 387px and needs a 419px screen to fit.",
     ).toBe(true);
+    expect(
+      /\.waka-dock-tool[^{]*\{[^}]*\bwidth:\s*(?:[0-3]\d|4[0-3])px/.test(css),
+      "a dock tool is sized under 44px. Fitting a narrow phone by shrinking " +
+        "the targets put every act under the floor beside a one-press Delete; " +
+        "the narrow bar folds Share and Delete into ⋯ instead.",
+    ).toBe(false);
   });
 
   it("keeps the shelves from being crushed to a sliver", () => {

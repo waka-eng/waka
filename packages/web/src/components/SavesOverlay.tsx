@@ -71,6 +71,7 @@ import { loadInspiration, loadInspirations, type Inspiration } from "../lib/data
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { inspectInspirationPhoto } from "../lib/inspiration-photo";
 import { inspectAttachmentFile } from "../lib/api/file-accept";
+import { inspirationPreview } from "../lib/inspiration-preview";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -453,7 +454,12 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     /* Not read yet (or the read failed): nothing typed can have reached the
        draft, and the preview is not the note — so leaving writes nothing. */
     const base = stored && stored.id === note.id ? stored.text : null;
-    if (base === null || !words || words === base.trim()) { setOpen(null); return; }
+    /* CLEARED WORDS ARE AN EDIT ONCE THE WHOLE TEXT IS HERE — when the note
+       still holds an attachment, which is the create rule: a save may have
+       no words beside a photo or a file. A note that would end with neither
+       is not written (the server refuses it too); its stored words stay, and
+       the page said so while it was empty (`placeholder` below). */
+    if (base === null || words === base.trim() || (!words && note.attachments.length === 0)) { setOpen(null); return; }
     setSaving(true);
     setSaveFailed(false);
     try {
@@ -461,7 +467,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       if (!mounted.current) return;
       /* The list holds what the page loaded, so it has to agree without a
          refetch — otherwise going back reveals the old first line. */
-      setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: words } : row)));
+      setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: inspirationPreview(words, row.attachments) } : row)));
       setOpen(null);
     } catch {
       if (mounted.current) setSaveFailed(true);
@@ -548,8 +554,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
          reason `attach` gives about the snapshot: the grid behind must not
          show the old first line, and the note in front must agree that it is
          saved or the button never dims. */
-      setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: words } : row)));
-      setOpen((card) => (card && card.id === note.id ? { ...card, preview: words } : card));
+      setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: inspirationPreview(words, row.attachments) } : row)));
+      setOpen((card) => (card && card.id === note.id ? { ...card, preview: inspirationPreview(words, card.attachments) } : card));
       /* What is stored now, which is what dims the button again. */
       setStored((held) => (held && held.id === note.id ? { ...held, text: words } : held));
     } catch {
@@ -747,7 +753,9 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        TRIMMED ON BOTH SIDES OF THE COMPARISON, which is the whole subject of
        the comment above `keepOpenNote`: a typed trailing space must not light
        a button whose write would then return early. */
-    hasWords: loaded && draft.trim().length > 0 && draft.trim() !== (stored?.text ?? "").trim(),
+    hasWords: loaded && draft.trim() !== (stored?.text ?? "").trim()
+      /* Empty is something to keep only beside an attachment — see `leaveNote`. */
+      && (draft.trim().length > 0 || (open?.attachments.length ?? 0) > 0),
     /* `ready` IS THE DRAFT STORE HAVING OPENED — "before that there is
        nowhere to write". This page has no draft store: the words live in
        React state and the destination is a row that already exists, so there
@@ -1228,6 +1236,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           readFailed={stored?.failed ? say("worldNoteOpenFailed") : ""}
           retryLabel={say("surfaceUnavailableRetry")}
           onRetry={() => readNote(open.id)}
+          moreLabel={say("worldMoreActions")}
           uploading={say("worldComposerUploading")}
           recordLabel={say("worldComposerRecord")}
           stopLabel={say("worldComposerStop")}
@@ -1356,6 +1365,11 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                    typed can land in it, because there is no draft yet. */
                 value={loaded ? draft : open.preview}
                 readOnly={saving || !loaded}
+                /* THE EMPTY NOTE SAYS WHAT IT NEEDS, the way the notepad's
+                   blank page does: with nothing attached, a note with no
+                   words cannot be kept, so Save stays dim and this line is
+                   why. */
+                placeholder={loaded && open.attachments.length === 0 ? say("worldNoteNeedsSomething") : undefined}
                 aria-busy={!loaded && !stored?.failed}
                 aria-label={say("worldCaptureInspiration")}
                 onChange={(event) => { setDraft(event.target.value); setSaveFailed(false); }}

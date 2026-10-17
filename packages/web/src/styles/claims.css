@@ -649,13 +649,12 @@
       0, or a flex child refuses to shrink below its content).
 
    2. ON A PHONE THE ROW TIGHTENS. The dock takes 8px gutters instead of 16,
-      its gaps go and labels pad 8 instead of 16 — which alone fits the
-      five-tool row at full 44px slots down to ~350px. Only below that do
-      the glyph slots narrow, to 40px (<=350) and 36px (<=330). The glyphs
-      are 17px in a round slot, so the slot is air around them; Back, the
-      labels and Close keep the full 44px floor because they are the ways
-      out. Measured at 320: Back 44 + five tools 180 + Close 45 + two rules
-      = 287 inside a 304px dock.
+      its gaps go and labels pad 8 instead of 16 — which fits the five-tool
+      row at full 44px slots down to ~343px. Below that, nothing is made
+      smaller: Share and Delete fold into one ⋯ overflow (`NoteTools`), so
+      every act left in the row keeps its 44x44 target. (A first pass
+      narrowed the glyph slots to 40/36px instead; review, 2026-10-17: that
+      put every act under the floor beside a one-press Delete.)
 
    3. CLOSE IS PINNED LAST AND NEVER SHRINKS — the guarantee the founder's
       Law 2 asks of every surface (one visible way out, one press). */
@@ -701,21 +700,34 @@
     padding-inline: var(--sp-4);
   }
 }
-/* MEASURED: tightened with 44px glyph slots, the open-save row is 327px; the
-   dock is 100vw - 16, so it fits down to 343px. Below 350 the slots go to
-   40 (row 307px, measured at 340: Close at x 275-319). */
-@media (max-width: 350px) {
-  .waka-dock-tool:not(.waka-dock-tool--wide) {
-    width: 40px;
-    min-width: 40px;
-  }
+/* THE TWO VERBS ABOUT A NOTE, AND THEIR FOLDED COPY. Both are rendered;
+   the width chooses. `display: contents` keeps the inline pair as direct
+   members of the row, so they space and shrink exactly as before. */
+.waka-dock-roomy {
+  display: contents;
 }
-/* MEASURED at 320: 36px slots make the row 287px in a 304px dock, Close at
-   x 255-299 — every control inside the screen, Close 45x44. */
-@media (max-width: 330px) {
-  .waka-dock-tool:not(.waka-dock-tool--wide) {
-    width: 36px;
-    min-width: 36px;
+/* Two classes on purpose: the overflow also wears `.waka-add` (its menu's
+   positioning), whose `display: inline-flex` comes later in this sheet and
+   would otherwise win and show both shapes at once. */
+.waka-dock-more.waka-add {
+  display: none;
+}
+/* TRY AGAIN, beside the failed-read sentence rather than inside it: a dock
+   item with the 44px floor, in the ink a press is drawn in. */
+.waka-dock-retry {
+  color: var(--ink);
+  text-decoration: underline;
+}
+/* MEASURED: tightened with 44px glyph slots, the open-save row is 327px; the
+   dock is 100vw - 16, so it fits down to 343px. Below 350 Share and Delete
+   fold into ⋯ — the row becomes Back, Record, ＋, Save, ⋯, Close: 283px at
+   44px each (measured at 320: inside a 304px dock). */
+@media (max-width: 350px) {
+  .waka-dock-roomy {
+    display: none;
+  }
+  .waka-dock-more.waka-add {
+    display: inline-flex;
   }
 }
 

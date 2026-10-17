@@ -120,8 +120,9 @@ it("keeps all 1,000 characters through open → edit → Save", async () => {
   await openSave(longRow, LONG);
   /* Before the text arrives: the preview stands in, read-only, nothing can be saved. */
   expect(page().readOnly).toBe(true);
-  expect(save()).toBeNull(); // no tool is offered until there is a note to act on
-  expect(bar()).toBe("Opening this note…");
+  expect(save()).toBeNull(); // no making tool is offered until there is a note to act on
+  expect(bar()).toBe("Opening…");
+  expect(slot.querySelector('[aria-label="Delete"]'), "Delete needs only the id").not.toBeNull();
 
   await answer(true);
   expect(page().readOnly).toBe(false);
@@ -157,7 +158,14 @@ it("stays read-only and never saves when the read fails, and Try again recovers"
   await answer(false);
   expect(page().readOnly).toBe(true);
   expect(save()).toBeNull();
-  expect(bar()).toContain("This note didn’t open. Nothing was changed.");
+  expect(bar()).toBe("Didn’t open.");
+  /* The alert holds the sentence only; Try again is its own control beside
+     it, and Delete is still offered — it needs nothing but the id. */
+  const alert = slot.querySelector('[role="alert"]')!;
+  expect(alert.querySelector("button")).toBeNull();
+  const again = [...slot.querySelectorAll("button")].find((item) => item.textContent === "Try again");
+  expect(again?.className).toContain("waka-dock-item");
+  expect(slot.querySelector('[aria-label="Delete"]')).not.toBeNull();
   await act(async () => closer!());
   expect(state.written).toEqual([]);
 
@@ -165,7 +173,7 @@ it("stays read-only and never saves when the read fails, and Try again recovers"
   await answer(false);
   const retry = [...slot.querySelectorAll("button")].find((item) => item.textContent === "Try again")!;
   await act(async () => retry.click());
-  expect(bar()).toBe("Opening this note…");
+  expect(bar()).toBe("Opening…");
   await answer(true);
   expect(page().value).toBe(LONG);
   expect(page().readOnly).toBe(false);
@@ -184,4 +192,29 @@ it("does not pick the attachment's label up into a photo-only save's text", asyn
   await type("the light on the wall");
   await act(async () => save().click());
   expect(state.written).toEqual([{ id: "photo-1", text: "the light on the wall" }]);
+});
+
+it("keeps a photo-only note's cleared words as a real edit", async () => {
+  await openSave({
+    id: "photo-2",
+    preview: "words beside a photo",
+    capturedMs: Date.UTC(2026, 9, 8),
+    category: null,
+    attachments: [{ id: "a2", type: "image", label: "IMG_0002.jpg" }],
+  }, "words beside a photo");
+  await answer(true);
+  await type("");
+  expect(save().disabled).toBe(false);
+  await act(async () => save().click());
+  expect(state.written).toEqual([{ id: "photo-2", text: "" }]);
+});
+
+it("will not empty a note that has nothing else on it, and says why on the page", async () => {
+  await openSave(longRow, LONG);
+  await answer(true);
+  await type("   ");
+  expect(save().disabled).toBe(true);
+  expect(page().placeholder).toBe("Write something, or add a photo or file, to keep this note.");
+  await act(async () => closer!());
+  expect(state.written).toEqual([]);
 });

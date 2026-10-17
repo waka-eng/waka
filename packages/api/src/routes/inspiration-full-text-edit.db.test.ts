@@ -63,3 +63,25 @@ it('opens a photo-only save with empty words, never its attachment label',async(
   const opened=await (await f.app.request(`/api/inspirations/${row.id}`)).json() as Detail;
   expect(opened.inspiration.text).toBe('');
 });
+
+const patchText=(app:Hono<AuthEnv>,id:string,text:string)=>app.request(`/api/inspirations/${id}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({text})});
+
+it('lets a save with an attachment have its words cleared, the create rule',async()=>{
+  const f=await fixture();
+  const [row]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${f.profileId},'words about the photo') RETURNING id`;
+  await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,name) VALUES (${f.profileId},${row.id},'image','https://example.test/p.jpg','IMG_0002.jpg')`;
+  const response=await patchText(f.app,row.id as string,'   ');
+  expect(response.status).toBe(200);
+  const [stored]=await t.sql`SELECT text FROM inspirations WHERE id=${row.id}`;
+  expect(stored.text).toBe('');
+});
+
+it('refuses to leave a save with neither words nor an attachment, and changes nothing',async()=>{
+  const f=await fixture();
+  const [row]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${f.profileId},'the only thing here') RETURNING id`;
+  const response=await patchText(f.app,row.id as string,'');
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({details:{text:['Inspiration text is required']}});
+  const [stored]=await t.sql`SELECT text FROM inspirations WHERE id=${row.id}`;
+  expect(stored.text).toBe('the only thing here');
+});
