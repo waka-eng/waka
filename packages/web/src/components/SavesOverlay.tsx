@@ -41,6 +41,7 @@
  */
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useInRouterContext, useLocation, useNavigate } from "react-router-dom";
+import { archiveLeaving } from "../lib/use-view-navigation";
 
 import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
@@ -109,6 +110,8 @@ function NoteHistory({ openId, onBack }: { openId: string | null; onBack: () => 
   const pushed = useRef<string | null>(null), seen = useRef(false);
   const back = useRef(onBack); back.current = onBack;
   const here = useRef(location); here.current = location;
+  // The archive going away ends the leave; a fresh archive starts clear.
+  useEffect(() => { archiveLeaving.now = false; return () => { archiveLeaving.now = false; }; }, []);
   useEffect(() => {
     if (openId && pushed.current !== openId && marked !== openId) {
       pushed.current = openId; seen.current = false;
@@ -117,7 +120,7 @@ function NoteHistory({ openId, onBack }: { openId: string | null; onBack: () => 
     } else if (!openId && pushed.current) {
       const mine = pushed.current;
       pushed.current = null; seen.current = false;
-      if (marked === mine) navigate(-1);
+      if (marked === mine && !archiveLeaving.now) navigate(-1);
     }
     // Runs on the note changing, not on the address: `marked` is read as it stands.
   }, [openId]);

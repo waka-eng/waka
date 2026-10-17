@@ -2,6 +2,9 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { EMPTY_VIEW, readViewLocation, viewHref, type ViewLocation } from './view-location';
 
+/** Set while `closeOpen` is putting the whole archive down over an open
+    note's entry; read and cleared by SavesOverlay's `NoteHistory`. */
+export const archiveLeaving={now:false};
 interface StoredView { scope: string; query: string; composerFrom?: string;shareFrom?:string;conversationFrom?:string;openFrom?:string }
 /** Router owns browser history; the world owns rendering and restoration. */
 export function useViewNavigation(scope: string | null) {
@@ -79,7 +82,15 @@ export function useViewNavigation(scope: string | null) {
     if(!before?.open)return;
     const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
     own.current=null;
-    if(stored?.scope===current.scope&&stored.openFrom) current.navigate(-1);
+    /* An open saved note has its own entry on top of the list's (see
+       SavesOverlay's `NoteHistory`); putting the whole archive down steps
+       over both, so Escape still lands where the archive was opened from. */
+    const noteOnTop=Boolean((current.location.state as {savesNote?:string}|null)?.savesNote);
+    /* And the note must not pop its own entry as it closes on the way out:
+       the router's address update is a transition, so the note's close can
+       commit first and would step back a THIRD time (or undo the replace). */
+    if(noteOnTop)archiveLeaving.now=true;
+    if(stored?.scope===current.scope&&stored.openFrom) current.navigate(noteOnTop?-2:-1);
     else current.navigate(viewHref({...before,open:null}),{replace:true});
   },[]);
   /**
