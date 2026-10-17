@@ -76,3 +76,7 @@ packages/*/scratch2/
 
 # Claude Code's per-task git worktrees, created inside the repo.
 .claude/worktrees/
+
+# The API suite writes a junit report here when CI=true (vitest.config.ts);
+# it is run output, not source.
+packages/api/test-results/
