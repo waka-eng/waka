@@ -62,14 +62,47 @@ it('reuses immutable words, visibility and identity after a lost response', asyn
   expect(resolved).toHaveBeenCalledOnce();
 });
 
-it('only reads a pending save on remount; missing is not permission to repost', async () => {
-  vi.mocked(createInspiration).mockRejectedValue(new Error('Lost response'));
+/* Missing on remount/reconnect earns ONE resend under the same identity —
+   never a fresh key — and then lets go of the composer (see SaveNotLanded). */
+it('resends a missing save once under its own identity on remount, and lands it', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  const key = records()[0]!, before = localStorage.getItem(key);
+  expect(latest.phase).toBe('uncertain');
+  const first = vi.mocked(createInspiration).mock.calls[0]![1]?.requestId;
   await act(async () => root.unmount()); root = createRoot(host);
   await act(async () => root.render(<Probe />));
-  expect(latest.phase).toBe('uncertain'); expect(localStorage.getItem(key)).toBe(before);
-  expect(createInspiration).toHaveBeenCalledOnce(); expect(resolved).not.toHaveBeenCalled();
+  expect(createInspiration).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(createInspiration).mock.calls[1]![1]?.requestId).toBe(first);
+  expect(resolved).toHaveBeenCalledOnce(); expect(records()).toHaveLength(0); expect(latest.phase).toBe('idle');
+});
+
+it('releases the composer after the one resend fails, and Save on the same words keeps the identity', async () => {
+  vi.mocked(createInspiration).mockRejectedValue(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const first = latest.pending!.requestId;
+  await act(async () => root.unmount()); root = createRoot(host);
+  await act(async () => root.render(<Probe />));
+  expect(createInspiration).toHaveBeenCalledTimes(2);
+  expect(latest.phase).toBe('unsent'); expect(latest.pending).toBeNull(); expect(latest.busy).toBe(false);
+  expect(records()).toHaveLength(0); expect(resolved).not.toHaveBeenCalled();
+  // A later look (focus, reconnect) has nothing left to poll.
+  vi.mocked(fetchInspirationSaveRequest).mockClear();
+  await act(async () => { latest.check(); });
+  expect(fetchInspirationSaveRequest).not.toHaveBeenCalled();
+  vi.mocked(createInspiration).mockResolvedValue(source);
+  await act(async () => { expect(latest.start(input)).toBe(true); });
+  expect(vi.mocked(createInspiration).mock.calls[2]![1]?.requestId).toBe(first);
+  expect(resolved).toHaveBeenCalledOnce();
+});
+
+it('resends at most once per identity: a second missing read releases without another POST', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'))
+    .mockImplementationOnce(() => Promise.reject(new ApiError({ status: 409, code: 'save_in_progress', message: 'In progress' })));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => { latest.check(); });
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(latest.phase).toBe('uncertain');
+  await act(async () => { latest.check(); });
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(latest.phase).toBe('unsent'); expect(records()).toHaveLength(0);
 });
 
 it('recovers a committed save by reading its current item, without another POST', async () => {

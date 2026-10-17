@@ -454,6 +454,7 @@
   "worldSaveStorageFailed": "쓴 말은 여기 있어요. 이 브라우저에서 저장을 준비하지 못했어요.",
   "worldSaveUnavailable": "지금은 저장할 수 없어요. 쓴 말은 아직 여기 있어요.",
   "worldSaveUncertain": "쓴 말은 여기 있어요. 저장 여부를 확인하지 못했어요.",
+  "worldSaveUnsent": "저장되지 않았어요. 쓴 말은 그대로 있으니 다시 저장해 주세요.",
   "worldSaving": "저장하는 중…",
   "worldSayEmpty1": "아직 아무것도 없어요 — 간직할 만한 것 하나만 주세요",
   "worldSayEmpty2": "한마디만 해 주면 제가 붙들고 있을게요",

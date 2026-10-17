@@ -28,10 +28,28 @@ export type AuthoredSaveInput = { operation: 'inspiration'; input: CreateInspira
 type SavedReference = { inspirationId: string; reflectionId: string | null; processing?: ApiInspirationProcessingReceipt };
 export type AuthoredSaveIntent = AuthoredSaveInput & { version: 1; accountId: string; profileId: string; requestId: string; createdAt: number; checksum: number; acknowledged?: SavedReference; rejected?: boolean; validationMessage?: string };
 export interface AuthoredSaveResult { inspiration: ApiInspiration; reflection: ApiReflection | null; processing?: ApiInspirationProcessingReceipt; recovered: boolean }
-type Phase = 'idle' | 'checking' | 'saving' | 'uncertain' | 'storage_error' | 'unsupported' | 'invalid' | 'removed' | 'rejected';
+type Phase = 'idle' | 'checking' | 'saving' | 'uncertain' | 'unsent' | 'storage_error' | 'unsupported' | 'invalid' | 'removed' | 'rejected';
+
+/* A SAVE THAT NEVER LANDED HAS TO LET GO OF THE COMPOSER (2026-10-17).
+   The audit at f2afcbe2: a save started, the network dropped, and from then on
+   every load read `GET /save-requests/:id`, got 404, and kept the journal —
+   Save disabled on "Uploading…" with "Couldn't confirm the save" under it,
+   and no act that could end it short of clearing site data.
+   A 404 is still not proof the old POST cannot commit, so the first answer to
+   it is the one this protocol already allows: POST the SAME intent under the
+   SAME identity, once, unprompted. The server dedupes on the request id, so
+   this cannot make a second copy. If it lands, the save resolves as if
+   nothing happened. If it does not, the journal is released ('unsent'): the
+   draft is untouched (drafts settle only on a resolved save), Save works
+   again, and the notice says plainly that the save did not go through. The
+   released identity is remembered for the page's life, so pressing Save on
+   the same words reuses it — a late commit of the old POST is then replayed,
+   never duplicated. */
+class SaveNotLanded extends Error { constructor() { super('Save did not land'); } }
 
 // A corruption checksum, NOT an authorization signature. The server owns
-// authorization and input-hash conflict checks; UUIDs are never reused here.
+// authorization and input-hash conflict checks; a UUID is reused only for the
+// SAME words after an unsent release (see SaveNotLanded), never for new ones.
 function checksum(value: AuthoredSaveInput): number {
   return hashStr(JSON.stringify({ operation: value.operation, input: value.input, ...(value.draft ? { draft: value.draft } : {}) }));
 }
@@ -84,6 +102,9 @@ export function useAuthoredSave(options: {
   const working = useRef(false), mounted = useRef(false), epoch = useRef(0);
   const abort = useRef<AbortController | null>(null);
   const refresh = useRef<() => void>(() => {});
+  // Identities already re-sent once without a press, and the last released one.
+  const autoRetried = useRef(new Set<string>());
+  const released = useRef<{ requestId: string; checksum: number; accountId: string; profileId: string } | null>(null);
 
   const run = useCallback(async (intent: AuthoredSaveIntent, write: boolean) => {
     const owner = live.current, key = owner.prefix;
@@ -113,7 +134,10 @@ export function useAuthoredSave(options: {
         if (error.code !== 'save_not_found') throw new ApiError({ status: 404, code: 'save_protocol_unavailable', message: 'Save recovery is unavailable' });
       }
       if (!saved) {
-        if (!write) throw new Error('Save not yet observed');
+        if (!write) {
+          if (autoRetried.current.has(intent.requestId) || (typeof navigator !== 'undefined' && navigator.onLine === false)) throw new SaveNotLanded();
+          autoRetried.current.add(intent.requestId);
+        }
         current(); setPhase('saving');
         attempted = true;
         const saveOptions = { ...scoped, requestId: intent.requestId, signal: controller.signal };
@@ -162,6 +186,13 @@ export function useAuthoredSave(options: {
         const rejected = { ...intent, rejected: true, validationMessage };
         try { persist(key, rejected); } catch { /* the original immutable intent is still retained */ }
         intentRef.current = rejected; setPending(rejected); setPhase('rejected');
+      } else if (!intentRef.current?.acknowledged && (error instanceof SaveNotLanded || (attempted && !write &&
+        !(error instanceof ApiError && (error.code === 'save_in_progress' || error.code === 'save_protocol_unavailable'))))) {
+        try {
+          localStorage.removeItem(key + intent.requestId);
+          released.current = { requestId: intent.requestId, checksum: intent.checksum, accountId: intent.accountId, profileId: intent.profileId };
+          intentRef.current = null; setPending(null); setPhase('unsent');
+        } catch { setPhase('storage_error'); }
       } else setPhase(error instanceof ApiError && error.code === 'save_protocol_unavailable' ? 'unsupported' : 'uncertain');
     } finally {
       window.clearTimeout(timeout); controller.signal.removeEventListener('abort', rejectAborted); controller.abort();
@@ -202,7 +233,11 @@ export function useAuthoredSave(options: {
       if (found.invalid || found.intents.length) { scan(); return false; }
       if (input.operation !== at.operation) throw new Error('Unexpected save target');
       const copy = JSON.parse(JSON.stringify(input)) as AuthoredSaveInput;
-      const intent: AuthoredSaveIntent = { ...copy, ...at.scope, version: 1, requestId: crypto.randomUUID(), createdAt: Date.now(), checksum: checksum(copy) };
+      const sum = checksum(copy), prior = released.current;
+      const requestId = prior && prior.checksum === sum && prior.accountId === at.scope.accountId && prior.profileId === at.scope.profileId
+        ? prior.requestId : crypto.randomUUID();
+      released.current = null;
+      const intent: AuthoredSaveIntent = { ...copy, ...at.scope, version: 1, requestId, createdAt: Date.now(), checksum: sum };
       persist(at.prefix, intent); // no request may precede durable ownership/words
       intentRef.current = intent; setPending(intent); void run(intent, true);
       return true;
