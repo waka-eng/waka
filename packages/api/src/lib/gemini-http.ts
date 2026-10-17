@@ -15,8 +15,11 @@ const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 25_000;
  * answer's SIZE but not its TIME. Three minutes is far past any legitimate
  * generation under OPENROUTER_MAX_OUTPUT_TOKENS with reasoning off (the
  * slowest healthy full pipeline runs finish ~15 calls in under 100s); a
- * stall past it is a hang, and the timeout throws so the queue's retry
- * backoff recovers the job with time left to matter.
+ * stall past it is a hang, and the timeout throws. A background job that
+ * lets it escape is retried by the queue's backoff with time left to
+ * matter. A chat reply is the exception: it is deliberately not replayed
+ * (conversation-replies.ts marks it failed and the person's Retry button
+ * spends the next attempt).
  */
 const DEFAULT_MODEL_EXCHANGE_TIMEOUT_MS = 180_000;
 

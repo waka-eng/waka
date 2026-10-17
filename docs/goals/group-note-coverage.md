@@ -546,7 +546,7 @@ are not disagreements — they are a malformed response and a thrown request.
 
 **And a malformed response costs a note permanently.** `invalid_judge_json` is
 *returned as a judgment*, not thrown, so `judgeGroupWithRetry` never saw it:
-`isTransientModelError` only matches HTTP 5xx/429 on a caught error. The trigger
+`isTransientModelError` only matches HTTP 5xx/429 on a caught error. *(Both are gone since: `judgeGroupWithRetry` went with the group engine in `1072f566`, and `isTransientModelError` was removed on 2026-10-17. Background jobs now retry any thrown model error through the queue's backoff.)* The trigger
 was dropped as though the judge had declined it. It had not — we could not read
 the reply, and the note it was about to make was gone. Trigger 3 is exactly
 that: a real note in one pass, silence in the next.
