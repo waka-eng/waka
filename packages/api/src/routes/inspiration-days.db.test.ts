@@ -10,7 +10,8 @@
  *      sending the whole history to say nothing happened in it.
  *   3. The window is respected — `days=N` cannot reach further back than N.
  *   4. One person's days are never in another's calendar.
- *   5. A day is the caller's day: grouped in the zone it names as `tz`.
+ *   5. A day is the caller's day: grouped in the zone it names as `tz`, and
+ *      the window starts at that zone's midnight of its oldest day.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): the auth middleware only, as every route
  * suite here does — the session is the one thing a test cannot produce by
@@ -191,6 +192,27 @@ describe("how much was kept on each day", () => {
     expect(await daysFor(person, "?tz=Mars%2FOlympus_Mons")).toEqual(await daysFor(person));
     const response = await appFor(person).request("/api/inspiration-days?tz=UTC'%3B--");
     expect(response.status).toBe(400);
+  });
+
+  it("starts the window at local midnight of its oldest day", async () => {
+    /* `days=2` is today and yesterday, whole. Measured as 48 hours back from
+       this instant it cut yesterday short at the front and reached into the
+       day before at the back — whichever the clock happened to say. */
+    const person = await seedPerson("midnight");
+    const at = async (offset: string, text: string) => t.sql`
+      INSERT INTO inspirations (profile_id, text, created_at)
+      VALUES (
+        ${person.profileId}, ${text},
+        (date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') - interval '1 day' + ${offset}::interval)
+          AT TIME ZONE 'Asia/Seoul'
+      )`;
+    await at("1 minute", "first minute of yesterday");
+    await at("-1 minute", "last minute of the day before");
+
+    const days = await daysFor(person, "?days=2&tz=Asia%2FSeoul");
+
+    expect(days).toHaveLength(1);
+    expect(days[0]!.kept).toBe(1);
   });
 
   it("refuses a window it cannot serve", async () => {

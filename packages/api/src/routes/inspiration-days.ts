@@ -18,7 +18,7 @@
  * shifted into a count per Seoul date (a day's saves straddle two UTC dates),
  * so a Korean evening's keeps were drawn on the day before. The caller now
  * sends its IANA zone as `tz` and the grouping happens there. Absent, or a
- * name this runtime does not know, it is UTC — a calendar a few hours off is
+ * name Postgres does not know, it is UTC — a calendar a few hours off is
  * better than one that will not load. A string that is not even shaped like a
  * zone name is refused, since nothing that sends it is a browser.
  */
@@ -56,20 +56,35 @@ const daysQuerySchema = z
   .strict();
 
 /**
- * The zone to group by: the one asked for if this runtime knows it, else UTC.
+ * The zone to group by: the one asked for if POSTGRES knows it, else UTC.
  *
- * `Intl` and Postgres both read the IANA database, so a name one knows the
- * other does; asking `Intl` keeps an unknown name from reaching `AT TIME ZONE`,
- * where it would be a 500 instead of a calendar.
+ * Asked of Postgres, not of `Intl`. They read different copies of the IANA
+ * database — Node's ICU and the server's tzdata — and a zone one copy has and
+ * the other lacks (a new one, like `America/Ciudad_Juarez`) passed an `Intl`
+ * check and then failed `AT TIME ZONE`, a 500 instead of a calendar. The
+ * question goes to the one that will do the grouping.
+ *
+ * `pg_timezone_names` is a scan of the zone files, so each answer is cached —
+ * unknown names too, so a probe repeated costs one query. The cache is
+ * bounded and simply starts over when full: the names real browsers send are
+ * a few hundred, and a stream of invented ones must not grow it without end.
  */
-export function groupingZone(tz: string | undefined): string {
-  if (!tz) return "UTC";
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: tz });
-    return tz;
-  } catch {
-    return "UTC";
+const KNOWN_ZONES = new Map<string, boolean>();
+const KNOWN_ZONES_MAX = 512;
+
+async function groupingZone(db: ReturnType<typeof getDb>, tz: string | undefined): Promise<string> {
+  if (!tz || tz === "UTC") return "UTC";
+  let known = KNOWN_ZONES.get(tz);
+  if (known === undefined) {
+    const rows = await db.execute<{ known: number }>(
+      sql`SELECT 1 AS known FROM pg_timezone_names WHERE name = ${tz} LIMIT 1`,
+    );
+    const list = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows) ?? [];
+    known = list.length > 0;
+    if (KNOWN_ZONES.size >= KNOWN_ZONES_MAX) KNOWN_ZONES.clear();
+    KNOWN_ZONES.set(tz, known);
   }
+  return known ? tz : "UTC";
 }
 
 export interface KeptDay {
@@ -111,13 +126,19 @@ export function createInspirationDaysRoutes(deps: DaysRouteDependencies = {}): H
     if (!scope.ok) return c.json(scope.body, scope.status);
 
     const days = parsed.data.days ?? DEFAULT_DAYS;
-    const zone = groupingZone(parsed.data.tz);
+    const zone = await groupingZone(db, parsed.data.tz);
     const rows = await db.execute<{ day: string; kept: number }>(sql`
       SELECT to_char(date_trunc('day', created_at AT TIME ZONE ${zone}::text), 'YYYY-MM-DD') AS day,
              count(*)::int AS kept
       FROM inspirations
       WHERE profile_id = ${scope.profileId}::uuid
-        AND created_at >= now() - (${days}::int * interval '1 day')
+        /* FROM LOCAL MIDNIGHT OF THE OLDEST DAY, not "N times 24 hours ago".
+           The calendar's cells are whole local dates — today and the N-1
+           before it — and a window measured from this instant started part
+           way through a date, so the oldest cell counted only its later
+           hours (and a daylight-saving change shifted the cut by an hour). */
+        AND created_at >= (date_trunc('day', now() AT TIME ZONE ${zone}::text)
+                           - ((${days}::int - 1) * interval '1 day')) AT TIME ZONE ${zone}::text
       GROUP BY 1
       ORDER BY 1
     `);
