@@ -189,6 +189,8 @@
   "worldRecordingDenied": "Microphone access wasn’t allowed. Allow it in your browser and try again.",
   "worldRecordingDisconnected": "The microphone disconnected. Listen to the recording before saving.",
   "worldRecordingEmpty": "Nothing was recorded. Please try again.",
+  "worldRecordingFileTooLarge": "Choose a recording under twenty-five megabytes.",
+  "worldRecordingNotAudio": "This file isn’t a recording. Choose an audio file.",
   "worldRecordingInterrupted": "The recording was interrupted. Please try again.",
   "worldRecordingKeepFailed": "Couldn’t keep this recording. Please try again.",
   "worldRecordingKeepFailedKept": "Couldn’t keep this recording. Your earlier clip is unchanged.",

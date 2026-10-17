@@ -5537,7 +5537,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     try {
       for (const file of files) {
         try {
-          if (audio && (!file.size || file.size > 25 * 1024 * 1024 || !file.type.startsWith('audio/'))) throw new DraftProblem('worldRecordingKeepFailed');
+          /* Each refusal says its own reason — "couldn't keep this" for an
+             empty file, a huge one and a PDF alike told nobody what to do. */
+          if (audio && !file.size) throw new DraftProblem('worldRecordingEmpty');
+          if (audio && file.size > 25 * 1024 * 1024) throw new DraftProblem('worldRecordingFileTooLarge');
+          if (audio && !file.type.startsWith('audio/')) throw new DraftProblem('worldRecordingNotAudio');
           const verdict = door === 'file' ? inspectAttachmentFile(file) : null;
           if (verdict?.kind === 'file') {
             if (epoch !== fileOwnerEpoch.current) return;
@@ -5556,14 +5560,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              reason is said in their language: `FileRefused` carries a code. */
           if (reason instanceof FileRefused) {
             accepted.push({ id: crypto.randomUUID(), type: 'file', ...(file.name ? { name: file.name.slice(0, 255) } : {}), blob: file,
-              validationError: say(reason.reason === 'too_large' ? 'worldAttachTooLarge' : reason.reason === 'empty' ? 'worldPhotoEmpty' : 'worldAttachUnsupported') });
+              /* the KEY, not the sentence: this lands in the durable draft,
+                 and a sentence stored there stays in the language it was
+                 written in. It is said where the tile renders. */
+              validationError: reason.reason === 'too_large' ? 'worldAttachTooLarge' : reason.reason === 'empty' ? 'worldPhotoEmpty' : 'worldAttachUnsupported' });
             continue;
           }
-          /* Said, not printed: a `PhotoRefused` carries a catalogue key as its
-             message, and `reason.message` put that key itself on the tile. */
-          const message = reason instanceof PhotoRefused ? whyOf(reason, locale) : say(draftProblem(reason, 'worldAttachUnsupported'));
-          if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', ...(file.name ? { name: file.name.slice(0, 255) } : {}), blob: file, validationError: message });
-          else problems.push(`${file.name}: ${message}`);
+          /* A KEY, kept on the draft and said at render (see above). A
+             `PhotoRefused` carries one; `reason.message` used to put that
+             key itself on the tile. */
+          const problem = reason instanceof PhotoRefused ? reason.reason : draftProblem(reason, 'worldAttachUnsupported');
+          if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', ...(file.name ? { name: file.name.slice(0, 255) } : {}), blob: file, validationError: problem });
+          else problems.push(`${file.name}: ${say(problem)}`);
         }
       }
       if (epoch !== fileOwnerEpoch.current) return;

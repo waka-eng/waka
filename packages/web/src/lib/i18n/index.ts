@@ -65,6 +65,12 @@ export const messageCatalogs = {
 } satisfies Record<SupportedLocale, Record<MessageKey, string>>;
 
 
+/** Whether a stored string is a catalogue key — for values written to disk
+    as keys, where an older copy may still hold the sentence itself. */
+export function isMessageKey(value: unknown): value is MessageKey {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(enUsMessages, value);
+}
+
 export function t(locale: unknown, key: MessageKey): string {
   return messageCatalogs[normalizeSupportedLocale(locale)][key];
 }

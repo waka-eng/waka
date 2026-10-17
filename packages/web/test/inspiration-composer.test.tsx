@@ -240,6 +240,23 @@ it('retains invalid/extra selections with removal controls and blocks saving unt
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Remove Photo 5.png"]')!.click());
   expect(props.onRemove).toHaveBeenCalledWith('5');
 });
+it('says a stored file problem and a failed upload in the reader’s language', async () => {
+  /* Both are stored on the durable draft as a key or a flag, not a sentence:
+     a sentence written there stayed English on a Korean screen, reload after
+     reload. The tile says them where it renders. */
+  props.locale = 'ko-KR';
+  props.media = [
+    { id: 'big', type: 'image', name: 'Big.png', blob: new Blob(['photo']), validationError: 'worldPhotoTooLarge' },
+    { id: 'stuck', type: 'image', name: 'Stuck.png', blob: new Blob(['photo']), uploadError: 'worldComposerUploadFailed' },
+  ];
+  await mount();
+  const titles = [...host.querySelectorAll('.jar-tile--wrong [title]')].map(node => node.getAttribute('title') ?? '');
+  expect(titles.length).toBeGreaterThanOrEqual(2);
+  for (const title of titles) {
+    expect(title, 'a key reached the screen').not.toMatch(/^world/);
+    expect(/[가-힣]/.test(title), title).toBe(true);
+  }
+});
 it('restores the separate link draft and includes it through the single Save action',async()=>{
   props.text='My note';props.linkText='https://example.test/unfinished';await mount();
   expect(host.querySelector<HTMLInputElement>('input[type=url]')?.value).toBe(props.linkText);

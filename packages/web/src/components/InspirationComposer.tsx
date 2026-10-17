@@ -37,7 +37,7 @@ import { AuthoredSaveNotice } from './AuthoredSaveNotice';
 import {inspirationWithPendingLink} from '../lib/inspiration-input';
 import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
 import { fileSizeWords } from '../lib/api/file-accept';
-import { formatMessage, t, type SupportedLocale } from '../lib/locales';
+import { formatMessage, isMessageKey, t, type SupportedLocale } from '../lib/locales';
 import { attachmentLabel } from '../lib/attachment-label';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { useAuthoredSave } from '../lib/use-authored-save';
@@ -82,7 +82,7 @@ import type { useAudioRecording } from '../lib/use-audio-recording';
  */
 function MediaTile({
   item, name, disabled, recording, uploading, onRemove, onRetry,
-  removeLabel, retryLabel, playLabel, pauseLabel, uploadFailedLabel,
+  removeLabel, retryLabel, playLabel, pauseLabel, uploadFailedLabel, problemLabel,
 }: {
   item: InspirationDraftMedia;
   /** What to call it: its own name, or "Photo" / "File" / "Recording" when
@@ -115,6 +115,9 @@ function MediaTile({
   pauseLabel: string;
   /** What a failed upload says, already in the reader's language. */
   uploadFailedLabel: string;
+  /** Why this file cannot be kept (`validationError`), already said in the
+      reader's language; empty when nothing is wrong with it. */
+  problemLabel: string;
 }) {
   const [url, setUrl] = useState('');
   const [failedPreview, setFailedPreview] = useState(false);
@@ -135,7 +138,7 @@ function MediaTile({
      tooltip, not in a second badge. */
   /* `uploadError` is a flag, said in the reader's language (see
      `lib/inspiration-media-upload`), never printed as stored. */
-  const wrong = item.validationError || (item.uploadError ? uploadFailedLabel : '');
+  const wrong = problemLabel || (item.uploadError ? uploadFailedLabel : '');
   const retryable = Boolean(item.uploadError) && !item.validationError && !uploading;
   const clock = seconds === null ? '' :
     `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
@@ -428,6 +431,8 @@ export function InspirationComposer(props: {
         playLabel={formatMessage(props.locale, 'worldComposerPlayFile', { name })}
         pauseLabel={formatMessage(props.locale, 'worldComposerPauseFile', { name })}
         uploadFailedLabel={say('worldComposerUploadFailed')}
+        /* stored as a key; a draft from before that still holds a sentence */
+        problemLabel={!item.validationError ? '' : isMessageKey(item.validationError) ? say(item.validationError) : item.validationError}
         onRemove={() => props.onRemove(item.id)}
         onRetry={() => props.onRetryFile(item.id)} />;
     })}</ul> : null}

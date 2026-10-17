@@ -9,7 +9,10 @@ export interface InspirationDraftMedia {
   name?: string;
   url?: string;
   blob?: Blob;
+  /** A flag: set means "did not upload", said as `worldComposerUploadFailed`. */
   uploadError?: string;
+  /** Why this file cannot be kept, as a catalogue KEY said at render — a
+      sentence stored here would stay in the language it was written in. */
   validationError?: string;
   uploaded?: { key: string; contentType: string; size: number };
 }
