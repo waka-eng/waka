@@ -7,6 +7,7 @@
  * nothing happened in it.
  */
 
+import { readerTimeZone } from "../words";
 import { apiPath, getJson, type ProfileScoped } from "./http";
 
 export interface ApiKeptDay {
@@ -21,25 +22,11 @@ export interface ListKeptDaysRequest extends ProfileScoped {
   tz?: string;
 }
 
-/**
- * The browser's own IANA zone, or nothing when it will not say.
- *
- * Without it the server grouped by UTC, and a save made at 8am in Seoul landed
- * on the previous date — the calendar a person reads is their own clock's.
- */
-function browserTimeZone(): string | undefined {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 /** GET /inspiration-days — how much was kept on each day, oldest first. */
 export async function listKeptDays(request: ListKeptDaysRequest = {}): Promise<ApiKeptDay[]> {
   const params = new URLSearchParams();
   if (request.days !== undefined) params.set("days", String(request.days));
-  const tz = request.tz ?? browserTimeZone();
+  const tz = request.tz ?? readerTimeZone();
   if (tz) params.set("tz", tz);
   if (request.profile) params.set("profile", request.profile);
   const query = params.toString();

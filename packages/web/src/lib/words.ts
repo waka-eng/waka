@@ -162,6 +162,22 @@ export function koSinoNumber(n: number): string {
  * year is a stamp that will one day be misread by exactly the person this is
  * built for.
  */
+/**
+ * The reader's own IANA zone, or nothing when the platform will not say.
+ *
+ * Here rather than beside its one caller (`lib/api/inspiration-days`, which
+ * sends it so the server groups saves by the reader's day, not UTC's) because
+ * this module is the one place the product asks the platform about dates —
+ * `test/one-date-vocabulary.test.tsx` holds every other file to that.
+ */
+export function readerTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function dateStamp(ms: number, locale: WordsLocale = "en-US"): string {
   const d = new Date(ms);
   if (locale === "ko-KR") {
