@@ -45,6 +45,15 @@ export interface PrincipleArtifactContent {
    */
   photo?:CanvasImageSource&{width:number;height:number}|null;
 }
+/** WHERE THE WORDS SIT, in card pixels (the card is 1080 wide), so the share
+ * sheet can put an editable copy of them exactly over the bubble: founder,
+ * 2026-10-16, "the user should be able to edit wording in the speech bubble
+ * directly rather than having the edit wording thing". */
+export interface ShareCardLayout {
+  width:number;height:number;
+  bubble:{x:number;y:number;w:number;h:number;radius:number;fill:string};
+  text:{x:number;y:number;w:number;size:number;leading:number;weight:number;family:string;ink:string};
+}
 export class ArtifactLayoutError extends Error {
   constructor(readonly code:'empty'|'too_long'|'unavailable'){super(code);}
 }
@@ -91,7 +100,7 @@ function seeded(seed:number):()=>number{
 /** The preview and exported file use these same pixels. No evidence, ids or
  * private metadata are accepted by the renderer. Principles, saves and the
  * top of mind all draw here, so the three cards are one family. */
-export async function renderShareCard(content:PrincipleArtifactContent):Promise<{blob:Blob;width:number;height:number;fallbackFont:boolean}>{
+export async function renderShareCard(content:PrincipleArtifactContent):Promise<{blob:Blob;width:number;height:number;fallbackFont:boolean;layout:ShareCardLayout}>{
   if(!content.items.length||content.items.length>3||content.items.some(item=>!item.text.trim()))throw new ArtifactLayoutError('empty');
   if(content.items.some(item=>item.text.length>2000)||content.name.length>100)throw new ArtifactLayoutError('too_long');
   if(content.proof&&content.proof.length>160)throw new ArtifactLayoutError('too_long');
@@ -170,16 +179,26 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
   const bubbleGap=64;
   const bubbleTop=margin+proofSpace;
   const bubbleBottomMax=beingTop-bubbleGap;
-  const bubbleW=width-margin*2,pad=56,textW=bubbleW-pad*2;
+  /* ═══ SMALLER WORDS IN MORE AIR, FOR WHAT THE CREATURE HOLDS ══════════
+     Founder, 2026-10-16, on the share card: the fonts were much bigger than
+     hoped. The fit used to start at 66px and take the largest size that
+     filled the bubble, so a sentence was always set as loud as the box
+     allowed. A thought or a kept note now tops out at 48px with more
+     leading, in a narrower bubble with deeper padding — the words held, not
+     shouted. A principle, which stands alone in the sky, keeps its scale. */
+  const held=kind!=='principle';
+  const inset=held?112:margin;
+  const bubbleW=width-inset*2,pad=held?64:56,textW=bubbleW-pad*2;
+  const sizeMax=held?48:66,sizeMin=held?28:36,leading=held?1.42:1.32;
   const photo=content.photo&&content.photo.width>0&&content.photo.height>0?content.photo:null;
   const photoH=photo?Math.round(Math.min((bubbleBottomMax-bubbleTop)*0.42,textW*photo.height/photo.width)):0;
   const photoSpace=photo?photoH+36:0;
   const available=bubbleBottomMax-bubbleTop-pad*2-photoSpace;
   let selected:{size:number;height:number;items:Array<{lines:string[];label?:string;date?:string}>}|null=null;
-  for(let size=66;size>=36;size-=2){
+  for(let size=sizeMax;size>=sizeMin;size-=2){
     ctx.font=`${wordWeight} ${size}px ${family}`;
     const items=content.items.map(item=>({...item,lines:wrapArtifactText(item.text,textW,value=>ctx.measureText(value).width)}));
-    const total=items.reduce((sum,item)=>sum+item.lines.length*size*1.32+(item.label||item.date?50:0),0)+(items.length-1)*44;
+    const total=items.reduce((sum,item)=>sum+item.lines.length*size*leading+(item.label||item.date?50:0),0)+(items.length-1)*44;
     if(total<=available){selected={size,height:total,items};break;}
   }
   if(!selected)throw new ArtifactLayoutError('too_long');
@@ -196,7 +215,7 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
   const glow=ctx.createRadialGradient(width/2,beingTop+being*0.55,being*0.2,width/2,beingTop+being*0.55,being*2.1);
   glow.addColorStop(0,`rgba(${ink.glow},${dark?0.34:0.55})`);glow.addColorStop(0.45,`rgba(${ink.glow},${dark?0.1:0.2})`);glow.addColorStop(1,`rgba(${ink.glow},0)`);
   ctx.fillStyle=glow;ctx.fillRect(0,0,width,height);
-  const x0=margin,y0=bubbleY,x1=margin+bubbleW,y1=bubbleY+bubbleH,cx=width/2;
+  const x0=inset,y0=bubbleY,x1=inset+bubbleW,y1=bubbleY+bubbleH,cx=width/2;
   const roundRect=(left:number,top:number,right:number,bottom:number,radius:number)=>{
     ctx.moveTo(left+radius,top);ctx.lineTo(right-radius,top);ctx.quadraticCurveTo(right,top,right,top+radius);ctx.lineTo(right,bottom-radius);
     ctx.quadraticCurveTo(right,bottom,right-radius,bottom);ctx.lineTo(left+radius,bottom);ctx.quadraticCurveTo(left,bottom,left,bottom-radius);
@@ -256,7 +275,7 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
 
   let y=bubbleY+pad;
   if(photo){
-    const band={x:margin+pad,y,w:textW,h:photoH};
+    const band={x:inset+pad,y,w:textW,h:photoH};
     const scale=Math.max(band.w/photo.width,band.h/photo.height);
     const sw=band.w/scale,sh=band.h/scale,sx=(photo.width-sw)/2,sy=(photo.height-sh)/2;
     ctx.save();ctx.beginPath();
@@ -264,10 +283,11 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
     ctx.drawImage(photo,sx,sy,sw,sh,band.x,band.y,band.w,band.h);ctx.restore();
     y+=photoSpace;
   }
-  const lineX=(text:string)=>centred?(width-ctx.measureText(text).width)/2:margin+pad;
+  const textTop=y;
+  const lineX=(text:string)=>centred?(width-ctx.measureText(text).width)/2:inset+pad;
   for(const [index,item] of selected.items.entries()){
     if(index){ctx.strokeStyle=ruleInk;ctx.lineWidth=2;ctx.beginPath();
-      if(centred){ctx.moveTo(cx-60,y-22);ctx.lineTo(cx+60,y-22);}else{ctx.moveTo(margin+pad,y-22);ctx.lineTo(margin+bubbleW-pad,y-22);}
+      if(centred){ctx.moveTo(cx-60,y-22);ctx.lineTo(cx+60,y-22);}else{ctx.moveTo(inset+pad,y-22);ctx.lineTo(inset+bubbleW-pad,y-22);}
       ctx.stroke();}
     if(item.label||item.date){
       ctx.font=`400 26px ${family}`;ctx.fillStyle=labelInk;
@@ -276,7 +296,7 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
       ctx.fillText(label,lineX(label),y);y+=50;
     }
     ctx.font=`${wordWeight} ${selected.size}px ${family}`;ctx.fillStyle=wordInk;
-    for(const line of item.lines){ctx.fillText(line,lineX(line),y);y+=selected.size*1.32;}
+    for(const line of item.lines){ctx.fillText(line,lineX(line),y);y+=selected.size*leading;}
     y+=44;
   }
   ctx.restore();
@@ -301,5 +321,8 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
   ctx.fillText(SHARE_MARK,width-margin-markWidth,height-margin-24);
 
   const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new ArtifactLayoutError('unavailable')),'image/png'));
-  return {blob,width,height,fallbackFont};
+  const layout:ShareCardLayout={width,height,
+    bubble:{x:x0,y:y0,w:bubbleW,h:bubbleH,radius:kind==='topOfMind'?Math.min(84,bubbleH/2):16,fill:kind==='topOfMind'?(dark?ink.bubbleDark:ink.bubbleLight):(dark?'#efe6d4':'#fffdf8')},
+    text:{x:inset+pad,y:textTop,w:textW,size:selected.size,leading,weight:wordWeight,family,ink:wordInk}};
+  return {blob,width,height,fallbackFont,layout};
 }

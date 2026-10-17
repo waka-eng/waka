@@ -13,9 +13,20 @@
  * failure it can meet, and none of that is redone here: the same renderer
  * draws this card, so the three kinds are one family. What this sheet does
  * differently is the order of things. It opens on the finished card, and
- * the only decisions on screen are the ones people make about a picture:
- * which look, and whether their name is on it. The words are a link away
- * for the rare time they want to change them. One press sends it.
+ * one press sends it.
+ *
+ * ── ONE DESIGN, AND THE WORDS ARE EDITED WHERE THEY ARE ─────────────────
+ *
+ * Founder, 2026-10-16: "let's not add options to change background or like
+ * design. Let's just have one design. The first main design is what I like
+ * the most" — so the looks row, and the name switch with it, are gone: the
+ * card is the dark square one, signed with your name. "The user should be
+ * able to edit wording in the speech bubble directly rather than having the
+ * edit wording thing" — so there is no second box under the card: pressing
+ * the words opens them for editing in the bubble itself, set in the card's
+ * own face, size and colours, and the picture redraws when you are done.
+ * And "I just wanted to say X on the top right corner" — the close is a
+ * plain ×, not a labelled button.
  *
  * ── WHAT IT NEVER DOES ──────────────────────────────────────────────────
  *
@@ -28,14 +39,20 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import type { CSSProperties } from "react";
 import { DialogSurface } from "./DialogSurface";
-import { ShareLooks } from "./ShareLooks";
 import { fetchAttachmentUrl } from "../lib/api";
-import { ArtifactLayoutError, renderShareCard, type PrincipleArtifactContent } from "../lib/principle-artifact";
-import { readShareLook, writeShareLook, type ShareLook } from "../lib/share-look";
+import { ArtifactLayoutError, renderShareCard, type PrincipleArtifactContent, type ShareCardLayout } from "../lib/principle-artifact";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { dateStamp } from "../lib/words";
 import { SHARE_NOTICE_KEY, useShareImage } from "../lib/use-share-image";
+
+/** The one design: the first one, dark and square. */
+const CARD_LOOK = { appearance: "dark", format: "square" } as const;
+
+/** Card pixels → a length that scales with the card as it is shown. The
+    stage is a size container, so `cqw` is a hundredth of the card's width. */
+const cq = (px: number, cardWidth: number) => `${(px / cardWidth) * 100}cqw`;
 
 export interface ShareTarget {
   kind: "inspiration" | "topOfMind";
@@ -70,9 +87,9 @@ export function ShareSheet({ target, name, locale, onClose }: {
   onClose: () => void;
 }) {
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
-  const [look, setLook] = useState<ShareLook>(() => readShareLook());
   const [words, setWords] = useState(target.text);
   const [editing, setEditing] = useState(false);
+  const [layout, setLayout] = useState<ShareCardLayout | null>(null);
   const [photo, setPhoto] = useState<PhotoState>(target.photoId ? { step: "loading" } : { step: "none" });
   const photoRef = useRef<ImageBitmap | null>(null);
   const [preview, setPreview] = useState<{ key: string; url: string; blob: Blob } | null>(null);
@@ -81,11 +98,6 @@ export function ShareSheet({ target, name, locale, onClose }: {
   const previewUrl = useRef<string | null>(null);
   const [renderError, setRenderError] = useState<"empty" | "too_long" | "unavailable" | null>(null);
   const [renderAttempt, setRenderAttempt] = useState(0);
-
-  const choose = (next: ShareLook) => {
-    setLook(next);
-    writeShareLook(next);
-  };
 
   /* THE PHOTO IS TRIED ONCE AND THE CARD NEVER WAITS ON IT TWICE. The
      attachment is served from storage on another origin, and a browser will
@@ -124,12 +136,13 @@ export function ShareSheet({ target, name, locale, onClose }: {
 
   const content = useMemo<PrincipleArtifactContent>(() => ({
     items: [{ text: words }],
-    name: look.showName ? name : "",
-    appearance: look.appearance,
-    format: look.format,
+    /* Signed, always — founder: "Show my name". */
+    name,
+    appearance: CARD_LOOK.appearance,
+    format: CARD_LOOK.format,
     kind: target.kind,
     ...(target.proof ? { proof: target.proof } : {}),
-  }), [words, look, name, target.proof]);
+  }), [words, name, target.kind, target.proof]);
   const contentKey = `${JSON.stringify(content)}|${photo.step}`;
 
   useEffect(() => {
@@ -147,6 +160,7 @@ export function ShareSheet({ target, name, locale, onClose }: {
           const url = URL.createObjectURL(result.blob);
           previewUrl.current = url;
           setPreview({ key: contentKey, url, blob: result.blob });
+          setLayout(result.layout);
         })
         .catch((error) => {
           if (alive) setRenderError(error instanceof ArtifactLayoutError ? error.code : "unavailable");
@@ -170,7 +184,28 @@ export function ShareSheet({ target, name, locale, onClose }: {
   const { busy, notice, setNotice, canShare, download, share } = useShareImage(ready ? preview?.blob ?? null : null, filenames);
 
   const title = say(target.kind === "inspiration" ? "worldShareInspirationTitle" : "worldShareTopOfMindTitle");
-  const alt = [target.proof, words, look.showName ? name : ""].filter(Boolean).join("\n");
+  const alt = [target.proof, words, name].filter(Boolean).join("\n");
+
+  /* THE WORDS, EDITABLE IN THE BUBBLE. A textarea laid exactly over the
+     bubble the renderer reports, in the card's own face, size and inks. At
+     rest it is clear, so the picture shows through and pressing the words is
+     pressing the field; while it has focus it takes the bubble's colour, so
+     you type into the bubble itself, and the card redraws a beat after each
+     change. Escape leaves the words without closing the sheet. */
+  const inline: CSSProperties | undefined = layout ? {
+    left: `${(layout.bubble.x / layout.width) * 100}%`,
+    top: `${(layout.bubble.y / layout.height) * 100}%`,
+    width: `${(layout.bubble.w / layout.width) * 100}%`,
+    height: `${(layout.bubble.h / layout.height) * 100}%`,
+    padding: `${cq(layout.text.y - layout.bubble.y, layout.width)} ${cq(layout.text.x - layout.bubble.x, layout.width)}`,
+    borderRadius: cq(layout.bubble.radius, layout.width),
+    fontFamily: layout.text.family,
+    fontWeight: layout.text.weight,
+    fontSize: cq(layout.text.size, layout.width),
+    lineHeight: layout.text.leading,
+    ["--share-ink" as string]: layout.text.ink,
+    ["--share-fill" as string]: layout.bubble.fill,
+  } : undefined;
 
   return (
     <>
@@ -178,60 +213,52 @@ export function ShareSheet({ target, name, locale, onClose }: {
       <DialogSurface className="jar-seek jar-thing-share" aria-label={title} onClose={onClose} data-jar-chrome="1">
         <header>
           <h2>{title}</h2>
-          <button type="button" onClick={onClose}>{say("worldClose")}</button>
+          <button type="button" className="jar-share-x" aria-label={say("worldClose")} onClick={onClose}>
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+          </button>
         </header>
         <div className="jar-share-body">
           <div className="jar-share-stage" aria-busy={!ready && !renderError}>
-            {preview && !renderError ? <img src={preview.url} alt={alt} /> : null}
+            {preview && !renderError ? (
+              <div className="jar-share-card">
+                <img src={preview.url} alt={alt} />
+                {inline ? (
+                  <textarea
+                    className="jar-share-inline"
+                    style={inline}
+                    aria-label={say("worldShareWords")}
+                    maxLength={2000}
+                    value={words}
+                    disabled={busy}
+                    spellCheck={editing}
+                    onFocus={() => setEditing(true)}
+                    onBlur={() => setEditing(false)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") { event.stopPropagation(); event.currentTarget.blur(); }
+                    }}
+                    onChange={(event) => setWords(event.target.value)}
+                  />
+                ) : null}
+              </div>
+            ) : null}
             {renderError ? (
               <p role="alert">
-                {say(renderError === "too_long" ? "worldShareTooLong" : renderError === "empty" ? "worldShareEmpty" : "worldShareRenderFailed")}
+                {say(renderError === "too_long" ? "worldShareTooLongCard" : renderError === "empty" ? "worldShareEmpty" : "worldShareRenderFailed")}
                 {renderError === "unavailable" ? (
                   <button type="button" onClick={() => setRenderAttempt((n) => n + 1)}>{say("worldRetry")}</button>
                 ) : null}
               </p>
-            ) : !ready ? (
+            ) : !preview ? (
               <p role="status" className="jar-share-quiet">{say("worldShareRendering")}</p>
             ) : null}
           </div>
 
-          <ShareLooks
-            appearance={look.appearance}
-            format={look.format}
-            disabled={busy}
-            locale={locale}
-            onChange={(next) => choose({ ...look, ...next })}
-          />
-
-          <div className="jar-share-row">
-            {name ? (
-              <label className="jar-share-name">
-                <input
-                  type="checkbox"
-                  checked={look.showName}
-                  disabled={busy}
-                  onChange={(event) => choose({ ...look, showName: event.target.checked })}
-                />
-                {say("worldShareName")}
-              </label>
-            ) : <span />}
-            <button type="button" className="jar-share-link" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>
-              {say("worldPrincipleEdit")}
-            </button>
-          </div>
-
-          {editing ? (
-            <div className="jar-share-wording">
-              <label>
-                {say("worldShareWords")}
-                <textarea rows={4} maxLength={2000} value={words} disabled={busy} onChange={(event) => setWords(event.target.value)} />
-              </label>
-              <p className="jar-share-quiet">{say("worldShareSeparate")}</p>
-              {words !== target.text ? (
-                <button type="button" className="jar-share-link" onClick={() => setWords(target.text)}>{say("worldShareOriginal")}</button>
-              ) : null}
-            </div>
-          ) : null}
+          <p className="jar-share-hint-line">
+            <span className="jar-share-quiet">{say("worldShareTapToEdit")}</span>
+            {words !== target.text ? (
+              <button type="button" className="jar-share-link" onClick={() => setWords(target.text)}>{say("worldShareOriginal")}</button>
+            ) : null}
+          </p>
 
           {photo.step === "failed" ? <p className="jar-share-quiet" role="status">{say("worldSharePhotoLeftOut")}</p> : null}
         </div>

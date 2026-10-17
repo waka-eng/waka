@@ -12,7 +12,11 @@
  * matters here is what the sheet ASKS the renderer for. `lib/api` is mocked
  * for `fetchAttachmentUrl`, the seam a photo is read through. `URL` supplies
  * blob handles, `navigator` a share sheet, and `fetch` the photo's bytes.
- * Everything else — the look store, the editing, the actions — is real.
+ * Everything else — the editing, the actions — is real.
+ *
+ * Founder, 2026-10-16: one design (the first, dark and square), always
+ * signed, no looks row and no name switch; the words edited in the bubble
+ * itself rather than in a box under the card; a plain × to close.
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -20,8 +24,13 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ShareSheet, type ShareTarget } from "../src/components/ShareSheet";
 import { fetchAttachmentUrl } from "../src/lib/api";
-import { renderShareCard } from "../src/lib/principle-artifact";
-import { readShareLook } from "../src/lib/share-look";
+import { renderShareCard, type ShareCardLayout } from "../src/lib/principle-artifact";
+
+const LAYOUT: ShareCardLayout = {
+  width: 1080, height: 1080,
+  bubble: { x: 112, y: 300, w: 856, h: 320, radius: 84, fill: "#e9dfcc" },
+  text: { x: 176, y: 364, w: 728, size: 44, leading: 1.42, weight: 400, family: "Jost", ink: "#151821" },
+};
 
 vi.mock("../src/lib/api", async (original) => ({ ...await original<typeof import("../src/lib/api")>(), fetchAttachmentUrl: vi.fn() }));
 vi.mock("../src/lib/principle-artifact", async (original) => ({ ...await original<typeof import("../src/lib/principle-artifact")>(), renderShareCard: vi.fn() }));
@@ -36,7 +45,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   localStorage.clear();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  vi.mocked(renderShareCard).mockImplementation(async (content) => ({ blob: new Blob([content.items[0]!.text], { type: "image/png" }), width: 1080, height: 1080, fallbackFont: false }));
+  vi.mocked(renderShareCard).mockImplementation(async (content) => ({ blob: new Blob([content.items[0]!.text], { type: "image/png" }), width: 1080, height: 1080, fallbackFont: false, layout: LAYOUT }));
   const BaseURL = URL;
   vi.stubGlobal("URL", class extends BaseURL { static createObjectURL = vi.fn(() => `blob:fixture-${crypto.randomUUID()}`); static revokeObjectURL = vi.fn(); });
   Object.defineProperty(navigator, "share", { configurable: true, value: nativeShare });
@@ -58,12 +67,10 @@ afterEach(async () => {
 const mount = (target: ShareTarget = SAVE, name = "Agi") => act(async () => root.render(<ShareSheet target={target} name={name} locale="en-US" onClose={close} />));
 const settle = () => act(async () => vi.advanceTimersByTimeAsync(200));
 const button = (text: string) => [...host.querySelectorAll<HTMLButtonElement>("button")].find((row) => row.textContent === text);
-const look = (label: string) => host.querySelector<HTMLButtonElement>(`.jar-share-look[aria-label="${label}"]`)!;
-
-it("opens on the finished card, with the kept words, no name, and one action", async () => {
+it("opens on the one design, signed, with the kept words and one action", async () => {
   await mount();
   await settle();
-  expect(renderShareCard).toHaveBeenLastCalledWith({ items: [{ text: SAVE.text }], name: "", appearance: "dark", format: "square", kind: "inspiration", proof: SAVE.proof, photo: null });
+  expect(renderShareCard).toHaveBeenLastCalledWith({ items: [{ text: SAVE.text }], name: "Agi", appearance: "dark", format: "square", kind: "inspiration", proof: SAVE.proof, photo: null });
   expect(host.querySelector("img")?.alt).toContain(SAVE.text);
   /* Without a native share sheet the one action is saving the image, and it
      is the primary. */
@@ -71,34 +78,36 @@ it("opens on the finished card, with the kept words, no name, and one action", a
   expect(save.disabled).toBe(false);
   expect(save.className).toContain("jar-share-primary");
   expect(button("Share image")).toBeUndefined();
-  expect(host.querySelector("textarea"), "the words should be a link away, not open").toBeNull();
+  /* No looks, no name switch, no separate wording box. */
+  expect(host.querySelector(".jar-share-look"), "one design: no looks row").toBeNull();
+  expect(host.querySelector(".jar-share-name"), "always signed: no name switch").toBeNull();
+  expect(button("Edit wording"), "the words are edited in the bubble").toBeUndefined();
+  expect(host.textContent).toContain("Tap the words to change them.");
 });
 
-it("changes the look in one press and remembers it for the next card", async () => {
+it("closes with a plain × in the corner", async () => {
   await mount();
   await settle();
-  await act(async () => look("Light · Story").click());
-  await settle();
-  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ appearance: "light", format: "portrait" }));
-  expect(look("Light · Story").getAttribute("aria-pressed")).toBe("true");
-  expect(readShareLook()).toMatchObject({ appearance: "light", format: "portrait" });
+  const x = host.querySelector<HTMLButtonElement>(".jar-share-x")!;
+  expect(x.getAttribute("aria-label")).toBe("Close");
+  expect(x.textContent).toBe("");
+  await act(async () => x.click());
+  expect(close).toHaveBeenCalledOnce();
 });
 
-it("puts the name on only when asked, and remembers that too", async () => {
+it("edits the words in the bubble itself, laid over the bubble the card reports", async () => {
   await mount();
   await settle();
-  await act(async () => host.querySelector<HTMLInputElement>(".jar-share-name input")!.click());
-  await settle();
-  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ name: "Agi" }));
-  expect(readShareLook().showName).toBe(true);
-});
-
-it("edits the card's words only, and can go back to the kept words", async () => {
-  await mount();
-  await settle();
-  await act(async () => button("Edit wording")!.click());
-  const area = host.querySelector("textarea")!;
+  const area = host.querySelector<HTMLTextAreaElement>(".jar-share-card .jar-share-inline")!;
+  expect(area, "the words are a field over the card").not.toBeNull();
+  /* Placed on the bubble, in the card's own face, as a share of the card. */
+  expect(area.style.left).toBe(`${(112 / 1080) * 100}%`);
+  expect(area.style.top).toBe(`${(300 / 1080) * 100}%`);
+  expect(area.style.fontFamily).toBe("Jost");
+  expect(area.style.fontSize).toBe(`${(44 / 1080) * 100}cqw`);
+  expect(area.value).toBe(SAVE.text);
   await act(async () => {
+    area.focus();
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(area, "Small first moves.");
     area.dispatchEvent(new Event("input", { bubbles: true }));
   });
@@ -107,6 +116,16 @@ it("edits the card's words only, and can go back to the kept words", async () =>
   await act(async () => button("Use original wording")!.click());
   await settle();
   expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ items: [{ text: SAVE.text }] }));
+});
+
+it("Escape leaves the words and keeps the sheet open", async () => {
+  await mount();
+  await settle();
+  const area = host.querySelector<HTMLTextAreaElement>(".jar-share-inline")!;
+  await act(async () => area.focus());
+  await act(async () => area.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(document.activeElement).not.toBe(area);
+  expect(close).not.toHaveBeenCalled();
 });
 
 it("sends only the image through the native sheet, and never says it was posted", async () => {
@@ -141,8 +160,8 @@ it("makes a words-only card and says so when the photo cannot be read", async ()
   expect(button("Save image")!.disabled).toBe(false);
 });
 
-it("offers no name switch when there is no name to show", async () => {
+it("leaves the name off the card when there is no name to show", async () => {
   await mount(SAVE, "");
   await settle();
-  expect(host.querySelector(".jar-share-name")).toBeNull();
+  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ name: "" }));
 });
