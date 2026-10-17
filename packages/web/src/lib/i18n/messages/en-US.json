@@ -604,5 +604,8 @@
   "readingPausedNotice": "Reading is paused — your saves are safe.",
   "readingPausedRetry": "Retry",
   "readingPausedRetrying": "Restarting…",
-  "readingPausedRetryFailed": "Couldn’t restart it. Try again in a moment."
+  "readingPausedRetryFailed": "Couldn’t restart it. Try again in a moment.",
+  "publicProfileFailedTitle": "This page didn’t open",
+  "publicProfileFailedBody": "WAKA couldn’t open this page just now. It may still be there.",
+  "surfaceUnavailableHome": "Go to your WAKA"
 }

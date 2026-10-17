@@ -45,11 +45,13 @@ export interface FetchPublicProfileResponse {
 
 export async function fetchPublicProfile(
   handle: string,
+  signal?: AbortSignal,
 ): Promise<FetchPublicProfileResponse> {
   const normalizedHandle = handle.trim().replace(/^@+/, "");
   const body = await getJson<FetchPublicProfileResponse>(
     apiPath(`/public/profiles/${encodeURIComponent(normalizedHandle)}`),
     "Failed to load public profile",
+    signal,
   );
 
   if (!body.profile) {

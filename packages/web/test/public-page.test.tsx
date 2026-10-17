@@ -31,8 +31,9 @@
  *   `ApiError` and every payload type stay the product's own. It is the layer
  *   directly beneath this page: the page calls it and renders what comes
  *   back, with nothing in between.
- *   There is no fixture fallback here — a failed load renders the "not here"
- *   state and nothing else — so a wrong mock produces an empty page and a red
+ *   There is no fixture fallback here — a 404 renders the "not here" state,
+ *   any other failure renders "didn't open" with a retry, and nothing else —
+ *   so a wrong mock produces an empty page and a red
  *   test rather than a green one describing something else. That is the
  *   condition that makes mocking this layer safe on this page and not on the
  *   world: the world has fixture fallbacks and would go green describing
@@ -59,7 +60,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PublicProfilePage from "../src/pages/PublicProfile";
-import { fetchPublicProfile } from "../src/lib/api";
+import { ApiError, fetchPublicProfile } from "../src/lib/api";
 
 const reader = vi.hoisted(() => ({ signedIn: false }));
 
@@ -221,11 +222,54 @@ describe("the page a stranger sees", () => {
    * client waiting for somebody to print it to a stranger.
    */
   it("names the handle and offers a way onward when there is no page", async () => {
-    vi.mocked(fetchPublicProfile).mockRejectedValue(new Error("Failed to load public profile"));
+    vi.mocked(fetchPublicProfile).mockRejectedValue(new ApiError({ status: 404, message: "Failed to load public profile" }));
     await visit("/@nobody");
     expect(host.querySelector(".waka-public-handle")?.textContent).toBe("@nobody");
+    expect(host.textContent).toContain("This page is not here");
     expect(host.textContent).not.toContain("Failed to load");
     expect(host.querySelector(".waka-public-enter")).not.toBeNull();
+  });
+
+  /**
+   * A SERVER THAT FAILED IS NOT A PAGE THAT IS NOT THERE. A 500 or a dead
+   * connection used to render "This page is not here" — a false statement
+   * about somebody else's page, made to a stranger, with nothing to try. It
+   * says it did not open now, and Try again reads it again.
+   */
+  it("says the page did not open, rather than that it is missing, and tries again", async () => {
+    vi.mocked(fetchPublicProfile).mockRejectedValueOnce(new ApiError({ status: 500, message: "boom" }));
+    await visit();
+    expect(host.textContent).toContain("This page didn’t open");
+    expect(host.textContent).not.toContain("This page is not here");
+    const retry = [...host.querySelectorAll<HTMLButtonElement>(".waka-public-enter")]
+      .find((button) => button.textContent === "Try again")!;
+    await act(async () => retry.click());
+    await act(async () => undefined);
+    expect(host.querySelector(".waka-public-title")?.textContent).toBe("River’s top of mind");
+  });
+
+  /** The way in does not depend on the read, so it is there while it runs. */
+  it("offers the way in while the page is still opening", async () => {
+    vi.mocked(fetchPublicProfile).mockReturnValue(new Promise(() => undefined));
+    await visit();
+    expect(host.textContent).toContain("Opening this page…");
+    expect(host.querySelector(".waka-public-enter")?.textContent).toBe("Create your WAKA");
+  });
+
+  /** A read that never answers ends, and ends in the state with a retry. */
+  it("stops waiting after fifteen seconds", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetchPublicProfile).mockImplementation((_handle, signal) => new Promise((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(new ApiError({ status: 0, message: "aborted" })));
+      }));
+      await visit();
+      expect(host.textContent).toContain("Opening this page…");
+      await act(async () => vi.advanceTimersByTimeAsync(15_000));
+      expect(host.textContent).toContain("This page didn’t open");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   /** Shared page, unshared board: the owner's choice, and a state rather than
