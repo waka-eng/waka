@@ -357,8 +357,6 @@
   "worldPhotoTooLarge": "25MB가 넘는 사진이에요. 더 작은 파일을 골라 주세요.",
   "worldPhotoWrongKind": "JPEG, PNG, WebP, GIF, AVIF, HEIC 사진을 사용해 주세요.",
   "worldPickNoticed": "에이전트가 내 작업에서 발견한 문장이에요",
-  "worldPourFailed": "와카를 따르지 못했어요 — 새로고침으로 다시 시도해 주세요",
-  "worldPouring": "와카를 따르는 중…",
   "worldPrincipleDisputed": "정확하지 않다고 표시했어요",
   "worldPrincipleEarned": "{since}부터 지켜온 생각 · 저장한 {countWords}개에서",
   "worldPrincipleEarnedAgent": "{since}부터 지켜온 생각 · 에이전트가 저장한 {countWords}개에서",
@@ -599,5 +597,12 @@
   "worldWriteANewOne": "새로 써 보기",
   "worldWrittenByHand": "손으로 쓴 문장",
   "worldYes": "맞아요",
-  "worldYesWithdrawIt": "네, 거둘게요"
+  "worldYesWithdrawIt": "네, 거둘게요",
+  "homeLoadFailed": "홈을 불러오지 못했어요.",
+  "homeTryAgain": "다시 시도",
+  "unreachableTitle": "지금 WAKA에 닿지 못했어요. 로그인은 그대로예요 — 연결을 확인하고 다시 시도해 주세요.",
+  "unreachableChecking": "확인하는 중…",
+  "sessionEndedTitle": "로그아웃되었어요.",
+  "sessionEndedSubtitle": "다시 로그인하면 있던 곳으로 돌아가요. 쓰던 글은 그대로 남아 있어요.",
+  "worldWhyOutOfCredit": "지금은 읽기가 잠시 멈춰 있어요. 저장한 것은 안전해요."
 }

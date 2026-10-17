@@ -2928,27 +2928,9 @@
 }
 
 
-/* ---------- skeleton / failure whispers ---------- */
-.jar-skel {
-  position: absolute;
-  inset: 0;
-  z-index: 7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-/* Its own register, and NOT .jar-label. What these two lines carry is prose —
-   "Pouring Waka…" — and prose set in the tracked uppercase label register is
-   the exact failure the founder named. Sentence case, no tracking, the same
-   quiet weight the forming line speaks in. */
-.jar-skel-line {
-  font-weight: 400;
-  font-size: var(--t-ui);
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--jar-muted);
-}
+/* `.jar-skel` and `.jar-skel-line` went with the two hidden lines they
+   placed (2026-10-17): a failed or slow load is the loading screen's to say
+   now, in `components/LoadingHome.tsx`. */
 
 @keyframes jar-word {
   from {
@@ -3712,15 +3694,6 @@
   color: var(--jar-muted);
 }
 
-/* the reason under the failure: quiet, small, and never the headline — it is
-   for the person who can act on it, not the person who just wanted to read */
-.jar-skel-why {
-  display: block;
-  margin-top: var(--sp-10);
-  font-size: var(--t-meta);
-  color: var(--jar-faint);
-  opacity: 0.75;
-}
 
 }
 

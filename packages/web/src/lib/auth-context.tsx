@@ -62,6 +62,7 @@ import type {
 import { normalizeSupportedLocale, writeStoredLocale } from "./locales";
 import type { SupportedLocale } from "./locales";
 import { isMobileBuild } from './platform';
+import { SESSION_EXPIRED_EVENT } from './api/transport';
 
 // ---------------------------------------------------------------------------
 // Storage helpers
@@ -179,6 +180,18 @@ export interface AuthContextValue {
    * its words. Never the other way round.
    */
   serverUnreachable: boolean;
+  /**
+   * THE SESSION ENDED WHILE IN USE, AND WHERE THE PERSON WAS WHEN IT DID.
+   *
+   * Set when a request made with a session comes back 401 (see
+   * `SESSION_EXPIRED_EVENT` in `lib/api/transport.ts`), never by the
+   * initial `/auth/me` check — a visitor who arrives signed out did not lose
+   * anything. The door reads it to say "you were signed out" rather than
+   * greet a returning visitor, and to send them back to `from` once they are
+   * in again. Unsent drafts are NOT cleared on this path: only `logout`
+   * evicts them, because only `logout` is somebody choosing to leave.
+   */
+  sessionExpired: { from: string } | null;
   /** The signed-in account, or null when anonymous. */
   account: ApiAccount | null;
   /** The profile this session acts as, or null when anonymous. */
@@ -280,11 +293,21 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
   /** See `AuthContextValue.serverUnreachable`. Says nothing about access. */
   const [serverUnreachable, setServerUnreachable] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState<{ from: string } | null>(null);
+  const viewerRef = useRef(viewer);
+  viewerRef.current = viewer;
   useEffect(() => {
-    if (!isMobileBuild) return;
-    const expired = () => { applyViewer(null); setServerUnreachable(false); setIsLoading(false); };
-    window.addEventListener('waka:session-expired', expired);
-    return () => window.removeEventListener('waka:session-expired', expired);
+    const expired = () => {
+      /* ON THE WEB THE EVENT FIRES FOR ANY 401, so it only means something
+         when there was a session to lose. Native fires it from the
+         credential store itself, which already implies there was one. */
+      if (!isMobileBuild && !viewerRef.current) return;
+      const at = window.location;
+      setSessionExpired({ from: `${at.pathname}${at.search}${at.hash}` });
+      applyViewer(null); setServerUnreachable(false); setIsLoading(false);
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, expired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expired);
   }, [applyViewer]);
 
   // Initial hydration: confirm the cached viewer against the server.
@@ -349,6 +372,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
          `logout` is deliberately not one of those, because it wipes state
          first and swallows its own network errors by design. */
       setServerUnreachable(false);
+      setSessionExpired(null);
       const next: ApiViewer = { account, profile };
       applyViewer(next);
       return next;
@@ -362,6 +386,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       const { account, profile } = await apiSignup(input);
       if (!aliveRef.current || startedAt !== authMutationRef.current) throw new ApiError({ status: 409, message: 'Sign-in changed. Please try again.' });
       setServerUnreachable(false);
+      setSessionExpired(null);
       const next: ApiViewer = { account, profile };
       applyViewer(next);
       return next;
@@ -403,6 +428,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     const leaving = viewer
       ? { accountId: viewer.account.id, profileId: viewer.profile.id }
       : null;
+    setSessionExpired(null);
     // Wipe local state FIRST so the UI updates immediately even if the
     // network call hangs. The server-side cookie clear is a best-effort
     // follow-up; `apiLogout()` swallows network errors by design.
@@ -422,11 +448,22 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     await evicted;
   }, [applyViewer, viewer]);
 
+  /* ALSO THE "TRY AGAIN" BEHIND "WE CAN'T REACH WAKA". So a dead connection
+     here re-raises `serverUnreachable` rather than leaving the flag at
+     whatever the last answer said — the screen asking the question again
+     has to be told when the answer is still no. */
   const refresh = useCallback(async (): Promise<ApiViewer | null> => {
     const startedAt = authMutationRef.current;
-    const fresh = await fetchCurrentViewer();
+    let fresh: ApiViewer | null;
+    try {
+      fresh = await fetchCurrentViewer();
+    } catch (err) {
+      if (aliveRef.current && err instanceof ApiError && err.status === 0) setServerUnreachable(true);
+      throw err;
+    }
     if (!aliveRef.current || startedAt !== authMutationRef.current) return fresh;
     setServerUnreachable(false);
+    if (fresh) setSessionExpired(null);
     applyViewer(fresh);
     return fresh;
   }, [applyViewer]);
@@ -468,6 +505,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       isLoading,
       isAuthenticated: viewer !== null,
       serverUnreachable,
+      sessionExpired,
       login,
       signup,
       logout,
@@ -480,6 +518,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       viewer,
       isLoading,
       serverUnreachable,
+      sessionExpired,
       login,
       signup,
       logout,

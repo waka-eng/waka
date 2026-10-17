@@ -227,7 +227,6 @@ describe("nothing visible loses its press", () => {
           ![
             ".jar-canvas",
             ".jar-atmos",
-            ".jar-skel",
             ".jar-topbar",
             ".jar-offline",
             ".jar-when-place",

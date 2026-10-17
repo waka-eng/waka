@@ -6,11 +6,43 @@ export const nativeSession = new NativeSession({
   get: async key => (await platformServices()).credentials.get(key),
   set: async (key, value) => (await platformServices()).credentials.set(key, value),
   remove: async key => (await platformServices()).credentials.remove(key),
-}, () => window.dispatchEvent(new Event('waka:session-expired')));
+}, () => window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT)));
+
+/**
+ * HOW LONG A REQUEST MAY GO UNANSWERED BEFORE IT COUNTS AS UNANSWERED.
+ *
+ * The native branch below has always had this deadline. The web branch was a
+ * bare `fetch`, and a browser waits for a server that accepted the connection
+ * and then said nothing for as long as the socket stays open — minutes, and
+ * on some proxies forever. Every screen that waits on one of these requests
+ * then waits with it: the home loading screen, the sign-in check, a chat's
+ * history. None of them can offer "Try again" for a request that has not yet
+ * failed, so a stall was a dead end that looked like patience.
+ *
+ * One number for both platforms, so a stalled server reads the same
+ * everywhere: as the dead connection it effectively is.
+ */
+const REQUEST_DEADLINE_MS = 20_000;
+
+/**
+ * WHICH 401s MEAN "YOUR SESSION ENDED".
+ *
+ * A 401 from the sign-in forms is a wrong password, and a 401 from
+ * `/auth/me` is the ordinary answer for a visitor who was never signed in —
+ * the auth context reads that one itself. Every other 401 means a session
+ * this page was using has stopped being accepted, which nothing could tell
+ * the person before: each screen met it as its own local error ("you are
+ * signed out") with no way to sign back in from where they were.
+ */
+const NOT_AN_EXPIRY = ['/api/auth/login', '/api/auth/signup', '/api/auth/mobile/exchange', '/api/auth/me', '/api/auth/logout'];
+export const SESSION_EXPIRED_EVENT = 'waka:session-expired';
+function pathOf(url: string): string {
+  try { return new URL(url, window.location.href).pathname; } catch { return url; }
+}
 
 /** The shared resource client only. Signed object-storage uploads bypass it. */
 export async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
-  if (!isMobileBuild) return fetch(url, init);
+  if (!isMobileBuild) return webFetch(url, init);
   const origin = checkedNativeApiOrigin();
   const parsed = new URL(url);
   if (parsed.origin !== origin ||
@@ -29,7 +61,7 @@ export async function apiFetch(url: string, init: RequestInit = {}): Promise<Res
   const abort = () => controller.abort(init.signal?.reason);
   if (init.signal?.aborted) abort();
   else init.signal?.addEventListener('abort', abort, { once: true });
-  const timeout = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), 20_000);
+  const timeout = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), REQUEST_DEADLINE_MS);
   try {
     const response = await fetch(url, { ...init, headers, credentials: 'omit', redirect: 'error', signal: controller.signal });
     if (response.status === 401 && token) await nativeSession.clearIfCurrent(version, token);
@@ -40,6 +72,51 @@ export async function apiFetch(url: string, init: RequestInit = {}): Promise<Res
   } finally {
     clearTimeout(timeout); init.signal?.removeEventListener('abort', abort);
   }
+}
+
+/**
+ * THE WEB BRANCH: the browser's own fetch, cookie and all, with the deadline
+ * and the expiry signal the native branch already had.
+ *
+ * THE DEADLINE STAYS ARMED THROUGH THE BODY. Clearing it when the headers
+ * arrive would leave a server that sends a status line and then stalls
+ * mid-body exactly as stuck as before. So a successful response leaves it
+ * armed: an abort landing after the body has been read is a no-op, and one
+ * landing mid-body is the point. The
+ * body is NOT buffered here, unlike native: web callers include tests and
+ * code that hand this a `Response` they read themselves, and a stream the
+ * deadline can still cut is all that is needed.
+ */
+async function webFetch(url: string, init: RequestInit): Promise<Response> {
+  /* READS ONLY. A write that has been sent may already be committing, and
+     cutting it off at the deadline turns "slow" into "did it save?" — the
+     one question a person cannot answer for themselves. The attachment
+     finalize is the sharp case (`chat-attachments-api.test.ts`: "the
+     finalize could be cut off mid-commit"). Writes keep their caller's own
+     signal and the server's own timeouts; what hung forever was the reads
+     every screen waits on before it can show anything. */
+  const method = (init.method ?? 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') {
+    const response = await fetch(url, init);
+    if (response.status === 401 && !NOT_AN_EXPIRY.includes(pathOf(url))) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    return response;
+  }
+  const controller = new AbortController();
+  const abort = () => controller.abort(init.signal?.reason);
+  if (init.signal?.aborted) abort();
+  else init.signal?.addEventListener('abort', abort, { once: true });
+  const timeout = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), REQUEST_DEADLINE_MS);
+  let response: Response;
+  try {
+    response = await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    clearTimeout(timeout); init.signal?.removeEventListener('abort', abort);
+    throw error;
+  }
+  if (response.status === 401 && !NOT_AN_EXPIRY.includes(pathOf(url))) {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  }
+  return response;
 }
 
 let revoking: Promise<void> | undefined;

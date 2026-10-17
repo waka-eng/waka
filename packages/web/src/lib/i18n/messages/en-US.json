@@ -357,8 +357,6 @@
   "worldPhotoTooLarge": "This photo is over 25 MB. Choose a smaller copy.",
   "worldPhotoWrongKind": "Use a JPEG, PNG, WebP, GIF, AVIF or HEIC photo.",
   "worldPickNoticed": "Your agent noticed this in your work",
-  "worldPourFailed": "Waka could not be poured — reload to try again",
-  "worldPouring": "Pouring Waka…",
   "worldPrincipleDisputed": "You marked this as inaccurate",
   "worldPrincipleEarned": "Held since {since} · drawn from {countWords} {count, plural, one {thing you kept} other {things you kept}}",
   "worldPrincipleEarnedAgent": "Held since {since} · drawn from {countWords} {count, plural, one {thing it kept} other {things it kept}}",
@@ -599,5 +597,12 @@
   "worldWriteANewOne": "Write a new one",
   "worldWrittenByHand": "Written by hand",
   "worldYes": "Yes",
-  "worldYesWithdrawIt": "Yes, withdraw it"
+  "worldYesWithdrawIt": "Yes, withdraw it",
+  "homeLoadFailed": "Your home didn’t load.",
+  "homeTryAgain": "Try again",
+  "unreachableTitle": "We can’t reach WAKA right now. You’re still signed in — check your connection and try again.",
+  "unreachableChecking": "Checking…",
+  "sessionEndedTitle": "You were signed out.",
+  "sessionEndedSubtitle": "Sign in again and you’ll go back to where you were. Anything you were writing is still here.",
+  "worldWhyOutOfCredit": "Reading is paused on our side. Your saves are safe."
 }

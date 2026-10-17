@@ -606,6 +606,19 @@ body {
   padding: 10px var(--sp-12);
 }
 
+/* The one verb a banner can carry — "Try again" — wearing the banner's own
+   words rather than a second button shape beside them. */
+.form-error-action {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
 /* ═══ `.form-success` AND `.btn-destructive` ARE GONE FROM THIS FILE ════
    Both were `Profile.tsx`'s, and `Profile.tsx` was deleted on 2026-10-11
    with the `/profile` route. Five blocks went: `.form-success`, the

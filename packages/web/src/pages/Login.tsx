@@ -607,7 +607,20 @@ export default function LoginPage(): JSX.Element {
   const navigate = useNavigate();
   /* Why the door is standing here, when the reason is "we could not ask" —
      see `AuthContextValue.serverUnreachable`. It never decides access. */
-  const { serverUnreachable } = useAuth();
+  const { serverUnreachable, sessionExpired, refresh } = useAuth();
+  const [checking, setChecking] = useState(false);
+  /* ═══ SIGNED OUT MID-SENTENCE COMES BACK TO THE SAME SENTENCE ═══════════
+     A session that ends while in use (`sessionExpired`, raised by any 401
+     outside the sign-in check) records where the person was. Writing it into
+     `state.from` — the field every route guard already uses — means the
+     form, the Google button and the redirect after sign-in all send them
+     back there without a second notion of "destination" to keep in step.
+     Only when nothing more specific was given: a guard's own `from` wins. */
+  useEffect(() => {
+    if (!sessionExpired || (location.state as { from?: unknown } | null)?.from) return;
+    navigate({ pathname: location.pathname, search: location.search },
+      { replace: true, state: { ...(location.state as object | null), from: sessionExpired.from } });
+  }, [sessionExpired, location, navigate]);
   const wayBack = wayBackFrom((location.state as { from?: unknown } | null)?.from);
 
   /**
@@ -648,8 +661,12 @@ export default function LoginPage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const headline = t(locale, mode === "login" ? "loginWelcome" : "loginBegin");
-  const subtitle = t(locale, mode === "login" ? "loginSubtitle" : "signupSubtitle");
+  /* "Welcome back" is wrong for somebody the product just signed out: they
+     never left. The door says what happened and that their words survived,
+     which is the fear a sudden sign-in form raises. */
+  const ended = sessionExpired !== null && mode === "login";
+  const headline = ended ? t(locale, "sessionEndedTitle") : t(locale, mode === "login" ? "loginWelcome" : "loginBegin");
+  const subtitle = ended ? t(locale, "sessionEndedSubtitle") : t(locale, mode === "login" ? "loginSubtitle" : "signupSubtitle");
 
   const activateLoginTab = (): void => {
     setMode("login");
@@ -725,6 +742,17 @@ export default function LoginPage(): JSX.Element {
         {serverUnreachable && !oauthError ? (
           <div className="form-error" role="alert">
             {t(locale, "loginNetworkError")}
+            {/* THE BANNER WAS A STATEMENT WITH NO VERB. Ask again from here:
+                a session that was fine all along goes straight back in,
+                without the person typing a password they did not need. */}
+            {" "}
+            <button type="button" className="form-error-action" disabled={checking} onClick={() => {
+              setChecking(true);
+              void refresh()
+                .then((viewer) => { if (viewer) navigate(resolveRedirect(location), { replace: true }); })
+                .catch(() => undefined)
+                .finally(() => setChecking(false));
+            }}>{t(locale, checking ? "unreachableChecking" : "homeTryAgain")}</button>
           </div>
         ) : null}
 

@@ -731,6 +731,16 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     };
   }, []);
   const [navigationProblem, setNavigationProblem] = useState<'retryable' | 'unavailable' | null>(null);
+  useEffect(() => {
+    if (!navigationProblem) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      viewNavigationRef.current.write({ ...EMPTY_VIEW }, { replace: true });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navigationProblem]);
   const [detachedInspiration, setDetachedInspiration] = useState<{ wall: string; ball: Ball; detail: InspirationDetail | null } | null>(null);
   const detachedRef = useRef(detachedInspiration); detachedRef.current = detachedInspiration;
   const linkedReflectionRef = useRef<{ panelId: string; open: boolean } | null>(null);
@@ -7273,10 +7283,35 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           frame that claims nothing is ready yet. */}
       {phase !== "ready" ? (
         <div style={{ position: "absolute", inset: 0, zIndex: 60 }}>
-          <LoadingHome />
+          {/* A FAILED LOAD SAID "LOADING" FOREVER. This screen sat at z 60
+              over the failure line and its reason (z 7, at the bottom of
+              this tree), and the retry the field loader keeps in
+              `retryFieldRef` was never called by anything. So the screen
+              itself turns into the failure: what went wrong, why, and the
+              two ways out a person can actually take from here. */}
+          <LoadingHome problem={phase === "failed" ? {
+            message: say("homeLoadFailed"),
+            detail: failReason,
+            actions: [
+              { label: say("homeTryAgain"), onClick: () => {
+                setFailReason(null);
+                setPhase("loading");
+                retryFieldRef.current?.();
+              } },
+              ...(auth?.isAuthenticated ? [{ label: say("signOut"), onClick: () => {
+                void auth.logout().then(() => navigate("/login", { replace: true })).catch(() => undefined);
+              } }] : []),
+            ],
+          } : null} />
         </div>
       ) : null}
       {navigationProblem ? <div className="jar-navigation-notice" role="alert" data-jar-chrome="1">
+        {/* A NOTICE IN THE MIDDLE OF THE SCREEN NEEDS THE TWO WAYS EVERY
+            OTHER ONE HAS: a ✕ inside it, and Escape (the listener below).
+            Both do what "Me" does — the view that failed is not there to go
+            back to, so dismissing it IS going home. */}
+        <button type="button" className="jar-navigation-notice-close" aria-label={say('worldClose')}
+          onClick={() => viewNavigation.write({ ...EMPTY_VIEW }, { replace: true })}>×</button>
         <p>{say(navigationProblem === 'unavailable' ? 'worldPrivateLinkUnavailable' : 'worldLinkUnavailable')}</p>
         {navigationProblem === 'retryable' ? <button type="button" onClick={() => viewNavigation.write(viewNavigation.view ?? { ...EMPTY_VIEW }, { replace: true, query: viewNavigation.query })}>{say('worldRoomHistoryRetry')}</button> : auth?.isAuthenticated ?
           <button type="button" onClick={() => {
@@ -11780,15 +11815,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           the audit actually taught. */}
 
 
-      {phase === "loading" ? (
-        <div className="jar-skel jar-skel-line">{say("worldPouring")}</div>
-      ) : null}
-      {phase === "failed" ? (
-        <div className="jar-skel jar-skel-line">
-          {say("worldPourFailed")}
-          {failReason ? <span className="jar-skel-why">{failReason}</span> : null}
-        </div>
-      ) : null}
+      {/* "POURING WAKA…" AND "COULD NOT BE POURED — RELOAD" LIVED HERE, at
+          z 7 under the loading screen's z 60: never seen, but read aloud by
+          a screen reader beside the screen that is seen, so a failed load
+          announced two different failures. The loading screen says it all
+          now (see the `LoadingHome` call above). */}
     </div>
   );
 }
