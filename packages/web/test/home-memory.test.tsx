@@ -59,6 +59,9 @@ import {
    above every other statement in the file and a plain `const` here would not
    exist yet when the factory runs. */
 const KEPT = vi.hoisted(() => ({ calls: [] as { id: string; text: string }[] }));
+/* A delete a case can hold open, so "the answer lands after the reader has
+   moved on" is a state it can stand in rather than a race it hopes to win. */
+const DELETES = vi.hoisted(() => ({ hold: null as Promise<void> | null }));
 
 const GROUP_ID = "group-1";
 const PROPOSAL_ID = "proposal-1";
@@ -172,7 +175,9 @@ vi.mock("../src/lib/api", async (importOriginal) => {
        one reaches a server jsdom has not got, so it rejects — and a rejected
        delete is a DIFFERENT state wearing a different sentence, which is
        precisely the confusion the cases below exist to refuse. */
-    deleteInspiration: async () => undefined,
+    deleteInspiration: async () => {
+      if (DELETES.hold) await DELETES.hold;
+    },
     /* One shared statement, LOCKED — the owner's own words on the room's
        wall. The star must render exactly where other people read the
        sentence (no-quiet-corners Phase 8), and the case below pins it. The
@@ -317,6 +322,7 @@ beforeEach(async () => {
      silently disables the layout the first case is about */
   window.localStorage.clear();
   KEPT.calls.length = 0;
+  DELETES.hold = null;
   layout = await mountWorld(FACTS);
   /* the sky arrives a hop behind the field: loadSignals, then one loadSignal
      per signal for its evidence, then the memo, then syncSky */
@@ -571,6 +577,42 @@ describe("deleting a memory", () => {
       (layout.container.textContent ?? "").includes("didn’t go through"),
       "and nothing claimed it failed",
     ).toBe(false);
+  });
+
+  it("leaves the next memory alone when the delete lands after you stepped to it", { timeout: 30_000 }, async () => {
+    /* Delete A, step to B before the server answers. A's answer used to close
+       whatever panel was open and reset its state — so B, which nobody asked
+       to delete, vanished from under the reader. */
+    let land!: () => void;
+    DELETES.hold = new Promise<void>((resolve) => {
+      land = resolve;
+    });
+    await layout.toField();
+    const panel = await openMemory("something I kept, 5");
+    const before = panel.querySelector(".jar-panel-text")?.textContent;
+    await pressPanelVerb(panel, "Delete");
+    expect(layout.container.textContent ?? "").toContain("Deleting");
+
+    const step = layout.container.querySelector<HTMLElement>(
+      ".jar-panel--in .jar-panel-foot-c button",
+    );
+    if (!step) throw new Error("the open memory offers no neighbour to step to");
+    await act(async () => step.click());
+    await layout.step(20);
+    const after = layout.container.querySelector(".jar-panel--in .jar-panel-text")?.textContent;
+    expect(after, "the step landed on a different memory").not.toBe(before);
+
+    await act(async () => {
+      land();
+      await DELETES.hold;
+    });
+    await layout.step(40);
+
+    expect(
+      layout.container.querySelector(".jar-panel--in .jar-panel-text")?.textContent,
+      "the memory stepped to is still open after the other one's delete landed",
+    ).toBe(after);
+    expect(layout.container.textContent ?? "").not.toContain("Deleting");
   });
 
   it("says what is lost when a signal stands on it, and only then", { timeout: 30_000 }, async () => {

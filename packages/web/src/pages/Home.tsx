@@ -6973,7 +6973,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
   const inspirationRemovedFromView = useCallback((serverId: string, visualId = serverId) => {
     sourceListMutationRef.current += 1;
-    setSelectedId(null);
+    /* ONLY IF IT IS STILL THE ONE OPEN. A delete is a round trip, and a
+       person who pressed delete on A and stepped to B before it landed was
+       having B's panel closed under them by A's answer. */
+    setSelectedId(current => (current === visualId || current === serverId ? null : current));
     simApiRef.current?.unborn(visualId);
     bornRef.current = bornRef.current.filter(row => row.id !== visualId && row.sigId !== serverId);
     inspirationsRef.current = inspirationsRef.current?.filter(row => row.id !== visualId && row.id !== serverId) ?? null;
@@ -7003,13 +7006,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     deleteInspiration(serverId)
       .then(() => {
         inspirationRemovedFromView(serverId, id);
-        setForget({ id: null, step: "rest" });
+        /* `forget` is per memory: if the reader has moved to another one
+           while this was in flight, that one's state is not ours to reset. */
+        setForget(current => (current.id === id ? { id: null, step: "rest" } : current));
       })
       .catch(() => {
         /* IT IS STILL THERE, AND THE WORLD STILL SHOWS IT. Not back to the
            ask: the ask is a sentence about what a signal loses, and nothing
-           about this failure is that. Its own state, its own line. */
-        setForget({ id, step: "failed" });
+           about this failure is that. Its own state, its own line. And only
+           on the memory that failed — written unconditionally, A's failure
+           printed "didn't go through" on whatever B was open by then. */
+        setForget(current => (current.id === id ? { id, step: "failed" } : current));
       });
   }, [panelId, panelBall, forget.step, inspirationRemovedFromView]);
 
@@ -10123,9 +10130,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       a warning with nothing to warn about is friction wearing
                       a safety costume. A memory a signal stands on opens the
                       ask below instead. */}
-                  {forget.step === "going" ? (
+                  {forget.step === "going" && forget.id === panelId ? (
                     say("worldDeleting")
-                  ) : forget.step === "failed" ? (
+                  ) : forget.step === "failed" && forget.id === panelId ? (
                     /* PROSE, AND IT SAYS WHAT IS TRUE: the memory is still
                        here. Beside the verb rather than in a sheet, because
                        nothing happened and nothing needs deciding — pressing
