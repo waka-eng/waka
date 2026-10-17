@@ -17,9 +17,6 @@ export async function requestSignalDerivation(input: {
   profileId: string;
   inspirationId: string;
   reason: DeriveSignalsPayload["reason"];
-  /** Kept on the input so callers state what changed; only the personal pass
-   * reads either kind of source. */
-  changedSource: "inspiration" | "reflection";
 }, transaction: SourceTransaction) {
   const personal = await enqueueDeriveSignals(input.profileId, input.inspirationId, input.reason, transaction);
   return { jobId: personal.jobId, receipt: personal.receipt };

@@ -74,25 +74,17 @@ export interface DeriveSignalsPayload {
   inspirationId: string;
   /** "created" on capture, "edited" when re-derivation follows an edit. */
   reason: "created" | "edited";
-  /**
-   * WHERE THE SIGNALS LAND (2026-08-24). Absent — the overwhelmingly common
-   * case — they land on the inspiration's own profile, exactly as always.
-   * Set, they land on a ROOM'S MIND: a public keep fans out one of these
-   * jobs per room its keeper is in, the job still OWNED by the keeper's
-   * profile so the model budget and queue fairness bill the person whose
-   * keep asked for the work, with this field carrying the destination.
-   */
-  deriveIntoProfileId?: string;
+  /* Legacy rows may still carry `deriveIntoProfileId` (a room mind as the
+     destination). Rooms' engine retired 2026-10-17; the worker recognises
+     and settles such rows from the raw payload, so the type omits it. */
 }
 
 export interface ReviewSignalSupportPayload {
   inspirationId: string;
-  deriveIntoProfileId?: string;
 }
 
 export interface AssessSignalSupportPayload {
   inspirationId: string;
-  deriveIntoProfileId?: string;
   signalIds: string[];
   materialRevision: string;
   materialHash: string;

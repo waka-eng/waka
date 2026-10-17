@@ -62,9 +62,6 @@ export async function ensureSupportBatchCoverage(db: Database, input: {
 }
 
 export async function supportBatchInputsCurrent(db: Database, ownerProfileId: string, payload: AssessSignalSupportPayload) {
-  // A batch aimed at a room mind is retired room work; the worker settles it
-  // before this is reached, and it can never verify as current here.
-  if (payload.deriveIntoProfileId) return false;
   const claims = await loadSupportClaims(db, ownerProfileId, ownerProfileId, payload.inspirationId);
   if (payload.signalIds.some((id) => !claims.some((claim) => claim.signalId === id))) return false;
   const report = await reviewSignalSupport(db, { ownerProfileId, inspirationId: payload.inspirationId,

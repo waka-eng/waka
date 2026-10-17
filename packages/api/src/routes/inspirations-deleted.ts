@@ -105,7 +105,7 @@ export function registerDeletedRoutes(routes: Hono<AuthEnv>, getDatabase: typeof
         .where(and(eq(harvestCandidates.profileId, profileId), eq(harvestCandidates.status, "kept"), isNull(harvestCandidates.inspirationId),
           sql`${harvestCandidates.context}->>'keptAs' = ${copy.id}::text`));
       await tx.delete(deletedInspirations).where(eq(deletedInspirations.id, copy.id));
-      await requestSignalDerivation({ profileId, inspirationId: copy.id, reason: "created", changedSource: "inspiration" }, tx);
+      await requestSignalDerivation({ profileId, inspirationId: copy.id, reason: "created" }, tx);
       return { state: "restored" as const, notRestored: copy.hadPhoto ? ["attachments"] : [] };
     });
     if (!restored) return c.json({ error: "Nothing to bring back" }, 404);

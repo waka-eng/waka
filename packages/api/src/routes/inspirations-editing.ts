@@ -210,7 +210,7 @@ export function registerEditingRoutes(
       .returning(inspirationSelection);
       if (!row) return undefined;
       const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: row.id,
-        reason: "edited", changedSource: "inspiration" }, tx);
+        reason: "edited" }, tx);
       return { ...row, processing: processing.receipt };
     });
 

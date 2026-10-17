@@ -560,7 +560,7 @@ export async function recoverPendingSignalSupport(db: Pick<ReturnType<typeof get
       request_version = request_version + 1, run_after = now(), last_error = NULL, result = NULL, rerun_requested = false
       WHERE type::text = 'assess_signal_support' AND status::text = 'failed'
         AND profile_id = ${source.ownerProfileId}::uuid AND payload->>'inspirationId' = ${source.inspirationId}
-        AND coalesce(payload->>'deriveIntoProfileId', profile_id::text) = ${profileId}
+        AND profile_id = ${profileId}::uuid AND payload->>'deriveIntoProfileId' IS NULL
         AND payload->>'materialRevision' = (SELECT CASE WHEN ${source.ownerProfileId}::uuid = ${profileId}::uuid
           THEN personal_revision ELSE public_revision END::text FROM inspiration_revisions
           WHERE inspiration_id = ${source.inspirationId}::uuid AND profile_id = ${source.ownerProfileId}::uuid)`);
@@ -939,10 +939,6 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
     // that order. Lock every revision this stage may write before its claim;
     // a busy human transaction wins instead of becoming a deadlock victim.
     const owners = new Set([job.profileId]);
-    if (job.type === "derive_signals" || job.type === 'review_signal_support' || job.type === 'assess_signal_support') {
-      const destination = readString(job.payload, "deriveIntoProfileId");
-      if (destination) owners.add(destination);
-    }
     if (job.type === "enrich_attachment") {
       const inspirationId = readString(job.payload, "inspirationId");
       if (inspirationId) {
@@ -971,7 +967,7 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
     if(job.type==='refresh_top_of_mind')await (await import('./review-processing.js')).recordReviewReadingResult(tx,{...publication,jobId:job.id,requestVersion:job.requestVersion.toString()});
     await (await import('./principle-status.js')).enqueuePrinciplesAfterReading(tx, publication.profileId);
   };
-  if (await retiredGroupJob(job)) return settleRetiredGroupJob(job);
+  if (retiredGroupJob(job)) return settleRetiredGroupJob(job);
   switch (job.type) {
     case 'assess_signal_support': {
       const payload = parseAssessSignalSupportPayload(job.payload);
@@ -1076,10 +1072,9 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       return;
     }
     case "refresh_principles": {
-      const profileId = readString(job.payload, "profileId") ?? job.profileId;
-      // Only a room mind's principles were ever requested on someone else's
-      // behalf; that is retired room work (see retiredGroupJob), not a poison.
-      if (profileId !== job.profileId) return settleRetiredGroupJob(job);
+      // A payload naming another profile was a room mind's; retiredGroupJob
+      // has already settled it, so the target here is the tenant.
+      const profileId = job.profileId;
       await refreshPrinciplesForProfile({ profileId }, {jobId:job.id,billingProfileId:job.profileId,
         expectedMaterialKey:job.idempotencyKey?.startsWith(`refresh_principles:${profileId}:`)?job.idempotencyKey.slice(`refresh_principles:${profileId}:`.length):undefined,
         beforeProgress:tx=>assertBackgroundJobOwnership(tx,job,true),beforeCommit:tx=>assertBackgroundJobOwnership(tx,job,true)});
@@ -1189,10 +1184,14 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
 
     case "tend_signal_garden": {
       const [profileRow] = await getDb()
-        .select({ preferredLocale: profiles.preferredLocale })
+        .select({ preferredLocale: profiles.preferredLocale, type: profiles.type })
         .from(profiles)
         .where(eq(profiles.id, job.profileId))
         .limit(1);
+      // A room mind's garden is retired room work (see retiredGroupJob). Read
+      // here, on the row this branch already loads, rather than in a query of
+      // its own for every garden job.
+      if (profileRow?.type === "group") return settleRetiredGroupJob(job);
       const summary = await tendSignalGarden(getDb(), {
         profileId: job.profileId,
         beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
@@ -1230,15 +1229,20 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
  *
  * The enum value `refresh_group_top_of_mind` stays — removing it is an
  * `ALTER TYPE` migration, and the data-dropping phase has not been decided.
- * What counts as room work, all of it shapes only the room engine wrote:
+ * What counts as room work, all of it shapes only the room engine wrote,
+ * recognised from the row alone (no query):
  *   - any `refresh_group_top_of_mind`;
- *   - derive/review/assess work landing on a room's mind (`deriveIntoProfileId`);
+ *   - derive/review/assess work landing on a room's mind — the legacy
+ *     `deriveIntoProfileId` field, read from the raw payload here and nowhere
+ *     else now (the payload types no longer declare it);
  *   - principles requested for a profile other than the job's tenant (a
- *     mind's, billed to a member) or for a group profile;
- *   - a signal-garden pass over a group profile.
- * Personal and agent jobs never carry these shapes, so they run unchanged.
+ *     mind's, billed to a member).
+ * Two more are settled where their branch already loads the profile row: a
+ * garden pass over a group profile (the `tend_signal_garden` case) and
+ * principles for a group profile (`refreshPrinciplesForProfile` returns
+ * below-bar). Personal and agent jobs never carry these shapes.
  */
-async function retiredGroupJob(job: BackgroundJob): Promise<boolean> {
+function retiredGroupJob(job: BackgroundJob): boolean {
   switch (job.type) {
     case "refresh_group_top_of_mind":
       return true;
@@ -1247,14 +1251,7 @@ async function retiredGroupJob(job: BackgroundJob): Promise<boolean> {
     case "assess_signal_support":
       return readString(job.payload, "deriveIntoProfileId") !== null;
     case "refresh_principles":
-    case "tend_signal_garden": {
-      const target = job.type === "refresh_principles"
-        ? readString(job.payload, "profileId") ?? job.profileId : job.profileId;
-      if (target !== job.profileId) return true;
-      const [row] = await getDb().select({ type: profiles.type }).from(profiles)
-        .where(eq(profiles.id, target)).limit(1);
-      return row?.type === "group";
-    }
+      return (readString(job.payload, "profileId") ?? job.profileId) !== job.profileId;
     default:
       return false;
   }
@@ -1306,15 +1303,12 @@ function parseDeriveSignalsPayload(payload: unknown): DeriveSignalsPayload | nul
   const reason = readString(payload, "reason");
   if (!inspirationId) return null;
   if (reason !== "created" && reason !== "edited") return null;
-  const deriveIntoProfileId = readString(payload, "deriveIntoProfileId");
-  return deriveIntoProfileId
-    ? { inspirationId, reason, deriveIntoProfileId }
-    : { inspirationId, reason };
+  return { inspirationId, reason };
 }
 
 function parseAssessSignalSupportPayload(payload: unknown): AssessSignalSupportPayload | null {
   const revision = z.string().regex(/^[1-9]\d*$/), hash = z.string().regex(/^[a-f0-9]{64}$/), uuid = z.string().uuid();
-  const parsed = z.object({ inspirationId: uuid, deriveIntoProfileId: uuid.optional(),
+  const parsed = z.object({ inspirationId: uuid,
     signalIds: z.array(uuid).min(1).max(SUPPORT_REVIEW_BATCH_SIZE), materialRevision: revision,
     materialHash: hash, membershipId: uuid.nullable(),
     statements: z.array(z.object({ id: uuid, revision, hash }).strict()).min(1).max(SUPPORT_REVIEW_BATCH_SIZE),

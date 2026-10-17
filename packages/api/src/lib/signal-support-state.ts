@@ -58,7 +58,9 @@ export async function loadSignalSupportWorkState(db: Pick<ReturnType<typeof getD
     FROM background_jobs j JOIN inspirations i ON i.id::text = j.payload->>'inspirationId' AND i.profile_id = j.profile_id
     JOIN profiles p ON p.id = ${profileId}::uuid
     WHERE j.type::text IN ('review_signal_support', 'assess_signal_support', 'derive_signals')
-      AND coalesce(j.payload->>'deriveIntoProfileId', j.profile_id::text) = p.id::text
+      -- A legacy room job (deriveIntoProfileId set) never counts as the
+      -- owner's own work; the worker settles it unrun.
+      AND j.profile_id = p.id AND j.payload->>'deriveIntoProfileId' IS NULL
       AND i.profile_id = p.id`);
   const pendingIds = new Set(sources.map((source) => source.inspirationId));
   const relevant = jobs.filter((job) => pendingIds.has(job.inspirationId) ||

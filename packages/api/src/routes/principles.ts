@@ -129,7 +129,7 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
   // Personal and agent profiles only (group_id IS NULL). A room mind's
   // principles were served by the room engine's predicates, retired with it;
   // a mind never resolves through this scope, and is refused here regardless.
-  const support=personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS);
+  const support=sql<boolean>`(${profiles.groupId} IS NULL AND ${personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)})`;
   const readable=sql<boolean>`(${profiles.groupId} IS NULL AND ${personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)})`;
   type Citation={id:string;statement:string;current:boolean|null;examples:Array<{text:string;createdAt:string}>;
     reviewExamples:Array<{answerId:string;sessionId:string;preview:string;createdAt:string}>};

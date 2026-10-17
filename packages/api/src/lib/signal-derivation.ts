@@ -204,10 +204,17 @@ export async function deriveSignalsForInspiration(
     }
   }
   const provider = deps.modelProvider ?? (await getDefaultModelProvider());
-  if (deps.beforeCommit) await (await import('./signal-support-batches.js')).ensureSupportBatchCoverage(db, {
-    ownerProfileId: inspirationRow.profileId, inspirationId: inspirationRow.id,
-    provider, beforeCommit: deps.beforeCommit,
-  });
+  // Planning large-source coverage reads the source too; a source deleted
+  // mid-run is the same ordinary outcome as below, not a retryable fault.
+  try {
+    if (deps.beforeCommit) await (await import('./signal-support-batches.js')).ensureSupportBatchCoverage(db, {
+      ownerProfileId: inspirationRow.profileId, inspirationId: inspirationRow.id,
+      provider, beforeCommit: deps.beforeCommit,
+    });
+  } catch (error) {
+    if (error instanceof SupportSourceUnavailableError) return emptyResult(error.status);
+    throw error;
+  }
   const embeddingClient = deps.embeddingClient ?? new GeminiEmbeddingHttpClient();
 
   // Existing support is its own question, before bounded discovery. Applying

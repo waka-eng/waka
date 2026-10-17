@@ -23,8 +23,6 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
     : job ? "processing" : "pending";
   return { phase, eligible: material.eligibility.eligible,
     supportPending: support.pending,
-    // Only a room mind ever withheld principles; personal ones never are.
-    restricted: false,
     signalCount: material.eligibility.distinctSignals,
     topOfMindCount: material.eligibility.tomAppearances };
 }

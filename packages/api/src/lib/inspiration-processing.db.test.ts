@@ -117,7 +117,7 @@ describe('source material and its numbered processing request', () => {
     const f = await fixture();
     await expect(t.db.transaction(async (tx) => {
       await tx.execute(sql`UPDATE inspirations SET text = 'Uncommitted edit' WHERE id = ${f.inspirationId}::uuid`);
-      const result = await requestSignalDerivation({ ...f, reason: 'edited', changedSource: 'inspiration' }, tx as never);
+      const result = await requestSignalDerivation({ ...f, reason: 'edited' }, tx as never);
       expect(result.receipt.materialRevision).toBe('2');
       throw new Error('Save failed');
     })).rejects.toThrow('Save failed');
@@ -208,7 +208,7 @@ describe('source material and its numbered processing request', () => {
       await t.sql`INSERT INTO group_members(group_id, profile_id) VALUES (${group.id}, ${f.profileId})`;
       await t.sql`UPDATE profiles SET type = ${type} WHERE id = ${f.profileId}`;
       await t.sql`UPDATE inspirations SET visibility = 'public' WHERE id = ${f.inspirationId}`;
-      await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created', changedSource: 'inspiration' }, tx as never));
+      await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created' }, tx as never));
       expect(await t.sql`SELECT profile_id FROM inspiration_processing WHERE inspiration_id = ${f.inspirationId}`)
         .toEqual([{ profile_id: f.profileId }]);
       expect(await t.sql`SELECT payload FROM background_jobs WHERE payload->>'inspirationId' = ${f.inspirationId}`)
@@ -219,7 +219,7 @@ describe('source material and its numbered processing request', () => {
   it('deleting a reflected source removes its revision and processing metadata without orphaning copies', async () => {
     const f = await fixture();
     await t.sql`INSERT INTO reflections(profile_id, inspiration_id, question, answer) VALUES (${f.profileId}, ${f.inspirationId}, 'Why?', 'An answer')`;
-    await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created', changedSource: 'inspiration' }, tx as never));
+    await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created' }, tx as never));
     await t.sql`DELETE FROM inspirations WHERE id = ${f.inspirationId}`;
     expect(await t.sql`SELECT inspiration_id FROM inspiration_revisions`).toHaveLength(0);
     expect(await t.sql`SELECT id FROM inspiration_processing`).toHaveLength(0);
@@ -259,7 +259,7 @@ describe('source material and its numbered processing request', () => {
 
   it('binds a saved source to its material revision and exact derivation request', async () => {
     const f = await fixture();
-    const result = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created', changedSource: 'inspiration' }, tx as never));
+    const result = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created' }, tx as never));
     expect(result).toMatchObject({ receipt: { ...f, materialRevision: '1', requestVersion: '1' } });
   });
 
@@ -275,9 +275,9 @@ describe('source material and its numbered processing request', () => {
 
   it('distinguishes successive material revisions even when the queue reuses one job', async () => {
     const f = await fixture();
-    const first = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created', changedSource: 'inspiration' }, tx as never));
+    const first = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created' }, tx as never));
     await t.sql`UPDATE inspirations SET text = 'New source' WHERE id = ${f.inspirationId}`;
-    const second = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'edited', changedSource: 'inspiration' }, tx as never));
+    const second = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'edited' }, tx as never));
     expect(second).toMatchObject({ jobId: first.jobId, receipt: { ...f, materialRevision: '2', requestVersion: '2' } });
   });
 });

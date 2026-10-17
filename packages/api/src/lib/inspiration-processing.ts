@@ -182,7 +182,7 @@ export async function recordInspirationProcessingRequest(tx: Transaction, input:
     INSERT INTO inspiration_processing (profile_id, owner_profile_id, inspiration_id, material_revision,
       derivation_job_id, derivation_request_version)
     SELECT ${input.profileId}::uuid, i.profile_id, i.id,
-      CASE WHEN ${input.profileId}::uuid = i.profile_id THEN r.personal_revision ELSE r.public_revision END,
+      r.personal_revision,
       j.id, j.request_version
     FROM inspirations i JOIN inspiration_revisions r ON r.inspiration_id = i.id AND r.profile_id = i.profile_id
       JOIN background_jobs j ON j.id = ${input.job.jobId}::uuid AND j.profile_id = i.profile_id
@@ -190,12 +190,9 @@ export async function recordInspirationProcessingRequest(tx: Transaction, input:
       AND j.type::text = 'derive_signals' AND j.request_version = ${input.job.requestVersion}::bigint
       AND j.status::text IN ('pending', 'running')
       AND j.payload->>'inspirationId' = i.id::text
-      AND coalesce(j.payload->>'deriveIntoProfileId', i.profile_id::text) = ${input.profileId}
-      AND ((${input.profileId}::uuid = i.profile_id AND j.payload->>'deriveIntoProfileId' IS NULL)
-        OR (${input.profileId}::uuid <> i.profile_id AND i.visibility::text = 'public' AND EXISTS (
-        SELECT 1 FROM profiles p JOIN group_members m ON m.group_id = p.group_id
-        JOIN profiles owner ON owner.id = m.profile_id AND owner.type::text = 'human'
-        WHERE p.id = ${input.profileId}::uuid AND p.type::text = 'group' AND m.profile_id = i.profile_id)))
+      -- Personal destination only: a room mind (deriveIntoProfileId) was
+      -- the other branch, retired with the room engine.
+      AND ${input.profileId}::uuid = i.profile_id AND j.payload->>'deriveIntoProfileId' IS NULL
     ON CONFLICT (profile_id, inspiration_id, derivation_job_id, derivation_request_version)
       DO UPDATE SET material_revision = inspiration_processing.material_revision
       WHERE inspiration_processing.material_revision = EXCLUDED.material_revision
