@@ -125,6 +125,10 @@ export interface OpenEdit {
  */
 export interface EditingDeps {
   readonly onInspirationSaved?: (inspiration: ApiInspiration) => void;
+  /** A memory's words were kept: the page re-points whatever it is showing
+      (and seeds the next edit from) at them, so a second edit cannot start
+      from the first one's before. */
+  readonly onMemoryKept?: (id: string, text: string) => void;
   readonly reloadReading?: () => Promise<void>;
   readonly onEntrySaved?: () => void;
   readonly beginReadingMutation?: () => () => void;
@@ -288,6 +292,7 @@ export function useEditing(deps: EditingDeps): Editing {
             prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
           );
           d.details.current.delete(held.id);
+          d.onMemoryKept?.(held.id, text);
           /* THE CARD STAYS OPEN. This deselected the memory on success, which
              closed the whole card in the same breath the `saved` beat was
              trying to hold it — so the founder's ruling ("just keep it

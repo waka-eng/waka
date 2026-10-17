@@ -631,6 +631,10 @@ interface PanelData {
   id: string;
   detail: InspirationDetail | null;
   partial: boolean;
+  /** The full read is still in flight after the panel gave up waiting for it
+      (the two-second rule below). The panel says "Opening this note…" and
+      takes the detail when it lands, instead of staying partial forever. */
+  pending?: boolean;
 }
 
 /**
@@ -4313,22 +4317,45 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        from nothing, and back to nothing. */
     if (!steppingRef.current && !panelOpenRef.current) setPanelOpen(false);
     let done = false;
-    const show = (detail: InspirationDetail | null) => {
+    let cancelled = false;
+    const show = (detail: InspirationDetail | null, pending = false) => {
       if (done) return;
       done = true;
       steppingRef.current = false;
       window.clearTimeout(timer);
-      setPanel({ id: selectedId, detail, partial: detail === null });
+      setPanel({ id: selectedId, detail, partial: detail === null, pending });
       setPanelOpen(true);
     };
-    /* the network is not allowed to hold a reading hostage */
-    const timer = window.setTimeout(() => show(null), 2000);
-    loadDetail(fetchId).then(show);
+    /* the network is not allowed to hold a reading hostage — but a late
+       answer is still the answer. The panel appears at two seconds saying it
+       is still opening, and the detail is taken whenever it lands; before
+       2026-10-17 a read slower than the timer left the panel partial (and
+       not editable) for as long as it stayed open. */
+    const timer = window.setTimeout(() => show(null, true), 2000);
+    loadDetail(fetchId).then((detail) => {
+      if (cancelled) return;
+      if (!done) { show(detail); return; }
+      setPanel((p) => (p && p.id === selectedId ? { id: selectedId, detail, partial: detail === null } : p));
+    });
     return () => {
       done = true;
+      cancelled = true;
       window.clearTimeout(timer);
     };
   }, [selectedId, loadDetail]);
+
+  /* TRY AGAIN, for a panel whose full read failed. The same read the effect
+     above makes, by the same id rule, landing on the panel only if it is
+     still the memory that asked. */
+  const retryPanelDetail = useCallback(() => {
+    const id = panel?.id;
+    if (!id) return;
+    const fetchId = ballsRef.current?.byId.get(id)?.sigId ?? id;
+    setPanel((p) => (p && p.id === id ? { ...p, pending: true } : p));
+    void loadDetail(fetchId).then((detail) => {
+      setPanel((p) => (p && p.id === id ? { id, detail, partial: detail === null } : p));
+    });
+  }, [panel?.id, loadDetail]);
 
   /* Placement is the stylesheet's now: the panel opens in the middle of the
      frame, always (founder, 2026-08-24). It used to be solved from the orb
@@ -6774,6 +6801,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     reloadReading: async () => { absorbBoard(await loadPersonalReading()); },
     beginReadingMutation,
     onInspirationSaved: (made) => { sourceListMutationRef.current += 1; if (made.processing) sourceProcessing.track(made.id, made.processing); },
+    /* THE OPEN CARD TAKES THE WORDS IT JUST KEPT. `panel.detail` is what the
+       next edit is seeded from, so leaving the pre-edit text there meant a
+       second edit began from the first one's BEFORE and its save reverted it
+       (review, 2026-10-17). The cache gets the same words for the same
+       reason: reopening this memory must not read them back stale. */
+    onMemoryKept: (id, text) => {
+      setPanel((p) => {
+        if (!p?.detail || (p.id !== id && p.detail.id !== id)) return p;
+        const detail = { ...p.detail, text, preview: text };
+        detailsRef.current.set(detail.id, detail);
+        return { ...p, detail };
+      });
+    },
     onEntrySaved: () => {
       readingMutationRef.current += 1;
       readingNeedsLatestRef.current = true;
@@ -6907,15 +6947,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const beginPanelEdit = useCallback(
     (ev: ReactMouseEvent<HTMLParagraphElement>) => {
       if (!panelId || editing.open) return;
-      /* NEVER AN EDIT SEEDED FROM THE LIST'S PREVIEW (P0, 2026-10-17). This
-         used to fall back to `panelBall.textPreview` while the detail read
-         was in flight or after it failed — a 220-character cut ending in "…"
-         (or an attachment label) that the editor then PATCHed back as the
-         whole text, deleting the rest of the save. Until the full text has
-         arrived for THIS memory the words are read-only; the press is simply
-         not an edit yet, and `panel.partial` already says the rest is
-         missing when the read failed. */
-      if (!panel?.detail || panel.id !== panelId) return;
+      /* NEVER AN EDIT SEEDED FROM A PREVIEW (P0, 2026-10-17). This used to
+         fall back to `panelBall.textPreview` while the detail read was in
+         flight or after it failed — a 220-character cut ending in "…" (or an
+         attachment label) that the editor then PATCHed back as the whole
+         text, deleting the rest of the save.
+
+         The fallback is still right in exactly the cases the panel effect
+         marks COMPLETE with no detail (`partial: false`): a memory kept a
+         moment ago, whose preview is every word you typed, and an offline
+         fixture memory, which has nothing else behind it. A panel that is
+         `partial` — still opening, or failed — does not know the whole
+         text, so the press is not an edit yet. */
+      if (!panel || panel.id !== panelId || panel.partial) return;
+      const whole = panel.detail ? panel.detail.text : panelBall?.textPreview;
+      if (whole === undefined) return;
       /* THE CARET GOES WHERE THE FINGER WENT. Without this the press lands
          you at the end of a page of text and you scroll back to the sentence
          you meant — which is the same "find your place again" cost the
@@ -6941,10 +6987,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       editing.begin(
         "memory",
         panelId,
-        panel.detail.text,
+        whole,
       );
     },
-    [panelId, editing, panel],
+    [panelId, editing, panel, panelBall],
   );
 
   /* ═══ `togglePublic` AND `publishing` ARE GONE ══════════════════════════
@@ -9875,8 +9921,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               )}
             </p>
           )}
-          {panel.partial ? (
-            <p className="jar-panel-note">{say("worldCouldntLoadRest")}</p>
+          {/* STILL OPENING, OR IT DID NOT — and from the second, a way to ask
+              again. The same two states and the same words the archive's
+              note page uses, so one memory never says two different things
+              depending on the door it was opened through. */}
+          {panel.pending ? (
+            <p className="jar-panel-note" role="status">{say("worldNoteOpening")}</p>
+          ) : panel.partial ? (
+            <p className="jar-panel-note">
+              {say("worldCouldntLoadRest")}{" "}
+              <button type="button" className="jar-panel-retry" onClick={retryPanelDetail}>
+                {say("surfaceUnavailableRetry")}
+              </button>
+            </p>
           ) : null}
           {panel.detail?.attachments.length ? <InspirationAttachments items={panel.detail.attachments} locale={locale} /> : null}
           {/* THE CITED-BY SENTENCE WENT WITH THE ROOM THAT NEEDED IT. On a
