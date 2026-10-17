@@ -35,7 +35,7 @@
  * Before this file, the single assertion in the whole suite that proved
  * Korean reaches anybody was `i18n.test.ts`'s
  * `expect(/[가-힣]/.test(t("ko-KR", "tagline"))).toBe(true)` — a catalogue
- * lookup for a key that nothing in the product renders. It proves the FILE
+ * lookup for a key that nothing in the product rendered (since deleted). It proves the FILE
  * holds Hangul. It cannot prove a screen does, which is exactly the gap both
  * regressions above lived in. These cases mount real components and read the
  * DOM, so the claim is about a screen.

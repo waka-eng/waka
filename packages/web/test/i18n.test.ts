@@ -29,10 +29,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_LOCALE,
-  formatBestRecentMirrorMoments,
-  formatGeneratedFieldCounts,
-  formatResultsCount,
-  formatSavedCount,
   isSupportedLocale,
   messageCatalogs,
   normalizeSupportedLocale,
@@ -114,24 +110,9 @@ describe("i18n catalog", () => {
     expect(normalizeSupportedLocale(null)).toBe(DEFAULT_LOCALE);
     expect(normalizeSupportedLocale(undefined)).toBe(DEFAULT_LOCALE);
     expect(normalizeSupportedLocale("fr-FR")).toBe(DEFAULT_LOCALE);
-    expect(t(null, "tagline")).toBe(t(DEFAULT_LOCALE, "tagline"));
+    expect(t(null, "signOut")).toBe(t(DEFAULT_LOCALE, "signOut"));
     // and the ko-KR chrome genuinely speaks Korean now
-    expect(t("ko-KR", "tagline")).not.toBe(t(DEFAULT_LOCALE, "tagline"));
-    expect(/[가-힣]/.test(t("ko-KR", "tagline"))).toBe(true);
-  });
-
-  it("formats saved-count and result-count phrases", () => {
-    expect(formatSavedCount("en-US", 1)).toBe("1 saved");
-    expect(formatSavedCount("en-US", 2)).toBe("2 saved");
-
-    expect(formatResultsCount("en-US", 1, 1)).toBe("1 of 1 inspiration");
-    expect(formatResultsCount("en-US", 8, 3)).toBe("3 of 8 inspirations");
-  });
-
-  it("formats WOW count helpers as complete phrases", () => {
-    expect(formatBestRecentMirrorMoments("en-US", 9)).toBe("9 recent mirror moments shown.");
-
-    expect(formatGeneratedFieldCounts("en-US", 1, 1)).toBe("1 source; 1 generated field");
-    expect(formatGeneratedFieldCounts("en-US", 2, 3)).toBe("2 sources; 3 generated fields");
+    expect(t("ko-KR", "signOut")).not.toBe(t(DEFAULT_LOCALE, "signOut"));
+    expect(/[가-힣]/.test(t("ko-KR", "signOut"))).toBe(true);
   });
 });

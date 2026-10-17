@@ -89,32 +89,3 @@ export function formatMessage(
     })
     .replace(/\{(\w+)\}/gu, (_match, name: string) => String(values[name] ?? ""));
 }
-
-export function formatSavedCount(locale: SupportedLocale | null | undefined, count: number): string {
-  return formatMessage(locale, "savedCount", { count });
-}
-
-
-export function formatResultsCount(
-  locale: SupportedLocale | null | undefined,
-  totalCount: number,
-  filteredCount: number,
-): string {
-  return formatMessage(locale, "resultsCount", { totalCount, filteredCount });
-}
-
-
-export function formatBestRecentMirrorMoments(locale: SupportedLocale | null | undefined, count: number): string {
-  return formatMessage(locale, "bestRecentMirrorMomentsShownCount", { count });
-}
-
-
-export function formatGeneratedFieldCounts(
-  locale: SupportedLocale | null | undefined,
-  countsOrSourceCount: number | { sources: number; fields: number },
-  maybeFieldCount?: number,
-): string {
-  const sourceCount = typeof countsOrSourceCount === "number" ? countsOrSourceCount : countsOrSourceCount.sources;
-  const fieldCount = typeof countsOrSourceCount === "number" ? (maybeFieldCount ?? 0) : countsOrSourceCount.fields;
-  return formatMessage(locale, "generatedFieldCounts", { sourceCount, fieldCount });
-}
