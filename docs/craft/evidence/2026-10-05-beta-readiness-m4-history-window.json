@@ -1,0 +1,56 @@
+{
+  "milestone":4,
+  "slice":"Bounded initial conversation history",
+  "date":"2026-10-05",
+  "status":"Locally accepted; full goal remains open",
+  "measurement":{
+    "maximumPlaceholderCharacters":{"user":4000,"assistant":3000},
+    "threadMessages":200,
+    "fullProjectionBytes":2221883,
+    "initialApiBytes":334997,
+    "initialMessages":30,
+    "variedSourceApiBytes":334432,
+    "receipt":"work/performance/long-conversation-window-final-size-1791261615695.json",
+    "sha256":"ae0d85ae44451232e80775adf89665be323c901b99d6e25ef4288e6b7204bcc6",
+    "scope":"Uncompressed synthetic payload bounds, not realistic compression, bandwidth or cloud latency",
+    "intermediateLoad":"One candidate ran beside web tests; its timing is not an acceptance gate"
+  },
+  "behavior":{
+    "initialTail":30,
+    "explicitExpansionPositions":30,
+    "totalRevisionWriteFencePreserved":true,
+    "legacyFullThreadRequestsPreserved":true,
+    "loadedSpansRevalidatedOnRefresh":true,
+    "originalSidebarTopicPreserved":true,
+    "oldReplayIncludesConfirmationAnchor":true,
+    "invalidWriteWindowRollsBack":true,
+    "uncertainWriteDoesNotAssumeCommit":true,
+    "scrollMetadataAccountProfileConversationScoped":true,
+    "legacyScrollRestoresFullSpan":true,
+    "mixedVersionFallback":"Only known old query refusal; IDs/body unchanged, no ambiguous write replay",
+    "allMessagesStillAvailable":true,
+    "schemaMigrationRequired":false
+  },
+  "verification":{
+    "apiUnitTests":918,
+    "webTests":793,
+    "conversationSqlTests":42,
+    "apiWebPerformanceTypes":"pass",
+    "productionBuildMigrationDiffAndGoalIndex":"pass",
+    "browserFixtureMessages":80,
+    "browserWindowsObserved":[30,60,80],
+    "reopenedMessages":60,
+    "reopenedScrollTop":8332,
+    "providerCalls":0,
+    "realAccountInputs":false,
+    "fixtureCleanup":"Exact owned schema removed and checked absent; temporary tabs closed and viewport reset",
+    "screenshots":["work/performance/beta-m4-window/initial-tail-narrow.png","work/performance/beta-m4-window/expanded-narrow.png","work/performance/beta-m4-window/reopened-narrow.png"]
+  },
+  "retainedRepairs":[
+    "SQL fixture rows needed explicit client IDs",
+    "Uncertain-write recovery changed to current-state read then conditional expansion",
+    "Legacy scroll snapshots need the full span before restoring position",
+    "Verb scanner follows helper calls through AST; delegated reads/cycles remain excluded"
+  ],
+  "remaining":["Actual chosen monetary limits/enforcement","Authorized deployment","Live metrics and alerts","Provider/runtime topology attestation","First-time-user comprehension"]
+}

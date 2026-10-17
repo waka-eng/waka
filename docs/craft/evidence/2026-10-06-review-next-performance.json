@@ -1,0 +1,47 @@
+{
+  "feature": "Next inspiration in Review",
+  "status": "Implemented and checked locally; not pushed or deployed",
+  "baseline": {
+    "path": "Legacy choice, completion, active read, start",
+    "sequentialRequests": 4,
+    "visibleMs": [820, 812, 815, 822, 812, 815],
+    "medianMs": 815
+  },
+  "candidate": {
+    "path": "Atomic advance with owned current-source bundle",
+    "sequentialRequests": 1,
+    "interleavedVisibleMs": [243, 251, 245, 244, 249, 244],
+    "finalBuiltVisibleMs": [248, 250, 244, 256, 248, 241],
+    "finalMedianMs": 248,
+    "medianReductionPercent": 69.57
+  },
+  "scope": {
+    "fixture": "Disposable loopback schema; 250 synthetic inspirations",
+    "build": "Production web build",
+    "injectedRequestDelayMs": 150,
+    "samplesPerPath": 6,
+    "interleavedInitialComparison": true,
+    "finalCandidateRetestedAfterRepeatableReadHardening": true,
+    "browserControlOverheadIncluded": true,
+    "cloudOrTailLatencyClaim": false,
+    "providerCalls": 0,
+    "temporaryLegacyResponseSwitchRemoved": true
+  },
+  "safety": {
+    "oneInspirationAtATime": true,
+    "legacyFrozenManifestsPreserved": true,
+    "choicesAndSuccessorCreationAtomic": true,
+    "lostResponsesReconciledWithReads": true,
+    "wrongOwnerSourceRevisionAndSuccessorRefused": true,
+    "olderApisRetainLegacyFlow": true,
+    "newSchemaMigrationRequired": false
+  },
+  "verification": {
+    "webCases": 799,
+    "apiUnitCases": 946,
+    "reviewSessionAndDialogueSqlCases": 43,
+    "targetedWebCasesIncludingWriteRegister": 56,
+    "typesBuildAndMigrationChecks": "pass",
+    "screenshot": "work/performance/review-next/verified-next.png"
+  }
+}
