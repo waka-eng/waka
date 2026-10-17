@@ -250,9 +250,24 @@ describe("auth boundary", () => {
     const container = await renderAuthRoutes({ initialPath: "/login" });
 
     expect(container.textContent).toContain("Welcome");
-    expect(container.textContent).toContain("Sign in to return to what you kept.");
     expect(container.querySelector("#login-tab-login")?.textContent).toBe("Sign in");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
+  });
+
+  /* Audit f2afcbe2: "Welcome back." greeted people arriving for the first
+     time. Only a browser that has been signed in before is told it is back. */
+  it("greets a first visit plainly and a returning browser as a return", async () => {
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
+    window.localStorage.removeItem("waka.auth.seenHere");
+    let container = await renderAuthRoutes({ initialPath: "/login" });
+    expect(container.querySelector("#login-title")?.textContent).toBe("Welcome.");
+    expect(container.textContent).not.toContain("Sign in to return to what you kept.");
+    await act(async () => mountedRoot?.unmount()); mountedRoot = null; container.remove();
+
+    window.localStorage.setItem("waka.auth.seenHere", "1");
+    container = await renderAuthRoutes({ initialPath: "/login" });
+    expect(container.querySelector("#login-title")?.textContent).toBe("Welcome back.");
+    expect(container.textContent).toContain("Sign in to return to what you kept.");
   });
 
   it("supports expected keyboard navigation for login and signup tabs", async () => {
