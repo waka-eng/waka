@@ -59,9 +59,12 @@ import {
    above every other statement in the file and a plain `const` here would not
    exist yet when the factory runs. */
 const KEPT = vi.hoisted(() => ({ calls: [] as { id: string; text: string }[] }));
-/* A delete a case can hold open, so "the answer lands after the reader has
-   moved on" is a state it can stand in rather than a race it hopes to win. */
-const DELETES = vi.hoisted(() => ({ hold: null as Promise<void> | null }));
+/* A delete and an archive read a case can hold open, so "the answer lands after
+   the reader has moved on" is a state it can stand in, not a race to win. */
+const DELETES = vi.hoisted(() => ({
+  hold: null as Promise<void> | null,
+  field: null as Promise<void> | null,
+}));
 
 const GROUP_ID = "group-1";
 const PROPOSAL_ID = "proposal-1";
@@ -264,6 +267,13 @@ vi.mock("../src/lib/data", async (importOriginal) => {
   return {
     ...actual,
     ...dataMockFrom(FACTS),
+    /* The archive read, holdable — so the return-to-tab refresh can be left
+       in flight across a delete and the order of their answers chosen. */
+    loadInspirations: async (...args: unknown[]) => {
+      const field = await (dataMockFrom(FACTS).loadInspirations as (...a: unknown[]) => Promise<unknown>)(...args);
+      if (DELETES.field) await DELETES.field;
+      return field;
+    },
     /* ONE MEMORY BY ITS ADDRESS. With the orbs gone (2026-10-15) the card
        opens from `/inspirations/:id`, which reads the memory itself rather
        than finding it on the ground, so the fixture answers that read too. */
@@ -323,6 +333,7 @@ beforeEach(async () => {
   window.localStorage.clear();
   KEPT.calls.length = 0;
   DELETES.hold = null;
+  DELETES.field = null;
   layout = await mountWorld(FACTS);
   /* the sky arrives a hop behind the field: loadSignals, then one loadSignal
      per signal for its evidence, then the memo, then syncSky */
@@ -613,6 +624,48 @@ describe("deleting a memory", () => {
       "the memory stepped to is still open after the other one's delete landed",
     ).toBe(after);
     expect(layout.container.textContent ?? "").not.toContain("Deleting");
+  });
+
+  it("is not brought back by a return-to-tab refresh that was already in flight", { timeout: 30_000 }, async () => {
+    /* Away long enough and the page re-reads the archive on return. If a
+       delete lands while that read is out, the list it brings back is from
+       before the delete — and written over the field, it put the memory back
+       until the next refresh. */
+    await layout.toField();
+    const panel = await openMemory("something I kept, 5");
+    const before = layout.audit().present;
+
+    let arrive!: () => void;
+    DELETES.field = new Promise<void>((resolve) => {
+      arrive = resolve;
+    });
+    let visibility: DocumentVisibilityState = "hidden";
+    const spy = vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
+    const clock = Date.now;
+    try {
+      await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+      Date.now = () => clock() + 60_000;
+      visibility = "visible";
+      await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+
+      await pressPanelVerb(panel, "Delete");
+      await act(async () => { await Promise.resolve(); });
+      await layout.step(20);
+      expect(layout.audit().present, "the delete took the memory off the field").toBe(before - 1);
+
+      await act(async () => {
+        arrive();
+        await DELETES.field;
+      });
+      await layout.step(20);
+      expect(
+        layout.audit().present,
+        "the refresh that left before the delete put the memory back",
+      ).toBe(before - 1);
+    } finally {
+      Date.now = clock;
+      spy.mockRestore();
+    }
   });
 
   it("says what is lost when a signal stands on it, and only then", { timeout: 30_000 }, async () => {

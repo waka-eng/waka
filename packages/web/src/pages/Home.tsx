@@ -3202,8 +3202,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       /* the fixture has no server to ask, and a signed-out visitor has no
          business making three requests that will all 401 */
       if (offlineRef.current) return;
+      /* THE SAME GUARD AS THE FIRST READ AND THE RECOVERED-SAVE READ. A save
+         or a delete made while this list was in flight is not in it, and
+         writing it over the field would drop the new memory or bring back the
+         deleted one until the next refresh. A list that raced a mutation is
+         simply not used — the field already holds the newer truth. */
+      const sourceRead = sourceListMutationRef.current;
       void Promise.allSettled([
         loadInspirations(undefined,{scope:storageScope??undefined}).then((field) => {
+          if (sourceListMutationRef.current !== sourceRead) return;
           setInspirations(field.inspirations);
           setFieldBeyond(beyondOf(field));
         }),
