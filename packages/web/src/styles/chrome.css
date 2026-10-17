@@ -1315,13 +1315,35 @@ body textarea {
    focus, and does not zoom back out. Measured 2026-08-25: every input in this
    product was 15px, so the first tap on the sign-in form threw the page into
    a zoomed state the person then had to pinch their way out of — on the very
-   first screen anyone sees. One pixel, on the devices that care. */
+   first screen anyone sees. One pixel, on the devices that care.
+
+   AND THE ZOOM IS WHAT BLURS THE CREATURE. Founder, 2026-10-17: "the 화질
+   of the character breaks in mobile setting." A focus-zoom magnifies the
+   composited page while `devicePixelRatio` stays 3, so every canvas — the
+   world, the companion — is a bitmap stretched by the zoom, and nothing in
+   `canvas/scale.ts` can see it: layout and ratio are both unchanged. Text
+   re-rasterises at the new scale and stays crisp, which is why it read as
+   the CHARACTER's quality and not the page's. Measured in Chromium at
+   390x844 DPR 3 with the page scale a 15px field asks for (16/15): the
+   steepest luminance step across the creature's silhouette fell 153 -> 96.
+   It does not reproduce at scale 1 in any engine, which is why four passes
+   at the renderer found nothing — the renderer was right.
+
+   THE GUARD WAS HERE AND WAS LOSING. Eight later rules at higher
+   specificity in this same layer set a field back under 16 — the capture
+   page's own well (`.jar-mouth-slot--note .jar-mouth-field`, 15px), the
+   composer, the note page, the settings and account inputs (13px) — so the
+   one field touched most on a phone zoomed the world on every keep. A
+   floor that any later selector can lower is not a floor, so this one is
+   `!important`, the same way the reduced-motion floor and the focus ring
+   are: nothing that is not itself a floor may out-rank it, and
+   `test/no-focus-zoom.test.ts` holds both the flag and the selectors. */
 @media (pointer: coarse) {
   body .field-input,
   body input,
   body select,
   body textarea {
-    font-size: var(--t-input);
+    font-size: var(--t-input) !important;
   }
 }
 
