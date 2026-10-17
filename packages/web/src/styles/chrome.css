@@ -1784,10 +1784,6 @@ button.jar-tile-face,
    while you type, so the edit happens in the bubble. */
 .jar-thing-share .jar-share-inline { position:absolute; box-sizing:border-box; min-height:0; margin:0; border:0; resize:none; overflow:hidden; background:transparent; color:transparent; caret-color:transparent; cursor:text; text-wrap:pretty; transition:background-color .18s ease, color .18s ease; }
 .jar-thing-share .jar-share-inline:hover { box-shadow:inset 0 0 0 2px color-mix(in srgb, var(--share-ink) 14%, transparent); }
-/* No focus brightening here: the global "lit on focus" filter turned the
-   cream bubble white the moment you started typing in it. The bubble IS the
-   field, so its own colour is the focus. */
-.jar-thing-share .jar-share-inline,.jar-thing-share .jar-share-inline:hover,.jar-thing-share .jar-share-inline:focus,.jar-thing-share .jar-share-inline:focus-visible { filter:none; }
 .jar-thing-share .jar-share-inline:focus { outline:none; background:var(--share-fill); color:var(--share-ink); caret-color:var(--share-ink); overflow:auto; box-shadow:0 0 0 3px color-mix(in srgb, var(--share-fill) 45%, transparent); }
 .jar-share-hint-line { display:flex; justify-content:center; align-items:center; gap:var(--sp-8); margin:0; min-height:var(--sp-24); text-align:center; }
 .jar-share-hint-line .jar-share-link { min-height:0; padding:0; font-size:var(--t-meta); }

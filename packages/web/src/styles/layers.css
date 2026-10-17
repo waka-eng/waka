@@ -330,6 +330,18 @@
   filter: none;
 }
 /*
+ * NOR THE SHARE CARD'S WORDS. On the share sheet the words are edited inside
+ * the card's own bubble (founder, 2026-10-16: "edit wording in the speech
+ * bubble directly"), and a textarea is focus-visible the moment it takes
+ * focus — so the rule above turned the cream bubble flat white as soon as
+ * you started typing in it. The field's focus is the bubble taking its own
+ * colour (`.jar-share-inline:focus` in chrome.css). Here and not there
+ * because this block is unlayered and beats every layer.
+ */
+.jar .jar-share-inline:focus-visible {
+  filter: none;
+}
+/*
  * `border-radius: inherit` USED TO BE IN THAT RULE, and it was a bug with a
  * long reach. This block is UNLAYERED, which means it beats every layer at
  * any specificity — the property that makes it a floor. So the line did not
