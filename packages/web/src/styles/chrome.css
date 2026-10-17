@@ -1774,8 +1774,9 @@ button.jar-tile-face,
 .jar-seek.jar-thing-share { width:min(460px,calc(100vw - var(--sp-24))); gap:var(--sp-16); padding:var(--sp-20) var(--sp-20) var(--sp-24); }
 .jar-thing-share header { flex-wrap:nowrap; }
 .jar-thing-share h2 { font-size:var(--t-body); font-weight:400; color:var(--w-muted); letter-spacing:.01em; }
-.jar-thing-share .jar-share-x { display:grid; place-items:center; width:var(--sp-44); min-width:var(--sp-44); height:var(--sp-44); padding:0; margin:calc(var(--sp-8) * -1) calc(var(--sp-8) * -1) calc(var(--sp-8) * -1) auto; border:0; border-radius:50%; color:var(--w-muted); transition:color .2s ease, background-color .2s ease; }
-.jar-thing-share .jar-share-x:hover,.jar-thing-share .jar-share-x:focus-visible { color:var(--w-ink); background:color-mix(in srgb, var(--w-ink) 8%, transparent); }
+.jar-thing-share .jar-share-x { display:grid; place-items:center; width:var(--sp-44); min-width:var(--sp-44); height:var(--sp-44); padding:0; margin:calc(var(--sp-8) * -1) calc(var(--sp-8) * -1) calc(var(--sp-8) * -1) auto; border:0; border-radius:50%; background:none; color:var(--w-muted); }
+/* No hover on the ×: founder, 2026-10-16, "when the user is trying to close it, don't add like a hover effect." */
+.jar-thing-share .jar-share-x:hover { color:var(--w-muted); background:none; filter:none; }
 .jar-thing-share .jar-share-stage { min-height:0; }
 .jar-share-card { position:relative; container-type:inline-size; width:min(100%, min(56dvh,520px)); aspect-ratio:1; margin-inline:auto; border-radius:var(--sp-16); overflow:hidden; box-shadow:0 0 0 1px color-mix(in srgb, var(--w-ink) 6%, transparent); }
 .jar-share-card img { display:block; width:100%; height:100%; max-height:none; object-fit:cover; border-radius:0; }
@@ -1791,7 +1792,10 @@ button.jar-tile-face,
 .jar-thing-share footer > p { flex-basis:100%; text-align:center; }
 .jar-thing-share footer > span:empty { display:none; }
 .jar-thing-share .jar-share-actions { margin-inline:auto; }
-.jar-thing-share .jar-share-actions button { min-width:9rem; border-radius:999px; padding-inline:var(--sp-24); }
+/* Two plain icons, no fill and no border: the icon is the button. */
+.jar-thing-share .jar-share-actions { gap:var(--sp-24); }
+.jar-thing-share .jar-share-icon { display:grid; place-items:center; width:var(--sp-44); min-width:var(--sp-44); height:var(--sp-44); padding:0; border:0; border-radius:50%; background:none; color:var(--w-ink); }
+.jar-thing-share .jar-share-icon:disabled { opacity:.35; }
 /* A link, not a button: it opens something optional. */
 .jar-thing-share .jar-share-link { border:0; padding-inline:var(--sp-4); color:var(--w-muted); text-decoration:underline; text-underline-offset:.2em; }
 .jar-share-link:hover,.jar-share-link:focus-visible { color:var(--w-ink); }

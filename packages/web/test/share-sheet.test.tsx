@@ -11,7 +11,8 @@
  * `renderShareCard` only, because a canvas cannot draw in jsdom and what
  * matters here is what the sheet ASKS the renderer for. `lib/api` is mocked
  * for `fetchAttachmentUrl`, the seam a photo is read through. `URL` supplies
- * blob handles, `navigator` a share sheet, and `fetch` the photo's bytes.
+ * blob handles, `navigator` a share sheet and a clipboard, `ClipboardItem`
+ * the clipboard's image wrapper, and `fetch` the photo's bytes.
  * Everything else — the editing, the actions — is real.
  *
  * Founder, 2026-10-16: one design (the first, dark and square), always
@@ -29,7 +30,8 @@ import { renderShareCard, type ShareCardLayout } from "../src/lib/principle-arti
 const LAYOUT: ShareCardLayout = {
   width: 1080, height: 1080,
   bubble: { x: 112, y: 300, w: 856, h: 320, radius: 84, fill: "#e9dfcc" },
-  text: { x: 176, y: 364, w: 728, size: 44, leading: 1.42, weight: 400, family: "Jost", ink: "#151821" },
+  text: { x: 176, y: 364, w: 728, size: 44, leading: 1.42, weight: 400, family: "Jost", ink: "#151821", align: "left" },
+  edit: { x: 112, y: 300, w: 856, h: 320, padTop: 55, padX: 64, padBottom: 64, radiusTop: 84, radiusBottom: 84 },
 };
 
 vi.mock("../src/lib/api", async (original) => ({ ...await original<typeof import("../src/lib/api")>(), fetchAttachmentUrl: vi.fn() }));
@@ -64,25 +66,26 @@ afterEach(async () => {
   if (priorCanShare) Object.defineProperty(navigator, "canShare", priorCanShare); else Reflect.deleteProperty(navigator, "canShare");
 });
 
-const mount = (target: ShareTarget = SAVE, name = "Agi") => act(async () => root.render(<ShareSheet target={target} name={name} locale="en-US" onClose={close} />));
+const mount = (target: ShareTarget = SAVE) => act(async () => root.render(<ShareSheet target={target} locale="en-US" onClose={close} />));
 const settle = () => act(async () => vi.advanceTimersByTimeAsync(200));
-const button = (text: string) => [...host.querySelectorAll<HTMLButtonElement>("button")].find((row) => row.textContent === text);
-it("opens on the one design, signed, with the kept words and one action", async () => {
+/* By visible words or, for the icon buttons, by the name they give a screen reader. */
+const button = (text: string) => [...host.querySelectorAll<HTMLButtonElement>("button")].find((row) => row.textContent === text || row.getAttribute("aria-label") === text);
+it("opens on the one design, unsigned, with the kept words and two icon actions", async () => {
   await mount();
   await settle();
-  expect(renderShareCard).toHaveBeenLastCalledWith({ items: [{ text: SAVE.text }], name: "Agi", appearance: "dark", format: "square", kind: "inspiration", proof: SAVE.proof, photo: null });
+  expect(renderShareCard).toHaveBeenLastCalledWith({ items: [{ text: SAVE.text }], name: "", appearance: "dark", format: "square", kind: "inspiration", proof: SAVE.proof, photo: null });
   expect(host.querySelector("img")?.alt).toContain(SAVE.text);
-  /* Without a native share sheet the one action is saving the image, and it
-     is the primary. */
-  const save = button("Save image")!;
+  /* Save and share are two plain icons, named for screen readers, no text. */
+  const save = button("Save image")!, share = button("Share image")!;
   expect(save.disabled).toBe(false);
-  expect(save.className).toContain("jar-share-primary");
-  expect(button("Share image")).toBeUndefined();
+  expect(save.className).toBe("jar-share-icon");
+  expect(share.className).toBe("jar-share-icon");
+  expect(save.textContent).toBe("");
   /* No looks, no name switch, no separate wording box. */
   expect(host.querySelector(".jar-share-look"), "one design: no looks row").toBeNull();
   expect(host.querySelector(".jar-share-name"), "always signed: no name switch").toBeNull();
   expect(button("Edit wording"), "the words are edited in the bubble").toBeUndefined();
-  expect(host.textContent).toContain("Tap the words to change them.");
+  expect(host.querySelector("h2")?.textContent).toBe("Share this inspiration, edit as needed");
 });
 
 it("closes with a plain × in the corner", async () => {
@@ -160,8 +163,21 @@ it("makes a words-only card and says so when the photo cannot be read", async ()
   expect(button("Save image")!.disabled).toBe(false);
 });
 
-it("leaves the name off the card when there is no name to show", async () => {
-  await mount(SAVE, "");
+it("says the top of mind the way the home bubble does, under the top-of-mind date line", async () => {
+  await mount({ kind: "topOfMind", text: "Build the place.", proof: "My top of mind · Oct 16, 2026" });
   await settle();
-  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ name: "" }));
+  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "topOfMind", frame: "This is what’s on your mind right now.", name: "", proof: "My top of mind · Oct 16, 2026" }));
+  expect(host.querySelector("h2")?.textContent).toBe("Share what’s on your mind, edit as needed");
+});
+
+it("without a device share sheet, sharing puts the image on the clipboard", async () => {
+  const write = vi.fn(async () => undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { write } });
+  vi.stubGlobal("ClipboardItem", class { constructor(readonly items: Record<string, Blob>) {} });
+  await mount();
+  await settle();
+  await act(async () => button("Share image")!.click());
+  expect(write).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain("Image copied. Paste it anywhere.");
+  Reflect.deleteProperty(navigator, "clipboard");
 });

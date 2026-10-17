@@ -10,12 +10,18 @@
  * The file is built once per rendered card, not per render: typing in a
  * card's words would otherwise rebuild it and re-ask the browser on every
  * keystroke.
+ *
+ * `fallback: "copy"` (the save / top-of-mind sheet) keeps Share pressable
+ * where the browser has no share sheet: the image goes on the clipboard,
+ * and with no clipboard either, the file is saved. Without it, Share is
+ * only offered where it works (`canShare`).
  */
 import { useCallback, useMemo, useState } from "react";
 
-export type ShareNotice = "download" | "downloadFailed" | "shared" | "unavailable";
+export type ShareNotice = "download" | "downloadFailed" | "shared" | "copied" | "unavailable";
 
-export function useShareImage(blob: Blob | null, names: { download: string; share: string }) {
+export function useShareImage(blob: Blob | null, names: { download: string; share: string }, options: { fallback?: "copy" } = {}) {
+  const copyFallback = options.fallback === "copy";
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<ShareNotice | null>(null);
 
@@ -54,20 +60,30 @@ export function useShareImage(blob: Blob | null, names: { download: string; shar
   }, [blob, busy, names.download]);
 
   const share = useCallback(async () => {
-    if (!file || !canShare || busy) return;
+    if (!blob || busy) return;
+    const canCopy = copyFallback && typeof navigator !== "undefined" && typeof navigator.clipboard?.write === "function" && typeof ClipboardItem === "function";
+    if (!canShare || !file) {
+      if (!copyFallback) return;
+      if (!canCopy) { download(); return; }
+    }
     setBusy(true);
     setNotice(null);
     try {
-      /* Files only. No title, no text, no URL: what leaves is the picture
-         the person is looking at, and nothing they did not see. */
-      await navigator.share({ files: [file] });
-      setNotice("shared");
+      if (canShare && file) {
+        /* Files only. No title, no text, no URL: what leaves is the picture
+           the person is looking at, and nothing they did not see. */
+        await navigator.share({ files: [file] });
+        setNotice("shared");
+      } else {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        setNotice("copied");
+      }
     } catch (error) {
       if ((error as { name?: string }).name !== "AbortError") setNotice("unavailable");
     } finally {
       setBusy(false);
     }
-  }, [file, canShare, busy]);
+  }, [blob, file, canShare, busy, copyFallback, download]);
 
   return { busy, notice, setNotice, canShare, download, share };
 }
@@ -77,5 +93,6 @@ export const SHARE_NOTICE_KEY = {
   download: "worldShareDownloadStarted",
   downloadFailed: "worldShareDownloadFailed",
   shared: "worldShareSheetClosed",
+  copied: "worldShareCopied",
   unavailable: "worldShareUnavailable",
 } as const;

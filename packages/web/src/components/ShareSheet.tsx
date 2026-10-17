@@ -80,9 +80,8 @@ export function inspirationShareTarget(
 
 type PhotoState = { step: "none" } | { step: "loading" } | { step: "ready" } | { step: "failed" };
 
-export function ShareSheet({ target, name, locale, onClose }: {
+export function ShareSheet({ target, locale, onClose }: {
   target: ShareTarget;
-  name: string;
   locale: SupportedLocale;
   onClose: () => void;
 }) {
@@ -136,13 +135,17 @@ export function ShareSheet({ target, name, locale, onClose }: {
 
   const content = useMemo<PrincipleArtifactContent>(() => ({
     items: [{ text: words }],
-    /* Signed, always — founder: "Show my name". */
-    name,
+    /* No name on the card — founder, 2026-10-16: "don't write the name on
+       the bottom left". The WAKA mark is the card's only signature. */
+    name: "",
     appearance: CARD_LOOK.appearance,
     format: CARD_LOOK.format,
     kind: target.kind,
+    /* The top of mind opens with the home bubble's own line. */
+    ...(target.kind === "topOfMind" ? { frame: say("worldBubbleActMine") } : {}),
     ...(target.proof ? { proof: target.proof } : {}),
-  }), [words, name, target.kind, target.proof]);
+    /* `say` follows `locale`, which is the dependency. */
+  }), [words, target.kind, target.proof, locale]);
   const contentKey = `${JSON.stringify(content)}|${photo.step}`;
 
   useEffect(() => {
@@ -181,10 +184,15 @@ export function ShareSheet({ target, name, locale, onClose }: {
   const ready = Boolean(preview && preview.key === contentKey && !renderError);
   const filename = target.kind === "inspiration" ? "waka-inspiration.png" : "waka-top-of-mind.png";
   const filenames = useMemo(() => ({ download: filename, share: filename }), [filename]);
-  const { busy, notice, setNotice, canShare, download, share } = useShareImage(ready ? preview?.blob ?? null : null, filenames);
+  const { busy, notice, setNotice, download, share } = useShareImage(ready ? preview?.blob ?? null : null, filenames, { fallback: "copy" });
+  /* SHARE IS ALWAYS THERE. Founder, 2026-10-16: "a save button icon and a
+     share button icon". Where the device has a share sheet, it opens it; a
+     desktop browser has none, so there sharing means the image on the
+     clipboard, ready to paste into whatever you post with — and failing
+     that, the saved file (`fallback: "copy"` in useShareImage). */
 
-  const title = say(target.kind === "inspiration" ? "worldShareInspirationTitle" : "worldShareTopOfMindTitle");
-  const alt = [target.proof, words, name].filter(Boolean).join("\n");
+  const title = say(target.kind === "inspiration" ? "worldShareInspirationSheet" : "worldShareTopOfMindTitle");
+  const alt = [target.proof, words].filter(Boolean).join("\n");
 
   /* THE WORDS, EDITABLE IN THE BUBBLE. A textarea laid exactly over the
      bubble the renderer reports, in the card's own face, size and inks. At
@@ -192,16 +200,17 @@ export function ShareSheet({ target, name, locale, onClose }: {
      pressing the field; while it has focus it takes the bubble's colour, so
      you type into the bubble itself, and the card redraws a beat after each
      change. Escape leaves the words without closing the sheet. */
+  /* The renderer says which part of the bubble the words fill (under the
+     frame line on the top of mind, so the line stays while you type) and
+     the padding that lands each line where the drawn one is. */
   const inline: CSSProperties | undefined = layout ? {
-    left: `${(layout.bubble.x / layout.width) * 100}%`,
-    top: `${(layout.bubble.y / layout.height) * 100}%`,
-    width: `${(layout.bubble.w / layout.width) * 100}%`,
-    height: `${(layout.bubble.h / layout.height) * 100}%`,
-    /* The canvas sets each line from its top; a field adds half the leading
-       above the first line, so the top padding gives that half back and the
-       words do not jump when the field takes over. */
-    padding: `${cq(layout.text.y - layout.bubble.y - ((layout.text.leading - 1) * layout.text.size) / 2, layout.width)} ${cq(layout.text.x - layout.bubble.x, layout.width)}`,
-    borderRadius: cq(layout.bubble.radius, layout.width),
+    left: `${(layout.edit.x / layout.width) * 100}%`,
+    top: `${(layout.edit.y / layout.height) * 100}%`,
+    width: `${(layout.edit.w / layout.width) * 100}%`,
+    height: `${(layout.edit.h / layout.height) * 100}%`,
+    padding: `${cq(layout.edit.padTop, layout.width)} ${cq(layout.edit.padX, layout.width)} 0`,
+    borderRadius: `${cq(layout.edit.radiusTop, layout.width)} ${cq(layout.edit.radiusTop, layout.width)} ${cq(layout.edit.radiusBottom, layout.width)} ${cq(layout.edit.radiusBottom, layout.width)}`,
+    textAlign: layout.text.align,
     fontFamily: layout.text.family,
     fontWeight: layout.text.weight,
     fontSize: cq(layout.text.size, layout.width),
@@ -256,34 +265,36 @@ export function ShareSheet({ target, name, locale, onClose }: {
             ) : null}
           </div>
 
-          <p className="jar-share-hint-line">
-            <span className="jar-share-quiet">{say("worldShareTapToEdit")}</span>
-            {words !== target.text ? (
+          {words !== target.text ? (
+            <p className="jar-share-hint-line">
               <button type="button" className="jar-share-link" onClick={() => setWords(target.text)}>{say("worldShareOriginal")}</button>
-            ) : null}
-          </p>
+            </p>
+          ) : null}
 
           {photo.step === "failed" ? <p className="jar-share-quiet" role="status">{say("worldSharePhotoLeftOut")}</p> : null}
         </div>
+        {/* TWO ICONS, NO FILLED BUTTONS. Founder, 2026-10-16: "a save button
+            icon and a share button icon ... just put the icon ... without
+            like the button being colored". Each names itself to a screen
+            reader and on hover; the outcome is said once, under them. */}
         <footer>
+          <span className="jar-share-actions">
+            <button type="button" className="jar-share-icon" aria-label={say("worldShareDownload")} title={say("worldShareDownload")} disabled={!ready || busy} onClick={download}>
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14" />
+              </svg>
+            </button>
+            <button type="button" className="jar-share-icon" aria-label={say("worldShareSheet")} title={say("worldShareSheet")} disabled={!ready || busy} onClick={() => void share()}>
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M8 11H6.5A1.5 1.5 0 0 0 5 12.5v6A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-6a1.5 1.5 0 0 0-1.5-1.5H16" />
+              </svg>
+            </button>
+          </span>
           {notice ? (
             <p role="status" className="jar-share-quiet">
               {say(SHARE_NOTICE_KEY[notice])}
             </p>
-          ) : <span />}
-          <span className="jar-share-actions">
-            {canShare ? (
-              <button type="button" disabled={!ready || busy} onClick={download}>{say("worldShareDownload")}</button>
-            ) : null}
-            <button
-              type="button"
-              className="jar-share-primary"
-              disabled={!ready || busy}
-              onClick={canShare ? () => void share() : download}
-            >
-              {say(canShare ? "worldShareSheet" : "worldShareDownload")}
-            </button>
-          </span>
+          ) : null}
         </footer>
       </DialogSurface>
     </>

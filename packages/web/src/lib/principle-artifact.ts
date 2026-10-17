@@ -44,6 +44,13 @@ export interface PrincipleArtifactContent {
    * thing on the card they would notice first.
    */
   photo?:CanvasImageSource&{width:number;height:number}|null;
+  /**
+   * THE LINE THE HOME BUBBLE OPENS WITH ("This is what's on your mind right
+   * now."), for the top of mind only. Founder, 2026-10-16: "I want the share
+   * it experience's speech bubble to look exactly like what I'm seeing in my
+   * main screen, except just remove let's chat about it and share it."
+   */
+  frame?:string;
 }
 /** WHERE THE WORDS SIT, in card pixels (the card is 1080 wide), so the share
  * sheet can put an editable copy of them exactly over the bubble: founder,
@@ -52,7 +59,11 @@ export interface PrincipleArtifactContent {
 export interface ShareCardLayout {
   width:number;height:number;
   bubble:{x:number;y:number;w:number;h:number;radius:number;fill:string};
-  text:{x:number;y:number;w:number;size:number;leading:number;weight:number;family:string;ink:string};
+  text:{x:number;y:number;w:number;size:number;leading:number;weight:number;family:string;ink:string;align:'left'|'center'};
+  /** The box an editable copy of the words should fill: the part of the
+   * bubble the words occupy (under the frame line, if there is one), with the
+   * padding that puts each line where the drawn one is. */
+  edit:{x:number;y:number;w:number;h:number;padTop:number;padX:number;padBottom:number;radiusTop:number;radiusBottom:number};
 }
 export class ArtifactLayoutError extends Error {
   constructor(readonly code:'empty'|'too_long'|'unavailable'){super(code);}
@@ -187,22 +198,56 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
      leading, in a narrower bubble with deeper padding — the words held, not
      shouted. A principle, which stands alone in the sky, keeps its scale. */
   const held=kind!=='principle';
+  /* ═══ THE TOP OF MIND IS SAID THE WAY THE HOME SCREEN SAYS IT ═════════
+     Founder, 2026-10-16: "I want the share it experience's speech bubble to
+     look exactly like what I'm seeing in my main screen, except just remove
+     let's chat about it and share it." So this bubble is the home one at
+     card scale, measured off it (`.jar-char-bubble-body` in claims.css):
+     sized to its words rather than the card, the frame line on top at 12/13
+     of the words, everything centred, 12/16/10 padding, 20/18 corners, the
+     warm paper fill and its three soft halos, and the small rounded tail
+     pointing down at the creature. `s` is the home bubble's px → card px. */
+  const spoken=kind==='topOfMind';
+  const frame=spoken?(content.frame??'').trim():'';
   const inset=held?112:margin;
-  const bubbleW=width-inset*2,pad=held?64:56,textW=bubbleW-pad*2;
-  const sizeMax=held?48:66,sizeMin=held?28:36,leading=held?1.42:1.32;
+  const pad=held?64:56;
+  let bubbleW=width-inset*2;const textW=bubbleW-pad*2;
+  const sizeMax=held?48:66,sizeMin=held?28:36,leading=spoken?1.4:held?1.42:1.32;
   const photo=content.photo&&content.photo.width>0&&content.photo.height>0?content.photo:null;
   const photoH=photo?Math.round(Math.min((bubbleBottomMax-bubbleTop)*0.42,textW*photo.height/photo.width)):0;
   const photoSpace=photo?photoH+36:0;
   const available=bubbleBottomMax-bubbleTop-pad*2-photoSpace;
   let selected:{size:number;height:number;items:Array<{lines:string[];label?:string;date?:string}>}|null=null;
-  for(let size=sizeMax;size>=sizeMin;size-=2){
-    ctx.font=`${wordWeight} ${size}px ${family}`;
-    const items=content.items.map(item=>({...item,lines:wrapArtifactText(item.text,textW,value=>ctx.measureText(value).width)}));
-    const total=items.reduce((sum,item)=>sum+item.lines.length*size*leading+(item.label||item.date?50:0),0)+(items.length-1)*44;
-    if(total<=available){selected={size,height:total,items};break;}
+  let said:{s:number;padTop:number;padBottom:number;padX:number;frameSize:number;frameH:number;gap:number}|null=null;
+  if(spoken){
+    for(let size=40;size>=24;size-=2){
+      const s=size/13,padX=Math.round(16*s),padTop=Math.round(12*s),padBottom=Math.round(12*s),gap=Math.round(6*s);
+      const frameSize=Math.round(12*s),frameH=frame?Math.round(frameSize*1.4):0;
+      const maxText=width-inset*2-padX*2;
+      ctx.font=`400 ${size}px ${family}`;
+      const items=content.items.map(item=>({...item,lines:wrapArtifactText(item.text,maxText,value=>ctx.measureText(value).width)}));
+      const widest=Math.max(...items.flatMap(item=>item.lines.map(line=>ctx.measureText(line).width)));
+      ctx.font=`400 ${frameSize}px ${family}`;
+      const frameW=frame?ctx.measureText(frame).width:0;
+      const textH=items.reduce((sum,item)=>sum+item.lines.length*size*leading,0);
+      const h=padTop+(frame?frameH+gap:0)+textH+padBottom;
+      if(h<=bubbleBottomMax-bubbleTop&&frameW<=maxText){
+        selected={size,height:textH,items};
+        said={s,padTop,padBottom,padX,frameSize,frameH,gap};
+        bubbleW=Math.ceil(Math.max(widest,frameW))+padX*2;
+        break;
+      }
+    }
+  }else{
+    for(let size=sizeMax;size>=sizeMin;size-=2){
+      ctx.font=`${wordWeight} ${size}px ${family}`;
+      const items=content.items.map(item=>({...item,lines:wrapArtifactText(item.text,textW,value=>ctx.measureText(value).width)}));
+      const total=items.reduce((sum,item)=>sum+item.lines.length*size*leading+(item.label||item.date?50:0),0)+(items.length-1)*44;
+      if(total<=available){selected={size,height:total,items};break;}
+    }
   }
   if(!selected)throw new ArtifactLayoutError('too_long');
-  const bubbleH=pad*2+photoSpace+selected.height;
+  const bubbleH=said?said.padTop+(frame?said.frameH+said.gap:0)+selected.height+said.padBottom:pad*2+photoSpace+selected.height;
   /* THE BUBBLE AND THE ONE SAYING IT MOVE AS ONE, into the middle of the
      card. Anchored to the foot, a short sentence on the tall card left half
      the picture empty above it; the pair is lifted by a little under half
@@ -215,7 +260,9 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
   const glow=ctx.createRadialGradient(width/2,beingTop+being*0.55,being*0.2,width/2,beingTop+being*0.55,being*2.1);
   glow.addColorStop(0,`rgba(${ink.glow},${dark?0.34:0.55})`);glow.addColorStop(0.45,`rgba(${ink.glow},${dark?0.1:0.2})`);glow.addColorStop(1,`rgba(${ink.glow},0)`);
   ctx.fillStyle=glow;ctx.fillRect(0,0,width,height);
-  const x0=inset,y0=bubbleY,x1=inset+bubbleW,y1=bubbleY+bubbleH,cx=width/2;
+  const bx0=said?Math.round((width-bubbleW)/2):inset;
+  const x0=bx0,y0=bubbleY,x1=bx0+bubbleW,y1=bubbleY+bubbleH,cx=width/2;
+  const SAID_FILL='#d7cdbb',SAID_INK='#11131a';
   const roundRect=(left:number,top:number,right:number,bottom:number,radius:number)=>{
     ctx.moveTo(left+radius,top);ctx.lineTo(right-radius,top);ctx.quadraticCurveTo(right,top,right,top+radius);ctx.lineTo(right,bottom-radius);
     ctx.quadraticCurveTo(right,bottom,right-radius,bottom);ctx.lineTo(left+radius,bottom);ctx.quadraticCurveTo(left,bottom,left,bottom-radius);
@@ -245,17 +292,18 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
       ctx.lineWidth=thick;ctx.beginPath();ctx.arc(pole.x,pole.y,radius,start,start+0.32);ctx.stroke();
     }
     wordInk=dark?'#f2ece1':'#1d1f26';labelInk=ink.muted;ruleInk=dark?'rgba(242,236,225,0.2)':'rgba(21,24,33,0.14)';centred=true;
-  }else if(kind==='topOfMind'){
-    /* ═══ WHAT IS ON YOUR MIND: A THOUGHT ═════════════════════════════
-       A pillowy bubble with no tail, and three small rounds rising from
-       the creature's head to it — the bubble a thought is drawn in, where
-       speech gets a point. */
-    ctx.shadowColor=dark?`rgba(${ink.glow},0.28)`:'rgba(40,32,20,0.14)';ctx.shadowBlur=dark?60:40;ctx.shadowOffsetY=dark?0:10;
-    ctx.fillStyle=dark?ink.bubbleDark:ink.bubbleLight;
-    ctx.beginPath();roundRect(x0,y0,x1,y1,Math.min(84,bubbleH/2));
-    const rise:[number,number,number][]=[[cx-46,y1+22,16],[cx-28,y1+46,10],[cx-14,y1+64,6]];
-    for(const [bx,by,br] of rise){ctx.moveTo(bx+br,by);ctx.arc(bx,by,br,0,Math.PI*2);}
-    ctx.fill();
+  }else if(said){
+    /* ═══ WHAT IS ON YOUR MIND: SAID, AS ON THE HOME SCREEN ═══════════
+       The body and its tail are one path, filled three times under the
+       home bubble's three warm halos (12/34/76px at 0.2/0.1/0.05). */
+    const s=said.s,r=Math.round(19*s),half=Math.round(9.2*s),tipY=y1+Math.round(7.5*s);
+    const shape=()=>{ctx.beginPath();roundRect(x0,y0,x1,y1,r);
+      ctx.moveTo(cx-half,y1-1);ctx.quadraticCurveTo(cx-2*s,tipY-1.5*s,cx,tipY);ctx.quadraticCurveTo(cx+2*s,tipY-1.5*s,cx+half,y1-1);ctx.closePath();};
+    ctx.fillStyle=SAID_FILL;
+    for(const [blur,alpha] of [[76,0.05],[34,0.1],[12,0.2]] as const){
+      ctx.shadowColor=`rgba(${ink.glow},${alpha})`;ctx.shadowBlur=blur*s;shape();ctx.fill();
+    }
+    wordInk=SAID_INK;labelInk='rgba(17,19,26,0.6)';centred=true;
   }else{
     /* ═══ SOMETHING YOU KEPT: A NOTE, HELD UP ═════════════════════════
        Paper rather than speech — a thing you put away, now taken out and
@@ -273,7 +321,12 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
   }
   ctx.shadowColor='transparent';
 
-  let y=bubbleY+pad;
+  let y=bubbleY+(said?said.padTop:pad);
+  if(said&&frame){
+    ctx.font=`400 ${said.frameSize}px ${family}`;ctx.fillStyle=labelInk;
+    ctx.fillText(frame,(width-ctx.measureText(frame).width)/2,y);
+    y+=said.frameH+said.gap;
+  }
   if(photo){
     const band={x:inset+pad,y,w:textW,h:photoH};
     const scale=Math.max(band.w/photo.width,band.h/photo.height);
@@ -284,7 +337,7 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
     y+=photoSpace;
   }
   const textTop=y;
-  const lineX=(text:string)=>centred?(width-ctx.measureText(text).width)/2:inset+pad;
+  const lineX=(text:string)=>centred?(width-ctx.measureText(text).width)/2:x0+pad;
   for(const [index,item] of selected.items.entries()){
     if(index){ctx.strokeStyle=ruleInk;ctx.lineWidth=2;ctx.beginPath();
       if(centred){ctx.moveTo(cx-60,y-22);ctx.lineTo(cx+60,y-22);}else{ctx.moveTo(inset+pad,y-22);ctx.lineTo(inset+bubbleW-pad,y-22);}
@@ -295,7 +348,7 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
       if(ctx.measureText(label).width>textW)throw new ArtifactLayoutError('too_long');
       ctx.fillText(label,lineX(label),y);y+=50;
     }
-    ctx.font=`${wordWeight} ${selected.size}px ${family}`;ctx.fillStyle=wordInk;
+    ctx.font=`${said?400:wordWeight} ${selected.size}px ${family}`;ctx.fillStyle=wordInk;
     for(const line of item.lines){ctx.fillText(line,lineX(line),y);y+=selected.size*leading;}
     y+=44;
   }
@@ -321,8 +374,17 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
   ctx.fillText(SHARE_MARK,width-margin-markWidth,height-margin-24);
 
   const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new ArtifactLayoutError('unavailable')),'image/png'));
+  /* The editor covers the words: under the frame line when there is one, so
+     the line stays visible while you type. Each line of a field sits half its
+     leading below the box's top, so the box starts that much higher. */
+  const halfLead=((leading-1)*selected.size)/2;
+  const radius=said?Math.round(19*said.s):kind==='principle'?0:16;
+  const padX=said?said.padX:pad;
+  const editTop=said&&frame?textTop-halfLead:y0;
   const layout:ShareCardLayout={width,height,
-    bubble:{x:x0,y:y0,w:bubbleW,h:bubbleH,radius:kind==='topOfMind'?Math.min(84,bubbleH/2):16,fill:kind==='topOfMind'?(dark?ink.bubbleDark:ink.bubbleLight):(dark?'#efe6d4':'#fffdf8')},
-    text:{x:inset+pad,y:textTop,w:textW,size:selected.size,leading,weight:wordWeight,family,ink:wordInk}};
+    bubble:{x:x0,y:y0,w:bubbleW,h:bubbleH,radius,fill:said?SAID_FILL:(dark?'#efe6d4':'#fffdf8')},
+    text:{x:x0+padX,y:textTop,w:bubbleW-padX*2,size:selected.size,leading,weight:said?400:wordWeight,family,ink:wordInk,align:said?'center':'left'},
+    edit:{x:x0,y:editTop,w:bubbleW,h:y1-editTop,padTop:Math.max(0,textTop-editTop-halfLead),padX,padBottom:said?said.padBottom:pad,
+      radiusTop:said&&frame?0:radius,radiusBottom:radius}};
   return {blob,width,height,fallbackFont,layout};
 }
