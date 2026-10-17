@@ -79,6 +79,7 @@ import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
 import { useInspirationProcessing } from '../lib/use-inspiration-processing';
 import { useAuthoredSave } from '../lib/use-authored-save';
 import { useInspirationDraft } from '../lib/use-inspiration-draft';
+import { useSettingsWrites } from '../lib/use-settings-writes';
 import { DraftProblem, draftProblem } from '../lib/draft-problem';
 import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
@@ -187,7 +188,7 @@ import {
   monthTag,
 } from "../lib/words";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
-import type { MessageKey, SupportedLocale } from "../lib/locales";
+import type { MessageKey } from "../lib/locales";
 
 import {
   fetchPrinciples,
@@ -2398,69 +2399,34 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     window.addEventListener("popstate", popped);
     return () => window.removeEventListener("popstate", popped);
   }, [commitOpenNote]);
-  const [settingsName, setSettingsName] = useState<string | null>(null);
-  /* TWO FLAGS, BECAUSE THEY LOCK DIFFERENT THINGS. One `busy` used to cover
-     both writes and disabled both controls — so the name field went inert
-     the moment its own autosave fired, mid-word, and a language change
-     locked the name too. The name write locks nothing (it is only announced
-     as busy); the language write locks only the language. */
-  const [settingsNameBusy, setSettingsNameBusy] = useState(false);
-  const [settingsLocaleBusy, setSettingsLocaleBusy] = useState(false);
-  const [settingsFailed, setSettingsFailed] = useState(false);
-  const nameTimer = useRef<number | null>(null);
-  /* NAME WRITES GO ONE AT A TIME, AND ONLY THE LAST ONE SPEAKS. With the
-     field typeable during a write, a second pause can fire a second write
-     while the first is out. Sent side by side they could land out of order —
-     the account left holding the older name — and the first to settle
-     cleared "busy" while the second was still going. So each write waits
-     for the one before it, and only the newest decides busy, failed and the
-     field. */
-  const nameWrites = useRef<{ chain: Promise<void>; latest: number }>({ chain: Promise.resolve(), latest: 0 });
-  useEffect(() => () => { if (nameTimer.current !== null) window.clearTimeout(nameTimer.current); }, []);
   /* The field shows what you typed while you are typing and the account's
      own name the rest of the time, so another tab renaming you is not
      overwritten by a stale field — and nothing is held here that the
      session does not already own. */
   const accountName = auth?.profile?.name ?? '';
-  /* `preferredLocale` RIDES ALONG BECAUSE THE WRITE IS A REPLACE, not a
-     patch: `UpdateProfileInput` requires both, and sending the name alone
-     would reset the language to whatever the server defaults to. The
-     language control below writes through `updatePreferredLocale`, which is
-     the narrow endpoint for exactly that field. */
+  /* TWO BUSY FLAGS, ONE QUEUE — the ordering rules are `useSettingsWrites`'s
+     and are tested there. One `busy` used to cover both writes and disabled
+     both controls, so the name field went inert the moment its own autosave
+     fired, mid-word. The name write locks nothing (it is only announced as
+     busy); the language write locks only the language.
+     `preferredLocale` RIDES ALONG ON A NAME WRITE BECAUSE THE WRITE IS A
+     REPLACE, not a patch: `UpdateProfileInput` requires both. The hook
+     sends the language wanted at the moment of sending, so a name write
+     queued behind a language change cannot put the old language back. */
+  const settingsWrites = useSettingsWrites({
+    accountName,
+    locale,
+    updateName: (name, preferredLocale) => auth ? auth.updateProfile({ name, preferredLocale }) : Promise.resolve(),
+    updateLocale: next => auth ? auth.updatePreferredLocale(next) : Promise.resolve(),
+    settleMs: NAME_SETTLE_MS,
+  });
   const settingsCard = auth ? {
-    name: settingsName ?? accountName,
-    nameBusy: settingsNameBusy,
-    localeBusy: settingsLocaleBusy,
-    failed: settingsFailed,
-    onName: (value: string) => {
-      setSettingsName(value); setSettingsFailed(false);
-      if (nameTimer.current !== null) window.clearTimeout(nameTimer.current);
-      const trimmed = value.trim();
-      /* AN EMPTY NAME IS NOT A RENAME. The field may be empty while somebody
-         clears it to type a new one; writing that would blank the account
-         between two keystrokes. */
-      if (!trimmed || trimmed === accountName) return;
-      nameTimer.current = window.setTimeout(() => {
-        const writes = nameWrites.current, mine = ++writes.latest;
-        setSettingsNameBusy(true);
-        writes.chain = writes.chain
-          .then(() => auth.updateProfile({ name: trimmed, preferredLocale: locale }))
-          .then(
-            /* Hand the field back to the account's name ONLY if it still
-               holds what was sent. Clearing it unconditionally threw away
-               whatever was typed while the write was out. */
-            () => { if (mine === writes.latest) setSettingsName(current => (current === value ? null : current)); },
-            () => { if (mine === writes.latest) setSettingsFailed(true); },
-          )
-          .finally(() => { if (mine === writes.latest) setSettingsNameBusy(false); });
-      }, NAME_SETTLE_MS);
-    },
-    onLocale: (next: SupportedLocale) => {
-      setSettingsLocaleBusy(true); setSettingsFailed(false);
-      void auth.updatePreferredLocale(next)
-        .catch(() => setSettingsFailed(true))
-        .finally(() => setSettingsLocaleBusy(false));
-    },
+    name: settingsWrites.name,
+    nameBusy: settingsWrites.nameBusy,
+    localeBusy: settingsWrites.localeBusy,
+    failed: settingsWrites.failed,
+    onName: settingsWrites.onName,
+    onLocale: settingsWrites.onLocale,
     /* ═══ THE PUBLIC PAGE IS NO LONGER OFFERED ════════════════════════
        Founder: "everything regarding public and private should also not be
        a thing in this new experience."
