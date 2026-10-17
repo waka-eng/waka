@@ -33,7 +33,13 @@ export function useViewNavigation(scope: string | null) {
        close. Writing `open:null` forward instead would leave a Back that
        reopens the thing you just dismissed. */
     const openFrom=next.open?(!before?.open&&!options.replace?previous:stored?.scope===current.scope?stored.openFrom:undefined):undefined;
-    current.navigate(to, { replace: options.replace, state: { wakaView: { scope: current.scope, query: options.query ?? '', ...(composerFrom ? { composerFrom } : {}),...(shareFrom?{shareFrom}:{}),...(conversationFrom?{conversationFrom}:{}),...(openFrom?{openFrom}:{}) } } });
+    /* AN OPEN SAVE'S MARK SURVIVES A REWRITE OF ITS OWN ENTRY. SavesOverlay's
+       `NoteHistory` marks the entry it pushed with `savesNote`; the world
+       re-writes the same address in place (to record the seek query), and a
+       state built from scratch here dropped the mark — which reads exactly
+       like Back, so the note closed itself the moment it opened. */
+    const savesNote = options.replace && to === previous ? (current.location.state as { savesNote?: string } | null)?.savesNote : undefined;
+    current.navigate(to, { replace: options.replace, state: { ...(savesNote ? { savesNote } : {}), wakaView: { scope: current.scope, query: options.query ?? '', ...(composerFrom ? { composerFrom } : {}),...(shareFrom?{shareFrom}:{}),...(conversationFrom?{conversationFrom}:{}),...(openFrom?{openFrom}:{}) } } });
   }, []);
   const closeComposer = useCallback(() => {
     const current = latest.current;

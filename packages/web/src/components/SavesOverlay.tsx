@@ -40,6 +40,7 @@
  * itself — the grid is for finding the thing, not for reading it.
  */
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useInRouterContext, useLocation, useNavigate } from "react-router-dom";
 
 import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
@@ -87,6 +88,45 @@ const UNDO_MS = 6000;
 function pictureOf(row: Inspiration): string | null {
   const image = row.attachments?.find((item) => item.type === "image");
   return image ? attachmentPreviewImageUrl(image.id) : null;
+}
+
+/**
+ * AN OPEN NOTE IS ONE STEP OF BACK (audit f2afcbe2, desk/27 and /32).
+ *
+ * The list is `?open=saves` and has its own history entry; the note opened
+ * inside it had none, so the browser's Back from a note skipped the list and
+ * closed the whole archive — two levels for one press. Opening a note now
+ * pushes an entry at the SAME address (the world's address does not change;
+ * `/inspirations/:id` was not used because it selects the memory in the
+ * field rather than opening this page), marked in router state. Back pops
+ * the mark and the note closes through `leaveNote`, so an edit is committed
+ * exactly as the on-screen way out commits it. Closing the note on screen
+ * pops its own mark, so the list's entry is never left doubled.
+ */
+function NoteHistory({ openId, onBack }: { openId: string | null; onBack: () => void }) {
+  const location = useLocation(), navigate = useNavigate();
+  const marked = (location.state as { savesNote?: string } | null)?.savesNote ?? null;
+  const pushed = useRef<string | null>(null), seen = useRef(false);
+  const back = useRef(onBack); back.current = onBack;
+  const here = useRef(location); here.current = location;
+  useEffect(() => {
+    if (openId && pushed.current !== openId && marked !== openId) {
+      pushed.current = openId; seen.current = false;
+      const at = here.current;
+      navigate(at.pathname + at.search + at.hash, { state: { ...((at.state as object | null) ?? {}), savesNote: openId } });
+    } else if (!openId && pushed.current) {
+      const mine = pushed.current;
+      pushed.current = null; seen.current = false;
+      if (marked === mine) navigate(-1);
+    }
+    // Runs on the note changing, not on the address: `marked` is read as it stands.
+  }, [openId]);
+  useEffect(() => {
+    if (!openId || pushed.current !== openId) return;
+    if (marked === openId) { seen.current = true; return; }
+    if (seen.current) { pushed.current = null; seen.current = false; back.current(); }
+  }, [marked, openId]);
+  return null;
 }
 
 export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, ownArchive = true, shareName = "" }: {
@@ -216,6 +256,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [open, setOpen] = useState<Inspiration | null>(null);
+  // Standalone renders (some suites) have no router; there is no Back to keep.
+  const inRouter = useInRouterContext();
   const [phase, setPhase] = useState<Phase>("loading");
   /* ═══ DELETE AT ONCE, UNDO FOR A MOMENT, THE SHELF FOR A MONTH ═══════════
      Founder: "just delete when user clicks on this, but give option to undo
@@ -819,6 +861,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        reserve is holding room for nothing, and holding it was the last 60px
        between this page and the one the founder prefers. */
     <div className={`waka-page${open ? " waka-page--note" : ""}`}>
+      {inRouter ? <NoteHistory openId={openId} onBack={() => void leaveNote()} /> : null}
       <DialogSurface
         /* ═══ AN OPEN NOTE IS A PAGE, NOT A COLUMN IN THE ARCHIVE ════════
            Founder: "it should go to the same exact UI as when I'm creating
