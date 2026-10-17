@@ -237,9 +237,18 @@ export function useEditing(deps: EditingDeps): Editing {
      * they belong to. The timer is cleared by `leave`, by a new `begin`, and
      * on unmount, so a closed card can never be reopened by an old beat.
      */
+    /* IS THE EDIT ON SCREEN STILL THE ONE THIS WRITE WAS FOR? The answer can
+       land after the person left this edit and opened another — a different
+       memory, or a signal — and both handlers used to act on whatever was
+       open by then: stamping `saved` on words that were never written, or
+       closing a draft mid-sentence. `begin` always opens with `saving: false`,
+       so a fresh edit of the same thing is not mistaken for this one either. */
+    const ours = (still: OpenEdit | null): still is OpenEdit =>
+      still !== null && still.kind === held.kind && still.id === held.id && still.saving;
     const done = () => {
       const still = heldRef.current;
-      put(still ? { ...still, saving: false, saved: true } : null);
+      if (!ours(still)) return;
+      put({ ...still, saving: false, saved: true });
       clearHold();
       holdRef.current = window.setTimeout(() => {
         holdRef.current = null;
@@ -263,9 +272,12 @@ export function useEditing(deps: EditingDeps): Editing {
      */
     const fail = (err?: unknown) => {
       const still = heldRef.current;
-      put(still ? { ...still, saving: false, saved: false } : null);
+      const mine = ours(still);
+      if (mine) put({ ...still, saving: false, saved: false });
       if (err instanceof ApiError && err.status === 404) {
-        put(null);
+        /* the reload below is about the board, not the edit, so it runs
+           either way; closing the edit is only ours to do if it is ours */
+        if (mine) put(null);
         if (d.reloadReading) { void d.reloadReading().catch(() => undefined); return; }
         void loadTopOfMind()
           .then((tom) => {
