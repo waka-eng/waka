@@ -61,6 +61,18 @@ it('restores a closed draft and forks its next edit without overwriting the earl
   expect(host.querySelector('textarea')!.value).toBe('Keep these card words');await type('A new draft of these words');
   expect(readPrincipleArtifactDrafts(scope,id).map(row=>row.value.entries[0].text).sort()).toEqual(['A new draft of these words','Keep these card words']);
 });
+it('does not restore a discarded card from the draft it forked from',async()=>{
+  /* Reopening forks the restored draft under a new key; discarding the fork
+     used to clear only the new key, so the next open brought back the
+     earlier revision of the card that had just been thrown away. */
+  await mount();await type('Keep these card words');await act(async()=>root.unmount());root=createRoot(host);await mount();
+  await type('A new draft of these words');
+  vi.spyOn(window,'confirm').mockReturnValue(true);
+  await act(async()=>button('Discard draft').click());
+  expect(readPrincipleArtifactDrafts(scope,id),'the draft it forked from is still on disk').toEqual([]);
+  await act(async()=>root.unmount());root=createRoot(host);await mount();
+  expect(host.querySelector('textarea')!.value).toBe(source.statement);
+});
 it('never enables export from a late preview of earlier wording',async()=>{
   let resolve!:(value:Awaited<ReturnType<typeof renderShareCard>>)=>void;
   vi.mocked(renderShareCard).mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));await mount();await settle();
