@@ -235,19 +235,19 @@ and `lib/group-output.ts` over the group tables and `signal_shares`.
 
 ## 3. The six files to read first
 
-In this order. The first three are 1,059 lines together; the first five are
-3,260. The sixth is read in two pieces and never linearly.
+In this order. The first three are 2,524 lines together; the first five are
+5,889. The sixth is read in two pieces and never linearly.
 
-1. **`packages/api/src/index.ts`** (94 lines) — every route mount on one page,
+1. **`packages/api/src/index.ts`** (153 lines) — every route mount on one page,
    in layer order, each with a sentence saying what it is for. Read it and you
    know the entire API surface and can find any handler in one hop.
-2. **`packages/api/src/db/schema-signals.ts`** (233 lines) — the middle layer,
+2. **`packages/api/src/db/schema-signals.ts`** (526 lines) — the middle layer,
    which is the one that explains the other two. `signal_evidence` is M:N to
    inspirations (so a signal is a *pattern*, not a per-save fragment) and
    `signal_shares` is per-signal, per-group (so sharing is a layer-2 act). The
    two tables beside it, `schema-inspirations.ts` and `schema-top-of-mind.ts`,
    read in ten minutes once this one has landed.
-3. **`packages/api/src/lib/queue.ts`** (732 lines — skim the header and
+3. **`packages/api/src/lib/queue.ts`** (1,845 lines — skim the header and
    `processBackgroundJob`) — the header explains why Postgres is the queue, and
    the thirteen job types (`backgroundJobTypeValues` in
    `db/schema-background-jobs.ts`) *are* the generation pipeline. The dispatch function is
@@ -257,11 +257,11 @@ In this order. The first three are 1,059 lines together; the first five are
    the whole client surface typed in canon words. One file per resource,
    mirroring `packages/api/src/routes/`, over a shared `http.ts`. Read it beside
    file 1 and the two packages stop being two vocabularies.
-5. **`packages/web/src/lib/data.ts`** (456 lines) — where payloads become the
+5. **`packages/web/src/lib/data.ts`** (589 lines) — where payloads become the
    things the canvas draws. Its header is also the clearest short statement in
    the repo of the world-words rule: `field`, `sky` and `headquarters` are words
    for *where a layer is drawn* and may not be type or function names.
-6. **`packages/web/src/pages/Home.tsx`** (10,110 lines) — read the file header
+6. **`packages/web/src/pages/Home.tsx`** (11,820 lines) — read the file header
    and the `SimApi` interface (~line 839), then stop. The header is the
    product's design brief; `SimApi` is the boundary between React and the
    canvas, which React calls into and the canvas never calls back through. Do
@@ -270,7 +270,7 @@ In this order. The first three are 1,059 lines together; the first five are
 Two short files worth a seventh and eighth minute:
 `packages/web/src/space-kinds/index.ts` defines **space** — the one word this
 frontend invents, for the thing that owns a full set of three layers — and
-`packages/api/src/lib/middleware.ts` (165 lines) holds the cross-profile access
+`packages/api/src/lib/middleware.ts` (304 lines) holds the cross-profile access
 matrix that every route defers to.
 
 And if you are about to open either `space/` or `space-kinds/`, read
