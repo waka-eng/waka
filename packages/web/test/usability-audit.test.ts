@@ -36,3 +36,19 @@ describe("the chosen shelf tab keeps its label under the pointer (#39)", () => {
     }
   });
 });
+
+describe("the principles creature never stands between a press and a card", () => {
+  it("its aura box takes no press (#3: it swallowed clicks on the first principle)", () => {
+    const being = rules(sheet("claims.css"), (s) => s === ".waka-ground-being");
+    expect(being.some(([, body]) => /pointer-events\s*:\s*none/.test(body))).toBe(true);
+  });
+  it("on the walk in, the cards arrive after the glide starts, not before (#17)", () => {
+    const css = sheet("claims.css");
+    const page = rules(css, (s) => s === ".waka-page--crossing-in .waka-over")[0]![1];
+    const cards = rules(css, (s) => s === ".waka-page--crossing-in .waka-held")[0]![1];
+    const delay = (body: string) => Number(/(\d+)ms forwards/.exec(body)?.[1]);
+    // CROSS_TURN_MS * 2 + CROSS_WALK_MS = 1380: the glide starts there.
+    expect(delay(cards)).toBeGreaterThan(1380);
+    expect(delay(cards)).toBeGreaterThan(delay(page));
+  });
+});

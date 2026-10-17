@@ -2050,6 +2050,15 @@
      screen's gap (founder, 2026-10-15: "the spacing between the character
      and the speech bubble is too high. I prefer the amount ... used here"). */
   margin-block: calc(var(--being, 106px) * -1.32 - var(--sp-24)) calc(var(--being, 106px) * -1.22);
+  /* LIGHT TAKES NO PRESS, AND THIS BOX IS MOSTLY LIGHT. It is the aura's
+     four-body square, and the margins above slide the first card up into
+     it — so it sat over that card's top and swallowed every click on it
+     (audit f2afcbe2: the first principle could not be opened with a mouse).
+     The creature has no press of its own here; the pull home belongs to the
+     page (`PrinciplesOverlay`'s pointer handlers), and a press that passes
+     through this box still reaches the page underneath, so the gesture is
+     untouched. */
+  pointer-events: none;
 }
 
 /* THE AURA IS THE PROGRESS. The companion's own light, at the strength the
@@ -6141,6 +6150,19 @@
   animation: waka-cross-reveal 460ms ease-out 1240ms forwards;
 }
 
+/* THE CARDS WAIT FOR THE CREATURE TO PASS THEM. The walk ends where the home
+   screen keeps the creature — low, exactly where the first card lands — and
+   it only rises to its seat during the glide (from 1380ms, landing ~2100ms).
+   Revealed with the rest of the page at 1240ms, the first card's "Make a
+   share card" sat under the walking body for over a second (audit f2afcbe2,
+   iphone-after-drag-right). The bubble still arrives with the page; the
+   cards arrive as the creature lands above them. */
+.waka-page--crossing-in .waka-held,
+.waka-page--crossing-in .waka-ground-card {
+  opacity: 0;
+  animation: waka-cross-reveal 320ms ease-out 1980ms forwards;
+}
+
 /* Out: the contents go first, so the walk home is the creature and the sky. */
 .waka-page--crossing-out .waka-over {
   animation: waka-cross-hide 220ms ease-in forwards;
@@ -6165,7 +6187,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .waka-page--crossing-in .waka-over,
-  .waka-page--crossing-out .waka-over {
+  .waka-page--crossing-out .waka-over,
+  .waka-page--crossing-in .waka-held,
+  .waka-page--crossing-in .waka-ground-card {
     animation: none;
     opacity: 1;
   }

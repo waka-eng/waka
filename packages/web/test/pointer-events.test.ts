@@ -280,6 +280,12 @@ describe("nothing visible loses its press", () => {
                span of grain under the card's words. The card itself is the
                press. */
             ".jar-pick-grain",
+            /* THE PRINCIPLES PAGE'S CREATURE (2026-10-17): the aura box of a
+               `.waka-companion`, which is already artwork — one canvas with
+               `role="img"`. Its negative margins slide the first card into
+               it, so as a hit target it swallowed that card's presses. The
+               pull home is the page's, not the creature's. */
+            ".waka-ground-being",
           ].includes(selector),
       );
     expect(
