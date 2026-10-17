@@ -153,16 +153,6 @@ export function koSinoNumber(n: number): string {
 }
 
 /**
- * The full date stamp a person writes at the top of a page: `Aug 24, 2026` —
- * or `2026년 8월 24일`, which is what a Korean hand writes. The card's head
- * wears this instead of the spoken pair — "Two days ago · Aug 24" said the
- * same fact twice and went stale as the card stayed open (founder,
- * 2026-08-27: "just keep date. also add year"). The year is always present:
- * a memory product's dates are read across years, and a stamp that drops its
- * year is a stamp that will one day be misread by exactly the person this is
- * built for.
- */
-/**
  * The reader's own IANA zone, or nothing when the platform will not say.
  *
  * Here rather than beside its one caller (`lib/api/inspiration-days`, which
@@ -178,6 +168,16 @@ export function readerTimeZone(): string | undefined {
   }
 }
 
+/**
+ * The full date stamp a person writes at the top of a page: `Aug 24, 2026` —
+ * or `2026년 8월 24일`, which is what a Korean hand writes. The card's head
+ * wears this instead of the spoken pair — "Two days ago · Aug 24" said the
+ * same fact twice and went stale as the card stayed open (founder,
+ * 2026-08-27: "just keep date. also add year"). The year is always present:
+ * a memory product's dates are read across years, and a stamp that drops its
+ * year is a stamp that will one day be misread by exactly the person this is
+ * built for.
+ */
 export function dateStamp(ms: number, locale: WordsLocale = "en-US"): string {
   const d = new Date(ms);
   if (locale === "ko-KR") {

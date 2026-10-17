@@ -48,15 +48,19 @@ describe("the days grid", () => {
   });
 
   it("draws every date once, across a daylight-saving change", () => {
-    /* New York leaves summer time on 2026-11-01: a 25-hour day. A grid that
-       stepped back in fixed 24-hour lengths could repeat or drop a date. */
+    /* New York leaves summer time on 2026-11-01: a 25-hour day. The clock is
+       pinned at 23:30 local, which is 04:30 the NEXT day in UTC — so a grid
+       that walked UTC dates ends a day late, and every cell's noon is the
+       local noon of its own date on both sides of the change. */
     process.env.TZ = "America/New_York";
-    const cells = buildGrid([], new Date("2026-11-20T15:00:00Z"));
+    const cells = buildGrid([], new Date("2026-11-21T04:30:00Z"));
     const keys = cells.map((cell) => cell.key);
+    const noonOf = (key: string) => cells.find((cell) => cell.key === key)!.at;
 
     expect(new Set(keys).size).toBe(keys.length);
-    expect(keys).toContain("2026-11-01");
-    expect(keys).toContain("2026-10-31");
     expect(keys.at(-1)).toBe("2026-11-20");
+    expect(noonOf("2026-10-31")).toBe(Date.parse("2026-10-31T12:00:00-04:00"));
+    expect(noonOf("2026-11-01")).toBe(Date.parse("2026-11-01T12:00:00-05:00"));
+    expect(noonOf("2026-11-02")).toBe(Date.parse("2026-11-02T12:00:00-05:00"));
   });
 });
