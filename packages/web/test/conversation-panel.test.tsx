@@ -144,20 +144,30 @@ it('restores unsent words after reopening and forks edits instead of overwriting
      drafts rather than one tab overwriting the other's sentence — what
      changed is that reopening restores the newest silently instead of
      offering a `<select>` of your own revisions. */
-  await mount();await type('Original draft');await act(async()=>root.unmount());root=createRoot(host);await mount();
+  /* ANOTHER TAB is another `sessionStorage` — the writer id lives there
+     (`lib/tab-writer`), so clearing it is what opening a second tab does. */
+  await mount();await type('Original draft');await act(async()=>root.unmount());sessionStorage.clear();root=createRoot(host);await mount();
   expect(host.querySelector('textarea')!.value).toBe('Original draft');await type('Another tab version');
   expect(readConversationDrafts(scope,id).map(row=>row.value.content).sort()).toEqual(['Another tab version','Original draft']);
 });
 it('does not bring back a sent message on the next reload',async()=>{
-  /* Reopening forks the restored draft under a new key; sending the fork used
-     to clear only the new key, so the next reload restored the old one — the
-     words just sent, back in the box as if unsent. */
+  /* A reload is the SAME tab, so it keeps writing its own draft in place.
+     It used to fork it under a new key, and sending the fork left the
+     original on disk for the next reload to restore — the words just sent,
+     back in the box as if unsent. */
   await mount();await type('Original draft');await act(async()=>root.unmount());root=createRoot(host);await mount();
   await type('Original draft, finished');await click('Send');
   expect(stored.messages.map(row=>row.content)).toEqual(['Original draft, finished']);
-  expect(readConversationDrafts(scope,id),'the draft it forked from is still on disk').toEqual([]);
+  expect(readConversationDrafts(scope,id),'the reloaded draft is still on disk').toEqual([]);
   await act(async()=>root.unmount());root=createRoot(host);await mount();
   expect(host.querySelector('textarea')!.value).toBe('');
+});
+it('leaves another open tab’s draft alone when this tab sends',async()=>{
+  /* The draft this one forked from may belong to a tab that is still open;
+     sending here must not delete the words over there. */
+  await mount();await type('Words in the other tab');await act(async()=>root.unmount());sessionStorage.clear();root=createRoot(host);await mount();
+  await type('Words in this tab');await click('Send');
+  expect(readConversationDrafts(scope,id).map(row=>row.value.content)).toEqual(['Words in the other tab']);
 });
 it('never restores another account’s draft',async()=>{
   await mount();await type('PRIVATE_DRAFT');await mount(id,{...scope,accountId:'different-account'});

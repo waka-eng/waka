@@ -8,20 +8,15 @@ import {dateStamp} from '../lib/words';
 import {DialogSurface} from './DialogSurface';
 import {ShareLooks} from './ShareLooks';
 import {SHARE_NOTICE_KEY,useShareImage} from '../lib/use-share-image';
+import {tabWriterId} from '../lib/tab-writer';
 
 export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:ProfileStorageScope;id:string;name:string;locale:SupportedLocale;onClose:()=>void;onChoose:(id:string)=>void}){
   const [rows,setRows]=useState<ApiPrinciple[]|null>(null),[loadFailed,setLoadFailed]=useState(false),[attempt,setAttempt]=useState(0);
   const [draft,setDraft]=useState<StoredPrincipleArtifactDraft|null>(null),[drafts,setDrafts]=useState<StoredPrincipleArtifactDraft[]>([]),[storageFailed,setStorageFailed]=useState(false);
-  const current=useRef<StoredPrincipleArtifactDraft|null>(null),writer=useRef(crypto.randomUUID());
-  /* WHAT EACH DRAFT FORKED FROM, by the fork's key. An edit to a draft read
-     back from a reload is written under a NEW key so another tab's card is
-     never overwritten — but the old key then outlived the draft that replaced
-     it: discard the card and the next open restored the earlier revision, the
-     draft you had just thrown away. So a fork remembers its ancestors and a
-     discard clears them with it, each only if it is still exactly what was
-     read (`clearPrincipleArtifactDraft` checks), so another tab's later words
-     survive. */
-  const forkedFrom=useRef(new Map<string,StoredPrincipleArtifactDraft[]>());
+  /* This tab's writer id, read once (see `lib/tab-writer`): a reload keeps
+     writing its own card draft in place; another tab still forks. */
+  const [tabWriter]=useState(tabWriterId);
+  const current=useRef<StoredPrincipleArtifactDraft|null>(null),writer=useRef(tabWriter);
   const [preview,setPreview]=useState<{key:string;url:string;blob:Blob;fallbackFont:boolean;words:string}|null>(null),[renderError,setRenderError]=useState<string|null>(null);
   const [renderAttempt,setRenderAttempt]=useState(0);
   const [editingWords,setEditingWords]=useState(false),[customizing,setCustomizing]=useState(false);
@@ -95,8 +90,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
     if(busy)return;
     let next={...value,updatedAt:Date.now()},previous=current.current;
     if(next.writer!==writer.current){next={...next,id:crypto.randomUUID(),writer:writer.current};previous=null;}
-    const ancestor=previous?null:current.current;
-    try{const saved=storePrincipleArtifactDraft(scope,id,next,previous??undefined);if(ancestor?.key&&ancestor.key!==saved.key)forkedFrom.current.set(saved.key,[...(forkedFrom.current.get(ancestor.key)??[]),ancestor]);useDraft(saved);setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
+    try{const saved=storePrincipleArtifactDraft(scope,id,next,previous??undefined);useDraft(saved);setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
     catch{useDraft({...previous??{key:'',raw:''},value:next});setStorageFailed(true);}
   };
   const change=draft?.value.mode==='change';
@@ -152,7 +146,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const {busy,notice,setNotice,canShare,download,share}=useShareImage(ready?preview?.blob??null:null,filenames);
   const discard=()=>{
     if(busy||!draft||!source||!window.confirm(say('worldShareDiscardConfirm')))return;
-    try{clearPrincipleArtifactDraft(draft);for(const row of forkedFrom.current.get(draft.key)??[])clearPrincipleArtifactDraft(row);forkedFrom.current.delete(draft.key);useDraft({key:'',raw:'',value:fresh(source,rows??[])});setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
+    try{clearPrincipleArtifactDraft(draft);useDraft({key:'',raw:'',value:fresh(source,rows??[])});setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
     catch{setStorageFailed(true);}
   };
   return <>

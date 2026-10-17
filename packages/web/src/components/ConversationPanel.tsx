@@ -100,6 +100,7 @@ import {FileRefused,MAX_MESSAGE_ATTACHMENTS,fileSizeWords,inspectAttachmentFile}
 import {attachmentLabel} from '../lib/attachment-label';
 import {inspectInspirationPhoto,PhotoRefused} from '../lib/inspiration-photo';
 import {formatMessage,type MessageKey} from '../lib/locales';
+import {tabWriterId} from '../lib/tab-writer';
 
 /** The id `Home` gives the bar's middle group on a chat; see `toolsSlot`. */
 export const CHAT_TOOLS_SLOT='waka-chat-tools';
@@ -169,16 +170,10 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const prependScroll=useRef<{height:number;top:number}|null>(null);
   const [focusPrinciple,setFocusPrinciple]=useState<ApiPrinciple|null>(null),[focusFailed,setFocusFailed]=useState(false);
   const lifecycle=useRef(new AbortController()),draftRef=useRef<Draft|null>(null),working=useRef(false);
-  const conversationRef=useRef<ApiConversation|null>(initial),writer=useRef(crypto.randomUUID()),receipt=useRef<StoredConversationDraft>();
-  /* THE DRAFTS THIS ONE FORKED FROM. Editing a draft read back from a reload
-     (or another tab) writes a NEW key rather than overwriting the old one, so
-     two tabs never clobber each other's words. But the old key used to stay
-     on disk after the fork was sent, and the next reload restored it as the
-     newest unsent sentence: a message you had already sent, back in the box.
-     So the keys a draft forked from are remembered and cleared when that
-     draft is confirmed — each only if it is still exactly what was read, so
-     words another tab has written since are never taken. */
-  const forkedFrom=useRef<StoredConversationDraft[]>([]);
+  /* This tab's writer id, read once (see `lib/tab-writer`): a reload keeps
+     writing its own draft in place; another tab still forks. */
+  const [tabWriter]=useState(tabWriterId);
+  const conversationRef=useRef<ApiConversation|null>(initial),writer=useRef(tabWriter),receipt=useRef<StoredConversationDraft>();
   const [generationEnabled,setGenerationEnabled]=useState<boolean|null>(initial?.generationEnabled??null);
   const root=useRef<HTMLElement>(null),body=useRef<HTMLDivElement>(null),editor=useRef<HTMLTextAreaElement>(null),nearBottom=useRef(true);
   const restoredScroll=useRef<{top:number;nearBottom:boolean;messageWindowStart?:number}|null>(null),scrollKey=profileStorageKey(scope,`conversationScroll:${journal}`)!;
@@ -221,7 +216,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     try{if(owner.signal.aborted)throw new Error('Conversation request stopped');const value=await Promise.race([work(request.signal),canceled]);if(request.signal.aborted||owner.signal.aborted)throw new Error('Conversation request stopped');return value;}
     finally{window.clearTimeout(timer);owner.signal.removeEventListener('abort',abort);request.signal.removeEventListener('abort',stopped);}
   };
-  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{const previous=receipt.current;receipt.current=storeConversationDraft(scope,journal,next,previous);if(previous&&previous.key!==receipt.current.key)forkedFrom.current.push(previous);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
+  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{receipt.current=storeConversationDraft(scope,journal,next,receipt.current);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
   const observe=(next:ApiConversation)=>{
     if(conversationRef.current?.id===next.id&&conversationRef.current.profileId===next.profileId&&conversationRef.current.revision>next.revision)next=conversationRef.current;
     conversationRef.current=next;setConversation(next);setGenerationEnabled(next.generationEnabled??false);
@@ -233,8 +228,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        forever the day the copy drifted.) */
     const pending=draftRef.current;
     if(pending?.pending&&next.messages.some(message=>message.id===pending.id)){
-      try{if(receipt.current)clearConversationDraft(receipt.current);for(const row of forkedFrom.current)clearConversationDraft(row);}catch{setStorageFailed(true);}
-      forkedFrom.current=[];
+      try{if(receipt.current)clearConversationDraft(receipt.current);}catch{setStorageFailed(true);}
       receipt.current=undefined;draftRef.current=null;setDraft(null);setError(null);
       if(!id){onCreated?.(next);onChoose(next.id);}
     }
@@ -334,7 +328,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     }catch{if(mine(owner))setEarlierFailed(true);}finally{if(mine(owner))setEarlierBusy(false);}
   };
   useEffect(()=>{
-    lifecycle.current=new AbortController();forkedFrom.current=[];
+    lifecycle.current=new AbortController();
     /* THE NEWEST UNSENT SENTENCE, WITHOUT ASKING WHICH. Two tabs each fork
        their own draft and both are still on disk; what went is the `<select>`
        that offered them to you by their first fifty characters, which is a
