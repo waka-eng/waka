@@ -14,6 +14,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { formatMessage } from "../src/lib/locales";
+import { numWords } from "../src/lib/words";
 import { buildGrid } from "../src/pages/Days";
 
 let savedTz: string | undefined;
@@ -62,5 +64,14 @@ describe("the days grid", () => {
     expect(noonOf("2026-10-31")).toBe(Date.parse("2026-10-31T12:00:00-04:00"));
     expect(noonOf("2026-11-01")).toBe(Date.parse("2026-11-01T12:00:00-05:00"));
     expect(noonOf("2026-11-02")).toBe(Date.parse("2026-11-02T12:00:00-05:00"));
+  });
+
+  it("says a day's count in words, never a numeral", () => {
+    /* States render, numerals never — the screen-reader sentence is the one
+       place the count is said at all, and it said "3개 담음". */
+    for (const locale of ["en-US", "ko-KR"] as const) {
+      const said = formatMessage(locale, "worldDaysKept", { count: 3, countWords: numWords(3, locale) });
+      expect(said, said).not.toMatch(/[0-9]/);
+    }
   });
 });

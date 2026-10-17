@@ -33,7 +33,7 @@ import { useOptionalAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 import { usePageMenu } from "../lib/page-menu";
 import { useAgent } from "../lib/use-agent";
-import { dateStamp } from "../lib/words";
+import { dateStamp, numWords } from "../lib/words";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -214,7 +214,7 @@ export function Days(): JSX.Element {
                       `toUTCString` read "17 Oct 2026" to a Korean reader. */}
                   {dateStamp(cell.at, locale)} —{" "}
                   {cell.kept
-                    ? formatMessage(locale, "worldDaysKept", { count: cell.kept })
+                    ? formatMessage(locale, "worldDaysKept", { count: cell.kept, countWords: numWords(cell.kept, locale) })
                     : say("worldDaysNone")}
                 </span>
               </button>

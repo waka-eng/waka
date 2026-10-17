@@ -241,7 +241,7 @@
   "worldCreatureSpeak": "무슨 일이 있었는지 듣기",
   "worldDaysEmpty": "아직 담은 게 없어요. 무언가 담은 날은 그날의 점에 불이 들어와요.",
   "worldDaysFail": "지난 날들을 열지 못했어요.",
-  "worldDaysKept": "{count}개 담음",
+  "worldDaysKept": "{countWords} 개 담음",
   "worldDaysLoad": "지난 날들을 여는 중…",
   "worldDaysNone": "담은 것 없음",
   "worldDaysTitle": "지난 날들",

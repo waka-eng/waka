@@ -241,7 +241,7 @@
   "worldCreatureSpeak": "What’s been happening",
   "worldDaysEmpty": "Nothing kept yet. Every day you keep something, its dot lights up.",
   "worldDaysFail": "Couldn't open your days.",
-  "worldDaysKept": "{count} kept",
+  "worldDaysKept": "{countWords} kept",
   "worldDaysLoad": "Opening your days…",
   "worldDaysNone": "Nothing kept",
   "worldDaysTitle": "Your days",
