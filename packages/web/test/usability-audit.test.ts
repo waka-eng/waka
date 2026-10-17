@@ -21,7 +21,7 @@ function rules(css: string, test: (selector: string) => boolean): Array<[string,
   const found: Array<[string, string]> = [];
   for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const selector = match[1]!.trim();
-    if (selector.split(",").some((part) => test(part.trim()))) found.push([selector, match[2]!]);
+    if (test(selector) || selector.split(",").some((part) => test(part.trim()))) found.push([selector, match[2]!]);
   }
   return found;
 }
@@ -49,6 +49,15 @@ describe("the bar and the corners light up when the keyboard reaches them (#5)",
       for (const [, body] of focus) expect(body).not.toMatch(/outline\s*:/);
     });
   }
+});
+
+describe("no share sheet has the bar painted over its footer (#9)", () => {
+  it("the dock steps aside while any share sheet is open", () => {
+    const hide = rules(sheet("claims.css"), (s) => /^body:has\(.*\.jar-thing-share.*\) \.waka-dock$/.test(s));
+    expect(hide).toHaveLength(1);
+    expect(hide[0]![0]).toContain(".jar-principle-share");
+    expect(hide[0]![1]).toMatch(/visibility\s*:\s*hidden|display\s*:\s*none/);
+  });
 });
 
 describe("the principles creature never stands between a press and a card", () => {

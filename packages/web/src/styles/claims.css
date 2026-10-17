@@ -302,6 +302,18 @@
   pointer-events: auto;
 }
 
+/* ═══ A SHARE SHEET HAS ITS OWN WAY OUT, SO THE BAR STEPS ASIDE ═══════════
+   The sheet is modal (a backdrop, its own Close) and runs nearly the full
+   height of a short window, so at 1280x720 the bar sat on top of the
+   sheet's footer — "Inspiration · Chat" painted beside "Save image" (audit
+   f2afcbe2, desk/86). The bar's places are not reachable through a modal
+   backdrop anyway; showing them over the sheet only covered its one act.
+   Every share sheet wears `.jar-thing-share` (the reading's, a saved note's)
+   or `.jar-principle-share`, so this holds for all of them. */
+body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
+  visibility: hidden;
+}
+
 .waka-dock-item {
   appearance: none;
   -webkit-appearance: none;
