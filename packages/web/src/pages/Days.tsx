@@ -33,6 +33,7 @@ import { useOptionalAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 import { usePageMenu } from "../lib/page-menu";
 import { useAgent } from "../lib/use-agent";
+import { dateStamp } from "../lib/words";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -43,26 +44,44 @@ const WINDOW_DAYS = 119;
     a day you had, and the product's rule is that fading never deletes. */
 const DAY_FLOOR = 0.1;
 
-interface Cell {
+export interface Cell {
   key: string;
-  label: string;
+  /** Local noon of this date, in ms — the moment a press on the dot jumps to. */
+  at: number;
   kept: number;
   glow: number;
 }
 
-function buildGrid(rows: ApiKeptDay[], now: Date): Cell[] {
+/** `YYYY-MM-DD` of a date as the reader's own clock names it. */
+function localDayKey(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * THE GRID IS THE READER'S CALENDAR, NOT GREENWICH'S.
+ *
+ * It was built in UTC, and so was the server's grouping, which put a Seoul
+ * evening's saves on the previous date and drew "today" as yesterday until
+ * nine in the morning. The server now groups by the browser's own zone (see
+ * `listKeptDays`) and this walks back in local dates to match, so the keys
+ * meet. Each step is a fresh local-noon date rather than "minus 24 hours",
+ * because a daylight-saving day is 23 or 25 hours long and stepping by a
+ * fixed length would skip or repeat a date at the change.
+ */
+export function buildGrid(rows: ApiKeptDay[], now: Date): Cell[] {
   const byDay = new Map(rows.map((row) => [row.day, row.kept]));
   /* The busiest day on the page sets the top of the scale — see the note. */
   const busiest = rows.reduce((top, row) => Math.max(top, row.kept), 0);
   const cells: Cell[] = [];
   for (let back = WINDOW_DAYS - 1; back >= 0; back -= 1) {
-    const date = new Date(now);
-    date.setUTCDate(date.getUTCDate() - back);
-    const key = date.toISOString().slice(0, 10);
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back, 12);
+    const key = localDayKey(date);
     const kept = byDay.get(key) ?? 0;
     cells.push({
       key,
-      label: date.toUTCString().slice(5, 16),
+      at: date.getTime(),
       kept,
       /* Square-rooted so the first keep of a day is the biggest step there is.
          Linear made one keep nearly indistinguishable from none on any week
@@ -176,8 +195,11 @@ export function Days(): JSX.Element {
                    there, so the dates themselves are how a day is reached.
                    `?at=` is the reading's own address for a moment in time,
                    which is why this is a link to a date rather than a second
-                   dial living on this page. */
-                onClick={() => navigate(`/?at=${Date.parse(`${cell.key}T12:00:00Z`)}`)}
+                   dial living on this page. It lands on LOCAL noon: UTC noon
+                   is already the next date for anyone more than twelve hours
+                   east of Greenwich (Kiritimati, Samoa), so the dot they
+                   pressed would open the day after it. */
+                onClick={() => navigate(`/?at=${cell.at}`)}
                 /* NO `title`. It carried the same sentence as the span below
                    it, which made the hover a printed count — "3 kept" — on a
                    page whose entire argument is that a busy day is a brighter
@@ -188,7 +210,9 @@ export function Days(): JSX.Element {
                    a third time in a numeral undoes the picture. */
               >
                 <span className="sr-only">
-                  {cell.label} —{" "}
+                  {/* The reader's own date words, in their language —
+                      `toUTCString` read "17 Oct 2026" to a Korean reader. */}
+                  {dateStamp(cell.at, locale)} —{" "}
                   {cell.kept
                     ? formatMessage(locale, "worldDaysKept", { count: cell.kept })
                     : say("worldDaysNone")}

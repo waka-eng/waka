@@ -10,6 +10,7 @@
  *      sending the whole history to say nothing happened in it.
  *   3. The window is respected — `days=N` cannot reach further back than N.
  *   4. One person's days are never in another's calendar.
+ *   5. A day is the caller's day: grouped in the zone it names as `tz`.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): the auth middleware only, as every route
  * suite here does — the session is the one thing a test cannot produce by
@@ -159,6 +160,37 @@ describe("how much was kept on each day", () => {
 
     expect(await daysFor(mine)).toHaveLength(1);
     expect(await daysFor(theirs)).toHaveLength(0);
+  });
+
+  it("groups by the caller's own day, not Greenwich's", async () => {
+    /* 20:00 UTC yesterday is 05:00 today in Seoul. Grouped by UTC this save
+       sat on the date before the one a Korean reader made it on. */
+    const person = await seedPerson("zone");
+    await t.sql`
+      INSERT INTO inspirations (profile_id, text, created_at)
+      VALUES (
+        ${person.profileId},
+        'kept at dawn in Seoul',
+        (date_trunc('day', now() AT TIME ZONE 'UTC') - interval '4 hours') AT TIME ZONE 'UTC'
+      )`;
+
+    const [utc] = await daysFor(person, "?tz=UTC");
+    const [seoul] = await daysFor(person, "?tz=Asia%2FSeoul");
+    const nextDay = new Date(Date.parse(`${utc!.day}T00:00:00Z`) + 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+    expect(seoul!.day).toBe(nextDay);
+    expect(await daysFor(person)).toEqual([utc]); /* no zone named is UTC */
+  });
+
+  it("falls back to UTC for a zone it does not know, and refuses one that is not a zone", async () => {
+    const person = await seedPerson("unknown-zone");
+    await keptDaysAgo(person, 1, 1);
+
+    expect(await daysFor(person, "?tz=Mars%2FOlympus_Mons")).toEqual(await daysFor(person));
+    const response = await appFor(person).request("/api/inspiration-days?tz=UTC'%3B--");
+    expect(response.status).toBe(400);
   });
 
   it("refuses a window it cannot serve", async () => {

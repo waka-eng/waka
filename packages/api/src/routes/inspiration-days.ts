@@ -13,10 +13,14 @@
  * zeroes would mean sending a row for every day since the account opened to say
  * nothing happened on it.
  *
- * UTC, AND SAID SO. Grouping by local day would need a timezone this server
- * does not have and would quietly move things across midnight for anyone who
- * travels. The caller knows its own offset and can shift the grid; the server
- * reports the fact it actually holds.
+ * THE CALLER'S DAY, NOT GREENWICH'S. This used to group by UTC on the theory
+ * that the caller could shift the grid — but a count per UTC date cannot be
+ * shifted into a count per Seoul date (a day's saves straddle two UTC dates),
+ * so a Korean evening's keeps were drawn on the day before. The caller now
+ * sends its IANA zone as `tz` and the grouping happens there. Absent, or a
+ * name this runtime does not know, it is UTC — a calendar a few hours off is
+ * better than one that will not load. A string that is not even shaped like a
+ * zone name is refused, since nothing that sends it is a browser.
  */
 import { Hono, type MiddlewareHandler } from "hono";
 import { sql } from "drizzle-orm";
@@ -40,11 +44,36 @@ const daysQuerySchema = z
       .pipe(z.number().int().min(1).max(MAX_DAYS))
       .optional(),
     profile: z.string().uuid("profile must be a uuid").optional(),
+    /* Shaped like `Area/City[/Sub]`, `UTC` or `Etc/GMT+9`. The value is bound
+       as a parameter either way; the shape check is so a typo or a probe is a
+       400 rather than a Postgres error. */
+    tz: z
+      .string()
+      .max(64)
+      .regex(/^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+){0,2}$/, "tz must be an IANA zone name")
+      .optional(),
   })
   .strict();
 
+/**
+ * The zone to group by: the one asked for if this runtime knows it, else UTC.
+ *
+ * `Intl` and Postgres both read the IANA database, so a name one knows the
+ * other does; asking `Intl` keeps an unknown name from reaching `AT TIME ZONE`,
+ * where it would be a 500 instead of a calendar.
+ */
+export function groupingZone(tz: string | undefined): string {
+  if (!tz) return "UTC";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return tz;
+  } catch {
+    return "UTC";
+  }
+}
+
 export interface KeptDay {
-  /** `YYYY-MM-DD`, UTC. */
+  /** `YYYY-MM-DD`, in the zone the request named (UTC when it named none). */
   day: string;
   kept: number;
 }
@@ -82,8 +111,9 @@ export function createInspirationDaysRoutes(deps: DaysRouteDependencies = {}): H
     if (!scope.ok) return c.json(scope.body, scope.status);
 
     const days = parsed.data.days ?? DEFAULT_DAYS;
+    const zone = groupingZone(parsed.data.tz);
     const rows = await db.execute<{ day: string; kept: number }>(sql`
-      SELECT to_char(date_trunc('day', created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
+      SELECT to_char(date_trunc('day', created_at AT TIME ZONE ${zone}::text), 'YYYY-MM-DD') AS day,
              count(*)::int AS kept
       FROM inspirations
       WHERE profile_id = ${scope.profileId}::uuid
