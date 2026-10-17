@@ -142,6 +142,9 @@ async function checkPick(file:File,door:'photo'|'file'):Promise<{file:File;type:
   if(door==='file'){const verdict=inspectAttachmentFile(file);if(verdict.kind==='file')return {file:verdict.file,type:'file',contentType:verdict.contentType};}
   const photo=await inspectInspirationPhoto(file);return {file:photo,type:'image',contentType:photo.type};
 }
+/** The browser's own word that there is no network — the one case where a
+    failed request is known not to have left this device. */
+const offlineNow=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
 const refusalOf=(reason:unknown):MessageKey=>reason instanceof PhotoRefused?reason.reason
   :reason instanceof FileRefused?(reason.reason==='too_large'?'worldAttachTooLarge':reason.reason==='empty'?'worldPhotoEmpty':'worldAttachUnsupported'):'worldAttachFailed';
 
@@ -164,6 +167,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const bootstrap=useRef(initial);
   const [conversation,setConversation]=useState<ApiConversation|null>(initial),[draft,setDraft]=useState<Draft|null>(null);
   const [busy,setBusy]=useState(false),[loading,setLoading]=useState(!initial),[error,setError]=useState<string|null>(null),[storageFailed,setStorageFailed]=useState(false);
+  /* True when the notice is about words that never left this device — the
+     notice's own button then sends them again rather than re-reading. */
+  const [unsent,setUnsent]=useState(false);
   const [mobile,setMobile]=useState(()=>window.matchMedia?.('(max-width:760px)').matches??false);
   const [earlierBusy,setEarlierBusy]=useState(false),[earlierFailed,setEarlierFailed]=useState(false);
   const prependScroll=useRef<{height:number;top:number}|null>(null);
@@ -297,7 +303,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const loadHistory=(owner=lifecycle.current)=>{void refreshList(owner).catch(()=>undefined);};
   const refresh=async()=>{
     const owner=lifecycle.current;
-    setLoading(true);setError(null);
+    setLoading(true);setError(null);setUnsent(false);
     try{
       if(id)loadHistory(owner);else await refreshList(owner);if(!mine(owner))return;
       const target=id??(draftRef.current?.pending?draftRef.current.conversationId:null);
@@ -310,7 +316,14 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         if(expected!==null&&next.revision>=expected&&(next.messageWindowStart??1)>expected&&!next.messages.some(message=>message.id===pending!.id))next=await run(signal=>fetchConversation(scope.profileId,target,signal,expected));
         if(mine(owner)){observe(next);setError(null);}}
       if(!id&&initialPrincipleId){const available=await run(signal=>fetchPrinciples({profile:scope.profileId},signal));if(mine(owner)){const focus=available.find(row=>row.id===initialPrincipleId)??null;setFocusPrinciple(focus);setFocusFailed(!focus);}}
-    }catch{if(mine(owner))setError(say(draftRef.current?.pending?'worldConversationSaveFailed':'worldConversationReadFailed'));}
+    }catch{
+      /* SAY WHICH THING COULD NOT BE REACHED (audit f2afcbe2, desk/93). A
+         new chat has nothing to open, so "This conversation couldn't be
+         opened" over an empty page was false: only the server was out of
+         reach. A pending message offline is said to be unsent, because
+         offline it never left. */
+      const target=id??(draftRef.current?.pending?draftRef.current.conversationId:null);
+      if(mine(owner))setError(say(draftRef.current?.pending?(offlineNow()?'worldConversationNotSent':'worldConversationSaveFailed'):target?'worldConversationReadFailed':'worldConversationUnreachable'));}
     finally{if(mine(owner))setLoading(false);}
   };
   const loadEarlier=async()=>{
@@ -334,10 +347,24 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     void refresh();return()=>lifecycle.current.abort();
   },[scope.accountId,scope.profileId,id,initialPrincipleId]);
   const save=async()=>{
-    if(working.current||loading||generationEnabled===null||awaitingReply||!draftRef.current?.content.trim()&&!draftRef.current?.attachments?.length||uploadsRef.current.length||storageFailed||focusFailed||id&&!conversation)return;
+    if(working.current||loading||(generationEnabled===null&&!error)||awaitingReply||!draftRef.current?.content.trim()&&!draftRef.current?.attachments?.length||uploadsRef.current.length||storageFailed||focusFailed||id&&!conversation)return;
     /* A draft kept before its agent was recorded waits for the agent to load,
        rather than starting a chat on your own memory instead. */
     if(!id&&draftRef.current.talkWith&&!draftRef.current.agentId&&!agent)return;
+    /* REPLIES UNKNOWN BECAUSE THE SERVER WAS UNREACHABLE: ask again first.
+       Send used to be dead here — disabled as "loading" forever after a
+       failed first read — so words typed offline could not be sent even
+       once the network was back. If the server still cannot be reached, the
+       words never left: the draft is NOT marked pending, so it stays
+       editable, and the notice says it was not sent and offers to retry. */
+    let replies=generationEnabled;
+    if(replies===null){
+      const owner=lifecycle.current;working.current=true;setBusy(true);
+      try{const listed=await run(signal=>listConversations(scope.profileId,signal));if(!mine(owner))return;replies=listed.generationEnabled;setGenerationEnabled(replies);setError(null);setUnsent(false);}
+      catch{if(mine(owner)){setError(say('worldConversationNotSent'));setUnsent(true);}return;}
+      finally{working.current=false;if(mine(owner))setBusy(false);}
+    }
+    if(!draftRef.current)return;
     const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID(),...(current.talkWith?{}:agent&&talkWith!=='mine'?{talkWith,agentId:agent.id}:{})}:{})};
     if(!keep(intent))return;const owner=lifecycle.current;working.current=true;setBusy(true);setError(null);nearBottom.current=true;
     try{
@@ -347,10 +374,10 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
          them to this message in the same write and drops anything else it
          staged under this id. */
       const attachmentIds=intent.attachments?.length?{attachmentIds:intent.attachments.map(item=>item.id)}:{};
-      const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(generationEnabled?{requestReply:true}:{}),...attachmentIds},from=conversationRef.current?.messageWindowStart;
+      const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(replies?{requestReply:true}:{}),...attachmentIds},from=conversationRef.current?.messageWindowStart;
         return from!==undefined?saveConversationMessage(scope.profileId,id,input,signal,from):saveConversationMessage(scope.profileId,id,input,signal);})
-        :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:generationEnabled===true,...attachmentIds},intent.talkWith&&talkAgent?{perspective:intent.talkWith,agentId:talkAgent}:undefined));
-      if(mine(owner)){observe(next);setError(null);setAttachNote(null);if(id)reply.check();}
+        :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:replies===true,...attachmentIds},intent.talkWith&&talkAgent?{perspective:intent.talkWith,agentId:talkAgent}:undefined));
+      if(mine(owner)){observe(next);setError(null);setUnsent(false);setAttachNote(null);if(id)reply.check();}
     }catch(reason){
       if(!mine(owner))return;
       /* ═══ A PHOTO THAT IS NO LONGER THERE ════════════════════════════
@@ -373,7 +400,10 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         setError(null);setAttachNote('worldAttachGone');
         return;
       }
-      setError(say('worldConversationSaveFailed'));
+      /* Offline, the request never left this device: "not sent" is the true
+         sentence, and the send control (now "Retry this message") sends the
+         same message, under the same id, when you press it again. */
+      setError(say(offlineNow()?'worldConversationNotSent':'worldConversationSaveFailed'));
     }
     finally{working.current=false;if(mine(owner))setBusy(false);}
   };
@@ -492,7 +522,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const whyNoSend = storageFailed ? 'worldConversationDraftFailed' as const
     : focusFailed ? 'worldPrincipleUnavailable' as const
     : full ? 'worldConversationFull' as const
-    : loading||generationEnabled===null ? 'worldChatLoading' as const
+    : loading||generationEnabled===null&&!error ? 'worldChatLoading' as const
     : awaitingReply ? 'worldConversationThinking' as const
     : busy ? 'worldChatSending' as const
     : uploads.some(row=>!row.failed) ? 'worldComposerUploading' as const
@@ -531,13 +561,14 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         it was, on a product whose other screens have one bar and two corner
         buttons. The corners are the navigation here as everywhere. */}
     <section className="chat-main" aria-label={say('worldConversationTitle')}>
-      {error?<div className="chat-notice" role="alert">{error} {!draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldRoomHistoryRetry')}</button>:null}
+      {error?<div className="chat-notice" role="alert">{error} {unsent&&!draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void save()}>{say('worldConversationRetry')}</button>
+        :!draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldRoomHistoryRetry')}</button>:null}
         {/* THE WAY OUT SITS BESIDE THE FAILURE. When a conversation cannot be
             opened there is no box to type in, so starting a fresh one is the
             only move left — and it used to be a button in a column down the
             side of the page. It belongs next to the sentence that says the
             conversation is gone. */}
-        {!conversation&&!draft?.pending?<button type="button" disabled={busy} onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button>:null}</div>:null}
+        {id&&!conversation&&!draft?.pending?<button type="button" disabled={busy} onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button>:null}</div>:null}
       {loading?<p className="chat-notice" role="status">{say('worldChatLoading')}</p>:null}
       {focusFailed?<p className="chat-notice" role="alert">{say('worldPrincipleUnavailable')} <button type="button" onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button></p>:null}
       <div className="jar-conversation-body chat-scroll" ref={body} onScroll={()=>{const node=body.current;if(!node)return;nearBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<80;try{sessionStorage.setItem(scrollKey,JSON.stringify({top:node.scrollTop,nearBottom:nearBottom.current,...(conversationRef.current?.messageWindowStart!==undefined?{messageWindowStart:conversationRef.current.messageWindowStart}:{})}));}catch{/* The transcript remains available. */}}}>
@@ -751,7 +782,10 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             passes `requestReply:false`), so the message is kept. Saying "your
             messages are still saved" is the whole point — the words are not
             lost, they just will not be answered yet. */}
-        {!generationEnabled?<p className="chat-reply-status" role="status">{say('worldConversationRepliesUnavailable')}</p>:null}
+        {/* `=== false`, NOT falsy: `null` means the server could not be
+            asked, and then "your messages are still saved" was a promise
+            about messages that had not been sent (audit f2afcbe2). */}
+        {generationEnabled===false?<p className="chat-reply-status" role="status">{say('worldConversationRepliesUnavailable')}</p>:null}
         {storageFailed?<p className="chat-reply-status" role="alert">{say('worldConversationDraftFailed')}</p>:null}
         {full?<p className="chat-reply-status">{say('worldConversationFull')}</p>:null}
         {/* WHY A PICK WAS NOT ADDED, in the line the box already speaks in —

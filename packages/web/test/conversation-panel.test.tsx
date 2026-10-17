@@ -125,6 +125,29 @@ it('clearly saves messages without promising an assistant reply',async()=>{
   expect(host.textContent).not.toContain('Thinking');
   expect(host.textContent).not.toContain('Still working');
 });
+/* Audit f2afcbe2 (desk/93): offline, a new chat said "This conversation
+   couldn't be opened" over a page with nothing to open, "Your messages are
+   still saved" under words that were never sent, and Send stayed dead. */
+it('says words typed offline were not sent, keeps them editable, and sends them on Retry',async()=>{
+  vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
+  await mount(null);
+  expect(host.textContent).toContain('WAKA can’t be reached right now.');
+  expect(host.textContent).not.toContain('couldn’t be opened');
+  expect(host.textContent).not.toContain('still saved');
+  await type('Words from the train');await click('Send');
+  expect(host.textContent).toContain('Not sent');
+  expect(host.querySelector('textarea')!.value).toBe('Words from the train');
+  expect(host.querySelector('textarea')!.disabled).toBe(false);
+  expect(createConversation).not.toHaveBeenCalled();
+  vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:false});
+  vi.mocked(createConversation).mockImplementation(async(_profile,conversationId,_signal,_principle,first)=>({...stored,id:conversationId,revision:1,
+    messages:[{...first!,attachments:[],profileId:scope.profileId,conversationId,position:1,role:'user',createdAt:'2026-10-03T01:00:00Z'}]}) as ApiConversation);
+  await click('Retry this message');
+  expect(createConversation).toHaveBeenCalledOnce();
+  expect(vi.mocked(createConversation).mock.calls[0]![4]).toMatchObject({content:'Words from the train'});
+  expect(host.textContent).not.toContain('Not sent');
+});
+
 it('offers a new-chat exit when a conversation is unavailable, without showing old words',async()=>{
   vi.mocked(fetchConversation).mockRejectedValueOnce(new Error('Unavailable'));await mount();
   /* No box to type in, so the exit has to be visible without opening
