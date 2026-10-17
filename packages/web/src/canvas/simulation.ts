@@ -90,7 +90,7 @@
 import type { MutableRefObject, RefObject } from "react";
 
 import { bakeBeing, buildPalette, MACHINE_CELLS, type BeingSprites, type Palette } from "./palette";
-import { renderScale } from "./scale";
+import { onZoomChange, renderScale } from "./scale";
 import { VIGNETTE, mix, rgbCss } from "./sprites";
 import type { Measured } from "./measured";
 import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, FACE_R, GLASS_GLINT, GLASS_MAGNIFY, GLASS_R, GLASS_RIM_ALPHA, GLASS_TINT, GLASS_W, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
@@ -5586,6 +5586,11 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
        the whole of "the page just feels unbalanced to my eyes": the lift was
        computed correctly and then never recomputed. */
     if (measured.charSay.current) ro.observe(measured.charSay.current);
+    /* AND A PINCH, which no element's size reports: `measure` re-reads the
+       render scale, re-sizes the backing store and re-bakes the sprites when
+       the zoom settles on a new step (`canvas/scale.ts`). Layout is unchanged
+       by a zoom, so nothing in the world moves. */
+    const offZoom = onZoomChange(measure);
 
     measure();
     /* `measure` is the first moment `vw` is real, so the horizontal camera can
@@ -6452,6 +6457,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       clock.running = false;
       cancelAnimationFrame(clock.raf);
       ro.disconnect();
+      offZoom();
       root.style.cursor = "";
       root.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("pointermove", onMove);

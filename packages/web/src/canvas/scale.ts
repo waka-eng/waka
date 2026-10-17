@@ -91,8 +91,92 @@ export function dprOf(w: number, h: number, dpr: number): number {
   return Math.max(1, Math.min(asked, Math.max(FLOOR, fits)));
 }
 
+/**
+ * ═══ AND THE ZOOM, WHICH THE RATIO DOES NOT REPORT ═══════════════════════
+ *
+ * Founder, 2026-10-17: "the 화질 of the character breaks in mobile setting."
+ * A phone's pinch — and the zoom iOS applies by itself when a small field
+ * takes focus — magnifies the composited page while `devicePixelRatio` and
+ * layout stay exactly where they were. Text re-rasterises at the new scale;
+ * a canvas is a bitmap and is simply stretched. Measured in Chromium at
+ * 390x844 DPR 3 with the page zoomed 1.067x, the steepest luminance step
+ * across the creature's silhouette fell 153 -> 96. A desktop's ctrl-plus
+ * changes the ratio itself, which is why this was only ever a phone's defect.
+ *
+ * So the zoom, `visualViewport.scale`, multiplies the scale — only when it is
+ * above 1 (zoomed OUT is no reason to draw less than the screen asks for),
+ * and only on top of what `dprOf` already gives, so nothing at rest moves.
+ *
+ * THE CAP IS THE SAME `CEILING`, AND ON A PHONE IT IS GENEROUS ON PURPOSE.
+ * A 390x844 world is 2.96Mpx at DPR 3; at zoom 2 it is 11.8Mpx, four times
+ * the fill and still under 16. Past that the zoom buys pixels the screen
+ * cannot show — at zoom 3 it shows a ninth of the canvas — so growth stops at
+ * `CEILING` (64MB of backing store, well inside what iOS allows a page) and
+ * the deepest zooms are slightly soft rather than a phone out of memory. The
+ * extra fill is paid only while the person is zoomed in, which is a moment
+ * they chose, not a resting state. And it never goes below `dprOf`'s answer:
+ * the ceiling bounds the growth the zoom asks for, exactly as it bounds the
+ * ratio's.
+ *
+ * @param zoom `visualViewport.scale`; a missing, nonsense or sub-1 value is 1
+ */
+export function scaleOf(w: number, h: number, dpr: number, zoom: number): number {
+  const base = dprOf(w, h, dpr);
+  if (!Number.isFinite(zoom) || zoom <= 1) return base;
+  const fits = Math.sqrt((CEILING * 1_000_000) / (Math.max(w, 1) * Math.max(h, 1)));
+  return Math.max(base, Math.min(base * zoom, fits));
+}
+
+/**
+ * The zoom, quantised UP to a quarter. A pinch reports a continuous scale and
+ * every change of render scale re-bakes the world's sprites, so the scale
+ * moves in steps nobody can tell apart — and up, so a step is never softer
+ * than the zoom it stands for.
+ */
+const ZOOM_STEP = 0.25;
+export function zoomStep(z: number): number {
+  return Number.isFinite(z) && z > 1 ? Math.ceil(z / ZOOM_STEP - 1e-6) * ZOOM_STEP : 1;
+}
+function zoomNow(): number {
+  return typeof window === "undefined" ? 1 : zoomStep(window.visualViewport?.scale ?? 1);
+}
+
 /** The scale for the window the product is actually running in. */
 export function renderScale(w: number, h: number): number {
   const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio;
-  return dprOf(w, h, dpr);
+  return scaleOf(w, h, dpr, zoomNow());
+}
+
+/**
+ * How long a pinch has to rest before the canvases re-size for it. A pinch
+ * fires `resize` on every frame of the gesture, and a re-size is a new
+ * backing store and a re-bake; doing that mid-gesture would stutter the very
+ * motion the person is making, for pixels they cannot see yet.
+ */
+const ZOOM_SETTLE_MS = 160;
+
+/**
+ * Calls `onChange` once the zoom has settled on a different step, and returns
+ * the unsubscribe. Only `visualViewport` reports a pinch — the window does not
+ * resize — and every real resize is already the `ResizeObserver`'s.
+ */
+export function onZoomChange(onChange: () => void): () => void {
+  const vv = typeof window === "undefined" ? null : window.visualViewport;
+  if (!vv) return () => {};
+  let last = zoomNow();
+  let timer = 0;
+  const settle = () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      const now = zoomNow();
+      if (now === last) return;
+      last = now;
+      onChange();
+    }, ZOOM_SETTLE_MS);
+  };
+  vv.addEventListener("resize", settle);
+  return () => {
+    window.clearTimeout(timer);
+    vv.removeEventListener("resize", settle);
+  };
 }

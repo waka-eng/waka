@@ -32,11 +32,11 @@
  * nobody asked for. The founder's law stands: nothing moves unless the user
  * moved it.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { OWNER_BEING, type Being } from "../character/body";
 import { REST_BLEED, coolRamp, restPose } from "../character/raster";
-import { renderScale } from "../canvas/scale";
+import { onZoomChange, renderScale } from "../canvas/scale";
 import { MACHINE_CELLS, pixelate, rampFromCss, rasterGrain } from "../canvas/palette";
 
 export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel = false, label = "WAKA" }: {
@@ -52,6 +52,11 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
   label?: string;
 }): JSX.Element {
   const canvas = useRef<HTMLCanvasElement>(null);
+  /* A pinch magnifies this bitmap without changing anything the effect below
+     depends on, so a settled zoom is itself a reason to redraw at the scale
+     `renderScale` now answers (see `canvas/scale.ts`). */
+  const [zoomed, setZoomed] = useState(0);
+  useEffect(() => onZoomChange(() => setZoomed((n) => n + 1)), []);
 
   useEffect(() => {
     const node = canvas.current;
@@ -103,7 +108,7 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
     restPose(sg, size, ramp, being, 1, dpr, grain);
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.drawImage(pixelate(sharp, MACHINE_CELLS * (box / size)), 0, 0);
-  }, [size, being, cool, pixel]);
+  }, [size, being, cool, pixel, zoomed]);
 
   /* The element is the padded box too, so the drawing is not squashed back
      into `size` by CSS — which would reintroduce the crop as a scale. */
