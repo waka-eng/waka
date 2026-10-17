@@ -193,20 +193,6 @@ let drainScheduled = false;
 let drainTimer: ReturnType<typeof setTimeout> | null = null;
 let drainDueAt = 0;
 
-export interface BackgroundJobSummary {
-  id: string;
-  type: BackgroundJob["type"];
-  status: BackgroundJobStatus;
-  payload: BackgroundJob["payload"];
-  attempts: number;
-  maxAttempts: number;
-  runAfter: Date | string;
-  lockedAt: Date | string | null;
-  lastError: string | null;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-}
-
 export interface EnqueueResult {
   jobId: string;
   requestVersion: string;
@@ -1826,22 +1812,6 @@ export const postgresBackgroundJobStore: BackgroundJobStore = {
   markFailedOrPending: markJobFailedOrPending,
   holdJob: holdBackgroundJob,
 };
-
-export function summarizeBackgroundJob(job: BackgroundJob): BackgroundJobSummary {
-  return {
-    id: job.id,
-    type: job.type,
-    status: job.status,
-    payload: job.payload,
-    attempts: job.attempts,
-    maxAttempts: job.maxAttempts,
-    runAfter: job.runAfter,
-    lockedAt: job.lockedAt,
-    lastError: job.lastError,
-    createdAt: job.createdAt,
-    updatedAt: job.updatedAt,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Small helpers

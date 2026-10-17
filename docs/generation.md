@@ -1074,7 +1074,6 @@ The authoritative values. Machine-checked against code — see
 | `GARDENER_SCAN_LIMIT` | 300 | Most-recently-evidenced signals one garden pass reads |
 | `GARDENER_MAX_JUDGED_PAIRS` | 8 | Judge calls one pass may spend; the rest wait a week |
 | `GROUP_SIGNAL_MIN_VOICES` | 2 | Distinct members' memories a room signal needs before it is served |
-| `GROUP_JOIN_BACKFILL_LIMIT` | 100 | Existing public memories a room is asked to read when a member arrives |
 | `CONFIDENCE_SUPPORT_WEIGHT` | 55 | Confidence: weight of evidence count |
 | `CONFIDENCE_SPREAD_WEIGHT` | 30 | Confidence: weight of time spread |
 | `CONFIDENCE_RECENCY_WEIGHT` | 15 | Confidence: weight of recency |

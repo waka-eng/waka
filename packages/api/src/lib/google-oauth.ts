@@ -96,17 +96,6 @@ export function getGoogleClientSecret(): string {
 }
 
 /**
- * Session signing secret used by SST OpenAuth (and any cookie HMAC we add
- * later). Distinct from JWT_SECRET so the two can rotate independently.
- */
-export function getSessionSecret(): string {
-  return resolveSecret("SessionSecret", "SESSION_SECRET", [
-    "AUTH_SECRET",
-    "NEXTAUTH_SECRET",
-  ]);
-}
-
-/**
  * Origin the OAuth callback should redirect to. Used to build the
  * `redirect_uri` param. We accept an explicit override (PUBLIC_API_URL) for
  * cases where the API is fronted by a custom domain; otherwise we fall back to

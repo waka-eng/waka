@@ -1004,6 +1004,9 @@ absent under `packages/web`).
 ---
 
 ### L5. A vitest config nothing runs, pointing at a test file that does not exist
+
+**CLOSED 2026-10-17** — `packages/api/vitest.persistence.config.ts` was deleted in the
+unused-code sweep (branch `claude/delete-unused`). The record below is kept as history.
 **PRE-EXISTING** · `packages/api/vitest.persistence.config.ts:1-10` · lens: cleanliness F7 · severity low (unchanged)
 
 **What.** The config sets `include: ["src/lib/top-of-mind-persistence.integration.test.ts"]` with

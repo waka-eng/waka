@@ -127,5 +127,3 @@ export function createConsultationRoutes(
 
   return routes;
 }
-
-export const consultationRoutes = createConsultationRoutes();
