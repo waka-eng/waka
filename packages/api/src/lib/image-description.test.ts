@@ -120,6 +120,31 @@ describe("describeImage", () => {
     ).rejects.toMatchObject({ transient: false });
   });
 
+  it("treats a provider timeout (408) as transient, not unavailable", async () => {
+    for (const status of [408, 503]) {
+      const timedOut = vi.fn(async () => jsonResponse({ error: "timeout" }, status));
+      await expect(
+        describeImage({
+          bytes: PNG,
+          contentType: "image/png",
+          apiKey: "k",
+          fetchFn: timedOut as unknown as typeof fetch,
+        }),
+      ).rejects.toMatchObject({ transient: true });
+    }
+    for (const status of [401, 403]) {
+      const refused = vi.fn(async () => jsonResponse({ error: "no" }, status));
+      await expect(
+        describeImage({
+          bytes: PNG,
+          contentType: "image/png",
+          apiKey: "k",
+          fetchFn: refused as unknown as typeof fetch,
+        }),
+      ).rejects.toMatchObject({ transient: false });
+    }
+  });
+
   /** A safety block is the model having looked and declined; retrying re-looks. */
   it("treats an empty candidate as permanent rather than retrying forever", async () => {
     const fetchFn = vi.fn(async () => jsonResponse({ candidates: [] }));
