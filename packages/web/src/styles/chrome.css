@@ -1337,14 +1337,35 @@ body textarea {
    floor that any later selector can lower is not a floor, so this one is
    `!important`, the same way the reduced-motion floor and the focus ring
    are: nothing that is not itself a floor may out-rank it, and
-   `test/no-focus-zoom.test.ts` holds both the flag and the selectors. */
+   `test/no-focus-zoom.test.ts` holds both the flag and the selectors.
+
+   A FLOOR, NOT A SIZE. `!important` makes the guard win over fields that
+   were deliberately set LARGER than 16 too, and CSS has no `max()` against
+   the cascaded value — so the few that are larger restate their own size
+   here, at the same strength, after it. Each is the size its own rule
+   already gives it; nothing grows, nothing that was above the floor drops
+   to it. A new larger field belongs in this list.
+
+   AND A FIELD SIZED BY ITS OWN `style=` KEEPS IT. `!important` beats an
+   inline declaration too, so a field whose size is computed in script (a
+   share card's editor sized to its card) is left out of the floor by
+   `:not([style*="font"])` rather than flattened to 16. */
 @media (pointer: coarse) {
-  body .field-input,
-  body input,
-  body select,
-  body textarea {
+  body .field-input:not([style*="font"]),
+  body input:not([style*="font"]),
+  body select:not([style*="font"]),
+  body textarea:not([style*="font"]) {
     font-size: var(--t-input) !important;
   }
+  body .jar-principle-share select:not([style*="font"]),
+  body .jar-principle-share textarea:not([style*="font"]),
+  body .jar-thing-share textarea:not([style*="font"]),
+  body .waka-note-page:not(.waka-over--note .waka-note-page):not([style*="font"]) {
+    font-size: var(--t-lead) !important;
+  }
+}
+@media (pointer: coarse) and (max-width: 600px) {
+  body .jar-attachment-transcript textarea:not([style*="font"]) { font-size: var(--t-lead) !important; }
 }
 
 /* ---------- one foot, ordered by consequence ----------
