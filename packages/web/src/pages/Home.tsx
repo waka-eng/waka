@@ -2398,7 +2398,13 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     return () => window.removeEventListener("popstate", popped);
   }, [commitOpenNote]);
   const [settingsName, setSettingsName] = useState<string | null>(null);
-  const [settingsBusy, setSettingsBusy] = useState(false);
+  /* TWO FLAGS, BECAUSE THEY LOCK DIFFERENT THINGS. One `busy` used to cover
+     both writes and disabled both controls — so the name field went inert
+     the moment its own autosave fired, mid-word, and a language change
+     locked the name too. The name write locks nothing (it is only announced
+     as busy); the language write locks only the language. */
+  const [settingsNameBusy, setSettingsNameBusy] = useState(false);
+  const [settingsLocaleBusy, setSettingsLocaleBusy] = useState(false);
   const [settingsFailed, setSettingsFailed] = useState(false);
   const nameTimer = useRef<number | null>(null);
   useEffect(() => () => { if (nameTimer.current !== null) window.clearTimeout(nameTimer.current); }, []);
@@ -2414,7 +2420,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      the narrow endpoint for exactly that field. */
   const settingsCard = auth ? {
     name: settingsName ?? accountName,
-    busy: settingsBusy,
+    nameBusy: settingsNameBusy,
+    localeBusy: settingsLocaleBusy,
     failed: settingsFailed,
     onName: (value: string) => {
       setSettingsName(value); setSettingsFailed(false);
@@ -2425,18 +2432,21 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
          between two keystrokes. */
       if (!trimmed || trimmed === accountName) return;
       nameTimer.current = window.setTimeout(() => {
-        setSettingsBusy(true);
+        setSettingsNameBusy(true);
         void auth.updateProfile({ name: trimmed, preferredLocale: locale })
-          .then(() => setSettingsName(null))
+          /* Hand the field back to the account's name ONLY if it still holds
+             what was sent. Clearing it unconditionally threw away whatever
+             was typed while the write was out. */
+          .then(() => setSettingsName(current => (current === value ? null : current)))
           .catch(() => setSettingsFailed(true))
-          .finally(() => setSettingsBusy(false));
+          .finally(() => setSettingsNameBusy(false));
       }, NAME_SETTLE_MS);
     },
     onLocale: (next: SupportedLocale) => {
-      setSettingsBusy(true); setSettingsFailed(false);
+      setSettingsLocaleBusy(true); setSettingsFailed(false);
       void auth.updatePreferredLocale(next)
         .catch(() => setSettingsFailed(true))
-        .finally(() => setSettingsBusy(false));
+        .finally(() => setSettingsLocaleBusy(false));
     },
     /* ═══ THE PUBLIC PAGE IS NO LONGER OFFERED ════════════════════════
        Founder: "everything regarding public and private should also not be
