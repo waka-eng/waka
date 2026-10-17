@@ -635,6 +635,90 @@
   gap: var(--sp-6);
 }
 
+/* ═══ EVERY BAR FITS A 320px PHONE, AND CLOSE IS NEVER THE ONE CUT ════════
+   P0, 2026-10-17: on a 360px phone the open-save bar's contents measured
+   387px inside a 328px dock, and the dock had no overflow rule — so the row
+   simply ran past the screen's edge and Close, being last, was the part that
+   went (the new-inspiration bar did the same). Three changes, in order of
+   how much they are relied on:
+
+   1. NOTHING SHRINKS BUT THE STATE LINE. Words and glyphs are `flex: none`
+      so a crowded row can never squeeze a control below its tap target;
+      the one thing allowed to give is `.waka-dock-state`, which already
+      ellipsizes, and the slot and the making group that hold it (min-width
+      0, or a flex child refuses to shrink below its content).
+
+   2. ON A PHONE THE ROW TIGHTENS. The dock takes 8px gutters instead of 16,
+      its gaps go and labels pad 8 instead of 16 — which alone fits the
+      five-tool row at full 44px slots down to ~350px. Only below that do
+      the glyph slots narrow, to 40px (<=350) and 36px (<=330). The glyphs
+      are 17px in a round slot, so the slot is air around them; Back, the
+      labels and Close keep the full 44px floor because they are the ways
+      out. Measured at 320: Back 44 + five tools 180 + Close 45 + two rules
+      = 287 inside a 304px dock.
+
+   3. CLOSE IS PINNED LAST AND NEVER SHRINKS — the guarantee the founder's
+      Law 2 asks of every surface (one visible way out, one press). */
+.waka-dock-item,
+.waka-dock-tool,
+.waka-dock-sep {
+  flex: none;
+}
+.waka-dock-slot,
+.waka-dock-making {
+  min-width: 0;
+}
+.waka-dock-state {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* MEASURED (Playwright, touch, 2026-10-17): the open-save row is 387px wide
+   at the desktop spacing, against a dock of 100vw - 32 — so it overflowed at
+   every width below 419px (328px of dock at 360, 288 at 320; Close at
+   x 342-403 on a 320px screen). Tightened, the same row is 327px. 440, not
+   419, so a longer translated label still lands inside. */
+@media (max-width: 440px) {
+  .waka-dock {
+    gap: 0;
+    max-width: calc(100vw - var(--sp-16));
+    padding: var(--sp-4);
+  }
+  .waka-dock-slot,
+  .waka-dock-making {
+    gap: 0;
+  }
+  .waka-dock-item {
+    min-width: var(--waka-corner);
+    padding: 0 var(--sp-8);
+  }
+  .waka-dock-tool--wide {
+    padding: 0 var(--sp-8);
+  }
+  .waka-dock-sep {
+    margin: 0 var(--sp-2);
+  }
+  .waka-dock-state {
+    padding-inline: var(--sp-4);
+  }
+}
+/* MEASURED: tightened with 44px glyph slots, the open-save row is 327px; the
+   dock is 100vw - 16, so it fits down to 343px. Below 350 the slots go to
+   40 (row 307px, measured at 340: Close at x 275-319). */
+@media (max-width: 350px) {
+  .waka-dock-tool:not(.waka-dock-tool--wide) {
+    width: 40px;
+    min-width: 40px;
+  }
+}
+/* MEASURED at 320: 36px slots make the row 287px in a 304px dock, Close at
+   x 255-299 — every control inside the screen, Close 45x44. */
+@media (max-width: 330px) {
+  .waka-dock-tool:not(.waka-dock-tool--wide) {
+    width: 36px;
+    min-width: 36px;
+  }
+}
+
 /* The composer and the dock both want the bottom of the screen, and the dock
    is the thing that is always there — so the box sits above it. */
 .waka-dock ~ * .jar-mouth-slot,

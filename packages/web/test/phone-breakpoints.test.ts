@@ -227,6 +227,28 @@ describe("the phone is a width somebody measured", () => {
 });
 
 describe("the four breaks that a browser found and reading did not", () => {
+  /* ═══ THE BAR RAN OFF THE SCREEN AND TOOK CLOSE WITH IT (2026-10-17) ════
+     Measured with Playwright on touch: the open-save bar's row was 387px
+     inside a 328px dock at 360 and a 288px dock at 320, with no overflow rule
+     — Close sat at x 342-403 on a 320px screen. The fix is three lines a
+     tidy-up would call redundant: controls never shrink (so the row cannot
+     squeeze a tap target), only the state line may, and the dock tightens
+     under a phone breakpoint. */
+  it("keeps every control in the bottom bar from shrinking, and tightens the bar on a phone", () => {
+    const css = rules("claims.css");
+    expect(
+      /\.waka-dock-item,\s*\.waka-dock-tool,\s*\.waka-dock-sep\s*\{\s*flex:\s*none;/.test(css),
+      "the dock's controls lost `flex: none`. Without it a crowded bar shrinks " +
+        "Close and the tools below their 44px target — or, with nothing able " +
+        "to shrink, runs off the right edge: Close at x 342-403 on a 320px phone.",
+    ).toBe(true);
+    expect(
+      /@media \(max-width: 4\d\dpx\) \{\s*\.waka-dock \{[^}]*max-width:\s*calc\(100vw - var\(--sp-16\)\)/.test(css),
+      "the dock no longer tightens on a phone. At the desktop spacing the " +
+        "open-save row is 387px and needs a 419px screen to fit.",
+    ).toBe(true);
+  });
+
   it("keeps the shelves from being crushed to a sliver", () => {
     expect(
       /flex:\s*none/.test(block("claims.css", ".waka-tabs")),
