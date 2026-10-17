@@ -40,7 +40,6 @@ Work happening now, or stopped mid-way with a recorded reason.
 | [`the-legible-loop.md`](the-legible-loop.md) | In flight — Phases 1–5 passed; Phase 6 is next. |
 | [`one-product-one-system.md`](one-product-one-system.md) | Audit complete, phases open (2026-08-25). |
 | [`ambition-reading.md`](ambition-reading.md) | In progress — Phase 0 passed with one criterion amended. |
-| [`room-timeline.md`](room-timeline.md) | Phases 0–1 shipped; Phase 2 largely built, not finished. |
 | [`no-quiet-corners.md`](no-quiet-corners.md) | In flight, yielding — queue position handed to `the-legible-loop.md`. |
 | [`durable-interest.md`](durable-interest.md) | **Halted** at the Phase 1 gate (2026-08-09). A halt with a number is a result. |
 | [`one-shift-a-day.md`](one-shift-a-day.md) | Phases 1–3 passed; **halted** at the Phase 4 gate (2026-08-31) — floor 8/8 live, gate 1/2, one fresh-day re-run to finish. |
@@ -94,12 +93,9 @@ Ideas with a shape, no commitment.
 | Goal | Proposed |
 | --- | --- |
 | [`metabolism-game.md`](metabolism-game.md) | 2026-08-10 |
-| [`two-modes.md`](two-modes.md) | 2026-08-08 |
 | [`salience.md`](salience.md) | 2026-08-03 |
 | [`board-selection.md`](board-selection.md) | 2026-08-02 — the code exists, parked; see `scoring/board-selection.ts`. |
 | [`wall-that-evolves.md`](wall-that-evolves.md) | 2026-08-02 |
-| [`combination-as-an-act.md`](combination-as-an-act.md) | not started |
-| [`finding-your-people.md`](finding-your-people.md) | not started |
 
 ## Not a goal
 

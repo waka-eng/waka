@@ -361,7 +361,7 @@ Largest lever first, but never a file whose tests do not exist yet.
 - **One PR, and the owner opens it.** PR 248 was closed because it had been
   opened early and then had every phase pushed into it, so no reviewer could
   tell what it was. The replacement is not opened by any autonomous run. The
-  description gets DRAFTED to `docs/pr-draft.md` when the work is done and
+  description gets DRAFTED to a PR-draft doc (`docs/pr-draft.md`, since removed) when the work is done and
   green; opening it is the owner's call, on their word.
 
 ## What the PR has to read like

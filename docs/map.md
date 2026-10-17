@@ -221,13 +221,9 @@ This is what actually happens, in file order. Every hop below was read.
     a save seems to have produced no signal, that is the first thing to check
     before suspecting the pipeline.
 
-**A group changes only the middle of this.** Members share *signals* to a group
-(`POST /api/signals/:signalId/shares`), and the group's own artifact is
-synthesized from those shared statements via `refresh_group_top_of_mind`. A
-group's *ground* is a separate thing: the public saves of its current members,
-served by `GET /api/groups/:groupId/field`. Evidence never crosses — a shared
-statement may cite memories its author kept private, so a room can show a
-statement whose grounds are not all visible in that room.
+**There are no groups any more.** Rooms were removed on 2026-10-12; the
+signal-share route, the group field route and the group top-of-mind refresh
+went with them, so this loop has only the personal and agent walls.
 
 ---
 
@@ -308,7 +304,7 @@ one trap a reader reliably falls into, which is that the `Space` type lives in
 | `space/inspiration/` | Layer 1: what a save *is* on screen (`orb.ts` — the `Ball`, and `agentId`, which decides which wall it stands on) and what the ground does with one (`field.ts` — brightness, size band, packing, scatter). |
 | `space/top-of-mind/` | Layer 3: `board.ts` is the artifact's entries and which sentence leads; `poster.tsx` is the one part that needs markup — which words survived the last rewrite stay lit, and only new words arrive. |
 | `space/settings/` | `SpaceSettings.tsx` — what a space is and every verb you can apply to it. A layer-shaped directory holding a screen, which is the one place this tree's own rule bends. |
-| `space-kinds/` | What differs by KIND of space: `index.ts` (the three kinds and what follows from each, **and the `Space` type itself**), `agent.ts`, `group.ts`, `GroupPanel.tsx`. A fourth kind should be a new entry here, not a hunt through the page. The name is wrong and the fix is recorded in `space/README.md`: it should be `space/` and its sibling should be `layers/`, blocked only because `Home.tsx` holds 11 of the 18 imports that cross into the two directories. |
+| `space-kinds/` | What differs by KIND of space: `index.ts` (the two kinds that remain and what follows from each, **and the `Space` type itself**) and `agent.ts`. A fourth kind should be a new entry here, not a hunt through the page. The name is wrong and the fix is recorded in `space/README.md`: it should be `space/` and its sibling should be `layers/`, blocked only because `Home.tsx` holds 11 of the 18 imports that cross into the two directories. |
 | `styles/` | Five stylesheets. `layers.css` must be imported first — it declares the `@layer` order so precedence is decided here and not by the bundler, which is a bug that already cost a whole design pass. |
 
 ### `packages/admin/src`

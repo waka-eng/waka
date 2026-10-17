@@ -114,7 +114,7 @@ jobs:
         run: pnpm --filter @waka/api test:unit
 
       # Everything that needs only Postgres. This is the gate: it covers the
-      # group authorization boundary, the vault, the routes, and the migration
+      # authorization boundary, the vault, the routes, and the migration
       # journal.
       - name: API suite (hermetic)
         run: |

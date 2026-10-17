@@ -98,7 +98,7 @@ person sees when it takes focus is the orb lighting up out in the field.
 
 The first form was the cheaper one and it was not chosen. A list of saves
 beside the world is the shape this product spent its whole evolution retiring;
-`docs/pr-draft.md` opens by saying WAKA is "not a list of saves, but a world
+`docs/pr-draft.md` (since removed) opened by saying WAKA is "not a list of saves, but a world
 you move through". Putting one back for the keyboard would have made that true
 for people with a mouse and false for everyone else.
 
