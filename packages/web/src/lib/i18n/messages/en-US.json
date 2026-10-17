@@ -364,7 +364,6 @@
   "worldPrincipleKeep": "Keep this",
   "worldPrincipleSavedExample": "Saved inspiration",
   "worldPrinciplesBack": "Back to principles",
-  "worldPrinciplesEmpty": "No principles yet. They take months of the same choice to form.",
   "worldPrinciplesError": "Principles could not be updated. Your saved words are still here.",
   "worldPrinciplesFailed": "Couldn't load your principles.",
   "worldPrinciplesFailedAgent": "Couldn’t load your agent’s principles.",
@@ -601,11 +600,14 @@
   "sessionEndedTitle": "You were signed out.",
   "sessionEndedSubtitle": "Sign in again and you’ll go back to where you were. Anything you were writing is still here.",
   "worldWhyOutOfCredit": "Reading is paused on our side. Your saves are safe.",
+  "publicProfileFailedTitle": "This page didn’t open",
+  "publicProfileFailedBody": "WAKA couldn’t open this page just now. It may still be there.",
+  "worldGroundFailed": "Couldn’t read what your principles grow from.",
+  "worldPrinciplesStalled": "This reading is taking longer than it should. Your saves are safe.",
+  "surfaceUnavailableHome": "Go to your WAKA",
   "readingPausedNotice": "Reading is paused — your saves are safe.",
   "readingPausedRetry": "Retry",
   "readingPausedRetrying": "Restarting…",
   "readingPausedRetryFailed": "Couldn’t restart it. Try again in a moment.",
-  "publicProfileFailedTitle": "This page didn’t open",
-  "publicProfileFailedBody": "WAKA couldn’t open this page just now. It may still be there.",
-  "surfaceUnavailableHome": "Go to your WAKA"
+  "agentWallHowItFills": "Your agent fills this wall itself: when it signs in to WAKA as your agent, what it saves appears here."
 }

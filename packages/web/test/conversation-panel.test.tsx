@@ -330,6 +330,25 @@ it('treats the first reply-read failure as transient rather than flashing an err
   stored.generationEnabled=true;vi.mocked(fetchConversationReply).mockRejectedValueOnce(new Error('Transient'));await mount();
   expect(host.textContent).not.toContain('Couldn’t check reply progress.');await tick(1000);expect(host.textContent).not.toContain('Couldn’t check reply progress.');
 });
+/* A CHECK THAT FAILED IS NOT A REPLY IN FLIGHT. Two failed reads under your
+   own last message used to count as "unconfirmed", which held Send disabled
+   as "thinking" for good, under a line saying it could not check and with
+   nothing to press. Send stays usable now, and "Check again" reads the
+   progress again. */
+it('keeps Send usable and offers Check again when reply progress cannot be read',async()=>{
+  stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
+  vi.mocked(fetchConversationReply).mockRejectedValue(new Error('Down'));await mount();await tick(1000);
+  expect(host.textContent).toContain('Couldn’t check reply progress.');
+  expect(host.textContent).not.toContain('Thinking');
+  await type('Still there?');
+  const send=[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
+  expect(send.disabled,'a failed progress read disabled Send').toBe(false);
+  vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:1}));
+  const calls=vi.mocked(fetchConversationReply).mock.calls.length;
+  await click('Check again');await tick(0);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBeGreaterThan(calls);
+  expect(host.textContent).not.toContain('Couldn’t check reply progress.');
+});
 /* ── ELEVEN TOMBSTONES: THE READINGS AND SOURCES A REPLY CITED ──────────────
    A reply could end in a list of top-of-mind previews, each one a button that
    fetched its verified text and SENT a follow-up message composed from it;

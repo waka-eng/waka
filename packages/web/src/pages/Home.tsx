@@ -2720,8 +2720,17 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       if (at.closest?.(".jar-dial") || at.closest?.(".jar-when")) return;
       setTimeOpen(false);
     };
+    /* AND ESCAPE, which is how a keyboard looks away. The rail answered
+       pointers only, so a person who opened it with Enter had no key that
+       put it down again — Tab walked past it and left it standing. */
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      e.preventDefault();
+      setTimeOpen(false);
+    };
     window.addEventListener("pointerdown", away, true);
-    return () => window.removeEventListener("pointerdown", away, true);
+    window.addEventListener("keydown", key);
+    return () => { window.removeEventListener("pointerdown", away, true); window.removeEventListener("keydown", key); };
   }, [timeOpen]);
 
   /* ═══ `loadGroup` AND THE WHOLE SHARED-READ MACHINERY ARE GONE ═════════
@@ -4278,6 +4287,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     panelRef.current?.scrollTo?.({ top: 0 });
   }, [panel?.id]);
 
+  /* "COULDN'T LOAD THE REST." HAD NO VERB. The two-second cap below shows
+     the preview rather than hold a reading hostage, and then nothing ever
+     asked again — the line was a verdict. Bumping this re-runs the effect:
+     a fetch that finished late is in `detailsRef` by then and lands at once,
+     and one that failed is asked for again. */
+  const [panelRetry, setPanelRetry] = useState(0);
   useEffect(() => {
     if (!selectedId) {
       setPanelOpen(false);
@@ -4366,7 +4381,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       done = true;
       window.clearTimeout(timer);
     };
-  }, [selectedId, loadDetail]);
+  }, [selectedId, loadDetail, panelRetry]);
 
   /* Placement is the stylesheet's now: the panel opens in the middle of the
      frame, always (founder, 2026-08-24). It used to be solved from the orb
@@ -4616,6 +4631,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      right pane asks for the memory itself, once per selection, and says so
      while it is on its way rather than rendering a shorter version of the
      truth. */
+  /* PICKING THE SAME GROUND AGAIN DID NOTHING after a failed fetch: the pick
+     did not change, so the effect below never ran and "couldn't fetch it"
+     stood for good. This is the second ask — bumped by the pane's own Try
+     again and by pressing the failed row again. */
+  const [provRetry, setProvRetry] = useState(0);
   useEffect(() => {
     if (!prov || provPick === null) {
       setProvFull(null);
@@ -4639,7 +4659,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     return () => {
       dead = true;
     };
-  }, [provPick, prov?.rows, say]);
+  }, [provPick, prov?.rows, say, provRetry]);
 
   const panelId = panel ? panel.id : null;
 
@@ -8570,6 +8590,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 {ready && c?.empty && !c?.formingAlt && w.kind === "agent" ? (
                   <p className="jar-wall-empty">
                     {say("worldAgentEmptyGive")}
+                    {/* THE LINE NAMED A WAIT AND NOT THE WAY. "Give me
+                        something" with no control under it asked a person to
+                        act and gave them nowhere to — and the honest answer
+                        is not a button on this wall: an agent's memory is
+                        written by the agent, signed in as itself (see
+                        `docs/data-model.md`, "What an agent session may do").
+                        So the wall says how material gets here. */}
+                    <span className="jar-wall-empty-how">{say("agentWallHowItFills")}</span>
                   </p>
                 ) : null}
                 {/* THE EDGE OF THE WORLD, AND WHAT IS BEYOND IT.
@@ -9935,7 +9963,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             </p>
           )}
           {panel.partial ? (
-            <p className="jar-panel-note">{say("worldCouldntLoadRest")}</p>
+            <p className="jar-panel-note">{say("worldCouldntLoadRest")}{" "}
+              <button type="button" className="jar-board-act" onClick={() => setPanelRetry((n) => n + 1)}>{say("homeTryAgain")}</button>
+            </p>
           ) : null}
           {panel.detail?.attachments.length ? <InspirationAttachments items={panel.detail.attachments} locale={locale} /> : null}
           {/* THE CITED-BY SENTENCE WENT WITH THE ROOM THAT NEEDED IT. On a
@@ -10273,7 +10303,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     provPick === e.inspirationId ? " jar-prov-row--picked" : ""
                   }`}
                   aria-pressed={provPick === e.inspirationId}
-                  onClick={() => setProvPick(e.inspirationId)}
+                  onClick={() => {
+                    if (provPick === e.inspirationId && provFull?.id === provPick && provFull.text === "") setProvRetry((n) => n + 1);
+                    else setProvPick(e.inspirationId);
+                  }}
                 >
                   <span className="jar-prov-text">{salience(e)}</span>
                   {e.reason ? <span className="jar-prov-why">{e.reason}</span> : null}
@@ -10292,7 +10325,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               ) : provFull === null || provFull.id !== provPick ? (
                 <p className="jar-prov-room-idle">{say("worldFetchingIt")}</p>
               ) : provFull.text === "" ? (
-                <p className="jar-prov-room-idle">{say("worldProvFetchFailed")}</p>
+                <p className="jar-prov-room-idle">{say("worldProvFetchFailed")}{" "}
+                  <button type="button" className="jar-board-act" onClick={() => setProvRetry((n) => n + 1)}>{say("homeTryAgain")}</button>
+                </p>
               ) : (
                 <p className="jar-prov-room-text">{provFull.text}</p>
               )}
@@ -11560,6 +11595,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           following an old reference here. */}
       {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
         onNoteOpen={savedNoteChanged}
+        onNewSave={startNewInspiration}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         ownArchive={atWall.kind!=='agent'} shareName={auth?.profile?.name ?? ''}

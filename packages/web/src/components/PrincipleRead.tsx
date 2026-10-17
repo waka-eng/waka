@@ -25,6 +25,11 @@ import { t, type SupportedLocale } from "../lib/i18n";
  * every room would grow its own philosophies and values. That is now a ruling about a thing that
  * does not exist. Your own sky is untouched, which is where this started.
  */
+/** Ten-second reads while a reading is in progress: five minutes, then stop. */
+const MAX_WAITING_READS = 30;
+/** Failed reads in a row before the poll stops and waits for Try again. */
+const MAX_FAILED_READS = 6;
+
 export function PrincipleRead({ active, locale, onRead }: {
   active: boolean; locale: SupportedLocale;
   onRead?: (rows: ApiPrinciple[]) => void;
@@ -32,6 +37,16 @@ export function PrincipleRead({ active, locale, onRead }: {
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
   const [status, setStatus] = useState<ApiPrincipleStatus | null>(null);
   const [failed, setFailed] = useState(false);
+  /**
+   * THE POLL HAS AN END NOW. It re-read every ten seconds for as long as the
+   * status said "processing" and every ten after three failures — forever,
+   * on a wall a person might leave open all afternoon. A reading stuck in a
+   * job that died would say "Reading…" until the tab closed. After
+   * `MAX_WAITING_READS` in a row it stops, says the reading is taking longer
+   * than it should, and offers the same Try again a failure does. Coming
+   * back to the tab still reads once, because that is the person asking.
+   */
+  const [stalled, setStalled] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const onReadRef = useRef(onRead);
   const retriedAttempt = useRef(0);
@@ -42,6 +57,9 @@ export function PrincipleRead({ active, locale, onRead }: {
     let running = false;
     let ensured = false;
     let consecutiveFailures = 0;
+    let waitingReads = 0;
+    let stopped = false;
+    setStalled(false);
     let timer: number | undefined;
     let delay = 60_000;
     const read = async () => {
@@ -56,8 +74,11 @@ export function PrincipleRead({ active, locale, onRead }: {
         setStatus(result.status);
         setFailed(false);
         consecutiveFailures = 0;
-        delay = result.status.phase === "processing" || result.status.phase === "pending"
-          ? 10_000 : 60_000;
+        const waiting = result.status.phase === "processing" || result.status.phase === "pending";
+        delay = waiting ? 10_000 : 60_000;
+        waitingReads = waiting ? waitingReads + 1 : 0;
+        stopped = waitingReads >= MAX_WAITING_READS;
+        setStalled(stopped);
         if (!ensured && ((result.status.eligible && !result.status.supportPending && result.status.phase === 'pending') ||
           ((result.status.eligible || result.status.supportPending) && result.status.phase === 'failed' && attempt > retriedAttempt.current))) {
           const retry = attempt > retriedAttempt.current;
@@ -69,10 +90,11 @@ export function PrincipleRead({ active, locale, onRead }: {
       } catch {
         consecutiveFailures += 1;
         delay = consecutiveFailures < 3 ? consecutiveFailures * 1_000 : 10_000;
+        stopped = consecutiveFailures >= MAX_FAILED_READS;
         if (!disposed && consecutiveFailures >= 3) setFailed(true);
       } finally {
         running = false;
-        if (!disposed) timer = window.setTimeout(() => void read(), delay);
+        if (!disposed && !stopped) timer = window.setTimeout(() => void read(), delay);
       }
     };
     void read();
@@ -86,9 +108,10 @@ export function PrincipleRead({ active, locale, onRead }: {
       document.removeEventListener("visibilitychange", onFocus);
     };
   }, [active, locale, attempt]);
-  const error = failed || status?.phase === "failed";
+  const error = failed || stalled || status?.phase === "failed";
   const visibleRows = rows;
-  const message = error ? status?.supportPending ? 'worldSupportCheckFailed' : "worldPrinciplesError"
+  const message = stalled && !failed ? "worldPrinciplesStalled"
+    : error ? status?.supportPending ? 'worldSupportCheckFailed' : "worldPrinciplesError"
     : !status ? "worldPrinciplesLoading"
     : status.supportPending ? (status.phase === 'processing' ? 'worldSupportChecking' : status.phase === 'pending' ? 'worldSupportQueued' : 'worldSupportNeedsContext')
     : status.phase === "processing" || status.phase === "pending" ? "worldPrinciplesReading"

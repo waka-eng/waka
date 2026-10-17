@@ -121,6 +121,9 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
   const [going, setGoing] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const live = useRef(true);
+  /* BUMPED BY "Try again". The list is fetched by the effect below, so a
+     retry is that effect running again rather than a second copy of it. */
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     live.current = true;
@@ -147,7 +150,7 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
         if (live.current && !controller.signal.aborted) setPhase("failed");
       });
     return () => controller.abort();
-  }, [profileId]);
+  }, [profileId, attempt]);
 
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
 
@@ -235,11 +238,28 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
         {phase === "loading" ? (
           <p className="waka-over-status" role="status">{say("worldChatLoading")}</p>
         ) : phase === "failed" ? (
-          <p className="waka-over-status" role="alert">{say("worldChatHistoryFailed")}</p>
+          /* A FAILURE WITH A WAY ON. This sentence used to be the whole
+             screen, and the only thing that could ever change it was leaving
+             and coming back — which is a retry the person has to invent. */
+          <>
+            <p className="waka-over-status" role="alert">{say("worldChatHistoryFailed")}</p>
+            <button type="button" className="waka-over-retry" onClick={() => setAttempt((n) => n + 1)}>
+              {say("worldRetry")}
+            </button>
+          </>
         ) : rows.length === 0 ? (
           /* Honest rather than empty: nothing has been talked about, which is
-             a fact and not a failure. */
-          <p className="waka-over-status">{say("worldConversationFirst")}</p>
+             a fact and not a failure. AND THE QUESTION IS A DOOR NOW. "What
+             would you like to explore?" was asked over a page with nowhere
+             to type an answer — the dock's plus could start one, but nothing
+             under the question said so. `onOpen(null)` is the same new chat
+             that plus opens. */
+          <>
+            <p className="waka-over-status">{say("worldConversationFirst")}</p>
+            <button type="button" className="waka-over-new" onClick={() => onOpen(null)}>
+              {say("worldConversationNew")}
+            </button>
+          </>
         ) : (
           /* ═══ THE SAME LIST THE ARCHIVE IS ═══════════════════════════
               Founder: "chat and inspirations should have same look and feel

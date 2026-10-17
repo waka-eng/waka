@@ -243,7 +243,13 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      landing and `observe` clearing the draft there is a frame where both are
      true, and rendering both would print your sentence twice. */
   const sending=draft?.pending&&!conversation?.messages.some(message=>message.id===draft.id)?draft:null;
-  const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&(!reply.state||reply.error));
+  /* A CHECK THAT FAILED IS NOT A REPLY IN FLIGHT. `reply.error` used to count
+     as "unconfirmed", which made `awaitingReply` true, which made `whyNoSend`
+     answer "thinking" — so one dropped progress read disabled Send for good,
+     under a line saying it could not check, with nothing to press. The
+     person's next message is an honest way past an unknown reply, and the
+     "Check again" beside the notice is the other. */
+  const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&!reply.state&&!reply.error);
   const awaitingReply=replyPending||replyUnconfirmed;
   useLayoutEffect(()=>{const node=body.current;if(!node||!conversation)return;const saved=restoredScroll.current;
     if(prependScroll.current){const previous=prependScroll.current;node.scrollTop=previous.top+node.scrollHeight-previous.height;prependScroll.current=null;return;}
@@ -736,6 +742,11 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             the founder reported, and the reference happens to ship the
             variant that avoids it. */}
         {generationEnabled&&replyNotice?<p className="chat-reply-status" role="status">{say(replyNotice)}</p>:null}
+        {/* THE WAY PAST "COULDN'T CHECK", and past the bounded wait running
+            out. Both stop polling on purpose; neither may stop the person.
+            This reads the reply's progress again — it does not ask for a new
+            reply, so it is not one of the regeneration buttons that went. */}
+        {generationEnabled&&(reply.error||reply.waiting)?<button type="button" className="chat-recheck" onClick={()=>reply.check()}>{say('worldReadingCheckAgain')}</button>:null}
         {/* AND WHEN REPLIES ARE NOT CONNECTED AT ALL, THE SURFACE SAYS SO.
             Every notice above is gated behind `generationEnabled`, correctly
             — but that left the one case where nothing will ever come back as

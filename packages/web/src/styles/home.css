@@ -1747,6 +1747,12 @@
   line-height: 1.5;
   color: var(--jar-muted);
 }
+/* How an agent's wall gets material — under the wait it explains, quieter. */
+.jar-wall-empty-how {
+  display: block;
+  margin-top: var(--sp-8);
+  font-size: var(--t-meta);
+}
 
 /* ---------- walls: side-by-side columns on the horizontal axis (v10) ----------
    Agents to the left, you at the origin, rooms to the right. Each wall is one

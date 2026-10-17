@@ -163,6 +163,31 @@ describe("principle read", () => {
     expect(requestPrincipleRead).not.toHaveBeenCalled();
   });
 
+  /* THE POLL HAS AN END. A job that died with its status still "processing"
+     used to be re-read every ten seconds for as long as the tab stayed open,
+     under "Reading…" forever. Thirty reads in, it stops, says so, and the
+     same Try again a failure offers starts it over. */
+  it("stops polling a read that never finishes, and says so with a retry", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "processing" } });
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    for (let i = 0; i < 40; i += 1) await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(fetchPrincipleRead).toHaveBeenCalledTimes(30);
+    expect(host.querySelector('[role="alert"]')?.textContent)
+      .toContain("This reading is taking longer than it should. Your saves are safe.");
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [principle], status: ready });
+    await act(async () => host.querySelector("button")!.click());
+    expect(fetchPrincipleRead).toHaveBeenCalledTimes(31);
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("stops polling after repeated failures until asked again", async () => {
+    vi.mocked(fetchPrincipleRead).mockRejectedValue(new Error("down"));
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    for (let i = 0; i < 20; i += 1) await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(fetchPrincipleRead).toHaveBeenCalledTimes(6);
+    expect(host.querySelector("button")?.textContent).toBe("Try again");
+  });
+
   it("does not fetch an inactive wall", async () => {
     await act(async () => root.render(<PrincipleRead active={false} locale="en-US" />));
     await act(async () => vi.advanceTimersByTimeAsync(30_000));
