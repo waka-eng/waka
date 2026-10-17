@@ -2744,16 +2744,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [agentReadingFailed, setAgentReadingFailed] = useState<ReadonlySet<string>>(() => new Set());
   /** Per pending bundle: whether its top-of-mind read failed. Lands with it. */
   const pendingReadingFailedRef = useRef<Map<string, boolean>>(new Map());
-  /** Which pending bundles are FIRST loads — the only ones allowed to land
-      at rest rather than at arrival. A refresh is in `agents` already, so
-      it has a wall to stand on until the next arrival; a first load has
-      nothing. Cleared whenever a bundle lands, by whichever door. */
-  const pendingFirstLoadsRef = useRef<Set<string>>(new Set());
   /** Put fetched bundles on their walls, and their reading's standing with them. */
   const applyAgentBundles = useCallback((fresh: Map<string, AgentBundle>) => {
     const failed = new Map<string, boolean>();
     for (const id of fresh.keys()) {
-      pendingFirstLoadsRef.current.delete(id);
       failed.set(id, pendingReadingFailedRef.current.get(id) === true);
       pendingReadingFailedRef.current.delete(id);
     }
@@ -2784,8 +2778,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      `atWallRef` cannot say that: it updates on ARRIVAL, so it still names
      this agent once you are crossing away or aiming up. The loop's own
      `navigationState()` can; while it is moving, or before there is a loop,
-     the bundle stays pending and lands at the next arrival, exactly as on
-     dev. Only that agent's bundle lands. A REFRESH — an agent already in
+     the bundle stays pending and lands at the next REST (below). Only that agent's bundle lands. A REFRESH — an agent already in
      `agents` — still lands only at arrival, as it always has. A polled
      at-rest version of this was tried and caused more than it fixed (final
      review, 2026-10-16).
@@ -2795,13 +2788,20 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      review of #436, 2026-10-17). So the loop also says when it came to rest
      — `pushRested`, below — and this is asked again then. Not a poll: one
      call per stop, and it does nothing unless a first load is waiting for
-     the wall you are standing on. */
+     the wall the loop is standing on.
+     REST AND THE WALL BOTH COME FROM THE LOOP. `isResting()` is the same
+     predicate the rest edge fires on, so "may it land" and "it stopped"
+     cannot disagree, and the wall is the loop's `navigationState().wall`
+     rather than `atWallRef`, which is React's echo of the last arrival and
+     a render behind it. A FIRST load is a pending bundle whose agent is not
+     in `agents` yet — a refresh has a wall to stand on until the next
+     arrival; a first load has nothing. */
   const landFirstLoadIfStandingOn = useCallback((agentId: string) => {
-    if (!pendingFirstLoadsRef.current.has(agentId)) return;
     const sim = simApiRef.current;
-    if (!sim || sim.navigationState().moving) return;
-    const w = atWallRef.current;
+    if (!sim || !sim.isResting()) return;
+    const w = sim.navigationState().wall;
     if (w.kind !== "agent" || w.id !== agentId) return;
+    if (agentsRef.current.some((a) => a.agent.id === agentId)) return;
     const fresh = pendingAgentBundlesRef.current.get(agentId);
     if (!fresh) return;
     pendingAgentBundlesRef.current.delete(agentId);
@@ -2824,7 +2824,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
         agentRefreshBusyRef.current.add(agentId);
         void loadAgentBundle(entry, { strict: true })
           .then((fresh) => {
-            pendingFirstLoadsRef.current.delete(agentId);
             pendingAgentBundlesRef.current.set(agentId, fresh);
             pendingReadingFailedRef.current.set(agentId, false);
           })
@@ -2851,7 +2850,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           agentRefreshedAtRef.current.set(agentId, Date.now());
           pendingAgentBundlesRef.current.set(agentId, fresh);
           pendingReadingFailedRef.current.set(agentId, readingFailed);
-          pendingFirstLoadsRef.current.add(agentId);
           landFirstLoadIfStandingOn(agentId);
         })
         .catch(() => {
@@ -2899,12 +2897,11 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   }, []);
   const pushArrivedRef = useRef(pushArrived);
   pushArrivedRef.current = pushArrived;
-  /** The world came to rest, wherever it stopped. Only the wall you are
-      standing on, and only its first load — `landFirstLoadIfStandingOn`
-      holds both rules; this just asks at the moment the answer can change. */
-  const pushRested = useCallback(() => {
-    const w = atWallRef.current;
-    if (w.kind === "agent") landFirstLoadIfStandingOn(w.id);
+  /** The world came to rest on `wall`, wherever it stopped. Only that wall,
+      and only its first load — `landFirstLoadIfStandingOn` holds both rules;
+      this just asks at the moment the answer can change. */
+  const pushRested = useCallback((wall: Space) => {
+    if (wall.kind === "agent") landFirstLoadIfStandingOn(wall.id);
   }, [landFirstLoadIfStandingOn]);
   const pushRestedRef = useRef(pushRested);
   pushRestedRef.current = pushRested;

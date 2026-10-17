@@ -185,7 +185,15 @@ it("says an empty agent's resting line in Korean to a Korean reader", async () =
    ARRIVAL. Aiming down to the ground and back up stops on the same wall, so
    `atWall` never changes: the reading that came back mid-aim sat pending and
    the wall stayed silent over it (retro review of #436, 2026-10-17). */
-it("lands an agent's first load that finished while the camera was aiming", async () => {
+type Sim = { toGround(): void; toTop(): void; isResting(): boolean };
+const simNow = () => (window as unknown as { wakaSim: () => Sim | null }).wakaSim()!;
+/** Let every promise the release set off run to the end, WITHOUT a frame:
+    frames only advance through `world.step`, so the camera holds still. */
+const flushFetch = async () => {
+  await act(async () => { for (let i = 0; i < 20; i += 1) await Promise.resolve(); await vi.advanceTimersByTimeAsync(0); });
+};
+const reading = () => bubble()?.querySelector('.jar-char-bubble-reading')?.textContent?.trim();
+async function standOnHeldAgent() {
   Object.assign(HOLD, { on: true, reading: 'defer' });
   world = await mountWorld(FACTS); await settle();
   await act(async () => { face('My agent')!.click(); });
@@ -193,17 +201,53 @@ it("lands an agent's first load that finished while the camera was aiming", asyn
   expect(world.audit().wallKind).toBe('agent');
   expect(bubble(), 'the reading was released before the test released it').toBeNull();
   expect(HOLD.release, 'the agent\'s reading was never asked for').toBeTruthy();
+}
 
-  const sim = (window as unknown as { wakaSim: () => { toGround(): void; toTop(): void; navigationState(): { moving: boolean } } }).wakaSim()!;
+it("lands an agent's first load that finished while the camera was aiming", async () => {
+  await standOnHeldAgent();
+  const sim = simNow();
   await act(async () => { sim.toGround(); });
   await world.step(2);
-  expect(sim.navigationState().moving, 'the aim had already ended — this would test arrival, not rest').toBe(true);
-  /* the reading arrives WHILE THE CAMERA IS AIMING, so it cannot land yet */
-  await act(async () => { HOLD.release!(); await Promise.resolve(); });
+  expect(sim.isResting(), 'the aim had already ended — this would test arrival, not rest').toBe(false);
+  /* THE FETCH FINISHES MID-AIM, and is seen to: everything it set off has
+     run, the camera is still aiming, and the reading is NOT on the wall —
+     so what lands it below can only be the aim ending, never the
+     fetch-completion path. */
+  HOLD.release!();
+  await flushFetch();
+  expect(sim.isResting(), 'the aim ended while the fetch was settling').toBe(false);
+  expect(reading(), 'the bundle landed mid-aim, rebuilding a moving world').toBeUndefined();
   await settle();
   await act(async () => { sim.toTop(); });
   await settle();
   expect(world.audit().wallKind, 'the aim crossed walls — this would test arrival, not rest').toBe('agent');
-  expect(bubble()?.querySelector('.jar-char-bubble-reading')?.textContent?.trim(),
-    'a first load that finished mid-aim never landed on the wall it was standing on').toBe(AGENT_SAYS);
+  expect(reading(), 'a first load that finished mid-aim never landed on the wall it was standing on').toBe(AGENT_SAYS);
+});
+
+/* ═══ AND A ONE-MILLISECOND AIM STILL ENDS IN A REST ═══════════════════════
+   Under reduced motion an aim lasts 1ms: it starts and commits between two
+   frames, so a frame-to-frame "was moving, now still" comparison never saw
+   it move — and never said it stopped. The latch does. */
+it("lands a first load released inside a reduced-motion aim", async () => {
+  const original = window.matchMedia;
+  Object.defineProperty(window, 'matchMedia', { configurable: true, value: (query: string) => ({
+    ...original(query), matches: /prefers-reduced-motion:\s*reduce/.test(query),
+  }) });
+  try {
+    await standOnHeldAgent();
+    const sim = simNow();
+    await act(async () => { sim.toGround(); });
+    expect(sim.isResting(), 'toGround did not start an aim').toBe(false);
+    HOLD.release!();
+    await flushFetch();
+    expect(reading(), 'the bundle landed before the aim ended').toBeUndefined();
+    await world.step(1);
+    expect(sim.isResting(), 'a reduced-motion aim outlived one frame').toBe(true);
+    await settle();
+    await act(async () => { sim.toTop(); });
+    await world.step(3);
+    expect(reading(), 'a 1ms aim never reported its rest').toBe(AGENT_SAYS);
+  } finally {
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: original });
+  }
 });

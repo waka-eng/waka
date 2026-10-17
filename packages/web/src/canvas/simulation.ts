@@ -681,6 +681,11 @@ type Moment = "touch" | "kept" | "answered" | "arrived" | "shared" | "let-go";
 
 export interface SimApi {
   navigationState: () => { wall: Space; section: 'top' | 'field' | 'sky'; moving: boolean };
+  /** The world is at rest: no trip, no aim, no finger down, no snap owed.
+      The ONE definition — `navigationState().moving` is its negation and the
+      loop's rest edge (`pushRestedRef`) fires on it — so "may this land now"
+      and "it has just stopped" can never disagree. */
+  isResting: () => boolean;
   /* `standIn` IS GONE, AND IT WAS THE LAST VERB ON THIS SURFACE WITH NO
      CALLER. It took a member's profile id — or null for your own — and swapped
      whose memories were standing on the ground in front of you, without moving
@@ -1108,9 +1113,11 @@ export interface SimulationOptions {
    * it changes `atWall`. A first-load bundle that finished while the camera
    * was aiming waited for an arrival that never came, and the wall stayed
    * empty over a reading the server had returned (retro review of #436,
-   * 2026-10-17). This is the moment it may land instead.
+   * 2026-10-17). This is the moment it may land instead. It carries the
+   * wall the LOOP is resting on: `atWallRef` is React's echo of an arrival
+   * and is a render behind the frame that fires this.
    */
-  pushRestedRef: MutableRefObject<() => void>;
+  pushRestedRef: MutableRefObject<(wall: Space) => void>;
   /* THREE OF THE NINE THINGS THE LOOP ASKED SOMEBODY ELSE TO DO WERE ABOUT
      ROOMS, AND ALL THREE ARE GONE. `loadGroupRef` fetched a room's board and
      ground as travel toward it began; `openGroupMemberRef` opened one
@@ -1557,8 +1564,23 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       }
     }
 
-    /** Whether the last frame was moving — the edge `pushRestedRef` fires on. */
-    let wasMoving = false;
+    /** THE ONE DEFINITION OF REST. A trip or an aim, and also a finger still
+        down or a snap still owed: a release is followed by the settle onto a
+        section, and nothing is at rest until that has ended too. Mid-drag is
+        moving — a bundle that landed under a held finger rebuilt the world
+        out from under it. */
+    function resting() {
+      return !(trip.active || cam.aiming || gesture.down || gesture.snapAt > 0);
+    }
+    /** LATCHED, NOT SAMPLED. Set wherever motion starts — an aim, a trip, a
+        touch — and cleared by the frame that finds the world at rest and
+        says so. A frame-to-frame comparison missed any motion that started
+        and ended between two frames (a reduced-motion aim lasts 1ms), and so
+        missed the very rest it was there to report. It starts TRUE: a
+        (re)build that comes up at rest says so on its first frame, which is
+        also what rescues a crossing a rebuild stranded mid-flight (the
+        restore above stops it without an arrival). */
+    let movedSinceRest = true;
 
     /** Which one-time hints have already been said, so they are said once. */
     const hinted = {
@@ -3433,6 +3455,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       cam.aimFrom = cam.y;
       cam.aimT0 = performance.now();
       cam.aiming = true;
+      movedSinceRest = true;
       wake();
     }
 
@@ -5036,16 +5059,15 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       draw(now);
       syncDom();
 
-      /* THE MOVING/STILL EDGE, said once per stop. Moving is what
-         `navigationState()` calls moving — a trip or an aim — plus a finger
-         still down or a snap still owed, because a release is followed by
-         the settle onto a section and the world is not at rest until that
-         has ended too. One comparison a frame; it fires on the frame motion
-         ends, wherever it ended: arrival, an aim's commit, an aim a touch
-         interrupted and a release that needed no snap. */
-      const movingNow = trip.active || cam.aiming || gesture.down || gesture.snapAt > 0;
-      if (wasMoving && !movingNow) pushRestedRef.current();
-      wasMoving = movingNow;
+      /* THE REST EDGE, said once per stop, on the first frame that finds the
+         world at rest after anything moved it — wherever it stopped: an
+         arrival, an aim's commit, an aim a touch interrupted, a release that
+         needed no snap, a rebuild. With the wall the loop is standing on. */
+      if (!resting()) movedSinceRest = true;
+      else if (movedSinceRest) {
+        movedSinceRest = false;
+        pushRestedRef.current(curWall());
+      }
 
       /* The field drifts continuously, so there is no longer an idle state to
          fall into while it is visible: the loop rests only when the document
@@ -5238,6 +5260,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            carry the gesture, they just do not get the off-window guarantee */
       }
       gesture.down = true;
+      movedSinceRest = true;
       gesture.dragging = false;
       gesture.axis = 0;
       gesture.downX = e.clientX;
@@ -5722,7 +5745,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     }
 
     simApiRef.current = {
-      navigationState: () => ({ wall: curWall(), section: cam.y < view.layout.minCam * 0.5 ? 'sky' : cam.y > view.layout.maxCam * 0.5 ? 'field' : 'top', moving: trip.active || cam.aiming }),
+      navigationState: () => ({ wall: curWall(), section: cam.y < view.layout.minCam * 0.5 ? 'sky' : cam.y > view.layout.maxCam * 0.5 ? 'field' : 'top', moving: !resting() }),
+      isResting: resting,
       /* the timeline re-hangs under the word, whose width the reading sets */
       hangRail,
       /* `standIn` IS GONE. It swapped whose ground you were standing on
@@ -6323,6 +6347,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             return;
           }
           trip.active = true;
+          movedSinceRest = true;
           const span = Math.abs(dest - trip.col);
           trip.ms = travelSpanMs(span);
           trip.at = performance.now();
