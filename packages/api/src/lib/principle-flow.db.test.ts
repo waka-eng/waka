@@ -410,4 +410,28 @@ describe("principles across personal profiles", () => {
      `queue-recovery` / `job-request-version`. Rewriting this one with a
      person substituted for the mind would have duplicated that, while
      quietly losing the only thing it uniquely said. */
+  /* A READING THAT FAILED IS A STATE THE PAGES CAN SHOW. Out of credit (402)
+     fails the reading job after its retries; before `readingPaused` the
+     status endpoint had no way to say so and the person saw nothing at all.
+     Latest-wins is the half worth pinning: a failure a later success
+     repaired must not keep the notice up. */
+  it('reports a failed reading as paused, and a retry restarts it', async () => {
+    const profileId = await person();
+    expect((await loadPrincipleStatus(t.db as never, profileId)).readingPaused).toBe(false);
+    await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,updated_at)
+      VALUES(${profileId},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed','OpenRouter 402',now()-interval '1 minute')`;
+    expect((await loadPrincipleStatus(t.db as never, profileId)).readingPaused).toBe(true);
+    const after = await requestPrincipleRefresh(t.db as never, profileId, true);
+    expect(after.readingPaused).toBe(false);
+    const jobs = await t.sql`SELECT status FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_top_of_mind' ORDER BY updated_at`;
+    expect(jobs.map((row) => row.status)).toEqual(['failed', 'pending']);
+    /* a plain refresh (no retry) never buys a reading on its own */
+    const quiet = await person();
+    await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status) VALUES(${quiet},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed')`;
+    await requestPrincipleRefresh(t.db as never, quiet);
+    expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${quiet} AND type='refresh_top_of_mind'`).toHaveLength(1);
+    /* and a later success clears it */
+    await t.sql`UPDATE background_jobs SET status='succeeded', updated_at=now() WHERE profile_id=${profileId} AND status='pending'`;
+    expect((await loadPrincipleStatus(t.db as never, profileId)).readingPaused).toBe(false);
+  });
 });
