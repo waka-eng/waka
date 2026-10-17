@@ -354,10 +354,9 @@ function toEntry(row: ApiTopOfMindEntry): Entry {
  * resolved fine. It only ever worked in the dev fixture, which does not go
  * through this call at all.
  *
- * 200 is the ceiling for one page. `fetchInspirations` does not surface the
- * cursor yet, so a field past 200 memories is silently short — noted here
- * rather than left to be discovered, and the reason paging is the next thing
- * this function needs.
+ * 200 is the ceiling for one page. The old single-page loader threw the
+ * cursor away, so a field past 200 memories was silently short — the reason
+ * this function now pages (below).
  */
 const FIELD_PAGE = 200;
 

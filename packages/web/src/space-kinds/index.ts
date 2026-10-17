@@ -94,7 +94,7 @@ export const hasSky = (_k: SpaceKind): boolean => true;
  *
  * It used to stay out of a room, then it wound a room's BOARD — one chain of
  * versions on one door ledger, which is a single history and was the room's
- * own. The founder's line in `goals/room-timeline.md` was "scrubber before
+ * own. The founder's line in `goals/room-timeline.md` (since removed) was "scrubber before
  * dial". Both the board and the ledger went with rooms; what the dial winds
  * now is your own wall and your agent's, which is what it wound first.
  */

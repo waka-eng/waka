@@ -30,9 +30,8 @@ export function storeConversationDraft(scope:ProfileStorageScope,id:string,value
   localStorage.setItem(key,raw);if(localStorage.getItem(key)!==raw)throw new Error('Draft was not saved');return {key,raw,value};
 }
 export function clearConversationDraft(row:StoredConversationDraft){if(localStorage.getItem(row.key)===row.raw)localStorage.removeItem(row.key);}
-export function clearConversationDrafts(scope:ProfileStorageScope,id:string){const start=prefix(scope,id);for(const key of Object.keys(localStorage).filter(key=>key.startsWith(start)))localStorage.removeItem(key);}
 /** EVERY COMPOSER THIS PROFILE LEFT HALF-TYPED, IN ONE SWEEP.
- * `clearConversationDrafts` above needs the conversation id, and logout does
+ * A per-conversation sweep would need the conversation id, and logout does
  * not know which conversations the person had open — the ids live in the keys,
  * which is exactly what makes a prefix sweep the right instrument here rather
  * than a list we would have to keep somewhere. Scoped to `conversation:` under

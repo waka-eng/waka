@@ -3,7 +3,7 @@
  *
  * Lets a spec import every infrastructure piece in one line:
  *
- *     import { authedClient, createTestDatabase } from "./helpers/index.js";
+ *     import { createTestDatabase } from "./helpers/index.js";
  *
  * Each module is also importable directly (`./helpers/db.js`, etc.) for
  * specs that only need one piece — the barrel is a convenience, not a
@@ -11,24 +11,11 @@
  */
 
 export {
-  app,
-  apiJson,
-  apiRequest,
-  authedClient,
-  extractSetCookie,
-  extractSetCookieOptional,
-  type ApiJsonResponse,
-  type ApiRequestInit,
-  type AuthedClient,
-  type SessionFixture,
-} from "./client.js";
-
-export {
   createTestDatabase,
   type TestDatabase,
 } from "./db.js";
 
-/* Unlike the two above this one opens nothing — it is an in-memory stand-in for
+/* Unlike the one above this one opens nothing — it is an in-memory stand-in for
    a single table, used by the no-database suite. Import it directly rather than
    through this barrel from a spec that must not pull in `./db.js`. */
 export {

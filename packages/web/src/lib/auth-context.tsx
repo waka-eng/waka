@@ -27,8 +27,6 @@
  * Hooks
  * -----
  *   - `useAuth()`        → full context (viewer, loading, login, signup, ...)
- *   - `useCurrentProfile()` → just the acting profile (or null)
- *   - `useIsAuthenticated()` → boolean — convenience for route guards
  */
 
 import {
@@ -521,14 +519,4 @@ export function useAuth(): AuthContextValue {
     );
   }
   return ctx;
-}
-
-/** Convenience selector — just the acting profile. */
-export function useCurrentProfile(): ApiProfile | null {
-  return useAuth().profile;
-}
-
-/** Convenience selector — just the boolean. */
-export function useIsAuthenticated(): boolean {
-  return useAuth().isAuthenticated;
 }

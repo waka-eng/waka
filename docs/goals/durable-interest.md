@@ -9,13 +9,13 @@ are committed; the archive is too young for the month-and-quarter question
 this goal exists to answer. See `## Log`.
 Branch: `goal/durable-interest`
 Follows: `brain-inspired-spark-engine.md` (S1+S2 shipped), `memory-movement.ts`,
-ambition-reading. Runs beside `two-modes.md` without collision: this goal
+ambition-reading. Runs beside `two-modes.md` (since removed) without collision: this goal
 changes what stickies and boards *rank on*, not what they are — no shared
 files until the read-side phase, which lands behind the two-modes surface.
 
 ## Why
 
-The founder's words, which `two-modes.md` is judged against, end like this:
+The founder's words, which `two-modes.md` (since removed) was judged against, end like this:
 
 > My priority is to place myself where my pulse still races **after the
 > novelty wears off**.

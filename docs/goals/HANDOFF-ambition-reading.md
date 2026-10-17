@@ -71,7 +71,7 @@ than at the route. Removed from my goal doc. Keep yours.
 ## What still needs reconciling — please do not build further on this alone
 
 `docs/goals/room-timeline.md` (yours) and `docs/goals/combination-as-an-act.md`
-(mine) both want to key history to a set of hearts. Yours is time-based on
+(mine) — both since removed — both want to key history to a set of hearts. Yours is time-based on
 rooms; mine makes the set of members first-class (`combinations`, with rooms as
 one `origin`, plus `subset` and `handshake` origins later).
 

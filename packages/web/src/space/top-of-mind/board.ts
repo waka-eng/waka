@@ -47,15 +47,6 @@ export interface Adopted {
   createdMs: number;
 }
 
-/** The reflect action's one-at-a-time life inside the panel. */
-export interface ReflectState {
-  step: "rest" | "asking" | "open" | "keeping" | "kept";
-  question: string;
-  answer: string;
-  /** the row just written, so it can be taken back without a refetch */
-  lastId?: string;
-}
-
 /**
  * The raw captures the adopted ambition was built from, and the words of theirs
  * that carried it. The peek row beneath the poster is THIS: not "the newest

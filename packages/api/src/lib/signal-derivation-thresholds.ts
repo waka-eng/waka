@@ -106,26 +106,6 @@ export const SIGNAL_PROMOTION_MIN_EVIDENCE = 3;
  */
 export const GROUP_SIGNAL_MIN_VOICES = 2;
 
-/**
- * HOW MUCH OF A MEMBER'S EXISTING GROUND A ROOM READS WHEN THEY ARRIVE.
- *
- * Fan-out fires when a memory is kept, so without this a room only ever sees
- * what its members keep AFTER they join. That is the wrong way round: a
- * person joins a room already carrying the memories that would tell it
- * something, and a room that ignores all of them stays empty for exactly the
- * people who have the most to pool. Joining therefore asks the room to read
- * the ground the joiner already stands on.
- *
- * Bounded, because the ask is one model pass per memory and an archive has no
- * ceiling. The newest hundred public memories are the ones that describe who
- * somebody is now; a memory older than that is history the room can live
- * without, and the person's own wall already holds its pattern. The jobs are
- * owned by the JOINER, so their own budget and the queue's fairness pace the
- * spend — joining ten rooms is ten times the work for the person who asked
- * for it, not for anyone else.
- */
-export const GROUP_JOIN_BACKFILL_LIMIT = 100;
-
 /** Evidence count at which the support term of confidence saturates. */
 export const CONFIDENCE_SATURATION_EVIDENCE = 6;
 

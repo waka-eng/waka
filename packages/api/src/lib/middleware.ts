@@ -189,27 +189,6 @@ export const humanSessionsOnly: MiddlewareHandler<AuthEnv> = async (c, next) => 
   await next();
 };
 
-export const optionalAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
-  const read = readToken(c);
-  if (read) {
-    /* same header-only rule for keys as requireAuth, same reason */
-    const session = looksLikeAgentKey(read.token)
-      ? read.source === "header"
-        ? await lookupAgentKeySession(read.token)
-        : null
-      : looksLikeKeeperKey(read.token)
-        ? read.source === "header"
-          ? await lookupKeeperKeySession(read.token)
-          : null
-        : await resolveSessionFromToken(read.token);
-    if (session) {
-      c.set("session", session);
-      c.set("sessionToken", read.token);
-    }
-  }
-  await next();
-};
-
 // ---------------------------------------------------------------------------
 // The access matrix
 // ---------------------------------------------------------------------------

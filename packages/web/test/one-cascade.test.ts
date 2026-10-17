@@ -154,10 +154,15 @@ const STYLES = resolve(HERE, "../src/styles");
  *        and an unlayered rule can only be overridden by another. Without it
  *        a page focused by the code turned flat white after any key press.
  *
- * What is left is `home.css`'s 23 and `layers.css`'s deliberate 3. The floor
+ *    20  2026-10-17. The unused-code sweep: the wall picker's split pill,
+ *        the old `.jar-back` / `.jar-values` / `.jar-account` signposts and
+ *        the anchored settings sheet were unlayered `home.css` rules with no
+ *        renderer, and six of them went.
+ *
+ * What is left is `home.css`'s 17 and `layers.css`'s deliberate 3. The floor
  * this is walking toward is 3.
  */
-const UNLAYERED_CEILING = 26;
+const UNLAYERED_CEILING = 20;
 
 /** Read the rules, not the prose — the same blanking the other gates use. */
 const commentsBlanked = (css: string): string =>

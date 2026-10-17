@@ -221,13 +221,15 @@ This is what actually happens, in file order. Every hop below was read.
     a save seems to have produced no signal, that is the first thing to check
     before suspecting the pipeline.
 
-**A group changes only the middle of this.** Members share *signals* to a group
-(`POST /api/signals/:signalId/shares`), and the group's own artifact is
-synthesized from those shared statements via `refresh_group_top_of_mind`. A
-group's *ground* is a separate thing: the public saves of its current members,
-served by `GET /api/groups/:groupId/field`. Evidence never crosses — a shared
-statement may cite memories its author kept private, so a room can show a
-statement whose grounds are not all visible in that room.
+**Rooms are gone from the product, not yet from the engine.** Rooms were
+removed on 2026-10-12 and the last room route (`/api/groups`) was unmounted
+on 2026-10-15; with them went the signal-share route, the group field route
+and every web surface for rooms, so nothing a person can reach shows a room.
+The API's room engine still runs and is pending a decision:
+`refresh_group_top_of_mind` is still enqueued (`lib/queue.ts`) from
+feedback, inspiration editing, signal-support apply and principle status,
+among other callers, and still handled there through `lib/group-inputs.ts`
+and `lib/group-output.ts` over the group tables and `signal_shares`.
 
 ---
 
@@ -247,7 +249,8 @@ In this order. The first three are 1,059 lines together; the first five are
    read in ten minutes once this one has landed.
 3. **`packages/api/src/lib/queue.ts`** (732 lines — skim the header and
    `processBackgroundJob`) — the header explains why Postgres is the queue, and
-   the four job types *are* the generation pipeline. The dispatch function is
+   the thirteen job types (`backgroundJobTypeValues` in
+   `db/schema-background-jobs.ts`) *are* the generation pipeline. The dispatch function is
    the shortest place in the repo where you can watch layer 1 become layer 2
    become layer 3.
 4. **`packages/web/src/lib/api/`** — the only place the browser does HTTP, and
@@ -308,7 +311,7 @@ one trap a reader reliably falls into, which is that the `Space` type lives in
 | `space/inspiration/` | Layer 1: what a save *is* on screen (`orb.ts` — the `Ball`, and `agentId`, which decides which wall it stands on) and what the ground does with one (`field.ts` — brightness, size band, packing, scatter). |
 | `space/top-of-mind/` | Layer 3: `board.ts` is the artifact's entries and which sentence leads; `poster.tsx` is the one part that needs markup — which words survived the last rewrite stay lit, and only new words arrive. |
 | `space/settings/` | `SpaceSettings.tsx` — what a space is and every verb you can apply to it. A layer-shaped directory holding a screen, which is the one place this tree's own rule bends. |
-| `space-kinds/` | What differs by KIND of space: `index.ts` (the three kinds and what follows from each, **and the `Space` type itself**), `agent.ts`, `group.ts`, `GroupPanel.tsx`. A fourth kind should be a new entry here, not a hunt through the page. The name is wrong and the fix is recorded in `space/README.md`: it should be `space/` and its sibling should be `layers/`, blocked only because `Home.tsx` holds 11 of the 18 imports that cross into the two directories. |
+| `space-kinds/` | What differs by KIND of space: `index.ts` (the two kinds that remain and what follows from each, **and the `Space` type itself**) and `agent.ts`. A third kind should be a new entry here, not a hunt through the page. The name is wrong and the fix is recorded in `space/README.md`: it should be `space/` and its sibling should be `layers/`, blocked only because `Home.tsx` holds 11 of the 18 imports that cross into the two directories. |
 | `styles/` | Five stylesheets. `layers.css` must be imported first — it declares the `@layer` order so precedence is decided here and not by the bundler, which is a bug that already cost a whole design pass. |
 
 ### `packages/admin/src`
@@ -354,9 +357,10 @@ verified by opening the file.
   There is no `Jar.tsx`; `pages/Home.tsx` imports it.
 - **`docs/codebase.md` puts `space-kinds/` underneath `space/` in the dependency
   order — "pure predicates and constants", read by the layers and reading
-  nothing back. One import still goes the other way.** `space-kinds/group.ts`
-  takes `formingWords` and `WallChrome` out of `space/top-of-mind/`. It used to
-  take four more — `colorBall`, `scatterSeed` and `Ball` — for `makeGroupBall`,
+  nothing back. One import still goes the other way.** `space-kinds/agent.ts`
+  takes `formingWords` and `WallChrome` out of `space/top-of-mind/` (the same
+  import `space-kinds/group.ts` made until rooms were removed). `group.ts`
+  used to take four more — `colorBall`, `scatterSeed` and `Ball` — for `makeGroupBall`,
   which built a room's evidence into a real field orb so the sky could hang it;
   that function had no caller once `space/signal/` was deleted on 2026-08-25
   and went with it, and the true CYCLE went with it too. Trace dependencies

@@ -61,7 +61,6 @@ import { describe, expect, it } from "vitest";
    than the next one. */
 const WAY_OUT_WORDS = [
   "worldClose",
-  "worldCardClose",
   "worldNotNow",
   "worldEnough",
   "worldDone",

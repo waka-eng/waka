@@ -82,7 +82,13 @@ const TOOLS = resolve(dirname(fileURLToPath(import.meta.url)), "../../../tools")
    left, and three exports lost their last importer between them. */
 /* 20 -> 19 on 2026-10-15: `CROSS_MS`, read only by the walk it times,
    stopped being exported. */
-const PRIVATE_ENOUGH = 19;
+/* 19 -> 16 on 2026-10-17: the unused-code sweep deleted three exports
+   that were on this list — `useCurrentProfile` and `useIsAuthenticated`
+   (auth-context) and `clearConversationDrafts` (conversation-drafts) — each
+   named by nothing outside its own file. The sweep's other deletions
+   (the count formatters, `fetchInspirations`) were named by tests, so they
+   were never counted here. */
+const PRIVATE_ENOUGH = 16;
 
 function sources(dir: string, found: string[] = []): string[] {
   let entries: string[];

@@ -121,7 +121,6 @@ const MUST_TAKE_A_PRESS: ReadonlyArray<readonly [string, string, readonly string
     "claims.css",
     ".waka-corners",
     [
-      /* the wall picker, left corner */ "jar-here-split",
       /* the settings cog, right corner */ "waka-corner-place",
       "waka-corner",
       /* the identity switch, where one is rendered */ "waka-switch",

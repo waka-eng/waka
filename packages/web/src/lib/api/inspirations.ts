@@ -203,32 +203,10 @@ export async function createInspiration(
 }
 
 /**
- * GET /inspirations
- *
- * The acting profile's private archive, newest first. The server scopes by
- * profile unconditionally, so the caller never passes an owner — `q` searches
- * the text and `limit` bounds the page.
- */
-export async function fetchInspirations(
-  options: FetchInspirationsOptions = {},
-): Promise<ApiInspirationSummary[]> {
-  const params = new URLSearchParams();
-  if (options.profile) params.set("profile", options.profile);
-  if (options.q) params.set("q", options.q);
-  if (typeof options.limit === "number") params.set("limit", String(options.limit));
-  if (options.cursor) params.set("cursor", options.cursor);
-  const query = params.toString();
-  const body = await getJson<ApiInspirationPage>(
-    apiPath(`/inspirations${query ? `?${query}` : ""}`),
-    "Failed to load your captures",
-  );
-  return Array.isArray(body.inspirations) ? body.inspirations : [];
-}
-
-/**
- * One page WITH its cursor. `fetchInspirations` throws the cursor away, which
- * silently capped the field at the server's 200-per-page ceiling — a person
- * with three hundred memories saw two hundred and was told nothing. Callers
+ * GET /inspirations — one page WITH its cursor. The old single-page loader
+ * threw the cursor away, which silently capped the field at the server's
+ * 200-per-page ceiling — a person with three hundred memories saw two hundred
+ * and was told nothing. Callers
  * that must see everything use this and follow the cursor.
  */
 export async function fetchInspirationPage(

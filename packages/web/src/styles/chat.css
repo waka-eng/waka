@@ -611,12 +611,6 @@
   line-height: 1.5;
 }
 
-.chat-muted {
-  margin: var(--sp-8) 0 0;
-  font-size: var(--t-meta);
-  color: var(--muted);
-}
-
 /* ORPHANS. `text-wrap: pretty` runs a slower line-breaker that MDN
    describes as favouring layout over speed and minimising orphans — the
    right tool for body text, where `balance` is heading-scoped and capped at

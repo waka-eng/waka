@@ -32,7 +32,6 @@ import {
   fetchInspiration,
   fetchInspirationProcessing,
   fetchInspirationSaveRequest,
-  fetchInspirations,
   fetchInspirationPage,
   fetchAttachmentUrl,
   presignAttachment,
@@ -520,19 +519,6 @@ describe("inspirations", () => {
     for (const key of ["groupId", "group", "shareToGroups", "roomId"]) {
       expect(body).not.toHaveProperty(key);
     }
-  });
-
-  it("searches the archive through the query string", async () => {
-    stubFetch(Response.json({ inspirations: [inspirationSummary] }));
-
-    await expect(fetchInspirations({ q: "notion", limit: 40 })).resolves.toEqual([
-      inspirationSummary,
-    ]);
-    expect(fetch).toHaveBeenCalledWith("/api/inspirations?q=notion&limit=40", {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
   });
 
   it("opens one capture with its attachments and reflections", async () => {

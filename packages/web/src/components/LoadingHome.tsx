@@ -140,5 +140,3 @@ export function LoadingHome(): JSX.Element {
     </div>
   );
 }
-
-export default LoadingHome;

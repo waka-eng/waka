@@ -69,8 +69,8 @@ Evidence under `docs/craft/evidence/personal-capture/`:
 `android-m8-chat-gutter.png`, `android-m8-input-failed.png` and
 `ios-m8-conversation-route.png`. All contain synthetic local fixtures.
 
-The bounded Capacitor probe is checked in under
-[`tools/e2e/native-capture-spike`](../../tools/e2e/native-capture-spike/README.md).
+The bounded Capacitor probe was checked in under
+`tools/e2e/native-capture-spike` (removed 2026-10-17; see version history).
 Its iOS simulator build succeeded (Xcode 26.6, iOS 26.5 SDK, signing disabled).
 After Mac UI access became available, the iOS simulator verified limited photo
 selection/preview, opening/canceling the file share sheet, session retention

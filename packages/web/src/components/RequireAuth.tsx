@@ -73,5 +73,3 @@ export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps
   // A different identity receives fresh route state, caches and pending work.
   return <Fragment key={`${account?.id ?? ""}:${profile?.id ?? ""}`}>{children}</Fragment>;
 }
-
-export default RequireAuth;

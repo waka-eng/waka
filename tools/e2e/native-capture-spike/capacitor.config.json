@@ -1,7 +1,0 @@
-{
-  "appId": "im.waka.captureprobe",
-  "appName": "WAKA capture probe",
-  "webDir": "dist",
-  "server": { "url": "http://127.0.0.1:3015/native-probe/", "cleartext": true },
-  "plugins": { "CapacitorHttp": { "enabled": true } }
-}
