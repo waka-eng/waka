@@ -51,6 +51,8 @@ const S = vi.hoisted(() => ({
   /* a write whose answer carries no row (as a fixture world's does) */
   bareWrites: false,
   shelf: [] as Array<{ id: string; text: string }>,
+  holdWrite: false,
+  landWrite: null as null | (() => void),
 }));
 
 const row = (id: string, text: string) => {
@@ -89,6 +91,8 @@ vi.mock("../src/lib/api", async (original) => ({
   },
   updateInspiration: async (id: string, input: { text: string }) => {
     S.written.push({ id, text: input.text });
+    /* a write the case holds in flight lands only when it says so */
+    if (S.holdWrite) await new Promise<void>((land) => { S.landWrite = land; });
     S.store.set(id, input.text);
     /* the server's row, as the PATCH answers it */
     if (S.bareWrites) return undefined;
@@ -137,6 +141,8 @@ beforeEach(() => {
   S.holdFetch = false;
   S.bareWrites = false;
   S.shelf = [];
+  S.holdWrite = false;
+  S.landWrite = null;
 });
 afterEach(() => world?.unmount());
 
@@ -411,3 +417,38 @@ it("an archive save of a note the card was editing: the edit is closed first, an
   expect(editBox()?.value).toBe(FROM_ARCHIVE);
 });
 
+
+/* THE TWO DOORS CANNOT RACE ON ONE NOTE (review, 2026-10-17). The card's
+   save is still out when the archive is opened: the card can no longer be
+   edited, the archive's read waits for that save to land and opens on its
+   words, and an archive save after it is the one that stands. */
+it("a card save in flight, then the archive: the archive opens on the card's words and its own save stands", { timeout: 30_000 }, async () => {
+  const FROM_CARD = "something I kept, 2 — saved on the card.";
+  const FROM_ARCHIVE = "something I kept, 2 — and then in the archive.";
+  await openByAddress("own-2");
+  await pressWords();
+  S.holdWrite = true;
+  await typeAndKeep(FROM_CARD);
+  expect(S.landWrite, "the card's save is out").not.toBeNull();
+  const path = here;
+  await act(async () => { go(`${path}?open=saves`); });
+  for (let turn = 0; turn < 30 && !world.container.querySelector(".waka-list-row"); turn += 1) { await world.step(4); await wait(30); }
+  /* the card's words cannot be opened for editing under the archive */
+  const p = words();
+  if (p) await act(async () => p.click());
+  expect(editBox(), "no card edit while the archive is open").toBeNull();
+  const archiveRow = [...world.container.querySelectorAll<HTMLButtonElement>(".waka-list-row")]
+    .find((b) => (b.textContent ?? "").includes("something I kept, 2"))!;
+  await act(async () => archiveRow.click());
+  await world.step(4);
+  await wait(50);
+  const page = () => world.container.querySelector<HTMLTextAreaElement>(".waka-note-page")!;
+  expect(page().readOnly, "the archive waits for the card's save before it reads").toBe(true);
+  S.holdWrite = false;
+  await act(async () => { S.landWrite!(); });
+  for (let turn = 0; turn < 20 && page().readOnly; turn += 1) { await world.step(2); await wait(20); }
+  expect(page().value, "and opens on the card's saved words").toBe(FROM_CARD);
+  await setText(page(), FROM_ARCHIVE);
+  await archiveSave();
+  expect(S.store.get("own-2"), "the archive's later save is what is stored").toBe(FROM_ARCHIVE);
+});

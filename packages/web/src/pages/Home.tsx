@@ -102,7 +102,6 @@ import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest
 import { inspirationPreview } from '../lib/inspiration-preview';
 import { wordsCanStand } from '../lib/note-words';
 import { markSaved, readAfterWrites, readDetail, type DetailReadState } from '../lib/detail-reads';
-import { verdictOnSavedWords } from '../lib/edit-conflict';
 import { candidateSaveRequestId } from '../lib/harvest';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
 import { inspectInspirationPhoto, PHOTO_ACCEPT, PhotoRefused } from '../lib/inspiration-photo';
@@ -1327,11 +1326,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      being rebuilt on every change (the shared saved-words writer below). */
   const panelNowRef = useRef<PanelData | null>(null);
   panelNowRef.current = panel;
-  /* The card's open edit, for the same callbacks (assigned under `useEditing`). */
-  const editingNowRef = useRef<ReturnType<typeof useEditing> | null>(null);
-  /** An archive save landed on words the card is editing with changes of its
-      own: the card asks which to keep. */
-  const [editConflict, setEditConflict] = useState<{ id: string; theirs: string } | null>(null);
   /**
    * A SAVE OR THE TOP OF MIND, BEING MADE INTO A CARD.
    *
@@ -2251,8 +2245,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       from before the write (`lib/detail-reads.ts`). */
   const writesRef = useRef<Map<string, Promise<void>>>(new Map());
   const writeSettlersRef = useRef<Map<string, () => void>>(new Map());
-  /** The archive's open note learns of a save made elsewhere through this. */
-  const [savedElsewhere, setSavedElsewhere] = useState<{ id: string; text: string; seq: number } | null>(null);
   const detailReadState = (): DetailReadState => ({
     details: detailsRef.current, pending: detailPendingRef.current,
     generations: savedGenerationRef.current, stamps: newestStampRef.current, writes: writesRef.current,
@@ -4432,9 +4424,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        is a read that started before a save (the archive's re-read after an
        upload, say) and must not put the old words back. */
     const stamp = made?.updatedAt ? Date.parse(made.updatedAt) : NaN;
+    /* A READ older than the newest accepted row is dropped. A WRITE is
+       always applied: the card cannot edit while the archive is open, and
+       the archive reads only after a card write has landed, so writes reach
+       this page in the order the server applied them. */
     if (Number.isFinite(stamp)) {
-      if (stamp < (newestStampRef.current.get(id) ?? -Infinity)) return false;
-      newestStampRef.current.set(id, stamp);
+      const newest = newestStampRef.current.get(id) ?? -Infinity;
+      if (how === 'read' && stamp < newest) return;
+      newestStampRef.current.set(id, Math.max(stamp, newest));
     }
     /* A WRITE makes every read already in flight older than what is stored
        (`markSaved`: the next read starts fresh rather than joining one of
@@ -4447,21 +4444,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     /* (With no row and nothing cached there is nothing to write: an in-flight
        read is then answered by a fresh read in `loadDetail`, not by null.) */
     if (detail) detailsRef.current.set(id, detail);
-    /* ═══ THE CARD MAY BE EDITING THIS NOTE RIGHT NOW ═════════════════════
-       An archive save of a note whose words are open on the card: if the
-       card's draft is still exactly what it opened with, it is moved onto
-       the new words (nothing of the person's is lost); if they have typed,
-       the card asks which words to keep rather than letting either save
-       silently overwrite the other. The card's own keep is not a conflict
-       (it is in flight while this runs). */
-    const held = editingNowRef.current?.open;
-    const holdsThis = held?.kind === 'memory' && (held.id === id || (panelNowRef.current?.id === held.id && shown?.id === id));
-    if (held && holdsThis && detail) {
-      /* the rule, and why each case is what it is: `lib/edit-conflict.ts` */
-      const verdict = verdictOnSavedWords({ how, openedWith: shown?.text ?? '', draft: held.text, saved: detail.text, busy: held.saving || held.saved });
-      if (verdict === 'rebase') editingNowRef.current?.begin('memory', held.id, detail.text);
-      else if (verdict === 'ask') setEditConflict({ id: held.id, theirs: detail.text });
-    }
     setInspirations((prev) => prev
       ? prev.map((c) => (c.id === id ? { ...c, preview: inspirationPreview(whole?.text ?? text, c.attachments) } : c))
       : prev);
@@ -4469,11 +4451,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? { ...p, detail, partial: false, pending: false } : p));
       /* a memory opened by its address is held beside the field too */
       setDetachedInspiration((held) => (held && held.detail?.id === id ? { ...held, detail } : held));
-      /* and the archive, if it has this note open, decides for its own
-         editor by the same rule the card uses (`lib/edit-conflict.ts`) */
-      if (how === 'write') setSavedElsewhere((was) => ({ id, text: detail.text, seq: (was?.seq ?? 0) + 1 }));
     }
-    return true;
   }, []);
 
   /* AN ATTACHMENT LANDED ON A NOTE IN THE ARCHIVE. Its words did not change,
@@ -6992,18 +6970,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        second edit began from the first one's BEFORE and its save reverted it
        (review, 2026-10-17). The cache gets the same words for the same
        reason: reopening this memory must not read them back stale. */
-    onMemoryKept: (id, text, made) => {
-      const accepted = rememberSavedInspiration(id, text, made);
-      /* REFUSED AS OLDER: the card's words reached the server before the
-         archive's newer ones. No "saved" over words that are not stored —
-         the card asks which to keep (review, 2026-10-17). */
-      if (accepted === false) {
-        const theirs = detailsRef.current.get(id)?.text;
-        const open = editingNowRef.current?.open;
-        if (theirs !== undefined && open) setEditConflict({ id: open.id, theirs });
-      }
-      return accepted;
-    },
+    onMemoryKept: (id, text, made) => rememberSavedInspiration(id, text, made),
     onMemoryWriteSettled: (id) => {
       writeSettlersRef.current.get(id)?.();
       writeSettlersRef.current.delete(id);
@@ -7031,11 +6998,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       void loadPersonalReading().then((tom) => absorbBoard(tom)).catch(() => setReadingCheckFailed(true));
     },
   });
-  editingNowRef.current = editing;
-  /* A conflict belongs to the edit it interrupted: any other edit, or none,
-     clears it. */
-  const editingKey = editing.open?.kind === 'memory' ? editing.open.id : null;
-  useEffect(() => { setEditConflict((c) => (c && c.id === editingKey ? c : null)); }, [editingKey]);
   /* A REFUSED PICTURE IS NEWS FOR AS LONG AS THE EDIT IS OPEN, AND NOT ONE
      MOMENT AFTER. `attachTrouble` is written by `attachTo` and shown under the
      editing foot; closing the edit and opening it again is somebody starting
@@ -7163,6 +7125,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const beginPanelEdit = useCallback(
     (ev: ReactMouseEvent<HTMLParagraphElement>) => {
       if (!panelId || editing.open) return;
+      /* NO CARD EDIT WHILE THE ARCHIVE IS OPEN (review, 2026-10-17). Opening
+         the archive already closes the card's edit; this keeps one from
+         opening under it. With both, every archive save is ordered after any
+         card write (the archive reads only once that write has landed), so
+         the two doors can never race on one note's words. */
+      if (viewNavigationRef.current.view?.open === 'saves') return;
       /* NEVER AN EDIT SEEDED FROM A PREVIEW (P0, 2026-10-17). This used to
          fall back to `panelBall.textPreview` while the detail read was in
          flight or after it failed — a 220-character cut ending in "…" (or an
@@ -10382,23 +10350,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               IT IS CARRIED WITH AN ID so that stepping to the next memory with
               a refusal on screen does not re-point the sentence at a card it
               was never about. */}
-          {/* ═══ THE ARCHIVE SAVED THESE WORDS WHILE YOU WERE EDITING THEM ═══
-              Neither save may silently overwrite the other: the person
-              chooses. "Use the saved words" moves the edit onto them; "Keep
-              mine" leaves the draft, and pressing Save will then write it
-              over the archive's words, knowingly. */}
-          {editConflict && editing.open?.kind === "memory" && editing.open.id === editConflict.id && editing.open.id === panelId ? (
-            <p className="jar-panel-warn" role="alert">
-              {say("worldEditConflict")}{" "}
-              <button type="button" className="jar-panel-retry"
-                onClick={() => { editing.begin("memory", editConflict.id, editConflict.theirs); setEditConflict(null); }}>
-                {say("worldEditConflictTheirs")}
-              </button>{" "}
-              <button type="button" className="jar-panel-retry" onClick={() => setEditConflict(null)}>
-                {say("worldEditConflictMine")}
-              </button>
-            </p>
-          ) : null}
           {editing.open?.kind === "memory" && editing.open.id === panelId
             && attachTrouble?.id === (panelBall?.sigId ?? panelId) ? (
             <p className="jar-panel-warn" role="status">{attachTrouble.text}</p>
@@ -11852,7 +11803,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         /* the archive reads through the world's stamped reads, so a read
            racing a card save cannot seed its editor with older words */
         readFull={(id) => readForArchiveRef.current(id)}
-        savedElsewhere={savedElsewhere}
         onAttached={(id) => attachedInspirationRef.current(id)}
         onErased={(id) => {
           /* Gone from the field and the cache like a delete made on the card

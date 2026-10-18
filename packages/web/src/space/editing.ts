@@ -129,11 +129,7 @@ export interface EditingDeps {
   /** A memory's words were kept: the page re-points whatever it is showing
       (and seeds the next edit from) at them, so a second edit cannot start
       from the first one's before. */
-  /** Returns `false` when the page refused the row as older than words it
-      already holds (another door saved newer ones first): the edit then
-      stays open and unsaved instead of saying "saved" over words that are
-      not the stored ones. */
-  readonly onMemoryKept?: (id: string, text: string, made?: ApiInspiration) => boolean | void;
+  readonly onMemoryKept?: (id: string, text: string, made?: ApiInspiration) => void;
   /** The memory write announced by `onMemoryWriting` has finished, either
       way — the page's per-note "write in flight" is over. */
   readonly onMemoryWriteSettled?: (id: string) => void;
@@ -376,16 +372,8 @@ export function useEditing(deps: EditingDeps): Editing {
              accepted from the archive changes nothing — and writes the list
              and the cache itself; this act no longer overwrites them first.
              Without one, the old local update stands. */
-          if (d.onMemoryKept) {
-            if (d.onMemoryKept(held.id, text, made ?? undefined) === false) {
-              /* REFUSED AS OLDER: no `saved` beat over words that are not the
-                 stored ones — the edit stays open, and the page asks which
-                 words to keep. */
-              const still = heldRef.current;
-              put(still ? { ...still, saving: false, saved: false } : null);
-              return;
-            }
-          } else {
+          if (d.onMemoryKept) d.onMemoryKept(held.id, text, made ?? undefined);
+          else {
             d.setInspirations((prev) =>
               prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
             );

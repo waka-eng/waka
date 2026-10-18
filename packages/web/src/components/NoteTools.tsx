@@ -61,9 +61,6 @@ export function NoteTools(props: {
   readFailed?: string;
   retryLabel?: string;
   onRetry?: () => void;
-  /** The note was saved elsewhere while edited here, with changes on both
-      sides: the bar asks which words to keep, with nothing else in it. */
-  conflict?: { question: string; theirsLabel: string; mineLabel: string; onTheirs: () => void; onMine: () => void };
   /** The overflow's name on a narrow phone, where Share and Delete fold into
       it so every remaining act keeps its 44px target. */
   moreLabel?: string;
@@ -174,21 +171,6 @@ export function NoteTools(props: {
       {String(props.recording.seconds % 60).padStart(2, "0")}
     </button>
   ) : null;
-  if (props.conflict) {
-    return createPortal(
-      <>
-        <span className="waka-dock-state" role="alert">{props.conflict.question}</span>
-        {stopClock}
-        <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.conflict.onTheirs}>
-          {props.conflict.theirsLabel}
-        </button>
-        <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.conflict.onMine}>
-          {props.conflict.mineLabel}
-        </button>
-      </>,
-      slot,
-    );
-  }
   if (props.erasePending && props.eraseQuestion) {
     return createPortal(
       <>

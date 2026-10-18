@@ -40,8 +40,6 @@ const kept: Array<{ id: string; text: string }> = [];
 const previews: string[] = [];
 /** the page's callbacks and the write, in the order they happened */
 const order: string[] = [];
-/** the page refuses the card's row as older than words it already holds */
-let refuse = false;
 
 function Host(props: { offline: boolean; attachments: number; profile?: string }) {
   const [, setInspirations] = useState<null | Array<{ id: string; preview: string }>>([{ id: "m1", preview: "old words" }]);
@@ -55,7 +53,7 @@ function Host(props: { offline: boolean; attachments: number; profile?: string }
       return next;
     })) as EditingDeps["setInspirations"],
     setSignals: vi.fn(), setNotes: vi.fn(), setTopOfMind: vi.fn(), setAdopted: vi.fn(), setSelectedId: vi.fn(),
-    onMemoryKept: (id, text) => { kept.push({ id, text }); order.push("kept"); return refuse ? false : undefined; },
+    onMemoryKept: (id, text) => { kept.push({ id, text }); order.push("kept"); },
     onMemoryWriteSettled: (id) => { order.push(`settled ${id}`); },
     onMemoryWriting: (id) => { order.push(`writing ${id}`); },
     memoryAttachmentCount: () => props.attachments,
@@ -66,7 +64,7 @@ function Host(props: { offline: boolean; attachments: number; profile?: string }
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  W.calls.length = 0; kept.length = 0; previews.length = 0; order.length = 0; refuse = false;
+  W.calls.length = 0; kept.length = 0; previews.length = 0; order.length = 0;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -114,17 +112,4 @@ it("leaves the list and the cache to the page, and announces the write before it
   await keepWords({}, "new words");
   expect(order).toEqual(["writing m1", "write", "kept", "settled m1"]);
   expect(previews, "no preview written behind the page's back").toEqual([]);
-});
-
-/* REFUSED AS OLDER (review, 2026-10-17): another door stored newer words
-   first, so the card's own write is not what is stored. It must not play
-   the "saved" beat over them — the edit stays open, unsaved, and the page
-   asks which words to keep. */
-it("does not say saved when the page refuses the card's write as older", async () => {
-  refuse = true;
-  await keepWords({}, "new words");
-  expect(edit.open?.saved, "no saved beat").toBe(false);
-  expect(edit.open?.saving).toBe(false);
-  expect(edit.open?.text, "and the person's words are still open").toBe("new words");
-  expect(order.at(-1), "the write is settled either way").toBe("settled m1");
 });

@@ -75,7 +75,6 @@ import { inspectInspirationPhoto } from "../lib/inspiration-photo";
 import { inspectAttachmentFile } from "../lib/api/file-accept";
 import { inspirationPreview } from "../lib/inspiration-preview";
 import { wordsCanStand } from "../lib/note-words";
-import { verdictOnSavedWords } from "../lib/edit-conflict";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -94,7 +93,7 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onSaved, onErased, onRestored, readFull, onAttached, savedElsewhere, ownArchive = true, shareName = "" }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onSaved, onErased, onRestored, readFull, onAttached, ownArchive = true, shareName = "" }: {
   locale: SupportedLocale;
   /** A note's words were stored, with the server's row. The world behind
       this page caches what it has read of each note, and a later edit there
@@ -115,10 +114,6 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       stale and reads it afresh (its attachments changed without its words,
       so `updatedAt` cannot tell the two reads apart). */
   onAttached?: (id: string) => void;
-  /** Words stored for a note by another door (Home's card), newest last.
-      If that note is open here: an untouched draft moves onto them, a
-      changed one asks which to keep — the card's rule, `lib/edit-conflict.ts`. */
-  savedElsewhere?: { id: string; text: string; seq: number } | null;
   /** Whether this is the person's own archive. The deleted shelf is theirs
       alone, so it is not read on an agent's archive; deleting there still
       works, and the request names the agent's profile. */
@@ -789,28 +784,6 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     clearRecording();
   }, [open?.id, clearRecording]);
 
-  /* ═══ THE SAME NOTE, SAVED ELSEWHERE WHILE IT IS OPEN HERE ══════════════
-     Home's card can save a note the archive has open (review, 2026-10-17:
-     data loss — the archive kept editing the words from before and its save
-     overwrote the card's). Same rule as the card: an untouched draft is
-     moved onto the stored words; a changed one is asked about. */
-  const [conflict, setConflict] = useState<{ id: string; theirs: string } | null>(null);
-  const savedSeq = savedElsewhere?.seq ?? 0;
-  useEffect(() => {
-    if (!savedElsewhere || !open || savedElsewhere.id !== open.id) return;
-    const base = stored && stored.id === open.id ? stored.text : null;
-    if (base === null) return; // still reading: the read waits for writes
-    const verdict = verdictOnSavedWords({ how: "write", openedWith: base, draft, saved: savedElsewhere.text, busy: saving });
-    if (verdict === "rebase") {
-      setStored({ id: open.id, text: savedElsewhere.text, failed: false });
-      setDraft(savedElsewhere.text);
-    } else if (verdict === "ask") {
-      setConflict({ id: open.id, theirs: savedElsewhere.text });
-    }
-    // only a NEW save elsewhere is news; the draft changing is not
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedSeq]);
-  useEffect(() => { setConflict((c) => (c && c.id === open?.id ? c : null)); }, [open?.id]);
 
   /**
    * ═══ WHETHER THIS NOTE'S SAVE CAN BE PRESSED — ASKED, NOT RESTATED ══════
@@ -1351,16 +1324,6 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           retryLabel={say("surfaceUnavailableRetry")}
           onRetry={() => readNote(open.id)}
           moreLabel={say("worldMoreActions")}
-          conflict={conflict && conflict.id === open.id ? {
-            question: say("worldEditConflictArchive"),
-            theirsLabel: say("worldEditConflictTheirs"),
-            mineLabel: say("worldEditConflictMine"),
-            /* their words become the stored base and the draft */
-            onTheirs: () => { setStored({ id: open.id, text: conflict.theirs, failed: false }); setDraft(conflict.theirs); setConflict(null); },
-            /* keep mine: the base becomes the stored words, so Save lights
-               for the person's draft and writes it over them, knowingly */
-            onMine: () => { setStored({ id: open.id, text: conflict.theirs, failed: false }); setConflict(null); },
-          } : undefined}
           uploading={say("worldComposerUploading")}
           recordLabel={say("worldComposerRecord")}
           stopLabel={say("worldComposerStop")}
