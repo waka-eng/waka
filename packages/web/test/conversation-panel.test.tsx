@@ -27,6 +27,7 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ConversationPanel} from '../src/components/ConversationPanel';
 import {createConversation,fetchConversation,fetchConversationReply,listConversations,saveConversationMessage,stopConversationReply,type ApiConversation,type ConversationReplyState} from '../src/lib/api/conversations';
 import {readConversationDrafts} from '../src/lib/conversation-drafts';
+import {ApiError} from '../src/lib/api/http';
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),stopConversationReply:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
 const scope={accountId:'owner',profileId:'profile'},id='11111111-1111-4111-8111-111111111111',choose=vi.fn();
 /* THE SAME JOB, DONE BY THE RULE THAT CAN DO IT SYMMETRICALLY.
@@ -349,6 +350,33 @@ it('keeps the reply in flight while progress cannot be read, retries on its own,
   expect(host.textContent).not.toContain('Couldn’t check reply progress.');
   expect(send().disabled,'Send stayed off after the server answered').toBe(false);
   expect(host.querySelector('.chat-recheck')).toBeNull();
+});
+/* A 404, or a server that keeps answering with a state older than the one on
+   screen, is terminal: the watch stops, says so, offers a reload, and Send
+   comes back rather than waiting on a reply that will never be confirmed. */
+it('stops on a 404 reply read, says it is gone, offers a reload and frees Send',async()=>{
+  stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
+  vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:404,message:'Not found'}));await mount();await tick(1000);
+  const calls=vi.mocked(fetchConversationReply).mock.calls.length;
+  await tick(15000);await tick(15000);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length,'a 404 kept being polled').toBe(calls);
+  expect(host.textContent).toContain('This reply can’t be found anymore.');
+  expect(host.textContent).not.toContain('Trying again');
+  await type('Still there?');
+  const send=[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
+  expect(send.disabled).toBe(false);
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Reload conversation')).toBe(true);
+});
+it('calls a reply stuck after repeated older-than-shown answers, and stops asking',async()=>{
+  stored={...stored,generationEnabled:true,revision:3,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
+  vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:1}));await mount();
+  for(let i=0;i<6;i+=1)await tick(15000);
+  const calls=vi.mocked(fetchConversationReply).mock.calls.length;
+  await tick(15000);await tick(15000);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBe(calls);
+  expect(host.textContent).toContain('Couldn’t confirm where this reply is up to.');
+  await click('Reload conversation');
+  expect(vi.mocked(fetchConversationReply).mock.calls.length,'Reload did not ask again').toBeGreaterThan(calls);
 });
 /* ── ELEVEN TOMBSTONES: THE READINGS AND SOURCES A REPLY CITED ──────────────
    A reply could end in a list of top-of-mind previews, each one a button that

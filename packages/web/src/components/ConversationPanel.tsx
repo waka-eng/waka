@@ -251,7 +251,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      retrying until the server answers, the line says it is retrying, and
      "Check again" asks at once. */
   const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&(!reply.state||reply.error));
-  const awaitingReply=replyPending||replyUnconfirmed;
+  /* A terminal answer (gone, or stuck on an older state) is not a reply in
+     flight: Send comes back and the notice offers a reload. */
+  const awaitingReply=!reply.terminal&&(replyPending||replyUnconfirmed);
   useLayoutEffect(()=>{const node=body.current;if(!node||!conversation)return;const saved=restoredScroll.current;
     if(prependScroll.current){const previous=prependScroll.current;node.scrollTop=previous.top+node.scrollHeight-previous.height;prependScroll.current=null;return;}
     if(saved){nearBottom.current=saved.nearBottom;node.scrollTop=saved.nearBottom?node.scrollHeight:saved.top;restoredScroll.current=null;}
@@ -508,7 +510,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        or at least one attachment, and the server accepts '' then. */
     : !draft?.content.trim()&&!draft?.attachments?.length ? 'worldConversationNeedsWords' as const
     : null;
-  const replyNotice=reply.error?'worldConversationReplyCheckFailed' as const
+  const replyNotice=reply.terminal==='gone'?'worldConversationReplyGone' as const
+    :reply.terminal==='stuck'?'worldConversationReplyStuck' as const
+    :reply.error?'worldConversationReplyCheckFailed' as const
     :reply.state?.retryAfter&&reply.state.phase!=='ready'?'worldConversationReplyLimit' as const
     :reply.state?.phase==='failed'?'worldConversationReplyFailed' as const
     :reply.state?.phase==='stopped'?'worldConversationReplyStopped' as const:null;
@@ -747,7 +751,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             out. Both stop polling on purpose; neither may stop the person.
             This reads the reply's progress again — it does not ask for a new
             reply, so it is not one of the regeneration buttons that went. */}
-        {generationEnabled&&(reply.error||reply.waiting)?<button type="button" className="chat-recheck" onClick={()=>reply.check()}>{say('worldReadingCheckAgain')}</button>:null}
+        {generationEnabled&&reply.terminal?<button type="button" className="chat-recheck" disabled={loading} onClick={()=>{void refresh();reply.check();}}>{say('worldConversationReload')}</button>
+          :generationEnabled&&(reply.error||reply.waiting)?<button type="button" className="chat-recheck" onClick={()=>reply.check()}>{say('worldReadingCheckAgain')}</button>:null}
         {/* AND WHEN REPLIES ARE NOT CONNECTED AT ALL, THE SURFACE SAYS SO.
             Every notice above is gated behind `generationEnabled`, correctly
             — but that left the one case where nothing will ever come back as
