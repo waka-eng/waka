@@ -65,6 +65,8 @@ const DELETES = vi.hoisted(() => ({
   hold: null as Promise<void> | null,
   field: null as Promise<void> | null,
   calls: [] as string[],
+  /** How many of the next deletes refuse, as a server error would. */
+  refuse: 0,
 }));
 
 const GROUP_ID = "group-1";
@@ -182,6 +184,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     deleteInspiration: async (id: string) => {
       DELETES.calls.push(id);
       if (DELETES.hold) await DELETES.hold;
+      if (DELETES.refuse > 0) { DELETES.refuse -= 1; throw new Error("refused"); }
     },
     /* One shared statement, LOCKED — the owner's own words on the room's
        wall. The star must render exactly where other people read the
@@ -337,6 +340,7 @@ beforeEach(async () => {
   DELETES.hold = null;
   DELETES.field = null;
   DELETES.calls.length = 0;
+  DELETES.refuse = 0;
   layout = await mountWorld(FACTS);
   /* the sky arrives a hop behind the field: loadSignals, then one loadSignal
      per signal for its evidence, then the memo, then syncSky */
@@ -591,6 +595,27 @@ describe("deleting a memory", () => {
       (layout.container.textContent ?? "").includes("didn’t go through"),
       "and nothing claimed it failed",
     ).toBe(false);
+  });
+
+  it("keeps Delete beside the failure line, so pressing it again is the retry", { timeout: 30_000 }, async () => {
+    DELETES.refuse = 1;
+    await layout.toField();
+    const panel = await openMemory("something I kept, 5");
+    await pressPanelVerb(panel, "Delete");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await layout.step(8);
+
+    const open = layout.container.querySelector<HTMLElement>(".jar-panel--in")!;
+    expect(open.textContent ?? "").toContain("didn’t go through");
+    await pressPanelVerb(open, "Delete");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await layout.step(40);
+    expect(DELETES.calls, "the retry was not sent").toHaveLength(2);
+    expect(layout.container.querySelector(".jar-panel--in"), "the retried delete went through").toBeNull();
   });
 
   it("leaves the next memory alone when the delete lands after you stepped to it", { timeout: 30_000 }, async () => {

@@ -10151,16 +10151,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       ask below instead. */}
                   {panelId && deleting.has(panelId) ? (
                     say("worldDeleting")
-                  ) : forget.step === "failed" && forget.id === panelId ? (
-                    /* PROSE, AND IT SAYS WHAT IS TRUE: the memory is still
-                       here. Beside the verb rather than in a sheet, because
-                       nothing happened and nothing needs deciding — pressing
-                       delete again is the whole recovery. */
-                    <span className="jar-panel-warn">
-                      {say("worldDeleteFailed")}
-                    </span>
                   ) : (
                     <>
+                      {forget.step === "failed" && forget.id === panelId ? (
+                        /* PROSE, AND IT SAYS WHAT IS TRUE: the memory is still
+                           here. Beside the verb rather than in a sheet, because
+                           nothing happened and nothing needs deciding — pressing
+                           delete again is the whole recovery, so the verb stays
+                           beside it (it was replaced by this line, which left
+                           the recovery it describes with nothing to press). */
+                        <span className="jar-panel-warn" role="alert">
+                          {say("worldDeleteFailed")}
+                        </span>
+                      ) : null}
                       {/* ONE PRESS FROM A THING YOU KEPT TO A CARD OF IT.
                           Only your own, and only when it has words: the card
                           is the words, and a picture alone has nothing for
