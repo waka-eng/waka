@@ -9550,8 +9550,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 id={claimQueue[0].id}
                 tone="reading"
                 label={claimQueue[0].statement}
-                labelKeep={say('worldStillTrue')}
-                labelNot={say('worldNotAnymore')}
+                /* "STILL" AND "ANYMORE" ONLY WHEN IT IS A SECOND ASKING.
+                   Both words presume an earlier yes, and on a reading asked
+                   for the first time there was none (audit f2afcbe2). A first
+                   asking takes the founder's own earlier pair, "True" / "Not
+                   true" (the 2026-10-11 card); a re-ask of an aged yes —
+                   `askedAgain`, the founder's "is this still true?" — keeps
+                   the pair written for it. */
+                labelKeep={say(claimQueue[0].askedAgain ? 'worldStillTrue' : 'worldClaimTrue')}
+                labelNot={say(claimQueue[0].askedAgain ? 'worldNotAnymore' : 'worldNotTrue')}
                 /* NO CHAT DOOR ON THE CARD. Founder, 2026-10-15: "remove chat
                    about it under the claim." The card asks one thing — still
                    true or not anymore — so `labelChat`/`onChat` are left off,

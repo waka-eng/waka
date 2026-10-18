@@ -198,19 +198,19 @@ it("files not true when the slip goes left, opens nothing, and leaves no receipt
   expect(openedChat(), "something opened a conversation after the no").toBeUndefined();
 });
 
-it("files not true on Not anymore, opens nothing, and leaves no receipt", async () => {
+it("files not true on Not true, opens nothing, and leaves no receipt", async () => {
   vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
   vi.mocked(createConversation).mockResolvedValue({} as Awaited<ReturnType<typeof createConversation>>);
   await withClaims(CLAIM, SECOND);
 
-  await act(async () => direction("Not anymore").click());
+  await act(async () => direction("Not true").click());
 
   expect(createFeedback).toHaveBeenCalledTimes(1);
   expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "not_true", targetRevision: "7" });
-  expect(openedChat(), "Not anymore opened a conversation").toBeUndefined();
-  expectNoReceipt("Not anymore");
+  expect(openedChat(), "Not true opened a conversation").toBeUndefined();
+  expectNoReceipt("Not true");
   await cardLeaves();
-  expectNoReceipt("Not anymore, once the card has gone");
+  expectNoReceipt("Not true, once the card has gone");
   expect(statement(), "the next claim did not come up").toContain(SECOND.statement);
 });
 
@@ -229,12 +229,12 @@ it("answers the same way from the two named directions, for anyone who does not 
   vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
   await withClaims(CLAIM, SECOND);
 
-  await act(async () => direction("Still true").click());
+  await act(async () => direction("True").click());
   expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "true" });
   await cardLeaves();
   expect(statement()).toContain(SECOND.statement);
 
-  await act(async () => direction("Not anymore").click());
+  await act(async () => direction("Not true").click());
   expect(vi.mocked(createFeedback).mock.calls[1]?.[0]).toMatchObject({ targetId: "claim-2", value: "not_true" });
 });
 
@@ -257,6 +257,15 @@ it("does not offer partly from this slot at all", async () => {
   /* The two answers and nothing else: "partly" is nowhere in the row, and
      neither is a chat (founder, 2026-10-15: "remove chat about it under the
      claim"). */
+  expect(words).toEqual(["Not true", "True"]);
+});
+
+/* Audit f2afcbe2: "Not anymore" presumed an earlier yes on a reading asked
+   for the first time. "Still" and "anymore" belong to the re-ask alone. */
+it("says Still true / Not anymore only when it is asking again", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
+  await withClaims({ ...CLAIM, askedAgain: { lastAnsweredAt: "2026-07-01T12:00:00Z" } });
+  const words = [...world.container.querySelectorAll(".jar-pick-act")].map((n) => n.textContent?.trim());
   expect(words).toEqual(["Not anymore", "Still true"]);
 });
 
