@@ -842,4 +842,16 @@ describe("the shared principle status across a session change", () => {
     expect(heard).toEqual([9]);
     stop();
   });
+
+  it("publishes the status a principles refresh POST answers with, as a refresh", async () => {
+    const { requestPrincipleRead, onPrincipleStatus } = await import("../src/lib/api/principles");
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ status: { phase: "processing", eligible: true, signalCount: 3, topOfMindCount: 1, readingPaused: false } }), { status: 202 }));
+    vi.stubGlobal("fetch", fetch);
+    const heard: Array<[string, string]> = [];
+    const stop = onPrincipleStatus((value, source) => heard.push([value.phase, source]));
+    await requestPrincipleRead(true);
+    stop();
+    expect(fetch.mock.calls[0]![0]).toBe("/api/principles/refresh?retry=1");
+    expect(heard, "the paused notice never heard the restart").toEqual([["processing", "refresh"]]);
+  });
 });

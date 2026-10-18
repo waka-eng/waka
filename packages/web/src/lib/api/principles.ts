@@ -139,8 +139,12 @@ export async function retryPausedReading(): Promise<ApiPrincipleStatus> {
   return publishStatus((await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted")).status, session, "refresh");
 }
 
+/** POST /principles/refresh — its answer is published as a `refresh`, so the
+    paused-reading notice hears the restart without asking again. */
 export async function requestPrincipleRead(retry = false): Promise<void> {
-  await postJson(apiPath(`/principles/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started");
+  const session = currentWebSession();
+  const body = await postJson<{ status?: ApiPrincipleStatus }>(apiPath(`/principles/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started");
+  if (body?.status) publishStatus(body.status, session, "refresh");
 }
 
 /** GET /principles — the acting profile's ranked set. */
