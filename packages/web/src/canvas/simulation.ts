@@ -921,9 +921,14 @@ export interface FieldAudit {
 export interface Carry {
   cam: unknown;
   trip: unknown;
-  /** a finger held through a rebuild is still held: without it the new loop
-      saw a release that never happened, and called the world at rest */
-  gesture: unknown;
+  /* A HELD PRESS IS NOT CARRIED. It was, so a rebuild under a finger would
+     not read as a release — but a build that returned early (no data yet)
+     tore the listeners down, the finger's pointerup went nowhere, and the
+     next build restored `down` and an owner that would never let go: every
+     new touch was refused as a second finger and nothing was ever at rest
+     again (code review, 2026-10-17). A press belongs to the listeners that
+     heard it; a rebuild starts with none, and the finger's release, if it
+     comes, finds nothing held and is ignored. */
   companion: unknown;
   /** the world has been sized, so a rebuild must not re-stage it */
   primed: boolean;
@@ -1764,8 +1769,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       leadOn: false,
       leadTarget: 0,
     };
-    /* A HELD FINGER SURVIVES A REBUILD, like the crossing does. See `Carry`. */
-    if (carryRef.current) Object.assign(gesture, carryRef.current.gesture as Partial<typeof gesture>);
 
     /* Dust motes: preallocated, mutated in place, never reallocated. They
        live in SCREEN space (drawn at layout y = y + camY) because they are
@@ -6545,6 +6548,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          settling between this teardown and the next build — or after the
          page itself unmounted — read a dead loop's rest and wall. */
       if (simApiRef.current === api) simApiRef.current = null;
+      /* and the press it was holding goes with it, capture and all — the
+         next build starts with no press (see `Carry`) */
+      if (gesture.ownerId !== null) releaseOwner(gesture.ownerId);
       clock.running = false;
       cancelAnimationFrame(clock.raf);
       ro.disconnect();
@@ -6565,7 +6571,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       carryRef.current = {
         cam: { ...cam },
         trip: { ...trip },
-        gesture: { ...gesture },
         companion: { ...companion },
         primed: view.primed,
         /*

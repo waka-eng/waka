@@ -356,3 +356,34 @@ it("ends a mouse press whose button is already up when it moves", async () => {
   expect(simNow().isResting(), 'a buttonless hover kept the press held').toBe(true);
   expect(reading(), 'a lost mouseup stranded the first load').toBe(AGENT_SAYS);
 });
+
+/* ═══ A REBUILD DOES NOT INHERIT A PRESS ═══════════════════════════════════
+   A held press used to be carried into the next build. When a build in
+   between returned early, the finger's pointerup reached no listener, and
+   the next build restored `down` and an owner that never let go: every new
+   touch was refused as a second finger and nothing was at rest again (code
+   review, 2026-10-17). Here a rebuild lands under a held touch whose
+   release never comes; the next touch must still be the world's. */
+it("starts a rebuild with no press held, so the next touch is accepted and rest returns", async () => {
+  Object.assign(HOLD, { on: true, reading: 'board' });
+  world = await mountWorld(FACTS); await settle();
+  const touch = (type: string, pointerId: number) => act(async () => {
+    world.container.querySelector('canvas')!.dispatchEvent(new window.PointerEvent(type,
+      { bubbles: true, cancelable: true, pointerId, pointerType: 'touch', clientX: 640, clientY: 300, button: 0, buttons: type === 'pointerup' ? 0 : 1 }));
+  });
+  await touch('pointerdown', 21);
+  expect(simNow().isResting(), 'the first touch did not register as held').toBe(false);
+  const before = simNow();
+  /* the arrival lands the agent's first load, and landing rebuilds the loop
+     — under a touch whose pointerup never arrives */
+  await world.travelTo(/agent-held/);
+  await settle();
+  expect(reading(), 'the first load did not land, so nothing was rebuilt').toBe(AGENT_SAYS);
+  expect(simNow(), 'the loop was not rebuilt').not.toBe(before);
+  expect(simNow().isResting(), 'the rebuilt loop inherited a press nobody can release').toBe(true);
+  await touch('pointerdown', 22);
+  expect(simNow().isResting(), 'a new touch was refused as a second finger').toBe(false);
+  await touch('pointerup', 22);
+  await settle();
+  expect(simNow().isResting(), 'rest never came back after the new touch').toBe(true);
+});
