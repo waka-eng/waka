@@ -8298,8 +8298,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         vanished mid-work would take its own progress report
                         with it. */}
                     {here && w.kind === 'self' && !showHomeProcessing && !reflectOpen && !editing.open ? sourceNotice : null}
+                    {/* NOT `besidePrincipleRead`: PrincipleRead's failure line
+                        and its Try again live in the sky, not on this board,
+                        so a principles failure must not hide the only Retry
+                        a person on the board can see. */}
                     {here && w.kind === "self" && !offline && !readingMessage && !showHomeProcessing ? (
-                      <ReadingPausedNotice state={readingPaused} locale={locale} besidePrincipleRead />
+                      <ReadingPausedNotice state={readingPaused} locale={locale} />
                     ) : null}
                     {here && w.kind === "self" && !offline && !lead && readingMessage ? (
                       <p className="jar-board-acts jar-reading-status" role="status" data-jar-chrome="1">
