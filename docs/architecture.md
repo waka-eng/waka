@@ -165,7 +165,7 @@ difference.
 - Never rely on stylesheet import order for precedence. It holds in dev and
   not in a production bundle.
 - A rule nobody can execute is a rule nobody has checked. Extract it
-  (`carriesMajority`, `mayAnswerSignal`) so a test can run it.
+  into a pure function so a test can run it.
 
 ## Running it
 

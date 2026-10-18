@@ -64,7 +64,7 @@ export function createAttachmentTranscriptRoutes(getDatabase: typeof getDb) {
       const [next] = await tx.update(attachments).set({ transcriptCorrection: input.data.correction,
         transcriptRevision: current.transcriptRevision + 1, transcriptCorrectedAt: input.data.correction === null ? null : new Date(), updatedAt: new Date() })
         .where(eq(attachments.id, current.id)).returning();
-      await requestSignalDerivation({ profileId: current.profileId, inspirationId, reason: 'edited', changedSource: 'inspiration' }, tx);
+      await requestSignalDerivation({ profileId: current.profileId, inspirationId, reason: 'edited' }, tx);
       return next!;
     });
     if (!saved) return c.json({ error: 'Recording not found' }, 404);

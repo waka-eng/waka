@@ -221,15 +221,24 @@ This is what actually happens, in file order. Every hop below was read.
     a save seems to have produced no signal, that is the first thing to check
     before suspecting the pipeline.
 
-**Rooms are gone from the product, not yet from the engine.** Rooms were
-removed on 2026-10-12 and the last room route (`/api/groups`) was unmounted
-on 2026-10-15; with them went the signal-share route, the group field route
-and every web surface for rooms, so nothing a person can reach shows a room.
-The API's room engine still runs and is pending a decision:
-`refresh_group_top_of_mind` is still enqueued (`lib/queue.ts`) from
-feedback, inspiration editing, signal-support apply and principle status,
-among other callers, and still handled there through `lib/group-inputs.ts`
-and `lib/group-output.ts` over the group tables and `signal_shares`.
+**Rooms are gone from the product and from the engine; their data is kept.**
+Rooms were removed on 2026-10-12 and the last room route (`/api/groups`) was
+unmounted on 2026-10-15; with them went the signal-share route, the group
+field route and every web surface for rooms. The room engine was retired on
+2026-10-17 (phase 1, no migration): the room top-of-mind pass, room
+derivation into a mind, room principles and room support review are deleted
+along with `lib/group-inputs.ts` and `lib/group-output.ts`, and nothing
+enqueues room work. Already-queued room jobs (`refresh_group_top_of_mind`,
+derive/review/assess work carrying `deriveIntoProfileId`, a mind's
+principles or garden pass) are settled unrun by `retiredGroupJob` in
+`lib/queue.ts`. The group tables, `signal_shares`, room minds' signals and
+their stored artifacts stay in the database untouched, as does the
+`refresh_group_top_of_mind` enum value, pending a decision to drop them;
+`lib/account-erasure.ts` still sweeps a person's room rows on erasure.
+One consequence is accepted until then (`docs/known-issues.md`): deleting or
+privatising a memory no longer refreshes room top-of-mind rows derived from
+it. They are unreadable — nothing serves a room — but account erasure
+keeps a room's record by design, so they persist until the drop is decided.
 
 ---
 
@@ -250,7 +259,8 @@ In this order. The first three are 1,059 lines together; the first five are
 3. **`packages/api/src/lib/queue.ts`** (732 lines — skim the header and
    `processBackgroundJob`) — the header explains why Postgres is the queue, and
    the thirteen job types (`backgroundJobTypeValues` in
-   `db/schema-background-jobs.ts`) *are* the generation pipeline. The dispatch function is
+   `db/schema-background-jobs.ts`; `refresh_group_top_of_mind` among them is
+   retired and settles unrun) *are* the generation pipeline. The dispatch function is
    the shortest place in the repo where you can watch layer 1 become layer 2
    become layer 3.
 4. **`packages/web/src/lib/api/`** — the only place the browser does HTTP, and

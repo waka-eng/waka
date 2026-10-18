@@ -11,6 +11,7 @@ import { writeSignalEmbedding } from "./signal-embeddings.js";
 import { acquireSignalDerivationLock, applyCandidates } from "./signal-match-or-mint.js";
 import type { ModelProvider } from "./model-provider.js";
 import type { SignalSupportAssessmentInput } from "./model-provider.js";
+import { hashEmbeddingInput } from "./inspiration-embeddings.js";
 
 let t: TestDatabase;
 let sequence = 0;
@@ -211,6 +212,36 @@ describe("applying explicit support decisions", () => {
     expect(await t.sql`SELECT * FROM signal_evidence WHERE signal_id = ${f.signalId}`).toEqual(before);
   });
 
+  it("applies a report written before rooms retired, but never one that names a membership", async () => {
+    /* Report files saved before 2026-10-17 carry `membershipId: null` and
+       `restrictedClaimCount: 0`. They still apply; a membership is room
+       work and is refused by the schema. */
+    const f = await fixture();
+    const report = await review(f, "unresolved");
+    const legacy = { ...report, membershipId: null, restrictedClaimCount: 0 };
+    await expect(applySignalSupportReview(t.db as never, legacy)).resolves.toMatchObject({ alreadyApplied: false });
+
+    /* ITS HASH IS THE ONE IT HAD BEFORE. origin/dev hashed the parsed report
+       in its schema's key order, with the two legacy keys in their places;
+       written out here by hand in exactly that order. Replaying the file is
+       then recognised as already applied rather than refused as a reused
+       identity. */
+    const m = report.material;
+    const before = { reviewId: report.reviewId, policy: report.policy, status: report.status,
+      profileId: report.profileId, ownerProfileId: report.ownerProfileId, membershipId: null,
+      inspirationId: report.inspirationId, claimsHash: report.claimsHash, calls: report.calls, restrictedClaimCount: 0,
+      ...(report.signalIds ? { signalIds: report.signalIds } : {}),
+      material: { scope: m.scope, revision: m.revision, policy: m.policy, hash: m.hash,
+        sources: m.sources.map(({ kind, id, hash }) => ({ kind, id, hash })) },
+      items: report.items.map(({ signalId, statementHash, verdict, sourceIds, issue }) =>
+        ({ signalId, statementHash, verdict, sourceIds, issue })) };
+    const [stored] = await t.sql`SELECT DISTINCT review_hash FROM signal_support_reviews WHERE review_id = ${report.reviewId}`;
+    expect(stored!.review_hash).toBe(hashEmbeddingInput(JSON.stringify(before)));
+    await expect(applySignalSupportReview(t.db as never, legacy)).resolves.toMatchObject({ alreadyApplied: true });
+    const withMembership = { ...(await review(f, "unresolved")), membershipId: f.signalId, restrictedClaimCount: 0 };
+    await expect(applySignalSupportReview(t.db as never, withMembership)).rejects.toThrow();
+  });
+
   it.each([true, false])("bounded discovery cannot undo explicit withdrawal (locked=%s)", async (locked) => {
     const f = await fixture();
     if (!locked) await t.sql`UPDATE signals SET locked_at = NULL WHERE id = ${f.signalId}`;
@@ -357,16 +388,13 @@ describe("applying explicit support decisions", () => {
      that a room's regeneration is billed to a PERSON, because a room's mind
      has no account to charge.
 
-     CORRECTION (2026-10-15). An earlier version of this note said the job was
-     "retired" and that there was therefore nothing left to bill. THAT WAS
-     WRONG. `refresh_group_top_of_mind` is still a live job type
-     (`lib/queue.ts`, `db/schema-background-jobs.ts`) and is still dispatched
-     to `refreshTopOfMindForGroup`; only the ROUTES into rooms were removed,
-     never the engine. What actually justifies dropping this case is narrower:
-     no door remains through which a person can ask for that regeneration, so
-     the billing-owner path is unreachable from outside. The rule it pinned is
-     consequently UNTESTED rather than retired, and if a door is ever reopened
-     this case has to come back with it. */
+     CORRECTION (2026-10-15), THEN SETTLED (2026-10-17). On 10-15 the job
+     was still live and this rule was untested rather than retired. It is
+     retired now: `refreshTopOfMindForGroup` is deleted, the room support
+     review path is gone (`applySignalSupportReview` refuses a report landing
+     on another profile), and a queued `refresh_group_top_of_mind` settles
+     unrun — pinned in `retired-group-jobs.db.test.ts`. If rooms ever return,
+     their billing rule returns with them. */
 
   it.each(["held", "contested"])("preserves edited %s principles and recovers their support", async (state) => {
     const f = await fixture();

@@ -27,8 +27,7 @@
  * unsafe, it is just a loop: signing in and landing back on the sign-in page.
  *
  * `docs/architecture.md`: "A rule nobody can execute is a rule nobody has
- * checked." This file is that rule made executable, next to `carriesMajority`
- * and `mayAnswerSignal`.
+ * checked." This file is that rule made executable.
  */
 
 import type { Location } from "react-router-dom";

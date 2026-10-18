@@ -13,7 +13,7 @@
  * mean they wait a day.
  */
 
-import { count, eq } from "drizzle-orm";
+import { and, count, eq, ne } from "drizzle-orm";
 
 import { profiles, signals } from "./db/index.js";
 import { getDb } from "./lib/db.js";
@@ -38,7 +38,9 @@ export async function handler() {
     .select({ profileId: signals.profileId, actives: count(signals.id) })
     .from(signals)
     .innerJoin(profiles, eq(profiles.id, signals.profileId))
-    .where(eq(signals.status, "active"))
+    /* room minds still hold active signals, but the room engine is retired
+       (2026-10-17): neither principles nor the gardener tend them any more */
+    .where(and(eq(signals.status, "active"), ne(profiles.type, "group")))
     .groupBy(signals.profileId);
 
   /* the garden pass rides the same night, keyed per ISO week — six of the

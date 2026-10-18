@@ -59,7 +59,7 @@ export async function recoverInspirationProcessing(db: ReturnType<typeof getDb>,
         const [job] = await tx.select({ id: backgroundJobs.id }).from(backgroundJobs)
           .where(and(eq(backgroundJobs.profileId, input.profileId), eq(backgroundJobs.type, 'derive_signals'),
             eq(backgroundJobs.idempotencyKey, `derive_signals:${input.inspirationId}`))).limit(1);
-        if (await recoverableJob(tx, input.profileId, job?.id ?? null)) await enqueueDeriveSignals(input.profileId, input.inspirationId, 'edited', undefined, tx);
+        if (await recoverableJob(tx, input.profileId, job?.id ?? null)) await enqueueDeriveSignals(input.profileId, input.inspirationId, 'edited', tx);
       }
     }
     return readInspirationProcessingStatus(tx, input);

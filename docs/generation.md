@@ -720,65 +720,19 @@ The check is standing/ownership, not a new semantic-quality threshold. Pending
 source/statement reassessment and potentially contaminated legacy context still
 need separate handling; these projections do not certify that work complete.
 
-### 5. The group's top of mind (`refreshTopOfMindForGroup`)
+### 5. The group's top of mind — retired
 
-A group's artifact runs the same pipeline with three deliberate differences
-(implemented 2026-08-21; before that the function was an explicit
-`not_implemented` seam, so groups had walls but never a reading):
-
-- **The wall is the selection — exactly the wall.** No scoring pass, no
-  cold start: members chose what to share, so every shared signal is
-  eligible, ranked by live `computeSignalConfidence` and capped at
-  `TOP_OF_MIND_SIGNAL_LIMIT`. "Exactly" is enforced since 2026-08-22: the
-  loader mirrors the wall's own withholdings — a share whose owner has
-  left the group is withdrawn, and a retired signal has sunk — where it
-  previously read every share row bare and could feed a departed member's
-  statement into the room's next reading.
-- **The first draft waits for affirmed material.** A room with no standing
-  artifact does not draft from thin evidence: a shared statement is
-  *affirmed* when at least one current member other than its owner has
-  said "true" of it (their latest verdict stands — a later "not true"
-  withdraws it), and the first generative draft waits until enough shared
-  statements are affirmed — the `emerging → active` shape, one level up.
-
-  **The bar reads the room** (founder ruling, 2026-08-25). At or below
-  `GROUP_DRAFT_SMALL_MAX_MEMBERS` (3) members it is
-  `GROUP_DRAFT_MIN_AFFIRMED_SMALL` (2); above that,
-  `GROUP_DRAFT_MIN_AFFIRMED` (3). A flat three was a proportion argument
-  wearing an absolute number's clothes: the count is over SHARED
-  STATEMENTS, so a pair who have put two statements up could never reach
-  three however many times each was affirmed — the gate did not slow a
-  small room down, it closed it. Two is the floor and never one, because
-  one person agreeing with one statement is not a room agreeing. The
-  member count is read at the moment the job runs, and only the first
-  draft is gated at all, so crossing the size line never unsays anything.
-
-  Below the bar the pass returns
-  the explicit status `waiting_for_affirmations` rather than a silent
-  nothing. Only the first model draft is gated: an established room
-  re-reads its standing artifact as shares and verdicts move, and member
-  decisions are never gated — an accepted proposal materializes a version
-  whatever the count. Answerability mirrors the wall too: a member may
-  file a verdict on a statement only while it stands on a wall they and
-  its owner are both currently in
-  (`packages/api/src/routes/feedback.ts`). Each
-  signal carries its owner's name into the prompt, and the group instruction
-  asks for cross-member entries in the group's plural voice — an artifact of
-  solo entries is named a failure in the instruction itself.
-- **Members edit by accepted proposal, and code applies them.** Before the
-  model writes a word, every proposal accepted since the previous version
-  is materialized deterministically: an accepted edit rewrites its entry
-  and locks it, an accepted removal dismisses it, an accepted addition
-  arrives locked (`applyGroupProposals`, pure and unit-tested). Member
-  decisions never pass through the model.
-- **Citations carry attribution.** Each group citation row records which
-  member's signal fed the entry, which the room view renders as
-  contributors. Raw captures never appear anywhere in the group path — the
-  prompt sees distilled statements only.
-
-Triggers: a member requesting a reread, membership changes, and proposal
-acceptance — all enqueue the same `refresh_group_top_of_mind` job. The room
-speaks in its creator's preferred locale until groups carry their own.
+Rooms left the product on 2026-10-15 and their engine on 2026-10-17
+(phase 1 of the retirement: code only, no migration). `refreshTopOfMindForGroup`,
+the room derivation pass (`deriveIntoProfileId`), room principles and room
+support review are deleted, and nothing enqueues room work. A
+`refresh_group_top_of_mind` job — or any other room-shaped job — already in
+the queue is settled by the worker without running (`retiredGroupJob` in
+`packages/api/src/lib/queue.ts`); the enum value stays until a migration
+removes it. The room tables and their rows are kept, unregenerated, pending a
+drop decision; see `docs/map.md`. The thresholds that gated a room's first
+draft (`GROUP_DRAFT_*`) and a room signal's serving
+(`GROUP_SIGNAL_MIN_VOICES`) went with it.
 
 ---
 
@@ -1073,7 +1027,6 @@ The authoritative values. Machine-checked against code — see
 | `GARDENER_SUSPECT_MIN_COSINE` | 0.86 | Two STANDING signals this close are worth a judge's minute |
 | `GARDENER_SCAN_LIMIT` | 300 | Most-recently-evidenced signals one garden pass reads |
 | `GARDENER_MAX_JUDGED_PAIRS` | 8 | Judge calls one pass may spend; the rest wait a week |
-| `GROUP_SIGNAL_MIN_VOICES` | 2 | Distinct members' memories a room signal needs before it is served |
 | `CONFIDENCE_SUPPORT_WEIGHT` | 55 | Confidence: weight of evidence count |
 | `CONFIDENCE_SPREAD_WEIGHT` | 30 | Confidence: weight of time spread |
 | `CONFIDENCE_RECENCY_WEIGHT` | 15 | Confidence: weight of recency |
@@ -1099,9 +1052,6 @@ The authoritative values. Machine-checked against code — see
 | `TOP_OF_MIND_FOCUS_DAYS` | 14 | Current-evidence window for that allowance |
 | `TOP_OF_MIND_EMERGING_MIN_EVIDENCE` | 2 | Independent units required for emerging focus on established profiles |
 | `TOP_OF_MIND_MIN_SHIFT_HOURS` | 24 | The board shifts at most once a day; an early automatic refresh sleeps until the floor opens |
-| `GROUP_DRAFT_MIN_AFFIRMED` | 3 | A room's first draft waits for this many shared statements affirmed by someone other than their owner |
-| `GROUP_DRAFT_SMALL_MAX_MEMBERS` | 3 | A room this size or smaller is held to the small-room bar instead |
-| `GROUP_DRAFT_MIN_AFFIRMED_SMALL` | 2 | The small room's bar. Two, never one — one person agreeing once is not a room agreeing |
 | `SELECTION_CONFIDENCE_WEIGHT` | 0.45 | Selection: confidence term |
 | `SELECTION_EVIDENCE_WEIGHT` | 0.2 | Selection: support term |
 | `SELECTION_RECENCY_WEIGHT` | 0.2 | Selection: recency term |
