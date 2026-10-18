@@ -9,7 +9,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApiError, createInspiration, type ApiInspiration } from '../src/lib/api';
-import { RESEND_BACKOFF_MS, useAuthoredSave, type AuthoredSaveInput } from '../src/lib/use-authored-save';
+import { OWNER_LEASE_MS, RESEND_BACKOFF_MS, useAuthoredSave, type AuthoredSaveInput } from '../src/lib/use-authored-save';
 
 vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), createInspiration: vi.fn() }));
 const scope = { accountId: 'account-A', profileId: 'profile-A' };
@@ -19,8 +19,8 @@ const input: AuthoredSaveInput = { operation: 'inspiration', input: { text: sour
 const resolved = vi.fn(), removed = vi.fn(), rejected = vi.fn();
 let host: HTMLDivElement, root: Root, latest: ReturnType<typeof useAuthoredSave>;
 const records = () => Object.keys(localStorage).filter((key) => key.includes(':pendingSave:'));
-function Probe({ owner = scope }) {
-  latest = useAuthoredSave({ scope: owner, operation: 'inspiration', onResolved: resolved, onRemoved: removed, onEditRejected: rejected });
+function Probe({ owner = scope, enabled = true }) {
+  latest = useAuthoredSave({ scope: owner, operation: 'inspiration', enabled, onResolved: resolved, onRemoved: removed, onEditRejected: rejected });
   return <span>{latest.phase}</span>;
 }
 const remount = async () => { await act(async () => root.unmount()); root = createRoot(host); await act(async () => root.render(<Probe />)); };
@@ -44,7 +44,7 @@ function idempotentServer() {
 }
 
 beforeEach(() => {
-  vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
+  vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear(); sessionStorage.clear();
   Object.defineProperty(document, 'hidden', { configurable: true, value: false });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
@@ -105,21 +105,38 @@ it('a POST that timed out but committed is replayed on reload: one inspiration',
   expect(resolved).toHaveBeenCalledOnce(); expect(resolved.mock.calls[0]![1].recovered).toBe(true);
 });
 
-it('two tabs re-sending the same id make one inspiration', async () => {
-  const server = idempotentServer();
-  let finish!: () => void;
-  server.holdNext(new Promise((resolve) => { finish = resolve; }));
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+/* ONE WINDOW SENDS EACH JOURNAL (2026-10-18). Each test window here is given
+   its own tab id through sessionStorage, as a real second tab would have. */
+function otherWindow() {
+  sessionStorage.setItem('waka.saveOwner', 'window-B');
   const hostB = document.createElement('div'); document.body.append(hostB); const rootB = createRoot(hostB);
-  let tabB!: ReturnType<typeof useAuthoredSave>;
-  function ProbeB() { tabB = useAuthoredSave({ scope, operation: 'inspiration', onResolved: resolved, onRemoved: removed }); return null; }
-  await act(async () => rootB.render(<ProbeB />));            // tab B sends the same id: "in progress"
-  expect(tabB.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
-  server.release(); await act(async () => { finish(); });    // tab A's POST lands
-  await act(async () => vi.advanceTimersByTimeAsync(RESEND_BACKOFF_MS[0]));
-  await act(async () => { await tabB.retry(); });
-  expect(server.rows.size).toBe(1); expect(records()).toHaveLength(0);
-  await act(async () => rootB.unmount()); hostB.remove();
+  const view: { latest?: ReturnType<typeof useAuthoredSave> } = {};
+  function ProbeB() { view.latest = useAuthoredSave({ scope, operation: 'inspiration', onResolved: resolved, onRemoved: removed }); return null; }
+  return { view, mount: () => act(async () => rootB.render(<ProbeB />)), unmount: async () => { await act(async () => rootB.unmount()); hostB.remove(); } };
+}
+
+it('only the window that owns a journal sends it while that window is live', async () => {
+  sessionStorage.setItem('waka.saveOwner', 'window-A');
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const b = otherWindow(); await b.mount();
+  await act(async () => { await b.view.latest!.check(); });
+  expect(createInspiration).toHaveBeenCalledOnce();           // only A's send
+  expect(b.view.latest!.pending).toBeNull(); expect(records()).toHaveLength(1);
+  await b.unmount();
+});
+
+it('a window adopts a journal whose owner has gone quiet, and sends it once', async () => {
+  const server = idempotentServer();
+  sessionStorage.setItem('waka.saveOwner', 'window-A');
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => root.unmount()); root = createRoot(host); // window A is gone
+  await act(async () => { vi.setSystemTime(Date.now() + OWNER_LEASE_MS); });
+  const b = otherWindow(); await b.mount();
+  expect(JSON.parse(localStorage.getItem(records()[0] ?? '') ?? 'null')).toBeNull();
+  expect(server.rows.size).toBe(1); expect(resolved).toHaveBeenCalledOnce();
+  await b.unmount();
 });
 
 it('asks before saving edited words while a save is pending; "Save as new" makes each land once', async () => {
@@ -254,12 +271,15 @@ it('holds the composer while the first POST is in flight, and frees it once the 
   expect(latest.phase).toBe('uncertain'); expect(latest.canResave).toBe(true);
 });
 
-it('marks the press on the journal itself, so a later background pass reports it', async () => {
-  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
+it('reports a press only from the window that pressed: a send after a reload is not one', async () => {
+  vi.mocked(createInspiration).mockResolvedValueOnce(source);
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  expect(JSON.parse(localStorage.getItem(records()[0]!)!).pressed).toBe(true);
-  await remount();                                         // the background pass sends it
-  expect(resolved).toHaveBeenCalledOnce(); expect(resolved.mock.calls[0]![2]).toBe(true);
+  expect(resolved.mock.calls[0]![2]).toBe(true);
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
+  await act(async () => { latest.start({ ...input, input: { ...input.input, text: 'Second' } }); });
+  expect(JSON.parse(localStorage.getItem(records()[0]!)!).pressed, 'the press was written down').toBeUndefined();
+  await remount();                                          // a new load sends it in the background
+  expect(resolved).toHaveBeenCalledTimes(2); expect(resolved.mock.calls[1]![2]).toBe(false);
 });
 
 /* REVIEW ROUND 7. */
@@ -274,26 +294,32 @@ it('background re-sends never hold the composer; only a press of a never-answere
   expect(latest.phase).toBe('uncertain');
 });
 
-it('a window settles a save another window landed, from the landed note, and storage events alone send nothing', async () => {
-  let landA!: (value: ApiInspiration) => void;
-  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise((resolve) => { landA = resolve; }))
-    .mockRejectedValue(new ApiError({ status: 409, code: 'save_in_progress', message: 'In progress' }));
+it('never writes back over a newer write when a send fails', async () => {
+  let fail!: (reason: unknown) => void;
+  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  const resolvedB = vi.fn();
-  const hostB = document.createElement('div'); document.body.append(hostB); const rootB = createRoot(hostB);
-  let tabB!: ReturnType<typeof useAuthoredSave>;
-  function ProbeB() { tabB = useAuthoredSave({ scope, operation: 'inspiration', onResolved: resolvedB, onRemoved: removed }); return null; }
-  await act(async () => rootB.render(<ProbeB />));            // B holds the same journal (its own send: "in progress")
-  expect(tabB.pending?.requestId).toBe(latest.pending?.requestId);
-  const sends = vi.mocked(createInspiration).mock.calls.length;
-  await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: records()[0] })); });
-  expect(vi.mocked(createInspiration).mock.calls.length, 'a storage event started a send').toBe(sends);
-  await act(async () => { landA(source); });                 // A's POST lands: journal gone, note left
-  expect(records()).toHaveLength(0);
-  await act(async () => { await tabB.check(); });
-  expect(resolvedB).toHaveBeenCalledOnce();
-  expect(resolvedB.mock.calls[0]![1].inspiration.id).toBe(source.id); expect(resolvedB.mock.calls[0]![2]).toBe(true);
-  await act(async () => rootB.unmount()); hostB.remove();
+  // While the POST is out, the journal is rewritten (a later press moved it to a new draft revision).
+  const key = records()[0]!, newer = { ...JSON.parse(localStorage.getItem(key)!), note: 'newer' };
+  localStorage.setItem(key, JSON.stringify(newer));
+  await act(async () => { fail(new Error('Lost response')); });
+  expect(JSON.parse(localStorage.getItem(key)!)).toEqual(newer);
+  // And a journal that went meanwhile is not brought back.
+  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
+  await act(async () => { void latest.retry(); });
+  localStorage.removeItem(key);
+  await act(async () => { fail(new Error('Lost response')); });
+  expect(localStorage.getItem(key)).toBeNull();
+});
+
+it('keeps what it holds when sending is switched off and on', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const id = latest.pending!.requestId;
+  await act(async () => root.render(<Probe enabled={false} />));
+  expect(latest.pending?.requestId).toBe(id);
+  await act(async () => root.render(<Probe enabled />));
+  expect(resolved).toHaveBeenCalledOnce();
+  expect(resolved.mock.calls[0]![2], 'the press was forgotten when sending paused').toBe(true);
 });
 
 it('keeps saying an unreadable journal is there, beside a readable pending save', async () => {
