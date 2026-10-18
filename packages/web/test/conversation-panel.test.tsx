@@ -169,15 +169,37 @@ it('leaves another open tab’s draft alone when this tab sends',async()=>{
   await type('Words in this tab');await click('Send');
   expect(readConversationDrafts(scope,id).map(row=>row.value.content)).toEqual(['Words in the other tab']);
 });
-it('clears a closed session’s draft once its words are sent from a new tab',async()=>{
-  /* Coming back tomorrow is a new tab and a new writer. The draft restored
-     from yesterday is forked on the first keystroke; once the fork is sent,
-     yesterday's copy is the same words already sent, and nothing open is
-     still writing it — `pagehide` is the old tab letting go of its lease. */
-  await mount();await type('Words from yesterday');await act(async()=>root.unmount());
-  window.dispatchEvent(new Event('pagehide'));sessionStorage.clear();root=createRoot(host);await mount();
-  await type('Words from yesterday, finished');await click('Send');
-  expect(readConversationDrafts(scope,id),'the closed tab’s copy came back as unsent').toEqual([]);
+it('forks to a writer of its own when a duplicated tab writes the same draft',async()=>{
+  /* A duplicated tab copies sessionStorage, writer id and all, so both tabs
+     write the same key. The second write to find the key changed under it
+     used to report broken storage on every keystroke; it takes a new writer
+     and forks the words instead. */
+  await mount();await type('Words in the original');
+  const [row]=readConversationDrafts(scope,id);
+  const sharedWriter=sessionStorage.getItem('waka:draftWriter');
+  localStorage.setItem(row!.key,JSON.stringify({...row!.value,content:'Words in the duplicate',updatedAt:row!.value.updatedAt+1}));
+  await type('Words in the original, more');
+  expect(host.textContent,'the conflict was reported as broken storage').not.toContain('couldn’t keep the draft');
+  expect(sessionStorage.getItem('waka:draftWriter')).not.toBe(sharedWriter);
+  expect(readConversationDrafts(scope,id).map(item=>item.value.content).sort()).toEqual(['Words in the duplicate','Words in the original, more']);
+  await click('Send');
+  expect(stored.messages.map(item=>item.content)).toEqual(['Words in the original, more']);
+  expect(readConversationDrafts(scope,id).map(item=>item.value.content),'the duplicate’s words were taken').toEqual(['Words in the duplicate']);
+});
+it('clears only its own writer’s leftovers on send, never another writer’s',async()=>{
+  /* This tab's own earlier key is safe to clear with the send; a draft from
+     any other writer may be an open tab's unsent words, and nothing here can
+     tell an open tab from a closed one. */
+  await mount();
+  const own=sessionStorage.getItem('waka:draftWriter')!,other=crypto.randomUUID();
+  await type('Words being sent');
+  const [row]=readConversationDrafts(scope,id);
+  const base=row!.key.slice(0,row!.key.length-row!.value.id.length);
+  const leftover={...row!.value,id:crypto.randomUUID(),writer:own,content:'An old key of this tab',updatedAt:1};
+  const foreign={...row!.value,id:crypto.randomUUID(),writer:other,content:'Another writer’s words',updatedAt:2};
+  localStorage.setItem(base+leftover.id,JSON.stringify(leftover));localStorage.setItem(base+foreign.id,JSON.stringify(foreign));
+  await click('Send');
+  expect(readConversationDrafts(scope,id).map(item=>item.value.content)).toEqual(['Another writer’s words']);
 });
 it('never restores another account’s draft',async()=>{
   await mount();await type('PRIVATE_DRAFT');await mount(id,{...scope,accountId:'different-account'});

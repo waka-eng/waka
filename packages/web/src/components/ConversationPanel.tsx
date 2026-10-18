@@ -92,7 +92,7 @@ import {timeOf} from '../lib/words';
 import {dictationAvailable,useDictation} from '../lib/use-dictation';
 import {ApiError,fetchPrinciples,type ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
-import {readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft as Draft,type ConversationDraftAttachment,type StoredConversationDraft} from '../lib/conversation-drafts';
+import {ConversationDraftConflict,readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft as Draft,type ConversationDraftAttachment,type StoredConversationDraft} from '../lib/conversation-drafts';
 import {AddMenu} from './AddMenu';
 import {MessageAttachments} from './MessageAttachments';
 import {discardMessageAttachment,fetchAttachmentUrl,uploadMessageAttachment} from '../lib/api/attachments';
@@ -100,7 +100,7 @@ import {FileRefused,MAX_MESSAGE_ATTACHMENTS,fileSizeWords,inspectAttachmentFile}
 import {attachmentLabel} from '../lib/attachment-label';
 import {inspectInspirationPhoto,PhotoRefused} from '../lib/inspiration-photo';
 import {formatMessage,type MessageKey} from '../lib/locales';
-import {tabWriterId,writerIsLive} from '../lib/tab-writer';
+import {newTabWriterId,tabWriterId} from '../lib/tab-writer';
 
 /** The id `Home` gives the bar's middle group on a chat; see `toolsSlot`. */
 export const CHAT_TOOLS_SLOT='waka-chat-tools';
@@ -174,13 +174,6 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      writing its own draft in place; another tab still forks. */
   const [tabWriter]=useState(tabWriterId);
   const conversationRef=useRef<ApiConversation|null>(initial),writer=useRef(tabWriter),receipt=useRef<StoredConversationDraft>();
-  /* THE DRAFTS THIS ONE FORKED FROM. Editing a draft another writer left
-     forks it under a new key, and once the fork is sent the original is the
-     same words, already sent — restored as unsent by the next visit if it
-     stays. It is cleared with the fork, but ONLY if no open tab is still
-     writing as its writer (`writerIsLive`): a draft from a tab that is still
-     open is that tab's unsent words, not a leftover. */
-  const forkedFrom=useRef<StoredConversationDraft[]>([]);
   const [generationEnabled,setGenerationEnabled]=useState<boolean|null>(initial?.generationEnabled??null);
   const root=useRef<HTMLElement>(null),body=useRef<HTMLDivElement>(null),editor=useRef<HTMLTextAreaElement>(null),nearBottom=useRef(true);
   const restoredScroll=useRef<{top:number;nearBottom:boolean;messageWindowStart?:number}|null>(null),scrollKey=profileStorageKey(scope,`conversationScroll:${journal}`)!;
@@ -223,7 +216,20 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     try{if(owner.signal.aborted)throw new Error('Conversation request stopped');const value=await Promise.race([work(request.signal),canceled]);if(request.signal.aborted||owner.signal.aborted)throw new Error('Conversation request stopped');return value;}
     finally{window.clearTimeout(timer);owner.signal.removeEventListener('abort',abort);request.signal.removeEventListener('abort',stopped);}
   };
-  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{const previous=receipt.current;receipt.current=storeConversationDraft(scope,journal,next,previous);if(previous&&previous.key!==receipt.current.key)forkedFrom.current.push(previous);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
+  /* KEEP RETURNS THE DRAFT IT ACTUALLY STORED, which is not always `next`.
+     A compare-and-set refusal means another tab wrote this key — a tab that
+     shares this one's writer id, which only a DUPLICATED tab does (see
+     `lib/tab-writer`). That is not broken storage: this tab takes a writer of
+     its own and forks the words to a new key, and the caller sends the fork. */
+  const keep=(next:Draft):Draft|null=>{draftRef.current=next;setDraft(next);
+    try{receipt.current=storeConversationDraft(scope,journal,next,receipt.current);setStorageFailed(false);return next;}
+    catch(reason){
+      if(reason instanceof ConversationDraftConflict){
+        writer.current=newTabWriterId();const forked:Draft={...next,id:crypto.randomUUID(),writer:writer.current};
+        try{receipt.current=storeConversationDraft(scope,journal,forked);draftRef.current=forked;setDraft(forked);setStorageFailed(false);return forked;}catch{/* fall through: really broken */}
+      }
+      setStorageFailed(true);return null;
+    }};
   const observe=(next:ApiConversation)=>{
     if(conversationRef.current?.id===next.id&&conversationRef.current.profileId===next.profileId&&conversationRef.current.revision>next.revision)next=conversationRef.current;
     conversationRef.current=next;setConversation(next);setGenerationEnabled(next.generationEnabled??false);
@@ -235,8 +241,11 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        forever the day the copy drifted.) */
     const pending=draftRef.current;
     if(pending?.pending&&next.messages.some(message=>message.id===pending.id)){
-      try{if(receipt.current)clearConversationDraft(receipt.current);for(const row of forkedFrom.current)if(row.value.writer!==writer.current&&!writerIsLive(row.value.writer))clearConversationDraft(row);}catch{setStorageFailed(true);}
-      forkedFrom.current=[];
+      try{if(receipt.current)clearConversationDraft(receipt.current);}catch{setStorageFailed(true);}
+      /* AND ANY OTHER KEY THIS TAB'S WRITER LEFT HERE — only its own. A draft
+         another writer left may be an open tab's unsent words, and nothing
+         here can tell an open tab from a closed one (`lib/tab-writer`). */
+      try{for(const row of readConversationDrafts(scope,journal))if(row.value.writer===writer.current)clearConversationDraft(row);}catch{/* a foreign row it cannot read is not this send's problem */}
       receipt.current=undefined;draftRef.current=null;setDraft(null);setError(null);
       if(!id){onCreated?.(next);onChoose(next.id);}
     }
@@ -336,7 +345,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     }catch{if(mine(owner))setEarlierFailed(true);}finally{if(mine(owner))setEarlierBusy(false);}
   };
   useEffect(()=>{
-    lifecycle.current=new AbortController();forkedFrom.current=[];
+    lifecycle.current=new AbortController();
     /* THE NEWEST UNSENT SENTENCE, WITHOUT ASKING WHICH. Two tabs each fork
        their own draft and both are still on disk; what went is the `<select>`
        that offered them to you by their first fifty characters, which is a
@@ -350,8 +359,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     /* A draft kept before its agent was recorded waits for the agent to load,
        rather than starting a chat on your own memory instead. */
     if(!id&&draftRef.current.talkWith&&!draftRef.current.agentId&&!agent)return;
-    const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID(),...(current.talkWith?{}:agent&&talkWith!=='mine'?{talkWith,agentId:agent.id}:{})}:{})};
-    if(!keep(intent))return;const owner=lifecycle.current;working.current=true;setBusy(true);setError(null);nearBottom.current=true;
+    const current=draftRef.current,wanted:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID(),...(current.talkWith?{}:agent&&talkWith!=='mine'?{talkWith,agentId:agent.id}:{})}:{})};
+    const intent=keep(wanted);if(!intent)return;const owner=lifecycle.current;working.current=true;setBusy(true);setError(null);nearBottom.current=true;
     try{
       /* The agent the draft was started with; a draft kept before that was recorded falls back to the one shown. */
       const talkAgent=intent.agentId??agent?.id;
@@ -409,7 +418,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     const next:Draft=carry?{...current!,writer:writer.current}:{id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content:current?.content??'',revision:conversation?.revision??0,pending:false};
     if(!id&&!next.conversationId)next.conversationId=crypto.randomUUID();
     if(carry&&next.writer===current!.writer&&next.conversationId===current!.conversationId)return current;
-    return keep(next)?next:null;
+    return keep(next);
   };
   const wanted=(key:string)=>uploadsRef.current.some(row=>row.key===key);
   const upload=async(item:Upload)=>{

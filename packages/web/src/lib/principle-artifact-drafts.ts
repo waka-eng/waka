@@ -21,11 +21,14 @@ export function readPrincipleArtifactDrafts(scope:ProfileStorageScope,principleI
   }
   return rows.sort((a,b)=>b.value.updatedAt-a.value.updatedAt||a.key.localeCompare(b.key));
 }
+/** Another tab wrote this key since this one last read it. A tab that hits it
+    is sharing a writer id with another (a duplicated tab) and forks to its own. */
+export class ShareDraftConflict extends Error{}
 export function storePrincipleArtifactDraft(scope:ProfileStorageScope,principleId:string,value:PrincipleArtifactDraft,previous?:StoredPrincipleArtifactDraft):StoredPrincipleArtifactDraft{
   if(!valid(value))throw new Error('Invalid share draft');
   const key=prefix(scope,principleId)+value.id,raw=JSON.stringify(value),existing=localStorage.getItem(key);
   if(existing===raw)return {key,raw,value};
-  if(existing!==null&&(previous?.key!==key||previous.raw!==existing))throw new Error('Share draft changed elsewhere');
+  if(existing!==null&&(previous?.key!==key||previous.raw!==existing))throw new ShareDraftConflict('Share draft changed elsewhere');
   localStorage.setItem(key,raw);if(localStorage.getItem(key)!==raw)throw new Error('Share draft was not kept');return {key,raw,value};
 }
 export function clearPrincipleArtifactDraft(row:StoredPrincipleArtifactDraft){if(localStorage.getItem(row.key)===row.raw)localStorage.removeItem(row.key);}

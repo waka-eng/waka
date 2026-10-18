@@ -1,52 +1,44 @@
 // @vitest-environment jsdom
 /**
- * ONE WRITER PER OPEN TAB — kept across a reload, never shared by a copy.
+ * ONE WRITER ID PER TAB, AND THE SAME ONE EVERYWHERE.
  *
- * A duplicated tab copies `sessionStorage`, so it started out holding the
- * same writer id as the tab it came from; the two then refused each other's
- * draft writes on every keystroke. Each page load leases its id in
- * `localStorage`, and a page that finds its stored id leased by another live
- * page mints its own. The cases are two "pages" of one tab's storage, which
- * `claimTabWriter` takes as a parameter for exactly this.
+ * The id lives in `sessionStorage` so a reload keeps writing its own draft;
+ * a duplicated tab that collides takes a new one. When storage throws, the id
+ * is held in memory — and the case that matters is that the id a draft is
+ * WRITTEN with is the id every later call reports, or the panel's own drafts
+ * would look like a stranger's.
  *
- * WHAT THIS MOCKS, AND WHY (gate G6): nothing. jsdom's real `localStorage`
- * and `sessionStorage` are the subject; `Date.now` is moved by
- * `vi.setSystemTime` where a lease has to go stale.
+ * WHAT THIS MOCKS, AND WHY (gate G6): nothing at the module level — jsdom's
+ * real storage throughout, except that the last case spies on the storage
+ * prototype's get and set to make them throw the way a locked-down browser
+ * does, and restores them after.
  */
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { claimTabWriter, LEASE_MS, writerIsLive } from "../src/lib/tab-writer";
+import { newTabWriterId, tabWriterId } from "../src/lib/tab-writer";
 
-beforeEach(() => {
-  localStorage.clear(); sessionStorage.clear();
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-10-17T12:00:00Z"));
-});
-afterEach(() => vi.useRealTimers());
+beforeEach(() => sessionStorage.clear());
+afterEach(() => vi.restoreAllMocks());
 
-it("keeps the tab's writer across a reload", () => {
-  const first = claimTabWriter("page-before-reload");
-  /* the old page let go on its way out (`pagehide`) — modelled by its lease
-     going, which is what release does */
-  localStorage.clear();
-  expect(claimTabWriter("page-after-reload")).toBe(first);
+it("keeps the tab's id across calls, as a reload would find it", () => {
+  const first = tabWriterId();
+  expect(tabWriterId()).toBe(first);
+  expect(sessionStorage.getItem("waka:draftWriter")).toBe(first);
 });
 
-it("gives a duplicated tab its own writer while the original is still open", () => {
-  const original = claimTabWriter("original-page");
-  /* the duplicate starts with a copy of the original's sessionStorage */
-  const duplicate = claimTabWriter("duplicate-page");
-  expect(duplicate, "the copy shares the original's writer").not.toBe(original);
-  expect(sessionStorage.getItem("waka:draftWriter")).toBe(duplicate);
-  expect(writerIsLive(original)).toBe(true);
-  expect(writerIsLive(duplicate)).toBe(true);
+it("takes a new id for the tab after a collision, and keeps reporting it", () => {
+  const shared = tabWriterId();
+  const own = newTabWriterId();
+  expect(own).not.toBe(shared);
+  expect(tabWriterId()).toBe(own);
 });
 
-it("treats a writer whose page stopped renewing as closed", () => {
-  const writer = claimTabWriter("page-that-crashed");
-  vi.setSystemTime(Date.now() + LEASE_MS + 1);
-  expect(writerIsLive(writer)).toBe(false);
-  /* and a page that finds only a stale lease keeps the id: a reload after a
-     crash is still the same tab */
-  expect(claimTabWriter("page-after-crash")).toBe(writer);
+it("holds one id in memory when storage throws, and reports that one everywhere", () => {
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+  const first = tabWriterId();
+  expect(tabWriterId()).toBe(first);
+  const own = newTabWriterId();
+  expect(own).not.toBe(first);
+  expect(tabWriterId(), "the id written with is not the id reported").toBe(own);
 });

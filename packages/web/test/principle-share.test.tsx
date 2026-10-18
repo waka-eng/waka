@@ -82,13 +82,15 @@ it('leaves another open tab’s card draft alone when this tab discards',async()
   await act(async()=>button('Discard draft').click());
   expect(readPrincipleArtifactDrafts(scope,id).map(row=>row.value.entries[0].text)).toEqual(['Card words in the other tab']);
 });
-it('clears a closed session’s card draft when a new tab discards its fork',async()=>{
-  await mount();await type('Card words from yesterday');await act(async()=>root.unmount());
-  window.dispatchEvent(new Event('pagehide'));sessionStorage.clear();root=createRoot(host);await mount();
-  await type('Card words from today');
-  vi.spyOn(window,'confirm').mockReturnValue(true);
-  await act(async()=>button('Discard draft').click());
-  expect(readPrincipleArtifactDrafts(scope,id),'the closed tab’s card came back').toEqual([]);
+it('forks to a writer of its own when a duplicated tab writes the same card draft',async()=>{
+  await mount();await type('Card words in the original');
+  const [row]=readPrincipleArtifactDrafts(scope,id);
+  const sharedWriter=sessionStorage.getItem('waka:draftWriter');
+  localStorage.setItem(row!.key,JSON.stringify({...row!.value,entries:row!.value.entries.map(entry=>({...entry,text:'Card words in the duplicate'})),updatedAt:row!.value.updatedAt+1}));
+  await type('Card words in the original, more');
+  expect(host.textContent,'the conflict was reported as broken storage').not.toContain('couldn’t keep the draft');
+  expect(sessionStorage.getItem('waka:draftWriter')).not.toBe(sharedWriter);
+  expect(readPrincipleArtifactDrafts(scope,id).map(item=>item.value.entries[0].text).sort()).toEqual(['Card words in the duplicate','Card words in the original, more']);
 });
 it('never enables export from a late preview of earlier wording',async()=>{
   let resolve!:(value:Awaited<ReturnType<typeof renderShareCard>>)=>void;

@@ -2,13 +2,13 @@ import {useEffect,useMemo,useRef,useState} from 'react';
 import {fetchPrinciples,fetchPrincipleStatements,type ApiPrinciple,type ApiPrincipleStatements} from '../lib/api';
 import type {ProfileStorageScope} from '../lib/profile-storage';
 import {ArtifactLayoutError,renderShareCard,type PrincipleArtifactContent} from '../lib/principle-artifact';
-import {readPrincipleArtifactDrafts,storePrincipleArtifactDraft,clearPrincipleArtifactDraft,recoverPrincipleArtifactDrafts,type PrincipleArtifactDraft,type StoredPrincipleArtifactDraft} from '../lib/principle-artifact-drafts';
+import {ShareDraftConflict,readPrincipleArtifactDrafts,storePrincipleArtifactDraft,clearPrincipleArtifactDraft,recoverPrincipleArtifactDrafts,type PrincipleArtifactDraft,type StoredPrincipleArtifactDraft} from '../lib/principle-artifact-drafts';
 import {formatMessage,t,type SupportedLocale} from '../lib/locales';
 import {dateStamp} from '../lib/words';
 import {DialogSurface} from './DialogSurface';
 import {ShareLooks} from './ShareLooks';
 import {SHARE_NOTICE_KEY,useShareImage} from '../lib/use-share-image';
-import {tabWriterId,writerIsLive} from '../lib/tab-writer';
+import {newTabWriterId,tabWriterId} from '../lib/tab-writer';
 
 export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:ProfileStorageScope;id:string;name:string;locale:SupportedLocale;onClose:()=>void;onChoose:(id:string)=>void}){
   const [rows,setRows]=useState<ApiPrinciple[]|null>(null),[loadFailed,setLoadFailed]=useState(false),[attempt,setAttempt]=useState(0);
@@ -17,10 +17,6 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
      writing its own card draft in place; another tab still forks. */
   const [tabWriter]=useState(tabWriterId);
   const current=useRef<StoredPrincipleArtifactDraft|null>(null),writer=useRef(tabWriter);
-  /* WHAT EACH DRAFT FORKED FROM, by the fork's key — cleared with the fork on
-     discard, but only where no open tab still writes as that writer
-     (`writerIsLive`): a draft another open tab holds is that tab's card. */
-  const forkedFrom=useRef(new Map<string,StoredPrincipleArtifactDraft[]>());
   const [preview,setPreview]=useState<{key:string;url:string;blob:Blob;fallbackFont:boolean;words:string}|null>(null),[renderError,setRenderError]=useState<string|null>(null);
   const [renderAttempt,setRenderAttempt]=useState(0);
   const [editingWords,setEditingWords]=useState(false),[customizing,setCustomizing]=useState(false);
@@ -94,9 +90,17 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
     if(busy)return;
     let next={...value,updatedAt:Date.now()},previous=current.current;
     if(next.writer!==writer.current){next={...next,id:crypto.randomUUID(),writer:writer.current};previous=null;}
-    const ancestor=previous?null:current.current;
-    try{const saved=storePrincipleArtifactDraft(scope,id,next,previous??undefined);if(ancestor?.key&&ancestor.key!==saved.key)forkedFrom.current.set(saved.key,[...(forkedFrom.current.get(ancestor.key)??[]),ancestor]);useDraft(saved);setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
-    catch{useDraft({...previous??{key:'',raw:''},value:next});setStorageFailed(true);}
+    try{const saved=storePrincipleArtifactDraft(scope,id,next,previous??undefined);useDraft(saved);setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
+    catch(reason){
+      /* ANOTHER TAB WROTE THIS KEY — one sharing this tab's writer id, which
+         only a duplicated tab does (`lib/tab-writer`). Not broken storage:
+         take a writer of our own and fork the card to a new key. */
+      if(reason instanceof ShareDraftConflict){
+        writer.current=newTabWriterId();const forked={...next,id:crypto.randomUUID(),writer:writer.current};
+        try{const saved=storePrincipleArtifactDraft(scope,id,forked);useDraft(saved);setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);return;}catch{/* really broken */}
+      }
+      useDraft({...previous??{key:'',raw:''},value:next});setStorageFailed(true);
+    }
   };
   const change=draft?.value.mode==='change';
   useEffect(()=>{if(change)setCustomizing(true);},[change]);
@@ -151,7 +155,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const {busy,notice,setNotice,canShare,download,share}=useShareImage(ready?preview?.blob??null:null,filenames);
   const discard=()=>{
     if(busy||!draft||!source||!window.confirm(say('worldShareDiscardConfirm')))return;
-    try{clearPrincipleArtifactDraft(draft);for(const row of forkedFrom.current.get(draft.key)??[])if(row.value.writer!==writer.current&&!writerIsLive(row.value.writer))clearPrincipleArtifactDraft(row);forkedFrom.current.delete(draft.key);useDraft({key:'',raw:'',value:fresh(source,rows??[])});setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
+    try{clearPrincipleArtifactDraft(draft);useDraft({key:'',raw:'',value:fresh(source,rows??[])});setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
     catch{setStorageFailed(true);}
   };
   return <>

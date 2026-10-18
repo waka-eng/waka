@@ -1144,6 +1144,23 @@ deliberately-broken security check. One auditor reported leaving
   concurrent runs.
 - Give each reviewing agent its own worktree or clone.
 
+### L10. A draft left by a CLOSED tab can come back in a new tab after its words were sent
+**Accepted limitation** · `packages/web/src/lib/tab-writer.ts`, `ConversationPanel.tsx`, `PrincipleShare.tsx` · severity low
+
+**What.** Chat and share-card drafts are stamped with a per-tab writer id (`sessionStorage`), so a
+reload keeps writing its own draft and a send or discard clears it. Opening a NEW tab — or coming
+back in a new session — gives a new writer; editing the draft the old tab left forks it under a new
+key, and sending (or discarding) the fork clears only this tab's own keys. The old tab's copy stays,
+and the next visit can restore it as unsent words.
+
+**Why it is accepted.** Clearing it safely needs to know whether the tab that wrote it is still
+open. A localStorage lease renewed on a heartbeat was tried and removed: browsers throttle timers in
+background tabs, so an open tab's lease went stale and its unsent words were deleted — a worse
+failure than the one it fixed. Nothing here clears a draft written by another writer.
+
+**Workaround.** The restored words can be cleared by hand. A real fix needs a liveness signal that
+survives background throttling (e.g. a `BroadcastChannel` roll-call at send time).
+
 ---
 
 ## Refuted findings
