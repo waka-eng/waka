@@ -181,17 +181,22 @@ it('puts the proof on the card, counting each save once',async()=>{
   expect(last.proof,'the card carries no proof, so it is a sentiment with nothing behind it').toBeTruthy();
   expect(last.proof).toContain('2 things I kept');
 });
-/* "6 things I kept over 1 month" was printed for six saves made that morning:
-   the span was max(1, months) from `heldSince`. It is the saves' own span now,
-   in plain units, and absent when there is none worth naming. */
-it('says the span honestly: none under a week, weeks under two months, then months',async()=>{
+/* "6 things I kept over 1 month" was printed for a principle held since that
+   morning: the span was max(1, months) from `heldSince`. It still runs from
+   `heldSince` — the examples' dates are only the two newest per signal, so
+   they cannot say how long anything was kept (review) — but in plain units,
+   and absent when there is none worth naming. */
+it('says the span honestly from heldSince: none under a week, weeks under two months, then months',async()=>{
   const day=86_400_000,now=Date.parse('2026-10-17T12:00:00Z');
-  const at=(daysAgo:number)=>({...source,citedSignals:[{id:'s',statement:'x',examples:[{text:'one',createdAt:new Date(now-daysAgo*day).toISOString()},{text:'two',createdAt:new Date(now-day/2).toISOString()}]}]});
+  /* The examples are always recent: what moves is `heldSince`. */
+  const at=(daysAgo:number)=>({...source,heldSince:new Date(now-daysAgo*day).toISOString(),
+    citedSignals:[{id:'s',statement:'x',examples:[{text:'one',createdAt:new Date(now-day).toISOString()},{text:'two',createdAt:new Date(now-day/2).toISOString()}]}]});
   expect(principleShareProof('en-US',[at(0.5)],now)).toBe('2 things I kept. This is what stayed.');
   expect(principleShareProof('en-US',[at(20)],now)).toBe('2 things I kept over 2 weeks. This is what stayed.');
   expect(principleShareProof('en-US',[at(7)],now)).toBe('2 things I kept over 1 week. This is what stayed.');
   expect(principleShareProof('en-US',[at(200)],now)).toBe('2 things I kept over 6 months. This is what stayed.');
   expect(principleShareProof('en-US',[at(200),{...at(200),id:'other'}],now)).toContain('These are what stayed.');
+  expect(principleShareProof('en-US',[{...at(200),heldSince:null}],now),'no heldSince, no span to claim').toBeUndefined();
   expect(principleShareProof('ko-KR',[at(0.5)],now)).not.toMatch(/개월|주 동안/);
 });
 

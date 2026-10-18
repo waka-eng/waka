@@ -19,22 +19,26 @@ import {SHARE_NOTICE_KEY,useShareImage} from '../lib/use-share-image';
  * not let it be counted twice, because the one number a stranger cannot
  * check is the one the card must not inflate.
  *
- * AND THE SPAN IS THE SAVES' OWN, TOLD HONESTLY (audit f2afcbe2). It was
- * `max(1, round(months))` from the principle's `heldSince`, so six things
- * all saved that morning printed "6 things I kept over 1 month". It now runs
- * from the earliest save behind the card to now, in weeks under two months
- * and months after; under a week there is no span to speak of, and the line
- * says the count alone rather than inventing one.
+ * AND THE SPAN IS TOLD HONESTLY (audit f2afcbe2). It was `max(1,
+ * round(months))` from the principle's `heldSince`, so a principle held since
+ * this morning printed "6 things I kept over 1 month". It still runs from
+ * `heldSince` (the examples the API sends are only the two newest per signal,
+ * so their dates cannot say how long anything was kept), but in weeks under
+ * two months and months after; under a week there is no span to speak of,
+ * and the line says the count alone rather than inventing one.
  */
 export function principleShareProof(locale:SupportedLocale,chosen:ApiPrinciple[],now:number):string|undefined{
   const saves=new Set<string>();
   let earliest=Number.POSITIVE_INFINITY;
-  for(const row of chosen)for(const signal of row.citedSignals)for(const example of signal.examples??[]){
-    saves.add(example.createdAt+example.text);
-    const at=Date.parse(example.createdAt);
-    if(Number.isFinite(at))earliest=Math.min(earliest,at);
+  for(const row of chosen){
+    for(const signal of row.citedSignals)for(const example of signal.examples??[])saves.add(example.createdAt+example.text);
+    /* THE SPAN IS THE PRINCIPLE'S `heldSince`, as on dev (review): the API
+       sends only the two newest examples per signal, so their dates said
+       nothing about how long anything was kept. */
+    const held=row.heldSince?Date.parse(row.heldSince):Number.NaN;
+    if(Number.isFinite(held))earliest=Math.min(earliest,held);
   }
-  if(!saves.size)return undefined;
+  if(!saves.size||!Number.isFinite(earliest))return undefined;
   const values={count:saves.size,principles:chosen.length};
   const days=(now-earliest)/86_400_000;
   if(!Number.isFinite(days)||days<7)return formatMessage(locale,'worldShareProofRecent',values);
