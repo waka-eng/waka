@@ -184,6 +184,12 @@ export function NoteTools(props: {
         ) : (
           <span className="waka-dock-state" role="status">{props.reading}</span>
         )}
+        {/* AN EARLIER FAILURE IS STILL NEWS. A save, an upload or a recording
+            that failed before this read began (Try again re-enters this
+            state) keeps its line here rather than vanishing with the tools. */}
+        {props.failed || props.recording.error ? (
+          <span className="waka-dock-state" role="alert">{props.failed || props.recording.error}</span>
+        ) : null}
         {props.readFailed && props.onRetry && props.retryLabel ? (
           <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.onRetry}>
             {props.retryLabel}
@@ -359,7 +365,10 @@ function MoreMenu(props: {
         <div {...menu.menuProps} className="waka-add-menu waka-more-menu" aria-label={props.label}>
           {props.rows.map((row) => (
             <button key={row.icon} type="button" role="menuitem" className="waka-add-row"
-              onClick={() => { menu.close(false); row.act(); }}>
+              /* FOCUS GOES BACK TO ⋯ FIRST, then the row acts: Share opens
+                 its sheet from there, and Delete takes the note (and the ⋯)
+                 away, after which the archive puts focus on its Undo line. */
+              onClick={() => { menu.close(true); row.act(); }}>
               <HomeActionIcon kind={row.icon} /><span>{row.label}</span>
             </button>
           ))}

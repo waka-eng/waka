@@ -280,6 +280,16 @@ describe("the four breaks that a browser found and reading did not", () => {
     ).toBe(true);
   });
 
+  /* While recording the mic is an auto-width clock; the fold reaches up to
+     400px then, so a long recording cannot push Close off at 351-360. */
+  it("folds Share and Delete into ⋯ up to 400px while a recording clock is in the row", () => {
+    const css = rules("claims.css");
+    expect(
+      /@media \(max-width: 400px\) \{\s*\.waka-dock-making:has\(\.waka-dock-tool--wide\) \.waka-dock-roomy\s*\{\s*display:\s*none;\s*\}\s*\.waka-dock-making:has\(\.waka-dock-tool--wide\) \.waka-dock-more\.waka-add\s*\{\s*display:\s*inline-flex;/.test(css),
+      "the recording clock no longer folds the row, so Close can leave a 351-360px screen",
+    ).toBe(true);
+  });
+
   it("keeps the shelves from being crushed to a sliver", () => {
     expect(
       /flex:\s*none/.test(block("claims.css", ".waka-tabs")),

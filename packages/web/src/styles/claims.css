@@ -730,6 +730,21 @@
     display: inline-flex;
   }
 }
+/* MEASURED WHILE RECORDING (review, 2026-10-17): the mic becomes a clock,
+   an auto-width tool — 44px at "0:07", wider once it reads "12:34" — and
+   the unfolded row has only 17px to spare at 360 (327 of a 344px dock), so a
+   long recording could push Close off at 351-360px. While a clock is in the
+   row the fold reaches up to 400px. Playwright, fake microphone, at
+   351/355/360/380/400: ⋯ shown, Close inside (355: x 270-315); at 401/414
+   the five tools return and Close is still inside. */
+@media (max-width: 400px) {
+  .waka-dock-making:has(.waka-dock-tool--wide) .waka-dock-roomy {
+    display: none;
+  }
+  .waka-dock-making:has(.waka-dock-tool--wide) .waka-dock-more.waka-add {
+    display: inline-flex;
+  }
+}
 /* THE ⋯'S MENU HANGS FROM ITS RIGHT EDGE. It reuses the ＋'s lifted column,
    which is centred on its button; the ⋯ sits near the end of the row, so
    centring ran the menu off the right of a 320px screen. Anchored right and
