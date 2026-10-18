@@ -17,8 +17,7 @@
  * private verdict on a shared entry would be a vote nobody else can see.
  */
 
-import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
@@ -27,9 +26,6 @@ import {
   principles,
   feedbackTargetTypeValues,
   feedbackValueValues,
-  groupMembers,
-  profiles,
-  signalShares,
   signals,
   topOfMindEntries,
   topOfMinds,
@@ -164,22 +160,6 @@ function serializeFeedback(row: Feedback): FeedbackRecord {
  * against any id at all, and regeneration would read a stranger's verdict as
  * the owner's.
  */
-/**
- * MAY THIS PROFILE ANSWER THIS SIGNAL? The rule alone, so it can be executed.
- *
- * Widening feedback from "signals you own" to "signals shared into your rooms"
- * changed who may write about whose statement, and nothing executed it — the
- * route tests inject a mock. Two facts decide it, and both must be supplied by
- * a caller that read them from the database under the acting profile's
- * identity: never trust either from a request.
- */
-export function mayAnswerSignal(input: {
-  ownsIt: boolean;
-  sharedIntoARoomYouAreIn: boolean;
-}): boolean {
-  return input.ownsIt || input.sharedIntoARoomYouAreIn;
-}
-
 async function targetBelongsToProfile(
   db: WakaDb | WakaTx,
   input: { profileId: string; targetType: FeedbackTargetType; targetId: string },
@@ -190,107 +170,11 @@ async function targetBelongsToProfile(
       .from(signals)
       .where(and(eq(signals.id, input.targetId), eq(signals.profileId, input.profileId)))
       .limit(1);
-    const ownsIt = Boolean(own);
-    if (ownsIt) return true;
-
-    /**
-     * A STATEMENT SOMEBODY SHARED WITH YOU CAN BE ANSWERED.
-     *
-     * Feedback used to require that you owned the signal, which meant a room
-     * was a place where claims were posted and nobody could reply — and the
-     * affirmations a room's synthesis is supposed to read had no way to
-     * accumulate.
-     *
-     * So: a signal is answerable if its owner shared it into a group you are
-     * currently in. Both halves are checked here, and membership is read now
-     * rather than trusted from earlier — leaving a room ends your standing to
-     * answer what was said in it.
-     *
-     * WHAT THIS DOES NOT GRANT. Reacting to a statement gives no access to
-     * anything beneath it. The evidence rows naming the exact spans of the
-     * author's memories stay where they are; sharing a statement has never
-     * shipped its grounds and does not start now.
-     */
-    /**
-     * STANDING MIRRORS THE WALL, EXACTLY. The wall withholds a share whose
-     * owner has left (leaving withdraws it) and drops retired signals — so
-     * answerability must too, or a member could keep filing verdicts against
-     * a statement the room can no longer see. Three joins, three facts: you
-     * are in the room now, its owner is in the room now, and the signal
-     * still stands.
-     */
-    const ownerSeat = alias(groupMembers, "owner_seat");
-    const [shared] = await db
-      .select({ id: signalShares.id })
-      .from(signalShares)
-      .innerJoin(
-        signals,
-        and(eq(signals.id, signalShares.signalId), ne(signals.status, "retired")),
-      )
-      .innerJoin(
-        groupMembers,
-        and(
-          eq(groupMembers.groupId, signalShares.groupId),
-          eq(groupMembers.profileId, input.profileId),
-        ),
-      )
-      .innerJoin(
-        ownerSeat,
-        and(
-          eq(ownerSeat.groupId, signalShares.groupId),
-          eq(ownerSeat.profileId, signalShares.profileId),
-        ),
-      )
-      .where(eq(signalShares.signalId, input.targetId))
-      .for('key share', { of: [signalShares, groupMembers, ownerSeat] })
-      .limit(1);
-
-    /**
-     * A STATEMENT YOUR ROOM GREW CAN BE ANSWERED (2026-08-24). A room-grown
-     * signal belongs to the room's mind, so the share join above never sees
-     * it — its standing rule is simpler: you are a current member of the
-     * room whose mind holds it, and it still stands. Two joins, two facts.
-     * The two-voices serve gate is a WALL rule, deliberately not repeated
-     * here: a member who saw a statement on the wall a moment ago may still
-     * answer it while a co-contributor's departure has it below the bar —
-     * a stance filed on something the room genuinely grew is never invalid.
-     */
-    const [grown] = await db
-      .select({ id: signals.id })
-      .from(signals)
-      .innerJoin(
-        profiles,
-        and(eq(profiles.id, signals.profileId), eq(profiles.type, "group")),
-      )
-      .innerJoin(
-        groupMembers,
-        and(
-          eq(groupMembers.groupId, profiles.groupId),
-          eq(groupMembers.profileId, input.profileId),
-        ),
-      )
-      .where(
-        and(
-          eq(signals.id, input.targetId),
-          ne(signals.status, "retired"),
-          /* AND NOT SET ASIDE. The wall refuses to serve a dismissed
-             statement, so a member cannot be looking at one; accepting a
-             stance on it would file an answer to something the room has
-             already put down, and nothing would ever show it back. The
-             two-voices gate is deliberately NOT repeated here (see above) —
-             that one is about a statement drifting below the bar while
-             somebody had it on screen, which is a race worth forgiving.
-             A dismissal is a decision, and there is nothing to forgive. */
-          isNull(signals.dismissedAt),
-        ),
-      )
-      .for('key share', { of: groupMembers })
-      .limit(1);
-
-    return mayAnswerSignal({
-      ownsIt,
-      sharedIntoARoomYouAreIn: Boolean(shared) || Boolean(grown),
-    });
+    /* Your own signals only. Answering a statement shared into a room you
+       sat in, or one a room's mind grew, was room standing; it retired with
+       the room engine (2026-10-17), and the shares and seats it read are
+       kept as data only. */
+    return Boolean(own);
   }
 
   if (input.targetType === "principle") {
@@ -357,9 +241,8 @@ async function persistFeedback(tx: WakaTx, input: CreateFeedbackInput): Promise<
 
   // A verdict on the owner's OWN signal arbitrates any contested pair it
   // stands in: true → the other side yields, not_true → this side yields,
-  // partly → nothing (an invitation to sharpen, not an arbitration). Owner
-  // only — a room member answering a shared statement judges the statement,
-  // not the owner's disputes, so the ownership check is explicit here.
+  // partly → nothing (an invitation to sharpen, not an arbitration). Only
+  // the owner can file a signal verdict at all now; the check stays explicit.
   if (
     row &&
     input.targetType === "signal" &&
