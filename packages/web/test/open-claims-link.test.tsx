@@ -6,8 +6,11 @@
  * The three online cases are walked through the whole page in
  * `claim-correction.test.tsx`. Offline cannot be: `mountWorld` refuses a
  * world the offline fixture produced, on purpose. So this case drives the
- * hook `pages/Home` hands the decision to. Nothing is mocked; the hook gets
- * plain values and two spies.
+ * hook `pages/Home` hands the decision to.
+ *
+ * WHAT THIS MOCKS, AND WHY (gate G6): nothing. The hook takes plain values
+ * and two callbacks (spies here) and reads no module beneath it, so there
+ * is no layer to replace.
  */
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
