@@ -10,6 +10,8 @@ vi.mock('../src/lib/platform', () => ({ isMobileBuild: true }));
 vi.mock('../src/lib/api', async original => ({ ...await original<typeof import('../src/lib/api')>(), fetchCurrentViewer: vi.fn(async () => null), login: vi.fn(), logout: vi.fn() }));
 import { login, logout } from '../src/lib/api';
 import { AuthProvider, useAuth, type AuthContextValue } from '../src/lib/auth-context';
+import { MemoryRouter } from 'react-router-dom';
+import LoginPage from '../src/pages/Login';
 const account = { id: 'synthetic-account', email: 'fixture@example.test', onboardingCompletedAt: '2026-10-07', isAdmin: false };
 const profile = { id: 'synthetic-profile', accountId: account.id, type: 'human' as const, name: 'Fixture', avatarUrl: null,
   preferredLocale: 'en-US' as const, publicHandle: null, publicProfileEnabled: false, publicTopOfMindEnabled: false };
@@ -33,6 +35,26 @@ it('late logout completion cannot wipe a newer native sign-in', async () => {
   await act(async () => { await auth.login({ email: account.email, password: 'synthetic-only' }); });
   await act(async () => { finish(); await pending; });
   expect(auth.account?.id).toBe(account.id);
+});
+/* The store's expiry event is ignored during a logout, so the sign-out has
+   to clear the viewer itself — or a native person who pressed Sign out
+   stayed signed in. And it lands on the ordinary door, not "you were
+   signed out". */
+it('a native sign-out from a signed-in session signs out and shows the ordinary door', async () => {
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  await act(async () => {
+    root.render(createElement(MemoryRouter, null, createElement(AuthProvider, null, createElement(Reader), createElement(LoginPage))));
+  });
+  vi.mocked(login).mockResolvedValue({ account, profile, token: 'synthetic-only' });
+  await act(async () => { await auth.login({ email: account.email, password: 'synthetic-only' }); });
+  expect(auth.isAuthenticated).toBe(true);
+  vi.mocked(logout).mockImplementation(async () => { window.dispatchEvent(new Event('waka:session-expired')); });
+  await act(async () => { await auth.logout(); });
+  expect(auth.isAuthenticated, 'Sign out left the native session signed in').toBe(false);
+  expect(auth.sessionExpired, 'a deliberate sign-out read as an expiry').toBeNull();
+  expect(host.textContent).toContain('Welcome back.');
+  expect(host.textContent).not.toContain('You were signed out.');
 });
 it('a failed durable retirement does not claim a successful sign-out', async () => {
   vi.mocked(login).mockResolvedValue({ account, profile, token: 'synthetic-only' });

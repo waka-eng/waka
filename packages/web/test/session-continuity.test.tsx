@@ -256,6 +256,23 @@ describe("a deliberate logout", () => {
     expect(text(), "a deliberate logout was reported as an expired session").toContain("expired:false");
     expect(logout).toHaveBeenCalledTimes(1);
   });
+
+  it("does not turn a sign-out into 'can't reach WAKA' after a background refresh failed while signed in", async () => {
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(VIEWER);
+    vi.mocked(logout).mockResolvedValue(undefined);
+    let auth: ReturnType<typeof useAuth> | null = null;
+    function Probe() { auth = useAuth(); return createElement("output", null, `unreachable:${auth.serverUnreachable}`); }
+    container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => {
+      root!.render(createElement(MemoryRouter, { initialEntries: ["/"] }, createElement(AuthProvider, null, createElement(Probe))));
+    });
+    await act(async () => { await Promise.resolve(); });
+    vi.mocked(fetchCurrentViewer).mockRejectedValue(new ApiError({ status: 0, message: "unreachable" }));
+    await act(async () => { await auth!.refresh().catch(() => undefined); });
+    expect(text(), "a background refresh failure raised unreachable for a signed-in person").toContain("unreachable:false");
+    await act(async () => { await auth!.logout(); });
+    expect(text(), "the sign-out landed on the unreachable screen").toContain("unreachable:false");
+  });
 });
 
 describe("the loading screen's failure face", () => {

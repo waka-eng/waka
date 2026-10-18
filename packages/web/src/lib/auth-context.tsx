@@ -458,7 +458,11 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       ? { accountId: viewer.account.id, profileId: viewer.profile.id }
       : null;
     setSessionExpired(null);
+    /* A sign-out is an answer: the person is signed out on purpose, not
+       cut off. Whatever an earlier dead connection set no longer applies. */
+    setServerUnreachable(false);
     loggingOutRef.current = true;
+    const startedAt = authMutationRef.current;
     try {
       // Wipe local state FIRST so the UI updates immediately even if the
       // network call hangs. The server-side cookie clear is a best-effort
@@ -467,6 +471,13 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         // Native invalidation is emitted after durable retirement, before the
         // server round trip. A failed secure write must not claim successful logout.
         await apiLogout();
+        /* THE SIGN-OUT CLEARS THE VIEWER ITSELF. It used to rely on the
+           store's expiry event to do it, and that event is (rightly)
+           ignored during a logout — which left a native person signed in
+           after pressing Sign out. Unless a newer sign-in happened while the
+           retirement ran, the viewer, the cached hint and the session
+           generation go now. */
+        if (aliveRef.current && authMutationRef.current === startedAt) applyViewer(null);
         await clearUnsentDrafts(leaving);
         return;
       }
@@ -492,7 +503,11 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     try {
       fresh = await fetchCurrentViewer();
     } catch (err) {
-      if (aliveRef.current && err instanceof ApiError && err.status === 0) setServerUnreachable(true);
+      /* Only the door's own question raises "unreachable": a background
+         refresh that fails while someone is signed in says nothing about
+         access, and leaving the flag up would turn their later sign-out
+         into "we can't reach WAKA". */
+      if (aliveRef.current && err instanceof ApiError && err.status === 0 && !viewerRef.current) setServerUnreachable(true);
       throw err;
     }
     if (!aliveRef.current || startedAt !== authMutationRef.current) return fresh;
