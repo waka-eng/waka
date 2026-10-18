@@ -104,6 +104,18 @@ function pictureOf(row: Inspiration): string | null {
  * exactly as the on-screen way out commits it. Closing the note on screen
  * pops its own mark, so the list's entry is never left doubled.
  */
+/** Which note's entry is on top of history RIGHT NOW. React Router's
+    location is committed a beat after the browser has already popped, and
+    Home's own `popstate` listener closes the note in that beat — so the
+    rendered `marked` still names the entry Back just left, and popping
+    "again" went two levels. Under a browser router the live answer is
+    `history.state.usr`; a memory router (tests) has none, and there the
+    rendered value is all there is and is not stale. */
+function onTop(rendered: string | null): string | null {
+  const live = typeof window !== "undefined" ? (window.history.state as { usr?: { savesNote?: string } | null; idx?: number } | null) : null;
+  return live && typeof live.idx === "number" ? live.usr?.savesNote ?? null : rendered;
+}
+
 function NoteHistory({ openId, onBack }: { openId: string | null; onBack: () => void }) {
   const location = useLocation(), navigate = useNavigate();
   const marked = (location.state as { savesNote?: string } | null)?.savesNote ?? null;
@@ -120,7 +132,7 @@ function NoteHistory({ openId, onBack }: { openId: string | null; onBack: () => 
     } else if (!openId && pushed.current) {
       const mine = pushed.current;
       pushed.current = null; seen.current = false;
-      if (marked === mine && !archiveLeaving.now) navigate(-1);
+      if (onTop(marked) === mine && !archiveLeaving.now) navigate(-1);
     }
     // Runs on the note changing, not on the address: `marked` is read as it stands.
   }, [openId]);
