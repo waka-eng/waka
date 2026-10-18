@@ -255,8 +255,6 @@ export function InspirationComposer(props: {
      looking for the control that honours it. The way out of this page is
      the dock, which `way-out.test.ts` is the gate for. */
   onClose: () => void; onSubmit: () => void;
-  /** "Save as new" from the notice: saves the words on screen beside a pending save. */
-  onSaveAsNew?: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
   /** True when the draft changed in another tab — the one state the "keep as
       a separate draft" button answers. A flag, not a match on the error's
@@ -294,7 +292,7 @@ export function InspirationComposer(props: {
      The check was also already redundant for most of what it covered: the
      input is `disabled={blocked}`, and a disabled input has no keydown to
      gate. */
-  const blocked = props.busy || (Boolean(props.save.pending) && !props.save.canResave) || !props.ready || props.recording.phase !== 'idle';
+  const blocked = props.busy || Boolean(props.save.pending) || !props.ready || props.recording.phase !== 'idle';
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   /* `invalidFiles` AND `empty` WENT WITH THE SAVE BUTTON. Both existed only
      to decide whether that button was there and whether it was pressable;
@@ -509,6 +507,6 @@ export function InspirationComposer(props: {
 
         KEPT: "only once there is something to keep", which the bar also
         obeys through `composerHasWords`. */}
-    <AuthoredSaveNotice save={props.save} locale={props.locale} onResave={props.onSaveAsNew} />
+    <AuthoredSaveNotice save={props.save} locale={props.locale} />
   </DialogSurface>;
 }

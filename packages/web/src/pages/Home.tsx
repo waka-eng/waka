@@ -1714,7 +1714,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * reason it is worth asking for.
    */
   const [momentWhy, setMomentWhy] = useState("");
-  const momentWhyRef = useRef(momentWhy); momentWhyRef.current = momentWhy;
 
 
   /**
@@ -5163,11 +5162,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       await composerDraft.settle(intent.draft, result.inspiration.id);
       const remaining = preserveNewer ? composerDraft.current.current.text : settleInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
       draftRef.current = remaining; setDraft(remaining); setMouthNote('');
-      /* The why belonged to this save; it goes with it, once it has landed —
-         and also when the composer has moved on but still shows THIS why, so
-         it is not attached a second time to the next save (review). */
-      const savedWhy = intent.input.reflections?.[0]?.answer?.trim();
-      if (!preserveNewer || (savedWhy && savedWhy === momentWhyRef.current.trim())) setMomentWhy('');
       const made = result.inspiration, detail = toInspirationDetail(made);
       const known = inspirationsRef.current?.some((item) => item.id === made.id) || bornIdsRef.current.has(made.id);
       const revision = ++sourceListMutationRef.current;
@@ -5217,7 +5211,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     },
     onRemoved: async (intent) => {
       if (intent.operation !== 'inspiration') return;
-      await composerDraft.settle(intent.draft, 'removed');
+      await composerDraft.settle(intent.draft, intent.acknowledged?.inspirationId ?? 'removed');
       const remaining = settleInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
       draftRef.current = remaining; setDraft(remaining);
     },
@@ -5225,13 +5219,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (intent.operation !== 'inspiration') return;
       const draft = restoreInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
       draftRef.current = draft; setDraft(draft); setMouthOpen(true); setCharSay('');
-      /* THE WHOLE REFUSED SAVE COMES BACK, not only its words: its why, and
-         its photos and files where the note still holds them (the draft's
-         media is settled only by a save that lands). Where they cannot be
-         put back, it says so rather than letting them vanish quietly. */
-      const why = intent.input.reflections?.[0]?.answer;
-      if (why && !momentWhyRef.current.trim()) setMomentWhy(why);
-      if (intent.input.attachments?.some((item) => item.type !== 'link') && !composerDraft.current.current.media.length) setMouthNote(say('worldSaveMediaNotRestored'));
     },
   };
 
@@ -5249,7 +5236,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     });
   };
   const retryDraftFile = async (id: string) => {
-    if (preparingInspirationRef.current || (inspirationSave.pending && !inspirationSave.canResave) || inspirationSave.busy || checkingFilesCount.current || recording.phase !== 'idle') return;
+    if (preparingInspirationRef.current || inspirationSave.pending || inspirationSave.busy || checkingFilesCount.current || recording.phase !== 'idle') return;
     const item = composerDraft.current.current.media.find(row => row.id === id);
     if (!item?.blob || item.uploaded) return;
     preparingInspirationRef.current = true; setPreparingInspiration(true); setMouthNote('');
@@ -5357,7 +5344,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const keepReadiness: KeepReadiness = {
     hasWords: composerHasWords,
     ready: composerDraft.ready,
-    saving: ((Boolean(inspirationSave.pending) || inspirationSave.busy) && !inspirationSave.canResave) || preparingInspiration,
+    saving: Boolean(inspirationSave.pending) || inspirationSave.busy || preparingInspiration,
     uploading: checkingFiles || Boolean(uploadingMediaId),
     /* DICTATING COUNTS AS RECORDING for the purpose of keeping: a sentence
        half-spoken is the same unfinished state as a clip half-recorded, and
@@ -5449,8 +5436,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     || (uploadingMediaId ? say('worldComposerUploading') : '')
     || (recording.phase === 'idle' && recording.notice ? say(recording.notice) : '');
 
-  /** `besides`: "Save as new" — this one press saves beside a pending save. */
-  const keepIt = useCallback(async (options?: { besides?: boolean }) => {
+  const keepIt = useCallback(async () => {
     let text = draftRef.current.trim();
     const initialMedia = composerDraft.current.current.media;
     const pendingLink=composerDraft.current.current.linkText??'';
@@ -5532,16 +5518,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const reflections = why
         ? [{ question: say('worldMomentAsk'), answer: why }]
         : undefined;
-      /* THE WHY STAYS UNTIL THE SAVE HAS LANDED (review). Clearing it at the
-         press lost it whenever the save was refused, unconfirmed or asked a
-         question back — and a retry then carried different words from the
-         held save (no reflection), so the same note looked "edited" and
-         asked instead of retrying. It is cleared in `onResolved`. */
-      const started = inspirationSave.start({ operation: 'inspiration', input: { text, kind, source: 'app',
+      inspirationSave.start({ operation: 'inspiration', input: { text, kind, source: 'app',
         ...(attachments.length ? { attachments } : {}), ...(reflections ? { reflections } : {}),
       },
-        ...(reference ? { draft: reference } : {}) }, options);
-      if (started) setCharSay('');
+        ...(reference ? { draft: reference } : {}) });
+      setMomentWhy('');
+      setCharSay('');
     } catch (reason) {
       /* An `ApiError` here is the SAVE refusing (uploads throw their own
          `DraftProblem('worldComposerUploadFailed')` by now), so it is said as
@@ -5549,7 +5531,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (composerEpoch.current === epoch) sayMouthProblem(draftProblem(reason, 'worldComposerSaveFailed'));
     }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
-  }, [inspirationSave.pending, inspirationSave.canResave, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
+  }, [inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
 
   /* ═══ THREE DOORS INTO ONE DRAFT ═══════════════════════════════════════
      'photo' is the chooser, the drop and the paste: every file is sniffed.
@@ -9783,7 +9765,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 gone, right?" It is not: answering claims is a different
                 branch of this same ternary and nothing in this change
                 touches it. */}
-            {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} onResave={() => { void keepIt({ besides: true }); }} /> : null}
+            {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
             {/* ONE THING FROM ONE MOUTH. The narration ("you kept two memories
                 today") stacked under the claim, so the creature was reporting
                 the weather and asking you a question in the same breath — a
@@ -9831,7 +9813,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              called this since. The lesson lives where it still applies:
              `openOverHome` writes ONE destination, which is why pressing a
              place from inside the notepad does not need a close first. */
-          onClose={saveAsDraft} onSubmit={() => { void keepIt(); }} onSaveAsNew={() => { void keepIt({ besides: true }); }}
+          onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
             clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
             sayProblem: sayMouthProblem }); }}
