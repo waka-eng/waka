@@ -7361,6 +7361,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         : "jar-values-room"
                     }
                     data-jar-chrome="1"
+                    /* OUT OF FRAME IS OUT OF REACH (audit f2afcbe2). The sky
+                       stands at its own height above Now, so from Now its
+                       principle rows sat at y=-654…-307 — and were the FIRST
+                       three Tab stops on the home screen, lighting nothing a
+                       person could see. Inert until you are standing in it. */
+                    {...(!(here && inSky) ? { inert: '', 'aria-hidden': true } : {})}
                   >
                     {/* THE SKY KEEPS ITS PROMISE. The forming copy says "keep
                         capturing, and this sky will start to fill" — so once

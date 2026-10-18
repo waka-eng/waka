@@ -129,6 +129,17 @@ it('takes the collapsed band out of focus order while it yields to the creature'
   for(const band of world.container.querySelectorAll<HTMLElement>('.jar-hq-inner:not(.jar-hq-inner--yielded)'))expect(band.hasAttribute('inert')).toBe(false);
 });
 
+/* Audit f2afcbe2: from Now, the sky's principle rows (above the frame) were
+   the first three Tab stops. */
+it('keeps the sky out of reach until you stand in it',async()=>{
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
+  const own=()=>world.container.querySelector<HTMLElement>('.jar-values-room--live');
+  expect(own()?.hasAttribute('inert')).toBe(true);
+  world.unmount();
+  world=await mountWorld(FACTS,{initialEntries:['/?view=sky'],routerTools:<RouterTools/>});await settle();
+  expect(own()?.hasAttribute('inert')).toBe(false);
+});
+
 it('offers places in the dock, and nothing that is already on the screen',async()=>{
   /* THE FOUR RUNGS ACROSS THE TOP ARE GONE. Founder: "have a bottom navbar."
      Two of those four named rooms a person is already standing in — claims
