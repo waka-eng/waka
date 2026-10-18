@@ -194,22 +194,41 @@ async function typeAndKeep(text: string): Promise<void> {
   await world.step(4);
 }
 
-it("a late full read: Opening… and no edit while it is out, then the card takes it", { timeout: 30_000 }, async () => {
+it("a slow full read: Couldn't load the rest and no edit at two seconds, then the late answer lands", { timeout: 30_000 }, async () => {
   await openByAddress("own-5");
   S.hold = "hold";
   await stepOn();
   await wait(2300); // past the card's two-second wait
   await world.step(4);
-  expect(note(), "the card says it is still opening").toBe("Opening…");
+  expect(note(), "the card says the rest did not load, with a way to ask again").toContain("Couldn’t load the rest.");
   await pressWords();
-  expect(editBox(), "an edit cannot begin on words that are not known to be whole").toBeNull();
+  expect(editBox(), "an edit is never seeded from the preview").toBeNull();
 
   await act(async () => S.held.at(-1)!.resolve());
   await world.step(6);
   expect(note(), "the late read landed on the card").toBe("");
-  S.hold = null; // the edit's own fresh read is answered at once
-  await pressWords();
-  expect(editBox()?.value, "and the edit opens on the whole text").toBe("something I kept, 4");
+  /* INSIDE THE TAP: no network between the press and the editor, so a
+     phone raises its keyboard and the caret lands where the finger did */
+  await act(async () => words()!.click());
+  expect(editBox()?.value, "and the edit opens at once on the whole text").toBe("something I kept, 4");
+});
+
+/* TRY AGAIN ASKS AGAIN (review, 2026-10-18). Reads in flight are shared, so
+   a first read that hung used to answer every Try again too. */
+it("Try again sends a fresh request even while the first read still hangs", { timeout: 30_000 }, async () => {
+  await openByAddress("own-5");
+  S.hold = "hold";
+  await stepOn();
+  await wait(2300);
+  await world.step(4);
+  const before = S.held.length;
+  await act(async () => card()!.querySelector<HTMLButtonElement>(".jar-panel-retry")!.click());
+  await world.step(4);
+  expect(S.held.length, "a new request went out").toBe(before + 1);
+  await act(async () => S.held.at(-1)!.resolve());
+  await world.step(6);
+  expect(note()).toBe("");
+  expect(words()?.textContent).toContain("something I kept, 4");
 });
 
 it("a failed full read: no edit, Couldn't load the rest, and Try again reads again", { timeout: 30_000 }, async () => {
@@ -232,44 +251,6 @@ it("a failed full read: no edit, Couldn't load the rest, and Try again reads aga
   expect(editBox()?.value).toBe("something I kept, 4");
 });
 
-it("an archive edit reaches the card, so the card's next edit keeps it (no overwrite)", { timeout: 30_000 }, async () => {
-  /* The card stands on own-3; own-2 — the next one along — is already read
-     into the world's cache by the time the archive edits it. */
-  await openByAddress("own-3");
-  await stepOn();
-  await wait(100);
-  await act(async () => { go("/inspirations/own-3"); });
-  await world.step(12);
-  const FROM_ARCHIVE = "something I kept, 2 — and then I said more in the archive.";
-  /* the archive, over the same world, opening the same note */
-  await act(async () => { go("/inspirations/own-3?open=saves"); });
-  for (let turn = 0; turn < 30 && !world.container.querySelector(".waka-list-row"); turn += 1) { await world.step(4); await wait(30); }
-  const archiveRow = [...world.container.querySelectorAll<HTMLButtonElement>(".waka-list-row")]
-    .find((b) => (b.textContent ?? "").includes("something I kept, 2"));
-  if (!archiveRow) throw new Error("the archive did not list own-2");
-  await act(async () => archiveRow.click());
-  for (let turn = 0; turn < 20 && world.container.querySelector<HTMLTextAreaElement>(".waka-note-page")?.readOnly !== false; turn += 1) { await world.step(2); await wait(20); }
-  const page = world.container.querySelector<HTMLTextAreaElement>(".waka-note-page")!;
-  const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
-  await act(async () => { set.call(page, FROM_ARCHIVE); page.dispatchEvent(new Event("input", { bubbles: true })); });
-  await act(async () => document.querySelector<HTMLButtonElement>(".waka-dock-tool--keep")!.click());
-  await world.step(4);
-  expect(S.written).toEqual([{ id: "own-2", text: FROM_ARCHIVE }]);
-
-  /* back to the card, and on to own-2 the way a person walks there: by the
-     caret, which opens from the world's cache when it holds the note */
-  await act(async () => { go("/inspirations/own-3"); });
-  await world.step(12);
-  await wait(100);
-  await stepOn();
-  await wait(100);
-  await world.step(6);
-  await pressWords();
-  expect(editBox()?.value, "the card's edit begins from the archive's words, not its own stale read").toBe(FROM_ARCHIVE);
-  await typeAndKeep(`${FROM_ARCHIVE} And on the card.`);
-  expect(S.store.get("own-2"), "both edits survive").toBe(`${FROM_ARCHIVE} And on the card.`);
-});
-
 /** Open the archive over the world, open one note in it, and wait for its full read. */
 async function openInArchive(path: string, words: string, release?: () => Promise<void>): Promise<HTMLTextAreaElement> {
   await act(async () => { go(`${path}?open=saves`); });
@@ -282,39 +263,6 @@ async function openInArchive(path: string, words: string, release?: () => Promis
   for (let turn = 0; turn < 20 && world.container.querySelector<HTMLTextAreaElement>(".waka-note-page")?.readOnly !== false; turn += 1) { await world.step(2); await wait(20); }
   return world.container.querySelector<HTMLTextAreaElement>(".waka-note-page")!;
 }
-
-it("a read that started before a save cannot put the old words back", { timeout: 30_000 }, async () => {
-  const NEWER = "something I kept, 4 — rewritten while an old read was still out.";
-  await openByAddress("own-5");
-  S.hold = "hold";
-  await stepOn(); // the card's read of own-4 goes out, and is held
-  const staleRead = S.held.at(-1)!;
-  await wait(50);
-  /* the archive reads own-4 too (held as well) — release that one — edit, save */
-  const page = await openInArchive("/inspirations/own-5", "something I kept, 4", async () => {
-    await act(async () => S.held.at(-1)!.resolve());
-  });
-  const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
-  await act(async () => { set.call(page, NEWER); page.dispatchEvent(new Event("input", { bubbles: true })); });
-  await act(async () => document.querySelector<HTMLButtonElement>(".waka-dock-tool--keep")!.click());
-  await world.step(4);
-  expect(S.store.get("own-4")).toBe(NEWER);
-
-  /* now the old read lands, carrying the words from before the save */
-  S.hold = null;
-  await act(async () => staleRead.resolve());
-  await world.step(4);
-
-  /* back on the world, walk to own-4: the card must open on the NEWER words */
-  await act(async () => { go("/inspirations/own-5"); });
-  await world.step(12);
-  await wait(100);
-  await stepOn();
-  await wait(100);
-  await world.step(6);
-  await pressWords();
-  expect(editBox()?.value, "the stale read was dropped; the save's words stand").toBe(NEWER);
-});
 
 /* The card has no way to attach anything, so its empty editor must not tell
    people to add a photo or a file — only to write. */
@@ -370,25 +318,4 @@ it("opening a memory by its address when no fresh read can be had opens no edita
   for (let turn = 0; turn < 15; turn += 1) { await world.step(10); await wait(60); }
   expect(card(), "no card opened on words it could not read").toBeNull();
   expect(editBox()).toBeNull();
-});
-
-/* THE EDIT'S OWN FRESH READ FAILS WHILE THE NOTE IS ON SCREEN (review,
-   2026-10-18): the words shown stay, the card says it could not open for
-   EDITING (not that the rest failed to load), and Try again opens the edit
-   the person asked for. */
-it("an edit whose fresh read fails says it could not open for editing, and Try again opens it", { timeout: 30_000 }, async () => {
-  await openByAddress("own-5");
-  await stepOn(); // own-4, its detail on screen
-  await wait(50);
-  await world.step(6);
-  S.hold = "fail";
-  await pressWords();
-  for (let turn = 0; turn < 10 && note() === "Opening…"; turn += 1) { await world.step(2); await wait(10); }
-  expect(editBox()).toBeNull();
-  expect(note()).toContain("Couldn’t open for editing.");
-  expect(words()?.textContent, "the words on screen stay").toContain("something I kept, 4");
-  S.hold = null;
-  await act(async () => card()!.querySelector<HTMLButtonElement>(".jar-panel-retry")!.click());
-  for (let turn = 0; turn < 10 && !editBox(); turn += 1) { await world.step(2); await wait(10); }
-  expect(editBox()?.value, "Try again opens the edit that was asked for").toBe("something I kept, 4");
 });

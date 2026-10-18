@@ -643,9 +643,6 @@ interface PanelData {
       words were just kept: what it now says, so the card shows them and the
       next edit starts from them. */
   keptText?: string;
-  /** The fresh read an edit needs failed (or took too long) while the full
-      detail is on screen: "Couldn't open for editing", with Try again. */
-  editFailed?: boolean;
 }
 
 /**
@@ -3234,9 +3231,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   }, [storageScope?.profileId]);
 
 const AWAY_LONG_ENOUGH_MS = 30_000;
-/** How long an edit waits for the note's fresh full text before it says it
-    could not open (and offers Try again). */
-const EDIT_READ_LIMIT_MS = 20_000;
+/** How long a card's Try again may wait before it is a failed read again. */
+const RETRY_READ_LIMIT_MS = 20_000;
   useEffect(() => {
     let hiddenAt: number | null = null;
     const onVisibility = () => {
@@ -4378,12 +4374,10 @@ const EDIT_READ_LIMIT_MS = 20_000;
       setPanel({ id: selectedId, detail, partial: detail === null, pending });
       setPanelOpen(true);
     };
-    /* the network is not allowed to hold a reading hostage — but a late
-       answer is still the answer. The panel appears at two seconds saying it
-       is still opening, and takes the detail whenever it lands; before
-       2026-10-17 a read slower than the timer left the panel partial (and
-       not editable) for as long as it stayed open. */
-    const timer = window.setTimeout(() => show(null, true), 2000);
+    /* the network is not allowed to hold a reading hostage: at two seconds
+       the panel appears partial — "Couldn't load the rest", with Try again —
+       and a late answer, if one comes, still lands on it. */
+    const timer = window.setTimeout(() => show(null), 2000);
     loadDetail(fetchId).then((detail) => {
       if (cancelled) return;
       if (!done) { show(detail); return; }
@@ -4404,7 +4398,18 @@ const EDIT_READ_LIMIT_MS = 20_000;
     if (!id) return;
     const fetchId = ballsRef.current?.byId.get(id)?.sigId ?? id;
     setPanel((p) => (p && p.id === id ? { ...p, pending: true } : p));
-    void loadDetail(fetchId).then((detail) => {
+    /* A FRESH REQUEST, NOT THE ONE THAT HUNG: `loadDetail` shares a read in
+       flight, so a hung first read would answer every Try again too. */
+    detailPendingRef.current.delete(fetchId);
+    /* and bounded: a retry that hangs too ends as "Couldn't load the rest"
+       again (its hung entry dropped, so the next Try again is fresh) rather
+       than "Opening…" for ever */
+    const read = loadDetail(fetchId);
+    const limit = new Promise<null>((give) => window.setTimeout(() => {
+      if (detailPendingRef.current.get(fetchId) === read) detailPendingRef.current.delete(fetchId);
+      give(null);
+    }, RETRY_READ_LIMIT_MS));
+    void Promise.race([read, limit]).then((detail) => {
       /* a failed retry keeps what is shown and says so — never replaces a
          detail on screen with nothing */
       setPanel((p) => (p && p.id === id ? { id, detail: detail ?? p.detail, partial: detail === null } : p));
@@ -6862,7 +6867,6 @@ const EDIT_READ_LIMIT_MS = 20_000;
    * itself; its header carries the canon rule above and the silent freeze the
    * shape is chosen to avoid.
    */
-  const editingRef = useRef<ReturnType<typeof useEditing> | null>(null);
   const editing = useEditing({
     offline: offlineRef,
     details: detailsRef,
@@ -6900,7 +6904,6 @@ const EDIT_READ_LIMIT_MS = 20_000;
       void loadPersonalReading().then((tom) => absorbBoard(tom)).catch(() => setReadingCheckFailed(true));
     },
   });
-  editingRef.current = editing;
   /* A REFUSED PICTURE IS NEWS FOR AS LONG AS THE EDIT IS OPEN, AND NOT ONE
      MOMENT AFTER. `attachTrouble` is written by `attachTo` and shown under the
      editing foot; closing the edit and opening it again is somebody starting
@@ -7025,24 +7028,6 @@ const EDIT_READ_LIMIT_MS = 20_000;
     el.style.height = `${el.scrollHeight}px`;
   }, []);
 
-  /* OPEN THE CARD'S EDIT ON THE WORDS STORED NOW. Through `loadDetail` — its
-     profile rule and its in-flight sharing — bounded at EDIT_READ_LIMIT_MS so
-     a read that never answers cannot leave the card "Opening…" forever. On
-     failure the detail on screen stays, and the card says it could not open
-     for editing, with Try again, which opens the edit the person asked for. */
-  const openEditFresh = useCallback((panelKey: string, noteId: string) => {
-    setPanel((p) => (p && p.id === panelKey ? { ...p, pending: true, editFailed: false } : p));
-    const limit = new Promise<null>((give) => { window.setTimeout(() => give(null), EDIT_READ_LIMIT_MS); });
-    void Promise.race([loadDetail(noteId), limit]).then((fresh) => {
-      if (!fresh) {
-        setPanel((p) => (p && p.id === panelKey ? { ...p, pending: false, editFailed: true } : p));
-        return;
-      }
-      setPanel((p) => (p && p.id === panelKey ? { id: panelKey, detail: fresh, partial: false } : p));
-      if (selectedIdRef.current === panelKey && !editingRef.current?.open) editingRef.current?.begin("memory", panelKey, fresh.text);
-    });
-  }, [loadDetail]);
-
   const beginPanelEdit = useCallback(
     (ev: ReactMouseEvent<HTMLParagraphElement>) => {
       if (!panelId || editing.open) return;
@@ -7052,6 +7037,8 @@ const EDIT_READ_LIMIT_MS = 20_000;
          or after it failed, and the edit then PATCHed that back as the whole
          text. A panel that is partial (still opening, or failed) has no edit
          to offer. */
+      /* A PANEL WITHOUT ITS FULL TEXT HAS NO EDIT TO OFFER: it is saying
+         "Couldn't load the rest" with Try again, and that is the way on. */
       if (!panel || panel.id !== panelId || panel.partial || panel.pending) return;
       /* THE CARET GOES WHERE THE FINGER WENT. Without this the press lands
          you at the end of a page of text and you scroll back to the sentence
@@ -7081,14 +7068,12 @@ const EDIT_READ_LIMIT_MS = 20_000;
         editing.begin("memory", panelId, panel.keptText ?? panelBall?.textPreview ?? "");
         return;
       }
-      /* EVERY OTHER EDIT READS THE NOTE FRESH FROM THE SERVER FIRST. The
-         panel's copy may be older than the stored words (the archive may
-         have saved them since); the editor starts from what is stored now.
-         The panel says "Opening…" while it reads, and "Couldn't load the
-         rest" with Try again if it cannot. */
-      openEditFresh(panelId, panel.detail.id);
+      /* THE FULL TEXT IS ON THE CARD: the edit opens inside the tap (so a
+         phone raises its keyboard, and the caret lands in the words the
+         finger touched), seeded from it — never from a preview. */
+      editing.begin("memory", panelId, panel.detail.text);
     },
-    [panelId, editing, panel, panelBall, openEditFresh],
+    [panelId, editing, panel, panelBall],
   );
 
   /* ═══ `togglePublic` AND `publishing` ARE GONE ══════════════════════════
@@ -10060,13 +10045,6 @@ const EDIT_READ_LIMIT_MS = 20_000;
               again. The same states the archive's note page has. */}
           {panel.pending ? (
             <p className="jar-panel-note" role="status">{say("worldNoteOpening")}</p>
-          ) : panel.editFailed && panel.detail ? (
-            <p className="jar-panel-note">
-              {say("worldEditOpenFailed")}{" "}
-              <button type="button" className="jar-panel-retry" onClick={() => openEditFresh(panel.id, panel.detail!.id)}>
-                {say("surfaceUnavailableRetry")}
-              </button>
-            </p>
           ) : panel.partial ? (
             <p className="jar-panel-note">
               {say("worldCouldntLoadRest")}{" "}

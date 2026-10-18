@@ -1165,9 +1165,10 @@ in a dedicated PR.**
 **Noted on `claude/fix-save-truncation`, 2026-10-18** · `packages/web/src/pages/Home.tsx`, `components/SavesOverlay.tsx`, `space/editing.ts` · severity medium
 
 **What.** Home's memory card and the archive's note page can both edit one note, and nothing orders
-their writes against each other or against reads in flight. The P0 branch makes each editor read the
-note's FULL text fresh from the server before it opens (so neither ever starts from a 220-character
-preview or from the other door's stale copy), and opening the archive closes the card's edit. It
+their writes against each other or against reads in flight. The P0 branch makes each editor start from the
+note's FULL text, never a 220-character preview: the archive reads it fresh before its editor opens;
+the card opens its edit only on a full detail it has read (inside the tap, so a phone raises its
+keyboard), and opening the archive closes the card's edit. It
 deliberately does NOT try to coordinate the two doors: four review rounds of cross-surface cache,
 freshness stamps and pending-write counting each found new holes and new regressions (stuck
 "Opening…", address links that did nothing, a "Still saving…" that never cleared), so that layer was
@@ -1175,8 +1176,9 @@ removed. The races it was chasing, all present on `origin/dev`:
 
 - A card save still in flight when the archive opens the same note: the archive's fresh read can
   answer before the save lands, and its later save then overwrites the card's words.
-- A slow detail read (the card's warm-up or its two-second late read) landing after a save can put
-  the older words back on the card's display (the next EDIT re-reads, so it does not seed from them).
+- The card's edit seeds from the full detail it holds, which can be older than an archive save made
+  since (or a slow read landing after a save can put older words back on it); a card save from
+  that edit then overwrites the archive's words.
 - An archive save, delete, restore or upload is not reflected in Home's field or card until Home
   reads again (no cross-surface notification); a deleted note stays on the field until reload.
 - Two writes of one note from different doors are not ordered on the client; the server applies
