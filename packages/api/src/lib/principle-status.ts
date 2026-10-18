@@ -1,6 +1,6 @@
 import {principleMaterialKey} from './principle-material-key.js';
 import { eq } from "drizzle-orm";
-import { backgroundJobs, profiles } from "../db/index.js";
+import { backgroundJobs } from "../db/index.js";
 import { getDb } from "./db.js";
 import { loadPrincipleMaterial } from "./principle-generation.js";
 import { enqueueRefreshPrinciples, enqueueTopOfMindRefresh, recoverPendingSignalSupport, wakeCommittedBackgroundJobs } from "./queue.js";
@@ -44,12 +44,10 @@ export async function enqueuePrinciplesAfterReading(tx: Transaction, profileId: 
 }
 
 async function enqueueEligiblePrinciples(db: Db, profileId: string, retry: boolean, transaction?: Transaction) {
-  // A room mind's principles retired with the room engine: decided on the
-  // profile's type before any material is loaded.
-  const [profile] = await db.select({ type: profiles.type }).from(profiles).where(eq(profiles.id, profileId)).limit(1);
-  if (profile?.type === "group") return;
+  // A room mind's material comes back empty from its profile read (room
+  // principles retired with the room engine); never enqueue for one.
   const material = await loadPrincipleMaterial(db, profileId);
-  if (material.eligibility.eligible) {
+  if (!material.groupProfile && material.eligibility.eligible) {
     await enqueueRefreshPrinciples(profileId, principleMaterialKey(material), retry, transaction);
   }
 }

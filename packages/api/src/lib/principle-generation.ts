@@ -299,15 +299,24 @@ export interface PrincipleGenerationDependencies {
 
 /** The profile's own readable active signals and their citation evidence. */
 export async function loadPrincipleMaterial(db: WakaDb | WakaTx, profileId: string) {
-  const [profile] = await db.select({ preferredLocale: profiles.preferredLocale }).from(profiles)
+  const [profile] = await db.select({ preferredLocale: profiles.preferredLocale, type: profiles.type }).from(profiles)
     .where(eq(profiles.id, profileId)).limit(1);
+  /* A room's mind: its principles retired with the room engine. Decided on
+     this same profile read, before any signal or evidence is loaded. */
+  const groupProfile = profile?.type === "group";
+  if (groupProfile) {
+    const evidence = new Map<string, CitationEvidence>();
+    return { activeSignals: [] as Array<{ id: string; statement: string; lastEvidenceAt: Date | null; updatedAt: Date }>,
+      evidence, groupProfile, preferredLocale: profile?.preferredLocale ?? "en-US",
+      eligibility: computeCitationEligibility([], new Date()) };
+  }
   const rows = await db.select({ id: signals.id, statement: signals.statement,
     lastEvidenceAt: signals.lastEvidenceAt, updatedAt: signals.updatedAt })
     .from(signals).where(and(eq(signals.profileId, profileId), eq(signals.status, "active"),
       personalSignalReadable(profileId)));
   const activeSignals = rows;
   const evidence = await loadCitationEvidence(db, profileId, activeSignals.map((row) => row.id));
-  return { activeSignals, evidence,
+  return { activeSignals, evidence, groupProfile,
     preferredLocale: profile?.preferredLocale ?? "en-US",
     eligibility: computeCitationEligibility([...evidence.values()], new Date()) };
 }

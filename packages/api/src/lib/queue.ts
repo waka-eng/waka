@@ -148,7 +148,6 @@ import {
   generationRevisions,
   attachments,
   reviewSessions,
-  signalEvidence,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import {recordPerformanceStage} from './performance-stages.js';
@@ -428,16 +427,15 @@ export async function enqueueRefreshPrinciples(
   const key = `refresh_principles:${profileId}:${materialKey}`;
   // Principles are billed to the profile they are for. (A room mind's were
   // billed to a member; that branch retired with the room engine.)
-  const ownerProfileId = profileId;
   if (transaction) {
     // Never wait back on a billing profile that is being erased.
     const [owner] = await db.select({ id: profiles.id }).from(profiles)
-      .where(eq(profiles.id, ownerProfileId)).for("key share", { noWait: true });
+      .where(eq(profiles.id, profileId)).for("key share", { noWait: true });
     if (!owner) throw new Error("Principle request owner is no longer available");
   }
   const rows = await db.execute(sql<{ id: string }>`
     INSERT INTO background_jobs (profile_id, type, payload, max_attempts, idempotency_key)
-    VALUES (${ownerProfileId}::uuid, 'refresh_principles', ${JSON.stringify({ profileId })}::jsonb,
+    VALUES (${profileId}::uuid, 'refresh_principles', ${JSON.stringify({ profileId })}::jsonb,
       ${DEFAULT_MAX_ATTEMPTS}, ${key})
     ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL
     DO UPDATE SET status = 'pending', attempts = 0, locked_at = NULL,
@@ -825,6 +823,8 @@ export async function drainBackgroundJobs(
     deferred: 0,
   };
 
+  if (store === postgresBackgroundJobStore) await settleRetiredGroupBacklogOnce();
+
   let deferrals = 0;
   let processed = 0;
   while (processed < limit) {
@@ -939,14 +939,8 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
     // that order. Lock every revision this stage may write before its claim;
     // a busy human transaction wins instead of becoming a deadlock victim.
     const owners = new Set([job.profileId]);
-    if (job.type === "enrich_attachment") {
-      const inspirationId = readString(job.payload, "inspirationId");
-      if (inspirationId) {
-        const destinations = await tx.select({ profileId: signalEvidence.profileId }).from(signalEvidence)
-          .where(and(eq(signalEvidence.ownerProfileId, job.profileId), eq(signalEvidence.inspirationId, inspirationId)));
-        for (const row of destinations) owners.add(row.profileId);
-      }
-    }
+    // Only the tenant's own revision now: enrichment once also locked the
+    // room minds citing the source, whose evidence retired with rooms.
     await tx.select({ id: generationRevisions.profileId }).from(generationRevisions)
       .where(inArray(generationRevisions.profileId, [...owners])).orderBy(asc(generationRevisions.profileId))
       .for("update", { noWait: true });
@@ -968,7 +962,7 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
     await (await import('./principle-status.js')).enqueuePrinciplesAfterReading(tx, publication.profileId);
   };
   if (job.type === "refresh_group_top_of_mind") return settleRetiredGroupJob(job);
-  if (await retiredGroupJob(job)) return settleRetiredGroupJob(job);
+  if (retiredGroupJob(job)) return settleRetiredGroupJob(job);
   switch (job.type) {
     case 'assess_signal_support': {
       const payload = parseAssessSignalSupportPayload(job.payload);
@@ -1216,31 +1210,74 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
  * still sitting in dev and prod `background_jobs`, and a worker meeting one
  * must neither run it nor throw: running it would keep regenerating rooms
  * nobody can see, and throwing would burn three attempts and leave a `failed`
- * row for every room. So each is marked done with no work, like a poison
- * payload but logged as what it is.
+ * row for every room.
+ *
+ * So the backlog is settled IN BULK, once per worker process, before its
+ * first drain (`settleRetiredGroupBacklog`): one UPDATE marks every pending
+ * (or stale-leased) room-shaped row succeeded with a `last_error` note
+ * saying why. No per-job read sits on the hot path. A running row with a
+ * live lease is left to its worker; the in-handler guard below catches it,
+ * and any row the sweep missed, wherever no extra query is needed.
  *
  * The enum value `refresh_group_top_of_mind` stays — removing it is an
  * `ALTER TYPE` migration, and the data-dropping phase has not been decided.
- * What counts as room work — shapes only the room engine wrote:
- *   - any `refresh_group_top_of_mind` (settled before this is asked);
+ * Room-shaped means one of the shapes only the room engine wrote:
+ *   - any `refresh_group_top_of_mind`;
  *   - derive/review/assess work landing on a room's mind — the legacy
- *     `deriveIntoProfileId` field (`hasLegacyGroupDestination`, the same rule
- *     the support-state SQL uses), read from the raw payload: the payload
- *     types no longer declare it;
+ *     `deriveIntoProfileId` field (`retired-group-work.ts`, the same rule the
+ *     support-state SQL uses);
  *   - principles requested for a profile other than the job's tenant (a
- *     mind's, billed to a member);
- *   - ANY job whose tenant is a room's mind (a garden pass, the mind's own
- *     principles, anything else) — one primary-key read of the tenant's
- *     type, the single tenant check that replaced per-branch ones.
+ *     mind's, billed to a member), compared as UUIDs (case-insensitive);
+ *   - any job whose tenant is a room's mind (sweep only: it needs the
+ *     tenant's profile type, which the claimed row does not carry).
  * Personal and agent jobs never carry these shapes, so they run unchanged.
  */
-async function retiredGroupJob(job: BackgroundJob): Promise<boolean> {
+export const RETIRED_GROUP_JOB_NOTE = "retired: room engine (2026-10-17); settled without running";
+
+export async function settleRetiredGroupBacklog(
+  database: Pick<ReturnType<typeof getDb>, "execute"> = getDb(),
+  now = new Date(),
+): Promise<number> {
+  const rows = await database.execute(sql`
+    UPDATE background_jobs j SET status = 'succeeded'::background_job_status, locked_at = NULL,
+      rerun_requested = false, last_error = ${RETIRED_GROUP_JOB_NOTE}, updated_at = now()
+    WHERE (j.status = 'pending'::background_job_status OR (j.status = 'running'::background_job_status
+        AND j.locked_at < ${now.toISOString()}::timestamptz - (${STALE_LOCK_SECONDS} || ' seconds')::interval))
+      AND (j.type::text = 'refresh_group_top_of_mind'
+        OR (j.type::text IN ('derive_signals', 'review_signal_support', 'assess_signal_support')
+          AND NOT ${withoutLegacyGroupDestination(sql`j.payload`)})
+        OR (j.type::text = 'refresh_principles'
+          AND lower(coalesce(j.payload->>'profileId', j.profile_id::text)) <> lower(j.profile_id::text))
+        OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = j.profile_id AND p.type::text = 'group'))
+    RETURNING j.id`);
+  const settled = (rows as unknown as Array<{ id: string }>).length;
+  if (settled) console.info("[background-jobs] settled retired room backlog", { settled });
+  return settled;
+}
+
+let retiredGroupBacklogSettled = false;
+async function settleRetiredGroupBacklogOnce(): Promise<void> {
+  if (retiredGroupBacklogSettled) return;
+  try {
+    await settleRetiredGroupBacklog();
+    retiredGroupBacklogSettled = true;
+  } catch (error) {
+    // Never block the queue on the sweep; the in-handler guard still holds,
+    // and the next drain tries again.
+    console.warn("[background-jobs] retired room backlog sweep failed", { error: sanitizeRetiredSweepError(error) });
+  }
+}
+
+function sanitizeRetiredSweepError(error: unknown): string {
+  return error instanceof Error ? error.name : "unknown";
+}
+
+/** No query: only shapes readable from the claimed row itself. */
+function retiredGroupJob(job: BackgroundJob): boolean {
   if ((job.type === "derive_signals" || job.type === "review_signal_support" || job.type === "assess_signal_support") &&
     hasLegacyGroupDestination(job.payload)) return true;
-  if (job.type === "refresh_principles" && (readString(job.payload, "profileId") ?? job.profileId) !== job.profileId) return true;
-  const [tenant] = await getDb().select({ type: profiles.type }).from(profiles)
-    .where(eq(profiles.id, job.profileId)).limit(1);
-  return tenant?.type === "group";
+  return job.type === "refresh_principles" &&
+    (readString(job.payload, "profileId") ?? job.profileId).toLowerCase() !== job.profileId.toLowerCase();
 }
 
 function settleRetiredGroupJob(job: BackgroundJob): void {

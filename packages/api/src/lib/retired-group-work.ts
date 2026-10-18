@@ -6,23 +6,26 @@
  * unrun, and the SQL that counts a person's own pending work must exclude
  * exactly the same rows — so both sides read this one definition: the field
  * is a room destination when present and not blank. Absent, JSON null, or a
- * whitespace-only string all mean "no destination" in both.
+ * string of ASCII whitespace only all mean "no destination" in both.
  *
- * JS `\s` and Postgres `\s` ([[:space:]]) agree on ASCII whitespace; a
- * payload made of exotic Unicode spaces was never written by any producer.
+ * Blank is an explicit ASCII class on both sides, from one pattern string,
+ * because JS `\s` and Postgres `\s` disagree on Unicode spaces (U+00A0 is
+ * whitespace to JS, not necessarily to the database's locale).
  */
 import { sql, type SQL } from "drizzle-orm";
 
-const BLANK = "^\\s*$";
+/** Postgres ARE and JS RegExp read these escapes identically inside []. */
+const BLANK_PATTERN = "^[ \\t\\n\\r\\f\\v]*$";
+const BLANK = new RegExp(BLANK_PATTERN);
 
 export function hasLegacyGroupDestination(payload: unknown): boolean {
   if (!payload || typeof payload !== "object") return false;
   const value = (payload as Record<string, unknown>).deriveIntoProfileId;
   if (value === undefined || value === null) return false;
-  return typeof value !== "string" || !new RegExp(BLANK).test(value);
+  return typeof value !== "string" || !BLANK.test(value);
 }
 
 /** SQL twin of `hasLegacyGroupDestination`, negated: true for own-profile rows. */
 export function withoutLegacyGroupDestination(payload: SQL): SQL {
-  return sql`(${payload}->>'deriveIntoProfileId' IS NULL OR ${payload}->>'deriveIntoProfileId' ~ ${BLANK})`;
+  return sql`(${payload}->>'deriveIntoProfileId' IS NULL OR ${payload}->>'deriveIntoProfileId' ~ ${BLANK_PATTERN})`;
 }

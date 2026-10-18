@@ -48,12 +48,7 @@ export async function ensureSupportBatchCoverage(db: Database, input: {
         signalIds: batch.map((claim) => claim.signalId), materialRevision: report.material.revision!, materialHash: report.material.hash,
         statements: batch.map((claim) => ({ id: claim.signalId, revision: claim.statementRevision, hash: hashEmbeddingInput(claim.statement) })),
       };
-      // HASH INPUT PINNED: keys were hashed with `membershipId: null` in this
-      // position before rooms retired. Keeping it keeps existing batch keys,
-      // so a failed batch is still found and a finished one is not re-bought.
-      const { statements, ...head } = payload;
-      const key = `assess_signal_support:${hashEmbeddingInput(JSON.stringify({ policy: SIGNAL_SUPPORT_REVIEW_POLICY,
-        owner: input.ownerProfileId, destination, ...head, membershipId: null, statements }))}`;
+      const key = supportBatchKey(input.ownerProfileId, payload);
       const [job] = await tx.execute<{ status: string }>(sql`SELECT status::text FROM background_jobs
         WHERE idempotency_key = ${key} AND profile_id = ${input.ownerProfileId}::uuid`);
       if (job?.status === 'failed') { failed = true; continue; }
@@ -62,6 +57,21 @@ export async function ensureSupportBatchCoverage(db: Database, input: {
   });
   if (failed) throw new Error('A support batch could not be checked; retry the reading');
   throw new BackgroundJobHeldError(new Date(Date.now() + 5_000), 'Support coverage is being checked');
+}
+
+/**
+ * HASH INPUT PINNED (support-batch-key.test.ts holds it to a value computed
+ * on origin/dev before rooms retired). Keys were hashed over
+ * {policy, owner, destination, ...payload} with `membershipId: null` between
+ * materialHash and statements; destination was the owner for every personal
+ * batch. Reproducing that exact JSON keeps existing keys, so a failed batch is
+ * still found and a finished one is not bought again.
+ */
+export function supportBatchKey(ownerProfileId: string, payload: AssessSignalSupportPayload): string {
+  const { inspirationId, signalIds, materialRevision, materialHash, statements } = payload;
+  return `assess_signal_support:${hashEmbeddingInput(JSON.stringify({ policy: SIGNAL_SUPPORT_REVIEW_POLICY,
+    owner: ownerProfileId, destination: ownerProfileId, inspirationId, signalIds, materialRevision, materialHash,
+    membershipId: null, statements }))}`;
 }
 
 export async function supportBatchInputsCurrent(db: Database, ownerProfileId: string, payload: AssessSignalSupportPayload) {

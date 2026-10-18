@@ -33,12 +33,14 @@ export interface DerivationProcessingInput {
 
 const materialJoins = sql`JOIN inspirations i ON i.id = p.inspiration_id AND i.profile_id = p.owner_profile_id
   JOIN inspiration_revisions r ON r.inspiration_id = i.id AND r.profile_id = i.profile_id`;
-const currentMaterial = sql`p.material_revision = CASE WHEN p.profile_id = p.owner_profile_id THEN r.personal_revision ELSE r.public_revision END`;
-const authorizedDestination = sql`(p.profile_id = p.owner_profile_id OR EXISTS (
-  SELECT 1 FROM profiles d JOIN group_members m ON m.group_id = d.group_id
-    JOIN profiles owner ON owner.id = m.profile_id AND owner.type::text = 'human'
-  WHERE d.id = p.profile_id AND d.type::text = 'group' AND m.profile_id = p.owner_profile_id))`;
-const allowedSource = sql`(p.profile_id = p.owner_profile_id OR i.visibility::text = 'public')`;
+/* Personal receipts only. A receipt landing on a room's mind (public
+   revision, a current human member as owner) was the other branch; it
+   retired with the room engine (2026-10-17), so such legacy receipts are
+   never current, authorized or completable again. For a personal receipt
+   each predicate below is the branch it always took. */
+const currentMaterial = sql`(p.profile_id = p.owner_profile_id AND p.material_revision = r.personal_revision)`;
+const authorizedDestination = sql`p.profile_id = p.owner_profile_id`;
+const allowedSource = authorizedDestination;
 const derivationScope = (input: DerivationProcessingInput) => sql`p.profile_id = ${input.profileId}::uuid
   AND p.owner_profile_id = ${input.ownerProfileId}::uuid AND p.inspiration_id = ${input.inspirationId}::uuid
   AND p.derivation_job_id = ${input.request.jobId}::uuid
@@ -86,7 +88,7 @@ export async function currentArtifactResult(tx: Transaction, profileId: string):
   const [row] = await tx.execute(sql`SELECT m.id, m.version,
     EXISTS(SELECT 1 FROM top_of_mind_entries e WHERE e.top_of_mind_id = m.id AND e.dismissed_at IS NULL) AS has_entries
     FROM top_of_minds m JOIN profiles d ON d.id = ${profileId}::uuid
-    WHERE m.status::text = 'live' AND (m.profile_id = d.id OR (d.type::text = 'group' AND m.group_id = d.group_id))
+    WHERE m.status::text = 'live' AND m.profile_id = d.id
     ORDER BY m.version DESC LIMIT 1`);
   return { kind: 'top_of_mind', topOfMindId: row ? String(row.id) : null,
     version: row ? Number(row.version) : 0, outcome: row?.has_entries ? 'unchanged' : 'empty' };
@@ -155,7 +157,7 @@ export async function recordInspirationReadingResult(tx: Transaction, input: {
   if (result.topOfMindId) {
     const owned = await tx.execute(sql`SELECT m.id FROM top_of_minds m JOIN profiles d ON d.id = ${input.profileId}::uuid
       WHERE m.id = ${result.topOfMindId}::uuid AND m.version = ${result.version}
-        AND (m.profile_id = d.id OR (d.type::text = 'group' AND m.group_id = d.group_id)) LIMIT 1`);
+        AND m.profile_id = d.id LIMIT 1`);
     if (!owned.length) throw new Error('Published reading does not belong to this destination');
   }
   await tx.execute(sql`UPDATE inspiration_processing p SET result = ${JSON.stringify(result)}::jsonb,
