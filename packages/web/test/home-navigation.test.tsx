@@ -103,22 +103,6 @@ it('opens your own material over a world that never leaves, and the world is one
   expect(new URLSearchParams(location.search).get('open')).toBe('conversations');
 });
 
-/* Audit f2afcbe2 (desk/27): Back from an open save skipped the list and
-   closed the whole archive. */
-it('steps Back from an open save to the list, then from the list to the world',async()=>{
-  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  await chooseFromMenu(world.container,'Inspirations');await settle();
-  const row=world.container.querySelector<HTMLButtonElement>('.waka-list-row');
-  expect(row).not.toBeNull();
-  await act(async()=>{row!.click();});await settle();
-  expect(world.container.querySelector('.waka-page--note')).not.toBeNull();
-  await navigate(-1);
-  expect(world.container.querySelector('.waka-page--note')).toBeNull();
-  expect(new URLSearchParams(location.search).get('open')).toBe('saves');
-  await navigate(-1);
-  expect(new URLSearchParams(location.search).get('open')).toBeNull();
-});
-
 /* Audit f2afcbe2: the first Tab stops landed on a "Details" button inside the
    height-zero band, with nothing on screen to show where focus went. */
 it('takes the collapsed band out of focus order while it yields to the creature',async()=>{

@@ -1,12 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { EMPTY_VIEW, readViewLocation, viewHref, type ViewLocation } from './view-location';
 
-/** Set while `closeOpen` is putting the whole archive down over an open
-    note's entry; read and cleared by SavesOverlay's `NoteHistory`. */
-export const archiveLeaving:{now:boolean;thenReplace:{to:string;from:string;at:number}|null}={now:false,thenReplace:null};
-/** How long a pending cold-link replace may wait for its own step back. */
-const THEN_REPLACE_MS = 2_000;
 interface StoredView { scope: string; query: string; composerFrom?: string;shareFrom?:string;conversationFrom?:string;openFrom?:string }
 /** Router owns browser history; the world owns rendering and restoration. */
 export function useViewNavigation(scope: string | null) {
@@ -14,23 +9,6 @@ export function useViewNavigation(scope: string | null) {
   const href = location.pathname + location.search;
   const view = useMemo(() => readViewLocation(location.pathname, location.search), [href]);
   const own = useRef<string | null>(null);
-  /* THE SECOND HALF OF A COLD-LINK CLOSE (see `closeOpen`): once the step
-     back over the note's entry has landed on the list's, that entry becomes
-     the world — so history holds the closed world alone, as it did before
-     notes had entries of their own. */
-  /* ONE STEP, ONCE (review): the replace is for the landing of the step back
-     it was armed with, and nothing later. Whatever the next location is, the
-     arming is spent; it acts only if that landing is the list's entry (no
-     note mark) and came within a moment of the press. */
-  useEffect(() => {
-    const armed = archiveLeaving.thenReplace;
-    if (!armed || location.key === armed.from) return;
-    // Spent or expired, the leave it belonged to is over too: the note may pop its own entry again.
-    archiveLeaving.thenReplace = null; archiveLeaving.now = false;
-    if (Date.now() - armed.at > THEN_REPLACE_MS || (location.state as { savesNote?: string } | null)?.savesNote) return;
-    if (!new URLSearchParams(location.search).get('open')) return;
-    navigate(armed.to, { replace: true, state: location.state });
-  }, [location.key]);
   const latest = useRef({ location, navigate, scope }); latest.current = { location, navigate, scope };
   const query = (() => {
     const state = location.state as { wakaView?: StoredView } | null;
@@ -55,13 +33,7 @@ export function useViewNavigation(scope: string | null) {
        close. Writing `open:null` forward instead would leave a Back that
        reopens the thing you just dismissed. */
     const openFrom=next.open?(!before?.open&&!options.replace?previous:stored?.scope===current.scope?stored.openFrom:undefined):undefined;
-    /* AN OPEN SAVE'S MARK SURVIVES A REWRITE OF ITS OWN ENTRY. SavesOverlay's
-       `NoteHistory` marks the entry it pushed with `savesNote`; the world
-       re-writes the same address in place (to record the seek query), and a
-       state built from scratch here dropped the mark — which reads exactly
-       like Back, so the note closed itself the moment it opened. */
-    const savesNote = options.replace && to === previous ? (current.location.state as { savesNote?: string } | null)?.savesNote : undefined;
-    current.navigate(to, { replace: options.replace, state: { ...(savesNote ? { savesNote } : {}), wakaView: { scope: current.scope, query: options.query ?? '', ...(composerFrom ? { composerFrom } : {}),...(shareFrom?{shareFrom}:{}),...(conversationFrom?{conversationFrom}:{}),...(openFrom?{openFrom}:{}) } } });
+    current.navigate(to, { replace: options.replace, state: { wakaView: { scope: current.scope, query: options.query ?? '', ...(composerFrom ? { composerFrom } : {}),...(shareFrom?{shareFrom}:{}),...(conversationFrom?{conversationFrom}:{}),...(openFrom?{openFrom}:{}) } } });
   }, []);
   const closeComposer = useCallback(() => {
     const current = latest.current;
@@ -101,20 +73,7 @@ export function useViewNavigation(scope: string | null) {
     if(!before?.open)return;
     const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
     own.current=null;
-    /* An open saved note has its own entry on top of the list's (see
-       SavesOverlay's `NoteHistory`); putting the whole archive down steps
-       over both, so Escape still lands where the archive was opened from. */
-    const noteOnTop=Boolean((current.location.state as {savesNote?:string}|null)?.savesNote);
-    /* And the note must not pop its own entry as it closes on the way out:
-       the router's address update is a transition, so the note's close can
-       commit first and would step back a THIRD time (or undo the replace). */
-    if(noteOnTop)archiveLeaving.now=true;
-    if(stored?.scope===current.scope&&stored.openFrom) current.navigate(noteOnTop?-2:-1);
-    /* A COLD LINK with a note open (review): replacing the note's entry left
-       the list's `?open=saves` underneath, so Back reopened the archive that
-       Escape had just closed. Step back over the note first; the effect above
-       turns the list's entry into the world when it lands. */
-    else if(noteOnTop){archiveLeaving.thenReplace={to:viewHref({...before,open:null}),from:current.location.key,at:Date.now()};current.navigate(-1);}
+    if(stored?.scope===current.scope&&stored.openFrom) current.navigate(-1);
     else current.navigate(viewHref({...before,open:null}),{replace:true});
   },[]);
   /**
