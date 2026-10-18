@@ -144,7 +144,7 @@ it("does not offer home on home, where it would be the reload again", async () =
   Object.defineProperty(window, "location", {
     configurable: true,
     writable: true,
-    value: { ...trueLocation, pathname: "/", reload, assign: vi.fn() },
+    value: { ...trueLocation, pathname: "/", search: "", hash: "", reload, assign: vi.fn() },
   });
   await mount(
     <SurfaceBoundary surface="the world">
@@ -152,4 +152,22 @@ it("does not offer home on home, where it would be the reload again", async () =
     </SurfaceBoundary>,
   );
   expect(host.textContent).not.toContain("Go to your WAKA");
+});
+
+it("offers home on '/' with a query, since the query may be what breaks it, and goes to a clean '/'", async () => {
+  const assign = vi.fn();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    writable: true,
+    value: { ...trueLocation, pathname: "/", search: "?open=saves", hash: "", reload, assign },
+  });
+  await mount(
+    <SurfaceBoundary surface="the world">
+      <Boom message="Cannot read properties of undefined (reading 'length')" />
+    </SurfaceBoundary>,
+  );
+  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Go to your WAKA");
+  expect(home, "a home with a query got no way to a clean home").toBeDefined();
+  await act(async () => home!.click());
+  expect(assign).toHaveBeenCalledWith("/");
 });

@@ -216,9 +216,10 @@ export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoun
           <button className="btn-primary" type="button" onClick={this.retry}>
             {t(locale, "surfaceUnavailableRetry")}
           </button>
-          {/* Not offered on home itself, where it would be the reload again
-              under a second name. */}
-          {window.location.pathname !== "/" ? (
+          {/* Not offered on a clean home itself, where it would be the reload
+              again under a second name. `/?open=…` or `/#…` is NOT home: the
+              query may be what breaks the page, and a clean `/` drops it. */}
+          {window.location.pathname !== "/" || window.location.search !== "" || window.location.hash !== "" ? (
             <p className="login-footer">
               <button className="login-link" type="button" onClick={this.goHome}>
                 {t(locale, "surfaceUnavailableHome")}
