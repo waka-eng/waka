@@ -162,6 +162,29 @@ it('reconciles a lost save response with a read, without resending',async()=>{
   expect(host.querySelector('textarea')!.value).toBe('Keep my exact thought');expect(host.textContent).toContain('Couldn’t confirm this message.');
   await click('Check saved messages');expect(saveConversationMessage).toHaveBeenCalledTimes(1);expect(stored.messages).toHaveLength(1);expect(host.querySelector('textarea')!.value).toBe('');
 });
+/* Review round 3: a journalled message is never "Not sent" because a
+   pre-flight failed — an earlier send under its id may have landed. */
+it('calls a pending message "not confirmed", never "not sent", when the pre-flight fails',async()=>{
+  vi.mocked(createConversation).mockRejectedValueOnce(new Error('Network'));
+  await mount(null);await type('Words in flight');await click('Send');
+  await act(async()=>root.unmount());root=createRoot(host);
+  vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
+  vi.mocked(fetchConversation).mockRejectedValue(new Error('Offline'));
+  await mount(null);
+  await click('Retry this message');
+  expect(host.textContent).toContain('Not confirmed yet');
+  expect(host.textContent).not.toContain('Not sent');
+});
+/* And "Not sent" with nothing left in the box offers the re-read, not a
+   Retry that has no words to send. */
+it('offers the re-read once the unsent words are cleared from the box',async()=>{
+  vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
+  await mount(null);await type('Words from the train');await click('Send');
+  expect(host.textContent).toContain('Not sent');
+  await type('');
+  const acts=[...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent);
+  expect(acts).not.toContain('Retry this message');expect(acts).toContain('Try again');
+});
 /* Review: with a pending message and a conversation that could not be read,
    "Retry" was offered and did nothing (sending needs the conversation). */
 it('offers the re-read, not a dead Retry, when a pending message sits on an unread conversation',async()=>{

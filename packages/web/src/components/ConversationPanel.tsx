@@ -387,7 +387,10 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     if(replies===null){
       const owner=lifecycle.current;working.current=true;setBusy(true);
       try{const listed=await run(signal=>listConversations(scope.profileId,signal));if(!mine(owner))return;replies=listed.generationEnabled;setGenerationEnabled(replies);setError(null);setUnsent(false);}
-      catch{if(mine(owner)){setError(say('worldConversationNotSent'));setUnsent(true);}return;}
+      /* A JOURNALLED message is never "not sent" on a failed pre-flight
+         (review): an earlier send under its id may have reached the server.
+         Only words that were never sent at all are "not sent". */
+      catch{if(mine(owner)){const held=Boolean(draftRef.current?.pending);setError(say(held?'worldConversationNotConfirmed':'worldConversationNotSent'));setUnsent(!held);}return;}
       finally{working.current=false;if(mine(owner))setBusy(false);}
     }
     if(!draftRef.current)return;
@@ -588,7 +591,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         it was, on a product whose other screens have one bar and two corner
         buttons. The corners are the navigation here as everywhere. */}
     <section className="chat-main" aria-label={say('worldConversationTitle')}>
-      {error?<div className="chat-notice" role="alert">{error} {(unsent&&!draft?.pending)||(draft?.pending&&(!id||conversation))?<button type="button" disabled={busy||loading} onClick={()=>void save()}>{say('worldConversationRetry')}</button>
+      {error?<div className="chat-notice" role="alert">{error} {(unsent&&!draft?.pending&&Boolean(draft?.content.trim()||draft?.attachments?.length))||(draft?.pending&&(!id||conversation))?<button type="button" disabled={busy||loading} onClick={()=>void save()}>{say('worldConversationRetry')}</button>
         /* A pending message on a conversation that could not be read cannot be
            re-sent (`save` needs the conversation), so the act offered is the
            re-read that brings it back (review): Retry only where it works. */
