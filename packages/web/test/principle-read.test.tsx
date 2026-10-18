@@ -256,6 +256,18 @@ describe("principle read", () => {
     expect(host.querySelector("button")?.textContent).toBe("Try again");
   });
 
+  it("resumes polling once a focus read succeeds after the poll gave up", async () => {
+    vi.mocked(fetchPrincipleRead).mockRejectedValue(new Error("down"));
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    for (let i = 0; i < 20; i += 1) await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(fetchPrincipleRead).toHaveBeenCalledTimes(6);
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "processing" } });
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(fetchPrincipleRead).toHaveBeenCalledTimes(7);
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(fetchPrincipleRead, "the poll stayed stopped after a read worked").toHaveBeenCalledTimes(8);
+  });
+
   it("does not fetch an inactive wall", async () => {
     await act(async () => root.render(<PrincipleRead active={false} locale="en-US" />));
     await act(async () => vi.advanceTimersByTimeAsync(30_000));

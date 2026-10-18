@@ -91,6 +91,9 @@ export function PrincipleRead({ active, locale, onRead }: {
         setStatus(result.status);
         setFailed(false);
         consecutiveFailures = 0;
+        /* A read that worked (a focus or visibility read after the poll gave
+           up) restarts the poll: `finally` schedules the next one again. */
+        stopped = false;
         const waiting = result.status.phase === "processing" || result.status.phase === "pending";
         waitingReads = waiting ? waitingReads + 1 : 0;
         const longWait = waitingReads >= MAX_WAITING_READS;
