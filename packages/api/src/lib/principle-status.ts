@@ -31,10 +31,25 @@ type Db = Database | Transaction;
  * retries its own derivation (`/inspirations/:id/processing`).
  */
 async function latestReadingJob(db: Db, profileId: string) {
-  const [latest] = await db.select({ status: backgroundJobs.status }).from(backgroundJobs)
+  const [latest] = await db.select({ status: backgroundJobs.status, lastError: backgroundJobs.lastError, updatedAt: backgroundJobs.updatedAt }).from(backgroundJobs)
     .where(and(eq(backgroundJobs.profileId, profileId), eq(backgroundJobs.type, "refresh_top_of_mind")))
     .orderBy(desc(backgroundJobs.updatedAt)).limit(1);
   return latest ?? null;
+}
+
+/**
+ * "READING IS PAUSED" IS A CLAIM ABOUT THE PROVIDER, SO IT NEEDS ITS EVIDENCE.
+ * Only the latest reading job (so nothing newer succeeded or is queued),
+ * only when it failed with a provider refusal — out of credit is HTTP 402,
+ * recorded in `last_error` as "… HTTP 402 Payment Required" — and only when
+ * that failure is under a day old. Any other failure is the reading's own
+ * error, not a pause, and a refusal from last week is history, not news.
+ */
+const PAUSE_FRESH_MS = 24 * 60 * 60_000;
+const PROVIDER_REFUSAL = /\b402\b|payment required|insufficient[\s_-]*(credit|credits|funds|quota)/i;
+function readingPausedFrom(latest: { status: string; lastError: string | null; updatedAt: Date } | null, now = new Date()): boolean {
+  return latest?.status === "failed" && PROVIDER_REFUSAL.test(latest.lastError ?? "")
+    && now.getTime() - latest.updatedAt.getTime() < PAUSE_FRESH_MS;
 }
 
 export async function loadPrincipleStatus(db: Db, profileId: string) {
@@ -47,7 +62,7 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
     : job?.status === "failed" ? "failed"
     : job?.status === "succeeded" ? "ready"
     : job ? "processing" : "pending";
-  const readingPaused = (await latestReadingJob(db, profileId))?.status === "failed";
+  const readingPaused = readingPausedFrom(await latestReadingJob(db, profileId));
   return { phase, eligible: material.eligibility.eligible,
     readingPaused,
     supportPending: support.pending,

@@ -441,6 +441,26 @@ describe("principles across personal profiles", () => {
     expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${quiet} AND type='refresh_top_of_mind'`).toHaveLength(1);
   });
 
+  /* "Paused" is a claim about the provider: only a fresh refusal (402) on
+     the latest reading job raises it. */
+  it('calls a reading paused only for a provider refusal under a day old on the latest reading job', async () => {
+    const other = await person();
+    await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,updated_at)
+      VALUES(${other},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed','Error: synthesis returned no entries',now())`;
+    expect((await loadPrincipleStatus(t.db as never, other)).readingPaused, 'an ordinary failure said the provider paused').toBe(false);
+    const stale = await person();
+    await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,updated_at)
+      VALUES(${stale},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed','Error: OpenRouter synthesis failed: HTTP 402 Payment Required',now()-interval '25 hours')`;
+    expect((await loadPrincipleStatus(t.db as never, stale)).readingPaused, 'a refusal from yesterday is history, not a pause').toBe(false);
+    const fresh = await person();
+    await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,updated_at)
+      VALUES(${fresh},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed','Error: OpenRouter synthesis failed: HTTP 402 Payment Required',now()-interval '1 hour')`;
+    expect((await loadPrincipleStatus(t.db as never, fresh)).readingPaused).toBe(true);
+    await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,updated_at)
+      VALUES(${fresh},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'succeeded',now())`;
+    expect((await loadPrincipleStatus(t.db as never, fresh)).readingPaused, 'a newer success left the pause up').toBe(false);
+  });
+
   it('answers for the reading alone: principles neither raise nor hide it', async () => {
     const raised = await person();
     await principlesJob(raised, 'failed');
