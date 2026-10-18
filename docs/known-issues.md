@@ -1227,6 +1227,39 @@ re-send.
   words must be added to that decision deliberately.
 
 ---
+## Back from an open saved note (follow-up)
+
+**Status:** open, deliberately not fixed in `claude/fix-usability`. Opening a saved note inside the
+archive (`?open=saves`) does not touch history, exactly as on `origin/dev`
+(`SavesOverlay.tsx`, `use-view-navigation.ts`). A note-history mechanism was tried and cut after
+review found three regressions in it.
+
+**The defect (usability audit at f2afcbe2, desk/27 and /32).** The note has no history entry of its
+own, so the browser's Back from an open note skips the list and closes the whole archive — two levels
+for one press. (Escape, the bar's rows and the note's own close already commit and step one level.)
+
+**What any design has to answer** — each broke the attempt:
+
+- **A same-URL entry re-runs the view restore.** Pushing an entry at the archive's own address (to mark
+  the open note in router state) changes `location.key`, and Home re-applies the view on every key
+  change; the note's entry must not cost a restore pass, or the restore must ignore it.
+- **The world rewrites the address in place.** `useViewNavigation.write` replaces the entry (to
+  record the seek query, among others) with a state built from scratch; any mark on the entry is
+  dropped, which reads exactly like Back and closes the note. A replace to a DIFFERENT href drops it
+  too.
+- **Stale entries become dead Back presses.** An entry left behind by a note that closed some other
+  way (a failed or in-flight save, a switch from note A straight to note B, the archive closed under
+  it) is a Back that does nothing visible.
+- **Closing the archive over an open note.** Escape must still land where the archive was opened from
+  (two entries, not one), including from a cold `?open=saves` link with no `openFrom`, where the list's
+  entry must not be left underneath to reopen it.
+- **A note that cannot close.** If Back pops the note's entry but its save fails or is still in flight,
+  the edit must not be lost and the next Back must still reach the list.
+- **Event order.** Home's own `popstate` listener commits the note before the router commits the popped
+  location (a transition), so code that reads the rendered location to decide "is my entry still on
+  top" sees a stale answer.
+
+---
 ## Refuted findings
 
 Three findings did not survive verification. **A list that only grows is a list nobody trusts**, so
