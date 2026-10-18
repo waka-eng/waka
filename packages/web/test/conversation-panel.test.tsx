@@ -283,15 +283,36 @@ it('keeps the full-page composer within the visible keyboard viewport',async()=>
    not shrink for its keyboard — so the variables above moved nothing and the
    composer sat under the keyboard. The page itself follows the keyboard. */
 it('pins the enclosing page to the visual viewport while an iOS keyboard is up, and lets go after',async()=>{
-  const viewport=Object.assign(new EventTarget(),{height:window.innerHeight,offsetTop:0});vi.stubGlobal('visualViewport',viewport);
+  const viewport=Object.assign(new EventTarget(),{height:window.innerHeight,offsetTop:0,scale:1});vi.stubGlobal('visualViewport',viewport);
   const page=document.createElement('div');page.className='waka-page';host.append(page);const inner=createRoot(page);
   await act(async()=>inner.render(<ConversationPanel scope={scope} id={id} locale="en-US" onChoose={choose}/>));
+  page.querySelector('textarea')!.focus();
   expect(page.style.height).toBe('');expect(page.dataset.keyboard).toBeUndefined();
-  viewport.height=window.innerHeight-300;viewport.offsetTop=120;await act(async()=>viewport.dispatchEvent(new Event('resize')));
+  /* A PINCH IS NOT A KEYBOARD (review): the viewport shrinks but its scale
+     is not 1, and the page is left alone. */
+  viewport.height=window.innerHeight-300;viewport.offsetTop=120;viewport.scale=2;await act(async()=>viewport.dispatchEvent(new Event('resize')));
+  expect(page.dataset.keyboard).toBeUndefined();
+  viewport.scale=1;await act(async()=>viewport.dispatchEvent(new Event('resize')));
   expect(page.style.height).toBe(`${window.innerHeight-300}px`);expect(page.style.top).toBe('120px');expect(page.dataset.keyboard).toBe('1');
   viewport.height=window.innerHeight;viewport.offsetTop=0;await act(async()=>viewport.dispatchEvent(new Event('resize')));
   expect(page.style.height).toBe('');expect(page.dataset.keyboard).toBeUndefined();
   await act(async()=>inner.unmount());
+});
+/* Review: offline is not proof a journalled message never reached the
+   server, so it is "not confirmed", and Retry resends the same id. */
+it('calls a pending message lost offline not confirmed, and retries it under the same id',async()=>{
+  await mount();
+  vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Network'));
+  const online=vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
+  await type('Words on the train');await click('Send');
+  expect(host.textContent).toContain('Not confirmed yet');expect(host.textContent).not.toContain('Not sent');
+  const first=vi.mocked(saveConversationMessage).mock.calls[0]![2].id;
+  online.mockReturnValue(true);
+  const retry=[...host.querySelectorAll('.chat-notice button')].find(b=>b.textContent==='Retry this message') as HTMLButtonElement;
+  expect(retry).toBeTruthy();
+  await act(async()=>retry.click());
+  expect(vi.mocked(saveConversationMessage).mock.calls[1]![2].id).toBe(first);
+  online.mockRestore();
 });
 /* ── TWO TOMBSTONES: DELETING A CONVERSATION, AND READING ITS MEMORY ────────
    `requires confirmation for deletion and removes only this conversation’s

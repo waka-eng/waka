@@ -217,9 +217,15 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      nothing is written. */
   useLayoutEffect(()=>{const viewport=window.visualViewport,node=root.current;if(!viewport||!node)return;
     const page=node.parentElement?.closest<HTMLElement>('.waka-page')??null;
+    /* A KEYBOARD, NOT A PINCH. Pinch-zoom shrinks the visual viewport too, and
+       pinning the page to a zoomed viewport would fight the zoom (review). A
+       keyboard leaves `scale` at 1 and has a field in focus to type into. */
+    const keyboardUp=()=>{const active=document.activeElement;
+      return Math.abs((viewport.scale??1)-1)<0.01&&window.innerHeight-viewport.height>120&&
+        active instanceof HTMLElement&&(active.isContentEditable||/^(TEXTAREA|INPUT|SELECT)$/.test(active.tagName));};
     const release=()=>{if(!page)return;page.style.removeProperty('top');page.style.removeProperty('height');page.style.removeProperty('bottom');delete page.dataset.keyboard;};
     const update=()=>{if(!Number.isFinite(viewport.height)||viewport.height<=0||!Number.isFinite(viewport.offsetTop))return;node.style.setProperty('--chat-height',`${viewport.height}px`);node.style.setProperty('--chat-top',`${viewport.offsetTop}px`);
-      if(page){if(window.innerHeight-viewport.height>120){page.style.top=`${viewport.offsetTop}px`;page.style.height=`${viewport.height}px`;page.style.bottom='auto';page.dataset.keyboard='1';}else release();}
+      if(page){if(keyboardUp()){page.style.top=`${viewport.offsetTop}px`;page.style.height=`${viewport.height}px`;page.style.bottom='auto';page.dataset.keyboard='1';}else release();}
       if(nearBottom.current&&body.current)body.current.scrollTop=body.current.scrollHeight;};
     update();viewport.addEventListener('resize',update);viewport.addEventListener('scroll',update);return()=>{viewport.removeEventListener('resize',update);viewport.removeEventListener('scroll',update);release();};},[]);
   /* THE TEXTAREA SIZES ITSELF, AND ONLY ONE THING DECIDES HOW. Four
@@ -338,10 +344,12 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       /* SAY WHICH THING COULD NOT BE REACHED (audit f2afcbe2, desk/93). A
          new chat has nothing to open, so "This conversation couldn't be
          opened" over an empty page was false: only the server was out of
-         reach. A pending message offline is said to be unsent, because
-         offline it never left. */
+         reach. A journalled (pending) message is NOT CONFIRMED rather than
+         "not sent", offline or not: the browser's offline flag says nothing
+         about whether an earlier request reached the server before the
+         connection went (review). Retry sends it again under the same id. */
       const target=id??(draftRef.current?.pending?draftRef.current.conversationId:null);
-      if(mine(owner))setError(say(draftRef.current?.pending?(offlineNow()?'worldConversationNotSent':'worldConversationSaveFailed'):target?'worldConversationReadFailed':'worldConversationUnreachable'));}
+      if(mine(owner))setError(say(draftRef.current?.pending?(offlineNow()?'worldConversationNotConfirmed':'worldConversationSaveFailed'):target?'worldConversationReadFailed':'worldConversationUnreachable'));}
     finally{if(mine(owner))setLoading(false);}
   };
   const loadEarlier=async()=>{
@@ -418,10 +426,11 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         setError(null);setAttachNote('worldAttachGone');
         return;
       }
-      /* Offline, the request never left this device: "not sent" is the true
-         sentence, and the send control (now "Retry this message") sends the
-         same message, under the same id, when you press it again. */
-      setError(say(offlineNow()?'worldConversationNotSent':'worldConversationSaveFailed'));
+      /* NOT CONFIRMED, NOT "NOT SENT": the request may have reached the server
+         before the connection dropped, so only the server can say. Retry (and
+         the send control, now "Retry this message") sends the same message
+         under the same id, which the server dedupes. */
+      setError(say(offlineNow()?'worldConversationNotConfirmed':'worldConversationSaveFailed'));
     }
     finally{working.current=false;if(mine(owner))setBusy(false);}
   };
@@ -579,7 +588,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         it was, on a product whose other screens have one bar and two corner
         buttons. The corners are the navigation here as everywhere. */}
     <section className="chat-main" aria-label={say('worldConversationTitle')}>
-      {error?<div className="chat-notice" role="alert">{error} {unsent&&!draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void save()}>{say('worldConversationRetry')}</button>
+      {error?<div className="chat-notice" role="alert">{error} {(unsent&&!draft?.pending)||draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void save()}>{say('worldConversationRetry')}</button>
         :!draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldRoomHistoryRetry')}</button>:null}
         {/* THE WAY OUT SITS BESIDE THE FAILURE. When a conversation cannot be
             opened there is no box to type in, so starting a fresh one is the
