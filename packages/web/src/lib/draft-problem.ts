@@ -28,25 +28,24 @@ export function draftProblem(reason: unknown, fallback: MessageKey = 'worldDraft
  * "KEEP AS A SEPARATE DRAFT", PRESSED.
  *
  * The offer stands while the composer is showing the conflict — either the
- * draft hook's own error or the note a failed keep left behind. The hook
- * clears its error when the fork lands; the note is the page's, so it is
- * cleared here, or the button stayed up and every further press forked the
- * already-forked draft again. Only the conflict note is cleared: anything
- * said since (an upload that failed) is not this button's to take away.
+ * draft hook's own error or the note a failed keep left behind, each a flag
+ * (a key), never a comparison with translated words. The hook clears its
+ * error when the fork lands; the note is the page's, so it is cleared here,
+ * or the button stayed up and every further press forked the already-forked
+ * draft again. Only a conflict note is cleared: anything said since (an
+ * upload that failed) is not this button's to take away.
  */
 export async function forkDraftAndClear(input: {
   fork: () => Promise<void>;
-  /** The conflict, as the page says it. */
-  conflictNote: string;
-  setNote: (update: (note: string) => string) => void;
-  /** How the page says a fork's own failure. */
-  sayProblem: (key: MessageKey) => string;
+  /** Clears the page's note only if it is still the conflict. */
+  clearConflict: () => void;
+  /** Says a fork's own failure. */
+  sayProblem: (key: MessageKey) => void;
 }): Promise<void> {
   try {
     await input.fork();
-    input.setNote(note => (note === input.conflictNote ? '' : note));
+    input.clearConflict();
   } catch (reason) {
-    const said = input.sayProblem(draftProblem(reason));
-    input.setNote(() => said);
+    input.sayProblem(draftProblem(reason));
   }
 }

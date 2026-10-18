@@ -88,10 +88,11 @@ it('forks once when the separate-draft offer is pressed twice, and the conflict 
   await writeInspirationDraft(scope, { ...original, revision: original.revision + 1, text: 'Other tab' }, original.revision);
   await act(async () => { hook.setText('Mine'); await expect(hook.flush()).rejects.toThrow('another tab'); });
 
-  const conflictNote = 'This draft changed in another tab.';
-  let note = conflictNote;
+  let note = { key: 'worldDraftChangedElsewhere', conflict: true };
   const press = () => forkDraftAndClear({
-    fork: hook.fork, conflictNote, setNote: update => { note = update(note); }, sayProblem: key => key,
+    fork: hook.fork,
+    clearConflict: () => { if (note.conflict) note = { key: '', conflict: false }; },
+    sayProblem: key => { note = { key, conflict: key === 'worldDraftChangedElsewhere' }; },
   });
   const minted = vi.spyOn(crypto, 'randomUUID');
   await act(async () => { const first = press(); const second = press(); await Promise.all([first, second]); });
@@ -99,16 +100,18 @@ it('forks once when the separate-draft offer is pressed twice, and the conflict 
   expect(hook.draft.id).not.toBe(original.id);
   expect(minted, 'the second press forked the fork').toHaveBeenCalledTimes(1);
   minted.mockRestore();
-  expect(note, 'the conflict note outlived the fork, so the offer stayed up').toBe('');
+  expect(note.conflict, 'the conflict outlived the fork, so the offer stayed up').toBe(false);
   expect(hook.error).toBe('');
   expect((await loadInspirationDraft(scope, hook.draft.id))?.text).toBe('Mine');
   expect((await loadInspirationDraft(scope, original.id))?.text).toBe('Other tab');
 });
 
 it('keeps a note that is not the conflict, and says a failed fork', async () => {
-  let note = 'An upload failed.';
-  await forkDraftAndClear({ fork: async () => undefined, conflictNote: 'conflict', setNote: u => { note = u(note); }, sayProblem: k => k });
-  expect(note).toBe('An upload failed.');
-  await forkDraftAndClear({ fork: async () => { throw new Error('disk'); }, conflictNote: 'conflict', setNote: u => { note = u(note); }, sayProblem: k => `said:${k}` });
-  expect(note).toBe('said:worldDraftKeepFailed');
+  let note = { key: 'worldComposerUploadFailed', conflict: false };
+  const clearConflict = () => { if (note.conflict) note = { key: '', conflict: false }; };
+  const sayProblem = (key: string) => { note = { key, conflict: key === 'worldDraftChangedElsewhere' }; };
+  await forkDraftAndClear({ fork: async () => undefined, clearConflict, sayProblem });
+  expect(note.key).toBe('worldComposerUploadFailed');
+  await forkDraftAndClear({ fork: async () => { throw new Error('disk'); }, clearConflict, sayProblem });
+  expect(note).toEqual({ key: 'worldDraftKeepFailed', conflict: false });
 });

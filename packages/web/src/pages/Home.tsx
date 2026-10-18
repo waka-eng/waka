@@ -2128,7 +2128,12 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   useEffect(() => { if (!mouthOpen && recording.phase !== 'idle') void recording.stop(); }, [mouthOpen, recording.phase, recording.stop]);
   const [newInspirationRequested, setNewInspirationRequested] = useState(false);
   /** The one honest line: it did not keep. Never a modal, never a silence. */
-  const [mouthNote, setMouthNote] = useState("");
+  const [mouthNoteState, setMouthNoteState] = useState({ text: "", conflict: false });
+  const mouthNote = mouthNoteState.text;
+  /* A note is plain words unless it was said by `sayMouthProblem` below,
+     which also remembers WHICH problem as a flag — the separate-draft offer
+     answers that flag, never a comparison with translated text. */
+  const setMouthNote = useCallback((text: string) => setMouthNoteState({ text, conflict: false }), []);
   /**
    * WHEN THE MOUTH HAS OUTGROWN THE QUICK LINE.
    *
@@ -2459,6 +2464,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const say = useCallback((key: MessageKey) => t(localeRef.current, key), []);
+  /** Says a draft problem on the composer, and flags the one problem that
+      offers a separate draft: this draft changed in another tab. */
+  const sayMouthProblem = useCallback((key: MessageKey) =>
+    setMouthNoteState({ text: say(key), conflict: key === 'worldDraftChangedElsewhere' }), [say]);
   /* ═══ IT STATES THE FACT; THE ACTION CARRIES THE VERB ═════════════════
      Founder, with "No top of mind formed yet. Add more inspirations." sitting
      above a button reading "Add an inspiration": "it's duplicative."
@@ -5478,7 +5487,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         ...(reference ? { draft: reference } : {}) });
       setMomentWhy('');
       setCharSay('');
-    } catch (reason) { if (composerEpoch.current === epoch) setMouthNote(reason instanceof ApiError ? say('worldComposerUploadFailed') : say(draftProblem(reason, 'worldComposerSaveFailed'))); }
+    } catch (reason) { if (composerEpoch.current === epoch) sayMouthProblem(reason instanceof ApiError ? 'worldComposerUploadFailed' : draftProblem(reason, 'worldComposerSaveFailed')); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   }, [inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
 
@@ -5546,7 +5555,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (accepted.length && composerDraft.setMedia([...media, ...accepted])) await composerDraft.flush();
       setMouthNote(problems.join(' '));
     } catch (reason) {
-      if (epoch === fileOwnerEpoch.current) setMouthNote(say(draftProblem(reason)));
+      if (epoch === fileOwnerEpoch.current) sayMouthProblem(draftProblem(reason));
     } finally {
       if (epoch === fileOwnerEpoch.current) { checkingFilesCount.current -= 1; setCheckingFiles(checkingFilesCount.current > 0); }
     }
@@ -5559,7 +5568,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (!hasRecording) return addInspirationFiles([file], 'audio');
     composerDraft.setRecordingCandidate({ id: crypto.randomUUID(), type: 'audio', name: file.name, blob: file });
     try { await composerDraft.flush(); setMouthNote(''); }
-    catch (reason) { setMouthNote(say(draftProblem(reason))); }
+    catch (reason) { sayMouthProblem(draftProblem(reason)); }
   };
 
   const onMouthKey = useCallback(
@@ -9694,7 +9703,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
           linkText={composerDraft.draft.linkText ?? ''} onLinkText={composerDraft.setLinkText}
           recordingCandidate={composerDraft.draft.recordingCandidate}
-          onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => setMouthNote(say(draftProblem(reason)))); }}
+          onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => sayMouthProblem(draftProblem(reason))); }}
           locale={locale} ready={composerDraft.ready} fileDraftsAvailable={composerDraft.available} busy={preparingInspiration || checkingFiles}
           uploadingId={uploadingMediaId} error={mouthNote || (composerDraft.error ? say(composerDraft.error) : '')}
           save={inspirationSave} recording={recording} inputRef={mouthFieldRef}
@@ -9713,8 +9722,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              `openOverHome` writes ONE destination, which is why pressing a
              place from inside the notepad does not need a close first. */
           onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
-          onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork, conflictNote: say('worldDraftChangedElsewhere'), setNote: setMouthNote, sayProblem: say }); }}
-          draftConflict={composerDraft.error === 'worldDraftChangedElsewhere' || mouthNote === say('worldDraftChangedElsewhere')} /> : null}
+          onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
+            clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
+            sayProblem: sayMouthProblem }); }}
+          draftConflict={composerDraft.error === 'worldDraftChangedElsewhere' || mouthNoteState.conflict} /> : null}
       </> : null}
 
       {/* SECTION S IS GONE. The sky — a whole viewport above headquarters
