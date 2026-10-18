@@ -31,7 +31,7 @@ type Db = Database | Transaction;
  * retries its own derivation (`/inspirations/:id/processing`).
  */
 async function latestReadingJob(db: Db, profileId: string) {
-  const [latest] = await db.select({ status: backgroundJobs.status, updatedAt: backgroundJobs.updatedAt }).from(backgroundJobs)
+  const [latest] = await db.select({ status: backgroundJobs.status, updatedAt: backgroundJobs.updatedAt, payload: backgroundJobs.payload }).from(backgroundJobs)
     .where(and(eq(backgroundJobs.profileId, profileId), eq(backgroundJobs.type, "refresh_top_of_mind")))
     .orderBy(desc(backgroundJobs.updatedAt)).limit(1);
   return latest ?? null;
@@ -42,7 +42,10 @@ async function latestReadingJob(db: Db, profileId: string) {
     Measured from when the job FAILED (`updatedAt`), not when it was first
     enqueued — a job that ran its retries for ten minutes failed just now.
     It throttles the reading job only: failed or stalled principles behind
-    the same Try again are still restarted inside it. */
+    the same Try again are still restarted inside it. And it counts only a
+    PERSON'S retry — a job the retry path enqueued carries `retry: true` in
+    its payload. A reading that failed on its own (an automatic run) never
+    starts a cooldown: the first Retry after it always goes through. */
 export const READING_RETRY_COOLDOWN_MS = 3 * 60_000;
 
 /** A retry asked for inside the cooldown. The route answers 429 with when. */
@@ -72,7 +75,7 @@ export async function requestPrincipleRefresh(db: Db, profileId: string, retry =
   let throttledSeconds = 0;
   if (retry) {
     const reading = await latestReadingJob(db, profileId);
-    if (reading?.status === "failed") {
+    if (reading?.status === "failed" && (reading.payload as { retry?: unknown } | null)?.retry === true) {
       const wait = reading.updatedAt.getTime() + READING_RETRY_COOLDOWN_MS - now.getTime();
       if (wait > 0) throttledSeconds = Math.ceil(wait / 1000);
     }
@@ -90,7 +93,7 @@ export async function requestPrincipleRefresh(db: Db, profileId: string, retry =
        explicit retry, and only when the latest reading job did fail — a
        plain refresh still never buys a synthesis nobody asked for. */
     if (retry && !sources.length && !throttledSeconds) {
-      if ((await latestReadingJob(tx, profileId))?.status === "failed") await enqueueTopOfMindRefresh(profileId, 'manual', tx);
+      if ((await latestReadingJob(tx, profileId))?.status === "failed") await enqueueTopOfMindRefresh(profileId, 'manual', tx, { retry: true });
     }
     if (await enqueueEligiblePrinciples(tx, profileId, retry, tx)) restarted = true;
   });
@@ -106,12 +109,14 @@ export async function enqueuePrinciplesAfterReading(tx: Transaction, profileId: 
   await enqueueEligiblePrinciples(tx, profileId, false, tx);
 }
 
-/** True when an explicit retry reset a failed or stalled principles job. */
+/** True when this call put principles work in motion: a new job for new
+    material, or a failed/stalled one reset by an explicit retry. Either way
+    the retry did something, so it answers 202, never 429. */
 async function enqueueEligiblePrinciples(db: Db, profileId: string, retry: boolean, transaction?: Transaction): Promise<boolean> {
   // A room mind's material comes back empty from its profile read (room
   // principles retired with the room engine); never enqueue for one.
   const material = await loadPrincipleMaterial(db, profileId);
   if (material.groupProfile || !material.eligibility.eligible) return false;
   const result = await enqueueRefreshPrinciples(profileId, principleMaterialKey(material), retry, transaction);
-  return Boolean(result.restarted);
+  return result.created;
 }

@@ -189,12 +189,17 @@ const MAX_ERROR_LENGTH = 1_000;
 export const STALE_LOCK_SECONDS = 15 * 60;
 /**
  * A principles job still pending or processing this long after its last
- * change has stalled: the page stops polling at five minutes and offers Try
- * again, and that explicit retry re-enqueues it rather than waiting out the
- * fifteen-minute stale lock. Resetting `locked_at`/`attempts` fences the old
- * claim, whose commit checks both.
+ * change has stalled, and an explicit retry re-enqueues it rather than
+ * waiting out the fifteen-minute stale lock. Resetting `locked_at`/`attempts`
+ * fences the old claim, whose commit checks both.
+ *
+ * ONE THRESHOLD WITH THE PAGE. `PrincipleRead` (web) calls a read stalled
+ * only after `PRINCIPLES_SERVER_STALL_MS` (this, mirrored) plus a margin, so
+ * by the time it offers Try again on a stall, this side agrees the job is
+ * stalled and the retry actually resets it. `principle-stall-threshold.test.ts`
+ * holds the two numbers together.
  */
-export const PRINCIPLES_STALL_SECONDS = 5 * 60;
+export const PRINCIPLES_STALL_SECONDS = 4 * 60;
 
 let drainScheduled = false;
 let drainTimer: ReturnType<typeof setTimeout> | null = null;
@@ -597,13 +602,14 @@ export async function enqueueTopOfMindRefresh(
   profileId: string,
   reason: RefreshTopOfMindPayload["reason"],
   transaction?: Pick<ReturnType<typeof getDb>, "execute">,
+  options: { retry?: boolean } = {},
 ): Promise<EnqueueResult> {
   if (reason === 'manual' && !transaction) {
-    const result = await getDb().transaction((tx) => enqueueTopOfMindRefresh(profileId, reason, tx));
+    const result = await getDb().transaction((tx) => enqueueTopOfMindRefresh(profileId, reason, tx, options));
     await wakeCommittedBackgroundJobs([{id:result.jobId,profileId,requestVersion:result.requestVersion.toString()}]); return result;
   }
   if (reason === 'manual' && transaction) await recoverPendingSignalSupport(transaction, profileId);
-  const payload: RefreshTopOfMindPayload = { reason };
+  const payload: RefreshTopOfMindPayload = options.retry ? { reason, retry: true } : { reason };
   const rows = await (transaction ?? getDb()).execute(sql<{ id: string }>`
     INSERT INTO background_jobs (profile_id, type, payload, max_attempts)
     VALUES (

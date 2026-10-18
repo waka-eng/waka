@@ -7,8 +7,18 @@ import { t, type SupportedLocale } from "../lib/i18n";
  * Your own principles: the sky's lead line and one status sentence. Only the
  * active view polls. (Rooms' principles left with rooms, 2026-10-12.)
  */
-/** Ten-second reads while a reading is in progress: five minutes, then stop. */
-const MAX_WAITING_READS = 30;
+/** The API's stall threshold (`PRINCIPLES_STALL_SECONDS` in
+    `packages/api/src/lib/queue.ts`), mirrored: a principles job unchanged
+    this long is one an explicit retry resets. Held equal to the server's by
+    `principle-stall-threshold.test.ts` in the API package. */
+export const PRINCIPLES_SERVER_STALL_MS = 4 * 60_000;
+/** The page calls a read stalled only a minute PAST the server's threshold,
+    so its Try again on a stall always lands on a job the server agrees is
+    stalled, and the retry actually resets it. */
+export const PRINCIPLES_STALL_MARGIN_MS = 60_000;
+const WAITING_READ_MS = 10_000;
+/** Ten-second reads while a reading is in progress, then stop (five minutes). */
+const MAX_WAITING_READS = Math.ceil((PRINCIPLES_SERVER_STALL_MS + PRINCIPLES_STALL_MARGIN_MS) / WAITING_READ_MS);
 /** Failed reads in a row before the poll stops and waits for Try again. */
 const MAX_FAILED_READS = 6;
 
@@ -64,7 +74,7 @@ export function PrincipleRead({ active, locale, onRead }: {
         setFailed(false);
         consecutiveFailures = 0;
         const waiting = result.status.phase === "processing" || result.status.phase === "pending";
-        delay = waiting ? 10_000 : 60_000;
+        delay = waiting ? WAITING_READ_MS : 60_000;
         waitingReads = waiting ? waitingReads + 1 : 0;
         stopped = waitingReads >= MAX_WAITING_READS;
         setStalled(stopped);
