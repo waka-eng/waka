@@ -87,6 +87,20 @@ afterEach(() => {
 });
 
 describe("offline at startup", () => {
+  it("says 'still signed in' only when this browser had a session, and otherwise offers the door too", async () => {
+    vi.mocked(fetchCurrentViewer).mockRejectedValue(new ApiError({ status: 0, message: "unreachable" }));
+    await mount("/");
+    expect(text()).toContain("We can’t reach WAKA right now");
+    expect(text(), "claimed a session nobody had").not.toContain("still signed in");
+    expect([...container!.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Try again", "Sign in"]);
+    act(() => root?.unmount()); container?.remove(); root = null; container = null;
+
+    window.localStorage.setItem("waka.auth.viewer", JSON.stringify(VIEWER));
+    await mount("/");
+    expect(text()).toContain("You’re still signed in");
+    expect([...container!.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Try again"]);
+  });
+
   it("says WAKA cannot be reached, keeps the door shut, and lets the person ask again", async () => {
     vi.mocked(fetchCurrentViewer).mockRejectedValue(new ApiError({ status: 0, message: "unreachable" }));
     await mount("/");
@@ -117,6 +131,13 @@ describe("a session that ends mid-flow", () => {
     storeConversationDraft({ accountId: "account-1", profileId: "profile-1" }, "thread-1",
       { id: crypto.randomUUID(), writer: crypto.randomUUID(), updatedAt: 1, revision: 0, pending: false, content: "half a thought" });
 
+    /* A SLOW READ SENT UNDER THE OLD SESSION, answered only after the person
+       has signed in again — its 401 is about a session that no longer
+       exists and must not sign out the new one. */
+    let answerLate: (response: Response) => void = () => undefined;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { answerLate = resolve; })));
+    const late = fetchInspiration("inspiration-late").catch(() => undefined);
+
     /* the real transport sees a 401 from a resource route */
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 })));
     await act(async () => { await fetchInspiration("inspiration-1").catch(() => undefined); });
@@ -139,6 +160,10 @@ describe("a session that ends mid-flow", () => {
     await act(async () => { await Promise.resolve(); });
     expect(text(), "signing in again did not return to the conversation").toContain("protected");
     expect(text()).not.toContain("You were signed out.");
+
+    await act(async () => { answerLate(new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 })); await late; });
+    await act(async () => { await Promise.resolve(); });
+    expect(text(), "a 401 from before the new sign-in signed the person out again").toContain("protected");
   });
 
   it("does not treat a wrong password or an anonymous /auth/me as an expiry", async () => {
@@ -176,5 +201,44 @@ describe("the loading screen's failure face", () => {
     await press("Sign out");
     expect(retry).toHaveBeenCalledTimes(1);
     expect(out).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the web read deadline", () => {
+  /* A body that starts and never finishes. The mock honours the request's
+     signal the way a real fetch does: aborting it errors the stream. */
+  function stalledBody(init?: RequestInit): Response {
+    const stream = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"account":'));
+      init?.signal?.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")));
+    } });
+    return new Response(stream, { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+
+  it("ends a stalled body as unreachable, never as a quiet signed-out", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => stalledBody(init)));
+      const { fetchCurrentViewer: realViewer } = await vi.importActual<typeof import("../src/lib/api")>("../src/lib/api");
+      const asked = realViewer();
+      const settled = expect(asked, "a stalled /auth/me body answered as 'no session'").rejects.toMatchObject({ status: 0 });
+      await vi.advanceTimersByTimeAsync(20_000);
+      await settled;
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("releases its timer and the caller's abort listener once the body is in", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response('{"ok":true}', { status: 200 })));
+      const { apiFetch } = await import("../src/lib/api/transport");
+      const controller = new AbortController();
+      const added = vi.spyOn(controller.signal, "addEventListener");
+      const removed = vi.spyOn(controller.signal, "removeEventListener");
+      const response = await apiFetch("/api/inspirations", { signal: controller.signal });
+      expect(await response.json()).toEqual({ ok: true });
+      expect(vi.getTimerCount(), "the 20s deadline outlived its request").toBe(0);
+      expect(removed.mock.calls.map((call) => call[1])).toEqual(added.mock.calls.map((call) => call[1]));
+    } finally { vi.useRealTimers(); }
   });
 });

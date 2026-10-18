@@ -62,7 +62,7 @@ import type {
 import { normalizeSupportedLocale, writeStoredLocale } from "./locales";
 import type { SupportedLocale } from "./locales";
 import { isMobileBuild } from './platform';
-import { SESSION_EXPIRED_EVENT } from './api/transport';
+import { SESSION_EXPIRED_EVENT, webSessionChanged } from './api/transport';
 
 // ---------------------------------------------------------------------------
 // Storage helpers
@@ -181,6 +181,12 @@ export interface AuthContextValue {
    */
   serverUnreachable: boolean;
   /**
+   * Whether this browser held a signed-in hint when the server could not be
+   * reached. Only then may a screen say "you're still signed in": for a
+   * visitor with no hint that sentence is an invention.
+   */
+  unreachableWasSignedIn: boolean;
+  /**
    * THE SESSION ENDED WHILE IN USE, AND WHERE THE PERSON WAS WHEN IT DID.
    *
    * Set when a request made with a session comes back 401 (see
@@ -276,11 +282,17 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
    * cache in lock-step. Every code path that mutates the viewer must go
    * through this so the two never drift.
    */
+  /* Which identity requests are being sent under — see `webSessionChanged`
+     in `lib/api/transport.ts`. Seeded from the cached hint so hydration that
+     confirms the same person is not counted as a change. */
+  const identityRef = useRef<string | null>(viewer ? `${viewer.account.id}:${viewer.profile.id}` : null);
   const applyViewer = useCallback(
     (next: ApiViewer | null, options?: { countAsAuthMutation?: boolean }): void => {
       if (options?.countAsAuthMutation !== false) {
         authMutationRef.current += 1;
       }
+      const identity = next ? `${next.account.id}:${next.profile.id}` : null;
+      if (identity !== identityRef.current) { identityRef.current = identity; webSessionChanged(); }
       setViewer(next);
       setInspirationSnapshotOwner(next?{accountId:next.account.id,profileId:next.profile.id}:null);
       writeCachedViewer(next);
@@ -294,6 +306,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   /** See `AuthContextValue.serverUnreachable`. Says nothing about access. */
   const [serverUnreachable, setServerUnreachable] = useState(false);
   const [sessionExpired, setSessionExpired] = useState<{ from: string } | null>(null);
+  const [unreachableWasSignedIn, setUnreachableWasSignedIn] = useState(false);
   const viewerRef = useRef(viewer);
   viewerRef.current = viewer;
   useEffect(() => {
@@ -341,6 +354,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
              RETURNS null for it rather than throwing, so signed-out is
              handled above and the door greets it normally. */
           setServerUnreachable(err instanceof ApiError && err.status === 0);
+          setUnreachableWasSignedIn(identityRef.current !== null);
         }
         // The cache is only an optimistic display hint, not proof of an
         // authenticated session. If the initial server validation fails
@@ -505,6 +519,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       isLoading,
       isAuthenticated: viewer !== null,
       serverUnreachable,
+      unreachableWasSignedIn,
       sessionExpired,
       login,
       signup,
@@ -518,6 +533,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       viewer,
       isLoading,
       serverUnreachable,
+      unreachableWasSignedIn,
       sessionExpired,
       login,
       signup,

@@ -75,19 +75,40 @@ export async function apiFetch(url: string, init: RequestInit = {}): Promise<Res
 }
 
 /**
+ * WHICH SESSION A WEB REQUEST WAS SENT WITH.
+ *
+ * Native compares the token a request carried with the one stored now
+ * (`clearIfCurrent`). The web cookie is invisible to script, so the auth
+ * context counts identities instead: every time the signed-in account or
+ * profile changes — a sign-in, a sign-out, a switch, an expiry — it calls
+ * `webSessionChanged`. A 401 is only news about the CURRENT session if the
+ * request left under it; a slow read that was sent before the person signed
+ * in again must not sign them out of the session they just made.
+ */
+let webSession = 0;
+export function webSessionChanged(): void { webSession += 1; }
+
+/**
  * THE WEB BRANCH: the browser's own fetch, cookie and all, with the deadline
  * and the expiry signal the native branch already had.
  *
- * THE DEADLINE STAYS ARMED THROUGH THE BODY. Clearing it when the headers
- * arrive would leave a server that sends a status line and then stalls
- * mid-body exactly as stuck as before. So a successful response leaves it
- * armed: an abort landing after the body has been read is a no-op, and one
- * landing mid-body is the point. The
- * body is NOT buffered here, unlike native: web callers include tests and
- * code that hand this a `Response` they read themselves, and a stream the
- * deadline can still cut is all that is needed.
+ * THE DEADLINE COVERS THE BODY, AND THE BODY IS READ HERE. Leaving the timer
+ * armed on a returned stream (the first version of this) let it abort a body
+ * mid-read, and `getJson` / `fetchCurrentViewer` swallowed a failed
+ * `res.json()` as "no body" — so a stalled `/auth/me` body became a 200 with
+ * nothing in it, which reads as signed out. Reading the body inside the
+ * deadline, as native does, means a stall anywhere ends as a thrown network
+ * error (status 0 to every caller) and never as a quiet success. The timer
+ * and the caller's abort listener are released the moment the body is in,
+ * whatever happened.
  */
 async function webFetch(url: string, init: RequestInit): Promise<Response> {
+  const session = webSession;
+  const expired = (response: Response) => {
+    if (response.status === 401 && session === webSession && !NOT_AN_EXPIRY.includes(pathOf(url))) {
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    }
+  };
   /* READS ONLY. A write that has been sent may already be committing, and
      cutting it off at the deadline turns "slow" into "did it save?" — the
      one question a person cannot answer for themselves. The attachment
@@ -98,7 +119,7 @@ async function webFetch(url: string, init: RequestInit): Promise<Response> {
   const method = (init.method ?? 'GET').toUpperCase();
   if (method !== 'GET' && method !== 'HEAD') {
     const response = await fetch(url, init);
-    if (response.status === 401 && !NOT_AN_EXPIRY.includes(pathOf(url))) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    expired(response);
     return response;
   }
   const controller = new AbortController();
@@ -106,17 +127,16 @@ async function webFetch(url: string, init: RequestInit): Promise<Response> {
   if (init.signal?.aborted) abort();
   else init.signal?.addEventListener('abort', abort, { once: true });
   const timeout = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), REQUEST_DEADLINE_MS);
-  let response: Response;
   try {
-    response = await fetch(url, { ...init, signal: controller.signal });
-  } catch (error) {
-    clearTimeout(timeout); init.signal?.removeEventListener('abort', abort);
-    throw error;
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const empty = method === 'HEAD' || response.status === 204 || response.status === 205 || response.status === 304;
+    const body = empty ? null : await response.arrayBuffer();
+    expired(response);
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  } finally {
+    clearTimeout(timeout);
+    init.signal?.removeEventListener('abort', abort);
   }
-  if (response.status === 401 && !NOT_AN_EXPIRY.includes(pathOf(url))) {
-    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
-  }
-  return response;
 }
 
 let revoking: Promise<void> | undefined;

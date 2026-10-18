@@ -609,5 +609,6 @@
   "readingPausedRetry": "Retry",
   "readingPausedRetrying": "Restarting…",
   "readingPausedRetryFailed": "Couldn’t restart it. Try again in a moment.",
-  "agentWallHowItFills": "Your agent fills this wall itself: when it signs in to WAKA as your agent, what it saves appears here."
+  "agentWallHowItFills": "Your agent fills this wall itself: when it signs in to WAKA as your agent, what it saves appears here.",
+  "unreachableAnonymous": "We can’t reach WAKA right now. Check your connection and try again."
 }

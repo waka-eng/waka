@@ -25,7 +25,7 @@
  */
 
 import { Fragment, useState, type ReactNode } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../lib/auth-context";
 import { LoadingHome } from "./LoadingHome";
@@ -37,9 +37,10 @@ export interface RequireAuthProps {
 }
 
 export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps): JSX.Element {
-  const { isAuthenticated, isLoading, account, profile, serverUnreachable, sessionExpired, refresh } = useAuth();
+  const { isAuthenticated, isLoading, account, profile, serverUnreachable, unreachableWasSignedIn, sessionExpired, refresh } = useAuth();
   const location = useLocation();
   const [checking, setChecking] = useState(false);
+  const navigate = useNavigate();
 
   if (isLoading) {
     // The splash was a white page with a word on it — the product changing
@@ -61,8 +62,12 @@ export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps
      where they were going, without the door in between. */
   if (!isAuthenticated && serverUnreachable && !sessionExpired) {
     const locale = readStoredLocale();
+    const from = `${location.pathname}${location.search}${location.hash}`;
+    /* "You're still signed in" only when this browser had a session to
+       keep. A visitor with none is told the plain fact and offered the door
+       as well, since a session may be exactly what they are missing. */
     return <LoadingHome problem={{
-      message: t(locale, "unreachableTitle"),
+      message: t(locale, unreachableWasSignedIn ? "unreachableTitle" : "unreachableAnonymous"),
       actions: [{
         label: t(locale, checking ? "unreachableChecking" : "homeTryAgain"),
         busy: checking,
@@ -70,7 +75,10 @@ export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps
           setChecking(true);
           void refresh().catch(() => undefined).finally(() => setChecking(false));
         },
-      }],
+      }, ...(unreachableWasSignedIn ? [] : [{
+        label: t(locale, "loginTab"),
+        onClick: () => navigate("/login", { state: { from } }),
+      }])],
     }} />;
   }
 
