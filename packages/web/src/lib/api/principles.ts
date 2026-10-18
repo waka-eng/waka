@@ -38,7 +38,6 @@ export interface ApiPrinciple {
 }
 
 export interface ApiPrincipleStatus {
-  restricted?: boolean;
   supportPending?: boolean;
   phase: "waiting" | "pending" | "processing" | "ready" | "failed";
   eligible: boolean;

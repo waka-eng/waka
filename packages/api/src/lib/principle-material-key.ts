@@ -6,7 +6,10 @@ export function principleMaterialKey(material: Awaited<ReturnType<typeof loadPri
   return createHash("sha256").update(JSON.stringify({
     // The new distinct-wording/semantic checks deserve one scheduled pass;
     // an old completed empty result must not permanently suppress them.
-    policy: material.groupId ? "principles-v3" : "principles-v4", groupId: material.groupId, locale: material.preferredLocale,
+    // `groupId: null` is pinned, not vestigial: every stored key was hashed
+    // with it, and dropping it would re-key (and re-buy) every profile's
+    // completed principles. Room minds ("principles-v3") retired 2026-10-17.
+    policy: "principles-v4", groupId: null, locale: material.preferredLocale,
     signals: material.activeSignals.map((signal) => ({
       id: signal.id, statement: signal.statement,
       evidence: material.evidence.get(signal.id)?.evidenceAt.map((at) => at.toISOString()).sort(),

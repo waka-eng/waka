@@ -92,7 +92,6 @@ const SPENDS_THE_SHARED_KEY: Record<string, string> = {
   // in the band between the two thresholds.
   applyCandidates: "src/lib/signal-match-or-mint.ts",
   refreshTopOfMindForProfile: "src/lib/top-of-mind-synthesis.ts",
-  refreshTopOfMindForGroup: "src/lib/top-of-mind-synthesis.ts",
   extractSignalCandidates: "src/queue/gemini.ts",
   judgeSignalMatch: "src/queue/gemini.ts",
   synthesizeTopOfMind: "src/queue/gemini.ts",
