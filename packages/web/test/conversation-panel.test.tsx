@@ -330,24 +330,25 @@ it('treats the first reply-read failure as transient rather than flashing an err
   stored.generationEnabled=true;vi.mocked(fetchConversationReply).mockRejectedValueOnce(new Error('Transient'));await mount();
   expect(host.textContent).not.toContain('Couldn’t check reply progress.');await tick(1000);expect(host.textContent).not.toContain('Couldn’t check reply progress.');
 });
-/* A CHECK THAT FAILED IS NOT A REPLY IN FLIGHT. Two failed reads under your
-   own last message used to count as "unconfirmed", which held Send disabled
-   as "thinking" for good, under a line saying it could not check and with
-   nothing to press. Send stays usable now, and "Check again" reads the
-   progress again. */
-it('keeps Send usable and offers Check again when reply progress cannot be read',async()=>{
+/* A CHECK THAT FAILED IS NOT AN ANSWER. The reply under your own last message
+   may still be running, so Send stays off while progress cannot be read — but
+   the watch never stops: it says it is retrying, keeps asking on its own, and
+   lets Send go the moment the server answers. "Check again" asks at once. */
+it('keeps the reply in flight while progress cannot be read, retries on its own, and frees Send on an answer',async()=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockRejectedValue(new Error('Down'));await mount();await tick(1000);
-  expect(host.textContent).toContain('Couldn’t check reply progress.');
-  expect(host.textContent).not.toContain('Thinking');
+  expect(host.textContent).toContain('Couldn’t check reply progress. Trying again…');
   await type('Still there?');
-  const send=[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
-  expect(send.disabled,'a failed progress read disabled Send').toBe(false);
+  const send=()=>[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
+  expect(send().disabled,'a failed progress read let a second message cross a reply that may be running').toBe(true);
+  const before=vi.mocked(fetchConversationReply).mock.calls.length;
+  await tick(2000);await tick(4000);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length,'the watch stopped after a failure').toBeGreaterThan(before);
   vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:1}));
-  const calls=vi.mocked(fetchConversationReply).mock.calls.length;
-  await click('Check again');await tick(0);
-  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBeGreaterThan(calls);
+  await tick(15000);
   expect(host.textContent).not.toContain('Couldn’t check reply progress.');
+  expect(send().disabled,'Send stayed off after the server answered').toBe(false);
+  expect(host.querySelector('.chat-recheck')).toBeNull();
 });
 /* ── ELEVEN TOMBSTONES: THE READINGS AND SOURCES A REPLY CITED ──────────────
    A reply could end in a list of top-of-mind previews, each one a button that

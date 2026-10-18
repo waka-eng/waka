@@ -30,7 +30,13 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
           // Keep a bounded ~one-minute window, then require an explicit check.
           if(++polls<35)timer=window.setTimeout(()=>void read(),polls<=10?1000:2000);else setWaiting(true);
         }
-      }catch{if(!controller.signal.aborted){if(++failures<2)timer=window.setTimeout(()=>void read(),1000);else setError(true);}}
+      }catch{
+        /* A FAILED READ IS NOT AN ANSWER, SO IT NEVER ENDS THE WATCH. The
+           reply may still be running; the panel keeps it counted in flight
+           (Send stays off) and says it is retrying, and this keeps asking —
+           backing off to fifteen seconds — until the server answers. */
+        if(!controller.signal.aborted){failures+=1;if(failures>=2)setError(true);timer=window.setTimeout(()=>void read(),Math.min(15000,1000*2**(failures-1)));}
+      }
       finally{window.clearTimeout(deadline);controller.signal.removeEventListener('abort',abort);}
     };void read();return()=>{controller.abort();window.clearTimeout(timer);};
   },[profileId,id,enabled,revision,serial,messageWindowStart]);

@@ -243,13 +243,14 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      landing and `observe` clearing the draft there is a frame where both are
      true, and rendering both would print your sentence twice. */
   const sending=draft?.pending&&!conversation?.messages.some(message=>message.id===draft.id)?draft:null;
-  /* A CHECK THAT FAILED IS NOT A REPLY IN FLIGHT. `reply.error` used to count
-     as "unconfirmed", which made `awaitingReply` true, which made `whyNoSend`
-     answer "thinking" — so one dropped progress read disabled Send for good,
-     under a line saying it could not check, with nothing to press. The
-     person's next message is an honest way past an unknown reply, and the
-     "Check again" beside the notice is the other. */
-  const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&!reply.state&&!reply.error);
+  /* A CHECK THAT FAILED IS NOT AN ANSWER. The reply may still be running, so
+     a failed progress read keeps it counted in flight and Send stays off —
+     a second message sent under a reply that is still being written would
+     cross it. What was wrong before was that the watch STOPPED after two
+     failures, leaving Send off for good; `useConversationReply` now keeps
+     retrying until the server answers, the line says it is retrying, and
+     "Check again" asks at once. */
+  const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&(!reply.state||reply.error));
   const awaitingReply=replyPending||replyUnconfirmed;
   useLayoutEffect(()=>{const node=body.current;if(!node||!conversation)return;const saved=restoredScroll.current;
     if(prependScroll.current){const previous=prependScroll.current;node.scrollTop=previous.top+node.scrollHeight-previous.height;prependScroll.current=null;return;}

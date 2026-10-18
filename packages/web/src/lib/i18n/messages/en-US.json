@@ -193,7 +193,7 @@
   "worldChatWithBothNote": "Answering from your memory and your agent’s",
   "worldConversationReadFailed": "This conversation couldn’t be opened.",
   "worldConversationRepliesUnavailable": "Replies aren’t available right now. Your messages are still saved.",
-  "worldConversationReplyCheckFailed": "Couldn’t check reply progress.",
+  "worldConversationReplyCheckFailed": "Couldn’t check reply progress. Trying again…",
   "worldConversationReplyFailed": "The reply couldn’t be finished. Your message is saved.",
   "worldConversationReplyLimit": "Replies are busy right now. Try again in a few minutes.",
   "worldConversationReplyStopped": "Stopped. Your message is saved.",
