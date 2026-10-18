@@ -112,14 +112,33 @@ describe("Back after the history moved under an open layer", () => {
     expect(tag(), "Back stopped on a step that does nothing").toBeUndefined();
   });
 
-  it("treats a tag found at load as a reload's, and steps over it", async () => {
+  it("moves the page entry beneath with a router replace that changes the address, so Back cannot restore the old one", async () => {
+    window.history.replaceState({ idx: 3, key: "page" }, "", "/old");
+    const close = vi.fn();
+    render(createElement(Layer, { open: true, onClose: close }));
+    const length = window.history.length;
+    window.history.replaceState({ idx: 3, key: "router", usr: null }, "", "/new");
+    for (let i = 0; i < 5; i += 1) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(tag(), "the layer lost its entry on top").toBe("moved-layer");
+    expect(window.location.pathname).toBe("/new");
+    expect(window.history.length, "the rebase added a step").toBe(length);
+    expect(close, "the silent pop closed the layer").not.toHaveBeenCalled();
+    await popped();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname, "Back restored the address the replace erased").toBe("/new");
+  });
+
+  it("treats a tag found at load as a reload's, and strips it in place without stepping back", async () => {
     window.history.replaceState({ idx: 1, key: "before" }, "", "/before");
     window.history.pushState({ idx: 1, key: "before", wakaLayer: "review" }, "", "/before");
+    const length = window.history.length;
+    const back = vi.spyOn(window.history, "back");
     vi.resetModules();
-    const popped = nextPop();
     await import("../src/lib/back-closes");
-    await act(async () => { await popped; });
     expect(tag(), "a reloaded page kept a layer entry with no layer").toBeUndefined();
+    expect(back, "stepping back crosses into the pre-reload document").not.toHaveBeenCalled();
+    expect(window.history.length).toBe(length);
+    back.mockRestore();
   });
 });
 

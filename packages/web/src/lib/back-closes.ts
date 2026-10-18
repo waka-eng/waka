@@ -26,8 +26,11 @@
  *   ours and took the tag with it, so closing found nothing to pop and left
  *   a same-address step behind. `replaceState` carries the tag across now
  *   while a layer is open — the entry is still the layer's entry. If the
- *   replace changed the address, closing strips the tag instead of stepping
- *   back, because stepping back would undo the replace.
+ *   replace changed the address, the page entry BENEATH the layer still holds
+ *   the old one, and Back from there would restore the address the replace
+ *   meant to erase. So the layer's entry is popped (silently — nothing else
+ *   hears that pop), the page entry is rewritten to the new address, and the
+ *   layer's entry is pushed again on top of it.
  *
  *   A NAVIGATION WHILE THE LAYER IS OPEN leaves the tagged entry under the
  *   new one, where closing cannot reach it. Walking onto such an entry later
@@ -36,7 +39,9 @@
  *
  *   A RELOAD leaves the tag in `history.state` with no layer open. Any tag
  *   present when this module first runs is stale by definition — nothing has
- *   rendered yet — so it is stripped and the duplicate stepped over.
+ *   rendered yet — so it is stripped IN PLACE. Stepping back over it is not
+ *   an option: the entry beneath belongs to the document from before the
+ *   reload, so going there would be a second full page load.
  */
 import { useEffect, useRef } from 'react';
 
@@ -62,6 +67,8 @@ function strip(value: HistoryState): HistoryState {
 const idxOf = (value: HistoryState): number => (typeof value?.idx === 'number' ? value.idx : 0);
 
 let installed = false;
+/* A replace under an open layer, waiting for its pop onto the page entry. */
+let rebase: { page: object; top: object; href: string } | null = null;
 let lastIdx = 0;
 function install(): void {
   if (installed || typeof window === 'undefined') return;
@@ -69,7 +76,6 @@ function install(): void {
   /* A reload: whatever layer this entry belonged to is not open. */
   if (state()?.[TAG]) {
     window.history.replaceState(strip(state()), '', window.location.href);
-    window.history.back();
   }
   lastIdx = idxOf(state());
   /* The tag survives a router replace while its layer is open, and every
@@ -79,15 +85,38 @@ function install(): void {
   window.history.replaceState = (data: unknown, unused: string, url?: string | URL | null) => {
     const layer = state()?.[TAG];
     const keep = typeof layer === 'string' && openLayers.has(layer) && data && typeof data === 'object' && !(TAG in data);
-    replace(keep ? { ...(data as object), [TAG]: layer, [BASE]: state()?.[BASE] } : data, unused, url);
+    if (!keep) {
+      replace(data, unused, url);
+      lastIdx = idxOf(state());
+      return;
+    }
+    const base = state()?.[BASE];
+    const href = new URL(url ?? window.location.href, window.location.href).href;
+    const top = { ...(data as object), [TAG]: layer, [BASE]: href };
+    replace(top, unused, url);
     lastIdx = idxOf(state());
+    /* The address changed: the page entry beneath must change with it. */
+    if (href !== base && !rebase) {
+      rebase = { page: data as object, top, href };
+      window.history.back();
+    }
   };
   window.history.pushState = (data: unknown, unused: string, url?: string | URL | null) => {
     push(data, unused, url);
     lastIdx = idxOf(state());
   };
   /* Stepping onto a tag whose layer is closed: keep going the same way. */
-  window.addEventListener('popstate', () => {
+  window.addEventListener('popstate', (event) => {
+    if (rebase) {
+      /* our own pop onto the page entry: nobody else should hear it */
+      event.stopImmediatePropagation();
+      const { page, top, href } = rebase;
+      rebase = null;
+      replace(page, '', href);
+      push(top, '', href);
+      lastIdx = idxOf(state());
+      return;
+    }
     const now = state();
     const idx = idxOf(now);
     const layer = now?.[TAG];
