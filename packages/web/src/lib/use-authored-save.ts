@@ -19,7 +19,10 @@ import { profileStorageKey, type ProfileStorageScope } from './profile-storage';
  * needs no journal of its own.
  */
 export type AuthoredSaveInput = { operation: 'inspiration'; input: CreateInspirationRequest; draft?: { id: string; revision: number } };
-export type AuthoredSaveIntent = AuthoredSaveInput & { version: 1; accountId: string; profileId: string; requestId: string; createdAt: number; checksum: number; rejected?: boolean; validationMessage?: string };
+export type AuthoredSaveIntent = AuthoredSaveInput & { version: 1; accountId: string; profileId: string; requestId: string; createdAt: number; checksum: number; rejected?: boolean; validationMessage?: string;
+  /** A person pressed Save for this journal (not only a background re-send).
+      Kept ON the entry, so whichever pass sends it reports the press. */
+  pressed?: boolean };
 export interface AuthoredSaveResult { inspiration: ApiInspiration; reflection: ApiReflection | null; processing?: ApiInspirationProcessingReceipt; recovered: boolean }
 type Phase = 'idle' | 'saving' | 'uncertain' | 'diverged' | 'storage_error' | 'invalid' | 'removed' | 'rejected';
 
@@ -89,7 +92,7 @@ function validIntent(key: string, prefix: string, scope: ProfileStorageScope, op
     key !== prefix + value.requestId || !Number.isFinite(value.createdAt) || !value.input ||
     typeof value.input.text !== 'string' ||
     value.checksum !== checksum(value)) throw new Error('Unverifiable pending save');
-  if (value.rejected !== undefined && typeof value.rejected !== 'boolean') throw new Error('Invalid pending save');
+  if ((value.rejected !== undefined && typeof value.rejected !== 'boolean') || (value.pressed !== undefined && typeof value.pressed !== 'boolean')) throw new Error('Invalid pending save');
   if (value.draft && (typeof value.draft.id !== 'string' || !Number.isSafeInteger(value.draft.revision) || value.draft.revision < 1)) throw new Error('Invalid draft reference');
   return value;
 }
@@ -141,7 +144,7 @@ export function useAuthoredSave(options: {
   const show = (intent: AuthoredSaveIntent | null) => { pendingRef.current = intent; setPending(intent); };
 
   /** Send one journal: the SAME id and the SAME body, read from disk now. */
-  const send = useCallback(async (requestId: string, pressed: boolean): Promise<Outcome> => {
+  const send = useCallback(async (requestId: string): Promise<Outcome> => {
     const at = live.current, key = at.prefix;
     if (!key || !at.scope) return 'gone';
     let intent: AuthoredSaveIntent;
@@ -167,7 +170,7 @@ export function useAuthoredSave(options: {
          composer settles against that one. */
       try { const latest = localStorage.getItem(key + intent.requestId); if (latest) intent = validIntent(key + intent.requestId, key, at.scope, at.operation, latest); } catch { /* keep the one sent */ }
       const after = await live.current.onResolved(intent, { inspiration: created, reflection: null, processing: created.processing,
-        recovered: created.saveRequest?.replayed === true }, pressed);
+        recovered: created.saveRequest?.replayed === true }, intent.pressed === true);
       if (!owns()) return 'unknown';
       // Cleanup follows matching-draft settlement; a crash before it only
       // means one more replay of the same id, never a second copy.
@@ -210,7 +213,7 @@ export function useAuthoredSave(options: {
         if (!next) break;
         tried.add(next.requestId);
         if (next.requestId === found.intents.at(-1)?.requestId && phaseRef.current !== 'diverged') setPhase('saving');
-        const outcome = await send(next.requestId, pressed);
+        const outcome = await send(next.requestId);
         if (epoch.current !== sequence || !mounted.current) return;
         if (outcome === 'unknown') unknown = true;
         else if (outcome === 'storage') storage = true;
@@ -282,9 +285,9 @@ export function useAuthoredSave(options: {
          journal takes the draft revision it is pressed from, so the composer
          settles when it lands. The body the server sees is unchanged. */
       diverged.current = null;
-      if (input.draft?.id !== held.draft?.id || input.draft?.revision !== held.draft?.revision) {
+      if (!held.pressed || input.draft?.id !== held.draft?.id || input.draft?.revision !== held.draft?.revision) {
         const { draft: _old, ...rest } = held;
-        const moved: AuthoredSaveIntent = { ...rest, ...(input.draft ? { draft: { ...input.draft } } : {}), checksum: 0 };
+        const moved: AuthoredSaveIntent = { ...rest, ...(input.draft ? { draft: { ...input.draft } } : {}), pressed: true, checksum: 0 };
         moved.checksum = checksum(moved);
         try { persist(at.prefix, moved); } catch { setPhase('storage_error'); return false; }
       }
@@ -293,7 +296,7 @@ export function useAuthoredSave(options: {
       return true;
     }
     const copy = JSON.parse(JSON.stringify(input)) as AuthoredSaveInput;
-    const intent: AuthoredSaveIntent = { ...copy, ...at.scope, version: 1, requestId: crypto.randomUUID(), createdAt: Date.now(), checksum: checksum(copy) };
+    const intent: AuthoredSaveIntent = { ...copy, ...at.scope, version: 1, requestId: crypto.randomUUID(), createdAt: Date.now(), checksum: checksum(copy), pressed: true };
     // No request may precede durable ownership of the words: unsaved, unsent.
     try { persist(at.prefix, intent); } catch { setPhase('storage_error'); return false; }
     diverged.current = null;
@@ -337,9 +340,10 @@ export function useAuthoredSave(options: {
   };
   // Stable, so a caller can dismiss from an effect without re-running it each render.
   const dismiss = useCallback(() => { if (!pendingRef.current) setPhase('idle'); }, []);
-  /** Save may be pressed while a save is pending, even mid-send: the same words
-      are queued as its retry (same id), edited words ask. */
-  const canResave = Boolean(pending && !pending.rejected && phase !== 'storage_error' && phase !== 'invalid');
+  /** Save may be pressed once a pending save is NOT CONFIRMED (or asking): the
+      same words re-send it, edited words ask. While its POST is in flight
+      ('saving') the composer is held, exactly as it always was (review). */
+  const canResave = Boolean(pending && !pending.rejected && (phase === 'uncertain' || phase === 'diverged'));
 
   return { pending, phase, busy, canResave, saveAsNew, keepEarlier, start, retry: () => pump(true),
     check: () => pump(), editRejected, resetInvalid, dismiss };

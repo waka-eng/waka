@@ -244,3 +244,20 @@ it('a Save press during a background re-send is queued, and the queued pass coun
   expect(resolved.mock.calls[0]![2], 'the queued pass lost its press').toBe(true);
   expect(records()).toHaveLength(0);
 });
+
+/* REVIEW ROUND 6. */
+it('holds the composer while the first POST is in flight, and frees it once the save is not confirmed', async () => {
+  vi.mocked(createInspiration).mockImplementation(() => new Promise(() => {}));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  expect(latest.phase).toBe('saving'); expect(latest.canResave).toBe(false);
+  await act(async () => vi.advanceTimersByTimeAsync(15_000));
+  expect(latest.phase).toBe('uncertain'); expect(latest.canResave).toBe(true);
+});
+
+it('marks the press on the journal itself, so a later background pass reports it', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  expect(JSON.parse(localStorage.getItem(records()[0]!)!).pressed).toBe(true);
+  await remount();                                         // the background pass sends it
+  expect(resolved).toHaveBeenCalledOnce(); expect(resolved.mock.calls[0]![2]).toBe(true);
+});
