@@ -12,6 +12,9 @@
  * either way. `idle(id)` resolves when the count for `id` reaches zero (at
  * once if it already is).
  */
+/** How long a read waits for a note's writes before it gives up. */
+export const IDLE_CEILING_MS = 25_000;
+
 export class NoteWrites {
   private readonly counts = new Map<string, number>();
   private readonly waiting = new Map<string, Array<() => void>>();
@@ -36,12 +39,18 @@ export class NoteWrites {
     return (this.counts.get(id) ?? 0) > 0;
   }
 
-  /** Resolves once no write of `id` is out. */
-  idle(id: string): Promise<void> {
-    if (!this.pending(id)) return Promise.resolve();
+  /** Resolves `true` once no write of `id` is out — or `false` after
+      `ceilingMs`, so a write that never settles cannot hold a read (and the
+      card waiting on it) forever: the read then fails plainly and offers
+      Try again. A write's own request is bounded too (`updateInspiration`). */
+  idle(id: string, ceilingMs = IDLE_CEILING_MS): Promise<boolean> {
+    if (!this.pending(id)) return Promise.resolve(true);
     return new Promise((done) => {
+      let finished = false;
+      const finish = (ok: boolean) => { if (!finished) { finished = true; done(ok); } };
+      const timer = setTimeout(() => finish(false), ceilingMs);
       const list = this.waiting.get(id) ?? [];
-      list.push(done);
+      list.push(() => { clearTimeout(timer); finish(true); });
       this.waiting.set(id, list);
     });
   }

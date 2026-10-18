@@ -60,8 +60,11 @@ export function readDetail(
   if (inFlight) return inFlight;
   const AGAIN = Symbol("read again");
   const settle = () => { if (state.pending.get(id) === p) state.pending.delete(id); };
-  const p: Promise<InspirationDetail | null> = (state.writes ? state.writes.idle(id) : Promise.resolve())
-    .then(() => {
+  const p: Promise<InspirationDetail | null> = (state.writes ? state.writes.idle(id) : Promise.resolve(true))
+    .then((idle) => {
+      /* the writes never settled within the ceiling: no read of words a
+         write may be replacing — fail plainly (the card offers Try again) */
+      if (!idle) return null;
       const generation = state.generations.get(id) ?? 0;
       const stale = (row?: InspirationDetail) =>
         (state.generations.get(id) ?? 0) !== generation

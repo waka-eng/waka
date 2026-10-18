@@ -708,8 +708,10 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
      the button that opens it, and that button is in the bar now — see
      `NoteTools`, which owns both. */
-  const attach = useCallback(async (chosen: File, came: "photo" | "recording" | "file" = "photo") => {
-    const note = open;
+  const attach = useCallback(async (chosen: File, came: "photo" | "recording" | "file" = "photo", target?: Inspiration | null) => {
+    /* `target`: the note a recording was STARTED on — a clip belongs to it,
+       whichever note is open when the recorder hands the clip over. */
+    const note = target ?? open;
     if (!note) return;
     setAttaching(true);
     setAttachFailed(false);
@@ -797,7 +799,31 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   /* The same recorder the notepad uses, handed a different destination —
      and naming the door it comes through, so `attach` does not try to read
      a sound file as a photograph. */
-  const recording = useAudioRecording((clip) => attach(clip, "recording"));
+  /* ═══ A RECORDING IS BOUND TO THE NOTE IT STARTED ON (review, 2026-10-17)
+     The recorder used to hand its clip to whatever note was open when it
+     stopped — so recording on one note, leaving it, and opening another put
+     the first note's clip on the second. The note is captured when the
+     recording starts, the clip is attached to that note, and leaving that
+     note (Back, Close, or opening another) stops the recording there and
+     then, so it is attached to the note it was made on. */
+  const recordingFor = useRef<Inspiration | null>(null);
+  const recording = useAudioRecording((clip) => attach(clip, "recording", recordingFor.current));
+  const recordingPhase = recording.phase;
+  /* captured as a recording begins (the phase leaves `idle`) and kept until
+     the next one begins, so the clip handed over after it stops still knows
+     its note */
+  const lastPhase = useRef(recordingPhase);
+  useEffect(() => {
+    if (lastPhase.current === "idle" && recordingPhase !== "idle") recordingFor.current = open;
+    lastPhase.current = recordingPhase;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordingPhase]);
+  const stopRecording = recording.stop;
+  useEffect(() => {
+    const bound = recordingFor.current;
+    if (bound && bound.id !== open?.id && recordingPhase !== "idle") void stopRecording();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open?.id]);
   /* ONE NOTE'S FAILURE IS NOT ANOTHER'S. Opening a different note clears the
      last one's upload failure and the recorder's error line. */
   const clearRecording = recording.clear;

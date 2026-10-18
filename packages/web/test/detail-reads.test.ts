@@ -11,11 +11,11 @@
  * a function the case hands in and answers by hand, because the subject is
  * the ordering rule, not the network.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { InspirationDetail } from "../src/lib/data";
 import { markSaved, readDetail, type DetailReadState } from "../src/lib/detail-reads";
-import { NoteWrites } from "../src/lib/note-writes";
+import { IDLE_CEILING_MS, NoteWrites } from "../src/lib/note-writes";
 
 const state = (writes = new NoteWrites()): DetailReadState & { writes: NoteWrites } =>
   ({ details: new Map(), pending: new Map(), generations: new Map(), stamps: new Map(), writes });
@@ -94,6 +94,22 @@ describe("a note's detail read", () => {
     await tick();
     f.asked[1]!.done(row("newer", 5_000));
     expect((await p)?.text).toBe("newer");
+  });
+
+  /* A WRITE THAT NEVER SETTLES cannot hold every read of its note forever:
+     after the ceiling the read fails plainly (the card offers Try again). */
+  it("gives up after the writes' ceiling instead of waiting forever", async () => {
+    vi.useFakeTimers();
+    try {
+      const s = state(), f = heldFetch();
+      s.writes.start("n1"); // never settles
+      const p = readDetail(s, "n1", f.fetch);
+      await vi.advanceTimersByTimeAsync(IDLE_CEILING_MS + 10);
+      expect(await p).toBeNull();
+      expect(f.asked, "and read nothing a write may be replacing").toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("fails plainly when nothing went stale", async () => {

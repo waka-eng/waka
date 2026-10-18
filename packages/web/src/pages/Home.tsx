@@ -7462,16 +7462,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            2026-10-12: "방 없애"), and with them the only path in this file
            that ever resolved a link to a memory this account does not own. */
         const readProfile = target.kind === 'agent' ? target.id : storageScope?.profileId;
-        /* THE SAME RULE AS EVERY OTHER READ (`lib/detail-reads.ts`): after
-           this note's writes, and again if a save landed while it was out. */
-        let tries = 0, generation: number;
-        do {
-          await noteWritesRef.current.idle(desired.inspirationId);
-          if (!current()) return;
-          generation = savedGenerationRef.current.get(desired.inspirationId) ?? 0;
-          detail = await loadInspiration(desired.inspirationId, readProfile, controller.signal);
-          if (!current()) return;
-        } while ((savedGenerationRef.current.get(desired.inspirationId) ?? 0) !== generation && ++tries < 3);
+        /* THROUGH THE ONE READ RULE (`lib/detail-reads.ts`), not a copy of
+           it: after this note's writes, re-read if stale, and — when it
+           cannot get fresh words (stale every time, or writes that never
+           settle) — no answer at all, so nothing stale is cached or made
+           editable: the address says it could not open, with Try again. */
+        /* the fetch's own failure is kept, so a 404 still says the link is
+           unavailable rather than offering a Try again that cannot work */
+        let failure: unknown = null;
+        const fresh = await readDetail(detailReadState(), desired.inspirationId,
+          (noteId) => loadInspiration(noteId, readProfile, controller.signal).catch((error: unknown) => { failure = error; throw error; }));
+        if (!current()) return;
+        if (!fresh) throw failure ?? new Error('No fresh detail');
+        detail = fresh;
         ball = makeBall(seedOf(detail, skyRef.current.citations, skyRef.current.signals, skyRef.current.posterSignalIds, skyRef.current.principleSignalIds));
         ball.sigId = detail.id;
         if (!current()) return;

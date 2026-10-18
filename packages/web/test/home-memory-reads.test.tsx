@@ -486,3 +486,14 @@ it("reopening a card whose keep is still out shows Saving…, then the kept word
   await pressWords();
   expect(editBox()?.value).toBe(KEPT);
 });
+
+/* AN ADDRESS THAT CANNOT BE READ FRESH OPENS NOTHING EDITABLE (review,
+   2026-10-17). The address now reads through the one rule; when that rule
+   has no fresh words to give, no card opens on stale ones. */
+it("opening a memory by its address when no fresh read can be had opens no editable card", { timeout: 30_000 }, async () => {
+  S.hold = "fail";
+  world = await mountWorld(FACTS, { initialEntries: ["/inspirations/own-4"], routerTools: <RouterTools /> });
+  for (let turn = 0; turn < 15; turn += 1) { await world.step(10); await wait(60); }
+  expect(card(), "no card opened on words it could not read").toBeNull();
+  expect(editBox()).toBeNull();
+});

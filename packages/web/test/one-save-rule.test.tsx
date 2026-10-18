@@ -96,6 +96,8 @@ const ROW = {
 const written: Array<{ id: string; text: string }> = [];
 /** Resolves nothing, ever: a presign that is still in flight. */
 let presignHangs = false;
+/** Where each finalized attachment was attached. */
+const attachedTo: string[] = [];
 
 vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
@@ -105,9 +107,14 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       written.push({ id, text: patch.text ?? "" });
       return undefined as never;
     },
-    presignAttachment: async (...args: unknown[]) => {
-      if (!presignHangs) return (actual.presignAttachment as (...a: unknown[]) => never)(...args);
+    presignAttachment: async () => {
+      if (!presignHangs) return { uploadUrl: "https://bucket.test/put", key: "k/clip", headers: {}, profileId: "p", expiresAt: "" } as never;
       return new Promise(() => {}) as never;
+    },
+    uploadToPresignedUrl: async () => undefined,
+    finalizeAttachment: async (input: { inspirationId: string }) => {
+      attachedTo.push(input.inspirationId);
+      return { id: "att-1" } as never;
     },
   };
 });
@@ -141,6 +148,7 @@ let host: HTMLDivElement, root: Root, slot: HTMLSpanElement, stopTrack: ReturnTy
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   written.length = 0;
+  attachedTo.length = 0;
   presignHangs = false;
   stopTrack = vi.fn();
   vi.stubGlobal("MediaRecorder", Recorder);
@@ -334,4 +342,26 @@ it("cancels a running recording when the note is deleted", async () => {
   await act(async () => slot.querySelector<HTMLButtonElement>(".waka-dock-roomy .waka-dock-tool--erase")!.click());
   for (let turn = 0; turn < 6; turn += 1) await act(async () => { await Promise.resolve(); });
   expect(stopTrack, "the microphone was released").toHaveBeenCalled();
+});
+
+/* A RECORDING BELONGS TO THE NOTE IT WAS STARTED ON (review, 2026-10-17).
+   Leaving that note stops the recording there and attaches the clip to it —
+   it never waits to be stopped on, and attached to, another note. */
+it("stops a recording when its note is left, and attaches the clip to that note", async () => {
+  const onNoteOpen = vi.fn();
+  await act(async () => root.render(
+    <SavesOverlay locale="en-US" title="Your Inspirations" onClose={vi.fn()} onNoteOpen={onNoteOpen} />,
+  ));
+  for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) {
+    await act(async () => { await Promise.resolve(); });
+  }
+  await act(async () => host.querySelector<HTMLButtonElement>(".waka-list-row")!.click());
+  for (let turn = 0; turn < 6 && !record(); turn += 1) await act(async () => { await Promise.resolve(); });
+  await act(async () => record()!.click());
+  expect(stopRecording(), "the recorder is running").not.toBeNull();
+  const leave = onNoteOpen.mock.calls.filter(([close]) => typeof close === "function").at(-1)![0] as () => void;
+  await act(async () => leave());
+  for (let turn = 0; turn < 12 && attachedTo.length === 0; turn += 1) await act(async () => { await Promise.resolve(); });
+  expect(attachedTo, "the clip went to the note it was recorded on").toEqual([ROW.id]);
+  expect(stopTrack, "and the microphone was released").toHaveBeenCalled();
 });
