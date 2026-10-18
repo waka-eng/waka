@@ -2742,8 +2742,16 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [agentReadingFailed, setAgentReadingFailed] = useState<ReadonlySet<string>>(() => new Set());
   /** Per pending bundle: whether its top-of-mind read failed. Lands with it. */
   const pendingReadingFailedRef = useRef<Map<string, boolean>>(new Map());
+  /** False once the page has gone: a fetch that settles after unmount, or a
+      rest the last loop reports on its way out, must not set state. */
+  const homeMountedRef = useRef(true);
+  useEffect(() => {
+    homeMountedRef.current = true;
+    return () => { homeMountedRef.current = false; };
+  }, []);
   /** Put fetched bundles on their walls, and their reading's standing with them. */
   const applyAgentBundles = useCallback((fresh: Map<string, AgentBundle>) => {
+    if (!homeMountedRef.current) return;
     const failed = new Map<string, boolean>();
     for (const id of fresh.keys()) {
       failed.set(id, pendingReadingFailedRef.current.get(id) === true);
@@ -2776,20 +2784,32 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      `atWallRef` cannot say that: it updates on ARRIVAL, so it still names
      this agent once you are crossing away or aiming up. The loop's own
      `navigationState()` can; while it is moving, or before there is a loop,
-     the bundle stays pending and lands at the next arrival, exactly as on
-     dev. Only that agent's bundle lands. A REFRESH — an agent already in
+     the bundle stays pending and lands at the next REST (below). Only that agent's bundle lands. A REFRESH — an agent already in
      `agents` — still lands only at arrival, as it always has. A polled
      at-rest version of this was tried and caused more than it fixed (final
-     review, 2026-10-16). */
-  const landFirstLoadIfStandingOn = useCallback((agentId: string) => {
-    const sim = simApiRef.current;
-    if (!sim || sim.navigationState().moving) return;
-    const w = atWallRef.current;
-    if (w.kind !== "agent" || w.id !== agentId) return;
-    const fresh = pendingAgentBundlesRef.current.get(agentId);
+     review, 2026-10-16).
+     THE NEXT ARRIVAL IS NOT ALWAYS COMING. Aiming down to the ground and
+     back up ends on the same wall, so `atWall` never changes and the arrival
+     effect never runs: the bundle sat pending under an empty wall (retro
+     review of #436, 2026-10-17). So the loop also says when it came to rest
+     — `pushRested`, below — and this is asked again then. Not a poll: one
+     call per stop, and it does nothing unless a first load is waiting for
+     the wall the loop is standing on.
+     REST AND THE WALL BOTH COME FROM THE LOOP, and this trusts what it is
+     handed. Its two callers each hold the loop's own answer: the rest edge
+     passes the wall it stopped on, and a fetch that finishes asks the
+     running loop's `isResting()` — the same predicate that edge fires on —
+     and `navigationState().wall`. Never `atWallRef`, which is React's echo
+     of the last arrival and a render behind it. A FIRST load is a pending
+     bundle whose agent is not in `agents` yet — a refresh has a wall to
+     stand on until the next arrival; a first load has nothing. */
+  const landFirstLoadOn = useCallback((wall: Space) => {
+    if (!homeMountedRef.current || wall.kind !== "agent") return;
+    if (agentsRef.current.some((a) => a.agent.id === wall.id)) return;
+    const fresh = pendingAgentBundlesRef.current.get(wall.id);
     if (!fresh) return;
-    pendingAgentBundlesRef.current.delete(agentId);
-    applyAgentBundles(new Map([[agentId, fresh]]));
+    pendingAgentBundlesRef.current.delete(wall.id);
+    applyAgentBundles(new Map([[wall.id, fresh]]));
   }, [applyAgentBundles]);
   /** Whether an agent wall's FIRST load is underway or has failed. Success
       needs no entry here — the bundle's presence in `agents` is readiness. */
@@ -2834,7 +2854,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           agentRefreshedAtRef.current.set(agentId, Date.now());
           pendingAgentBundlesRef.current.set(agentId, fresh);
           pendingReadingFailedRef.current.set(agentId, readingFailed);
-          landFirstLoadIfStandingOn(agentId);
+          /* landed only if the loop is at rest ON THIS AGENT right now */
+          const sim = simApiRef.current;
+          const here = sim?.isResting() ? sim.navigationState().wall : null;
+          if (here?.kind === "agent" && here.id === agentId) landFirstLoadOn(here);
         })
         .catch(() => {
           agentFirstLoadRef.current.set(agentId, "failed");
@@ -2843,7 +2866,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           agentRefreshBusyRef.current.delete(agentId);
         });
     },
-    [agentRoster, agents, landFirstLoadIfStandingOn],
+    [agentRoster, agents, landFirstLoadOn],
   );
 
   /**
@@ -2881,6 +2904,15 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   }, []);
   const pushArrivedRef = useRef(pushArrived);
   pushArrivedRef.current = pushArrived;
+  /** The world came to rest on `wall`, wherever it stopped: its first load,
+      if one is waiting, lands. Only from the loop that is running — a loop
+      being torn down for a rebuild is not the world any more. */
+  const pushRested = useCallback((wall: Space, from: SimApi) => {
+    if (from !== simApiRef.current) return;
+    landFirstLoadOn(wall);
+  }, [landFirstLoadOn]);
+  const pushRestedRef = useRef(pushRested);
+  pushRestedRef.current = pushRested;
 
   // The route-restoration bridge below handles initial links and every POP,
   // not a one-shot latch tied to the first wall name.
@@ -4063,6 +4095,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         panelArrowRef,
         parkedRef,
         pushArrivedRef,
+        pushRestedRef,
         sayLineRef,
         sayLineKeyRef,
         selectedIdRef,
