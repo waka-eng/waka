@@ -1178,6 +1178,55 @@ drop the room tables, or purge room artifacts that cite a deleted or privatised 
 
 ---
 
+## Save recovery redesign (follow-up PR)
+
+**Status:** open, deliberately not fixed in `claude/fix-usability`. The save journal, request-id
+handling and composer locking on that branch are exactly `origin/dev`'s (`use-authored-save.ts`,
+`AuthoredSaveNotice.tsx`, the save parts of `InspirationComposer.tsx` and `Home.tsx`, and their
+tests). Seven review rounds on a rewrite kept finding new duplicate-save races, so the rewrite was
+cut and the problem is written down here, to be designed once.
+
+**The defect (usability audit at f2afcbe2).** A save that loses its network after the journal is
+written leaves Save disabled on "Uploading…" with "Couldn't confirm the save" under it: every load
+reads `GET /inspirations/save-requests/:id`, gets 404 `save_not_found`, keeps the journal, and the
+composer stays locked. Retry (same id) is the only way out; reloading or reconnecting does not
+re-send.
+
+**What any design has to answer** — each case below broke at least one attempt:
+
+- **Gateway timeouts vs the app's own 500.** A 502/503/504, an HTML page or a bodyless 500 may sit in
+  front of a POST that still commits; only a JSON-bodied 500 from our API (a caught, rolled-back
+  failure) says anything about the write. A client that treats any 5xx followed by a 404 as "did not
+  land" can release a journal whose POST then commits — and the next save makes a second copy.
+- **"Not found" is not "did not land".** A status read races an in-flight POST (another tab, or this
+  tab before a reload). Any release on 404 needs a rule for "a POST under this id may still be
+  committing", and that rule must survive reloads and work across tabs.
+- **Cross-tab journals.** Two tabs may hold the same journal. Re-POSTing the same id is safe (the
+  server is idempotent on (profile, request id) and answers a concurrent POST with 409
+  `save_in_progress`), but a tab must not start a NEW journal for words another live tab is already
+  saving, must not adopt a journal while its owner is still open, and must not write back over a
+  newer write (re-read before every write-back). Storage events and shared "landed" notes were
+  tried and produced new races; landed notes also held words past sign-out.
+- **409 `save_request_conflict`.** The id was already used for different content: that request can
+  never land as written. It is a refusal, not "busy".
+- **"Save as new" while a save is pending.** Edited words must not silently become a second copy, and
+  choosing "new" must not drop the earlier unconfirmed save; each id must land once. Pressing it on
+  words the pending save already carries is that save's retry.
+- **The why (photo reflections).** `keepIt` clears `momentWhy` at the press; if the save is then
+  refused or unconfirmed, the why is lost, and a retry carries different input (no reflection) from
+  the held journal, so the same note looks edited. It should clear only once the save lands, and
+  must not ride a second save once a held one with the same why lands.
+- **Same words, current draft revision.** A retry from a draft touched since must resolve against the
+  current revision, or the composer is not settled when the save lands.
+- **Acknowledging a press (`initiated`).** Whether a person pressed Save is per window; a background
+  or adopted send must not report a press, and a press queued behind a background send must keep it.
+- **410 `saved_item_removed`.** The id points at a deleted item: settle the draft via `onRemoved`; no
+  other window should be left holding it.
+- **Sign-out.** `pendingSave:` and `unrecoveredSave:` are account+profile scoped and are kept across
+  sign-out by design (`draft-eviction.ts`) so an unsent save is not lost; anything new that holds
+  words must be added to that decision deliberately.
+
+---
 ## Refuted findings
 
 Three findings did not survive verification. **A list that only grows is a list nobody trusts**, so
