@@ -1037,6 +1037,9 @@ export interface SimulationOptions {
   setInField: (inField: boolean) => void;
   /** …and in the sky. Called from the frame. */
   setInSky: (inSky: boolean) => void;
+  /** Whether ANY of the sky is in frame (the camera above Now at all) — not
+      the half-way "in the sky" above. Optional; called from the frame. */
+  setSkyInView?: (inView: boolean) => void;
   /**
    * An orb was pressed, or released. NOTE, because it is a hazard and not a
    * tidy fact: the loop ALSO writes `selectedIdRef.current` directly at both
@@ -1216,6 +1219,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     setDialAway,
     setInField,
     setInSky,
+    setSkyInView,
     setSelectedId,
     agentsRef,
     asideRef,
@@ -1600,6 +1604,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       dialAway: false,
       inField: false,
       inSky: false,
+      skyInView: false,
     };
     /**
      * WHAT THE FIELD STILL OWES THE NEXT FRAME.
@@ -5063,6 +5068,13 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       if (nowInSky !== hinted.inSky) {
         hinted.inSky = nowInSky;
         setInSky(nowInSky);
+      }
+      /* A pixel of sky in frame is enough: what is on screen must be
+         reachable, so this flips the moment the camera rises above Now. */
+      const nowSkyInView = cam.y < -1;
+      if (nowSkyInView !== hinted.skyInView) {
+        hinted.skyInView = nowSkyInView;
+        setSkyInView?.(nowSkyInView);
       }
       if (nowAway !== hinted.dialAway) {
         hinted.dialAway = nowAway;

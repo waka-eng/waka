@@ -124,6 +124,22 @@ it('keeps the sky out of reach until you stand in it',async()=>{
   expect(own()?.hasAttribute('inert')).toBe(false);
 });
 
+/* Review: `inSky` waits for half-way up, so a sky already partly on screen was
+   unreachable. Reachable the moment ANY of it is in frame. */
+it('makes the sky reachable as soon as any of it is in frame, before half-way',async()=>{
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
+  const own=()=>world.container.querySelector<HTMLElement>('.jar-values-room--live');
+  const sim=(window as unknown as {wakaSim?:()=>{toSky():void}|null}).wakaSim!()!;
+  await act(async()=>sim.toSky());
+  let checked=false;
+  for(let frame=0;frame<120&&!checked;frame+=1){
+    await world.step(1);
+    const {camY}=world.audit() as unknown as {camY:number};
+    if(camY < -1 && camY > -300){ await act(async()=>{}); expect(own()?.hasAttribute('inert'),`camY ${camY}`).toBe(false); checked=true; }
+  }
+  expect(checked,'the camera never passed through a partly-shown sky').toBe(true);
+});
+
 it('offers places in the dock, and nothing that is already on the screen',async()=>{
   /* THE FOUR RUNGS ACROSS THE TOP ARE GONE. Founder: "have a bottom navbar."
      Two of those four named rooms a person is already standing in — claims

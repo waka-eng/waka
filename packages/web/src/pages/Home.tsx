@@ -1609,6 +1609,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [inField, setInField] = useState(false);
   /** And whether it stands in the sky — where philosophies and values form. */
   const [inSky, setInSky] = useState(false);
+  // Any of the sky in frame at all (see `setSkyInView`): what decides whether its rows are reachable.
+  const [skyInView, setSkyInView] = useState(false);
   /** Drafts assembled here, in this session. They live nowhere else. */
   /* ---- the mouth: the one verb this world was missing ----
      At rest it is a phrase. Open, it is a plain field at the seam between
@@ -4076,6 +4078,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         setDialAway,
         setInField,
         setInSky,
+        setSkyInView,
         setSelectedId,
         agentsRef,
         asideRef,
@@ -7455,8 +7458,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                        stands at its own height above Now, so from Now its
                        principle rows sat at y=-654…-307 — and were the FIRST
                        three Tab stops on the home screen, lighting nothing a
-                       person could see. Inert until you are standing in it. */
-                    {...(!(here && inSky) ? { inert: '', 'aria-hidden': true } : {})}
+                       person could see. Inert only while it is wholly out of
+                       frame: `skyInView` flips the moment the camera rises
+                       above Now (review: `inSky` waits for half-way, which
+                       left a sky already on screen unreachable). */
+                    {...(!(here && (inSky || skyInView)) ? { inert: '', 'aria-hidden': true } : {})}
                   >
                     {/* THE SKY KEEPS ITS PROMISE. The forming copy says "keep
                         capturing, and this sky will start to fill" — so once
