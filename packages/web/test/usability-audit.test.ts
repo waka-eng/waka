@@ -60,6 +60,24 @@ describe("no share sheet has the bar painted over its footer (#9)", () => {
   });
 });
 
+describe("a phone turned sideways keeps its chrome out of the notch (#15)", () => {
+  /* Headless Chromium cannot emulate a notch, so env() is checked where it
+     has to be read: nothing in the product read the left/right insets. */
+  it("the corners, the page gutter and the dock all read the side insets", () => {
+    const css = sheet("claims.css");
+    const body = (selector: string) => rules(css, (s) => s === selector).map(([, b]) => b).join("\n");
+    for (const selector of [".waka-corners", ".waka-page", ".waka-dock"]) {
+      expect(body(selector), selector).toMatch(/safe-area-inset-left/);
+      expect(body(selector), selector).toMatch(/safe-area-inset-right/);
+    }
+  });
+  it("the corner card's height bound leaves the home indicator's band", () => {
+    const account = rules(sheet("claims.css"), (s) => s === ".waka-account").map(([, b]) => b).join("\n");
+    expect(account).toMatch(/max-height:[^;]*safe-area-inset-bottom/);
+    expect(account).toMatch(/overflow-y:\s*auto/);
+  });
+});
+
 describe("the principles creature never stands between a press and a card", () => {
   it("its aura box takes no press (#3: it swallowed clicks on the first principle)", () => {
     const being = rules(sheet("claims.css"), (s) => s === ".waka-ground-being");

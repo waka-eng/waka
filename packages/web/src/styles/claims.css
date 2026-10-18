@@ -295,7 +295,7 @@
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  max-width: calc(100vw - var(--sp-32));
+  max-width: calc(100vw - var(--sp-32) - env(safe-area-inset-left) - env(safe-area-inset-right));
   padding: var(--sp-6);
   border-radius: var(--r-pill);
   background: var(--waka-raised);
@@ -714,7 +714,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: calc(var(--sp-12) + env(safe-area-inset-top)) var(--sp-16) 0;
+  /* The sides clear the notch too: in landscape the corners sat under the
+     camera housing (audit f2afcbe2, land-home). */
+  padding: calc(var(--sp-12) + env(safe-area-inset-top)) calc(var(--sp-16) + env(safe-area-inset-right)) 0 calc(var(--sp-16) + env(safe-area-inset-left));
   pointer-events: none;
 }
 
@@ -1149,6 +1151,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
      when the geometry moved down here. */
   padding: calc(var(--waka-corner) + var(--sp-16) + env(safe-area-inset-top)) var(--sp-20)
     calc(var(--sp-20) + var(--waka-corner) + var(--sp-24) + env(safe-area-inset-bottom));
+  /* AND THE NOTCH, IN LANDSCAPE (audit f2afcbe2, land-*): nothing in the
+     product read `safe-area-inset-left/right`, so on a phone turned sideways
+     the page's edge ran under the camera housing. The gutter is at least
+     the inset on each side. */
+  padding-inline: max(var(--sp-20), env(safe-area-inset-left)) max(var(--sp-20), env(safe-area-inset-right));
   /* THE GROUND, NOT A FILM OVER IT. A scrim says "the thing behind is still
      the thing you are in, and this is on top of it" — true of a dialog, and
      the exact opposite of what a room is. The notepad already stands on
@@ -5212,8 +5219,10 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
      so the card never touches the bottom edge. It also binds EVERY card the
      corner opens rather than only the one that happened to overflow, which
      is why the new "i" panel needed no bound of its own. */
+  /* `- safe-area-inset-bottom` too: in landscape the home indicator's band
+     took the card's last row (audit f2afcbe2, land-settings). */
   max-height: calc(
-    100dvh - env(safe-area-inset-top) - var(--sp-12) - var(--waka-corner) - var(--sp-8) - var(--sp-16)
+    100dvh - env(safe-area-inset-top) - var(--sp-12) - var(--waka-corner) - var(--sp-8) - var(--sp-16) - env(safe-area-inset-bottom)
   );
   overflow-y: auto;
   overscroll-behavior: contain;
