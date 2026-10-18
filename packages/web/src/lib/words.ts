@@ -153,6 +153,22 @@ export function koSinoNumber(n: number): string {
 }
 
 /**
+ * The reader's own IANA zone, or nothing when the platform will not say.
+ *
+ * Here rather than beside its one caller (`lib/api/inspiration-days`, which
+ * sends it so the server groups saves by the reader's day, not UTC's) because
+ * this module is the one place the product asks the platform about dates —
+ * `test/one-date-vocabulary.test.tsx` holds every other file to that.
+ */
+export function readerTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * The full date stamp a person writes at the top of a page: `Aug 24, 2026` —
  * or `2026년 8월 24일`, which is what a Korean hand writes. The card's head
  * wears this instead of the spoken pair — "Two days ago · Aug 24" said the
