@@ -174,13 +174,11 @@ describe("logging out", () => {
     expect(apiLogout).toHaveBeenCalled();
   });
 
-  it("clears unconfirmed save journals too, and keeps what they expect to find", async () => {
-    /* A save not yet landed is still words on a shared machine (decided
-       2026-10-18, security review): signing out lets it go with the rest.
-       Settings and positions stay. */
-    const pending = profileStorageKey(SCOPE, "pendingSave:inspiration::00000000-0000-4000-8000-000000000009")!;
-    const unrecovered = profileStorageKey(SCOPE, "unrecoveredSave:00000000-0000-4000-8000-000000000008")!;
-    localStorage.setItem(unrecovered, JSON.stringify({ raw: "words" }));
+  it("keeps what the person already submitted, and what they expect to find", async () => {
+    /* A save that IS on its way: kept so a dead network cannot silently lose
+       it. Evicting this would turn a privacy fix into data loss, in exactly
+       the case the backup exists for. */
+    const pending = profileStorageKey(SCOPE, "pendingSave:keep:x:1")!;
     const scroll = profileStorageKey(SCOPE, "conversationScroll:journal")!;
     const keepPublic = profileStorageKey(SCOPE, "keepPublic")!;
     localStorage.setItem(pending, JSON.stringify({ text: "already sent" }));
@@ -192,8 +190,7 @@ describe("logging out", () => {
       await auth?.logout();
     });
 
-    expect(localStorage.getItem(pending)).toBeNull();
-    expect(localStorage.getItem(unrecovered)).toBeNull();
+    expect(localStorage.getItem(pending)).not.toBeNull();
     expect(localStorage.getItem(scroll)).not.toBeNull();
     expect(localStorage.getItem(keepPublic)).toBe("1");
   });

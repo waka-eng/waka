@@ -122,15 +122,14 @@ export async function writeInspirationDraft(scope: ProfileStorageScope, draft: I
  * a row carrying that id holds no words — what it holds is the fact that this
  * draft was already submitted, which is how an old tab is stopped from
  * submitting it a second time. Deleting it would buy no privacy and cost that
- * guarantee.
+ * guarantee, which is the same trade `pendingSave:` is kept for.
  *
  * Anything unreadable goes. A row this module's own verifier rejects is still
  * a row someone typed into, and there is no recovery backup here to move it to.
  *
- * Deleting a row that a save is in flight for is part of signing out: the
- * save's own journal (`pendingSave:`) is swept on logout too since
- * 2026-10-18 (see `draft-eviction.ts`), and `settleInspirationMediaDraft`
- * treats an absent row as already settled.
+ * Deleting a row that a save is in flight for costs nothing either: the
+ * submitted payload lives in the `pendingSave:` intent, which survives logout,
+ * and `settleInspirationMediaDraft` treats an absent row as already settled.
  */
 export async function clearInspirationDrafts(scope: ProfileStorageScope): Promise<void> {
   const owner = ownerKey(scope);

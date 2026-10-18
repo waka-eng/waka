@@ -17,15 +17,12 @@
  *     half-typed; a principle card being composed to share; and three key
  *     namespaces from the retired review surfaces — see the list below for why
  *     those are still swept. Unsent by definition, every one.
- *   - CLEARED SINCE 2026-10-18: `pendingSave:` and `unrecoveredSave:`. They
- *     were kept on the argument that they hold work the person DID submit, so
- *     a save lost to a dead network would survive a sign-out. Security review
- *     weighed it the other way, and that is how it was decided (2026-10-18):
- *     an unconfirmed save is still words on a shared machine that the next
- *     person can read. Signing out is the person saying they are done here;
- *     a save that has not landed by then is let go with the rest.
- *   - NOT cleared: the `…Recovery:` backups of retired surfaces' selections.
- *     Every prefix below ends in `:` for this reason and no other:
+ *   - NOT cleared: `pendingSave:` and the `unrecovered…`/`…Recovery:` backups.
+ *     Those hold work the person DID submit, kept so that a save interrupted
+ *     by a dead network is not silently lost — evicting them on logout would
+ *     turn a privacy fix into a data-loss bug, and would do it in exactly the
+ *     case (flaky network, person gives up and signs out) the backups exist
+ *     for. Every prefix below ends in `:` for this reason and no other:
  *     `reviewSelection:` must not also match `reviewSelectionRecovery:`.
  *   - NOT cleared: anything a returning owner expects to find — their
  *     language, whether the last keep was public, where they had scrolled to.
@@ -107,12 +104,6 @@ const UNSENT_KEY_PREFIXES = [
   /* LIVE: `principle-artifact-drafts.ts`. A principle card being composed to
      share, carrying the person's own rewording of their statement. */
   'principleArtifact:',
-  /* LIVE: `use-authored-save.ts`. A save's journal — its words, its why, its
-     media references — until the server settles it. */
-  'pendingSave:',
-  /* LIVE: `use-authored-save.ts`. The raw bytes of a journal that could not
-     be read, set aside by an explicit reset. */
-  'unrecoveredSave:',
 ] as const;
 
 function clearPrefix(scope: ProfileStorageScope, prefix: string): void {
