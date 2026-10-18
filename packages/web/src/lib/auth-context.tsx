@@ -289,7 +289,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
      confirms the same person is not counted as a change. */
   const identityRef = useRef<string | null>(viewer ? `${viewer.account.id}:${viewer.profile.id}` : null);
   const applyViewer = useCallback(
-    (next: ApiViewer | null, options?: { countAsAuthMutation?: boolean }): void => {
+    (next: ApiViewer | null, options?: { countAsAuthMutation?: boolean; keepCachedHint?: boolean }): void => {
       if (options?.countAsAuthMutation !== false) {
         authMutationRef.current += 1;
       }
@@ -297,7 +297,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       if (identity !== identityRef.current) { identityRef.current = identity; webSessionChanged(); }
       setViewer(next);
       setInspirationSnapshotOwner(next?{accountId:next.account.id,profileId:next.profile.id}:null);
-      writeCachedViewer(next);
+      /* `keepCachedHint`: the in-memory viewer is withdrawn, but the stored
+         "this browser was signed in" hint is not — nothing has said so. */
+      if (!options?.keepCachedHint) writeCachedViewer(next);
       if (next) {
         writeStoredLocale(normalizeSupportedLocale(next.profile.preferredLocale));
       }
@@ -359,12 +361,16 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
           setUnreachableWasSignedIn(identityRef.current !== null);
         }
         // The cache is only an optimistic display hint, not proof of an
-        // authenticated session. If the initial server validation fails
-        // before we have a fresh `/auth/me`, drop the hint rather than
-        // letting RequireAuth render protected routes from stale localStorage.
+        // authenticated session, so protected routes must not render from
+        // it: the in-memory viewer is withdrawn. But an unanswered check is
+        // not a sign-out either — only a definitive 401 (`fetchCurrentViewer`
+        // returning null, above) or a sign-out clears the STORED hint. Wiping
+        // it here meant one dead network at startup made the next load
+        // forget this browser had a session ("still signed in" became the
+        // anonymous door).
         if (cancelled || !aliveRef.current) return;
         if (authMutationRef.current === initialAuthMutation) {
-          applyViewer(null, { countAsAuthMutation: false });
+          applyViewer(null, { countAsAuthMutation: false, keepCachedHint: true });
         }
       } finally {
         if (!cancelled && aliveRef.current) setIsLoading(false);

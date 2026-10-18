@@ -354,7 +354,7 @@ describe("auth boundary", () => {
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it("does not treat a cached viewer as authenticated when initial /auth/me fails", async () => {
+  it("does not treat a cached viewer as authenticated when initial /auth/me fails, nor wipe the stored hint", async () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedViewer));
     vi.mocked(fetchCurrentViewer).mockRejectedValue(new Error("server unavailable"));
 
@@ -362,7 +362,7 @@ describe("auth boundary", () => {
 
     expect(container.textContent).toContain("Sign in to return to what you kept.");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
-    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(STORAGE_KEY), "an unanswered check is not a sign-out: only a definitive no clears the hint").not.toBeNull();
   });
 
   it.each(["refresh", "profile", "preferences"])("does not restore a signed-out account from an older %s response", async (operation) => {

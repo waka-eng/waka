@@ -113,6 +113,24 @@ describe("offline at startup", () => {
     expect(text()).toContain("protected");
   });
 
+  /* An unanswered check is not a sign-out: the stored hint survives it, so
+     the next load still knows this browser had a session. Only a definitive
+     answer (no session) clears it. */
+  it("keeps the stored signed-in hint through an unreachable startup, and clears it only on a definitive no", async () => {
+    window.localStorage.setItem("waka.auth.viewer", JSON.stringify(VIEWER));
+    vi.mocked(fetchCurrentViewer).mockRejectedValue(new ApiError({ status: 0, message: "unreachable" }));
+    await mount("/");
+    expect(text()).toContain("You’re still signed in");
+    expect(window.localStorage.getItem("waka.auth.viewer"), "a dead network wiped the signed-in hint").not.toBeNull();
+    act(() => root?.unmount()); container?.remove(); root = null; container = null;
+
+    await mount("/");
+    expect(text(), "the second load forgot this browser had a session").toContain("You’re still signed in");
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
+    await press("Try again");
+    expect(window.localStorage.getItem("waka.auth.viewer")).toBeNull();
+  });
+
   it("goes to the door when the second ask answers signed-out", async () => {
     vi.mocked(fetchCurrentViewer).mockRejectedValue(new ApiError({ status: 0, message: "unreachable" }));
     await mount("/");
