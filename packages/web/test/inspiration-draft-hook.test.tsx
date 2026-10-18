@@ -8,6 +8,7 @@ import { Blob } from 'node:buffer';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useInspirationDraft } from '../src/lib/use-inspiration-draft';
+import { forkDraftAndClear } from '../src/lib/draft-problem';
 import { loadInspirationDraft, writeInspirationDraft } from '../src/lib/inspiration-draft-store';
 
 const scope = { accountId: 'draft-owner', profileId: 'draft-profile' };
@@ -79,4 +80,35 @@ it('keeps the old clip until an explicit replacement choice and never reuses its
   await act(async () => { hook.setRecordingCandidate(candidate); hook.chooseRecording(true); await hook.flush(); });
   expect(hook.draft.media).toHaveLength(1); expect(hook.draft.media[0]?.id).toBe('new'); expect(hook.draft.media[0]?.uploaded).toBeUndefined();
   expect((await loadInspirationDraft(scope, hook.draft.id))?.recordingCandidate).toBeUndefined();
+});
+
+it('forks once when the separate-draft offer is pressed twice, and the conflict note goes with the fork', async () => {
+  await act(async () => { hook.setText('Shared start'); await hook.flush(); });
+  const original = hook.draft;
+  await writeInspirationDraft(scope, { ...original, revision: original.revision + 1, text: 'Other tab' }, original.revision);
+  await act(async () => { hook.setText('Mine'); await expect(hook.flush()).rejects.toThrow('another tab'); });
+
+  const conflictNote = 'This draft changed in another tab.';
+  let note = conflictNote;
+  const press = () => forkDraftAndClear({
+    fork: hook.fork, conflictNote, setNote: update => { note = update(note); }, sayProblem: key => key,
+  });
+  const minted = vi.spyOn(crypto, 'randomUUID');
+  await act(async () => { const first = press(); const second = press(); await Promise.all([first, second]); });
+
+  expect(hook.draft.id).not.toBe(original.id);
+  expect(minted, 'the second press forked the fork').toHaveBeenCalledTimes(1);
+  minted.mockRestore();
+  expect(note, 'the conflict note outlived the fork, so the offer stayed up').toBe('');
+  expect(hook.error).toBe('');
+  expect((await loadInspirationDraft(scope, hook.draft.id))?.text).toBe('Mine');
+  expect((await loadInspirationDraft(scope, original.id))?.text).toBe('Other tab');
+});
+
+it('keeps a note that is not the conflict, and says a failed fork', async () => {
+  let note = 'An upload failed.';
+  await forkDraftAndClear({ fork: async () => undefined, conflictNote: 'conflict', setNote: u => { note = u(note); }, sayProblem: k => k });
+  expect(note).toBe('An upload failed.');
+  await forkDraftAndClear({ fork: async () => { throw new Error('disk'); }, conflictNote: 'conflict', setNote: u => { note = u(note); }, sayProblem: k => `said:${k}` });
+  expect(note).toBe('said:worldDraftKeepFailed');
 });

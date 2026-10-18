@@ -23,3 +23,30 @@ export function draftProblem(reason: unknown, fallback: MessageKey = 'worldDraft
   if (reason instanceof InspirationDraftConflict) return 'worldDraftChangedElsewhere';
   return fallback;
 }
+
+/**
+ * "KEEP AS A SEPARATE DRAFT", PRESSED.
+ *
+ * The offer stands while the composer is showing the conflict — either the
+ * draft hook's own error or the note a failed keep left behind. The hook
+ * clears its error when the fork lands; the note is the page's, so it is
+ * cleared here, or the button stayed up and every further press forked the
+ * already-forked draft again. Only the conflict note is cleared: anything
+ * said since (an upload that failed) is not this button's to take away.
+ */
+export async function forkDraftAndClear(input: {
+  fork: () => Promise<void>;
+  /** The conflict, as the page says it. */
+  conflictNote: string;
+  setNote: (update: (note: string) => string) => void;
+  /** How the page says a fork's own failure. */
+  sayProblem: (key: MessageKey) => string;
+}): Promise<void> {
+  try {
+    await input.fork();
+    input.setNote(note => (note === input.conflictNote ? '' : note));
+  } catch (reason) {
+    const said = input.sayProblem(draftProblem(reason));
+    input.setNote(() => said);
+  }
+}

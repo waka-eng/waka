@@ -106,7 +106,10 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
       try { if (key) sessionStorage.setItem(key, next.id); } catch { /* lookup excludes saved tombstones */ }
     }
   }, []);
-  const fork = useCallback(async () => {
+  /* ONE FORK AT A TIME. A second press while the first is out would fork the
+     fork; it waits on the same one instead. */
+  const forking = useRef<Promise<void> | null>(null);
+  const forkOnce = useCallback(async () => {
     if (running.current) await running.current.catch(() => undefined);
     const next = { ...live.current, id: crypto.randomUUID(), revision: 0 };
     queue.current = []; blocked.current = false; live.current = next; setDraft(next);
@@ -114,5 +117,11 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
     try { if (key) sessionStorage.setItem(key, next.id); } catch { /* owner-index recovery */ }
     change(current => current); await pump();
   }, [change, pump]);
+  const fork = useCallback((): Promise<void> => {
+    if (forking.current) return forking.current;
+    const run = forkOnce().finally(() => { if (forking.current === run) forking.current = null; });
+    forking.current = run;
+    return run;
+  }, [forkOnce]);
   return { draft, current: live, ready, available, error, setText, setMedia, setLinkText, setRecordingCandidate, chooseRecording, flush, settle, fork };
 }

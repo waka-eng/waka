@@ -80,7 +80,7 @@ import { useInspirationProcessing } from '../lib/use-inspiration-processing';
 import { useAuthoredSave } from '../lib/use-authored-save';
 import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { useSettingsWrites } from '../lib/use-settings-writes';
-import { DraftProblem, draftProblem } from '../lib/draft-problem';
+import { DraftProblem, draftProblem, forkDraftAndClear } from '../lib/draft-problem';
 import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { attachmentLabel } from '../lib/attachment-label';
@@ -9713,7 +9713,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              `openOverHome` writes ONE destination, which is why pressing a
              place from inside the notepad does not need a close first. */
           onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
-          onKeyDown={onMouthKey} onForkDraft={() => { void composerDraft.fork().catch(reason => setMouthNote(say(draftProblem(reason)))); }}
+          onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork, conflictNote: say('worldDraftChangedElsewhere'), setNote: setMouthNote, sayProblem: say }); }}
           draftConflict={composerDraft.error === 'worldDraftChangedElsewhere' || mouthNote === say('worldDraftChangedElsewhere')} /> : null}
       </> : null}
 
