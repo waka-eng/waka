@@ -478,7 +478,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
    (audit f2afcbe2: Speak at x=675, Stop at x=561). The control now keeps its
    size and place and says it is listening with light — lit, and breathing
    slowly, which is motion that explains (it is live) rather than decorates.
-   The clock moved to the live caption (`.waka-dock-state--live`). */
+   The clock and Cancel ride in the bar's state line beside it. */
 .waka-dock-tool--live {
   color: var(--ink);
   background: radial-gradient(closest-side, color-mix(in srgb, var(--jar-live, var(--moon-warm)) 34%, transparent), transparent);
@@ -492,37 +492,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
 
 @media (prefers-reduced-motion: reduce) {
   .waka-dock-tool--live { animation: none; }
-}
-
-/* THE BAR'S CAPTION WHILE THE MICROPHONE IS OPEN. Still the bar's — it sits
-   on the bar's top edge and leaves with the bar — but out of the row, so it
-   can never widen it, and free to wrap, so the cloud disclosure is read in
-   full rather than cut at 14rem. */
-.waka-dock-state.waka-dock-state--live {
-  position: absolute;
-  bottom: calc(100% + var(--sp-12));
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: var(--sp-8);
-  width: max-content;
-  max-width: min(26rem, calc(100vw - var(--sp-32)));
-  padding: var(--sp-6) var(--sp-12);
-  border-radius: var(--r-pill);
-  background: var(--waka-raised);
-  white-space: normal;
-  overflow: visible;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  /* A status line, not a control (review): presses fall through it. Its one
-     control — the recorder's Cancel — takes them back below. */
-  pointer-events: none;
-}
-.waka-dock-state--live button {
-  pointer-events: auto;
 }
 
 /* ═══ THE ONE FILLED CONTROL IN THE BAR ═══════════════════════════════════
@@ -690,15 +659,14 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
 }
 
 /* ═══ A FINGER'S TARGET, LARGER THAN WHAT IT LOOKS LIKE (audit f2afcbe2) ══
-   Measured on a 390x844 phone: the delete line's Undo 27x32, a photo's ×
-   28x28, the chat's Send 40x44 and its Me / My agent / Both 36 tall, the
-   review's Skip 32x44, a principle's row 32 tall. Each is drawn at the size
-   its surface wants — the photo's × says why it is 28 and not 44 — so the
-   drawing stays and the TARGET grows: an invisible box centred on the
+   Measured on a 390x844 phone: the delete line's Undo 27x32, the chat's
+   Send 40x44 and its Me / My agent / Both 36 tall, the review's Skip 32x44,
+   a principle's row 32 tall. Each is drawn at the size its surface wants, so
+   the drawing stays and the TARGET grows: an invisible box centred on the
    control, at least 44 on each side. A pseudo-element takes the control's
-   own press, so nothing else needs to know it is there. `position:
-   relative` only where the control was static; the photo's × is already
-   positioned. */
+   own press, so nothing else needs to know it is there. (The photo's 28px ×
+   is not here: its tile clips overflow, so a box past it does nothing — see
+   docs/known-issues.md.) */
 .waka-dock-undo,
 .chat-with-choice,
 .chat-send,
@@ -709,7 +677,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
 }
 
 .waka-dock-undo::after,
-.jar-tile-x::after,
 .waka-drawer-items button::after,
 .chat-with-choice::after,
 .chat-send::after,
@@ -722,16 +689,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
   width: max(100%, 44px);
   height: max(100%, 44px);
   transform: translate(-50%, -50%);
-}
-/* THE PHOTO'S × GROWS OUTWARD, NOT INTO THE PHOTO (review). It sits in the
-   tile's top-right corner, so a centred 44px box covered part of the picture
-   — a press meant to open the photo removed it. Anchored at the ×'s own
-   bottom-left, the box reaches up and right, past the tile's corner. */
-.jar-tile-x::after {
-  left: 0;
-  top: auto;
-  bottom: 0;
-  transform: none;
 }
 
 /* THE SLOT INSPIRATION STANDS IN. While a note is being written (or a saved

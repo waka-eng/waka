@@ -1260,6 +1260,24 @@ for one press. (Escape, the bar's rows and the note's own close already commit a
   top" sees a stale answer.
 
 ---
+## Small usability follow-ups set aside from `claude/fix-usability`
+
+**Status:** open. Both were tried on the branch and reverted to `origin/dev`'s behaviour in review.
+
+- **The photo ×'s tap target (audit f2afcbe2: 28×28 on a 390×844 phone).** A 44px invisible hit box
+  on `.jar-tile-x` does nothing: the photo tile clips overflow, so the box is cut back to the tile,
+  and centred on the × it also covered part of the photo (a press meant to open the photo would
+  remove it). A real fix needs the × to sit OUTSIDE the clipped tile (or the tile to stop clipping),
+  with its hit area reaching away from the picture.
+- **The recording/dictation line in the bar (audit f2afcbe2, desk/106).** Stop now stays in the
+  microphone's own seat, but the state line beside it is still in the bar's row, as on dev: when it
+  appears the centred bar widens and the row shifts, and its 14rem cap cuts the cloud disclosure
+  ("Your browser sends speech to its own …"). The tried fix lifted the line off the row into a
+  caption over the bar (out of flow, wrapping, `pointer-events: none` except its Cancel) and was set
+  aside for its own change. Whatever lands must keep the one shared clock (`clockWords`) and the
+  single announced "Recording" (`LiveWord`).
+
+---
 ## Refuted findings
 
 Three findings did not survive verification. **A list that only grows is a list nobody trusts**, so

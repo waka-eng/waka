@@ -11455,20 +11455,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
                     `role="status"` so it is still announced; it is the
                     position that changed, not whether it is said. */}
-                {/* WHILE THE MICROPHONE IS OPEN, THE LINE RISES OFF THE BAR.
-                    In the row it widened a centred bar and moved every
-                    button under a pointer that was about to press Stop, and
-                    its 14rem cap cut the cloud disclosure — the one sentence
-                    this bar is obliged to show — to "Your browser sends
-                    speech to its own …". As the bar's caption it is still
-                    the bar's (it sits on it and leaves with it), it wraps
-                    instead of truncating, and nothing in the row moves. */}
+                {/* WHILE THE MICROPHONE IS OPEN the state line stays in the
+                    bar's row, as on dev. A caption lifted off the bar (so the
+                    row never widens and the disclosure is never cut at 14rem)
+                    was tried and set aside for its own change — see
+                    docs/known-issues.md. */}
                 {dictation.listening || recording.phase !== 'idle' ? (
                   /* THE CLOCK IS NOT A LIVE REGION (review): inside
                      `role="status"` a screen reader re-announced it every
                      second. The disclosure and a one-word "Recording" are
                      the live part; the clock is for eyes and is hidden. */
-                  <span className="waka-dock-state waka-dock-state--live">
+                  <span className="waka-dock-state">
                     {/* Shown for eyes; said by `LiveWord`, which mounts empty
                         and fills a beat later so the words are announced. */}
                     {composerState ? <span aria-hidden="true">{composerState}</span> : null}

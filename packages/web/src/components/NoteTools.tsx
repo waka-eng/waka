@@ -138,7 +138,7 @@ export function NoteTools(props: {
              notepad (audit f2afcbe2): a wide clock-button re-laid the
              centred bar under the pointer. The clock — words, because a red
              dot cannot say how long you have been talking — rides in the
-             live caption over the bar instead. */
+             bar's state line beside it. */
           <>
             <button type="button" className="waka-dock-tool waka-dock-tool--live"
               aria-label={props.stopLabel}
@@ -146,7 +146,7 @@ export function NoteTools(props: {
               onClick={() => void props.recording.stop()}><HomeActionIcon kind="stop" /></button>
             {/* The clock is for eyes (aria-hidden); a live region would read
                 it out every second. "Recording" is announced once. */}
-            <span className="waka-dock-state waka-dock-state--live">
+            <span className="waka-dock-state">
               <LiveWord text={props.recordingLabel} />
               <span aria-hidden="true">{clockWords(props.recording.seconds)}</span>
             </span>
