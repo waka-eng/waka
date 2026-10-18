@@ -260,6 +260,18 @@ it("does not offer partly from this slot at all", async () => {
   expect(words).toEqual(["Not true", "True"]);
 });
 
+/* Audit f2afcbe2 (mob): a swipe that began on the creature while reviewing
+   walked the world to Principles, leaving "Exit review mode" and no card. */
+it("does not walk to Principles when the creature is pulled while reviewing", async () => {
+  await withClaims(CLAIM);
+  const creature = world.container.querySelector<HTMLElement>(".jar-char-press");
+  expect(creature, "the creature is not on screen while reviewing").toBeTruthy();
+  await drag(creature!, 120);
+  await act(async () => { await world.step(); });
+  expect(world.container.querySelector(".waka-page--timeless"), "the pull walked to Principles mid-review").toBeNull();
+  expect(statement()).toContain(CLAIM.statement);
+});
+
 /* Audit f2afcbe2: "Not anymore" presumed an earlier yes on a reading asked
    for the first time. "Still" and "anymore" belong to the re-ask alone. */
 it("says Still true / Not anymore only when it is asking again", async () => {

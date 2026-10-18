@@ -8987,7 +8987,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               data-jar-interactive="1"
               onPointerDown={event => {
                 creatureDragged.current = false;
-                if (!atNowView) return;
+                /* NOT WHILE REVIEWING, as → is not (the key handler above
+                   already says `!reviewing`). On a phone a sideways swipe at
+                   a card that began on the creature walked the world to
+                   Principles mid-review, leaving "Exit review mode" in the
+                   bar with no card under it (audit f2afcbe2, mob). */
+                if (!atNowView || reviewing) return;
                 creatureDrag.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
                 event.currentTarget.setPointerCapture?.(event.pointerId);
               }}
