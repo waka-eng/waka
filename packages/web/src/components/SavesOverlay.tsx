@@ -48,13 +48,11 @@ import { NoteTools } from "./NoteTools";
 import {
   attachmentPreviewImageUrl,
   deleteInspiration,
-  fetchInspiration,
   finalizeAttachment,
   forgetDeletedInspiration,
   listDeletedInspirations,
   restoreInspiration,
   type ApiDeletedInspiration,
-  type ApiInspiration,
   presignAttachment,
   updateInspiration,
   uploadToPresignedUrl,
@@ -69,7 +67,7 @@ import { ShareSheet, inspirationShareTarget, type ShareTarget } from "./ShareShe
    the invariant that a total is never smaller than what arrived. Reaching
    past it to the HTTP layer would have been a second way to read one thing,
    with its own pagination and its own idea of what the archive holds. */
-import { loadInspiration, loadInspirations, type Inspiration, type InspirationDetail } from "../lib/data";
+import { loadInspiration, loadInspirations, type Inspiration } from "../lib/data";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { inspectInspirationPhoto } from "../lib/inspiration-photo";
 import { inspectAttachmentFile } from "../lib/api/file-accept";
@@ -93,31 +91,8 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onSaved, onErased, onRestored, readFull, onAttached, onWriting, onWriteSettled, ownArchive = true, shareName = "" }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, ownArchive = true, shareName = "" }: {
   locale: SupportedLocale;
-  /** A note's words were stored, with the server's row. The world behind
-      this page caches what it has read of each note, and a later edit there
-      starts from that cache — so an archive edit it never heard of was
-      overwritten by the next one (review, 2026-10-17). */
-  onSaved?: (row: ApiInspiration, how?: "write" | "read") => void;
-  /** A note came back from the deleted shelf, with its server row. */
-  onRestored?: (row: ApiInspiration) => void;
-  /** A note was deleted (its server send, after Undo's moment). */
-  onErased?: (id: string) => void;
-  /** THE WORLD'S OWN READ OF ONE NOTE, when the archive sits over it. The
-      world stamps every read against the saves it has seen
-      (`lib/detail-reads.ts`), so a read racing a save made on Home's card
-      answers with the saved words, never the ones from before it. Absent,
-      the archive reads for itself. Resolves null when the read failed. */
-  readFull?: (id: string) => Promise<InspirationDetail | null>;
-  /** An attachment landed on a note: the world marks older reads of it
-      stale and reads it afresh (its attachments changed without its words,
-      so `updatedAt` cannot tell the two reads apart). */
-  onAttached?: (id: string) => void;
-  /** A write of a note's words was sent from here, and when it settled —
-      counted with Home's own (`lib/note-writes.ts`). */
-  onWriting?: (id: string) => void;
-  onWriteSettled?: (id: string) => void;
   /** Whether this is the person's own archive. The deleted shelf is theirs
       alone, so it is not read on an agent's archive; deleting there still
       works, and the request names the agent's profile. */
@@ -281,16 +256,6 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const [forgetting, setForgetting] = useState<string | null>(null);
   const [shelfFailed, setShelfFailed] = useState(false);
   const [undoable, setUndoable] = useState<Inspiration | null>(null);
-  /* ═══ THE WORLD'S CALLBACKS, READ THROUGH A REF ════════════════════════
-     Home passes these inline, so they are new functions on every Home
-     render. Named in the deps of `commitErase`, they rebuilt `flushErase` on
-     each one, and the unmount-cleanup effect keyed on `flushErase` ran its
-     cleanup — which FLUSHES the pending delete — killing the six-second
-     Undo on any re-render behind the archive (review, 2026-10-17). Read
-     through a ref, the callbacks are always the latest and never a
-     dependency. */
-  const tellHome = useRef({ onSaved, onErased, onRestored, readFull, onAttached, onWriting, onWriteSettled });
-  tellHome.current = { onSaved, onErased, onRestored, readFull, onAttached, onWriting, onWriteSettled };
   /* WHERE FOCUS GOES WHEN A DELETE TAKES THE NOTE AWAY. The press that
      deleted it (the bar's trash, or the ⋯ menu's row) unmounts with the
      note, and focus fell to the page; the Undo line is the next thing a
@@ -383,7 +348,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     /* On an agent's archive the delete names the agent's profile; the
        request outlives the tab when it is sent as the page goes. */
     void deleteInspiration(pending.row.id, { ...(profileId ? { profile: profileId } : {}), ...(leaving ? { keepalive: true } : {}) })
-      .then(() => { tellHome.current.onErased?.(pending.row.id); return loadShelf(); })
+      .then(() => loadShelf())
       .catch(() => {
         if (!mounted.current) return;
         setRows((all) => all.some((row) => row.id === pending.row.id) ? all
@@ -450,14 +415,10 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       if (!mounted.current) return;
       setShelf((all) => all.filter((row) => row.id !== item.id));
       void load();
-      /* back in the world behind, too — the mirror of `onErased` */
-      void fetchInspiration(item.id, profileId ? { profile: profileId } : {})
-        .then((row) => { tellHome.current.onRestored?.(row); })
-        .catch(() => undefined);
     } catch {
       if (mounted.current) setShelfFailed(true);
     }
-  }, [load, profileId]);
+  }, [load]);
 
   const forget = useCallback(async (item: ApiDeletedInspiration) => {
     if (forgetting !== item.id) { setForgetting(item.id); return; }
@@ -518,17 +479,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     setSaving(true);
     setSaveFailed(false);
     try {
-      /* COUNTED WITH HOME'S WRITES (`lib/note-writes.ts`): until this
-         settles, no read of the note and no editor seeded from it starts —
-         the archive can close on this press with the write still out. */
-      tellHome.current.onWriting?.(note.id);
-      let made: ApiInspiration;
-      try {
-        made = await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
-        if (made) tellHome.current.onSaved?.(made);
-      } finally {
-        tellHome.current.onWriteSettled?.(note.id);
-      }
+      await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
       if (!mounted.current) return;
       /* The list holds what the page loaded, so it has to agree without a
          refetch — otherwise going back reveals the old first line. */
@@ -613,17 +564,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     setSaving(true);
     setSaveFailed(false);
     try {
-      /* COUNTED WITH HOME'S WRITES (`lib/note-writes.ts`): until this
-         settles, no read of the note and no editor seeded from it starts —
-         the archive can close on this press with the write still out. */
-      tellHome.current.onWriting?.(note.id);
-      let made: ApiInspiration;
-      try {
-        made = await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
-        if (made) tellHome.current.onSaved?.(made);
-      } finally {
-        tellHome.current.onWriteSettled?.(note.id);
-      }
+      await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
       if (!mounted.current) return;
       /* Both copies, for the reason `leaveNote` gives about the list and the
          reason `attach` gives about the snapshot: the grid behind must not
@@ -648,10 +589,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     const controller = new AbortController();
     reading.current = controller;
     setStored({ id, text: null, failed: false });
-    const read = tellHome.current.readFull;
-    (read
-      ? read(id).then((detail) => { if (!detail) throw new Error("read failed"); return detail; })
-      : loadInspiration(id, profileId ?? undefined, controller.signal))
+    loadInspiration(id, profileId ?? undefined, controller.signal)
       .then((detail) => {
         if (!mounted.current || controller.signal.aborted) return;
         setStored((held) => (held && held.id === id ? { id, text: detail.text, failed: false } : held));
@@ -779,17 +717,6 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
         ...(file.type ? { contentType: file.type } : {}),
       });
       if (!mounted.current) return;
-      /* THE WORLD BEHIND HEARS OF IT TOO, with the server's row: its cached
-         copy of this note has one attachment fewer, and an edit there would
-         be judged against it (the empty-words rule counts attachments).
-         Best effort — the attachment is stored either way. */
-      if (tellHome.current.onAttached) tellHome.current.onAttached(note.id);
-      else void fetchInspiration(note.id, profileId ? { profile: profileId } : {})
-        /* A READ, NOT A WRITE: the world behind accepts it only if no save
-           newer than it has landed (it compares the server's `updatedAt`),
-           and it does not count as a save itself. */
-        .then((row) => { tellHome.current.onSaved?.(row, "read"); })
-        .catch(() => undefined);
       /* The open note is a snapshot, so it is re-pointed at the row that
          now carries the attachment — otherwise the upload lands, the list
          knows, and the page somebody is looking at does not. */
@@ -834,11 +761,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      last one's upload failure and the recorder's error line. */
   const clearRecording = recording.clear;
   useEffect(() => {
-    /* an upload failure is said once, on its own note; opening a note
-       (another, or the same one again) starts it clean — the failure is
-       keyed by note (`attachFailedFor`), so a late failure of the note just
-       left still lands on that note, never on this one */
-    setAttachFailedFor(null);
+    /* an upload failure is keyed by its note (`attachFailedFor`): it is
+       still said when that note is opened again, and never on another */
     clearRecording();
   }, [open?.id, clearRecording]);
 

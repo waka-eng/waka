@@ -126,17 +126,9 @@ export interface OpenEdit {
  */
 export interface EditingDeps {
   readonly onInspirationSaved?: (inspiration: ApiInspiration) => void;
-  /** A memory's words were kept: the page re-points whatever it is showing
-      (and seeds the next edit from) at them, so a second edit cannot start
-      from the first one's before. */
+  /** A memory's words were kept (with the server's row when there was one):
+      the page shows them on the card. */
   readonly onMemoryKept?: (id: string, text: string, made?: ApiInspiration) => void;
-  /** The memory write announced by `onMemoryWriting` has finished, either
-      way — the page's per-note "write in flight" is over. */
-  readonly onMemoryWriteSettled?: (id: string) => void;
-  /** A memory write was queued. The page counts it until it settles
-      (`onMemoryWriteSettled`) and marks every read of the memory already in
-      flight as older than it (`lib/detail-reads.ts`, `lib/note-writes.ts`). */
-  readonly onMemoryWriting?: (id: string) => void;
   /** How many attachments the memory being edited holds, for the one rule on
       empty words both doors share (`lib/note-words.ts`): a memory may be
       left wordless only beside an attachment. Absent means none. */
@@ -264,13 +256,12 @@ export function useEditing(deps: EditingDeps): Editing {
     const held = heldRef.current;
     if (!held || held.saving) return;
     const text = held.text.trim();
-    const d = depsRef.current;
     /* EMPTY WORDS: a memory beside an attachment may be wordless (the create
-       rule); anything else with no words has nothing to keep. The card says
-       why in its placeholder — this is the same answer at the press. */
+       rule); anything else with no words has nothing to keep. */
     if (held.kind === "memory"
-      ? !wordsCanStand(text, d.memoryAttachmentCount?.(held.id) ?? 0)
+      ? !wordsCanStand(text, depsRef.current.memoryAttachmentCount?.(held.id) ?? 0)
       : text === "") return;
+    const d = depsRef.current;
     put({ ...held, saving: true });
     const token = ++keepToken.current;
     /**
@@ -341,44 +332,25 @@ export function useEditing(deps: EditingDeps): Editing {
       }
     };
     if (d.offline.current) {
-      /* A FIXTURE MEMORY IS KEPT LOCALLY, AND THE CARD HAS TO KNOW. This
-         returned `done()` alone, so the `saved` beat played over the old
-         words and the next edit began from them (review, 2026-10-17). */
+      /* a fixture memory is kept locally — and the card shows the kept words */
       if (held.kind === "memory") {
-        /* The page that knows the freshness rules writes the list and the
-           cache when it is listening (`onMemoryKept`); only a page that is
-           not gets the bare preview update. */
-        if (d.onMemoryKept) d.onMemoryKept(held.id, text);
-        else d.setInspirations((prev) =>
+        d.setInspirations((prev) =>
           prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
         );
+        d.onMemoryKept?.(held.id, text);
       }
       return done();
     }
     if (held.kind === "memory") {
       const profile = d.memoryProfile?.();
-      /* in order behind any earlier write of this memory (dev, #443), named
-         to the profile the card read it with — and COUNTED FROM THE MOMENT
-         IT IS QUEUED, not when it reaches the network, so a read or an
-         editor that waits for this note's writes waits for a write still
-         queued behind another (`lib/note-writes.ts`). Uncounted in the
-         `finally` below, either way. */
-      d.onMemoryWriting?.(held.id);
       inOrder(`memory:${held.id}`, () => updateInspiration(held.id, { text }, profile ? { profile } : {}))
         .then((made) => {
           if (made) d.onInspirationSaved?.(made);
-          /* FRESHNESS IS THE PAGE'S VERDICT (review, 2026-10-17). With a
-             listener, the page decides — a row older than one it has already
-             accepted from the archive changes nothing — and writes the list
-             and the cache itself; this act no longer overwrites them first.
-             Without one, the old local update stands. */
-          if (d.onMemoryKept) d.onMemoryKept(held.id, text, made ?? undefined);
-          else {
-            d.setInspirations((prev) =>
-              prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
-            );
-            d.details.current.delete(held.id);
-          }
+          d.setInspirations((prev) =>
+            prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
+          );
+          d.details.current.delete(held.id);
+          d.onMemoryKept?.(held.id, text, made ?? undefined);
           /* THE CARD STAYS OPEN. This deselected the memory on success, which
              closed the whole card in the same breath the `saved` beat was
              trying to hold it — so the founder's ruling ("just keep it
@@ -388,8 +360,7 @@ export function useEditing(deps: EditingDeps): Editing {
              (founder, 2026-08-27, after it closed on them again.) */
           done();
         })
-        .catch(fail)
-        .finally(() => d.onMemoryWriteSettled?.(held.id));
+        .catch(fail);
     } else if (held.kind === "signal") {
       inOrder(`signal:${held.id}`, () => updateSignal(held.id, { statement: text }))
         .then(() => {

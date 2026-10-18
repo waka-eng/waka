@@ -179,6 +179,9 @@ async function pressWords(): Promise<void> {
   const p = words();
   if (!p) throw new Error("the card is not showing its words");
   await act(async () => p.click());
+  /* every edit reads the note fresh before it opens: give that read its turn */
+  for (let turn = 0; turn < 10 && !editBox() && !note(); turn += 1) { await world.step(2); await wait(10); }
+  for (let turn = 0; turn < 20 && !editBox() && note() === "Opening…" && S.hold !== "hold"; turn += 1) { await world.step(2); await wait(10); }
 }
 async function typeAndKeep(text: string): Promise<void> {
   const box = editBox()!;
@@ -204,6 +207,7 @@ it("a late full read: Opening… and no edit while it is out, then the card take
   await act(async () => S.held.at(-1)!.resolve());
   await world.step(6);
   expect(note(), "the late read landed on the card").toBe("");
+  S.hold = null; // the edit's own fresh read is answered at once
   await pressWords();
   expect(editBox()?.value, "and the edit opens on the whole text").toBe("something I kept, 4");
 });
@@ -312,21 +316,6 @@ it("a read that started before a save cannot put the old words back", { timeout:
   expect(editBox()?.value, "the stale read was dropped; the save's words stand").toBe(NEWER);
 });
 
-it("a note deleted in the archive leaves the field and closes its card", { timeout: 30_000 }, async () => {
-  await openByAddress("own-2");
-  const before = world.audit().present;
-  await openInArchive("/inspirations/own-2", "something I kept, 2");
-  await act(async () => document.querySelector<HTMLButtonElement>(".waka-dock-tool--erase")!.click());
-  /* leaving the archive sends the delete at once (Undo's moment is the page's) */
-  await act(async () => { go("/"); });
-  await world.step(12);
-  await wait(50);
-  await world.step(6);
-  expect(S.deleted).toEqual(["own-2"]);
-  expect(card(), "the card showing the deleted note closed").toBeNull();
-  expect(world.audit().present, "and the field holds one memory fewer").toBe(before - 1);
-});
-
 /* The card has no way to attach anything, so its empty editor must not tell
    people to add a photo or a file — only to write. */
 it("tells an emptied memory card to write something, and offers nothing it cannot do", { timeout: 30_000 }, async () => {
@@ -348,57 +337,6 @@ const archiveSave = async () => {
   await world.step(4);
 };
 
-/* AN UPLOAD IN THE ARCHIVE, THEN A SAVE: the world re-reads the note after
-   the upload (its attachments changed without its words, so only the save
-   generation can order the reads), and that re-read — answering with the
-   words from before the save — lands last. It must be dropped. */
-it("the re-read after an upload cannot put words older than a later save back", { timeout: 30_000 }, async () => {
-  const NEWER = "something I kept, 4 — saved after the upload's re-read went out.";
-  await openByAddress("own-5");
-  S.hold = "hold";
-  const page = await openInArchive("/inspirations/own-5", "something I kept, 4", async () => {
-    await act(async () => S.held.at(-1)!.resolve());
-  });
-  const readsBefore = S.held.length;
-  const input = [...document.querySelectorAll<HTMLInputElement>('nav.waka-dock input[type="file"]')].find((node) => node.accept.includes("application/pdf"))!;
-  Object.defineProperty(input, "files", { configurable: true, value: [new File(["%PDF-1.7"], "notes.pdf", { type: "application/pdf" })] });
-  await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
-  for (let turn = 0; turn < 20 && S.held.length === readsBefore; turn += 1) { await world.step(2); await wait(10); }
-  expect(S.held.length, "the world did not re-read after the upload").toBe(readsBefore + 1);
-  const reRead = S.held.at(-1)!;
-  await setText(page, NEWER);
-  await archiveSave();
-  S.hold = null;
-  await act(async () => reRead.resolve()); // the words from before the save
-  await world.step(4);
-  await act(async () => { go("/inspirations/own-5"); });
-  await world.step(12);
-  await wait(100);
-  await stepOn();
-  await wait(100);
-  await world.step(6);
-  await pressWords();
-  expect(editBox()?.value, "the late re-read was older than the save and was dropped").toBe(NEWER);
-});
-
-
-it("a note brought back from the deleted shelf comes back to the field", { timeout: 30_000 }, async () => {
-  await openByAddress("own-2");
-  const before = world.audit().present;
-  await openInArchive("/inspirations/own-2", "something I kept, 2");
-  await act(async () => document.querySelector<HTMLButtonElement>(".waka-dock-tool--erase")!.click());
-  await act(async () => { go("/"); });
-  await world.step(12);
-  await wait(50);
-  expect(world.audit().present).toBe(before - 1);
-  await act(async () => { go("/?open=saves"); });
-  for (let turn = 0; turn < 30 && ![...world.container.querySelectorAll("button")].some((b) => b.textContent === "Deleted"); turn += 1) { await world.step(4); await wait(30); }
-  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Deleted")!.click());
-  await world.step(4);
-  await act(async () => world.container.querySelector<HTMLButtonElement>(".waka-shelf-back")!.click());
-  for (let turn = 0; turn < 20 && world.audit().present !== before; turn += 1) { await world.step(4); await wait(20); }
-  expect(world.audit().present, "restored to the field").toBe(before);
-});
 
 /* AN ARCHIVE SAVE NEVER LANDS ON AN OPEN CARD EDIT. Opening the archive
    ends the card's edit, so the archive's words cannot be overwritten by a
@@ -422,70 +360,6 @@ it("an archive save of a note the card was editing: the edit is closed first, an
   expect(editBox()?.value).toBe(FROM_ARCHIVE);
 });
 
-
-/* THE TWO DOORS CANNOT RACE ON ONE NOTE (review, 2026-10-17). The card's
-   save is still out when the archive is opened: the card can no longer be
-   edited, the archive's read waits for that save to land and opens on its
-   words, and an archive save after it is the one that stands. */
-it("a card save in flight, then the archive: the archive opens on the card's words and its own save stands", { timeout: 30_000 }, async () => {
-  const FROM_CARD = "something I kept, 2 — saved on the card.";
-  const FROM_ARCHIVE = "something I kept, 2 — and then in the archive.";
-  await openByAddress("own-2");
-  await pressWords();
-  S.holdWrite = true;
-  await typeAndKeep(FROM_CARD);
-  expect(S.landWrite, "the card's save is out").not.toBeNull();
-  const path = here;
-  await act(async () => { go(`${path}?open=saves`); });
-  for (let turn = 0; turn < 30 && !world.container.querySelector(".waka-list-row"); turn += 1) { await world.step(4); await wait(30); }
-  /* the card's words cannot be opened for editing under the archive */
-  const p = words();
-  if (p) await act(async () => p.click());
-  expect(editBox(), "no card edit while the archive is open").toBeNull();
-  const archiveRow = [...world.container.querySelectorAll<HTMLButtonElement>(".waka-list-row")]
-    .find((b) => (b.textContent ?? "").includes("something I kept, 2"))!;
-  await act(async () => archiveRow.click());
-  await world.step(4);
-  await wait(50);
-  const page = () => world.container.querySelector<HTMLTextAreaElement>(".waka-note-page")!;
-  expect(page().readOnly, "the archive waits for the card's save before it reads").toBe(true);
-  S.holdWrite = false;
-  await act(async () => { S.landWrite!(); });
-  for (let turn = 0; turn < 20 && page().readOnly; turn += 1) { await world.step(2); await wait(20); }
-  expect(page().value, "and opens on the card's saved words").toBe(FROM_CARD);
-  await setText(page(), FROM_ARCHIVE);
-  await archiveSave();
-  expect(S.store.get("own-2"), "the archive's later save is what is stored").toBe(FROM_ARCHIVE);
-});
-
-/* KEEP, STEP AWAY, COME BACK BEFORE IT LANDS (review, 2026-10-17). The card
-   reopening the note finds the words from before the write in its cache;
-   it must say "Saving…", wait for the write, and open the edit on it. */
-it("reopening a card whose keep is still out shows Saving…, then the kept words", { timeout: 30_000 }, async () => {
-  const KEPT = "something I kept, 4 — kept, still on its way.";
-  await openByAddress("own-5");
-  await stepOn(); // own-4, read into the cache
-  await wait(50);
-  await world.step(6);
-  await pressWords();
-  S.holdWrite = true;
-  await typeAndKeep(KEPT);
-  expect(S.landWrite, "the keep is out").not.toBeNull();
-  const back = [...world.container.querySelectorAll<HTMLElement>(".jar-panel-foot-c button")]
-    .find((b) => /before this one/.test(b.getAttribute("aria-label") ?? ""))!;
-  await act(async () => back.click()); // to own-5
-  await world.step(10);
-  await stepOn(); // and back to own-4 while the keep is out
-  await world.step(6);
-  expect(note(), "the card says the write is still going").toBe("Saving…");
-  await pressWords();
-  expect(editBox(), "no edit seeded from the words the write is replacing").toBeNull();
-  S.holdWrite = false;
-  await act(async () => { S.landWrite!(); });
-  for (let turn = 0; turn < 20 && note() !== ""; turn += 1) { await world.step(2); await wait(20); }
-  await pressWords();
-  expect(editBox()?.value).toBe(KEPT);
-});
 
 /* AN ADDRESS THAT CANNOT BE READ FRESH OPENS NOTHING EDITABLE (review,
    2026-10-17). The address now reads through the one rule; when that rule

@@ -110,16 +110,13 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-type World = { profileId?: string; ownArchive?: boolean; readFull?: (id: string) => Promise<never>; onAttached?: (id: string) => void };
+type World = { profileId?: string; ownArchive?: boolean };
 /** The archive as Home renders it: every callback a NEW inline function on
     every render, exactly as Home passes them. */
 async function renderArchive(whose: World = {}): Promise<void> {
   await act(async () => root.render(
     <SavesOverlay locale="en-US" title="Your Inspirations" onClose={vi.fn()}
       profileId={whose.profileId} ownArchive={whose.ownArchive}
-      onSaved={(made) => { state.saved.push({ id: made.id, text: made.text }); }}
-      onErased={() => undefined}
-      readFull={whose.readFull} onAttached={whose.onAttached}
       onNoteOpen={(close) => { closer = close; }} />,
   ));
 }
@@ -283,14 +280,6 @@ it("on an agent's archive, writes and deletes name the same profile the read did
   }
 });
 
-it("tells the world behind it what was stored, with the server's row", async () => {
-  await openSave(longRow, LONG);
-  await answer(true);
-  await type(`${LONG} Told.`);
-  await act(async () => save().click());
-  expect(state.saved).toEqual([{ id: "long-1", text: `${LONG} Told.` }]);
-});
-
 /* THE ⋯ MENU (narrow phones fold Share and Delete into it). Rendered at
    every width — the stylesheet chooses which shape shows — so its keyboard
    and pointer rules are testable here; they are `lib/use-dock-menu.ts`'s,
@@ -327,17 +316,8 @@ it("folds Share and Delete into a More menu with the bar's menu keys", async () 
   expect(document.activeElement?.textContent, "and focus lands on the Undo line, not the page body").toBe("Undo");
 });
 
-it("tells the world behind it when an attachment lands, with the server's row", async () => {
-  await openSave(longRow, LONG);
-  await answer(true);
-  const input = [...slot.querySelectorAll<HTMLInputElement>('input[type="file"]')].find((node) => node.accept.includes("application/pdf"))!;
-  Object.defineProperty(input, "files", { configurable: true, value: [new File(["%PDF-1.7"], "notes.pdf", { type: "application/pdf" })] });
-  await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
-  for (let turn = 0; turn < 10 && state.saved.length === 0; turn += 1) await act(async () => { await Promise.resolve(); });
-  expect(state.saved).toEqual([{ id: "long-1", text: LONG }]);
-});
-
-it("does not carry one note's upload failure onto the next note opened", async () => {
+it("keeps one note's upload failure on that note: not on the next, still on its own", async () => {
+  state.more = [{ ...longRow, id: "older-1", preview: "an older note" }];
   await openSave(longRow, LONG);
   await answer(true);
   state.failUpload = true;
@@ -347,9 +327,15 @@ it("does not carry one note's upload failure onto the next note opened", async (
   for (let turn = 0; turn < 10 && !bar(); turn += 1) await act(async () => { await Promise.resolve(); });
   expect(bar(), "the failure is said on the note it happened to").toContain("upload");
   await act(async () => closer!());
-  await act(async () => host.querySelector<HTMLButtonElement>(".waka-list-row")!.click());
+  const other = [...host.querySelectorAll<HTMLButtonElement>(".waka-list-row")].find((b) => (b.textContent ?? "").includes("an older note"))!;
+  await act(async () => other.click());
   await answer(true);
-  expect(bar(), "and not on the next note opened").toBe("");
+  expect(bar(), "not on the next note opened").toBe("");
+  await act(async () => closer!());
+  const own = [...host.querySelectorAll<HTMLButtonElement>(".waka-list-row")].find((b) => !(b.textContent ?? "").includes("an older note"))!;
+  await act(async () => own.click());
+  await answer(true);
+  expect(bar(), "and still on its own note, opened again").toContain("upload");
 });
 
 /* HOME RE-RENDERS BEHIND THE ARCHIVE ALL THE TIME, and its callbacks are new
@@ -373,26 +359,6 @@ it("keeps a delete undoable while the world behind re-renders", async () => {
   } finally {
     vi.useRealTimers();
   }
-});
-
-it("opens a note through the world's stamped read when the world offers one", async () => {
-  const SAVED_ON_THE_CARD = `${LONG} (saved on the card a moment ago)`;
-  await openSave(longRow, LONG, { readFull: async (id) => ({ ...longRow, id, text: SAVED_ON_THE_CARD, reflections: [] }) as never });
-  for (let turn = 0; turn < 5 && page().readOnly; turn += 1) await act(async () => { await Promise.resolve(); });
-  expect(page().value).toBe(SAVED_ON_THE_CARD);
-  expect(state.reads, "the archive did not read for itself").toHaveLength(0);
-});
-
-it("tells the world an attachment landed, so it re-reads through its own stamps", async () => {
-  const attached: string[] = [];
-  await openSave(longRow, LONG, { onAttached: (id) => { attached.push(id); } });
-  await answer(true);
-  const input = [...slot.querySelectorAll<HTMLInputElement>('input[type="file"]')].find((node) => node.accept.includes("application/pdf"))!;
-  Object.defineProperty(input, "files", { configurable: true, value: [new File(["%PDF-1.7"], "notes.pdf", { type: "application/pdf" })] });
-  await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
-  for (let turn = 0; turn < 10 && attached.length === 0; turn += 1) await act(async () => { await Promise.resolve(); });
-  expect(attached).toEqual(["long-1"]);
-  expect(state.saved, "and does not hand it a row of its own").toEqual([]);
 });
 
 /* AN UPLOAD IS ITS NOTE'S (review, 2026-10-17). A clip can finish uploading

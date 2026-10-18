@@ -98,11 +98,8 @@ import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
-import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type ApiInspiration, type HarvestReason } from '../lib/api';
-import { inspirationPreview } from '../lib/inspiration-preview';
+import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
 import { wordsCanStand } from '../lib/note-words';
-import { markSaved, newerDetail, readDetail, type DetailReadState } from '../lib/detail-reads';
-import { NoteWrites } from '../lib/note-writes';
 import { candidateSaveRequestId } from '../lib/harvest';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
 import { inspectInspirationPhoto, PHOTO_ACCEPT, PhotoRefused } from '../lib/inspiration-photo';
@@ -633,24 +630,17 @@ async function loadAgentBundle(
  * one honest degradation — the network failed or took too long, so the
  * preview stands alone and says so.
  */
-/** A detail read landing on the card: taken only if it is not older than
-    what the card already shows (a save applied while it was out wins). */
-function landed(p: PanelData, id: string, detail: InspirationDetail | null): PanelData {
-  const keep = newerDetail(p.detail, detail);
-  return { id, detail: keep, partial: keep === null };
-}
-
 interface PanelData {
   id: string;
   detail: InspirationDetail | null;
   partial: boolean;
   /** The full read is still in flight after the panel gave up waiting for it
-      (the two-second rule below). The panel says "Opening this note…" and
-      takes the detail when it lands, instead of staying partial forever. */
-  pending?: boolean | 'saving' | 'still-saving';
+      (the two-second rule below), or an edit is reading the words fresh: the
+      panel says "Opening this note…" and takes the detail when it lands. */
+  pending?: boolean;
   /** A memory with no detail (one kept a moment ago, or a fixture's) whose
-      words were just kept locally: what it now says, so the card shows them
-      and the next edit starts from them. */
+      words were just kept: what it now says, so the card shows them and the
+      next edit starts from them. */
   keptText?: string;
 }
 
@@ -1334,8 +1324,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      again — releases. It lags `selectedId` at BOTH ends: it does not appear
      until its content is whole, and it stays mounted through its fade-out. */
   const [panel, setPanel] = useState<PanelData | null>(null);
-  /* The panel as last rendered, for callbacks that must read it without
-     being rebuilt on every change (the shared saved-words writer below). */
   const panelNowRef = useRef<PanelData | null>(null);
   panelNowRef.current = panel;
   /**
@@ -2243,30 +2231,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** Read by the loop: a panel is occluding part of the field right now. */
   const panelOpenRef = useRef(false);
   const detailsRef = useRef<Map<string, InspirationDetail>>(new Map());
-  /** Per note, how many saves this page has seen — the freshness stamp a
-      detail read is checked against when it lands (see `loadDetail`). */
-  const savedGenerationRef = useRef<Map<string, number>>(new Map());
-  /** Per note, the newest server `updatedAt` this page has accepted. A row
-      older than it — a read that started before a save and answered after
-      it — never replaces newer words (see `rememberSavedInspiration`). */
-  const newestStampRef = useRef<Map<string, number>>(new Map());
-  /** The four maps `lib/detail-reads.ts` reads and stamps, from their refs. */
-  /** How many card writes of each note are out (`lib/note-writes.ts`).
-      Every read of a note's words, and every editor seeded from them, waits
-      until there are none — the one rule that keeps two doors and a slow
-      network from ever showing the words from before a write. */
-  const noteWritesRef = useRef(new NoteWrites());
-  /** Each note's last fetch failure, for a caller that joined a read. */
-  const detailErrorsRef = useRef<Map<string, unknown>>(new Map());
-  const detailReadState = (): DetailReadState => ({
-    details: detailsRef.current, pending: detailPendingRef.current,
-    generations: savedGenerationRef.current, stamps: newestStampRef.current, writes: noteWritesRef.current,
-    errors: detailErrorsRef.current,
-    /* a read waiting past the ceiling on a slow write: the card says so */
-    onStillSaving: (id) => setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? { ...p, pending: 'still-saving' } : p)),
-  });
-  const detailReadStateRef = useRef(detailReadState);
-  detailReadStateRef.current = detailReadState;
   const detailPendingRef = useRef<Map<string, Promise<InspirationDetail | null>>>(new Map());
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
@@ -3326,11 +3290,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const loadDetail = useCallback((id: string): Promise<InspirationDetail | null> => {
     // A remembered original is not a current read: reflections, permissions
     // or the source itself may have changed since the previous opening.
+    const inFlight = detailPendingRef.current.get(id);
+    if (inFlight) return inFlight;
     const active = atWallRef.current;
     const profile = active.kind === 'agent' ? active.id : storageScope?.profileId;
-    /* A READ THAT STARTED BEFORE A SAVE IS OLDER THAN THE SAVE (review,
-       2026-10-17: data loss) — the rule, and why, is `lib/detail-reads.ts`. */
-    return readDetail(detailReadState(), id, (noteId) => loadInspiration(noteId, profile));
+    const p = loadInspiration(id, profile)
+      .then((row) => {
+        detailsRef.current.set(id, row);
+        detailPendingRef.current.delete(id);
+        return row;
+      })
+      .catch(() => {
+        /* leave it absent: the tap path falls back to the preview */
+        detailPendingRef.current.delete(id);
+        return null;
+      });
+    detailPendingRef.current.set(id, p);
+    return p;
   }, []);
   const loadDetailRef = useRef(loadDetail);
   loadDetailRef.current = loadDetail;
@@ -4359,20 +4335,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        pointerdown): the panel appears in the same commit as the selection —
        no wait at all, and still one single appearance. */
     const cached = detailsRef.current.get(fetchId);
-    /* A WRITE OF THIS MEMORY IS STILL OUT: the cache holds the words from
-       before it. The card opens saying so ("Saving…"), and takes the words
-       read once the write has landed (`lib/note-writes.ts`). */
-    if (cached && noteWritesRef.current.pending(fetchId)) {
-      steppingRef.current = false;
-      setPanel({ id: selectedId, detail: null, partial: true, pending: 'saving' });
-      setPanelOpen(true);
-      let gone = false;
-      void loadDetail(fetchId).then((detail) => {
-        if (gone) return;
-        setPanel((p) => (p && p.id === selectedId ? landed(p, selectedId, detail) : p));
-      });
-      return () => { gone = true; };
-    }
     if (cached) {
       steppingRef.current = false;
       setPanel({ id: selectedId, detail: cached, partial: false });
@@ -4411,14 +4373,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     };
     /* the network is not allowed to hold a reading hostage — but a late
        answer is still the answer. The panel appears at two seconds saying it
-       is still opening, and the detail is taken whenever it lands; before
+       is still opening, and takes the detail whenever it lands; before
        2026-10-17 a read slower than the timer left the panel partial (and
        not editable) for as long as it stayed open. */
     const timer = window.setTimeout(() => show(null, true), 2000);
     loadDetail(fetchId).then((detail) => {
       if (cancelled) return;
       if (!done) { show(detail); return; }
-      setPanel((p) => (p && p.id === selectedId ? landed(p, selectedId, detail) : p));
+      setPanel((p) => (p && p.id === selectedId ? { id: selectedId, detail, partial: detail === null } : p));
     });
     return () => {
       done = true;
@@ -4426,92 +4388,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       window.clearTimeout(timer);
     };
   }, [selectedId, loadDetail]);
-
-  /* ═══ A NOTE'S WORDS WERE STORED — FROM ANY DOOR ════════════════════════
-     The memory card seeds every edit from `panel.detail`, and reopening a
-     memory reads `detailsRef` first. Both used to learn of a save only when
-     the save was the card's own — so an edit made in the archive (or the
-     card's own second edit) began from words that were no longer stored,
-     and its save overwrote the newer ones (review, 2026-10-17: DATA LOSS).
-
-     So every successful save comes through here: the card's own (via
-     `editing.ts`'s `onMemoryKept`) and the archive's (`SavesOverlay`'s
-     `onSaved`). The cached detail is BUILT FROM THE SERVER'S ROW when one
-     came back — the stored truth, attachments and all — and only patched
-     from the typed words when it did not (a fixture world, which has no
-     server). Built here, outside any state updater, so the cache write
-     happens once and not on React's whim. */
-  const rememberSavedInspiration = useCallback((id: string, text: string, made?: ApiInspiration, how: 'write' | 'read' = 'write') => {
-    /* OLDER THAN WHAT IS KNOWN: DROPPED, AND NOTHING BUMPED. A row carries the
-       server's `updatedAt`; one older than the newest this page has accepted
-       is a read that started before a save (the archive's re-read after an
-       upload, say) and must not put the old words back. */
-    const stamp = made?.updatedAt ? Date.parse(made.updatedAt) : NaN;
-    /* A READ older than the newest accepted row is dropped. A WRITE is
-       always applied: the card cannot edit while the archive is open, and
-       the archive reads only after a card write has landed, so writes reach
-       this page in the order the server applied them. */
-    if (Number.isFinite(stamp)) {
-      const newest = newestStampRef.current.get(id) ?? -Infinity;
-      if (how === 'read' && stamp < newest) return;
-      newestStampRef.current.set(id, Math.max(stamp, newest));
-    }
-    /* A WRITE makes every read already in flight older than what is stored
-       (`markSaved`: the next read starts fresh rather than joining one of
-       them). A read is not a write — it leaves the generation alone. */
-    if (how === 'write') markSaved(detailReadState(), id, made?.updatedAt);
-    const whole = made && made.id === id && Array.isArray(made.attachments) ? toInspirationDetail(made) : null;
-    const shown = panelNowRef.current?.detail;
-    const known = detailsRef.current.get(id) ?? (shown?.id === id ? shown : null);
-    const detail = whole ?? (known ? { ...known, text, preview: inspirationPreview(text, known.attachments) } : null);
-    /* (With no row and nothing cached there is nothing to write: an in-flight
-       read is then answered by a fresh read in `loadDetail`, not by null.) */
-    if (detail) detailsRef.current.set(id, detail);
-    setInspirations((prev) => prev
-      ? prev.map((c) => (c.id === id ? { ...c, preview: inspirationPreview(whole?.text ?? text, c.attachments) } : c))
-      : prev);
-    if (detail) {
-      setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? { ...p, detail, partial: false, pending: false } : p));
-      /* a memory opened by its address is held beside the field too */
-      setDetachedInspiration((held) => (held && held.detail?.id === id ? { ...held, detail } : held));
-    } else {
-      /* NO DETAIL TO PATCH (a fixture keep, or a memory kept a moment ago):
-         the card still shows, and the next edit starts from, the kept words */
-      setPanel((p) => (p && p.id === id && !p.detail ? { ...p, keptText: text } : p));
-    }
-  }, []);
-
-  /* AN ATTACHMENT LANDED ON A NOTE IN THE ARCHIVE. Its words did not change,
-     so `updatedAt` cannot order the reads around it; the generation can.
-     Every read of it already out is marked older, and a fresh one — made
-     after the upload — is what the cache, the card and an address-opened
-     memory take. */
-  const attachedInspiration = (id: string) => {
-    markSaved(detailReadState(), id);
-    void loadDetailRef.current(id).then((detail) => {
-      if (!detail) return;
-      setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? landed(p, p.id, detail) : p));
-      setDetachedInspiration((held) => (held && held.detail?.id === id ? { ...held, detail: newerDetail(held.detail, detail) } : held));
-    });
-  };
-  const attachedInspirationRef = useRef(attachedInspiration);
-  attachedInspirationRef.current = attachedInspiration;
-
-  /* A note brought back from the deleted shelf comes back to the field —
-     the mirror of `onErased` (review, 2026-10-17). */
-  const restoredInspiration = (made: ApiInspiration) => {
-    const detail = toInspirationDetail(made);
-    const known = inspirationsRef.current?.some((item) => item.id === made.id) || bornIdsRef.current.has(made.id);
-    sourceListMutationRef.current += 1;
-    markSaved(detailReadState(), made.id, made.updatedAt);
-    detailsRef.current.set(made.id, detail);
-    if (!known) birthInspiration(made.id, detail.preview, Date.parse(made.createdAt), made.id, true);
-    setInspirations((previous) => previous?.some((item) => item.id === made.id)
-      ? previous.map((item) => (item.id === made.id ? detail : item))
-      : [...(previous ?? []), detail]);
-  };
-  const restoredInspirationRef = useRef(restoredInspiration);
-  restoredInspirationRef.current = restoredInspiration;
 
   /* TRY AGAIN, for a panel whose full read failed. The same read the effect
      above makes, by the same id rule, landing on the panel only if it is
@@ -4522,7 +4398,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const fetchId = ballsRef.current?.byId.get(id)?.sigId ?? id;
     setPanel((p) => (p && p.id === id ? { ...p, pending: true } : p));
     void loadDetail(fetchId).then((detail) => {
-      setPanel((p) => (p && p.id === id ? landed(p, id, detail) : p));
+      setPanel((p) => (p && p.id === id ? { id, detail, partial: detail === null } : p));
     });
   }, [panel?.id, loadDetail]);
 
@@ -5303,16 +5179,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
   const sourceListMutationRef = useRef(0);
   const attachmentRequestsRef = useRef(new Set<string>());
-  /* `keepClock`: a note that is not NEW (one restored from the deleted
-     shelf) joins the field at its own old date without moving the dial's
-     `now` back to it (review, 2026-10-17). */
-  const birthInspiration = (id: string, text: string, atMs: number, serverId?: string, keepClock = false) => {
+  const birthInspiration = (id: string, text: string, atMs: number, serverId?: string) => {
     const seed: BornSeed = { id, ...(serverId ? { sigId: serverId } : {}), capturedMs: atMs, updatedMs: atMs,
       textPreview: text, kind: "note", quote: null, reflectionCount: 0,
       cited: false, roots: 0, promotion: 0, onPoster: false, underPrinciple: false, terms: [] };
     bornRef.current = [...bornRef.current, seed]; simApiRef.current?.born(seed);
     if (serverId) bornIdsRef.current.add(serverId);
-    if (!keepClock) setClockMs(atMs);
+    setClockMs(atMs);
   };
   inspirationSaveHandlers.current = {
     onResolved: async (intent, result, initiated) => {
@@ -6992,26 +6865,24 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     reloadReading: async () => { absorbBoard(await loadPersonalReading()); },
     beginReadingMutation,
     onInspirationSaved: (made) => { sourceListMutationRef.current += 1; if (made.processing) sourceProcessing.track(made.id, made.processing); },
-    /* THE OPEN CARD TAKES THE WORDS IT JUST KEPT. `panel.detail` is what the
-       next edit is seeded from, so leaving the pre-edit text there meant a
-       second edit began from the first one's BEFORE and its save reverted it
-       (review, 2026-10-17). The cache gets the same words for the same
-       reason: reopening this memory must not read them back stale. */
-    onMemoryKept: (id, text, made) => rememberSavedInspiration(id, text, made),
-    onMemoryWriteSettled: (id) => noteWritesRef.current.settle(id),
-    /* a card write QUEUED: counted until it settles, and every read of this
-       note already in flight is now older than it (`lib/detail-reads.ts`) */
-    onMemoryWriting: (id) => {
-      noteWritesRef.current.start(id);
-      markSaved(detailReadState(), id);
+    /* THE CARD SHOWS THE WORDS IT JUST KEPT — the server's row when one came
+       back, or the typed words (a fixture world) — rather than the words from
+       before the edit. */
+    onMemoryKept: (id, text, made) => {
+      const fresh = made && made.id === id && Array.isArray(made.attachments) ? toInspirationDetail(made) : null;
+      setPanel((p) => {
+        if (!p || (p.id !== id && p.detail?.id !== id)) return p;
+        if (fresh) return { ...p, detail: fresh, partial: false };
+        return p.detail ? { ...p, detail: { ...p.detail, text, preview: text } } : { ...p, keptText: text };
+      });
     },
-    /* The one empty-words rule (`lib/note-words.ts`) needs to know what the
-       memory holds besides its words. */
+    /* the empty-words rule (`lib/note-words.ts`) counts what the memory holds
+       besides its words */
     memoryAttachmentCount: (id) => {
-      const shown = panelNowRef.current?.detail;
-      return (shown && (shown.id === id || panelNowRef.current?.id === id) ? shown : detailsRef.current.get(id))?.attachments.length ?? 0;
+      const shown = panelNowRef.current;
+      return (shown?.detail && (shown.detail.id === id || shown.id === id) ? shown.detail : detailsRef.current.get(id))?.attachments.length ?? 0;
     },
-    /* The profile the card was read with — an agent's wall reads its own. */
+    /* the profile the card was read with — an agent's wall reads its own */
     memoryProfile: () => (atWallRef.current.kind === 'agent' ? atWallRef.current.id : storageScope?.profileId),
     onEntrySaved: () => {
       readingMutationRef.current += 1;
@@ -7146,38 +7017,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const beginPanelEdit = useCallback(
     (ev: ReactMouseEvent<HTMLParagraphElement>) => {
       if (!panelId || editing.open) return;
-      /* NO CARD EDIT WHILE THE ARCHIVE IS OPEN (review, 2026-10-17). Opening
-         the archive already closes the card's edit; this keeps one from
-         opening under it. With both, every archive save is ordered after any
-         card write (the archive reads only once that write has landed), so
-         the two doors can never race on one note's words. */
-      if (viewNavigationRef.current.view?.open === 'saves') return;
-      /* NEVER AN EDIT SEEDED FROM A PREVIEW (P0, 2026-10-17). This used to
-         fall back to `panelBall.textPreview` while the detail read was in
-         flight or after it failed — a 220-character cut ending in "…" (or an
-         attachment label) that the editor then PATCHed back as the whole
-         text, deleting the rest of the save.
-
-         The fallback is still right in exactly the cases the panel effect
-         marks COMPLETE with no detail (`partial: false`): a memory kept a
-         moment ago, whose preview is every word you typed, and an offline
-         fixture memory, which has nothing else behind it. A panel that is
-         `partial` — still opening, or failed — does not know the whole
-         text, so the press is not an edit yet. */
-      if (!panel || panel.id !== panelId || panel.partial) return;
-      /* A WRITE OF THIS MEMORY IS STILL OUT: no editor seeded from words a
-         write is replacing. The card says "Saving…" and re-reads once the
-         write has landed; the press after that opens the edit. */
-      const noteId = panel.detail?.id ?? panelBall?.sigId ?? panelId;
-      if (noteWritesRef.current.pending(noteId)) {
-        setPanel((p) => (p && p.id === panelId ? { ...p, pending: 'saving' } : p));
-        void loadDetailRef.current(noteId).then((detail) => {
-          setPanel((p) => (p && p.id === panelId ? landed(p, panelId, detail) : p));
-        });
-        return;
-      }
-      const whole = panel.detail ? panel.detail.text : panel.keptText ?? panelBall?.textPreview;
-      if (whole === undefined) return;
+      /* NEVER AN EDITOR SEEDED FROM A PREVIEW OR A STALE COPY (P0,
+         2026-10-17). This fell back to `panelBall.textPreview` — a cut
+         ending in "…", or an attachment label — while the full read was out
+         or after it failed, and the edit then PATCHed that back as the whole
+         text. A panel that is partial (still opening, or failed) has no edit
+         to offer. */
+      if (!panel || panel.id !== panelId || panel.partial || panel.pending) return;
       /* THE CARET GOES WHERE THE FINGER WENT. Without this the press lands
          you at the end of a page of text and you scroll back to the sentence
          you meant — which is the same "find your place again" cost the
@@ -7200,13 +7046,31 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            behaviour and never wrong, only less kind */
       }
       panelCaretRef.current = at;
-      editing.begin(
-        "memory",
-        panelId,
-        whole,
+      /* A MEMORY WITH NO SERVER DETAIL (kept a moment ago, or a fixture's)
+         is complete as shown: its words are the ones typed. */
+      if (!panel.detail) {
+        editing.begin("memory", panelId, panel.keptText ?? panelBall?.textPreview ?? "");
+        return;
+      }
+      /* EVERY OTHER EDIT READS THE NOTE FRESH FROM THE SERVER FIRST. The
+         panel's copy may be older than the stored words (the archive may
+         have saved them since); the editor starts from what is stored now.
+         The panel says "Opening…" while it reads, and "Couldn't load the
+         rest" with Try again if it cannot. */
+      const noteId = panel.detail.id;
+      const active = atWallRef.current;
+      const profile = active.kind === "agent" ? active.id : storageScope?.profileId;
+      setPanel((p) => (p && p.id === panelId ? { ...p, pending: true } : p));
+      void loadInspiration(noteId, profile).then(
+        (fresh) => {
+          detailsRef.current.set(noteId, fresh);
+          setPanel((p) => (p && p.id === panelId ? { id: panelId, detail: fresh, partial: false } : p));
+          if (selectedIdRef.current === panelId) editing.begin("memory", panelId, fresh.text);
+        },
+        () => setPanel((p) => (p && p.id === panelId ? { ...p, pending: false, partial: true } : p)),
       );
     },
-    [panelId, editing, panel, panelBall],
+    [panelId, editing, panel, panelBall, storageScope?.profileId],
   );
 
   /* ═══ `togglePublic` AND `publishing` ARE GONE ══════════════════════════
@@ -7242,17 +7106,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      rather than a quiet rider on this one. The COLUMN stays regardless;
      `inspirations.visibility` is the server's and no migration touches it. */
 
-  const inspirationRemovedFromView = useCallback((serverId: string, visualId = serverId, closePanel = true) => {
+  const inspirationRemovedFromView = useCallback((serverId: string, visualId = serverId) => {
     sourceListMutationRef.current += 1;
     /* ONLY IF IT IS STILL THE ONE OPEN. A delete is a round trip, and a
        person who pressed delete on A and stepped to B before it landed was
-       having B's panel closed under them by A's answer (dev, #443). An
-       archive delete asks the same, and may also say not to close at all. */
-    if (closePanel) setSelectedId(current => (current === visualId || current === serverId ? null : current));
+       having B's panel closed under them by A's answer. */
+    setSelectedId(current => (current === visualId || current === serverId ? null : current));
     simApiRef.current?.unborn(visualId);
     bornRef.current = bornRef.current.filter(row => row.id !== visualId && row.sigId !== serverId);
-    /* forgotten as born too, so a restore from the deleted shelf is born again */
-    bornIdsRef.current.delete(serverId);
     inspirationsRef.current = inspirationsRef.current?.filter(row => row.id !== visualId && row.id !== serverId) ?? null;
     setInspirations(rows => rows?.filter(row => row.id !== visualId && row.id !== serverId) ?? rows);
     detailsRef.current.delete(serverId);
@@ -7473,24 +7334,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            memory it hangs on is shared. Both are gone with rooms (founder,
            2026-10-12: "방 없애"), and with them the only path in this file
            that ever resolved a link to a memory this account does not own. */
-        const readProfile = target.kind === 'agent' ? target.id : storageScope?.profileId;
-        /* THROUGH THE ONE READ RULE (`lib/detail-reads.ts`), not a copy of
-           it: after this note's writes, re-read if stale, and — when it
-           cannot get fresh words (stale every time, or writes that never
-           settle) — no answer at all, so nothing stale is cached or made
-           editable: the address says it could not open, with Try again. */
-        /* the fetch's own failure is kept, so a 404 still says the link is
-           unavailable rather than offering a Try again that cannot work */
-        /* NOT ABORTED WITH THIS NAVIGATION: the read may be shared with
-           the card or the archive (a second ask joins the first), so moving
-           on only ignores its answer. Its failure is read from the shared
-           state, so a JOINED read's 404 still says unavailable. */
-        detailErrorsRef.current.delete(desired.inspirationId);
-        const fresh = await readDetail(detailReadState(), desired.inspirationId,
-          (noteId) => loadInspiration(noteId, readProfile));
+        detail = await loadInspiration(desired.inspirationId, target.kind === 'agent' ? target.id : storageScope?.profileId, controller.signal);
         if (!current()) return;
-        if (!fresh) throw detailErrorsRef.current.get(desired.inspirationId) ?? new Error('No fresh detail');
-        detail = fresh;
         ball = makeBall(seedOf(detail, skyRef.current.citations, skyRef.current.signals, skyRef.current.posterSignalIds, skyRef.current.principleSignalIds));
         ball.sigId = detail.id;
         if (!current()) return;
@@ -10162,8 +10007,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                  is measuring the same words the same way, not teaching the
                  reading face to hold invented air. */
               rows={1}
-              /* WHY SAVE IS DIM ON AN EMPTY MEMORY: the archive's words, for
-                 the archive's rule (`lib/note-words.ts`). */
+              /* why Save is dim on an emptied memory (the card cannot attach) */
               placeholder={(panel.detail?.attachments.length ?? 0) === 0 ? say("worldMemoryNeedsWords") : undefined}
               value={editing.open.text}
               onChange={(e) => {
@@ -10195,11 +10039,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             </p>
           )}
           {/* STILL OPENING, OR IT DID NOT — and from the second, a way to ask
-              again. The same two states and the same words the archive's
-              note page uses, so one memory never says two different things
-              depending on the door it was opened through. */}
+              again. The same states the archive's note page has. */}
           {panel.pending ? (
-            <p className="jar-panel-note" role="status">{say(panel.pending === 'still-saving' ? "worldStillSaving" : panel.pending === 'saving' ? "worldSaving" : "worldNoteOpening")}</p>
+            <p className="jar-panel-note" role="status">{say("worldNoteOpening")}</p>
           ) : panel.partial ? (
             <p className="jar-panel-note">
               {say("worldCouldntLoadRest")}{" "}
@@ -11836,28 +11678,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           following an old reference here. */}
       {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
         onNoteOpen={savedNoteChanged}
-        /* An archive save or delete reaches the world's cache of read notes,
-           so the memory card never edits from words that are not stored. */
-        onSaved={(made, how) => rememberSavedInspiration(made.id, made.text, made, how)}
-        onRestored={(made) => restoredInspirationRef.current(made)}
-        /* the archive reads through the world's stamped reads, so a read
-           racing a card save cannot seed its editor with older words */
-        /* the archive reads through the same rule: after the note's writes */
-        readFull={(id) => loadDetailRef.current(id)}
-        /* and its writes are counted with the card's: no read or editor of
-           the note starts until they settle (`lib/note-writes.ts`) */
-        onWriting={(id) => { noteWritesRef.current.start(id); markSaved(detailReadStateRef.current(), id); }}
-        onWriteSettled={(id) => noteWritesRef.current.settle(id)}
-        onAttached={(id) => attachedInspirationRef.current(id)}
-        onErased={(id) => {
-          /* Gone from the field and the cache like a delete made on the card
-             itself — and the card closes only if it is showing this note. */
-          const shown = panelNowRef.current;
-          const showing = shown?.id === id || shown?.detail?.id === id;
-          const visual = shown && showing ? shown.id : id;
-          markSaved(detailReadState(), id);
-          inspirationRemovedFromView(id, visual, showing);
-        }}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         ownArchive={atWall.kind!=='agent'} shareName={auth?.profile?.name ?? ''}

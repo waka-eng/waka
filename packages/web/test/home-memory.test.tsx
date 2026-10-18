@@ -286,8 +286,11 @@ vi.mock("../src/lib/data", async (importOriginal) => {
       const kept = FACTS.inspirations.find((x) => x.id === id);
       if (!kept) throw new Error(`no such memory ${id}`);
       const at = BASE - kept.daysAgo * DAY;
+      /* what the server holds NOW: the last words kept for it, else the
+         fixture's — every edit reads the note fresh before it opens */
+      const text = [...KEPT.calls].reverse().find((call) => call.id === id)?.text ?? kept.text;
       return {
-        id: kept.id, preview: kept.text, text: kept.text, isPublic: kept.isPublic, kind: "note", source: "app",
+        id: kept.id, preview: text, text, isPublic: kept.isPublic, kind: "note", source: "app",
         category: null, capturedMs: at, updatedMs: at, attachments: [], reflectionCount: 0,
         conversationOrigin: null, reflections: [], enrichment: [],
       };

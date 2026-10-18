@@ -353,10 +353,7 @@ it('restores an older card, its earlier reflection and date across Back/Forward 
      THAT answer on screen, identified by its own id rather than by a
      disclosure's state. */
   expect(world.container.querySelector('[data-reflection-id="answer-1"]')?.textContent).toContain('My earlier words');
-  /* NO ABORT SIGNAL ANY MORE (2026-10-17): the address's read may be shared
-     with the card or the archive, so moving on ignores its answer rather than
-     aborting a read others are waiting on (`lib/detail-reads.ts`). */
-  expect(loadInspiration).toHaveBeenCalledWith('older', VIEWER_ID);
+  expect(loadInspiration).toHaveBeenCalledWith('older', VIEWER_ID, expect.any(AbortSignal));
   /* A HOP TO ANOTHER WALL STOOD HERE and it was doing two jobs. The first is
      gone with rooms (founder, 2026-10-12: "방 없애"): it navigated to
      `/w/group-id/old-name?view=sky`, whose point was that the URL carries a

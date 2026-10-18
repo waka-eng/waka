@@ -54,8 +54,6 @@ function Host(props: { offline: boolean; attachments: number; profile?: string }
     })) as EditingDeps["setInspirations"],
     setSignals: vi.fn(), setNotes: vi.fn(), setTopOfMind: vi.fn(), setAdopted: vi.fn(), setSelectedId: vi.fn(),
     onMemoryKept: (id, text) => { kept.push({ id, text }); order.push("kept"); },
-    onMemoryWriteSettled: (id) => { order.push(`settled ${id}`); },
-    onMemoryWriting: (id) => { order.push(`writing ${id}`); },
     memoryAttachmentCount: () => props.attachments,
     memoryProfile: () => props.profile,
   } as EditingDeps);
@@ -99,17 +97,5 @@ it("tells the card about a fixture keep, so its words and the next edit are the 
   await keepWords({ offline: true }, "kept offline");
   expect(W.calls, "a fixture world asks no server").toEqual([]);
   expect(kept).toEqual([{ id: "m1", text: "kept offline" }]);
-  /* the page that listens writes the list itself — see the next case */
-  expect(previews).toEqual([]);
-});
-
-/* THE PAGE'S FRESHNESS VERDICT DECIDES (review, 2026-10-17). A card write
-   older than an archive write the page already accepted must change
-   nothing — so with a listener, the act no longer writes the list's preview
-   or drops the cache before asking; and it says a write is going out first,
-   so reads already in flight are marked older than it. */
-it("leaves the list and the cache to the page, and announces the write before it goes", async () => {
-  await keepWords({}, "new words");
-  expect(order).toEqual(["writing m1", "write", "kept", "settled m1"]);
-  expect(previews, "no preview written behind the page's back").toEqual([]);
+  expect(previews.at(-1), "and the list shows them").toBe("kept offline");
 });

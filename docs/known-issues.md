@@ -1161,25 +1161,35 @@ in a dedicated PR.**
 
 ---
 
-### L10. A saved note's words live in three client copies, kept in step by hand *(follow-up, 2026-10-17)*
-**Added on `claude/fix-save-truncation`** · `packages/web/src/pages/Home.tsx`, `components/SavesOverlay.tsx` · severity low (design debt)
+### L13. Card ↔ archive concurrent edits of the same note *(pre-existing on dev; follow-up)*
+**Noted on `claude/fix-save-truncation`, 2026-10-18** · `packages/web/src/pages/Home.tsx`, `components/SavesOverlay.tsx`, `space/editing.ts` · severity medium
 
-**What.** Home holds a note's full detail in `detailsRef` (the read cache), in `panel.detail` (what
-the memory card shows and seeds its edits from) and in `detachedInspiration.detail` (a memory opened
-by its address); the archive's note page holds its own `stored` text. The P0 save-truncation work
-and two review rounds made them agree: every save from either door goes through
-`rememberSavedInspiration` with the server's row, every detail read is stamped with a per-note save
-generation and dropped if a save happened while it was out, and an archive delete removes the note
-from the field. That is correct but it is discipline, not structure — a new reader or writer of a
-note's words has to know to join it.
+**What.** Home's memory card and the archive's note page can both edit one note, and nothing orders
+their writes against each other or against reads in flight. The P0 branch makes each editor read the
+note's FULL text fresh from the server before it opens (so neither ever starts from a 220-character
+preview or from the other door's stale copy), and opening the archive closes the card's edit. It
+deliberately does NOT try to coordinate the two doors: four review rounds of cross-surface cache,
+freshness stamps and pending-write counting each found new holes and new regressions (stuck
+"Opening…", address links that did nothing, a "Still saving…" that never cleared), so that layer was
+removed. The races it was chasing, all present on `origin/dev`:
 
-**Follow-up.** One detail store (per profile, keyed by inspiration id, holding the server row and its
-`updatedAt`) that both doors read and write, so freshness is a property of the store rather than of
-each call site. Not done in the P0 branch on purpose: it touches every memory path in `Home.tsx`.
+- A card save still in flight when the archive opens the same note: the archive's fresh read can
+  answer before the save lands, and its later save then overwrites the card's words.
+- A slow detail read (the card's warm-up or its two-second late read) landing after a save can put
+  the older words back on the card's display (the next EDIT re-reads, so it does not seed from them).
+- An archive save, delete, restore or upload is not reflected in Home's field or card until Home
+  reads again (no cross-surface notification); a deleted note stays on the field until reload.
+- Two writes of one note from different doors are not ordered on the client; the server applies
+  them in arrival order.
+
+**Follow-up.** One per-profile detail store, keyed by inspiration id and holding the server row and
+its `updatedAt`, that both doors read and write through — with write ordering per note and an
+explicit, bounded wait for a pending write before an editor opens. Designed as its own change, with
+browser-level tests, rather than layered onto the P0 fix.
 
 **Also noticed, not verified.** `finalizeAttachment` for an inspiration sends no `?profile=`, while
-the archive's presign does. Attaching to an agent's note from the agent's archive may therefore be
-resolved against the signed-in human. Check before relying on agent-archive attachments.
+the archive's presign does; attaching to an agent's note from the agent's archive may resolve against
+the signed-in human.
 
 ---
 
@@ -1192,8 +1202,7 @@ while pinning that an archive save cannot land on an open card edit (`home-memor
 which this behaviour is what guarantees. Not introduced by the P0 branch.
 
 **Follow-up.** Either keep the card's draft across the archive, or ask before leaving unsaved words.
-(The card-vs-archive conflict prompt this once pointed to was removed: the two doors can no longer
-edit one note at once.)
+See L13 for the concurrent-edit races between the two doors.
 
 ---
 
