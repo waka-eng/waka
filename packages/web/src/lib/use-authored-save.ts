@@ -26,32 +26,64 @@ import { profileStorageKey, type ProfileStorageScope } from './profile-storage';
  */
 export type AuthoredSaveInput = { operation: 'inspiration'; input: CreateInspirationRequest; draft?: { id: string; revision: number } };
 type SavedReference = { inspirationId: string; reflectionId: string | null; processing?: ApiInspirationProcessingReceipt };
-export type AuthoredSaveIntent = AuthoredSaveInput & { version: 1; accountId: string; profileId: string; requestId: string; createdAt: number; checksum: number; acknowledged?: SavedReference; rejected?: boolean; validationMessage?: string };
+export type AuthoredSaveIntent = AuthoredSaveInput & { version: 1; accountId: string; profileId: string; requestId: string; createdAt: number; checksum: number; acknowledged?: SavedReference; rejected?: boolean; validationMessage?: string;
+  /** The server ANSWERED a POST under this id with a failure (5xx). With that
+      on record, a later `save_not_found` is a definitive "it did not land". */
+  answered?: boolean };
 export interface AuthoredSaveResult { inspiration: ApiInspiration; reflection: ApiReflection | null; processing?: ApiInspirationProcessingReceipt; recovered: boolean }
-type Phase = 'idle' | 'checking' | 'saving' | 'uncertain' | 'unsent' | 'storage_error' | 'unsupported' | 'invalid' | 'removed' | 'rejected';
+type Phase = 'idle' | 'checking' | 'saving' | 'uncertain' | 'diverged' | 'unsent' | 'storage_error' | 'unsupported' | 'invalid' | 'removed' | 'rejected';
 
-/* A SAVE THAT NEVER LANDED HAS TO LET GO OF THE COMPOSER (2026-10-17).
+/* ═══ A SAVE THAT DID NOT LAND LETS GO — ONLY WHEN THE SERVER SAYS SO ═══════
+   (2026-10-17; revised the same day after review.)
    The audit at f2afcbe2: a save started, the network dropped, and from then on
-   every load read `GET /save-requests/:id`, got 404, and kept the journal —
-   Save disabled on "Uploading…" with "Couldn't confirm the save" under it,
-   and no act that could end it short of clearing site data.
-   A 404 is still not proof the old POST cannot commit, so the first answer to
-   it is the one this protocol already allows: POST the SAME intent under the
-   SAME identity, once, unprompted. The server dedupes on the request id, so
-   this cannot make a second copy. If it lands, the save resolves as if
-   nothing happened. If it does not, the journal is released ('unsent'): the
-   draft is untouched (drafts settle only on a resolved save), Save works
-   again, and the notice says plainly that the save did not go through. The
-   released identity is remembered for the page's life, so pressing Save on
-   the same words reuses it — a late commit of the old POST is then replayed,
-   never duplicated. */
+   every load read `GET /save-requests/:id`, got 404, kept the journal and left
+   Save disabled on "Uploading…" with no act that could end it.
+
+   THE FIRST REPAIR RELEASED TOO EAGERLY, and review was right to stop it: it
+   let go of the journal after a re-send that merely timed out — and a POST
+   that times out may still commit. Releasing then and saving again under a
+   NEW id is exactly the silent second copy this protocol exists to prevent.
+   So the rule is now about what the server has SAID:
+
+     LANDED      — the status read finds it: resolve, as always.
+     DID NOT     — the server refused the POST (a 4xx that is not "busy" or
+                   "who are you"), or it answered a POST with a failure (5xx,
+                   recorded on the journal as `answered`) and a LATER status
+                   read finds nothing. Only then is the journal released
+                   ('unsent'): the draft stays, Save works, and new words get
+                   a new identity safely.
+     NOT KNOWN   — offline, timed out, 5xx with nothing read since, or
+                   `save_in_progress` (another tab or request may be
+                   committing it right now). The journal and its id stay, on
+                   disk, across reloads ('uncertain', with Retry under the
+                   same id). One unprompted re-send per page load is still
+                   made when a status read finds nothing — the server dedupes
+                   on the id, so it cannot make a copy.
+
+   AND SAVE IS NOT DEAD WHILE IT IS NOT KNOWN. Pressing Save on the SAME words
+   retries the same id. Pressing it on EDITED words asks ('diverged'): the
+   earlier save may have landed, so saving the new words is a second
+   inspiration by the person's explicit choice ("Save as new"), never by
+   accident. */
 class SaveNotLanded extends Error { constructor() { super('Save did not land'); } }
+/** A 4xx that turned this POST away. Not "busy" (409 save_in_progress), not
+    "who are you" (401/403), not "too slow" (408) or "too many" (429): those
+    say nothing about whether these words will land. */
+function refused(error: unknown): boolean {
+  return error instanceof ApiError && error.status >= 400 && error.status < 500 && ![401, 403, 408, 429].includes(error.status) &&
+    error.code !== 'save_in_progress' && error.code !== 'save_protocol_unavailable';
+}
 
 // A corruption checksum, NOT an authorization signature. The server owns
-// authorization and input-hash conflict checks; a UUID is reused only for the
-// SAME words after an unsent release (see SaveNotLanded), never for new ones.
+// authorization and input-hash conflict checks; a UUID is never reused for
+// different words.
 function checksum(value: AuthoredSaveInput): number {
   return hashStr(JSON.stringify({ operation: value.operation, input: value.input, ...(value.draft ? { draft: value.draft } : {}) }));
+}
+/** The WORDS of a save, without the draft revision: two presses of Save on
+    the same words are the same save even if the draft was touched between. */
+function wordsSum(value: AuthoredSaveInput): number {
+  return hashStr(JSON.stringify({ operation: value.operation, input: value.input }));
 }
 function readIntents(prefix: string, scope: ProfileStorageScope, operation: AuthoredSaveInput['operation']) {
   const intents: AuthoredSaveIntent[] = [];
@@ -66,7 +98,7 @@ function readIntents(prefix: string, scope: ProfileStorageScope, operation: Auth
         key !== prefix + value.requestId || !Number.isFinite(value.createdAt) || !value.input ||
         typeof value.input.text !== 'string' ||
         value.checksum !== checksum(value)) throw new Error('Unverifiable pending save');
-      if ((value.rejected !== undefined && typeof value.rejected !== 'boolean') ||
+      if ((value.rejected !== undefined && typeof value.rejected !== 'boolean') || (value.answered !== undefined && typeof value.answered !== 'boolean') ||
         (value.acknowledged && (typeof value.acknowledged.inspirationId !== 'string' || !value.acknowledged.inspirationId || value.rejected))) throw new Error('Invalid saved reference');
       if (value.draft && (typeof value.draft.id !== 'string' || !Number.isSafeInteger(value.draft.revision) || value.draft.revision < 1)) throw new Error('Invalid draft reference');
       intents.push(value);
@@ -102,9 +134,10 @@ export function useAuthoredSave(options: {
   const working = useRef(false), mounted = useRef(false), epoch = useRef(0);
   const abort = useRef<AbortController | null>(null);
   const refresh = useRef<() => void>(() => {});
-  // Identities already re-sent once without a press, and the last released one.
+  // Identities already re-sent once without a press during this page load.
   const autoRetried = useRef(new Set<string>());
-  const released = useRef<{ requestId: string; checksum: number; accountId: string; profileId: string } | null>(null);
+  // Edited words waiting on the person's "Save as new" while an earlier save is not known.
+  const diverged = useRef<AuthoredSaveInput | null>(null);
 
   const run = useCallback(async (intent: AuthoredSaveIntent, write: boolean) => {
     const owner = live.current, key = owner.prefix;
@@ -134,8 +167,11 @@ export function useAuthoredSave(options: {
         if (error.code !== 'save_not_found') throw new ApiError({ status: 404, code: 'save_protocol_unavailable', message: 'Save recovery is unavailable' });
       }
       if (!saved) {
+        // Answered with a failure before, and still not found: it did not land.
+        if (intent.answered) throw new SaveNotLanded();
         if (!write) {
-          if (autoRetried.current.has(intent.requestId) || (typeof navigator !== 'undefined' && navigator.onLine === false)) throw new SaveNotLanded();
+          // Not known. One unprompted re-send per page load, under the same id.
+          if (autoRetried.current.has(intent.requestId) || (typeof navigator !== 'undefined' && navigator.onLine === false)) throw new Error('Save not yet observed');
           autoRetried.current.add(intent.requestId);
         }
         current(); setPhase('saving');
@@ -186,14 +222,23 @@ export function useAuthoredSave(options: {
         const rejected = { ...intent, rejected: true, validationMessage };
         try { persist(key, rejected); } catch { /* the original immutable intent is still retained */ }
         intentRef.current = rejected; setPending(rejected); setPhase('rejected');
-      } else if (!intentRef.current?.acknowledged && (error instanceof SaveNotLanded || (attempted && !write &&
-        !(error instanceof ApiError && (error.code === 'save_in_progress' || error.code === 'save_protocol_unavailable'))))) {
+      } else if (!intentRef.current?.acknowledged && (error instanceof SaveNotLanded || (attempted && refused(error)))) {
+        // DEFINITIVE: the server refused it, or answered with a failure and
+        // has since been asked and found nothing. Safe to let go.
         try {
           localStorage.removeItem(key + intent.requestId);
-          released.current = { requestId: intent.requestId, checksum: intent.checksum, accountId: intent.accountId, profileId: intent.profileId };
           intentRef.current = null; setPending(null); setPhase('unsent');
         } catch { setPhase('storage_error'); }
-      } else setPhase(error instanceof ApiError && error.code === 'save_protocol_unavailable' ? 'unsupported' : 'uncertain');
+      } else {
+        // NOT KNOWN: keep the journal and the id. A 5xx is the server's own
+        // answer, so it is recorded — the next status read can then decide.
+        if (attempted && error instanceof ApiError && error.status >= 500 && !intentRef.current?.acknowledged) {
+          const answered = { ...(intentRef.current ?? intent), answered: true };
+          try { persist(key, answered); } catch { /* the original intent is still retained */ }
+          intentRef.current = answered; setPending(answered);
+        }
+        setPhase(error instanceof ApiError && error.code === 'save_protocol_unavailable' ? 'unsupported' : 'uncertain');
+      }
     } finally {
       window.clearTimeout(timeout); controller.signal.removeEventListener('abort', rejectAborted); controller.abort();
       if (owns()) { working.current = false; setBusy(false); if (!intentRef.current) refresh.current(); }
@@ -226,18 +271,24 @@ export function useAuthoredSave(options: {
 
   const start = useCallback((input: AuthoredSaveInput): boolean => {
     const at = live.current;
-    if (!mounted.current || working.current || intentRef.current || at.enabled === false) return false;
+    if (!mounted.current || working.current || at.enabled === false) return false;
+    const held = intentRef.current;
+    if (held) {
+      // An earlier save is not known. The same words retry it under its own
+      // id; different words wait for an explicit "Save as new".
+      if (held.acknowledged || held.rejected) return false;
+      if (wordsSum(input) === wordsSum(held)) { diverged.current = null; void run(held, true); return true; }
+      diverged.current = JSON.parse(JSON.stringify(input)) as AuthoredSaveInput;
+      setPhase('diverged');
+      return false;
+    }
     if (!at.scope || !at.prefix) { setPhase('unsupported'); return false; }
     try {
       const found = readIntents(at.prefix, at.scope, at.operation);
       if (found.invalid || found.intents.length) { scan(); return false; }
       if (input.operation !== at.operation) throw new Error('Unexpected save target');
       const copy = JSON.parse(JSON.stringify(input)) as AuthoredSaveInput;
-      const sum = checksum(copy), prior = released.current;
-      const requestId = prior && prior.checksum === sum && prior.accountId === at.scope.accountId && prior.profileId === at.scope.profileId
-        ? prior.requestId : crypto.randomUUID();
-      released.current = null;
-      const intent: AuthoredSaveIntent = { ...copy, ...at.scope, version: 1, requestId, createdAt: Date.now(), checksum: sum };
+      const intent: AuthoredSaveIntent = { ...copy, ...at.scope, version: 1, requestId: crypto.randomUUID(), createdAt: Date.now(), checksum: checksum(copy) };
       persist(at.prefix, intent); // no request may precede durable ownership/words
       intentRef.current = intent; setPending(intent); void run(intent, true);
       return true;
@@ -269,6 +320,19 @@ export function useAuthoredSave(options: {
     } catch { setPhase('storage_error'); }
   };
 
-  return { pending, phase, busy, start, retry: () => intentRef.current ? run(intentRef.current, true) : Promise.resolve(scan()),
+  /** The person chose to keep the edited words as a NEW inspiration, knowing
+      the earlier save may have landed. Only now is the earlier journal let go. */
+  const saveAsNew = () => {
+    const held = intentRef.current, next = diverged.current, at = live.current;
+    if (!held || !next || working.current || !at.prefix) return false;
+    try { localStorage.removeItem(at.prefix + held.requestId); } catch { setPhase('storage_error'); return false; }
+    intentRef.current = null; setPending(null); diverged.current = null;
+    return start(next);
+  };
+  const keepEarlier = () => { diverged.current = null; return intentRef.current ? run(intentRef.current, true) : Promise.resolve(); };
+  /** Save may be pressed while an earlier save is not known (it retries or asks). */
+  const canResave = Boolean(pending && !busy && !pending.acknowledged && !pending.rejected && (phase === 'uncertain' || phase === 'diverged'));
+
+  return { pending, phase, busy, canResave, saveAsNew, keepEarlier, start, retry: () => intentRef.current ? run(intentRef.current, true) : Promise.resolve(scan()),
     check: scan, editRejected, resetInvalid, dismiss: () => { if (!intentRef.current) setPhase('idle'); } };
 }

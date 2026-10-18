@@ -280,7 +280,7 @@ export function InspirationComposer(props: {
      The check was also already redundant for most of what it covered: the
      input is `disabled={blocked}`, and a disabled input has no keydown to
      gate. */
-  const blocked = props.busy || Boolean(props.save.pending) || !props.ready || props.recording.phase !== 'idle';
+  const blocked = props.busy || (Boolean(props.save.pending) && !props.save.canResave) || !props.ready || props.recording.phase !== 'idle';
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   /* `invalidFiles` AND `empty` WENT WITH THE SAVE BUTTON. Both existed only
      to decide whether that button was there and whether it was pressable;

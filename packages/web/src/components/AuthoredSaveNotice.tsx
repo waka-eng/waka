@@ -8,11 +8,18 @@ export function AuthoredSaveNotice({ save, locale }: { save: ReturnType<typeof u
     : save.phase === 'storage_error' ? 'worldSaveStorageFailed' : save.phase === 'unsupported' ? 'worldSaveUnavailable'
     : save.phase === 'rejected' ? 'worldSaveRejected'
     : save.phase === 'unsent' ? 'worldSaveUnsent'
+    : save.phase === 'diverged' ? 'worldSaveDiverged'
     : save.pending?.acknowledged ? 'worldSaveKeptCheckFailed' : 'worldSaveUncertain';
   return <div className="jar-source-status" role="status" data-jar-chrome="1">
     <span>{save.phase === 'rejected' && save.pending?.validationMessage ? save.pending.validationMessage : t(locale, message)}</span>
     {save.phase === 'invalid' ? <button type="button" onClick={() => { if (window.confirm(t(locale, 'worldSaveResetConfirm'))) save.resetInvalid(); }}>{t(locale, 'worldSaveStartAgain')}</button>
       : save.phase === 'rejected' ? <button type="button" onClick={save.editRejected}>{t(locale, 'worldSaveEditDraft')}</button>
+      /* THE PERSON CHOOSES whether edited words become a second inspiration
+         while the first may already have landed; nothing decides it for them. */
+      : save.phase === 'diverged' && !save.busy ? <>
+        <button type="button" onClick={() => { save.saveAsNew(); }}>{t(locale, 'worldSaveAsNew')}</button>
+        <button type="button" onClick={() => { void save.keepEarlier(); }}>{t(locale, 'worldSaveCheckEarlier')}</button>
+      </>
       : save.pending && !save.busy ? <button type="button" onClick={(event) => {
         event.currentTarget.closest<HTMLElement>('[data-jar-surface]')?.focus({ preventScroll: true });
         void save.retry();
