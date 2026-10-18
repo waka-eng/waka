@@ -351,9 +351,9 @@ it('keeps the reply in flight while progress cannot be read, retries on its own,
   expect(send().disabled,'Send stayed off after the server answered').toBe(false);
   expect(host.querySelector('.chat-recheck')).toBeNull();
 });
-/* A 404, or a server that keeps answering with a state older than the one on
-   screen, is terminal: the watch stops, says so, offers a reload, and Send
-   comes back rather than waiting on a reply that will never be confirmed. */
+/* Only a 404 is terminal: the watch stops, says so, offers a reload, and Send
+   comes back. A server answering with a state older than the screen is not an
+   answer: Send stays off and the watch keeps asking, saying it is waiting. */
 it('stops on a 404 reply read, says it is gone, offers a reload and frees Send',async()=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:404,message:'Not found'}));await mount();await tick(1000);
@@ -367,16 +367,23 @@ it('stops on a 404 reply read, says it is gone, offers a reload and frees Send',
   expect(send.disabled).toBe(false);
   expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Reload conversation')).toBe(true);
 });
-it('calls a reply stuck after repeated older-than-shown answers, and stops asking',async()=>{
+it('keeps Send off and keeps asking while answers are older than the screen, then frees Send on a current one',async()=>{
   stored={...stored,generationEnabled:true,revision:3,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:1}));await mount();
   for(let i=0;i<6;i+=1)await tick(15000);
   const calls=vi.mocked(fetchConversationReply).mock.calls.length;
   await tick(15000);await tick(15000);
-  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBe(calls);
-  expect(host.textContent).toContain('Couldn’t confirm where this reply is up to.');
-  await click('Reload conversation');
-  expect(vi.mocked(fetchConversationReply).mock.calls.length,'Reload did not ask again').toBeGreaterThan(calls);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length,'an older state ended the watch').toBeGreaterThan(calls);
+  expect(host.textContent).toContain('Still waiting for the latest reply.');
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Reload conversation'),'an older state was treated as terminal').toBe(false);
+  await type('Still there?');
+  const send=()=>[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
+  expect(send().disabled,'Send came back while the reply was unconfirmed').toBe(true);
+  vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:3}));
+  await click('Check again');await tick(0);
+  expect(host.textContent).not.toContain('Still waiting for the latest reply.');
+  expect(send().disabled).toBe(false);
 });
 /* ── ELEVEN TOMBSTONES: THE READINGS AND SOURCES A REPLY CITED ──────────────
    A reply could end in a list of top-of-mind previews, each one a button that
