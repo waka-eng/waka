@@ -10,8 +10,10 @@
  * left before a language change could land after it and put the old
  * language back; two name writes could land out of order and leave the
  * older name on the account. So every write waits for the one before it,
- * and a name write reads the language the person CURRENTLY wants at the
- * moment it is sent, not the one that was showing when they typed.
+ * and a name write carries the last language the SERVER ACCEPTED at the
+ * moment it is sent — not the one showing when they typed, and not one a
+ * language write queued BEHIND it still only wants: that write may yet be
+ * refused, and the rename would already have put it on the account.
  *
  * ONLY THE NEWEST WRITE OF EACH KIND SPEAKS. Busy, failed and the field are
  * decided by the latest name write and the latest language write; an older
@@ -28,10 +30,10 @@
  * because the account's name in the session may not have been re-applied
  * yet — and both are dropped when the account's name changes.
  *
- * A REFUSED LANGUAGE IS NOT CARRIED. When a language write fails, the
- * language wanted goes back to the last one the server accepted INSIDE the
- * queued task, before the queue moves on — so a rename waiting behind it
- * cannot send the language that was just refused.
+ * A REFUSED LANGUAGE IS NOT CARRIED. Only a language write's success moves
+ * the accepted language, and it does so INSIDE the queued task, before the
+ * queue moves on — so a rename waiting behind it carries that language, and
+ * a refused one is never carried.
  *
  * TWO FAILURE FLAGS. A language write succeeding must not hide a rename
  * that is still failed, and the other way round.
@@ -65,11 +67,10 @@ export function useSettingsWrites(input: SettingsWritesInput) {
   const nameToken = useRef(0), localeToken = useRef(0), localePending = useRef(0), namePending = useRef(0);
   const lastSent = useRef<string | null>(null);
   const confirmedRef = useRef<string | null>(null);
-  const wantedLocale = useRef(input.locale);
   const acceptedLocale = useRef(input.locale);
-  /* With no language write out, the language wanted is the one the account
+  /* With no language write out, the accepted language is the one the account
      holds — which another tab may have changed. */
-  if (localePending.current === 0) wantedLocale.current = acceptedLocale.current = input.locale;
+  if (localePending.current === 0) acceptedLocale.current = input.locale;
   const timer = useRef<number | null>(null);
   useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
   /* The account's name moved (this write re-applied, or another tab): it is
@@ -106,7 +107,7 @@ export function useSettingsWrites(input: SettingsWritesInput) {
       lastSent.current = trimmed;
       namePending.current += 1;
       setNameBusy(true);
-      void enqueue(() => live.current.updateName(trimmed, wantedLocale.current))
+      void enqueue(() => live.current.updateName(trimmed, acceptedLocale.current))
         .then(
           (serverName) => {
             /* Only the NEWEST rename's landing settles what was sent; an older
@@ -135,16 +136,11 @@ export function useSettingsWrites(input: SettingsWritesInput) {
 
   const onLocale = useCallback((next: SupportedLocale) => {
     const mine = ++localeToken.current;
-    wantedLocale.current = next;
     localePending.current += 1;
     setLocaleBusy(true); setLocaleFailed(false);
     void enqueue(() => live.current.updateLocale(next).then(
+      /* inside the task, so it happens before the queue moves on */
       (result) => { acceptedLocale.current = next; return result; },
-      (reason: unknown) => {
-        /* inside the task, so it happens before the queue moves on */
-        if (mine === localeToken.current) wantedLocale.current = acceptedLocale.current;
-        throw reason;
-      },
     ))
       .then(undefined, () => { if (mine === localeToken.current) setLocaleFailed(true); })
       .finally(() => {

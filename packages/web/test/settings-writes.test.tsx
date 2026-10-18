@@ -139,3 +139,17 @@ it("writes back a name that already landed when typed again while a newer rename
   names[1]!.resolve("Carol"); await flush();
   expect(names.map(row => row.args[0])).toEqual(["Bob", "Carol", "Bob"]);
 });
+
+it("does not carry a language queued behind the rename, which may yet be refused", async () => {
+  /* Bob is queued behind Bo; Korean is asked for after Bob. When Bob is sent,
+     Korean is only wanted, not accepted — carrying it would put Korean on
+     the account even if its own write is then refused. */
+  await type("Bo");
+  await type("Bob");
+  await act(async () => hook.onLocale("ko-KR" as SupportedLocale));
+  names[0]!.resolve(); await flush();
+  expect(names[1]!.args, "the rename carried a language not yet accepted").toEqual(["Bob", "en-US"]);
+  names[1]!.resolve(); await flush();
+  locales[0]!.reject(); await flush();
+  expect(input.updateName).toHaveBeenCalledTimes(2);
+});
