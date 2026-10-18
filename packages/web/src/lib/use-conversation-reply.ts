@@ -28,12 +28,16 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
       try{
         const next=await fetchConversationReply(profileId,id,request.signal);if(controller.signal.aborted)return;
         if(next.revision<revision)throw new Error('Older reply state');
-        setStored(next);setError(false);failures=0;
         const refreshKey=`${profileId}:${id}:${serial}:${next.revision}`;
         if(next.revision>revision||(next.phase==='stale'||serial>0&&next.phase==='ready')&&delivered.current!==refreshKey){
           const conversation=messageWindowStart!==undefined?await fetchConversation(profileId,id,request.signal,messageWindowStart):await fetchConversation(profileId,id,request.signal);if(controller.signal.aborted)return;
           if(conversation.revision<next.revision)throw new Error('Older conversation');delivered.current=refreshKey;deliver.current(conversation);
         }
+        /* THE REPLY STATE LANDS ONLY WITH ITS CONVERSATION. Stored before the
+           conversation read confirmed the same revision, an 'Older
+           conversation' left a "ready" state on screen over messages that
+           did not have the reply yet — and Send came back too early. */
+        setStored(next);setError(false);failures=0;
         older=0;setBehind(false);
         if(['pending','running'].includes(next.phase)){
           // A short early cadence avoids adding two seconds to a quick reply.

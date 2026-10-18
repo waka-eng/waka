@@ -398,6 +398,14 @@ it.each([404,410])('stops on a %i reply read, says it is gone, offers a reload a
   expect(send.disabled).toBe(false);
   expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Reload conversation')).toBe(true);
 });
+it('keeps Send off when a newer reply state arrives but its conversation read is still older',async()=>{
+  stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
+  vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,phase:'ready',revision:2}));await mount();
+  await tick(1000);await tick(2000);
+  await type('Still there?');
+  const send=[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
+  expect(send.disabled,'a reply state was taken as landed before its conversation confirmed it').toBe(true);
+});
 it('keeps Send off and keeps asking while answers are older than the screen, then frees Send on a current one',async()=>{
   stored={...stored,generationEnabled:true,revision:3,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:1}));await mount();
