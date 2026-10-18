@@ -631,6 +631,7 @@
   "worldGroundFailed": "Couldn’t read what your principles grow from.",
   "worldPrinciplesStillWorking": "Still working — this can take a few minutes. Your saves are safe.",
   "worldPrinciplesRetrying": "Retrying…",
+  "worldPrinciplesRetryFailed": "Couldn’t retry. Try again.",
   "surfaceUnavailableHome": "Go to your WAKA",
   "readingPausedNotice": "Reading is paused — your saves are safe.",
   "readingPausedRetry": "Retry",

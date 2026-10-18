@@ -141,9 +141,9 @@ export async function retryPausedReading(): Promise<ApiPrincipleStatus> {
 
 /** POST /principles/refresh — its answer is published as a `refresh`, so the
     paused-reading notice hears the restart without asking again. */
-export async function requestPrincipleRead(retry = false): Promise<void> {
+export async function requestPrincipleRead(retry = false, signal?: AbortSignal): Promise<void> {
   const session = currentWebSession();
-  const body = await postJson<{ status?: ApiPrincipleStatus }>(apiPath(`/principles/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started");
+  const body = await postJson<{ status?: ApiPrincipleStatus }>(apiPath(`/principles/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started", signal);
   if (body?.status) publishStatus(body.status, session, "refresh");
 }
 

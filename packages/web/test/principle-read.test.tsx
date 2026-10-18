@@ -84,10 +84,14 @@ describe("principle read", () => {
     vi.mocked(requestPrincipleRead).mockResolvedValue();
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     expect(host.textContent).toContain("Couldn't confirm current support. Your words are kept.");
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
+      ...ready, phase: 'pending', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true,
+    } });
     await act(async () => host.querySelector('button')!.click());
-    /* THE RETRY FLAG IS THE WHOLE ARGUMENT, and it used to be the SECOND
-       argument because the first was the room id. One parameter now. */
-    expect(requestPrincipleRead).toHaveBeenCalledWith(true);
+    await act(async () => vi.advanceTimersByTimeAsync(3_100));
+    /* THE RETRY FLAG IS THE FIRST ARGUMENT (the room id that once came first
+       is gone); the second is the POST's own deadline signal. */
+    expect(requestPrincipleRead).toHaveBeenCalledWith(true, expect.any(AbortSignal));
     expect(host.textContent).toContain('A support check is queued.');
   });
 
@@ -140,29 +144,46 @@ describe("principle read", () => {
     expect(host.querySelector('[role="alert"]')?.textContent)
       .toContain("Principles could not be updated. Your saved words are still here.");
     await act(async () => host.querySelector("button")!.click());
+    await act(async () => vi.advanceTimersByTimeAsync(3_100));
     expect(read).toHaveBeenCalledWith([principle]);
     expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(fetchPrincipleRead).toHaveBeenCalledTimes(4);
   });
 
-  it("sends a Try again's retry POST again on the next poll when it failed", async () => {
+  /* TRY AGAIN IS ONE POST PER PRESS. A failed one says so and re-arms the
+     button; nothing re-sends it on its own, however long the page polls. */
+  it("sends exactly one POST per Try again, and never re-sends a failed one by itself", async () => {
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "failed" } });
-    vi.mocked(requestPrincipleRead).mockRejectedValueOnce(new Error("lost")).mockResolvedValue();
+    vi.mocked(requestPrincipleRead).mockRejectedValue(new Error("lost"));
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    expect(requestPrincipleRead, "a failed phase sent a retry nobody pressed").not.toHaveBeenCalled();
     await act(async () => host.querySelector("button")!.click());
+    await act(async () => vi.advanceTimersByTimeAsync(3_100));
     expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
-    await act(async () => vi.advanceTimersByTimeAsync(5_000));
-    expect(requestPrincipleRead, "a failed Try again was never re-sent").toHaveBeenCalledTimes(2);
-    expect(requestPrincipleRead).toHaveBeenLastCalledWith(true);
-    await act(async () => vi.advanceTimersByTimeAsync(120_000));
-    expect(requestPrincipleRead, "a retry the server took was sent again").toHaveBeenCalledTimes(2);
+    expect(requestPrincipleRead).toHaveBeenCalledWith(true, expect.any(AbortSignal));
+    expect(host.textContent).toContain("Couldn’t retry. Try again.");
+    expect(host.querySelector("button")?.disabled).toBe(false);
+    await act(async () => vi.advanceTimersByTimeAsync(300_000));
+    expect(requestPrincipleRead, "a failed Try again was re-sent automatically").toHaveBeenCalledTimes(1);
+    await act(async () => host.querySelector("button")!.click());
+    expect(requestPrincipleRead, "a second press did not send its own POST").toHaveBeenCalledTimes(2);
   });
 
-  it("sends the auto-start again on the next poll when the first POST failed", async () => {
-    vi.mocked(requestPrincipleRead).mockRejectedValueOnce(new Error("lost")).mockResolvedValue();
+  it("retries a failed auto-start on later polls, then after three failures offers Try again", async () => {
+    vi.mocked(requestPrincipleRead).mockRejectedValue(new Error("lost"));
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "pending" } });
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
+    expect(requestPrincipleRead).toHaveBeenCalledWith(false, expect.any(AbortSignal));
+    for (let i = 0; i < 6; i += 1) await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(requestPrincipleRead, "the auto-start was not bounded").toHaveBeenCalledTimes(3);
+    expect(host.querySelector("button")?.textContent).toBe("Try again");
+  });
+
+  it("counts the auto-start as done once the server takes it", async () => {
+    vi.mocked(requestPrincipleRead).mockRejectedValueOnce(new Error("lost")).mockResolvedValue();
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "pending" } });
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(requestPrincipleRead, "a failed start was taken as done").toHaveBeenCalledTimes(2);
     await act(async () => vi.advanceTimersByTimeAsync(30_000));
@@ -228,24 +249,19 @@ describe("principle read", () => {
 
   /* NO SERVER COOLDOWN, SO THE BUTTON GUARDS ITSELF: disabled and saying
      "Retrying…" until the request answers, and for at least three seconds. */
-  it("keeps Retrying… until the read the press started answers, not an older read still in flight", async () => {
+  it("gives a hung Try again POST 20 seconds, then re-arms the button with Couldn't retry", async () => {
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "failed" } });
-    vi.mocked(requestPrincipleRead).mockResolvedValue();
+    vi.mocked(requestPrincipleRead).mockImplementation((_retry, signal) => new Promise<void>((_, reject) => {
+      signal?.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")));
+    }));
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    type Read = Awaited<ReturnType<typeof fetchPrincipleRead>>;
-    let answerOld!: (value: Read) => void, answerNew!: (value: Read) => void;
-    vi.mocked(fetchPrincipleRead).mockImplementationOnce(() => new Promise<Read>((resolve) => { answerOld = resolve; }));
-    await act(async () => { window.dispatchEvent(new Event("focus")); });
-    vi.mocked(fetchPrincipleRead).mockImplementationOnce(() => new Promise<Read>((resolve) => { answerNew = resolve; }));
     await act(async () => host.querySelector("button")!.click());
-    await act(async () => vi.advanceTimersByTimeAsync(4_000));
-    await act(async () => { answerOld({ principles: [], status: { ...ready, phase: "failed" } }); });
-    await act(async () => vi.advanceTimersByTimeAsync(0));
-    expect(host.querySelector("button")?.textContent, "an older read ended the press's Retrying…").toBe("Retrying…");
-    await act(async () => { answerNew({ principles: [], status: { ...ready, phase: "failed" } }); });
-    await act(async () => vi.advanceTimersByTimeAsync(0));
-    expect(host.textContent).not.toContain("Retrying…");
-    expect(requestPrincipleRead).toHaveBeenCalledWith(true);
+    await act(async () => vi.advanceTimersByTimeAsync(15_000));
+    expect(host.querySelector("button")?.disabled).toBe(true);
+    await act(async () => vi.advanceTimersByTimeAsync(5_100));
+    expect(host.querySelector("button")?.disabled, "a hung POST left Try again disabled").toBe(false);
+    expect(host.textContent).toContain("Couldn’t retry. Try again.");
+    expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
   });
 
   it("disables Try again and says Retrying… until the retry answers, for at least three seconds", async () => {
@@ -253,7 +269,7 @@ describe("principle read", () => {
     vi.mocked(requestPrincipleRead).mockResolvedValue();
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     await act(async () => host.querySelector("button")!.click());
-    expect(requestPrincipleRead).toHaveBeenCalledWith(true);
+    expect(requestPrincipleRead).toHaveBeenCalledWith(true, expect.any(AbortSignal));
     const button = () => host.querySelector("button");
     expect(button()?.textContent).toBe("Retrying…");
     expect(button()?.disabled, "a second press could go out while the first was in flight").toBe(true);
