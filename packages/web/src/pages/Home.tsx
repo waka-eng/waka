@@ -1711,6 +1711,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * reason it is worth asking for.
    */
   const [momentWhy, setMomentWhy] = useState("");
+  const momentWhyRef = useRef(momentWhy); momentWhyRef.current = momentWhy;
 
 
   /**
@@ -5156,8 +5157,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       await composerDraft.settle(intent.draft, result.inspiration.id);
       const remaining = preserveNewer ? composerDraft.current.current.text : settleInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
       draftRef.current = remaining; setDraft(remaining); setMouthNote('');
-      // The why belonged to this save; it goes with it, once it has landed.
-      if (!preserveNewer) setMomentWhy('');
+      /* The why belonged to this save; it goes with it, once it has landed —
+         and also when the composer has moved on but still shows THIS why, so
+         it is not attached a second time to the next save (review). */
+      const savedWhy = intent.input.reflections?.[0]?.answer?.trim();
+      if (!preserveNewer || (savedWhy && savedWhy === momentWhyRef.current.trim())) setMomentWhy('');
       const made = result.inspiration, detail = toInspirationDetail(made);
       const known = inspirationsRef.current?.some((item) => item.id === made.id) || bornIdsRef.current.has(made.id);
       const revision = ++sourceListMutationRef.current;
@@ -7154,8 +7158,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      thrown away — there is nothing left for it to be about. */
   const saveDismiss = inspirationSave.dismiss;
   useEffect(() => {
-    if (inspirationSave.phase === 'unsent' && !draft.trim() && !inputMedia.length) saveDismiss();
-  }, [inspirationSave.phase, draft, inputMedia.length, saveDismiss]);
+    if (inspirationSave.phase === 'unsent' && !inspirationSave.unsent?.displaced && !draft.trim() && !inputMedia.length) saveDismiss();
+  }, [inspirationSave.phase, inspirationSave.unsent, draft, inputMedia.length, saveDismiss]);
   const sourceNotice = !offline && !readingRefresh.busy && inspirationSave.phase === 'idle' ? <InspirationProcessingNotice
     processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null;
   const showHomeProcessing = Boolean(sourceProcessing.active && sourceProcessing.phase !== 'idle' && !offline && !readingRefresh.busy &&
@@ -9719,7 +9723,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 gone, right?" It is not: answering claims is a different
                 branch of this same ternary and nothing in this change
                 touches it. */}
-            {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} onResave={() => { void keepIt(); }} /> : null}
+            {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} onResave={() => { void keepIt(); }}
+              currentText={draft} onRestore={(text) => {
+                /* An earlier save's words, offered back after it was found not
+                   to have landed: added to the note, never replacing it. */
+                const next = draftRef.current.trim() ? `${draftRef.current}\n\n${text}` : text;
+                draftRef.current = next; writeProfileText(storageScope, 'draft', next); setDraft(next);
+              }} /> : null}
             {/* ONE THING FROM ONE MOUTH. The narration ("you kept two memories
                 today") stacked under the claim, so the creature was reporting
                 the weather and asking you a question in the same breath — a

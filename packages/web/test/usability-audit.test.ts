@@ -90,8 +90,11 @@ describe("Home keeps a save's why until it lands, and lets 'unsent' go (review r
     expect(clears[0]! > resolvedAt && clears[0]! - resolvedAt < 2_000).toBe(true);
     expect(source).toMatch(/const started = inspirationSave\.start\(/);
   });
+  it("a confirmed save's why is cleared even when the composer moved on, so it is never attached twice (round 3)", () => {
+    expect(home()).toMatch(/if \(!preserveNewer \|\| \(savedWhy && savedWhy === momentWhyRef\.current\.trim\(\)\)\) setMomentWhy\(''\)/);
+  });
   it("an 'unsent' notice is dismissed once the composer holds nothing", () => {
-    expect(home()).toMatch(/inspirationSave\.phase === 'unsent' && !draft\.trim\(\) && !inputMedia\.length\) saveDismiss\(\)/);
+    expect(home()).toMatch(/inspirationSave\.phase === 'unsent' && !inspirationSave\.unsent\?\.displaced && !draft\.trim\(\) && !inputMedia\.length\) saveDismiss\(\)/);
   });
 });
 
