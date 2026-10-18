@@ -34,13 +34,21 @@ const state = vi.hoisted(() => ({
   text: "",
   written: [] as Array<{ id: string; text: string }>,
   reads: [] as Array<{ resolve: () => void; reject: () => void }>,
+  /* whose profile each read, write and delete named */
+  profiles: [] as Array<{ act: string; profile?: string }>,
+  saved: [] as Array<{ id: string; text: string }>,
 }));
 
 vi.mock("../src/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/lib/api")>()),
-  updateInspiration: async (id: string, patch: { text?: string }) => {
+  updateInspiration: async (id: string, patch: { text?: string }, options: { profile?: string } = {}) => {
     state.written.push({ id, text: patch.text ?? "" });
-    return undefined as never;
+    state.profiles.push({ act: "write", profile: options.profile });
+    /* the server's row, as the PATCH answers it */
+    return { id, text: patch.text ?? "", attachments: [], reflections: [] } as never;
+  },
+  deleteInspiration: async (_id: string, options: { profile?: string } = {}) => {
+    state.profiles.push({ act: "delete", profile: options.profile });
   },
 }));
 vi.mock("../src/lib/data", async (importOriginal) => ({
@@ -48,7 +56,8 @@ vi.mock("../src/lib/data", async (importOriginal) => ({
   loadInspirations: async () => ({ inspirations: [state.row], total: 1, short: false }),
   /* HELD OPEN until the test answers it, so "before the text arrives" is a
      state the test can stand in rather than a race it hopes to lose. */
-  loadInspiration: () => new Promise((done, fail) => {
+  loadInspiration: (_id: string, profile?: string) => new Promise((done, fail) => {
+    state.profiles.push({ act: "read", profile });
     state.reads.push({
       resolve: () => done({ ...state.row, text: state.text, reflections: [] }),
       reject: () => fail(new Error("offline")),
@@ -63,6 +72,8 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   state.written.length = 0;
   state.reads.length = 0;
+  state.profiles.length = 0;
+  state.saved.length = 0;
   vi.stubGlobal("URL", class extends URL {
     static createObjectURL(): string { return "blob:x"; }
     static revokeObjectURL(): void {}
@@ -81,11 +92,13 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function openSave(row: Record<string, unknown>, text: string): Promise<void> {
+async function openSave(row: Record<string, unknown>, text: string, whose: { profileId?: string; ownArchive?: boolean } = {}): Promise<void> {
   state.row = row;
   state.text = text;
   await act(async () => root.render(
     <SavesOverlay locale="en-US" title="Your Inspirations" onClose={vi.fn()}
+      profileId={whose.profileId} ownArchive={whose.ownArchive}
+      onSaved={(made) => { state.saved.push({ id: made.id, text: made.text }); }}
       onNoteOpen={(close) => { closer = close; }} />,
   ));
   for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) {
@@ -217,4 +230,69 @@ it("will not empty a note that has nothing else on it, and says why on the page"
   expect(page().placeholder).toBe("Write something, or add a photo or file, to keep this note.");
   await act(async () => closer!());
   expect(state.written).toEqual([]);
+});
+
+it("on an agent's archive, writes and deletes name the same profile the read did", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    await openSave(longRow, LONG, { profileId: "agent-7", ownArchive: false });
+    await answer(true);
+    await type(`${LONG} By the agent.`);
+    await act(async () => save().click());
+    expect(state.profiles.filter((item) => item.act !== "delete")).toEqual([
+      { act: "read", profile: "agent-7" },
+      { act: "write", profile: "agent-7" },
+    ]);
+    /* an agent's archive asks before it deletes, then sends at once */
+    const del = () => slot.querySelector<HTMLButtonElement>(".waka-dock-tool--erase")!;
+    await act(async () => del().click());
+    await act(async () => del().click());
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    expect(state.profiles.filter((item) => item.act === "delete")).toEqual([{ act: "delete", profile: "agent-7" }]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("tells the world behind it what was stored, with the server's row", async () => {
+  await openSave(longRow, LONG);
+  await answer(true);
+  await type(`${LONG} Told.`);
+  await act(async () => save().click());
+  expect(state.saved).toEqual([{ id: "long-1", text: `${LONG} Told.` }]);
+});
+
+/* THE ⋯ MENU (narrow phones fold Share and Delete into it). Rendered at
+   every width — the stylesheet chooses which shape shows — so its keyboard
+   and pointer rules are testable here; they are `lib/use-dock-menu.ts`'s,
+   shared with the ＋. */
+it("folds Share and Delete into a More menu with the bar's menu keys", async () => {
+  await openSave(longRow, LONG);
+  await answer(true);
+  await type(`${LONG} so there is something to share`);
+  const more = slot.querySelector<HTMLButtonElement>('[aria-label="More"]')!;
+  expect(more.getAttribute("aria-haspopup")).toBe("menu");
+  await act(async () => more.click());
+  const rows = () => [...slot.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+  expect(rows().map((row) => row.textContent)).toEqual(["Share this inspiration", "Delete"]);
+  expect(document.activeElement, "focus moves into the menu").toBe(rows()[0]);
+  const key = async (name: string) => act(async () => {
+    (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true }));
+  });
+  await key("ArrowDown"); expect(document.activeElement).toBe(rows()[1]);
+  await key("ArrowDown"); expect(document.activeElement, "the arrows wrap").toBe(rows()[0]);
+  await key("End"); expect(document.activeElement).toBe(rows()[1]);
+  await key("Home"); expect(document.activeElement).toBe(rows()[0]);
+  await key("ArrowUp"); expect(document.activeElement).toBe(rows()[1]);
+  await key("Escape");
+  expect(rows(), "Escape closes it").toEqual([]);
+  expect(document.activeElement, "and gives focus back to the button").toBe(more);
+
+  await act(async () => more.click());
+  await act(async () => { document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); });
+  expect(rows(), "a press outside closes it").toEqual([]);
+
+  await act(async () => more.click());
+  await act(async () => rows()[1]!.click());
+  expect(host.querySelector(".waka-note-page"), "its Delete row deletes the note").toBeNull();
 });

@@ -254,9 +254,13 @@ export async function fetchInspiration(id: string, options: ProfileScoped = {}, 
 export async function updateInspiration(
   id: string,
   input: UpdateInspirationRequest,
+  /* THE SAME PROFILE THE READ USED. An agent's archive reads with
+     `?profile=<agent>`; a write without it resolves to the signed-in human
+     and answers 404 for the agent's own note (review, 2026-10-17). */
+  options: ProfileScoped = {},
 ): Promise<ApiInspiration> {
   const body = await patchJson<{ inspiration: ApiInspiration; processing?: ApiInspirationProcessingReceipt }>(
-    apiPath(`/inspirations/${encodeURIComponent(id)}`),
+    apiPath(`/inspirations/${encodeURIComponent(id)}${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
     input,
     "Failed to update this capture",
   );

@@ -22,7 +22,7 @@ async function fixture(){
   const app=new Hono<AuthEnv>();app.route('/api/inspirations',createInspirationsRoutes({getDatabase:()=>t.db as never,
     authMiddleware:async(c,next)=>{c.set('session',{sessionId:randomUUID(),account:{id:account.id,email:'writer@example.test'},
       profile:{id:profile.id,accountId:account.id,type:'human',name:'Writer',preferredLocale:'en-US'}});await next();}}));
-  return {profileId:profile.id as string,app};
+  return {profileId:profile.id as string,accountId:account.id as string,app};
 }
 const LONG=Array.from({length:60},(_,i)=>`sentence ${i} keeps going.`).join(' ').slice(0,1000);
 type Detail={inspiration:{text:string}};
@@ -84,4 +84,16 @@ it('refuses to leave a save with neither words nor an attachment, and changes no
   expect(await response.json()).toMatchObject({details:{text:['Inspiration text is required']}});
   const [stored]=await t.sql`SELECT text FROM inspirations WHERE id=${row.id}`;
   expect(stored.text).toBe('the only thing here');
+});
+
+it("lets the account holder edit their agent's note when the write names the agent, as the read does",async()=>{
+  const f=await fixture();
+  const [agent]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES (${f.accountId},'agent','Agent') RETURNING id`;
+  const [row]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${agent.id},'what the agent kept') RETURNING id`;
+  /* without the profile the write resolves to the human and misses */
+  expect((await patchText(f.app,row.id as string,'unscoped')).status).toBe(404);
+  const scoped=await f.app.request(`/api/inspirations/${row.id}?profile=${agent.id}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({text:'what the agent kept, corrected'})});
+  expect(scoped.status).toBe(200);
+  const [stored]=await t.sql`SELECT text FROM inspirations WHERE id=${row.id}`;
+  expect(stored.text).toBe('what the agent kept, corrected');
 });

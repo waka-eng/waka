@@ -84,6 +84,7 @@ import {
   type TopOfMind,
 } from "../lib/data";
 import type { Adopted, JarNote } from "./top-of-mind/board";
+import { wordsCanStand } from "../lib/note-words";
 
 /** Which layer's words are open. The three are one gesture, not three. */
 export type EditKind = "memory" | "signal" | "entry";
@@ -128,7 +129,15 @@ export interface EditingDeps {
   /** A memory's words were kept: the page re-points whatever it is showing
       (and seeds the next edit from) at them, so a second edit cannot start
       from the first one's before. */
-  readonly onMemoryKept?: (id: string, text: string) => void;
+  readonly onMemoryKept?: (id: string, text: string, made?: ApiInspiration) => void;
+  /** How many attachments the memory being edited holds, for the one rule on
+      empty words both doors share (`lib/note-words.ts`): a memory may be
+      left wordless only beside an attachment. Absent means none. */
+  readonly memoryAttachmentCount?: (id: string) => number;
+  /** Whose memory this is, for the write: the same profile the card was read
+      with (an agent's wall reads with `?profile=`), or the write lands on the
+      signed-in human and misses. */
+  readonly memoryProfile?: () => string | undefined;
   readonly reloadReading?: () => Promise<void>;
   readonly onEntrySaved?: () => void;
   readonly beginReadingMutation?: () => () => void;
@@ -226,8 +235,13 @@ export function useEditing(deps: EditingDeps): Editing {
     const held = heldRef.current;
     if (!held || held.saving) return;
     const text = held.text.trim();
-    if (text === "") return;
     const d = depsRef.current;
+    /* EMPTY WORDS: a memory beside an attachment may be wordless (the create
+       rule); anything else with no words has nothing to keep. The card says
+       why in its placeholder — this is the same answer at the press. */
+    if (held.kind === "memory"
+      ? !wordsCanStand(text, d.memoryAttachmentCount?.(held.id) ?? 0)
+      : text === "") return;
     put({ ...held, saving: true });
     /**
      * THE BEAT BETWEEN WRITTEN AND GONE.
@@ -283,16 +297,28 @@ export function useEditing(deps: EditingDeps): Editing {
           });
       }
     };
-    if (d.offline.current) return done();
+    if (d.offline.current) {
+      /* A FIXTURE MEMORY IS KEPT LOCALLY, AND THE CARD HAS TO KNOW. This
+         returned `done()` alone, so the `saved` beat played over the old
+         words and the next edit began from them (review, 2026-10-17). */
+      if (held.kind === "memory") {
+        d.setInspirations((prev) =>
+          prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
+        );
+        d.onMemoryKept?.(held.id, text);
+      }
+      return done();
+    }
     if (held.kind === "memory") {
-      updateInspiration(held.id, { text })
+      const profile = d.memoryProfile?.();
+      updateInspiration(held.id, { text }, profile ? { profile } : {})
         .then((made) => {
           if (made) d.onInspirationSaved?.(made);
           d.setInspirations((prev) =>
             prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
           );
           d.details.current.delete(held.id);
-          d.onMemoryKept?.(held.id, text);
+          d.onMemoryKept?.(held.id, text, made ?? undefined);
           /* THE CARD STAYS OPEN. This deselected the memory on success, which
              closed the whole card in the same breath the `saved` beat was
              trying to hold it — so the founder's ruling ("just keep it

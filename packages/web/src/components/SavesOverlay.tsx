@@ -53,6 +53,7 @@ import {
   listDeletedInspirations,
   restoreInspiration,
   type ApiDeletedInspiration,
+  type ApiInspiration,
   presignAttachment,
   updateInspiration,
   uploadToPresignedUrl,
@@ -72,6 +73,7 @@ import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { inspectInspirationPhoto } from "../lib/inspiration-photo";
 import { inspectAttachmentFile } from "../lib/api/file-accept";
 import { inspirationPreview } from "../lib/inspiration-preview";
+import { wordsCanStand } from "../lib/note-words";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -90,8 +92,15 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, ownArchive = true, shareName = "" }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onSaved, onErased, ownArchive = true, shareName = "" }: {
   locale: SupportedLocale;
+  /** A note's words were stored, with the server's row. The world behind
+      this page caches what it has read of each note, and a later edit there
+      starts from that cache — so an archive edit it never heard of was
+      overwritten by the next one (review, 2026-10-17). */
+  onSaved?: (row: ApiInspiration) => void;
+  /** A note was deleted (its server send, after Undo's moment). */
+  onErased?: (id: string) => void;
   /** Whether this is the person's own archive. The deleted shelf is theirs
       alone, so it is not read on an agent's archive; deleting there still
       works, and the request names the agent's profile. */
@@ -336,8 +345,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const commitErase = useCallback((pending: { row: Inspiration; at: number }, leaving = false) => {
     /* On an agent's archive the delete names the agent's profile; the
        request outlives the tab when it is sent as the page goes. */
-    void deleteInspiration(pending.row.id, { ...(!ownArchive && profileId ? { profile: profileId } : {}), ...(leaving ? { keepalive: true } : {}) })
-      .then(() => loadShelf())
+    void deleteInspiration(pending.row.id, { ...(profileId ? { profile: profileId } : {}), ...(leaving ? { keepalive: true } : {}) })
+      .then(() => { onErased?.(pending.row.id); return loadShelf(); })
       .catch(() => {
         if (!mounted.current) return;
         setRows((all) => all.some((row) => row.id === pending.row.id) ? all
@@ -345,7 +354,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
         setTotal((count) => count === null ? count : count + 1);
         setEraseFailed(true);
       });
-  }, [loadShelf, ownArchive, profileId]);
+  }, [loadShelf, ownArchive, profileId, onErased]);
 
   const flushErase = useCallback((leaving = false) => {
     const pending = pendingErase.current;
@@ -459,11 +468,12 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        no words beside a photo or a file. A note that would end with neither
        is not written (the server refuses it too); its stored words stay, and
        the page said so while it was empty (`placeholder` below). */
-    if (base === null || words === base.trim() || (!words && note.attachments.length === 0)) { setOpen(null); return; }
+    if (base === null || words === base.trim() || !wordsCanStand(words, note.attachments.length)) { setOpen(null); return; }
     setSaving(true);
     setSaveFailed(false);
     try {
-      await updateInspiration(note.id, { text: words });
+      const made = await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
+      if (made) onSaved?.(made);
       if (!mounted.current) return;
       /* The list holds what the page loaded, so it has to agree without a
          refetch — otherwise going back reveals the old first line. */
@@ -474,7 +484,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     } finally {
       if (mounted.current) setSaving(false);
     }
-  }, [draft, open, saving, stored]);
+  }, [draft, open, saving, stored, profileId, onSaved]);
 
   /**
    * ═══ AND NOW THERE IS A SAVE TO PRESS, WITH THE NET STILL UNDER IT ═════
@@ -548,7 +558,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     setSaving(true);
     setSaveFailed(false);
     try {
-      await updateInspiration(note.id, { text: words });
+      const made = await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
+      if (made) onSaved?.(made);
       if (!mounted.current) return;
       /* Both copies, for the reason `leaveNote` gives about the list and the
          reason `attach` gives about the snapshot: the grid behind must not
@@ -563,7 +574,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     } finally {
       if (mounted.current) setSaving(false);
     }
-  }, [draft, open, saving, stored]);
+  }, [draft, open, saving, stored, profileId, onSaved]);
 
   /* READ ONE NOTE IN FULL. A newer read (another note, or Try again) aborts
      the older, and a reply for a note no longer open is dropped by id — so a
@@ -754,8 +765,9 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        the comment above `keepOpenNote`: a typed trailing space must not light
        a button whose write would then return early. */
     hasWords: loaded && draft.trim() !== (stored?.text ?? "").trim()
-      /* Empty is something to keep only beside an attachment — see `leaveNote`. */
-      && (draft.trim().length > 0 || (open?.attachments.length ?? 0) > 0),
+      /* Empty is something to keep only beside an attachment — the one rule
+         both doors ask (`lib/note-words.ts`). */
+      && wordsCanStand(draft, open?.attachments.length ?? 0),
     /* `ready` IS THE DRAFT STORE HAVING OPENED — "before that there is
        nowhere to write". This page has no draft store: the words live in
        React state and the destination is a row that already exists, so there

@@ -96,7 +96,9 @@ import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
-import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
+import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type ApiInspiration, type HarvestReason } from '../lib/api';
+import { inspirationPreview } from '../lib/inspiration-preview';
+import { wordsCanStand } from '../lib/note-words';
 import { candidateSaveRequestId } from '../lib/harvest';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
 import { inspectInspirationPhoto, PHOTO_ACCEPT } from '../lib/inspiration-photo';
@@ -1317,6 +1319,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      again — releases. It lags `selectedId` at BOTH ends: it does not appear
      until its content is whole, and it stays mounted through its fade-out. */
   const [panel, setPanel] = useState<PanelData | null>(null);
+  /* The panel as last rendered, for callbacks that must read it without
+     being rebuilt on every change (the shared saved-words writer below). */
+  const panelNowRef = useRef<PanelData | null>(null);
+  panelNowRef.current = panel;
   /**
    * A SAVE OR THE TOP OF MIND, BEING MADE INTO A CARD.
    *
@@ -4344,6 +4350,37 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     };
   }, [selectedId, loadDetail]);
 
+  /* ═══ A NOTE'S WORDS WERE STORED — FROM ANY DOOR ════════════════════════
+     The memory card seeds every edit from `panel.detail`, and reopening a
+     memory reads `detailsRef` first. Both used to learn of a save only when
+     the save was the card's own — so an edit made in the archive (or the
+     card's own second edit) began from words that were no longer stored,
+     and its save overwrote the newer ones (review, 2026-10-17: DATA LOSS).
+
+     So every successful save comes through here: the card's own (via
+     `editing.ts`'s `onMemoryKept`) and the archive's (`SavesOverlay`'s
+     `onSaved`). The cached detail is BUILT FROM THE SERVER'S ROW when one
+     came back — the stored truth, attachments and all — and only patched
+     from the typed words when it did not (a fixture world, which has no
+     server). Built here, outside any state updater, so the cache write
+     happens once and not on React's whim. */
+  const rememberSavedInspiration = useCallback((id: string, text: string, made?: ApiInspiration) => {
+    const whole = made && made.id === id && Array.isArray(made.attachments) ? toInspirationDetail(made) : null;
+    const shown = panelNowRef.current?.detail;
+    const known = detailsRef.current.get(id) ?? (shown?.id === id ? shown : null);
+    const detail = whole ?? (known ? { ...known, text, preview: inspirationPreview(text, known.attachments) } : null);
+    if (detail) detailsRef.current.set(id, detail);
+    else detailsRef.current.delete(id);
+    setInspirations((prev) => prev
+      ? prev.map((c) => (c.id === id ? { ...c, preview: inspirationPreview(whole?.text ?? text, c.attachments) } : c))
+      : prev);
+    if (detail) setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? { ...p, detail, partial: false, pending: false } : p));
+  }, []);
+  /* A note deleted from the archive: nothing cached may bring it back. */
+  const forgetErasedInspiration = useCallback((id: string) => {
+    detailsRef.current.delete(id);
+  }, []);
+
   /* TRY AGAIN, for a panel whose full read failed. The same read the effect
      above makes, by the same id rule, landing on the panel only if it is
      still the memory that asked. */
@@ -6806,14 +6843,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        second edit began from the first one's BEFORE and its save reverted it
        (review, 2026-10-17). The cache gets the same words for the same
        reason: reopening this memory must not read them back stale. */
-    onMemoryKept: (id, text) => {
-      setPanel((p) => {
-        if (!p?.detail || (p.id !== id && p.detail.id !== id)) return p;
-        const detail = { ...p.detail, text, preview: text };
-        detailsRef.current.set(detail.id, detail);
-        return { ...p, detail };
-      });
+    onMemoryKept: rememberSavedInspiration,
+    /* The one empty-words rule (`lib/note-words.ts`) needs to know what the
+       memory holds besides its words. */
+    memoryAttachmentCount: (id) => {
+      const shown = panelNowRef.current?.detail;
+      return (shown && (shown.id === id || panelNowRef.current?.id === id) ? shown : detailsRef.current.get(id))?.attachments.length ?? 0;
     },
+    /* The profile the card was read with — an agent's wall reads its own. */
+    memoryProfile: () => (atWallRef.current.kind === 'agent' ? atWallRef.current.id : storageScope?.profileId),
     onEntrySaved: () => {
       readingMutationRef.current += 1;
       readingNeedsLatestRef.current = true;
@@ -9892,6 +9930,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                  is measuring the same words the same way, not teaching the
                  reading face to hold invented air. */
               rows={1}
+              /* WHY SAVE IS DIM ON AN EMPTY MEMORY: the archive's words, for
+                 the archive's rule (`lib/note-words.ts`). */
+              placeholder={(panel.detail?.attachments.length ?? 0) === 0 ? say("worldNoteNeedsSomething") : undefined}
               value={editing.open.text}
               onChange={(e) => {
                 editing.retype(e.target.value);
@@ -10077,7 +10118,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   disabled={
                     editing.open.saving ||
                     editing.open.saved ||
-                    editing.open.text.trim() === ""
+                    /* the archive's rule, from the same helper: no words is
+                       keepable only beside an attachment */
+                    !wordsCanStand(editing.open.text, panel.detail?.attachments.length ?? 0)
                   }
                 >
                   {/* three states in one word, in the slot the carets will
@@ -11558,6 +11601,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           following an old reference here. */}
       {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
         onNoteOpen={savedNoteChanged}
+        /* An archive save or delete reaches the world's cache of read notes,
+           so the memory card never edits from words that are not stored. */
+        onSaved={(made) => rememberSavedInspiration(made.id, made.text, made)}
+        onErased={forgetErasedInspiration}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         ownArchive={atWall.kind!=='agent'} shareName={auth?.profile?.name ?? ''}
