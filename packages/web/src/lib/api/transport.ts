@@ -86,7 +86,18 @@ export async function apiFetch(url: string, init: RequestInit = {}): Promise<Res
  * in again must not sign them out of the session they just made.
  */
 let webSession = 0;
-export function webSessionChanged(): void { webSession += 1; }
+const sessionListeners = new Set<() => void>();
+export function webSessionChanged(): void {
+  webSession += 1;
+  for (const listener of sessionListeners) listener();
+}
+/** The identity generation requests are sent under right now. */
+export function currentWebSession(): number { return webSession; }
+/** Hear every identity change (sign-in, sign-out, switch, expiry). */
+export function onWebSessionChanged(listener: () => void): () => void {
+  sessionListeners.add(listener);
+  return () => { sessionListeners.delete(listener); };
+}
 
 /**
  * THE WEB BRANCH: the browser's own fetch, cookie and all, with the deadline

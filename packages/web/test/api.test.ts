@@ -817,3 +817,29 @@ describe("the read deadline", () => {
     }
   });
 });
+
+describe("the shared principle status across a session change", () => {
+  it("drops the cached status and ignores an in-flight answer from the session before", async () => {
+    const { fetchPrincipleStatus, recentPrincipleStatus, onPrincipleStatus } = await import("../src/lib/api/principles");
+    const { webSessionChanged } = await import("../src/lib/api/transport");
+    const status = (signalCount: number) => ({ phase: "ready", eligible: true, signalCount, topOfMindCount: 1 });
+    let answer!: (response: Response) => void;
+    const fetch = vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { answer = resolve; }))
+      .mockImplementationOnce(async () => new Response(JSON.stringify({ status: status(9) }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const heard: number[] = [];
+    const stop = onPrincipleStatus((value) => heard.push(value.signalCount));
+    const old = fetchPrincipleStatus();
+    webSessionChanged();
+    expect(recentPrincipleStatus(60_000), "a status outlived the sign-out").toBeNull();
+    const fresh = await fetchPrincipleStatus();
+    expect(fetch, "the new session joined the old session's request").toHaveBeenCalledTimes(2);
+    expect(fresh.signalCount).toBe(9);
+    answer(new Response(JSON.stringify({ status: status(3) }), { status: 200 }));
+    await old;
+    expect(recentPrincipleStatus(60_000)?.signalCount, "the old session's answer overwrote the new one").toBe(9);
+    expect(heard).toEqual([9]);
+    stop();
+  });
+});

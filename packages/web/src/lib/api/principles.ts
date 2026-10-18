@@ -15,6 +15,7 @@
 
 import { ApiError,apiPath, getJson, patchJson, postJson, requestVoid, type ProfileScoped } from "./http";
 import type {ApiSignalReviewEvidence} from './signals';
+import { currentWebSession, onWebSessionChanged } from "./transport";
 
 export type ApiPrincipleState = "held" | "aspirational" | "contested";
 export type ApiPrincipleKind = "value" | "maxim" | "stance";
@@ -84,7 +85,14 @@ export async function fetchPrincipleStatements(id:string,profileId:string,signal
 let statusInFlight: Promise<ApiPrincipleStatus> | null = null;
 let lastStatus: { status: ApiPrincipleStatus; at: number } | null = null;
 const statusListeners = new Set<(status: ApiPrincipleStatus) => void>();
-function publishStatus(status: ApiPrincipleStatus): ApiPrincipleStatus {
+/* THE CACHE BELONGS TO ONE SIGNED-IN IDENTITY. A status heard before a
+   sign-out, sign-in or switch is somebody else's (or nobody's) reading, so
+   an identity change drops both the cached answer and the shared request,
+   and an answer that lands after the change is handed to the reader that
+   asked for it but never cached or published. */
+onWebSessionChanged(() => { lastStatus = null; statusInFlight = null; });
+function publishStatus(status: ApiPrincipleStatus, session: number): ApiPrincipleStatus {
+  if (session !== currentWebSession()) return status;
   lastStatus = { status, at: Date.now() };
   for (const listener of statusListeners) listener(status);
   return status;
@@ -101,10 +109,13 @@ export function recentPrincipleStatus(maxAgeMs: number): ApiPrincipleStatus | nu
 
 /** GET /principles/status — shared while in flight, published when it lands. */
 export function fetchPrincipleStatus(): Promise<ApiPrincipleStatus> {
-  statusInFlight ??= getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded")
-    .then((body) => publishStatus(body.status))
-    .finally(() => { statusInFlight = null; });
-  return statusInFlight;
+  if (statusInFlight) return statusInFlight;
+  const session = currentWebSession();
+  const request: Promise<ApiPrincipleStatus> = getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded")
+    .then((body) => publishStatus(body.status, session))
+    .finally(() => { if (statusInFlight === request) statusInFlight = null; });
+  statusInFlight = request;
+  return request;
 }
 
 export async function fetchPrincipleRead(): Promise<{
@@ -120,7 +131,8 @@ export async function fetchPrincipleRead(): Promise<{
 /** POST /principles/refresh?retry=1 — restarts a failed reading and principles.
     A 429 (`reading_retry_throttled`) means it was retried moments ago. */
 export async function retryPausedReading(): Promise<ApiPrincipleStatus> {
-  return publishStatus((await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted")).status);
+  const session = currentWebSession();
+  return publishStatus((await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted")).status, session);
 }
 
 export async function requestPrincipleRead(retry = false): Promise<void> {
