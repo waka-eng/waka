@@ -1314,7 +1314,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           attaching={attaching}
           saving={saving}
           recording={recording}
-          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : ""}
+          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : ""}
           /* THE FULL-TEXT READ'S TWO STATES, in the bar with every other
              state (founder: "states should show and disappear in the bottom
              bar only"). See `stored`. */

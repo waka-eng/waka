@@ -59,6 +59,15 @@ import {
    above every other statement in the file and a plain `const` here would not
    exist yet when the factory runs. */
 const KEPT = vi.hoisted(() => ({ calls: [] as { id: string; text: string }[] }));
+/* A delete and an archive read a case can hold open, so "the answer lands after
+   the reader has moved on" is a state it can stand in, not a race to win. */
+const DELETES = vi.hoisted(() => ({
+  hold: null as Promise<void> | null,
+  field: null as Promise<void> | null,
+  calls: [] as string[],
+  /** How many of the next deletes refuse, as a server error would. */
+  refuse: 0,
+}));
 
 const GROUP_ID = "group-1";
 const PROPOSAL_ID = "proposal-1";
@@ -172,7 +181,11 @@ vi.mock("../src/lib/api", async (importOriginal) => {
        one reaches a server jsdom has not got, so it rejects — and a rejected
        delete is a DIFFERENT state wearing a different sentence, which is
        precisely the confusion the cases below exist to refuse. */
-    deleteInspiration: async () => undefined,
+    deleteInspiration: async (id: string) => {
+      DELETES.calls.push(id);
+      if (DELETES.hold) await DELETES.hold;
+      if (DELETES.refuse > 0) { DELETES.refuse -= 1; throw new Error("refused"); }
+    },
     /* One shared statement, LOCKED — the owner's own words on the room's
        wall. The star must render exactly where other people read the
        sentence (no-quiet-corners Phase 8), and the case below pins it. The
@@ -259,6 +272,13 @@ vi.mock("../src/lib/data", async (importOriginal) => {
   return {
     ...actual,
     ...dataMockFrom(FACTS),
+    /* The archive read, holdable — so the return-to-tab refresh can be left
+       in flight across a delete and the order of their answers chosen. */
+    loadInspirations: async (...args: unknown[]) => {
+      const field = await (dataMockFrom(FACTS).loadInspirations as (...a: unknown[]) => Promise<unknown>)(...args);
+      if (DELETES.field) await DELETES.field;
+      return field;
+    },
     /* ONE MEMORY BY ITS ADDRESS. With the orbs gone (2026-10-15) the card
        opens from `/inspirations/:id`, which reads the memory itself rather
        than finding it on the ground, so the fixture answers that read too. */
@@ -317,6 +337,10 @@ beforeEach(async () => {
      silently disables the layout the first case is about */
   window.localStorage.clear();
   KEPT.calls.length = 0;
+  DELETES.hold = null;
+  DELETES.field = null;
+  DELETES.calls.length = 0;
+  DELETES.refuse = 0;
   layout = await mountWorld(FACTS);
   /* the sky arrives a hop behind the field: loadSignals, then one loadSignal
      per signal for its evidence, then the memo, then syncSky */
@@ -602,6 +626,207 @@ describe("deleting a memory", () => {
       (layout.container.textContent ?? "").includes("didn’t go through"),
       "and nothing claimed it failed",
     ).toBe(false);
+  });
+
+  it("keeps Delete beside the failure line, so pressing it again is the retry", { timeout: 30_000 }, async () => {
+    DELETES.refuse = 1;
+    await layout.toField();
+    const panel = await openMemory("something I kept, 5");
+    await pressPanelVerb(panel, "Delete");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await layout.step(8);
+
+    const open = layout.container.querySelector<HTMLElement>(".jar-panel--in")!;
+    expect(open.textContent ?? "").toContain("didn’t go through");
+    await pressPanelVerb(open, "Delete");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await layout.step(40);
+    expect(DELETES.calls, "the retry was not sent").toHaveLength(2);
+    expect(layout.container.querySelector(".jar-panel--in"), "the retried delete went through").toBeNull();
+  });
+
+  it("still says a delete failed after stepping away from the memory and back", { timeout: 30_000 }, async () => {
+    DELETES.refuse = 1;
+    await layout.toField();
+    const panel = await openMemory("something I kept, 5");
+    const first = panel.querySelector(".jar-panel-text")?.textContent;
+    await pressPanelVerb(panel, "Delete");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await layout.step(8);
+    expect(layout.container.querySelector(".jar-panel--in")?.textContent ?? "").toContain("didn’t go through");
+
+    const caret = () => layout.container.querySelector<HTMLElement>(".jar-panel--in .jar-panel-foot-c button");
+    const away = caret()!.getAttribute("aria-label");
+    await act(async () => caret()!.click());
+    await layout.step(20);
+    expect(
+      layout.container.querySelector(".jar-panel--in")?.textContent ?? "",
+      "the other memory wore A's failure",
+    ).not.toContain("didn’t go through");
+
+    const back = [...layout.container.querySelectorAll<HTMLElement>(".jar-panel--in .jar-panel-foot-c button")]
+      .find((button) => button.getAttribute("aria-label") !== away);
+    if (!back) throw new Error("no way back to the first memory");
+    await act(async () => back.click());
+    await layout.step(20);
+    const again = layout.container.querySelector<HTMLElement>(".jar-panel--in")!;
+    expect(again.querySelector(".jar-panel-text")?.textContent).toBe(first);
+    expect(again.textContent ?? "", "returning to A forgot its delete had failed").toContain("didn’t go through");
+  });
+
+  it("never offers Delete again on a memory whose delete has landed", { timeout: 30_000 }, async () => {
+    /* `deleting` used to clear in a `finally` ahead of the removal, which
+       could draw the memory once more with Delete offered before it went. */
+    let land!: () => void;
+    DELETES.hold = new Promise<void>((resolve) => {
+      land = resolve;
+    });
+    await layout.toField();
+    const panel = await openMemory("something I kept, 5");
+    await pressPanelVerb(panel, "Delete");
+    let reoffered = false;
+    const watch = new MutationObserver(() => {
+      const open = layout.container.querySelector(".jar-panel--in");
+      if (!open) return;
+      if ([...open.querySelectorAll(".jar-ask--after button")].some((b) => (b.textContent ?? "").trim() === "Delete")) reoffered = true;
+    });
+    watch.observe(layout.container, { subtree: true, childList: true, characterData: true });
+    await act(async () => {
+      land();
+      await DELETES.hold;
+    });
+    await layout.step(40);
+    watch.disconnect();
+    expect(reoffered, "Delete came back on the memory being removed").toBe(false);
+    expect(layout.container.querySelector(".jar-panel--in")).toBeNull();
+  });
+
+  it("leaves the next memory alone when the delete lands after you stepped to it", { timeout: 30_000 }, async () => {
+    /* Delete A, step to B before the server answers. A's answer used to close
+       whatever panel was open and reset its state — so B, which nobody asked
+       to delete, vanished from under the reader. */
+    let land!: () => void;
+    DELETES.hold = new Promise<void>((resolve) => {
+      land = resolve;
+    });
+    await layout.toField();
+    const panel = await openMemory("something I kept, 5");
+    const before = panel.querySelector(".jar-panel-text")?.textContent;
+    await pressPanelVerb(panel, "Delete");
+    expect(layout.container.textContent ?? "").toContain("Deleting");
+
+    const step = layout.container.querySelector<HTMLElement>(
+      ".jar-panel--in .jar-panel-foot-c button",
+    );
+    if (!step) throw new Error("the open memory offers no neighbour to step to");
+    await act(async () => step.click());
+    await layout.step(20);
+    const after = layout.container.querySelector(".jar-panel--in .jar-panel-text")?.textContent;
+    expect(after, "the step landed on a different memory").not.toBe(before);
+
+    await act(async () => {
+      land();
+      await DELETES.hold;
+    });
+    await layout.step(40);
+
+    expect(
+      layout.container.querySelector(".jar-panel--in .jar-panel-text")?.textContent,
+      "the memory stepped to is still open after the other one's delete landed",
+    ).toBe(after);
+    expect(layout.container.textContent ?? "").not.toContain("Deleting");
+  });
+
+  it("deletes each memory on its own, and keeps saying so while its own request is out", { timeout: 30_000 }, async () => {
+    /* One "going" flag stood for every delete. Stepping away reset it, so
+       stepping BACK to a memory whose delete was still out offered Delete
+       again; and only one memory could ever be "Deleting". Per memory, B is
+       deleted while A's request is out, and A still says so on return. */
+    let land!: () => void;
+    DELETES.hold = new Promise<void>((resolve) => {
+      land = resolve;
+    });
+    await layout.toField();
+    const panel = await openMemory("something I kept, 5");
+    const first = panel.querySelector(".jar-panel-text")?.textContent;
+    await pressPanelVerb(panel, "Delete");
+
+    const caret = () => layout.container.querySelector<HTMLElement>(".jar-panel--in .jar-panel-foot-c button");
+    const away = caret()!.getAttribute("aria-label");
+    await act(async () => caret()!.click());
+    await layout.step(20);
+    const second = layout.container.querySelector<HTMLElement>(".jar-panel--in")!;
+    await pressPanelVerb(second, "Delete");
+    /* this one has a signal standing on it, so the press opens the ask */
+    const anyway = [...layout.container.querySelectorAll<HTMLElement>(".jar-panel-askrow button")]
+      .find((button) => (button.textContent ?? "").trim() === "Delete it anyway");
+    if (anyway) {
+      await act(async () => anyway.click());
+      await layout.step(8);
+    }
+    expect(DELETES.calls, "the second memory's delete was ignored while the first was out").toHaveLength(2);
+
+    const back = [...layout.container.querySelectorAll<HTMLElement>(".jar-panel--in .jar-panel-foot-c button")]
+      .find((button) => button.getAttribute("aria-label") !== away);
+    if (!back) throw new Error("no way back to the first memory");
+    await act(async () => back.click());
+    await layout.step(20);
+    expect(layout.container.querySelector(".jar-panel--in .jar-panel-text")?.textContent).toBe(first);
+    expect(layout.container.textContent ?? "", "the first memory forgot its own delete was out").toContain("Deleting");
+    await act(async () => {
+      land();
+      await DELETES.hold;
+    });
+    await layout.step(20);
+    expect(DELETES.calls, "a memory was deleted twice").toHaveLength(2);
+  });
+
+  it("is not brought back by a return-to-tab refresh that was already in flight", { timeout: 30_000 }, async () => {
+    /* Away long enough and the page re-reads the archive on return. If a
+       delete lands while that read is out, the list it brings back is from
+       before the delete — and written over the field, it put the memory back
+       until the next refresh. */
+    await layout.toField();
+    const panel = await openMemory("something I kept, 5");
+    const before = layout.audit().present;
+
+    let arrive!: () => void;
+    DELETES.field = new Promise<void>((resolve) => {
+      arrive = resolve;
+    });
+    let visibility: DocumentVisibilityState = "hidden";
+    const spy = vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
+    const clock = Date.now;
+    try {
+      await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+      Date.now = () => clock() + 60_000;
+      visibility = "visible";
+      await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+
+      await pressPanelVerb(panel, "Delete");
+      await act(async () => { await Promise.resolve(); });
+      await layout.step(20);
+      expect(layout.audit().present, "the delete took the memory off the field").toBe(before - 1);
+
+      await act(async () => {
+        arrive();
+        await DELETES.field;
+      });
+      await layout.step(20);
+      expect(
+        layout.audit().present,
+        "the refresh that left before the delete put the memory back",
+      ).toBe(before - 1);
+    } finally {
+      Date.now = clock;
+      spy.mockRestore();
+    }
   });
 
   it("says what is lost when a signal stands on it, and only then", { timeout: 30_000 }, async () => {

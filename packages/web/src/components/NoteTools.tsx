@@ -47,7 +47,8 @@ export function NoteTools(props: {
   attaching: boolean;
   saving: boolean;
   recording: ReturnType<typeof useAudioRecording>;
-  /** Said in the bar when a write failed; empty is the success state. */
+  /** Said in the bar when a write or the recorder failed, in the reader's
+      language; empty is the success state. */
   failed: string;
   uploading: string;
   /** THE NOTE'S FULL TEXT IS STILL BEING READ. A saved note is opened from a
@@ -210,8 +211,8 @@ export function NoteTools(props: {
         {/* AN EARLIER FAILURE IS STILL NEWS. A save, an upload or a recording
             that failed before this read began (Try again re-enters this
             state) keeps its line here rather than vanishing with the tools. */}
-        {props.failed || props.recording.error ? (
-          <span className="waka-dock-state" role="alert">{props.failed || props.recording.error}</span>
+        {props.failed ? (
+          <span className="waka-dock-state" role="alert">{props.failed}</span>
         ) : null}
         {props.readFailed && props.onRetry && props.retryLabel ? (
           <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.onRetry}>
@@ -347,8 +348,11 @@ export function NoteTools(props: {
         ]} />
       {/* ONE LINE, THE SAME SLOT THE NOTEPAD'S STATE USES. Founder: "states
           should show and disappear in the bottom bar only." */}
-      {props.failed || props.recording.error ? (
-        <span className="waka-dock-state" role="alert">{props.failed || props.recording.error}</span>
+      {/* the recorder's own problem arrives inside `failed`, already said:
+          `recording.error` is a catalogue key and this has no locale (dev,
+          #443). An armed delete is its own branch above. */}
+      {props.failed ? (
+        <span className="waka-dock-state" role="alert">{props.failed}</span>
       ) : props.attaching ? (
         <span className="waka-dock-state" role="status">{props.uploading}</span>
       ) : null}

@@ -57,8 +57,9 @@ it("keeps Stop in the bar while a delete is armed during a recording", async () 
   expect(slot.querySelector('[aria-label="Delete it anyway"]')).not.toBeNull();
 });
 
-it("keeps a recording error beside a failed read, and Try again and Delete stay", async () => {
-  const lines = await bar({ readFailed: "Didn’t open.", recording: { ...idle, error: "The microphone stopped." } as never });
+it("keeps a recorder failure beside a failed read, and Try again and Delete stay", async () => {
+  /* the recorder's error reaches the bar already said, inside `failed` (dev, #443) */
+  const lines = await bar({ readFailed: "Didn’t open.", failed: "The microphone stopped." });
   expect(lines).toEqual(["Didn’t open.", "The microphone stopped."]);
   expect(slot.querySelector(".waka-dock-retry")?.textContent).toBe("Try again");
   expect(slot.querySelector('[aria-label="Delete"]')).not.toBeNull();

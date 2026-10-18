@@ -200,6 +200,28 @@ export function useEditing(deps: EditingDeps): Editing {
   /* The draft, again, where a callback can reach it. Written by `put` and by
      nothing else, so it cannot fall behind the state it mirrors. */
   const heldRef = useRef<OpenEdit | null>(null);
+  /* Which keep is the current one. Kind, id and `saving` cannot tell two
+     keeps of the SAME words apart — leave, reopen, keep again — so a late
+     answer to the first would stamp the second `saved` before its own write
+     had landed. Each keep takes a number; only the newest one's answer acts. */
+  const keepToken = useRef(0);
+  /* ONE WRITE PER THING AT A TIME. The token above decides whose answer may
+     stamp `saved`, but not what the server ends with: keep X, reopen, keep Y
+     and both PATCHes are out — X could land after Y on the server, and X's
+     success would write X's words onto the card. Each thing's writes wait for
+     the one before them, so the last words kept are the last words sent, and
+     the card's preview is written in that same order. */
+  const writeChain = useRef(new Map<string, Promise<unknown>>());
+  const inOrder = useCallback(<T,>(key: string, write: () => Promise<T>): Promise<T> => {
+    const before = writeChain.current.get(key) ?? Promise.resolve();
+    const mine = before.catch(() => undefined).then(write);
+    const tail = mine.catch(() => undefined);
+    writeChain.current.set(key, tail);
+    void tail.then(() => {
+      if (writeChain.current.get(key) === tail) writeChain.current.delete(key);
+    });
+    return mine;
+  }, []);
   const put = useCallback((next: OpenEdit | null) => {
     heldRef.current = next;
     setOpen(next);
@@ -248,6 +270,7 @@ export function useEditing(deps: EditingDeps): Editing {
       ? !wordsCanStand(text, d.memoryAttachmentCount?.(held.id) ?? 0)
       : text === "") return;
     put({ ...held, saving: true });
+    const token = ++keepToken.current;
     /**
      * THE BEAT BETWEEN WRITTEN AND GONE.
      *
@@ -260,9 +283,19 @@ export function useEditing(deps: EditingDeps): Editing {
      * they belong to. The timer is cleared by `leave`, by a new `begin`, and
      * on unmount, so a closed card can never be reopened by an old beat.
      */
+    /* IS THE EDIT ON SCREEN STILL THE ONE THIS WRITE WAS FOR? The answer can
+       land after the person left this edit and opened another — a different
+       memory, or a signal — and both handlers used to act on whatever was
+       open by then: stamping `saved` on words that were never written, or
+       closing a draft mid-sentence. `begin` always opens with `saving: false`,
+       so a fresh edit of the same thing is not mistaken for this one either. */
+    const ours = (still: OpenEdit | null): still is OpenEdit =>
+      token === keepToken.current &&
+      still !== null && still.kind === held.kind && still.id === held.id && still.saving;
     const done = () => {
       const still = heldRef.current;
-      put(still ? { ...still, saving: false, saved: true } : null);
+      if (!ours(still)) return;
+      put({ ...still, saving: false, saved: true });
       clearHold();
       holdRef.current = window.setTimeout(() => {
         holdRef.current = null;
@@ -286,9 +319,12 @@ export function useEditing(deps: EditingDeps): Editing {
      */
     const fail = (err?: unknown) => {
       const still = heldRef.current;
-      put(still ? { ...still, saving: false, saved: false } : null);
+      const mine = ours(still);
+      if (mine) put({ ...still, saving: false, saved: false });
       if (err instanceof ApiError && err.status === 404) {
-        put(null);
+        /* the reload below is about the board, not the edit, so it runs
+           either way; closing the edit is only ours to do if it is ours */
+        if (mine) put(null);
         if (d.reloadReading) { void d.reloadReading().catch(() => undefined); return; }
         void loadTopOfMind()
           .then((tom) => {
@@ -319,8 +355,13 @@ export function useEditing(deps: EditingDeps): Editing {
     }
     if (held.kind === "memory") {
       const profile = d.memoryProfile?.();
-      d.onMemoryWriting?.(held.id);
-      updateInspiration(held.id, { text }, profile ? { profile } : {})
+      /* in order behind any earlier write of this memory (dev, #443), named
+         to the profile the card read it with, and announced as it actually
+         goes out so reads already in flight are marked older than it */
+      inOrder(`memory:${held.id}`, () => {
+        d.onMemoryWriting?.(held.id);
+        return updateInspiration(held.id, { text }, profile ? { profile } : {});
+      })
         .then((made) => {
           if (made) d.onInspirationSaved?.(made);
           /* FRESHNESS IS THE PAGE'S VERDICT (review, 2026-10-17). With a
@@ -346,7 +387,7 @@ export function useEditing(deps: EditingDeps): Editing {
         })
         .catch(fail);
     } else if (held.kind === "signal") {
-      updateSignal(held.id, { statement: text })
+      inOrder(`signal:${held.id}`, () => updateSignal(held.id, { statement: text }))
         .then(() => {
           d.setSignals((prev) =>
             prev
@@ -358,7 +399,7 @@ export function useEditing(deps: EditingDeps): Editing {
         .catch(fail);
     } else {
       const finish = d.beginReadingMutation?.() ?? (() => {});
-      updateTopOfMindEntry(held.id, { body: text })
+      inOrder(`entry:${held.id}`, () => updateTopOfMindEntry(held.id, { body: text }))
         .then(() => {
           finish();
           d.onEntrySaved?.();
@@ -370,7 +411,7 @@ export function useEditing(deps: EditingDeps): Editing {
         })
         .catch((error) => { finish(); fail(error); }).finally(finish);
     }
-  }, [put]);
+  }, [put, inOrder]);
 
   /* Rebuilt only when the words change, which is the one thing a reader of the
      act can see. The four callbacks never change identity, so this is also the

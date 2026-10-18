@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import type { MessageKey } from './i18n';
+
 export const MAX_RECORDING_SECONDS = 300;
 const MAX_BYTES = 25 * 1024 * 1024;
 const FORMATS = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus'];
@@ -8,12 +10,18 @@ export function supportedRecordingType(): string | null {
   return FORMATS.find(type => MediaRecorder.isTypeSupported(type)) ?? null;
 }
 /** The caller owns the resulting File. Closing the composer can await stop;
- * unmount always releases the microphone, including a late permission grant. */
+ * unmount always releases the microphone, including a late permission grant.
+ *
+ * `error` AND `notice` ARE CATALOGUE KEYS, NOT SENTENCES. They were finished
+ * English sentences set from here and printed verbatim by every surface that
+ * shows them, so a Korean reader denied the microphone was told so in
+ * English. A hook does not know whose screen it is on; the surface does, so
+ * it says the key with `say()` where it renders. Empty is "nothing to say". */
 export function useAudioRecording(onRecorded: (file: File) => Promise<void> | void,
   getStream: () => Promise<MediaStream> = () => navigator.mediaDevices.getUserMedia({ audio: true })) {
   const [phase, setPhase] = useState<'idle' | 'requesting' | 'recording' | 'finishing'>('idle');
-  const [seconds, setSeconds] = useState(0), [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [seconds, setSeconds] = useState(0), [error, setError] = useState<MessageKey | ''>('');
+  const [notice, setNotice] = useState<MessageKey | ''>('');
   const media = useRef<MediaRecorder | null>(null), stream = useRef<MediaStream | null>(null);
   const pending = useRef<Promise<void> | null>(null), epoch = useRef(0), mounted = useRef(true), clock = useRef(0);
   const requesting = useRef(false);
@@ -22,9 +30,9 @@ export function useAudioRecording(onRecorded: (file: File) => Promise<void> | vo
   const release = () => { clearTrackListeners.current?.(); clearTrackListeners.current = null;
     stream.current?.getTracks().forEach(track => track.stop()); stream.current = null; window.clearInterval(clock.current); };
   const stop = useCallback(async (reason?: 'limit' | 'hidden' | 'interrupted') => {
-    if (reason) setNotice(reason === 'limit' ? 'Five-minute limit reached. Listen before saving.'
-      : reason === 'hidden' ? 'Recording stopped when you left this page. Listen before saving.'
-      : 'The microphone disconnected. Listen to the recording before saving.');
+    if (reason) setNotice(reason === 'limit' ? 'worldRecordingLimit'
+      : reason === 'hidden' ? 'worldRecordingLeftPage'
+      : 'worldRecordingDisconnected');
     const active = media.current;
     if (active?.state === 'recording') { setPhase('finishing'); active.stop(); }
     if (!active) { epoch.current += 1; requesting.current = false; setPhase('idle'); release(); }
@@ -33,12 +41,12 @@ export function useAudioRecording(onRecorded: (file: File) => Promise<void> | vo
   const cancel = useCallback(async () => {
     epoch.current += 1; requesting.current = false;
     await stop();
-    if (mounted.current) { setNotice('Recording canceled.'); setError(''); }
+    if (mounted.current) { setNotice('worldRecordingCanceled'); setError(''); }
   }, [stop]);
   const start = useCallback(async () => {
     if (pending.current || media.current || requesting.current) return;
     const mimeType = supportedRecordingType();
-    if (!mimeType || !navigator.mediaDevices?.getUserMedia) { setError('Recording is unavailable in this browser. You can still add a note or photo.'); return; }
+    if (!mimeType || !navigator.mediaDevices?.getUserMedia) { setError('worldRecordingUnavailable'); return; }
     const currentEpoch = ++epoch.current; requesting.current = true; setError(''); setNotice(''); setSeconds(0); setPhase('requesting');
     try {
       const input = await getStream();
@@ -56,20 +64,20 @@ export function useAudioRecording(onRecorded: (file: File) => Promise<void> | vo
         recorder.ondataavailable = event => {
           if (!event.data.size || failed) return;
           bytes += event.data.size;
-          if (bytes > MAX_BYTES) { failed = true; setError('This recording is too large. Try a shorter clip.'); if (recorder.state === 'recording') recorder.stop(); return; }
+          if (bytes > MAX_BYTES) { failed = true; setError('worldRecordingTooLarge'); if (recorder.state === 'recording') recorder.stop(); return; }
           chunks.push(event.data);
         };
-        recorder.onerror = () => { failed = true; if (mounted.current) setError('The recording was interrupted. Please try again.'); release(); if (recorder.state !== 'inactive') recorder.stop(); };
+        recorder.onerror = () => { failed = true; if (mounted.current) setError('worldRecordingInterrupted'); release(); if (recorder.state !== 'inactive') recorder.stop(); };
         recorder.onstop = async () => {
           release(); media.current = null;
           try {
             if (!failed && mounted.current && epoch.current === currentEpoch) {
               const blob = new Blob(chunks, { type: recorder.mimeType || mimeType });
-              if (!blob.size) throw new Error('Nothing was recorded. Please try again.');
+              if (!blob.size) { if (mounted.current) setError('worldRecordingEmpty'); return; }
               const extension = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('ogg') ? 'ogg' : 'webm';
               await finishCallback.current(new File([blob], `Recording.${extension}`, { type: blob.type }));
             }
-          } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : 'Could not keep the recording.'); }
+          } catch { if (mounted.current) setError('worldRecordingKeepFailed'); }
           finally { if (mounted.current) setPhase('idle'); pending.current = null; resolve(); }
         };
       });
@@ -81,10 +89,10 @@ export function useAudioRecording(onRecorded: (file: File) => Promise<void> | vo
     } catch (reason) {
       release(); media.current = null; pending.current = null;
       if (mounted.current && epoch.current === currentEpoch) { requesting.current = false; setPhase('idle'); setError(reason instanceof DOMException && reason.name === 'NotAllowedError'
-        ? 'Microphone access was not allowed. You can enable it in your browser and try again.'
-        : reason instanceof DOMException && reason.name === 'NotFoundError' ? 'No microphone was found. Connect one and try again.'
-        : reason instanceof DOMException && reason.name === 'NotReadableError' ? 'The microphone is busy or unavailable. Close other recording apps and try again.'
-        : 'Could not start recording. Check your microphone and try again.'); }
+        ? 'worldRecordingDenied'
+        : reason instanceof DOMException && reason.name === 'NotFoundError' ? 'worldRecordingNoMicrophone'
+        : reason instanceof DOMException && reason.name === 'NotReadableError' ? 'worldRecordingMicrophoneBusy'
+        : 'worldRecordingStartFailed'); }
     }
   }, [getStream, stop]);
   useEffect(() => {

@@ -112,7 +112,7 @@ vi.mock("../src/lib/use-agent", () => ({ useAgent: () => agent.value }));
 
 vi.mock("../src/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/lib/api")>()),
-  listKeptDays: vi.fn(async () => []),
+  listKeptDays: vi.fn(async () => ({ days: [], zone: "UTC" })),
   fetchProfiles: vi.fn(async () => []),
   fetchConnections: vi.fn(async () => []),
 }));

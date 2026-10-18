@@ -144,7 +144,7 @@ function composerProps(): ComponentProps<typeof InspirationComposer> {
       start: vi.fn(), stop: vi.fn(), cancel: vi.fn() },
     onText: vi.fn(), onFiles: vi.fn(), onRetryFile: vi.fn(), onChooseRecording: vi.fn(),
     onRemove: vi.fn(), onVisibility: vi.fn(), onClose: vi.fn(),
-    onSubmit: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(),
+    onSubmit: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(), draftConflict: false,
   };
 }
 
