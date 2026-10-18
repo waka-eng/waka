@@ -863,7 +863,7 @@ export async function enrichAttachment(
       current.enrichmentKind !== (result.status === "ready" ? result.kind : null) ||
       current.hostname !== (link.hostname ?? null)) {
       await requestSignalDerivation({ profileId: attachment.profileId, inspirationId,
-        reason: "edited", changedSource: "inspiration" }, tx);
+        reason: "edited" }, tx);
     }
     return true;
   });

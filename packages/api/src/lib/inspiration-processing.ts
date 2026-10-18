@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { getDb } from './db.js';
 import type { EnqueueResult } from './queue.js';
+import { withoutLegacyGroupDestination } from './retired-group-work.js';
 import { inspirationRevisions, type InspirationEmbeddingScope, type BackgroundJobResult } from '../db/index.js';
 import { parseTopOfMindRefreshResult } from './top-of-mind-refresh-status.js';
 
@@ -32,12 +33,14 @@ export interface DerivationProcessingInput {
 
 const materialJoins = sql`JOIN inspirations i ON i.id = p.inspiration_id AND i.profile_id = p.owner_profile_id
   JOIN inspiration_revisions r ON r.inspiration_id = i.id AND r.profile_id = i.profile_id`;
-const currentMaterial = sql`p.material_revision = CASE WHEN p.profile_id = p.owner_profile_id THEN r.personal_revision ELSE r.public_revision END`;
-const authorizedDestination = sql`(p.profile_id = p.owner_profile_id OR EXISTS (
-  SELECT 1 FROM profiles d JOIN group_members m ON m.group_id = d.group_id
-    JOIN profiles owner ON owner.id = m.profile_id AND owner.type::text = 'human'
-  WHERE d.id = p.profile_id AND d.type::text = 'group' AND m.profile_id = p.owner_profile_id))`;
-const allowedSource = sql`(p.profile_id = p.owner_profile_id OR i.visibility::text = 'public')`;
+/* Personal receipts only. A receipt landing on a room's mind (public
+   revision, a current human member as owner) was the other branch; it
+   retired with the room engine (2026-10-17), so such legacy receipts are
+   never current, authorized or completable again. For a personal receipt
+   each predicate below is the branch it always took. */
+const currentMaterial = sql`(p.profile_id = p.owner_profile_id AND p.material_revision = r.personal_revision)`;
+const authorizedDestination = sql`p.profile_id = p.owner_profile_id`;
+const allowedSource = authorizedDestination;
 const derivationScope = (input: DerivationProcessingInput) => sql`p.profile_id = ${input.profileId}::uuid
   AND p.owner_profile_id = ${input.ownerProfileId}::uuid AND p.inspiration_id = ${input.inspirationId}::uuid
   AND p.derivation_job_id = ${input.request.jobId}::uuid
@@ -85,7 +88,7 @@ export async function currentArtifactResult(tx: Transaction, profileId: string):
   const [row] = await tx.execute(sql`SELECT m.id, m.version,
     EXISTS(SELECT 1 FROM top_of_mind_entries e WHERE e.top_of_mind_id = m.id AND e.dismissed_at IS NULL) AS has_entries
     FROM top_of_minds m JOIN profiles d ON d.id = ${profileId}::uuid
-    WHERE m.status::text = 'live' AND (m.profile_id = d.id OR (d.type::text = 'group' AND m.group_id = d.group_id))
+    WHERE m.status::text = 'live' AND m.profile_id = d.id
     ORDER BY m.version DESC LIMIT 1`);
   return { kind: 'top_of_mind', topOfMindId: row ? String(row.id) : null,
     version: row ? Number(row.version) : 0, outcome: row?.has_entries ? 'unchanged' : 'empty' };
@@ -154,7 +157,7 @@ export async function recordInspirationReadingResult(tx: Transaction, input: {
   if (result.topOfMindId) {
     const owned = await tx.execute(sql`SELECT m.id FROM top_of_minds m JOIN profiles d ON d.id = ${input.profileId}::uuid
       WHERE m.id = ${result.topOfMindId}::uuid AND m.version = ${result.version}
-        AND (m.profile_id = d.id OR (d.type::text = 'group' AND m.group_id = d.group_id)) LIMIT 1`);
+        AND m.profile_id = d.id LIMIT 1`);
     if (!owned.length) throw new Error('Published reading does not belong to this destination');
   }
   await tx.execute(sql`UPDATE inspiration_processing p SET result = ${JSON.stringify(result)}::jsonb,
@@ -182,7 +185,7 @@ export async function recordInspirationProcessingRequest(tx: Transaction, input:
     INSERT INTO inspiration_processing (profile_id, owner_profile_id, inspiration_id, material_revision,
       derivation_job_id, derivation_request_version)
     SELECT ${input.profileId}::uuid, i.profile_id, i.id,
-      CASE WHEN ${input.profileId}::uuid = i.profile_id THEN r.personal_revision ELSE r.public_revision END,
+      r.personal_revision,
       j.id, j.request_version
     FROM inspirations i JOIN inspiration_revisions r ON r.inspiration_id = i.id AND r.profile_id = i.profile_id
       JOIN background_jobs j ON j.id = ${input.job.jobId}::uuid AND j.profile_id = i.profile_id
@@ -190,12 +193,9 @@ export async function recordInspirationProcessingRequest(tx: Transaction, input:
       AND j.type::text = 'derive_signals' AND j.request_version = ${input.job.requestVersion}::bigint
       AND j.status::text IN ('pending', 'running')
       AND j.payload->>'inspirationId' = i.id::text
-      AND coalesce(j.payload->>'deriveIntoProfileId', i.profile_id::text) = ${input.profileId}
-      AND ((${input.profileId}::uuid = i.profile_id AND j.payload->>'deriveIntoProfileId' IS NULL)
-        OR (${input.profileId}::uuid <> i.profile_id AND i.visibility::text = 'public' AND EXISTS (
-        SELECT 1 FROM profiles p JOIN group_members m ON m.group_id = p.group_id
-        JOIN profiles owner ON owner.id = m.profile_id AND owner.type::text = 'human'
-        WHERE p.id = ${input.profileId}::uuid AND p.type::text = 'group' AND m.profile_id = i.profile_id)))
+      -- Personal destination only: a room mind (deriveIntoProfileId) was
+      -- the other branch, retired with the room engine.
+      AND ${input.profileId}::uuid = i.profile_id AND ${withoutLegacyGroupDestination(sql`j.payload`)}
     ON CONFLICT (profile_id, inspiration_id, derivation_job_id, derivation_request_version)
       DO UPDATE SET material_revision = inspiration_processing.material_revision
       WHERE inspiration_processing.material_revision = EXCLUDED.material_revision

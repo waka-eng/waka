@@ -11,7 +11,6 @@ import { enrichAttachment } from '../lib/signal-enrichment.js';
 import { loadInspirationMaterial } from '../lib/inspiration-material.js';
 import { assembleProfileExport } from '../lib/profile-export.js';
 import { ensureInspirationEmbedding } from '../lib/inspiration-embeddings.js';
-import { loadGroupInputAttachments } from '../lib/group-inputs.js';
 import type { AuthEnv } from '../lib/middleware.js';
 const state = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('../lib/db.js', () => ({ getDb: () => state.db }));
@@ -115,7 +114,7 @@ it('does not commit an unprocessed correction if the durable learning request fa
     await t.sql`DROP TRIGGER reject_transcript_job ON background_jobs`; await t.sql`DROP FUNCTION reject_transcript_job()`;
   }
 });
-it('rebuilds embeddings and permitted public attachment material from the correction only', async () => {
+it('rebuilds embeddings and attachment material from the correction only', async () => {
   const f = await fixture();
   const embed = vi.fn(async (_input: string) => Array.from({ length: 768 }, () => .1));
   const client = { model: 'fixture-embedding', embed };
@@ -126,7 +125,10 @@ it('rebuilds embeddings and permitted public attachment material from the correc
   await ensureInspirationEmbedding({ db: t.db as never, profileId: f.profileId, inspirationId: f.sourceId, client });
   expect(embed.mock.calls[1]?.[0]).toContain('Corrected words for retrieval');
   expect(embed.mock.calls[1]?.[0]).not.toContain('Machine words');
-  expect(await loadGroupInputAttachments(t.db as never, f.profileId, f.sourceId))
+  /* Was read through the room input contract (`loadGroupInputAttachments`),
+     deleted with the room engine; the personal material loader reads the
+     same effective attachment text. */
+  expect((await loadInspirationMaterial(t.db as never, f.profileId, f.sourceId, 'personal'))?.attachmentRows)
     .toMatchObject([{ kind: 'audio_transcription', text: 'Corrected words for retrieval' }]);
 });
 it('bounds explicit retry requests across failures and allows recovery after the window', async () => {

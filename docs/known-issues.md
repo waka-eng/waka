@@ -1161,6 +1161,23 @@ in a dedicated PR.**
 
 ---
 
+## Added after the audit: room-derived text outlives the memory it came from
+
+**Status:** accepted for phase 1 of the room retirement (2026-10-17), open until the room data
+drop is decided.
+
+With the room engine retired, deleting a memory or making it private no longer refreshes the
+room top-of-mind rows (`top_of_minds` with a `group_id`, their entries and citations) that were
+derived from it. Evidence links and room signals still reconcile on delete; the synthesized
+room text does not regenerate. Those rows are unreadable — no route or surface serves a room.
+They are NOT erased with the member's account: `lib/account-erasure.ts` deliberately keeps a
+room's record whole (erasure doctrine, 2026-08-23; the profile FKs become departed marks), so
+room-synthesized words derived from an erased or privatised memory persist in the database.
+That is the strongest reason not to leave the room-data drop undecided. Resolve then: either
+drop the room tables, or purge room artifacts that cite a deleted or privatised memory.
+
+---
+
 ## Refuted findings
 
 Three findings did not survive verification. **A list that only grows is a list nobody trusts**, so

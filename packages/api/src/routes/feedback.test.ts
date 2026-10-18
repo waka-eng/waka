@@ -5,7 +5,6 @@ import type { AuthenticatedSession } from "../lib/session.js";
 import {
   createFeedbackRoutes,
   FeedbackTargetChangedError,
-  mayAnswerSignal,
   type FeedbackRecord,
   type FeedbackRouteDependencies,
 } from "./feedback.js";
@@ -295,21 +294,5 @@ describe("GET /api/feedback", () => {
 
     expect(response.status).toBe(400);
     expect(listFeedback).not.toHaveBeenCalled();
-  });
-});
-
-describe("who may answer a signal", () => {
-  it("lets you answer your own", () => {
-    expect(mayAnswerSignal({ ownsIt: true, sharedIntoARoomYouAreIn: false })).toBe(true);
-  });
-
-  it("lets you answer one shared into a room you are in", () => {
-    expect(mayAnswerSignal({ ownsIt: false, sharedIntoARoomYouAreIn: true })).toBe(true);
-  });
-
-  /* the case the widening must not create: a statement that exists, that you
-     do not own, and that was never shared anywhere you can see */
-  it("refuses a stranger's unshared signal", () => {
-    expect(mayAnswerSignal({ ownsIt: false, sharedIntoARoomYouAreIn: false })).toBe(false);
   });
 });

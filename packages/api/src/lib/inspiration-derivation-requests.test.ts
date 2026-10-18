@@ -9,11 +9,13 @@ import { requestSignalDerivation } from "./inspiration-derivation-requests.js";
 
 beforeEach(() => { vi.clearAllMocks(); });
 
-it("updates personal learning without triggering room generation for a private reflection", async () => {
+/* The room fan-out retired with the room engine (2026-10-17): whatever
+   changed, a save asks for exactly the personal pass, and nothing reads the
+   keeper's seats. The transaction is an empty object, so any read of it
+   (the old visibility and membership lookups) would throw. */
+it.each(["created", "edited"] as const)("asks only for the personal pass when a source is %s", async (reason) => {
   const transaction = {} as never;
-  await requestSignalDerivation({
-    profileId: "person", inspirationId: "capture", reason: "edited", changedSource: "reflection",
-  }, transaction);
-  expect(enqueue).toHaveBeenCalledExactlyOnceWith("person", "capture", "edited", undefined, transaction);
+  await requestSignalDerivation({ profileId: "person", inspirationId: "capture", reason }, transaction);
+  expect(enqueue).toHaveBeenCalledExactlyOnceWith("person", "capture", reason, transaction);
   expect(database).not.toHaveBeenCalled();
 });
