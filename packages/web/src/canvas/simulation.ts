@@ -537,11 +537,6 @@ const TRAVEL_LEAD_X = 0.21;
  * of dead input, which is exactly what read as "stuck".
  */
 const TRAVEL_MS = 670;
-/** How long a press may go unheard — no move, no release — before it is
-    taken as lost. A stationary held finger sends nothing, so this is long
-    enough that a real hold is never cut, and short enough that a swallowed
-    pointerup cannot hold the world "moving" for the rest of the session. */
-export const LOST_PRESS_MS = 10_000;
 /** Arrival commits inside this distance; the tail is finished by the snap. */
 const TRAVEL_SNAP = 8;
 /**
@@ -1768,9 +1763,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       /** a held horizontal drag: the companion walks */
       leadOn: false,
       leadTarget: 0,
-      /** When the owning pointer was last heard from, down or move — the
-          clock a LOST release is measured on (see `LOST_PRESS_MS`). */
-      heardAt: 0,
     };
     /* A HELD FINGER SURVIVES A REBUILD, like the crossing does. See `Carry`. */
     if (carryRef.current) Object.assign(gesture, carryRef.current.gesture as Partial<typeof gesture>);
@@ -5081,11 +5073,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          world at rest after anything moved it — wherever it stopped: an
          arrival, an aim's commit, an aim a touch interrupted, a release that
          needed no snap, a rebuild. With the wall the loop is standing on. */
-      /* A PRESS NOBODY RELEASED. Dragging off the window, a sheet opening
-         over the canvas, a browser that swallowed the pointerup: `down`
-         stayed true, nothing could ever be at rest, and a first load waited
-         under it forever. Ten seconds unheard is a press that has gone. */
-      if (gesture.down && performance.now() - gesture.heardAt > LOST_PRESS_MS) dropPress();
       if (!resting()) movedSinceRest = true;
       else if (movedSinceRest) {
         movedSinceRest = false;
@@ -5283,7 +5270,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            carry the gesture, they just do not get the off-window guarantee */
       }
       gesture.down = true;
-      gesture.heardAt = performance.now();
       movedSinceRest = true;
       gesture.dragging = false;
       gesture.axis = 0;
@@ -5426,7 +5412,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       onHover(e);
       if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
       if (!gesture.down) return;
-      gesture.heardAt = performance.now();
+      /* THE BUTTON IS ALREADY UP. A mouse or pen that moves with no button
+         held has been released somewhere this page never heard — off the
+         window, under a sheet. That is the platform saying the press is over,
+         so it ends here rather than holding the world "moving" until the
+         next click. (A touch has no hover: its moves always carry the press.) */
+      if (e.pointerType !== "touch" && e.buttons === 0) {
+        dropPress();
+        wake();
+        return;
+      }
       if (!gesture.dragging && Math.abs(e.clientX - gesture.downX) + Math.abs(e.clientY - gesture.downY) > TAP_SLOP) {
         gesture.dragging = true;
         /* THE GESTURE NO LONGER HAS A SIDEWAYS AXIS. It used to pick between
@@ -5490,8 +5485,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       gesture.axis = 0;
       wake();
     };
-    /** End a press that will not be released properly: a cancel, a blur, a
-        hidden tab, or one unheard for `LOST_PRESS_MS`. */
+    /** End a press the platform says is gone without a pointerup: a cancel,
+        a lost capture, a blur, a hidden tab, or a buttonless move. NEVER on
+        a clock — a finger held still sends nothing at all, and a timeout
+        once snapped the world out from under a genuine ten-second hold. */
     function dropPress() {
       if (gesture.dragging || gesture.interruptedSnap) {
         /* cancelled mid-drag, or cancelled on a press that had interrupted a
@@ -5508,6 +5505,12 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     const onCancel = (e: PointerEvent) => {
       if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
       dropPress();
+    };
+    /* the capture went without our releasing it: the pointer is gone */
+    const onLostCapture = (e: PointerEvent) => {
+      if (!gesture.down || e.pointerId !== gesture.ownerId) return;
+      dropPress();
+      wake();
     };
     /* the window lost focus mid-press: its pointerup goes somewhere else */
     const onBlur = () => {
@@ -5654,6 +5657,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
     window.addEventListener("blur", onBlur);
+    root.addEventListener("lostpointercapture", onLostCapture);
     root.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKey);
     document.addEventListener("visibilitychange", onVis);
@@ -6550,6 +6554,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
       window.removeEventListener("blur", onBlur);
+      root.removeEventListener("lostpointercapture", onLostCapture);
       root.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("visibilitychange", onVis);

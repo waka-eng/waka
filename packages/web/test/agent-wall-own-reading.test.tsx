@@ -18,7 +18,6 @@
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { LOST_PRESS_MS } from '../src/canvas/simulation';
 import { mountWorld, dataMockFrom, apiMockFrom, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 
 const FACTS = vi.hoisted(() => ({
@@ -309,22 +308,51 @@ it("never lands a refresh at rest, only at the next arrival", async () => {
   }
 });
 
-/* ═══ AND A PRESS NOBODY RELEASED DOES NOT HOLD IT FOREVER ═════════════════
+/* ═══ A PRESS ENDS ON THE PLATFORM'S WORD, NEVER ON A CLOCK ═══════════════
    A pointerup the browser swallowed left `down` true, nothing could ever be
-   at rest, and the first load waited under it for the whole session. After
-   `LOST_PRESS_MS` unheard, the press is taken as gone. */
-it("lands a first load held under a press that was never released, once the press is given up", async () => {
-  await standOnHeldAgent();
+   at rest, and the first load waited under it for the whole session. A
+   timeout fixed that and broke a still hold — a finger held ten seconds had
+   the world snapped out from under it. So a press ends only on evidence it
+   is gone: a lost capture, or a mouse moving with no button held (retro
+   review, 2026-10-17). */
+const press = (type: string, init: PointerEventInit = {}) => {
   const canvas = world.container.querySelector('canvas')!;
-  await act(async () => { canvas.dispatchEvent(new window.PointerEvent('pointerdown',
-    { bubbles: true, cancelable: true, pointerId: 11, clientX: 640, clientY: 300, button: 0, buttons: 1 })); });
+  canvas.dispatchEvent(new window.PointerEvent(type,
+    { bubbles: true, cancelable: true, pointerId: 11, pointerType: 'mouse', clientX: 640, clientY: 300, button: 0, buttons: 1, ...init }));
+};
+async function heldWithReadingBack() {
+  await standOnHeldAgent();
+  await act(async () => { press('pointerdown'); });
   HOLD.release!();
   await flushFetch();
   await world.step(60);
-  expect(reading(), 'the bundle landed under a held finger').toBeUndefined();
-  /* ten seconds of frames with no pointer event at all */
-  await world.step(Math.ceil(LOST_PRESS_MS / 16.7) + 5);
+  expect(reading(), 'the bundle landed under a held press').toBeUndefined();
+}
+
+it("keeps a still hold of fifteen seconds held — no drop, no snap, no landing", async () => {
+  await heldWithReadingBack();
+  const camY = world.audit().camY;
+  await world.step(Math.ceil(15_000 / 16.7));
+  expect(simNow().isResting(), 'a genuine still hold was dropped on a clock').toBe(false);
+  expect(world.audit().camY, 'the world moved under a held finger').toBe(camY);
+  expect(reading(), 'the bundle landed under a held press').toBeUndefined();
+  await act(async () => { press('pointerup', { buttons: 0 }); });
   await settle();
-  expect(simNow().isResting(), 'a lost press held the world moving past its limit').toBe(true);
-  expect(reading(), 'a press nobody released stranded the first load').toBe(AGENT_SAYS);
+  expect(reading(), 'the release did not land the first load').toBe(AGENT_SAYS);
+});
+
+it("ends a press whose capture was lost, and lands what waited under it", async () => {
+  await heldWithReadingBack();
+  await act(async () => { press('lostpointercapture', { buttons: 0 }); });
+  await settle();
+  expect(simNow().isResting(), 'a lost capture left the press held').toBe(true);
+  expect(reading(), 'a lost capture stranded the first load').toBe(AGENT_SAYS);
+});
+
+it("ends a mouse press whose button is already up when it moves", async () => {
+  await heldWithReadingBack();
+  await act(async () => { press('pointermove', { buttons: 0, clientX: 700 }); });
+  await settle();
+  expect(simNow().isResting(), 'a buttonless hover kept the press held').toBe(true);
+  expect(reading(), 'a lost mouseup stranded the first load').toBe(AGENT_SAYS);
 });
