@@ -8,7 +8,7 @@
  * once, so the wait is held to a minimum. The promise settles the way the
  * request did — value or error — no sooner than `ms` after it started.
  */
-export const RETRY_MIN_MS = 3_000;
+const RETRY_MIN_MS = 3_000;
 
 export function settleAtLeast<T>(work: Promise<T>, ms = RETRY_MIN_MS): Promise<T> {
   const floor = new Promise<void>((resolve) => { window.setTimeout(resolve, ms); });
