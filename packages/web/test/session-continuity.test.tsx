@@ -278,8 +278,30 @@ describe("the web read deadline", () => {
       const { fetchCurrentViewer: realViewer } = await vi.importActual<typeof import("../src/lib/api")>("../src/lib/api");
       const asked = realViewer();
       const settled = expect(asked, "a stalled /auth/me body answered as 'no session'").rejects.toMatchObject({ status: 0 });
-      await vi.advanceTimersByTimeAsync(20_000);
+      /* the body gets the long ceiling, not the 20s time-to-first-byte */
+      await vi.advanceTimersByTimeAsync(120_000);
       await settled;
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("lets a slow body that is still arriving finish past 20s, instead of calling it unreachable", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+        const stream = new ReadableStream<Uint8Array>({ start(controller) {
+          const encoder = new TextEncoder();
+          controller.enqueue(encoder.encode('{"ok":'));
+          setTimeout(() => controller.enqueue(encoder.encode('true')), 30_000);
+          setTimeout(() => { controller.enqueue(encoder.encode('}')); controller.close(); }, 60_000);
+          init?.signal?.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")));
+        } });
+        return new Response(stream, { status: 200, headers: { "Content-Type": "application/json" } });
+      }));
+      const { apiFetch } = await import("../src/lib/api/transport");
+      const reading = apiFetch("/api/inspirations");
+      await vi.advanceTimersByTimeAsync(60_000);
+      const response = await reading;
+      expect(await response.json(), "a slow, progressing body was cut off at the first-byte deadline").toEqual({ ok: true });
     } finally { vi.useRealTimers(); }
   });
 

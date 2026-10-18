@@ -23,6 +23,9 @@ export const nativeSession = new NativeSession({
  * everywhere: as the dead connection it effectively is.
  */
 const REQUEST_DEADLINE_MS = 20_000;
+/** On the web, the deadline above is time to first byte (headers); a body
+    already arriving gets this much longer ceiling. */
+const BODY_DEADLINE_MS = 120_000;
 
 /**
  * WHICH 401s MEAN "YOUR SESSION ENDED".
@@ -137,9 +140,16 @@ async function webFetch(url: string, init: RequestInit): Promise<Response> {
   const abort = () => controller.abort(init.signal?.reason);
   if (init.signal?.aborted) abort();
   else init.signal?.addEventListener('abort', abort, { once: true });
-  const timeout = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), REQUEST_DEADLINE_MS);
+  const timedOut = () => controller.abort(new DOMException('Request timed out', 'TimeoutError'));
+  let timeout = setTimeout(timedOut, REQUEST_DEADLINE_MS);
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
+    /* The 20s deadline is for the server to START answering. Once headers
+       are in, a body that is still arriving (a long archive on a slow line)
+       is progress, not a stall: it gets a much longer ceiling, so only a
+       body that truly never finishes reads as unreachable. */
+    clearTimeout(timeout);
+    timeout = setTimeout(timedOut, BODY_DEADLINE_MS);
     const empty = method === 'HEAD' || response.status === 204 || response.status === 205 || response.status === 304;
     const body = empty ? null : await response.arrayBuffer();
     expired(response);
