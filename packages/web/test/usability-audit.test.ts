@@ -135,5 +135,13 @@ describe("the principles creature never stands between a press and a card", () =
     // CROSS_TURN_MS * 2 + CROSS_WALK_MS = 1380: the glide starts there.
     expect(delay(cards)).toBeGreaterThan(1380);
     expect(delay(cards)).toBeGreaterThan(delay(page));
+    // Held back, they take no press and no focus until they appear (review).
+    expect(cards).toMatch(/visibility:\s*hidden/);
+    expect(cards).toMatch(/pointer-events:\s*none/);
+    expect(css).toMatch(/@keyframes waka-cross-cards-in\s*\{\s*from\s*\{\s*visibility:\s*visible/);
+  });
+  it("an iOS-keyboard page drops its full-height floor, so the inline height holds (review)", () => {
+    const keyboard = rules(sheet("claims.css"), (s) => s === ".waka-page[data-keyboard]").map(([, b]) => b).join("\n");
+    expect(keyboard).toMatch(/min-height:\s*0/);
   });
 });

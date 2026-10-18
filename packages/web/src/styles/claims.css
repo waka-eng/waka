@@ -1229,6 +1229,10 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
    keyboard then, so the room reserved for it would only push the composer
    back under the keyboard's edge. */
 .waka-page[data-keyboard] {
+  /* `min-height: 0` too (review): the page's own `min-height: 100dvh` would
+     otherwise win over the inline keyboard height, and `top` would only push
+     a full-height page down under the keyboard. */
+  min-height: 0;
   padding-bottom: calc(var(--sp-8) + env(safe-area-inset-bottom));
 }
 
@@ -6270,8 +6274,17 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
    cards arrive as the creature lands above them. */
 .waka-page--crossing-in .waka-held,
 .waka-page--crossing-in .waka-ground-card {
+  /* Unseen is unreachable (review): while held back the cards take no press
+     and no focus — `visibility: hidden` until their own reveal sets it. */
   opacity: 0;
-  animation: waka-cross-reveal 320ms ease-out 1980ms forwards;
+  visibility: hidden;
+  pointer-events: none;
+  animation: waka-cross-cards-in 320ms ease-out 1980ms forwards;
+}
+
+@keyframes waka-cross-cards-in {
+  from { visibility: visible; opacity: 0; transform: translateY(8px); }
+  to { visibility: visible; opacity: 1; transform: none; }
 }
 
 /* Out: the contents go first, so the walk home is the creature and the sky. */
@@ -6303,6 +6316,10 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
   .waka-page--crossing-in .waka-ground-card {
     animation: none;
     opacity: 1;
+  }
+  .waka-page--crossing-in .waka-held,
+  .waka-page--crossing-in .waka-ground-card {
+    visibility: visible;
   }
 }
 
