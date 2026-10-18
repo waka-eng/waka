@@ -622,10 +622,6 @@
   "worldYesWithdrawIt": "Yes, withdraw it",
   "homeLoadFailed": "Your home didn’t load.",
   "homeTryAgain": "Try again",
-  "unreachableTitle": "We can’t reach WAKA right now. You’re still signed in — check your connection and try again.",
-  "unreachableChecking": "Checking…",
-  "sessionEndedTitle": "You were signed out.",
-  "sessionEndedSubtitle": "Sign in again and you’ll go back to where you were. Anything you were writing is still here.",
   "worldWhyOutOfCredit": "Reading is paused on our side. Your saves are safe.",
   "publicProfileFailedTitle": "This page didn’t open",
   "publicProfileFailedBody": "WAKA couldn’t open this page just now. It may still be there.",
@@ -638,6 +634,5 @@
   "readingPausedRetry": "Retry",
   "readingPausedRetrying": "Retrying…",
   "readingPausedRetryFailed": "Couldn’t restart it. Try again in a moment.",
-  "agentWallHowItFills": "Your agent fills this wall itself: when it signs in to WAKA as your agent, what it saves appears here.",
-  "unreachableAnonymous": "We can’t reach WAKA right now. Check your connection and try again."
+  "agentWallHowItFills": "Your agent fills this wall itself: when it signs in to WAKA as your agent, what it saves appears here."
 }

@@ -820,8 +820,7 @@ describe("the read deadline", () => {
 
 describe("the shared principle status across a session change", () => {
   it("drops the cached status and ignores an in-flight answer from the session before", async () => {
-    const { fetchPrincipleStatus, recentPrincipleStatus, onPrincipleStatus } = await import("../src/lib/api/principles");
-    const { webSessionChanged } = await import("../src/lib/api/transport");
+    const { fetchPrincipleStatus, recentPrincipleStatus, onPrincipleStatus, principleStatusFor } = await import("../src/lib/api/principles");
     const status = (signalCount: number) => ({ phase: "ready", eligible: true, signalCount, topOfMindCount: 1 });
     let answer!: (response: Response) => void;
     const fetch = vi.fn()
@@ -831,7 +830,7 @@ describe("the shared principle status across a session change", () => {
     const heard: number[] = [];
     const stop = onPrincipleStatus((value) => heard.push(value.signalCount));
     const old = fetchPrincipleStatus();
-    webSessionChanged();
+    principleStatusFor("someone-else");
     expect(recentPrincipleStatus(60_000), "a status outlived the sign-out").toBeNull();
     const fresh = await fetchPrincipleStatus();
     expect(fetch, "the new session joined the old session's request").toHaveBeenCalledTimes(2);

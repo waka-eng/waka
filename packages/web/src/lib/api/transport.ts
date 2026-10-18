@@ -6,46 +6,48 @@ export const nativeSession = new NativeSession({
   get: async key => (await platformServices()).credentials.get(key),
   set: async (key, value) => (await platformServices()).credentials.set(key, value),
   remove: async key => (await platformServices()).credentials.remove(key),
-}, () => window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT)));
+}, () => window.dispatchEvent(new Event('waka:session-expired')));
 
 /**
- * HOW LONG A REQUEST MAY GO UNANSWERED BEFORE IT COUNTS AS UNANSWERED.
+ * THE WEB READ DEADLINE — and nothing about sessions.
  *
- * The native branch below has always had this deadline. The web branch was a
- * bare `fetch`, and a browser waits for a server that accepted the connection
- * and then said nothing for as long as the socket stays open — minutes, and
- * on some proxies forever. Every screen that waits on one of these requests
- * then waits with it: the home loading screen, the sign-in check, a chat's
- * history. None of them can offer "Try again" for a request that has not yet
- * failed, so a stall was a dead end that looked like patience.
- *
- * One number for both platforms, so a stalled server reads the same
- * everywhere: as the dead connection it effectively is.
+ * The native branch below has always had a 20s deadline. The web branch was
+ * a bare `fetch`, and a browser waits for a server that accepted the
+ * connection and then said nothing for as long as the socket stays open, so
+ * every screen waiting on a read waited with it, with no "Try again" for a
+ * request that had not yet failed. Web READS now get the same 20s to start
+ * answering (time to first byte) and a much longer ceiling for a body that is
+ * already arriving. Writes are untouched: one that has been sent may already
+ * be committing. A stall ends as a thrown network error, never a quiet empty
+ * success. 401s pass through exactly as before.
  */
-const REQUEST_DEADLINE_MS = 20_000;
-/** On the web, the deadline above is time to first byte (headers); a body
-    already arriving gets this much longer ceiling. */
-const BODY_DEADLINE_MS = 120_000;
-
-/**
- * WHICH 401s MEAN "YOUR SESSION ENDED".
- *
- * A 401 from the sign-in forms is a wrong password, and a 401 from
- * `/auth/me` is the ordinary answer for a visitor who was never signed in —
- * the auth context reads that one itself. Every other 401 means a session
- * this page was using has stopped being accepted, which nothing could tell
- * the person before: each screen met it as its own local error ("you are
- * signed out") with no way to sign back in from where they were.
- */
-const NOT_AN_EXPIRY = ['/api/auth/login', '/api/auth/signup', '/api/auth/mobile/exchange', '/api/auth/me', '/api/auth/logout'];
-export const SESSION_EXPIRED_EVENT = 'waka:session-expired';
-function pathOf(url: string): string {
-  try { return new URL(url, window.location.href).pathname; } catch { return url; }
+const READ_FIRST_BYTE_MS = 20_000;
+const READ_BODY_MS = 120_000;
+async function webRead(url: string, init: RequestInit): Promise<Response> {
+  const method = (init.method ?? 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') return fetch(url, init);
+  const controller = new AbortController();
+  const abort = () => controller.abort(init.signal?.reason);
+  if (init.signal?.aborted) abort();
+  else init.signal?.addEventListener('abort', abort, { once: true });
+  const timedOut = () => controller.abort(new DOMException('Request timed out', 'TimeoutError'));
+  let timeout = setTimeout(timedOut, READ_FIRST_BYTE_MS);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    clearTimeout(timeout);
+    timeout = setTimeout(timedOut, READ_BODY_MS);
+    const empty = method === 'HEAD' || response.status === 204 || response.status === 205 || response.status === 304;
+    const body = empty ? null : await response.arrayBuffer();
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  } finally {
+    clearTimeout(timeout);
+    init.signal?.removeEventListener('abort', abort);
+  }
 }
 
 /** The shared resource client only. Signed object-storage uploads bypass it. */
 export async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
-  if (!isMobileBuild) return webFetch(url, init);
+  if (!isMobileBuild) return webRead(url, init);
   const origin = checkedNativeApiOrigin();
   const parsed = new URL(url);
   if (parsed.origin !== origin ||
@@ -64,7 +66,7 @@ export async function apiFetch(url: string, init: RequestInit = {}): Promise<Res
   const abort = () => controller.abort(init.signal?.reason);
   if (init.signal?.aborted) abort();
   else init.signal?.addEventListener('abort', abort, { once: true });
-  const timeout = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), REQUEST_DEADLINE_MS);
+  const timeout = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), 20_000);
   try {
     const response = await fetch(url, { ...init, headers, credentials: 'omit', redirect: 'error', signal: controller.signal });
     if (response.status === 401 && token) await nativeSession.clearIfCurrent(version, token);
@@ -74,89 +76,6 @@ export async function apiFetch(url: string, init: RequestInit = {}): Promise<Res
     return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
   } finally {
     clearTimeout(timeout); init.signal?.removeEventListener('abort', abort);
-  }
-}
-
-/**
- * WHICH SESSION A WEB REQUEST WAS SENT WITH.
- *
- * Native compares the token a request carried with the one stored now
- * (`clearIfCurrent`). The web cookie is invisible to script, so the auth
- * context counts identities instead: every time the signed-in account or
- * profile changes — a sign-in, a sign-out, a switch, an expiry — it calls
- * `webSessionChanged`. A 401 is only news about the CURRENT session if the
- * request left under it; a slow read that was sent before the person signed
- * in again must not sign them out of the session they just made.
- */
-let webSession = 0;
-const sessionListeners = new Set<() => void>();
-export function webSessionChanged(): void {
-  webSession += 1;
-  for (const listener of sessionListeners) listener();
-}
-/** The identity generation requests are sent under right now. */
-export function currentWebSession(): number { return webSession; }
-/** Hear every identity change (sign-in, sign-out, switch, expiry). */
-export function onWebSessionChanged(listener: () => void): () => void {
-  sessionListeners.add(listener);
-  return () => { sessionListeners.delete(listener); };
-}
-
-/**
- * THE WEB BRANCH: the browser's own fetch, cookie and all, with the deadline
- * and the expiry signal the native branch already had.
- *
- * THE DEADLINE COVERS THE BODY, AND THE BODY IS READ HERE. Leaving the timer
- * armed on a returned stream (the first version of this) let it abort a body
- * mid-read, and `getJson` / `fetchCurrentViewer` swallowed a failed
- * `res.json()` as "no body" — so a stalled `/auth/me` body became a 200 with
- * nothing in it, which reads as signed out. Reading the body inside the
- * deadline, as native does, means a stall anywhere ends as a thrown network
- * error (status 0 to every caller) and never as a quiet success. The timer
- * and the caller's abort listener are released the moment the body is in,
- * whatever happened.
- */
-async function webFetch(url: string, init: RequestInit): Promise<Response> {
-  const session = webSession;
-  const expired = (response: Response) => {
-    if (response.status === 401 && session === webSession && !NOT_AN_EXPIRY.includes(pathOf(url))) {
-      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
-    }
-  };
-  /* READS ONLY. A write that has been sent may already be committing, and
-     cutting it off at the deadline turns "slow" into "did it save?" — the
-     one question a person cannot answer for themselves. The attachment
-     finalize is the sharp case (`chat-attachments-api.test.ts`: "the
-     finalize could be cut off mid-commit"). Writes keep their caller's own
-     signal and the server's own timeouts; what hung forever was the reads
-     every screen waits on before it can show anything. */
-  const method = (init.method ?? 'GET').toUpperCase();
-  if (method !== 'GET' && method !== 'HEAD') {
-    const response = await fetch(url, init);
-    expired(response);
-    return response;
-  }
-  const controller = new AbortController();
-  const abort = () => controller.abort(init.signal?.reason);
-  if (init.signal?.aborted) abort();
-  else init.signal?.addEventListener('abort', abort, { once: true });
-  const timedOut = () => controller.abort(new DOMException('Request timed out', 'TimeoutError'));
-  let timeout = setTimeout(timedOut, REQUEST_DEADLINE_MS);
-  try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
-    /* The 20s deadline is for the server to START answering. Once headers
-       are in, a body that is still arriving (a long archive on a slow line)
-       is progress, not a stall: it gets a much longer ceiling, so only a
-       body that truly never finishes reads as unreachable. */
-    clearTimeout(timeout);
-    timeout = setTimeout(timedOut, BODY_DEADLINE_MS);
-    const empty = method === 'HEAD' || response.status === 204 || response.status === 205 || response.status === 304;
-    const body = empty ? null : await response.arrayBuffer();
-    expired(response);
-    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
-  } finally {
-    clearTimeout(timeout);
-    init.signal?.removeEventListener('abort', abort);
   }
 }
 

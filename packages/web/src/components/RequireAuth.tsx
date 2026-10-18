@@ -24,12 +24,11 @@
  * frame is the only honest answer.
  */
 
-import { Fragment, useState, type ReactNode } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Fragment, type ReactNode } from "react";
+import { Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../lib/auth-context";
 import { LoadingHome } from "./LoadingHome";
-import { readStoredLocale, t } from "../lib/locales";
 
 export interface RequireAuthProps {
   children: ReactNode;
@@ -37,10 +36,8 @@ export interface RequireAuthProps {
 }
 
 export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps): JSX.Element {
-  const { isAuthenticated, isLoading, account, profile, serverUnreachable, unreachableWasSignedIn, sessionExpired, refresh } = useAuth();
+  const { isAuthenticated, isLoading, account, profile } = useAuth();
   const location = useLocation();
-  const [checking, setChecking] = useState(false);
-  const navigate = useNavigate();
 
   if (isLoading) {
     // The splash was a white page with a word on it — the product changing
@@ -49,37 +46,6 @@ export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps
     // there"). It is the world's own early face now, shared with Home's
     // pre-ready frame, so the way in never flashes.
     return <LoadingHome />;
-  }
-
-  /* ═══ COULD NOT ASK IS NOT SIGNED OUT ═════════════════════════════════
-     A dead network at startup used to fall straight through to the redirect
-     below, so a person with a perfectly good session was sent to the sign-in
-     form — "Welcome back. Sign in to return to what you kept." — and had no
-     way to get back except to type a password they had not needed, or to
-     reload and hope. Access is still refused (nothing protected renders off
-     a cached hint); what changes is that the screen says what is known and
-     asks the server again when told to. A successful answer lands the person
-     where they were going, without the door in between. */
-  if (!isAuthenticated && serverUnreachable && !sessionExpired) {
-    const locale = readStoredLocale();
-    const from = `${location.pathname}${location.search}${location.hash}`;
-    /* "You're still signed in" only when this browser had a session to
-       keep. A visitor with none is told the plain fact and offered the door
-       as well, since a session may be exactly what they are missing. */
-    return <LoadingHome problem={{
-      message: t(locale, unreachableWasSignedIn ? "unreachableTitle" : "unreachableAnonymous"),
-      actions: [{
-        label: t(locale, checking ? "unreachableChecking" : "homeTryAgain"),
-        busy: checking,
-        onClick: () => {
-          setChecking(true);
-          void refresh().catch(() => undefined).finally(() => setChecking(false));
-        },
-      }, ...(unreachableWasSignedIn ? [] : [{
-        label: t(locale, "loginTab"),
-        onClick: () => navigate("/login", { state: { from } }),
-      }])],
-    }} />;
   }
 
   if (!isAuthenticated) {

@@ -15,7 +15,6 @@
 
 import { ApiError,apiPath, getJson, patchJson, postJson, requestVoid, type ProfileScoped } from "./http";
 import type {ApiSignalReviewEvidence} from './signals';
-import { currentWebSession, onWebSessionChanged } from "./transport";
 
 export type ApiPrincipleState = "held" | "aspirational" | "contested";
 export type ApiPrincipleKind = "value" | "maxim" | "stance";
@@ -91,10 +90,22 @@ const statusListeners = new Set<(status: ApiPrincipleStatus, source: PrincipleSt
    sign-out, sign-in or switch is somebody else's (or nobody's) reading, so
    an identity change drops both the cached answer and the shared request,
    and an answer that lands after the change is handed to the reader that
-   asked for it but never cached or published. */
-onWebSessionChanged(() => { lastStatus = null; statusInFlight = null; });
-function publishStatus(status: ApiPrincipleStatus, session: number, source: PrincipleStatusSource = "poll"): ApiPrincipleStatus {
-  if (session !== currentWebSession()) return status;
+   asked for it but never cached or published. The readers say whose page
+   they are on (`principleStatusFor`, from the profile they render for); the
+   auth layer itself is not involved. */
+let identity: string | null = null;
+let session = 0;
+const currentSession = () => session;
+/** Name the identity the readers are reading for; a change drops the cache. */
+export function principleStatusFor(next: string | null): void {
+  if (next === identity) return;
+  identity = next;
+  session += 1;
+  lastStatus = null;
+  statusInFlight = null;
+}
+function publishStatus(status: ApiPrincipleStatus, asked: number, source: PrincipleStatusSource = "poll"): ApiPrincipleStatus {
+  if (asked !== currentSession()) return status;
   lastStatus = { status, at: Date.now() };
   for (const listener of statusListeners) listener(status, source);
   return status;
@@ -115,9 +126,9 @@ export function recentPrincipleStatus(maxAgeMs: number): ApiPrincipleStatus | nu
     before a POST cannot speak for what the POST just started. */
 export function fetchPrincipleStatus(options: { fresh?: boolean } = {}): Promise<ApiPrincipleStatus> {
   if (statusInFlight && !options.fresh) return statusInFlight;
-  const session = currentWebSession();
+  const asked = currentSession();
   const request: Promise<ApiPrincipleStatus> = getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded")
-    .then((body) => publishStatus(body.status, session))
+    .then((body) => publishStatus(body.status, asked))
     .finally(() => { if (statusInFlight === request) statusInFlight = null; });
   statusInFlight = request;
   return request;
@@ -137,16 +148,16 @@ export async function fetchPrincipleRead(options: { fresh?: boolean } = {}): Pro
     principles. Its answer is published as a `refresh`, so a reader showing a
     failure can tell a restart from an ordinary poll. */
 export async function retryPausedReading(signal?: AbortSignal): Promise<ApiPrincipleStatus> {
-  const session = currentWebSession();
-  return publishStatus((await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted", signal)).status, session, "refresh");
+  const asked = currentSession();
+  return publishStatus((await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted", signal)).status, asked, "refresh");
 }
 
 /** POST /principles/refresh — its answer is published as a `refresh`, so the
     paused-reading notice hears the restart without asking again. */
 export async function requestPrincipleRead(retry = false, signal?: AbortSignal): Promise<void> {
-  const session = currentWebSession();
+  const asked = currentSession();
   const body = await postJson<{ status?: ApiPrincipleStatus }>(apiPath(`/principles/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started", signal);
-  if (body?.status) publishStatus(body.status, session, "refresh");
+  if (body?.status) publishStatus(body.status, asked, "refresh");
 }
 
 /** GET /principles — the acting profile's ranked set. */

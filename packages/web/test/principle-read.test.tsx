@@ -48,7 +48,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PrincipleRead } from "../src/components/PrincipleRead";
 import { fetchPrincipleRead, onPrincipleStatus, requestPrincipleRead, type ApiPrincipleStatus } from "../src/lib/api/principles";
 
-vi.mock("../src/lib/api/principles", () => ({ fetchPrincipleRead: vi.fn(), requestPrincipleRead: vi.fn(), onPrincipleStatus: vi.fn() }));
+vi.mock("../src/lib/api/principles", () => ({ fetchPrincipleRead: vi.fn(), requestPrincipleRead: vi.fn(), onPrincipleStatus: vi.fn(), principleStatusFor: vi.fn() }));
 /* The status broadcast `lib/api/principles` runs: listeners a case can call. */
 const statusListeners = new Set<(status: ApiPrincipleStatus, source: "poll" | "refresh") => void>();
 let host: HTMLDivElement;

@@ -62,7 +62,6 @@ import type {
 import { normalizeSupportedLocale, writeStoredLocale } from "./locales";
 import type { SupportedLocale } from "./locales";
 import { isMobileBuild } from './platform';
-import { SESSION_EXPIRED_EVENT, webSessionChanged } from './api/transport';
 
 // ---------------------------------------------------------------------------
 // Storage helpers
@@ -180,26 +179,6 @@ export interface AuthContextValue {
    * its words. Never the other way round.
    */
   serverUnreachable: boolean;
-  /**
-   * Whether this browser held a signed-in hint when the server could not be
-   * reached. Only then may a screen say "you're still signed in": for a
-   * visitor with no hint that sentence is an invention.
-   */
-  unreachableWasSignedIn: boolean;
-  /**
-   * THE SESSION ENDED WHILE IN USE, AND WHERE THE PERSON WAS WHEN IT DID.
-   *
-   * Set when a request made with a session comes back 401 (see
-   * `SESSION_EXPIRED_EVENT` in `lib/api/transport.ts`), never by the
-   * initial `/auth/me` check — a visitor who arrives signed out did not lose
-   * anything. The door reads it to say "you were signed out" rather than
-   * greet a returning visitor, and to send them back to `from` once they are
-   * in again. Unsent drafts are NOT cleared on this path: only `logout`
-   * evicts them, because only `logout` is somebody choosing to leave.
-   */
-  /** `accountId` is the account whose session ended (null if unknown): only
-      that account signing in again is sent back to `from`. */
-  sessionExpired: { from: string; accountId: string | null } | null;
   /** The signed-in account, or null when anonymous. */
   account: ApiAccount | null;
   /** The profile this session acts as, or null when anonymous. */
@@ -284,22 +263,14 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
    * cache in lock-step. Every code path that mutates the viewer must go
    * through this so the two never drift.
    */
-  /* Which identity requests are being sent under — see `webSessionChanged`
-     in `lib/api/transport.ts`. Seeded from the cached hint so hydration that
-     confirms the same person is not counted as a change. */
-  const identityRef = useRef<string | null>(viewer ? `${viewer.account.id}:${viewer.profile.id}` : null);
   const applyViewer = useCallback(
-    (next: ApiViewer | null, options?: { countAsAuthMutation?: boolean; keepCachedHint?: boolean }): void => {
+    (next: ApiViewer | null, options?: { countAsAuthMutation?: boolean }): void => {
       if (options?.countAsAuthMutation !== false) {
         authMutationRef.current += 1;
       }
-      const identity = next ? `${next.account.id}:${next.profile.id}` : null;
-      if (identity !== identityRef.current) { identityRef.current = identity; webSessionChanged(); }
       setViewer(next);
       setInspirationSnapshotOwner(next?{accountId:next.account.id,profileId:next.profile.id}:null);
-      /* `keepCachedHint`: the in-memory viewer is withdrawn, but the stored
-         "this browser was signed in" hint is not — nothing has said so. */
-      if (!options?.keepCachedHint) writeCachedViewer(next);
+      writeCachedViewer(next);
       if (next) {
         writeStoredLocale(normalizeSupportedLocale(next.profile.preferredLocale));
       }
@@ -309,29 +280,11 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
   /** See `AuthContextValue.serverUnreachable`. Says nothing about access. */
   const [serverUnreachable, setServerUnreachable] = useState(false);
-  const [sessionExpired, setSessionExpired] = useState<{ from: string; accountId: string | null } | null>(null);
-  const [unreachableWasSignedIn, setUnreachableWasSignedIn] = useState(false);
-  const viewerRef = useRef(viewer);
-  viewerRef.current = viewer;
-  /* A DELIBERATE LOGOUT IS NOT AN EXPIRY. Native retires the credential and
-     fires the expiry event from the store; on the web a request in flight
-     can 401 mid-logout. Either would land the person on "you were signed
-     out" for leaving on purpose, so the handler ignores events while a
-     logout is under way. */
-  const loggingOutRef = useRef(false);
   useEffect(() => {
-    const expired = () => {
-      if (loggingOutRef.current) return;
-      /* ON THE WEB THE EVENT FIRES FOR ANY 401, so it only means something
-         when there was a session to lose. Native fires it from the
-         credential store itself, which already implies there was one. */
-      if (!isMobileBuild && !viewerRef.current) return;
-      const at = window.location;
-      setSessionExpired({ from: `${at.pathname}${at.search}${at.hash}`, accountId: viewerRef.current?.account.id ?? null });
-      applyViewer(null); setServerUnreachable(false); setIsLoading(false);
-    };
-    window.addEventListener(SESSION_EXPIRED_EVENT, expired);
-    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expired);
+    if (!isMobileBuild) return;
+    const expired = () => { applyViewer(null); setServerUnreachable(false); setIsLoading(false); };
+    window.addEventListener('waka:session-expired', expired);
+    return () => window.removeEventListener('waka:session-expired', expired);
   }, [applyViewer]);
 
   // Initial hydration: confirm the cached viewer against the server.
@@ -365,22 +318,14 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
              RETURNS null for it rather than throwing, so signed-out is
              handled above and the door greets it normally. */
           setServerUnreachable(err instanceof ApiError && err.status === 0);
-          setUnreachableWasSignedIn(identityRef.current !== null);
         }
         // The cache is only an optimistic display hint, not proof of an
-        // authenticated session, so protected routes must not render from
-        // it: the in-memory viewer is withdrawn. But an unanswered check is
-        // not a sign-out either — only a definitive 401 (`fetchCurrentViewer`
-        // returning null, above) or a sign-out clears the STORED hint. Wiping
-        // it here meant one dead network at startup made the next load
-        // forget this browser had a session ("still signed in" became the
-        // anonymous door).
+        // authenticated session. If the initial server validation fails
+        // before we have a fresh `/auth/me`, drop the hint rather than
+        // letting RequireAuth render protected routes from stale localStorage.
         if (cancelled || !aliveRef.current) return;
         if (authMutationRef.current === initialAuthMutation) {
-          /* Only "we never got an answer" (status 0) keeps the hint; a 5xx
-             or a thrown error is not evidence the session is fine either,
-             and those clear it as before. */
-          applyViewer(null, { countAsAuthMutation: false, keepCachedHint: err instanceof ApiError && err.status === 0 });
+          applyViewer(null, { countAsAuthMutation: false });
         }
       } finally {
         if (!cancelled && aliveRef.current) setIsLoading(false);
@@ -404,7 +349,6 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
          `logout` is deliberately not one of those, because it wipes state
          first and swallows its own network errors by design. */
       setServerUnreachable(false);
-      setSessionExpired(null);
       const next: ApiViewer = { account, profile };
       applyViewer(next);
       return next;
@@ -418,7 +362,6 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       const { account, profile } = await apiSignup(input);
       if (!aliveRef.current || startedAt !== authMutationRef.current) throw new ApiError({ status: 409, message: 'Sign-in changed. Please try again.' });
       setServerUnreachable(false);
-      setSessionExpired(null);
       const next: ApiViewer = { account, profile };
       applyViewer(next);
       return next;
@@ -441,9 +384,13 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
    * a person leaving. Evicting there would delete a draft as a consequence of
    * bad wifi.
    *
-   * Both platforms sign out locally first and retire the session with the
-   * server (and, on native, the keychain) in the background, so the drafts go
-   * with the local wipe on both.
+   * The two platforms clear at different moments for the same reason they log
+   * out differently. Web wipes local state first and treats the server round
+   * trip as best-effort, so the drafts go with that wipe. Native reports a
+   * failed secure retirement instead of claiming a logout that did not happen,
+   * so it clears only once `apiLogout()` has resolved — a person still signed
+   * in because the keychain write failed must not already have lost what they
+   * were typing.
    *
    * IT IS AWAITED, because the save box also keeps photographs and voice
    * recordings in IndexedDB and emptying those is a transaction rather than a
@@ -456,46 +403,30 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     const leaving = viewer
       ? { accountId: viewer.account.id, profileId: viewer.profile.id }
       : null;
-    /* LOCAL-FIRST, ON BOTH PLATFORMS, BEFORE ANY AWAIT. The person asked to
-       leave, so this device forgets them now: the auth counter moves (any
-       refresh or write that started before this is discarded when it
-       lands), the viewer, cached hint and session generation go, and so do
-       "unreachable" and "your session ended" — a sign-out is an answer. The
-       server/keychain retirement runs after, in the background: a slow or
-       offline one (native revocations can take many seconds) never holds
-       the UI, and a failure never restores a viewer. */
+    // Wipe local state FIRST so the UI updates immediately even if the
+    // network call hangs. The server-side cookie clear is a best-effort
+    // follow-up; `apiLogout()` swallows network errors by design.
+    if (isMobileBuild) {
+      // Native invalidation is emitted after durable retirement, before the
+      // server round trip. A failed secure write must not claim successful logout.
+      await apiLogout();
+      await clearUnsentDrafts(leaving);
+      return;
+    }
     applyViewer(null);
-    setSessionExpired(null);
-    setServerUnreachable(false);
-    setIsLoading(false);
-    loggingOutRef.current = true;
+    /* Started before the server round trip and awaited after it, so the
+       asynchronous half of the eviction overlaps the request instead of
+       delaying the cookie clear behind it. */
     const evicted = clearUnsentDrafts(leaving);
-    void apiLogout()
-      .catch((err: unknown) => { console.error("[waka] sign-out could not be confirmed with the server:", err); })
-      .finally(() => { loggingOutRef.current = false; });
+    await apiLogout();
     await evicted;
   }, [applyViewer, viewer]);
 
-  /* ALSO THE "TRY AGAIN" BEHIND "WE CAN'T REACH WAKA". So a dead connection
-     here re-raises `serverUnreachable` rather than leaving the flag at
-     whatever the last answer said — the screen asking the question again
-     has to be told when the answer is still no. */
   const refresh = useCallback(async (): Promise<ApiViewer | null> => {
     const startedAt = authMutationRef.current;
-    let fresh: ApiViewer | null;
-    try {
-      fresh = await fetchCurrentViewer();
-    } catch (err) {
-      /* Only the door's own question raises "unreachable": a background
-         refresh that fails while someone is signed in says nothing about
-         access, and leaving the flag up would turn their later sign-out
-         into "we can't reach WAKA". */
-      if (aliveRef.current && err instanceof ApiError && err.status === 0 && !viewerRef.current) setServerUnreachable(true);
-      throw err;
-    }
+    const fresh = await fetchCurrentViewer();
     if (!aliveRef.current || startedAt !== authMutationRef.current) return fresh;
     setServerUnreachable(false);
-    if (fresh) setSessionExpired(null);
     applyViewer(fresh);
     return fresh;
   }, [applyViewer]);
@@ -537,8 +468,6 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       isLoading,
       isAuthenticated: viewer !== null,
       serverUnreachable,
-      unreachableWasSignedIn,
-      sessionExpired,
       login,
       signup,
       logout,
@@ -551,8 +480,6 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       viewer,
       isLoading,
       serverUnreachable,
-      unreachableWasSignedIn,
-      sessionExpired,
       login,
       signup,
       logout,

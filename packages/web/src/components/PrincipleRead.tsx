@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchPrincipleRead, onPrincipleStatus, requestPrincipleRead, type ApiPrinciple, type ApiPrincipleStatus } from "../lib/api/principles";
+import { fetchPrincipleRead, onPrincipleStatus, principleStatusFor, requestPrincipleRead, type ApiPrinciple, type ApiPrincipleStatus } from "../lib/api/principles";
+import { useOptionalAuth } from "../lib/auth-context";
 import { t, type SupportedLocale } from "../lib/i18n";
 import { settleAtLeast, withPostDeadline } from "../lib/settle-at-least";
 
@@ -33,6 +34,9 @@ export function PrincipleRead({ active, locale, onRead }: {
   active: boolean; locale: SupportedLocale;
   onRead?: (rows: ApiPrinciple[]) => void;
 }) {
+  /* Whose principles these are: a different person drops the shared status
+     cache before this reads it. (Home also re-keys this per profile.) */
+  principleStatusFor(useOptionalAuth()?.profile?.id ?? null);
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
   const [status, setStatus] = useState<ApiPrincipleStatus | null>(null);
   const [failed, setFailed] = useState(false);

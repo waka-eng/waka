@@ -19,14 +19,20 @@
  * and "reading is paused" is a claim about the reading, not the network.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchPrincipleStatus, onPrincipleStatus, recentPrincipleStatus, retryPausedReading, type ApiPrincipleStatus } from './api';
+import { fetchPrincipleStatus, onPrincipleStatus, principleStatusFor, recentPrincipleStatus, retryPausedReading, type ApiPrincipleStatus } from './api';
+import { useOptionalAuth } from './auth-context';
 import { settleAtLeast, withPostDeadline } from './settle-at-least';
 
 /** A status this young is the answer; nobody needs to ask again yet. */
 const FRESH_MS = 15_000;
 
 export function useReadingPaused(enabled: boolean) {
+  /* Whose status this is: a different person drops the shared cache. */
+  const who = useOptionalAuth()?.profile?.id ?? null;
+  principleStatusFor(who);
   const [status, setStatus] = useState<ApiPrincipleStatus | null>(null);
+  const [statusFor, setStatusFor] = useState(who);
+  if (statusFor !== who) { setStatusFor(who); setStatus(null); }
   const [retrying, setRetrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState<null | 'failed'>(null);
   const alive = useRef(true);
@@ -51,7 +57,7 @@ export function useReadingPaused(enabled: boolean) {
     const again = () => { if (!document.hidden) check(); };
     window.addEventListener('focus', again);
     return () => { unsubscribe(); window.removeEventListener('focus', again); };
-  }, [enabled, check]);
+  }, [enabled, check, who]);
 
   /* Retry disables itself and says "Retrying…" until the request answers,
      and for at least `RETRY_MIN_MS` — the only guard against repeated

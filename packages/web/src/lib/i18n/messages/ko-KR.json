@@ -622,10 +622,6 @@
   "worldYesWithdrawIt": "네, 거둘게요",
   "homeLoadFailed": "홈을 불러오지 못했어요.",
   "homeTryAgain": "다시 시도",
-  "unreachableTitle": "지금 WAKA에 닿지 못했어요. 로그인은 그대로예요 — 연결을 확인하고 다시 시도해 주세요.",
-  "unreachableChecking": "확인하는 중…",
-  "sessionEndedTitle": "로그아웃되었어요.",
-  "sessionEndedSubtitle": "다시 로그인하면 있던 곳으로 돌아가요. 쓰던 글은 그대로 남아 있어요.",
   "worldWhyOutOfCredit": "지금은 읽기가 잠시 멈춰 있어요. 저장한 것은 안전해요.",
   "publicProfileFailedTitle": "이 페이지를 열지 못했어요",
   "publicProfileFailedBody": "WAKA가 지금 이 페이지를 열지 못했어요. 페이지는 그대로 있을 수 있어요.",
@@ -638,6 +634,5 @@
   "readingPausedRetry": "다시 시도",
   "readingPausedRetrying": "다시 시도하는 중…",
   "readingPausedRetryFailed": "다시 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
-  "agentWallHowItFills": "이 벽은 에이전트가 직접 채워요. 에이전트가 내 에이전트로 WAKA에 로그인해 저장한 것이 여기에 나타나요.",
-  "unreachableAnonymous": "지금 WAKA에 닿지 못했어요. 연결을 확인하고 다시 시도해 주세요."
+  "agentWallHowItFills": "이 벽은 에이전트가 직접 채워요. 에이전트가 내 에이전트로 WAKA에 로그인해 저장한 것이 여기에 나타나요."
 }

@@ -1176,6 +1176,38 @@ room-synthesized words derived from an erased or privatised memory persist in th
 That is the strongest reason not to leave the room-data drop undecided. Resolve then: either
 drop the room tables, or purge room artifacts that cite a deleted or privatised memory.
 
+## Session expiry return path and signed-in hint (follow-up)
+
+**Status:** open follow-up (2026-10-18). `claude/fix-dead-ends` reworked sign-in, sign-out,
+session expiry and the cached signed-in hint; four review rounds kept finding regressions in the
+same handling, so it was reverted to `origin/dev` (`lib/auth-context.tsx`, `RequireAuth.tsx`,
+`pages/Login.tsx`, `lib/sign-in-destination.ts`, `lib/api/auth.ts`, the 401 handling in
+`lib/api/transport.ts`, and their tests). Only the web READ deadline survived in the transport,
+and it does not touch sessions. The cases any reattempt has to answer:
+
+- **A session that ends mid-flow** meets each screen's own 401 as a local error, with no door and
+  no return to where the person was; a door that does appear says "Welcome back".
+- **Return path ownership.** A remembered "where you were" must only apply to the account whose
+  session ended; another account signing in at that door must go home. The Google button names
+  its destination before anyone is known.
+- **Stale 401s.** A slow read sent under the previous session must not sign out the session made
+  since (web cookies are invisible to script; native compares tokens).
+- **Deliberate sign-out vs expiry.** Native retirement fires the expiry event; an in-flight 401
+  can land mid-logout. Neither may read as "you were signed out", but suppressing them must not
+  drop a genuine later expiry.
+- **Local-first sign-out vs a live credential.** Clearing the UI before the keychain/server
+  retirement can leave a live session behind a signed-out screen if the clear fails; waiting on it
+  can take many seconds offline. On the web a late logout response must not erase the next
+  sign-in's cookie.
+- **Offline at startup.** An unanswered `/auth/me` signed the person out; keeping the stored hint
+  instead can trap them on "can't reach WAKA". A 200 `/auth/me` whose body is unreadable still
+  reads as signed out (dev's `fetchCurrentViewer`).
+- **Background refresh failures** while signed in must not raise "unreachable" for a later
+  sign-out.
+
+The principles status cache is keyed by the profile its readers render for
+(`principleStatusFor`), not by the auth layer.
+
 ## Layer history under replace/reload
 
 **Status:** open follow-up (2026-10-17). `claude/fix-dead-ends` shipped and then withdrew

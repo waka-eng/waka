@@ -211,18 +211,10 @@ export async function fetchCurrentViewer(): Promise<ApiViewer | null> {
   if (res.status === 401) return null;
 
   let body: unknown = null;
-  let unreadable = false;
   try {
     body = await res.json();
   } catch {
     // Non-JSON response — handled below.
-    unreadable = true;
-  }
-  /* A 200 WHOSE BODY NEVER ARRIVED IS NOT "SIGNED OUT". It fell through to
-     the `!payload.account` check below and returned null — the answer for a
-     visitor with no session — so a stalled body signed a person out. */
-  if (res.ok && unreadable) {
-    throw new ApiError({ status: 0, message: "Network unreachable while loading session" });
   }
 
   if (!res.ok) {

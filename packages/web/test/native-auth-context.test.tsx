@@ -8,10 +8,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('../src/lib/platform', () => ({ isMobileBuild: true }));
 vi.mock('../src/lib/api', async original => ({ ...await original<typeof import('../src/lib/api')>(), fetchCurrentViewer: vi.fn(async () => null), login: vi.fn(), logout: vi.fn() }));
-import { fetchCurrentViewer, login, logout } from '../src/lib/api';
+import { login, logout } from '../src/lib/api';
 import { AuthProvider, useAuth, type AuthContextValue } from '../src/lib/auth-context';
-import { MemoryRouter } from 'react-router-dom';
-import LoginPage from '../src/pages/Login';
 const account = { id: 'synthetic-account', email: 'fixture@example.test', onboardingCompletedAt: '2026-10-07', isAdmin: false };
 const profile = { id: 'synthetic-profile', accountId: account.id, type: 'human' as const, name: 'Fixture', avatarUrl: null,
   preferredLocale: 'en-US' as const, publicHandle: null, publicProfileEnabled: false, publicTopOfMindEnabled: false };
@@ -36,55 +34,10 @@ it('late logout completion cannot wipe a newer native sign-in', async () => {
   await act(async () => { finish(); await pending; });
   expect(auth.account?.id).toBe(account.id);
 });
-/* The store's expiry event is ignored during a logout, so the sign-out has
-   to clear the viewer itself — or a native person who pressed Sign out
-   stayed signed in. And it lands on the ordinary door, not "you were
-   signed out". */
-it('a native sign-out from a signed-in session signs out and shows the ordinary door', async () => {
-  await act(async () => root.unmount());
-  root = createRoot(host);
-  await act(async () => {
-    root.render(createElement(MemoryRouter, null, createElement(AuthProvider, null, createElement(Reader), createElement(LoginPage))));
-  });
-  vi.mocked(login).mockResolvedValue({ account, profile, token: 'synthetic-only' });
-  await act(async () => { await auth.login({ email: account.email, password: 'synthetic-only' }); });
-  expect(auth.isAuthenticated).toBe(true);
-  vi.mocked(logout).mockImplementation(async () => { window.dispatchEvent(new Event('waka:session-expired')); });
-  await act(async () => { await auth.logout(); });
-  expect(auth.isAuthenticated, 'Sign out left the native session signed in').toBe(false);
-  expect(auth.sessionExpired, 'a deliberate sign-out read as an expiry').toBeNull();
-  expect(host.textContent).toContain('Welcome back.');
-  expect(host.textContent).not.toContain('You were signed out.');
-});
-/* SIGN-OUT IS LOCAL-FIRST. The person asked to leave: this device forgets
-   them before any network or keychain work, which only runs after, in the
-   background, and can never bring them back. */
-it('a failed retirement still leaves the person signed out on this device', async () => {
+it('a failed durable retirement does not claim a successful sign-out', async () => {
   vi.mocked(login).mockResolvedValue({ account, profile, token: 'synthetic-only' });
   await act(async () => { await auth.login({ email: account.email, password: 'synthetic-only' }); });
   vi.mocked(logout).mockRejectedValue(new Error('secure retirement failed'));
-  const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-  await act(async () => { await auth.logout(); });
-  await act(async () => { await Promise.resolve(); });
-  error.mockRestore();
-  expect(auth.account, 'a failed retirement restored the viewer').toBeNull();
-});
-it('an offline sign-out signs out at once, without waiting on the retirement', async () => {
-  vi.mocked(login).mockResolvedValue({ account, profile, token: 'synthetic-only' });
-  await act(async () => { await auth.login({ email: account.email, password: 'synthetic-only' }); });
-  vi.mocked(logout).mockImplementation(() => new Promise<void>(() => {}));
-  await act(async () => { await auth.logout(); });
-  expect(auth.account, 'sign-out waited on a retirement that never answers').toBeNull();
-});
-it('a refresh that started before the sign-out cannot restore the old viewer when it lands', async () => {
-  vi.mocked(login).mockResolvedValue({ account, profile, token: 'synthetic-only' });
-  await act(async () => { await auth.login({ email: account.email, password: 'synthetic-only' }); });
-  let answer!: (value: { account: typeof account; profile: typeof profile }) => void;
-  vi.mocked(fetchCurrentViewer).mockImplementation(() => new Promise((resolve) => { answer = resolve; }) as never);
-  vi.mocked(logout).mockResolvedValue(undefined);
-  let pending!: Promise<unknown>;
-  await act(async () => { pending = auth.refresh(); });
-  await act(async () => { await auth.logout(); });
-  await act(async () => { answer({ account, profile }); await pending; });
-  expect(auth.account, 'a pre-logout refresh signed the person back in').toBeNull();
+  await act(async () => { await expect(auth.logout()).rejects.toThrow('secure retirement failed'); });
+  expect(auth.account?.id).toBe(account.id);
 });
