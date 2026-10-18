@@ -313,8 +313,15 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [unreachableWasSignedIn, setUnreachableWasSignedIn] = useState(false);
   const viewerRef = useRef(viewer);
   viewerRef.current = viewer;
+  /* A DELIBERATE LOGOUT IS NOT AN EXPIRY. Native retires the credential and
+     fires the expiry event from the store; on the web a request in flight
+     can 401 mid-logout. Either would land the person on "you were signed
+     out" for leaving on purpose, so the handler ignores events while a
+     logout is under way. */
+  const loggingOutRef = useRef(false);
   useEffect(() => {
     const expired = () => {
+      if (loggingOutRef.current) return;
       /* ON THE WEB THE EVENT FIRES FOR ANY 401, so it only means something
          when there was a session to lose. Native fires it from the
          credential store itself, which already implies there was one. */
@@ -451,23 +458,28 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       ? { accountId: viewer.account.id, profileId: viewer.profile.id }
       : null;
     setSessionExpired(null);
-    // Wipe local state FIRST so the UI updates immediately even if the
-    // network call hangs. The server-side cookie clear is a best-effort
-    // follow-up; `apiLogout()` swallows network errors by design.
-    if (isMobileBuild) {
-      // Native invalidation is emitted after durable retirement, before the
-      // server round trip. A failed secure write must not claim successful logout.
+    loggingOutRef.current = true;
+    try {
+      // Wipe local state FIRST so the UI updates immediately even if the
+      // network call hangs. The server-side cookie clear is a best-effort
+      // follow-up; `apiLogout()` swallows network errors by design.
+      if (isMobileBuild) {
+        // Native invalidation is emitted after durable retirement, before the
+        // server round trip. A failed secure write must not claim successful logout.
+        await apiLogout();
+        await clearUnsentDrafts(leaving);
+        return;
+      }
+      applyViewer(null);
+      /* Started before the server round trip and awaited after it, so the
+         asynchronous half of the eviction overlaps the request instead of
+         delaying the cookie clear behind it. */
+      const evicted = clearUnsentDrafts(leaving);
       await apiLogout();
-      await clearUnsentDrafts(leaving);
-      return;
+      await evicted;
+    } finally {
+      loggingOutRef.current = false;
     }
-    applyViewer(null);
-    /* Started before the server round trip and awaited after it, so the
-       asynchronous half of the eviction overlaps the request instead of
-       delaying the cookie clear behind it. */
-    const evicted = clearUnsentDrafts(leaving);
-    await apiLogout();
-    await evicted;
   }, [applyViewer, viewer]);
 
   /* ALSO THE "TRY AGAIN" BEHIND "WE CAN'T REACH WAKA". So a dead connection

@@ -31,15 +31,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LoadingHome } from "../src/components/LoadingHome";
 import { RequireAuth } from "../src/components/RequireAuth";
-import { ApiError, fetchCurrentViewer, fetchInspiration, login } from "../src/lib/api";
+import { ApiError, fetchCurrentViewer, fetchInspiration, login, logout } from "../src/lib/api";
 import type { ApiViewer } from "../src/lib/api";
-import { AuthProvider } from "../src/lib/auth-context";
+import { AuthProvider, useAuth } from "../src/lib/auth-context";
 import { readConversationDrafts, storeConversationDraft } from "../src/lib/conversation-drafts";
 import LoginPage from "../src/pages/Login";
 
 vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
-  return { ...actual, fetchCurrentViewer: vi.fn(async () => null), login: vi.fn() };
+  return { ...actual, fetchCurrentViewer: vi.fn(async () => null), login: vi.fn(), logout: vi.fn(async () => undefined) };
 });
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -236,6 +236,25 @@ describe("a session that ends mid-flow", () => {
     } finally {
       window.removeEventListener("waka:session-expired", heard);
     }
+  });
+});
+
+describe("a deliberate logout", () => {
+  /* Native retires the credential and fires the expiry event from the store;
+     on the web a request in flight can 401 mid-logout. Neither is an expiry. */
+  it("never lands on 'you were signed out', even when an expiry event fires during it", async () => {
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(VIEWER);
+    vi.mocked(logout).mockImplementation(async () => { window.dispatchEvent(new Event("waka:session-expired")); });
+    let leave: (() => Promise<void>) | null = null;
+    function Probe() { const auth = useAuth(); leave = auth.logout; return createElement("output", null, `expired:${auth.sessionExpired !== null}`); }
+    container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => {
+      root!.render(createElement(MemoryRouter, { initialEntries: ["/"] }, createElement(AuthProvider, null, createElement(Probe))));
+    });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await leave!(); });
+    expect(text(), "a deliberate logout was reported as an expired session").toContain("expired:false");
+    expect(logout).toHaveBeenCalledTimes(1);
   });
 });
 
