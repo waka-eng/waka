@@ -34,7 +34,12 @@ export function PrincipleRead({ active, locale, onRead }: {
      button disables and says "Retrying…" from the press until the read it
      started answers, and for at least `RETRY_MIN_MS`. */
   const [retrying, setRetrying] = useState(false);
-  const retryingSince = useRef<number | null>(null);
+  /* When the press happened and which `attempt` it started: only a read of
+     that attempt may end the "Retrying…" state. */
+  const retryingSince = useRef<{ at: number; attempt: number } | null>(null);
+  /* True while this component's own refresh POST is out, so its published
+     answer is not mistaken for a retry from elsewhere. */
+  const ownRequest = useRef(false);
   /* Bumped when a status heard from elsewhere says work started again: the
      poll restarts without that counting as a Try again. */
   const [resume, setResume] = useState(0);
@@ -49,7 +54,7 @@ export function PrincipleRead({ active, locale, onRead }: {
   useEffect(() => {
     if (!active) return;
     return onPrincipleStatus((next, source) => {
-      if (source !== "refresh" || !stuckRef.current || (next.phase !== "processing" && next.phase !== "pending")) return;
+      if (source !== "refresh" || ownRequest.current || !stuckRef.current || (next.phase !== "processing" && next.phase !== "pending")) return;
       stuckRef.current = false;
       setStatus(next); setFailed(false); setSlow(false);
       setResume((value) => value + 1);
@@ -66,11 +71,13 @@ export function PrincipleRead({ active, locale, onRead }: {
     setSlow(false);
     let timer: number | undefined;
     let delay = 60_000;
+    /* Only the read the press started (this effect run, for that attempt)
+       ends "Retrying…" — a read of an earlier run still in flight does not. */
     const finishRetry = () => {
-      const since = retryingSince.current;
-      if (since === null) return;
+      const pressed = retryingSince.current;
+      if (disposed || pressed === null || pressed.attempt !== attempt) return;
       retryingSince.current = null;
-      window.setTimeout(() => setRetrying(false), Math.max(0, RETRY_MIN_MS - (Date.now() - since)));
+      window.setTimeout(() => setRetrying(false), Math.max(0, RETRY_MIN_MS - (Date.now() - pressed.at)));
     };
     const read = async () => {
       if (running || document.hidden) return;
@@ -94,7 +101,8 @@ export function PrincipleRead({ active, locale, onRead }: {
           ((result.status.eligible || result.status.supportPending) && result.status.phase === "failed" && asked))) {
           retriedAttempt.current = attempt;
           ensured = true;
-          await requestPrincipleRead(asked);
+          ownRequest.current = true;
+          try { await requestPrincipleRead(asked); } finally { ownRequest.current = false; }
           if (!disposed) setStatus({ ...result.status, phase: result.status.supportPending ? "pending" : "processing" });
         }
       } catch {
@@ -136,7 +144,7 @@ export function PrincipleRead({ active, locale, onRead }: {
       <p className="jar-values-sub" role={error ? "alert" : slow || status?.phase === "processing" ? "status" : undefined}>
         {t(locale, message)}
         {error || retrying ? <> <button type="button" disabled={retrying} onClick={() => {
-          retryingSince.current = Date.now(); setRetrying(true); setAttempt((value) => value + 1);
+          retryingSince.current = { at: Date.now(), attempt: attempt + 1 }; setRetrying(true); setAttempt(attempt + 1);
         }}>
           {t(locale, retrying ? "worldPrinciplesRetrying" : "worldPrinciplesRetry")}
         </button></> : null}

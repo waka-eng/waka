@@ -204,6 +204,26 @@ describe("principle read", () => {
 
   /* NO SERVER COOLDOWN, SO THE BUTTON GUARDS ITSELF: disabled and saying
      "Retrying…" until the request answers, and for at least three seconds. */
+  it("keeps Retrying… until the read the press started answers, not an older read still in flight", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "failed" } });
+    vi.mocked(requestPrincipleRead).mockResolvedValue();
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    type Read = Awaited<ReturnType<typeof fetchPrincipleRead>>;
+    let answerOld!: (value: Read) => void, answerNew!: (value: Read) => void;
+    vi.mocked(fetchPrincipleRead).mockImplementationOnce(() => new Promise<Read>((resolve) => { answerOld = resolve; }));
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    vi.mocked(fetchPrincipleRead).mockImplementationOnce(() => new Promise<Read>((resolve) => { answerNew = resolve; }));
+    await act(async () => host.querySelector("button")!.click());
+    await act(async () => vi.advanceTimersByTimeAsync(4_000));
+    await act(async () => { answerOld({ principles: [], status: { ...ready, phase: "failed" } }); });
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(host.querySelector("button")?.textContent, "an older read ended the press's Retrying…").toBe("Retrying…");
+    await act(async () => { answerNew({ principles: [], status: { ...ready, phase: "failed" } }); });
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(host.textContent).not.toContain("Retrying…");
+    expect(requestPrincipleRead).toHaveBeenCalledWith(true);
+  });
+
   it("disables Try again and says Retrying… until the retry answers, for at least three seconds", async () => {
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "failed" } });
     vi.mocked(requestPrincipleRead).mockResolvedValue();
