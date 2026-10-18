@@ -2223,6 +2223,9 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** Read by the loop: a panel is occluding part of the field right now. */
   const panelOpenRef = useRef(false);
   const detailsRef = useRef<Map<string, InspirationDetail>>(new Map());
+  /** Per note, how many saves this page has seen — the freshness stamp a
+      detail read is checked against when it lands (see `loadDetail`). */
+  const savedGenerationRef = useRef<Map<string, number>>(new Map());
   const detailPendingRef = useRef<Map<string, Promise<InspirationDetail | null>>>(new Map());
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
@@ -3256,16 +3259,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (inFlight) return inFlight;
     const active = atWallRef.current;
     const profile = active.kind === 'agent' ? active.id : storageScope?.profileId;
-    const p = loadInspiration(id, profile)
+    /* A READ THAT STARTED BEFORE A SAVE IS OLDER THAN THE SAVE (review,
+       2026-10-17: data loss). A warm-up, a pending panel read or a retry
+       could land after the archive or the card stored new words and put the
+       old ones back into the cache and onto the card — and the next edit
+       began from them. Each read carries the save generation it started
+       under; if a save has happened since, the read is dropped and whatever
+       the save left in the cache is the answer. */
+    const generation = savedGenerationRef.current.get(id) ?? 0;
+    const stale = () => (savedGenerationRef.current.get(id) ?? 0) !== generation;
+    const settle = () => { if (detailPendingRef.current.get(id) === p) detailPendingRef.current.delete(id); };
+    const p: Promise<InspirationDetail | null> = loadInspiration(id, profile)
       .then((row) => {
+        settle();
+        if (stale()) return detailsRef.current.get(id) ?? null;
         detailsRef.current.set(id, row);
-        detailPendingRef.current.delete(id);
         return row;
       })
       .catch(() => {
         /* leave it absent: the tap path falls back to the preview */
-        detailPendingRef.current.delete(id);
-        return null;
+        settle();
+        return stale() ? detailsRef.current.get(id) ?? null : null;
       });
     detailPendingRef.current.set(id, p);
     return p;
@@ -4365,6 +4379,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      server). Built here, outside any state updater, so the cache write
      happens once and not on React's whim. */
   const rememberSavedInspiration = useCallback((id: string, text: string, made?: ApiInspiration) => {
+    /* Every read already in flight for this note is now older than what is
+       stored: bump its generation (see `loadDetail`) and let the next read
+       start fresh rather than join one of them. */
+    savedGenerationRef.current.set(id, (savedGenerationRef.current.get(id) ?? 0) + 1);
+    detailPendingRef.current.delete(id);
     const whole = made && made.id === id && Array.isArray(made.attachments) ? toInspirationDetail(made) : null;
     const shown = panelNowRef.current?.detail;
     const known = detailsRef.current.get(id) ?? (shown?.id === id ? shown : null);
@@ -4374,11 +4393,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setInspirations((prev) => prev
       ? prev.map((c) => (c.id === id ? { ...c, preview: inspirationPreview(whole?.text ?? text, c.attachments) } : c))
       : prev);
-    if (detail) setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? { ...p, detail, partial: false, pending: false } : p));
-  }, []);
-  /* A note deleted from the archive: nothing cached may bring it back. */
-  const forgetErasedInspiration = useCallback((id: string) => {
-    detailsRef.current.delete(id);
+    if (detail) {
+      setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? { ...p, detail, partial: false, pending: false } : p));
+      /* a memory opened by its address is held beside the field too */
+      setDetachedInspiration((held) => (held && held.detail?.id === id ? { ...held, detail } : held));
+    }
   }, []);
 
   /* TRY AGAIN, for a panel whose full read failed. The same read the effect
@@ -7064,9 +7083,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      rather than a quiet rider on this one. The COLUMN stays regardless;
      `inspirations.visibility` is the server's and no migration touches it. */
 
-  const inspirationRemovedFromView = useCallback((serverId: string, visualId = serverId) => {
+  const inspirationRemovedFromView = useCallback((serverId: string, visualId = serverId, closePanel = true) => {
     sourceListMutationRef.current += 1;
-    setSelectedId(null);
+    if (closePanel) setSelectedId(null);
     simApiRef.current?.unborn(visualId);
     bornRef.current = bornRef.current.filter(row => row.id !== visualId && row.sigId !== serverId);
     inspirationsRef.current = inspirationsRef.current?.filter(row => row.id !== visualId && row.id !== serverId) ?? null;
@@ -7260,8 +7279,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            memory it hangs on is shared. Both are gone with rooms (founder,
            2026-10-12: "방 없애"), and with them the only path in this file
            that ever resolved a link to a memory this account does not own. */
+        const generation = savedGenerationRef.current.get(desired.inspirationId) ?? 0;
         detail = await loadInspiration(desired.inspirationId, target.kind === 'agent' ? target.id : storageScope?.profileId, controller.signal);
         if (!current()) return;
+        /* a save landed while this read was out: what it stored wins (see `loadDetail`) */
+        if ((savedGenerationRef.current.get(desired.inspirationId) ?? 0) !== generation) detail = detailsRef.current.get(detail.id) ?? detail;
         ball = makeBall(seedOf(detail, skyRef.current.citations, skyRef.current.signals, skyRef.current.posterSignalIds, skyRef.current.principleSignalIds));
         ball.sigId = detail.id;
         if (!current()) return;
@@ -9932,7 +9954,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               rows={1}
               /* WHY SAVE IS DIM ON AN EMPTY MEMORY: the archive's words, for
                  the archive's rule (`lib/note-words.ts`). */
-              placeholder={(panel.detail?.attachments.length ?? 0) === 0 ? say("worldNoteNeedsSomething") : undefined}
+              placeholder={(panel.detail?.attachments.length ?? 0) === 0 ? say("worldMemoryNeedsWords") : undefined}
               value={editing.open.text}
               onChange={(e) => {
                 editing.retype(e.target.value);
@@ -11604,7 +11626,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         /* An archive save or delete reaches the world's cache of read notes,
            so the memory card never edits from words that are not stored. */
         onSaved={(made) => rememberSavedInspiration(made.id, made.text, made)}
-        onErased={forgetErasedInspiration}
+        onErased={(id) => {
+          /* Gone from the field and the cache like a delete made on the card
+             itself — and the card closes only if it is showing this note. */
+          const shown = panelNowRef.current;
+          const showing = shown?.id === id || shown?.detail?.id === id;
+          const visual = shown && showing ? shown.id : id;
+          savedGenerationRef.current.set(id, (savedGenerationRef.current.get(id) ?? 0) + 1);
+          inspirationRemovedFromView(id, visual, showing);
+        }}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         ownArchive={atWall.kind!=='agent'} shareName={auth?.profile?.name ?? ''}

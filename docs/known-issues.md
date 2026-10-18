@@ -1146,6 +1146,28 @@ deliberately-broken security check. One auditor reported leaving
 
 ---
 
+### L10. A saved note's words live in three client copies, kept in step by hand *(follow-up, 2026-10-17)*
+**Added on `claude/fix-save-truncation`** · `packages/web/src/pages/Home.tsx`, `components/SavesOverlay.tsx` · severity low (design debt)
+
+**What.** Home holds a note's full detail in `detailsRef` (the read cache), in `panel.detail` (what
+the memory card shows and seeds its edits from) and in `detachedInspiration.detail` (a memory opened
+by its address); the archive's note page holds its own `stored` text. The P0 save-truncation work
+and two review rounds made them agree: every save from either door goes through
+`rememberSavedInspiration` with the server's row, every detail read is stamped with a per-note save
+generation and dropped if a save happened while it was out, and an archive delete removes the note
+from the field. That is correct but it is discipline, not structure — a new reader or writer of a
+note's words has to know to join it.
+
+**Follow-up.** One detail store (per profile, keyed by inspiration id, holding the server row and its
+`updatedAt`) that both doors read and write, so freshness is a property of the store rather than of
+each call site. Not done in the P0 branch on purpose: it touches every memory path in `Home.tsx`.
+
+**Also noticed, not verified.** `finalizeAttachment` for an inspiration sends no `?profile=`, while
+the archive's presign does. Attaching to an agent's note from the agent's archive may therefore be
+resolved against the signed-in human. Check before relying on agent-archive attachments.
+
+---
+
 ## Refuted findings
 
 Three findings did not survive verification. **A list that only grows is a list nobody trusts**, so

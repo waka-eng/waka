@@ -50,6 +50,13 @@ vi.mock("../src/lib/api", async (importOriginal) => ({
   deleteInspiration: async (_id: string, options: { profile?: string } = {}) => {
     state.profiles.push({ act: "delete", profile: options.profile });
   },
+  /* an attachment's three network steps, and the row read after it */
+  presignAttachment: async (input: { filename: string; contentType: string }) =>
+    ({ uploadUrl: "https://bucket.test/put", key: `k/${input.filename}`, headers: {}, profileId: "p", expiresAt: "" }) as never,
+  uploadToPresignedUrl: async () => undefined,
+  finalizeAttachment: async () => ({ id: "att-1" }) as never,
+  fetchInspiration: async (id: string) =>
+    ({ id, text: state.text, attachments: [{ id: "att-1", type: "file", name: "notes.pdf", url: "" }], reflections: [] }) as never,
 }));
 vi.mock("../src/lib/data", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/lib/data")>()),
@@ -295,4 +302,15 @@ it("folds Share and Delete into a More menu with the bar's menu keys", async () 
   await act(async () => more.click());
   await act(async () => rows()[1]!.click());
   expect(host.querySelector(".waka-note-page"), "its Delete row deletes the note").toBeNull();
+  expect(document.activeElement?.textContent, "and focus lands on the Undo line, not the page body").toBe("Undo");
+});
+
+it("tells the world behind it when an attachment lands, with the server's row", async () => {
+  await openSave(longRow, LONG);
+  await answer(true);
+  const input = [...slot.querySelectorAll<HTMLInputElement>('input[type="file"]')].find((node) => node.accept.includes("application/pdf"))!;
+  Object.defineProperty(input, "files", { configurable: true, value: [new File(["%PDF-1.7"], "notes.pdf", { type: "application/pdf" })] });
+  await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
+  for (let turn = 0; turn < 10 && state.saved.length === 0; turn += 1) await act(async () => { await Promise.resolve(); });
+  expect(state.saved).toEqual([{ id: "long-1", text: LONG }]);
 });

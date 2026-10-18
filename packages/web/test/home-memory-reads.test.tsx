@@ -44,6 +44,7 @@ const S = vi.hoisted(() => ({
   written: [] as Array<{ id: string; text: string }>,
   hold: null as null | "hold" | "fail",
   held: [] as Array<{ resolve: () => void; reject: () => void }>,
+  deleted: [] as string[],
 }));
 
 const row = (id: string, text: string) => {
@@ -57,6 +58,7 @@ const row = (id: string, text: string) => {
 vi.mock("../src/lib/api", async (original) => ({
   ...await original<typeof import("../src/lib/api")>(),
   ...apiMockFrom(FACTS),
+  deleteInspiration: async (id: string) => { S.deleted.push(id); S.store.delete(id); },
   updateInspiration: async (id: string, input: { text: string }) => {
     S.written.push({ id, text: input.text });
     S.store.set(id, input.text);
@@ -69,11 +71,13 @@ vi.mock("../src/lib/data", async (original) => ({
   ...await original<typeof import("../src/lib/data")>(),
   ...dataMockFrom(FACTS),
   loadInspiration: (id: string) => {
-    const answer = () => row(id, S.store.get(id) ?? "");
-    if (id !== "own-4" || S.hold === null) return Promise.resolve(answer());
+    /* what was stored WHEN THE READ WAS ASKED — a held read answers with
+       that, the way a slow response carries the row it read */
+    const snapshot = row(id, S.store.get(id) ?? "");
+    if (id !== "own-4" || S.hold === null) return Promise.resolve(snapshot);
     if (S.hold === "fail") return Promise.reject(new Error("offline"));
     return new Promise((done, fail) => {
-      S.held.push({ resolve: () => done(answer()), reject: () => fail(new Error("offline")) });
+      S.held.push({ resolve: () => done(snapshot), reject: () => fail(new Error("offline")) });
     });
   },
 }));
@@ -98,6 +102,7 @@ beforeEach(() => {
   S.written.length = 0;
   S.hold = null;
   S.held.length = 0;
+  S.deleted.length = 0;
 });
 afterEach(() => world?.unmount());
 
@@ -210,4 +215,77 @@ it("an archive edit reaches the card, so the card's next edit keeps it (no overw
   expect(editBox()?.value, "the card's edit begins from the archive's words, not its own stale read").toBe(FROM_ARCHIVE);
   await typeAndKeep(`${FROM_ARCHIVE} And on the card.`);
   expect(S.store.get("own-2"), "both edits survive").toBe(`${FROM_ARCHIVE} And on the card.`);
+});
+
+/** Open the archive over the world, open one note in it, and wait for its full read. */
+async function openInArchive(path: string, words: string, release?: () => Promise<void>): Promise<HTMLTextAreaElement> {
+  await act(async () => { go(`${path}?open=saves`); });
+  for (let turn = 0; turn < 30 && !world.container.querySelector(".waka-list-row"); turn += 1) { await world.step(4); await wait(30); }
+  const archiveRow = [...world.container.querySelectorAll<HTMLButtonElement>(".waka-list-row")]
+    .find((b) => (b.textContent ?? "").includes(words));
+  if (!archiveRow) throw new Error(`the archive did not list "${words}"`);
+  await act(async () => archiveRow.click());
+  if (release) await release();
+  for (let turn = 0; turn < 20 && world.container.querySelector<HTMLTextAreaElement>(".waka-note-page")?.readOnly !== false; turn += 1) { await world.step(2); await wait(20); }
+  return world.container.querySelector<HTMLTextAreaElement>(".waka-note-page")!;
+}
+
+it("a read that started before a save cannot put the old words back", { timeout: 30_000 }, async () => {
+  const NEWER = "something I kept, 4 — rewritten while an old read was still out.";
+  await openByAddress("own-5");
+  S.hold = "hold";
+  await stepOn(); // the card's read of own-4 goes out, and is held
+  const staleRead = S.held.at(-1)!;
+  await wait(50);
+  /* the archive reads own-4 too (held as well) — release that one — edit, save */
+  const page = await openInArchive("/inspirations/own-5", "something I kept, 4", async () => {
+    await act(async () => S.held.at(-1)!.resolve());
+  });
+  const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+  await act(async () => { set.call(page, NEWER); page.dispatchEvent(new Event("input", { bubbles: true })); });
+  await act(async () => document.querySelector<HTMLButtonElement>(".waka-dock-tool--keep")!.click());
+  await world.step(4);
+  expect(S.store.get("own-4")).toBe(NEWER);
+
+  /* now the old read lands, carrying the words from before the save */
+  S.hold = null;
+  await act(async () => staleRead.resolve());
+  await world.step(4);
+
+  /* back on the world, walk to own-4: the card must open on the NEWER words */
+  await act(async () => { go("/inspirations/own-5"); });
+  await world.step(12);
+  await wait(100);
+  await stepOn();
+  await wait(100);
+  await world.step(6);
+  await pressWords();
+  expect(editBox()?.value, "the stale read was dropped; the save's words stand").toBe(NEWER);
+});
+
+it("a note deleted in the archive leaves the field and closes its card", { timeout: 30_000 }, async () => {
+  await openByAddress("own-2");
+  const before = world.audit().present;
+  await openInArchive("/inspirations/own-2", "something I kept, 2");
+  await act(async () => document.querySelector<HTMLButtonElement>(".waka-dock-tool--erase")!.click());
+  /* leaving the archive sends the delete at once (Undo's moment is the page's) */
+  await act(async () => { go("/"); });
+  await world.step(12);
+  await wait(50);
+  await world.step(6);
+  expect(S.deleted).toEqual(["own-2"]);
+  expect(card(), "the card showing the deleted note closed").toBeNull();
+  expect(world.audit().present, "and the field holds one memory fewer").toBe(before - 1);
+});
+
+/* The card has no way to attach anything, so its empty editor must not tell
+   people to add a photo or a file — only to write. */
+it("tells an emptied memory card to write something, and offers nothing it cannot do", { timeout: 30_000 }, async () => {
+  await openByAddress("own-2");
+  await pressWords();
+  const box = editBox()!;
+  const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+  await act(async () => { set.call(box, ""); box.dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(box.placeholder).toBe("Write something to keep this memory.");
+  expect(card()!.querySelector<HTMLButtonElement>(".jar-panel-save")!.disabled, "and Save stays dim").toBe(true);
 });

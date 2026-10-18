@@ -48,6 +48,7 @@ import { NoteTools } from "./NoteTools";
 import {
   attachmentPreviewImageUrl,
   deleteInspiration,
+  fetchInspiration,
   finalizeAttachment,
   forgetDeletedInspiration,
   listDeletedInspirations,
@@ -264,6 +265,13 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const [forgetting, setForgetting] = useState<string | null>(null);
   const [shelfFailed, setShelfFailed] = useState(false);
   const [undoable, setUndoable] = useState<Inspiration | null>(null);
+  /* WHERE FOCUS GOES WHEN A DELETE TAKES THE NOTE AWAY. The press that
+     deleted it (the bar's trash, or the ⋯ menu's row) unmounts with the
+     note, and focus fell to the page; the Undo line is the next thing a
+     keyboard user needs, so a delete made on the note hands it focus — once,
+     on that delete, and not on any other way the line appears. */
+  const undoButton = useRef<HTMLButtonElement>(null);
+  const focusUndoNext = useRef(false);
   /* Armed delete on an archive with no shelf — see `onErase` below. */
   const [askingErase, setAskingErase] = useState<string | null>(null);
   const [eraseFailed, setEraseFailed] = useState(false);
@@ -387,6 +395,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       flushErase();
     }, UNDO_MS);
     pendingErase.current = { row, at, timer };
+    focusUndoNext.current = true;
     setUndoable(row);
   }, [flushErase, rows]);
 
@@ -704,6 +713,13 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
         ...(file.type ? { contentType: file.type } : {}),
       });
       if (!mounted.current) return;
+      /* THE WORLD BEHIND HEARS OF IT TOO, with the server's row: its cached
+         copy of this note has one attachment fewer, and an edit there would
+         be judged against it (the empty-words rule counts attachments).
+         Best effort — the attachment is stored either way. */
+      void fetchInspiration(note.id, profileId ? { profile: profileId } : {})
+        .then((row) => { onSaved?.(row); })
+        .catch(() => undefined);
       /* The open note is a snapshot, so it is re-pointed at the row that
          now carries the attachment — otherwise the upload lands, the list
          knows, and the page somebody is looking at does not. */
@@ -715,7 +731,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     } finally {
       if (mounted.current) setAttaching(false);
     }
-  }, [load, open, profileId]);
+  }, [load, open, profileId, onSaved]);
   /* The same recorder the notepad uses, handed a different destination —
      and naming the door it comes through, so `attach` does not try to read
      a sound file as a photograph. */
@@ -825,6 +841,12 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      because that callback closes over the draft. That is the point rather
      than a cost: the bar must hold the CURRENT closer, or pressing
      Inspirations would commit the words as they were when the note opened. */
+  useEffect(() => {
+    if (!undoable || open || !focusUndoNext.current) return;
+    focusUndoNext.current = false;
+    undoButton.current?.focus();
+  }, [undoable, open]);
+
   const openId = open?.id ?? null;
   useEffect(() => {
     onNoteOpen?.(openId === null ? null : () => void leaveNote());
@@ -1578,7 +1600,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
         {!open && undoable ? (
           <p className="waka-over-undo" role="status">
             {say("worldDeletedOne")}
-            <button type="button" className="waka-dock-undo" onClick={undoErase}>{say("worldUndo")}</button>
+            <button ref={undoButton} type="button" className="waka-dock-undo" onClick={undoErase}>{say("worldUndo")}</button>
           </p>
         ) : !open && eraseFailed ? (
           <p className="waka-over-undo" role="alert">{say("worldDeleteFailed")}</p>
