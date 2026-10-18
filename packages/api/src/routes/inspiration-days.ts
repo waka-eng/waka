@@ -147,7 +147,10 @@ export function createInspirationDaysRoutes(deps: DaysRouteDependencies = {}): H
        array on one driver and `{ rows }` on another. Normalising here keeps
        that difference out of the response shape. */
     const list = (Array.isArray(rows) ? rows : (rows as { rows?: KeptDay[] }).rows) ?? [];
-    return c.json({ days: list as KeptDay[] }, 200);
+    /* THE ZONE ACTUALLY USED, said back. A zone Postgres did not know fell
+       back to UTC, and a client that went on drawing its own local dates
+       put every count on the wrong cell for part of the day. */
+    return c.json({ days: list as KeptDay[], zone }, 200);
   });
 
   return routes;

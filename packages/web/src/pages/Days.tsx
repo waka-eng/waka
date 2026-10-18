@@ -33,7 +33,7 @@ import { useOptionalAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 import { usePageMenu } from "../lib/page-menu";
 import { useAgent } from "../lib/use-agent";
-import { dateStamp, numWords } from "../lib/words";
+import { dateStamp, numWords, readerTimeZone } from "../lib/words";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -70,14 +70,19 @@ function localDayKey(date: Date): string {
  * because a daylight-saving day is 23 or 25 hours long and stepping by a
  * fixed length would skip or repeat a date at the change.
  */
-export function buildGrid(rows: ApiKeptDay[], now: Date): Cell[] {
+export function buildGrid(rows: ApiKeptDay[], now: Date, utc = false): Cell[] {
   const byDay = new Map(rows.map((row) => [row.day, row.kept]));
   /* The busiest day on the page sets the top of the scale — see the note. */
   const busiest = rows.reduce((top, row) => Math.max(top, row.kept), 0);
   const cells: Cell[] = [];
   for (let back = WINDOW_DAYS - 1; back >= 0; back -= 1) {
-    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back, 12);
-    const key = localDayKey(date);
+    /* UTC dates when the server could not group in the reader's zone (it
+       says so — see `listKeptDays`): its keys are UTC dates then, and a
+       local grid would put each count on the wrong cell for part of the day. */
+    const date = utc
+      ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - back, 12))
+      : new Date(now.getFullYear(), now.getMonth(), now.getDate() - back, 12);
+    const key = utc ? date.toISOString().slice(0, 10) : localDayKey(date);
     const kept = byDay.get(key) ?? 0;
     cells.push({
       key,
@@ -102,6 +107,7 @@ export function Days(): JSX.Element {
   const menu = usePageMenu(locale, auth?.account?.id, agent);
 
   const [rows, setRows] = useState<ApiKeptDay[]>([]);
+  const [utc, setUtc] = useState(false);
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
 
@@ -115,9 +121,10 @@ export function Days(): JSX.Element {
   const load = useCallback(async () => {
     setPhase("loading");
     try {
-      const days = await listKeptDays({ days: WINDOW_DAYS });
+      const kept = await listKeptDays({ days: WINDOW_DAYS });
       if (!mounted.current) return;
-      setRows(days);
+      setRows(kept.days);
+      setUtc(kept.zone !== (readerTimeZone() ?? "UTC"));
       setPhase("ready");
     } catch {
       if (!mounted.current) return;
@@ -131,7 +138,7 @@ export function Days(): JSX.Element {
 
   /* The clock is read once per load, not per render: a grid that rebuilt on
      every paint would shift at midnight under a reader's hands. */
-  const cells = useMemo(() => buildGrid(rows, new Date()), [rows]);
+  const cells = useMemo(() => buildGrid(rows, new Date(), utc), [rows, utc]);
   const kept = rows.reduce((sum, row) => sum + row.kept, 0);
 
   return (

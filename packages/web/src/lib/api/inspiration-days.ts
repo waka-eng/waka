@@ -16,6 +16,13 @@ export interface ApiKeptDay {
   kept: number;
 }
 
+/** The days, and the zone the server actually grouped them in — the one
+    asked for, or UTC when the server did not know it. */
+export interface KeptDays {
+  days: ApiKeptDay[];
+  zone: string;
+}
+
 export interface ListKeptDaysRequest extends ProfileScoped {
   days?: number;
   /** IANA zone to group by. Defaults to this browser's own. */
@@ -23,16 +30,19 @@ export interface ListKeptDaysRequest extends ProfileScoped {
 }
 
 /** GET /inspiration-days — how much was kept on each day, oldest first. */
-export async function listKeptDays(request: ListKeptDaysRequest = {}): Promise<ApiKeptDay[]> {
+export async function listKeptDays(request: ListKeptDaysRequest = {}): Promise<KeptDays> {
   const params = new URLSearchParams();
   if (request.days !== undefined) params.set("days", String(request.days));
   const tz = request.tz ?? readerTimeZone();
   if (tz) params.set("tz", tz);
   if (request.profile) params.set("profile", request.profile);
   const query = params.toString();
-  const body = await getJson<{ days: ApiKeptDay[] }>(
+  const body = await getJson<{ days: ApiKeptDay[]; zone?: string }>(
     apiPath(`/inspiration-days${query ? `?${query}` : ""}`),
     "Failed to load your days",
   );
-  return Array.isArray(body.days) ? body.days : [];
+  return {
+    days: Array.isArray(body.days) ? body.days : [],
+    zone: typeof body.zone === "string" ? body.zone : "UTC",
+  };
 }

@@ -74,4 +74,16 @@ describe("the days grid", () => {
       expect(said, said).not.toMatch(/[0-9]/);
     }
   });
+
+  it("draws UTC dates when the server says it grouped in UTC", () => {
+    /* The server fell back to UTC for a zone it did not know, and said so.
+       At 00:30 in Seoul the UTC date is still the 16th, which is where the
+       server put today's saves — so that is the last cell. */
+    const now = new Date("2026-10-16T15:30:00Z");
+    const cells = buildGrid([{ day: "2026-10-16", kept: 2 }], now, true);
+    const last = cells[cells.length - 1]!;
+    expect(last.key).toBe("2026-10-16");
+    expect(last.kept).toBe(2);
+    expect(last.at).toBe(Date.parse("2026-10-16T12:00:00Z"));
+  });
 });

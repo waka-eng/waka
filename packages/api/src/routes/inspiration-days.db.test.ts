@@ -190,6 +190,11 @@ describe("how much was kept on each day", () => {
     await keptDaysAgo(person, 1, 1);
 
     expect(await daysFor(person, "?tz=Mars%2FOlympus_Mons")).toEqual(await daysFor(person));
+    /* and it SAYS it fell back, so the calendar can draw UTC dates to match */
+    const fellBack = await appFor(person).request("/api/inspiration-days?tz=Mars%2FOlympus_Mons");
+    expect(((await fellBack.json()) as { zone: string }).zone).toBe("UTC");
+    const kept = await appFor(person).request("/api/inspiration-days?tz=Asia%2FSeoul");
+    expect(((await kept.json()) as { zone: string }).zone).toBe("Asia/Seoul");
     const response = await appFor(person).request("/api/inspiration-days?tz=UTC'%3B--");
     expect(response.status).toBe(400);
   });
