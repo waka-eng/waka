@@ -381,3 +381,19 @@ it("keeps one note's upload off another note's bar", async () => {
   expect(bar(), "and not on the next note").toBe("");
   expect(slot.querySelector<HTMLButtonElement>('[aria-label="Add photo or file"]')?.disabled, "whose tools it does not hold").toBe(false);
 });
+
+/* A READ THAT NEVER ANSWERS ENDS (review, 2026-10-18): after the limit the
+   note is a failed read with Try again, never an editor stuck "Opening…". */
+it("ends a full-text read that never answers as a failed read with Try again", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    await openSave(longRow, LONG); // the read is held and never answered
+    expect(bar()).toBe("Opening…");
+    await act(async () => { vi.advanceTimersByTime(20_001); });
+    expect(bar()).toBe("Didn’t open.");
+    expect(page().readOnly).toBe(true);
+    expect([...slot.querySelectorAll("button")].some((b) => b.textContent === "Try again")).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});

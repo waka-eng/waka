@@ -371,3 +371,24 @@ it("opening a memory by its address when no fresh read can be had opens no edita
   expect(card(), "no card opened on words it could not read").toBeNull();
   expect(editBox()).toBeNull();
 });
+
+/* THE EDIT'S OWN FRESH READ FAILS WHILE THE NOTE IS ON SCREEN (review,
+   2026-10-18): the words shown stay, the card says it could not open for
+   EDITING (not that the rest failed to load), and Try again opens the edit
+   the person asked for. */
+it("an edit whose fresh read fails says it could not open for editing, and Try again opens it", { timeout: 30_000 }, async () => {
+  await openByAddress("own-5");
+  await stepOn(); // own-4, its detail on screen
+  await wait(50);
+  await world.step(6);
+  S.hold = "fail";
+  await pressWords();
+  for (let turn = 0; turn < 10 && note() === "Opening…"; turn += 1) { await world.step(2); await wait(10); }
+  expect(editBox()).toBeNull();
+  expect(note()).toContain("Couldn’t open for editing.");
+  expect(words()?.textContent, "the words on screen stay").toContain("something I kept, 4");
+  S.hold = null;
+  await act(async () => card()!.querySelector<HTMLButtonElement>(".jar-panel-retry")!.click());
+  for (let turn = 0; turn < 10 && !editBox(); turn += 1) { await world.step(2); await wait(10); }
+  expect(editBox()?.value, "Try again opens the edit that was asked for").toBe("something I kept, 4");
+});

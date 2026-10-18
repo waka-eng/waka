@@ -75,6 +75,8 @@ import { inspirationPreview } from "../lib/inspiration-preview";
 import { wordsCanStand } from "../lib/note-words";
 
 type Phase = "loading" | "ready" | "failed";
+/** How long a note's full-text read may take before it is a failed read. */
+const NOTE_READ_LIMIT_MS = 20_000;
 
 /** How many kept things it takes before finding one is a real act rather
     than a glance. Roughly a screenful at the archive's row height. */
@@ -589,7 +591,15 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     const controller = new AbortController();
     reading.current = controller;
     setStored({ id, text: null, failed: false });
+    /* BOUNDED: a read that never answers ends as a failed read (Try again),
+       never an editor stuck "Opening…" */
+    const limit = window.setTimeout(() => {
+      if (reading.current !== controller) return;
+      setStored((held) => (held && held.id === id && held.text === null ? { id, text: null, failed: true } : held));
+      controller.abort();
+    }, NOTE_READ_LIMIT_MS);
     loadInspiration(id, profileId ?? undefined, controller.signal)
+      .finally(() => window.clearTimeout(limit))
       .then((detail) => {
         if (!mounted.current || controller.signal.aborted) return;
         setStored((held) => (held && held.id === id ? { id, text: detail.text, failed: false } : held));

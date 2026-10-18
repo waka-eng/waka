@@ -85,6 +85,7 @@ import {
 } from "../lib/data";
 import type { Adopted, JarNote } from "./top-of-mind/board";
 import { wordsCanStand } from "../lib/note-words";
+import { inspirationPreview } from "../lib/inspiration-preview";
 
 /** Which layer's words are open. The three are one gesture, not three. */
 export type EditKind = "memory" | "signal" | "entry";
@@ -335,7 +336,7 @@ export function useEditing(deps: EditingDeps): Editing {
       /* a fixture memory is kept locally — and the card shows the kept words */
       if (held.kind === "memory") {
         d.setInspirations((prev) =>
-          prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
+          prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: inspirationPreview(text, c.attachments) } : c)) : prev,
         );
         d.onMemoryKept?.(held.id, text);
       }
@@ -347,7 +348,7 @@ export function useEditing(deps: EditingDeps): Editing {
         .then((made) => {
           if (made) d.onInspirationSaved?.(made);
           d.setInspirations((prev) =>
-            prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
+            prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: inspirationPreview(text, c.attachments) } : c)) : prev,
           );
           d.details.current.delete(held.id);
           d.onMemoryKept?.(held.id, text, made ?? undefined);

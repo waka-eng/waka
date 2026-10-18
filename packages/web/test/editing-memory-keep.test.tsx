@@ -42,7 +42,10 @@ const previews: string[] = [];
 const order: string[] = [];
 
 function Host(props: { offline: boolean; attachments: number; profile?: string }) {
-  const [, setInspirations] = useState<null | Array<{ id: string; preview: string }>>([{ id: "m1", preview: "old words" }]);
+  const [, setInspirations] = useState<null | Array<{ id: string; preview: string; attachments: Array<{ type: "image"; label: string }> }>>([{
+    id: "m1", preview: "old words",
+    attachments: Array.from({ length: props.attachments }, () => ({ type: "image" as const, label: "IMG_0001.jpg" })),
+  }]);
   edit = useEditing({
     offline: { current: props.offline },
     details: { current: new Map() },
@@ -98,4 +101,12 @@ it("tells the card about a fixture keep, so its words and the next edit are the 
   expect(W.calls, "a fixture world asks no server").toEqual([]);
   expect(kept).toEqual([{ id: "m1", text: "kept offline" }]);
   expect(previews.at(-1), "and the list shows them").toBe("kept offline");
+});
+
+/* THE LIST'S PREVIEW AFTER A KEEP IS THE ARCHIVE'S PREVIEW (review,
+   2026-10-17): a photo-only memory whose words were cleared reads "Photo",
+   never an empty row. */
+it("previews a wordless memory by its attachment after a keep", async () => {
+  await keepWords({ attachments: 1 }, "");
+  expect(previews.at(-1)).toBe("Photo");
 });
