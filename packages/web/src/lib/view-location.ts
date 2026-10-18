@@ -77,7 +77,8 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
   view.reflectionId = params.get('reflection') === 'open' ? 'open' : id(params.get('reflection'));
   if (!view.inspirationId) view.reflectionId = null;
   view.memberId = id(params.get('member'));
-  const open = params.get('open');
+  /* an empty or blank `open` (`?open=`, `?open=%20`) names no page: it is absent, not a dead link */
+  const open = params.get('open')?.trim() || null;
   view.open = OPEN.find((name) => name === open) ?? null;
   /* AN `open` THIS BUILD DOES NOT KNOW IS A DEAD LINK, NOT A HOME LINK. It
      was dropped silently, so `?open=reading` — a page that went — opened

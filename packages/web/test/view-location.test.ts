@@ -33,6 +33,11 @@ it('refuses an open page this build does not know, and keeps the ones it does', 
   expect(readViewLocation('/', '?open=saves')).toMatchObject({ open: 'saves' });
   expect(readViewLocation('/', '?open=claims')).toMatchObject({ open: 'claims' });
 });
+it('treats an empty or blank open as absent, not as a dead link', () => {
+  expect(readViewLocation('/', '?open=')).toMatchObject({ open: null });
+  expect(readViewLocation('/', '?open=%20%20')).toMatchObject({ open: null });
+  expect(readViewLocation('/w/me', '?open=&view=sky')).toMatchObject({ open: null, section: 'sky' });
+});
 /* THE TWO REVIEW SUITES THAT STOOD HERE ARE REPLACED, NOT DROPPED
    (2026-10-10). They asserted that `/review/:id` round-tripped and that
    `?thought=` carried one exact answer id. Both are deleted with the review
