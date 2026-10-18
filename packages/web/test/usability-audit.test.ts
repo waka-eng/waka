@@ -74,6 +74,13 @@ describe("the recording clock is never read out every second (review of #11)", (
         expect(attributes).not.toContain("role=");
       }
       expect(source).not.toMatch(/waka-dock-state--live" role="status"/);
+      if (file === "pages/Home.tsx") {
+        // One "Recording" region at a time (round 6): the foot only while the
+        // mouth is closed, the bar's fallback only while it is open.
+        expect(source).toMatch(/recording\.phase !== 'idle' && mouthOpen \? say\('worldComposerRecordingNow'\)/);
+        const foot = source.indexOf('<div className="waka-composer-foot"');
+        expect(source.slice(foot - 60, foot)).toContain("!mouthOpen ?");
+      }
       // The composer foot's "Recording · Ns" too (review round 5).
       expect(source).not.toMatch(/role="status">\s*\{formatMessage\(locale, 'worldComposerRecordingFor'/);
       const counts = [...source.matchAll(/<span([^>]*)>\{formatMessage\(locale, 'worldComposerRecordingFor'/g)];

@@ -116,7 +116,7 @@ function onTop(rendered: string | null): string | null {
   return live && typeof live.idx === "number" ? live.usr?.savesNote ?? null : rendered;
 }
 
-function NoteHistory({ openId, onBack }: { openId: string | null; onBack: () => void | Promise<unknown> }) {
+export function NoteHistory({ openId, onBack }: { openId: string | null; onBack: () => void | Promise<unknown> }) {
   const location = useLocation(), navigate = useNavigate();
   const marked = (location.state as { savesNote?: string } | null)?.savesNote ?? null;
   const pushed = useRef<string | null>(null), seen = useRef(false);
@@ -125,16 +125,18 @@ function NoteHistory({ openId, onBack }: { openId: string | null; onBack: () => 
   const live = useRef(openId); live.current = openId;
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
-  const push = (id: string) => {
+  const push = (id: string, replace = false) => {
     pushed.current = id; seen.current = false;
     const at = here.current;
-    navigate(at.pathname + at.search + at.hash, { state: { ...((at.state as object | null) ?? {}), savesNote: id } });
+    navigate(at.pathname + at.search + at.hash, { replace, state: { ...((at.state as object | null) ?? {}), savesNote: id } });
   };
   // The archive going away ends the leave; a fresh archive starts clear.
   useEffect(() => { archiveLeaving.now = false; return () => { archiveLeaving.now = false; }; }, []);
   useEffect(() => {
     if (openId && pushed.current !== openId && marked !== openId) {
-      push(openId);
+      /* NOTE TO NOTE, ONE ENTRY (review): going from A straight to B while
+         A's entry is on top replaces it, so one Back still reaches the list. */
+      push(openId, pushed.current !== null && marked === pushed.current);
     } else if (!openId && pushed.current) {
       const mine = pushed.current;
       pushed.current = null; seen.current = false;

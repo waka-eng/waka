@@ -11483,7 +11483,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     {/* Shown for eyes; said by `LiveWord`, which mounts empty
                         and fills a beat later so the words are announced. */}
                     {composerState ? <span aria-hidden="true">{composerState}</span> : null}
-                    <LiveWord text={composerState || (recording.phase !== 'idle' ? say('worldComposerRecordingNow') : '')} />
+                    {/* ONE "Recording" AT A TIME (review): the composer foot says it
+                        while the mouth is closed (`!mouthOpen`), so the bar says it
+                        only while the mouth is open — never both regions at once. */}
+                    <LiveWord text={composerState || (recording.phase !== 'idle' && mouthOpen ? say('worldComposerRecordingNow') : '')} />
                     {recording.phase !== 'idle' ? <>
                       <span aria-hidden="true">{Math.floor(recording.seconds / 60)}:{String(recording.seconds % 60).padStart(2, '0')}</span>
                       <button type="button" className="waka-dock-undo" disabled={recording.phase === 'finishing'}
