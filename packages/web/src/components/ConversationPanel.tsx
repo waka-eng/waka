@@ -276,6 +276,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const sending=draft?.pending&&!conversation?.messages.some(message=>message.id===draft.id)?draft:null;
   const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&(!reply.state||reply.error));
   const awaitingReply=replyPending||replyUnconfirmed;
+  // The send guards as they stand now, for code that resumes after an await.
+  const guards=useRef({loading,awaitingReply,storageFailed,focusFailed,conversation});guards.current={loading,awaitingReply,storageFailed,focusFailed,conversation};
   useLayoutEffect(()=>{const node=body.current;if(!node||!conversation)return;const saved=restoredScroll.current;
     if(prependScroll.current){const previous=prependScroll.current;node.scrollTop=previous.top+node.scrollHeight-previous.height;prependScroll.current=null;return;}
     if(saved){nearBottom.current=saved.nearBottom;node.scrollTop=saved.nearBottom?node.scrollHeight:saved.top;restoredScroll.current=null;}
@@ -392,6 +394,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        words never left: the draft is NOT marked pending, so it stays
        editable, and the notice says it was not sent and offers to retry. */
     let replies=generationEnabled;
+    const pressed=draftRef.current;
     if(replies===null){
       const owner=lifecycle.current;working.current=true;setBusy(true);
       try{const listed=await run(signal=>listConversations(scope.profileId,signal));if(!mine(owner))return;replies=listed.generationEnabled;setGenerationEnabled(replies);setError(null);setUnsent(false);}
@@ -400,6 +403,14 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
          Only words that were never sent at all are "not sent". */
       catch{if(mine(owner)){const held=Boolean(draftRef.current?.pending);setError(say(held?'worldConversationNotConfirmed':'worldConversationNotSent'));setUnsent(!held);}return;}
       finally{working.current=false;if(mine(owner))setBusy(false);}
+      /* EVERY SEND GUARD AGAIN, AFTER THE AWAIT (review): the list read takes
+         time, and in it the words may have been cleared or changed, an upload
+         begun, a reply started, a reload begun. The press was for the draft
+         as it stood; anything else is not what the person sent. State read
+         through `guards`, not this render's stale closure. */
+      const g=guards.current,now=draftRef.current;
+      if(now!==pressed||!now||!now.content.trim()&&!now.attachments?.length||uploadsRef.current.length||working.current||
+        g.loading||g.awaitingReply||g.storageFailed||g.focusFailed||(id&&!g.conversation))return;
     }
     if(!draftRef.current)return;
     const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID(),...(current.talkWith?{}:agent&&talkWith!=='mine'?{talkWith,agentId:agent.id}:{})}:{})};

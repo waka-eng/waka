@@ -171,6 +171,19 @@ it('says when the list read fails and nothing else can tell whether replies are 
   expect(host.textContent).toContain('WAKA can’t be reached right now.');
   expect([...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent)).toContain('Try again');
 });
+/* Review: Send waits for the list read when replies are unknown; whatever
+   changed meanwhile, the press was for the words as they stood. */
+it('re-checks every send guard after the pre-flight read, and sends nothing if the words changed or went',async()=>{
+  vi.mocked(listConversations).mockRejectedValueOnce(new Error('Offline'));
+  await mount(null);
+  let answer!:(value:Awaited<ReturnType<typeof listConversations>>)=>void;
+  vi.mocked(listConversations).mockImplementation(()=>new Promise(resolve=>{answer=resolve;}));
+  await type('First words');await click('Send');            // pre-flight in flight
+  await type('Other words');                                  // changed meanwhile
+  await act(async()=>{answer({profileId:scope.profileId,conversations:[],generationEnabled:false});});
+  expect(createConversation).not.toHaveBeenCalled();
+  expect(host.querySelector('textarea')!.value).toBe('Other words');
+});
 /* Round 7: the list read's failure never replaces a more specific sentence. */
 it('keeps the conversation\'s own failure when the list read fails after it',async()=>{
   let failList!:(reason:unknown)=>void;
