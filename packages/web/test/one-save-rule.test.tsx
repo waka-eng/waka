@@ -323,3 +323,15 @@ describe("the saved note's Save asks the one rule", () => {
     }
   });
 });
+
+/* DELETING A NOTE WHILE ITS RECORDING RUNS (review, 2026-10-17). The bar
+   that held Stop goes with the note, so the recording must end with it —
+   never a live microphone with no way to stop it. */
+it("cancels a running recording when the note is deleted", async () => {
+  await openTheSavedNote();
+  await act(async () => record()!.click());
+  expect(stopRecording(), "the recorder is running").not.toBeNull();
+  await act(async () => slot.querySelector<HTMLButtonElement>(".waka-dock-roomy .waka-dock-tool--erase")!.click());
+  for (let turn = 0; turn < 6; turn += 1) await act(async () => { await Promise.resolve(); });
+  expect(stopTrack, "the microphone was released").toHaveBeenCalled();
+});

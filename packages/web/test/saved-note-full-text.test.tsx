@@ -107,7 +107,8 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-type World = { profileId?: string; ownArchive?: boolean; readFull?: (id: string) => Promise<never>; onAttached?: (id: string) => void };
+type World = { profileId?: string; ownArchive?: boolean; readFull?: (id: string) => Promise<never>; onAttached?: (id: string) => void;
+  savedElsewhere?: { id: string; text: string; seq: number } | null };
 /** The archive as Home renders it: every callback a NEW inline function on
     every render, exactly as Home passes them. */
 async function renderArchive(whose: World = {}): Promise<void> {
@@ -116,7 +117,7 @@ async function renderArchive(whose: World = {}): Promise<void> {
       profileId={whose.profileId} ownArchive={whose.ownArchive}
       onSaved={(made) => { state.saved.push({ id: made.id, text: made.text }); }}
       onErased={() => undefined}
-      readFull={whose.readFull} onAttached={whose.onAttached}
+      readFull={whose.readFull} onAttached={whose.onAttached} savedElsewhere={whose.savedElsewhere}
       onNoteOpen={(close) => { closer = close; }} />,
   ));
 }
@@ -390,4 +391,24 @@ it("tells the world an attachment landed, so it re-reads through its own stamps"
   for (let turn = 0; turn < 10 && attached.length === 0; turn += 1) await act(async () => { await Promise.resolve(); });
   expect(attached).toEqual(["long-1"]);
   expect(state.saved, "and does not hand it a row of its own").toEqual([]);
+});
+
+/* THE CARD SAVED THIS NOTE WHILE IT WAS OPEN HERE (review, 2026-10-17:
+   data loss). The archive must not keep editing the words from before. */
+it("moves an untouched draft onto words the card saved, and asks about a changed one", async () => {
+  await openSave(longRow, LONG);
+  await answer(true);
+  const FROM_CARD = `${LONG} (saved on the card)`;
+  await renderArchive({ savedElsewhere: { id: "long-1", text: FROM_CARD, seq: 1 } });
+  expect(page().value, "an untouched draft moved onto the stored words").toBe(FROM_CARD);
+  expect(save().disabled, "and there is nothing new to save").toBe(true);
+
+  await type(`${FROM_CARD} And mine.`);
+  const AGAIN = `${FROM_CARD} And the card again.`;
+  await renderArchive({ savedElsewhere: { id: "long-1", text: AGAIN, seq: 2 } });
+  expect(page().value, "the person's typing is not overwritten").toBe(`${FROM_CARD} And mine.`);
+  expect(slot.querySelector('[role="alert"]')?.textContent).toBe("This note was saved on the home screen while you were editing it.");
+  await act(async () => [...slot.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Use the saved words")!.click());
+  expect(page().value).toBe(AGAIN);
+  expect(slot.querySelector('[role="alert"]'), "the question is answered").toBeNull();
 });

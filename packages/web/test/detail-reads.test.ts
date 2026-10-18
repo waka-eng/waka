@@ -14,7 +14,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { InspirationDetail } from "../src/lib/data";
-import { markSaved, readDetail, type DetailReadState } from "../src/lib/detail-reads";
+import { markSaved, readAfterWrites, readDetail, type DetailReadState } from "../src/lib/detail-reads";
 
 const state = (): DetailReadState => ({ details: new Map(), pending: new Map(), generations: new Map(), stamps: new Map() });
 const row = (text: string, updatedMs = 1_000): InspirationDetail =>
@@ -86,6 +86,37 @@ describe("a note's detail read", () => {
     f.asked[0]!(row("words", 1_000)); // same stamp, no attachment, lands last
     expect((await before)?.attachments, "the older read answers with what the newer one cached").toHaveLength(1);
     expect(s.details.get("n1")?.attachments).toHaveLength(1);
+  });
+
+  /* NOT THE PRE-WRITE CACHE EITHER (review, 2026-10-17). While a write is
+     still out, the cache holds the words from before it; a stale read waits
+     for the write and answers with what the write cached. */
+  it("stale while a write is still out, waits for the write and answers with its words", async () => {
+    const s = state(), f = heldFetch();
+    let land!: () => void;
+    s.writes = new Map([["n1", new Promise<void>((done) => { land = done; })]]);
+    s.details.set("n1", row("before the write"));
+    const p = readDetail(s, "n1", f.fetch);
+    markSaved(s, "n1");
+    f.asked[0]!(row("before the write"));
+    await Promise.resolve(); await Promise.resolve();
+    s.details.set("n1", row("the write's words")); // the write lands and caches its row
+    land();
+    expect((await p)?.text).toBe("the write's words");
+  });
+
+  it("an archive read waits for a card write in flight before it starts", async () => {
+    const s = state(), f = heldFetch();
+    let land!: () => void;
+    s.writes = new Map([["n1", new Promise<void>((done) => { land = done; })]]);
+    const p = readAfterWrites(s, "n1", f.fetch);
+    await Promise.resolve();
+    expect(f.asked, "no read while the write is out").toHaveLength(0);
+    land();
+    await Promise.resolve(); await Promise.resolve();
+    expect(f.asked).toHaveLength(1);
+    f.asked[0]!(row("after the write", 2_000));
+    expect((await p)?.text).toBe("after the write");
   });
 
   it("answering with a row older than one already accepted, is dropped", async () => {

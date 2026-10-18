@@ -358,6 +358,7 @@
   "worldMomentPlaceholder": "떠오르는 대로 적어도 괜찮아요",
   "worldMomentSkip": "말하지 않고 담기",
   "worldEditConflict": "편집하는 동안 보관함에서 이 노트가 저장됐어요.",
+  "worldEditConflictArchive": "편집하는 동안 홈 화면에서 이 노트가 저장됐어요.",
   "worldEditConflictMine": "내 글 유지",
   "worldEditConflictTheirs": "저장된 글 쓰기",
   "worldMemoryNeedsWords": "이 기억을 남기려면 글을 써 주세요.",

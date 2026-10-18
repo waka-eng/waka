@@ -33,6 +33,9 @@ export interface DetailReadState {
   generations: Map<string, number>;
   /** Newest accepted server `updatedAt` (ms), by note id. */
   stamps: Map<string, number>;
+  /** Writes of a note still in flight, by note id: settle when the write
+      has landed (and its words are cached) or failed. */
+  writes?: Map<string, Promise<void>>;
 }
 
 export function readDetail(
@@ -50,7 +53,14 @@ export function readDetail(
   const p: Promise<InspirationDetail | null> = fetch(id)
     .then((row) => {
       settle();
-      if (stale(row)) return state.details.get(id) ?? readDetail(state, id, fetch);
+      if (stale(row)) {
+        /* A WRITE STILL IN FLIGHT: the cache holds the words from BEFORE it,
+           so they are not the answer either — wait for the write to land
+           (it caches its own row) and answer with that, or read again. */
+        const writing = state.writes?.get(id);
+        if (writing) return writing.then(() => state.details.get(id) ?? readDetail(state, id, fetch));
+        return state.details.get(id) ?? readDetail(state, id, fetch);
+      }
       state.details.set(id, row);
       return row;
     })
@@ -68,4 +78,15 @@ export function markSaved(state: DetailReadState, id: string, updatedAt?: string
   state.pending.delete(id);
   const stamp = updatedAt ? Date.parse(updatedAt) : NaN;
   if (Number.isFinite(stamp)) state.stamps.set(id, Math.max(stamp, state.stamps.get(id) ?? -Infinity));
+}
+
+/** A read that must not start until any write of `id` in flight has
+    landed — the archive opening a note the card is saving. */
+export function readAfterWrites(
+  state: DetailReadState,
+  id: string,
+  fetch: (id: string) => Promise<InspirationDetail>,
+): Promise<InspirationDetail | null> {
+  const writing = state.writes?.get(id);
+  return writing ? writing.then(() => readDetail(state, id, fetch)) : readDetail(state, id, fetch);
 }

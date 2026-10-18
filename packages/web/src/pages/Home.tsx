@@ -101,7 +101,7 @@ import type { CreateInspirationRequest } from '../lib/api';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type ApiInspiration, type HarvestReason } from '../lib/api';
 import { inspirationPreview } from '../lib/inspiration-preview';
 import { wordsCanStand } from '../lib/note-words';
-import { markSaved, readDetail, type DetailReadState } from '../lib/detail-reads';
+import { markSaved, readAfterWrites, readDetail, type DetailReadState } from '../lib/detail-reads';
 import { verdictOnSavedWords } from '../lib/edit-conflict';
 import { candidateSaveRequestId } from '../lib/harvest';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
@@ -2245,9 +2245,17 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       it — never replaces newer words (see `rememberSavedInspiration`). */
   const newestStampRef = useRef<Map<string, number>>(new Map());
   /** The four maps `lib/detail-reads.ts` reads and stamps, from their refs. */
+  /** Card writes still in flight, by note id, with the way to settle each —
+      the archive waits on these before it reads a note the card is saving,
+      and a stale read waits on them rather than answering with the words
+      from before the write (`lib/detail-reads.ts`). */
+  const writesRef = useRef<Map<string, Promise<void>>>(new Map());
+  const writeSettlersRef = useRef<Map<string, () => void>>(new Map());
+  /** The archive's open note learns of a save made elsewhere through this. */
+  const [savedElsewhere, setSavedElsewhere] = useState<{ id: string; text: string; seq: number } | null>(null);
   const detailReadState = (): DetailReadState => ({
     details: detailsRef.current, pending: detailPendingRef.current,
-    generations: savedGenerationRef.current, stamps: newestStampRef.current,
+    generations: savedGenerationRef.current, stamps: newestStampRef.current, writes: writesRef.current,
   });
   const detailPendingRef = useRef<Map<string, Promise<InspirationDetail | null>>>(new Map());
 
@@ -3316,6 +3324,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, []);
   const loadDetailRef = useRef(loadDetail);
   loadDetailRef.current = loadDetail;
+  /* THE ARCHIVE'S READ: the same stamped read, started only once any card
+     write of the note in flight has landed (review, 2026-10-17). */
+  const readForArchive = (id: string): Promise<InspirationDetail | null> => {
+    const active = atWallRef.current;
+    const profile = active.kind === 'agent' ? active.id : storageScope?.profileId;
+    return readAfterWrites(detailReadState(), id, (noteId) => loadInspiration(noteId, profile));
+  };
+  const readForArchiveRef = useRef(readForArchive);
+  readForArchiveRef.current = readForArchive;
 
   /**
    * THE CREATURE, ASKED. A tap on the companion is a question — "what has
@@ -4416,7 +4433,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        upload, say) and must not put the old words back. */
     const stamp = made?.updatedAt ? Date.parse(made.updatedAt) : NaN;
     if (Number.isFinite(stamp)) {
-      if (stamp < (newestStampRef.current.get(id) ?? -Infinity)) return;
+      if (stamp < (newestStampRef.current.get(id) ?? -Infinity)) return false;
       newestStampRef.current.set(id, stamp);
     }
     /* A WRITE makes every read already in flight older than what is stored
@@ -4452,7 +4469,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? { ...p, detail, partial: false, pending: false } : p));
       /* a memory opened by its address is held beside the field too */
       setDetachedInspiration((held) => (held && held.detail?.id === id ? { ...held, detail } : held));
+      /* and the archive, if it has this note open, decides for its own
+         editor by the same rule the card uses (`lib/edit-conflict.ts`) */
+      if (how === 'write') setSavedElsewhere((was) => ({ id, text: detail.text, seq: (was?.seq ?? 0) + 1 }));
     }
+    return true;
   }, []);
 
   /* AN ATTACHMENT LANDED ON A NOTE IN THE ARCHIVE. Its words did not change,
@@ -6971,10 +6992,31 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        second edit began from the first one's BEFORE and its save reverted it
        (review, 2026-10-17). The cache gets the same words for the same
        reason: reopening this memory must not read them back stale. */
-    onMemoryKept: rememberSavedInspiration,
+    onMemoryKept: (id, text, made) => {
+      const accepted = rememberSavedInspiration(id, text, made);
+      /* REFUSED AS OLDER: the card's words reached the server before the
+         archive's newer ones. No "saved" over words that are not stored —
+         the card asks which to keep (review, 2026-10-17). */
+      if (accepted === false) {
+        const theirs = detailsRef.current.get(id)?.text;
+        const open = editingNowRef.current?.open;
+        if (theirs !== undefined && open) setEditConflict({ id: open.id, theirs });
+      }
+      return accepted;
+    },
+    onMemoryWriteSettled: (id) => {
+      writeSettlersRef.current.get(id)?.();
+      writeSettlersRef.current.delete(id);
+      writesRef.current.delete(id);
+    },
     /* a card write going out: every read of this note already in flight is
        now older than it (`lib/detail-reads.ts`) */
-    onMemoryWriting: (id) => markSaved(detailReadState(), id),
+    onMemoryWriting: (id) => {
+      markSaved(detailReadState(), id);
+      if (!writesRef.current.has(id)) {
+        writesRef.current.set(id, new Promise<void>((settle) => { writeSettlersRef.current.set(id, settle); }));
+      }
+    },
     /* The one empty-words rule (`lib/note-words.ts`) needs to know what the
        memory holds besides its words. */
     memoryAttachmentCount: (id) => {
@@ -11809,7 +11851,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         onRestored={(made) => restoredInspirationRef.current(made)}
         /* the archive reads through the world's stamped reads, so a read
            racing a card save cannot seed its editor with older words */
-        readFull={(id) => loadDetailRef.current(id)}
+        readFull={(id) => readForArchiveRef.current(id)}
+        savedElsewhere={savedElsewhere}
         onAttached={(id) => attachedInspirationRef.current(id)}
         onErased={(id) => {
           /* Gone from the field and the cache like a delete made on the card

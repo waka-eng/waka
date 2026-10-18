@@ -358,6 +358,7 @@
   "worldMomentPlaceholder": "Say it however it comes out",
   "worldMomentSkip": "Keep it without saying",
   "worldEditConflict": "This note was saved from your archive while you were editing it.",
+  "worldEditConflictArchive": "This note was saved on the home screen while you were editing it.",
   "worldEditConflictMine": "Keep mine",
   "worldEditConflictTheirs": "Use the saved words",
   "worldMemoryNeedsWords": "Write something to keep this memory.",
