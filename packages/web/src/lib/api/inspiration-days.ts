@@ -21,6 +21,26 @@ export interface ApiKeptDay {
 export interface KeptDays {
   days: ApiKeptDay[];
   zone: string;
+  /** True when the server used UTC because the zone asked for was absent,
+      malformed or unknown. Absent from a server older than the flag. */
+  fallback?: boolean;
+}
+
+/** Old names for the same place — the server's own list
+    (`routes/inspiration-days.ts`), so a reply naming the new one is
+    recognised as the zone that was asked for. */
+const ZONE_LINKS: Record<string, string> = {
+  "asia/calcutta": "asia/kolkata",
+  "europe/kiev": "europe/kyiv",
+  "asia/saigon": "asia/ho_chi_minh",
+  "asia/katmandu": "asia/kathmandu",
+  "asia/rangoon": "asia/yangon",
+  "america/buenos_aires": "america/argentina/buenos_aires",
+};
+/** One spelling per place: lower case, old names read as their new ones. */
+export function canonicalZone(tz: string): string {
+  const lower = tz.toLowerCase();
+  return ZONE_LINKS[lower] ?? lower;
 }
 
 export interface ListKeptDaysRequest extends ProfileScoped {
@@ -45,12 +65,13 @@ export async function listKeptDays(request: ListKeptDaysRequest = {}): Promise<K
   if (tz) params.set("tz", tz);
   if (request.profile) params.set("profile", request.profile);
   const query = params.toString();
-  const body = await getJson<{ days: ApiKeptDay[]; zone?: string }>(
+  const body = await getJson<{ days: ApiKeptDay[]; zone?: string; fallback?: boolean }>(
     apiPath(`/inspiration-days${query ? `?${query}` : ""}`),
     "Failed to load your days",
   );
   return {
     days: Array.isArray(body.days) ? body.days : [],
     zone: typeof body.zone === "string" ? body.zone : "UTC",
+    ...(typeof body.fallback === "boolean" ? { fallback: body.fallback } : {}),
   };
 }

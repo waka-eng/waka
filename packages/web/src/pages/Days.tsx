@@ -29,6 +29,7 @@ import { useNavigate } from "react-router-dom";
 import { Menu } from "../components/Menu";
 import { ChatCorner } from "../components/ChatCorner";
 import { listKeptDays, type ApiKeptDay } from "../lib/api";
+import { canonicalZone } from "../lib/api/inspiration-days";
 import { useOptionalAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 import { usePageMenu } from "../lib/page-menu";
@@ -105,13 +106,18 @@ export function buildGrid(rows: ApiKeptDay[], now: Date, utc = false): Cell[] {
 }
 
 /**
- * Whether the server's days are UTC dates rather than the reader's. A request
- * that named no zone (the browser would not say) is grouped in UTC by the
- * server — so that is UTC, whatever zone the reply names; otherwise it is
- * UTC exactly when the zone grouped in is not the one asked for.
+ * Whether the server's days are UTC dates rather than the reader's.
+ *
+ * The server SAYS so (`fallback`), and that is the answer whenever it is
+ * there: the zone it names may be a canonical spelling of the one asked for
+ * (`Asia/Calcutta` asked, `Asia/Kolkata` used), which is the reader's own
+ * zone, not a fallback. A server older than the flag is read by comparing
+ * the two names in one spelling. A request that named no zone is UTC.
  */
-export function groupedInUtc(asked: string | undefined, grouped: string): boolean {
-  return asked === undefined || grouped !== asked;
+export function groupedInUtc(asked: string | undefined, reply: { zone: string; fallback?: boolean }): boolean {
+  if (typeof reply.fallback === "boolean") return reply.fallback;
+  if (asked === undefined) return true;
+  return canonicalZone(reply.zone) !== canonicalZone(asked);
 }
 
 export function Days(): JSX.Element {
@@ -141,7 +147,7 @@ export function Days(): JSX.Element {
       const kept = await listKeptDays({ days: WINDOW_DAYS, tz });
       if (!mounted.current) return;
       setRows(kept.days);
-      setUtc(groupedInUtc(tz, kept.zone));
+      setUtc(groupedInUtc(tz, kept));
       setPhase("ready");
     } catch {
       if (!mounted.current) return;

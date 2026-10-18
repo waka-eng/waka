@@ -99,8 +99,16 @@ export function zoneCandidates(tz: string): string[] {
 const KNOWN_ZONES = new Map<string, string | null>();
 const KNOWN_ZONES_MAX = 512;
 
-async function groupingZone(db: ReturnType<typeof getDb>, tz: string | undefined): Promise<string> {
-  if (!tz || tz === "UTC") return "UTC";
+/** The zone grouped in, and whether it is UTC only because the one asked
+    for was absent, malformed or unknown — said outright, so a client never
+    has to guess from a name that may have been canonicalized
+    (`Asia/Calcutta` asked, `Asia/Kolkata` used: not a fallback). */
+async function groupingZone(
+  db: ReturnType<typeof getDb>,
+  tz: string | undefined,
+): Promise<{ zone: string; fallback: boolean }> {
+  if (!tz) return { zone: "UTC", fallback: true };
+  if (tz === "UTC") return { zone: "UTC", fallback: false };
   let known = KNOWN_ZONES.get(tz);
   if (known === undefined) {
     known = null;
@@ -116,7 +124,7 @@ async function groupingZone(db: ReturnType<typeof getDb>, tz: string | undefined
     if (KNOWN_ZONES.size >= KNOWN_ZONES_MAX) KNOWN_ZONES.clear();
     KNOWN_ZONES.set(tz, known);
   }
-  return known ?? "UTC";
+  return known ? { zone: known, fallback: false } : { zone: "UTC", fallback: true };
 }
 
 export interface KeptDay {
@@ -158,7 +166,7 @@ export function createInspirationDaysRoutes(deps: DaysRouteDependencies = {}): H
     if (!scope.ok) return c.json(scope.body, scope.status);
 
     const days = parsed.data.days ?? DEFAULT_DAYS;
-    const zone = await groupingZone(db, zoneShaped(parsed.data.tz));
+    const { zone, fallback } = await groupingZone(db, zoneShaped(parsed.data.tz));
     const rows = await db.execute<{ day: string; kept: number }>(sql`
       SELECT to_char(date_trunc('day', created_at AT TIME ZONE ${zone}::text), 'YYYY-MM-DD') AS day,
              count(*)::int AS kept
@@ -182,7 +190,7 @@ export function createInspirationDaysRoutes(deps: DaysRouteDependencies = {}): H
     /* THE ZONE ACTUALLY USED, said back. A zone Postgres did not know fell
        back to UTC, and a client that went on drawing its own local dates
        put every count on the wrong cell for part of the day. */
-    return c.json({ days: list as KeptDay[], zone }, 200);
+    return c.json({ days: list as KeptDay[], zone, fallback }, 200);
   });
 
   return routes;

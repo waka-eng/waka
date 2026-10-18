@@ -99,13 +99,25 @@ describe("the days grid", () => {
   });
 
   it("treats a request that named no zone as grouped in UTC", () => {
-    expect(groupedInUtc(undefined, "UTC")).toBe(true);
-    expect(groupedInUtc(undefined, "Asia/Seoul")).toBe(true);
-    expect(groupedInUtc("Asia/Seoul", "Asia/Seoul")).toBe(false);
-    expect(groupedInUtc("Asia/Seoul", "UTC")).toBe(true);
+    expect(groupedInUtc(undefined, { zone: "UTC" })).toBe(true);
+    expect(groupedInUtc(undefined, { zone: "Asia/Seoul" })).toBe(true);
+    expect(groupedInUtc("Asia/Seoul", { zone: "Asia/Seoul" })).toBe(false);
+    expect(groupedInUtc("Asia/Seoul", { zone: "UTC" })).toBe(true);
     /* A reader whose zone IS UTC got their own zone back: local dates and UTC
        dates are the same, and the reply is not a fallback. */
-    expect(groupedInUtc("UTC", "UTC")).toBe(false);
+    expect(groupedInUtc("UTC", { zone: "UTC" })).toBe(false);
+  });
+
+  it("takes the server's word on a fallback, so a canonicalized zone is not mistaken for one", () => {
+    /* Asked Asia/Calcutta, grouped in Asia/Kolkata: the same place. */
+    expect(groupedInUtc("Asia/Calcutta", { zone: "Asia/Kolkata", fallback: false })).toBe(false);
+    expect(groupedInUtc("Asia/Seoul", { zone: "UTC", fallback: true })).toBe(true);
+    expect(groupedInUtc(undefined, { zone: "UTC", fallback: true })).toBe(true);
+    /* an older server, without the flag: compared in one spelling */
+    expect(groupedInUtc("Asia/Calcutta", { zone: "Asia/Kolkata" })).toBe(false);
+    expect(groupedInUtc("Europe/Kiev", { zone: "Europe/Kyiv" })).toBe(false);
+    expect(groupedInUtc("asia/seoul", { zone: "Asia/Seoul" })).toBe(false);
+    expect(groupedInUtc("Asia/Seoul", { zone: "UTC" })).toBe(true);
   });
 });
 

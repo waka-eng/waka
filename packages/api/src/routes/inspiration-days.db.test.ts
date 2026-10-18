@@ -202,6 +202,21 @@ describe("how much was kept on each day", () => {
     }
   });
 
+  it("says outright whether it fell back to UTC", async () => {
+    const person = await seedPerson("zone-fallback-flag");
+    await keptDaysAgo(person, 1, 1);
+    const reply = async (query: string) =>
+      (await (await appFor(person).request(`/api/inspiration-days${query}`)).json()) as { zone: string; fallback: boolean };
+
+    expect(await reply("")).toMatchObject({ zone: "UTC", fallback: true });
+    expect(await reply("?tz=UTC")).toMatchObject({ zone: "UTC", fallback: false });
+    expect(await reply("?tz=Mars%2FOlympus_Mons")).toMatchObject({ zone: "UTC", fallback: true });
+    expect(await reply("?tz=UTC'%3B--")).toMatchObject({ zone: "UTC", fallback: true });
+    expect(await reply("?tz=Asia%2FSeoul")).toMatchObject({ zone: "Asia/Seoul", fallback: false });
+    /* an old name answered by its new one is NOT a fallback */
+    expect((await reply("?tz=Asia%2FCalcutta")).fallback).toBe(false);
+  });
+
   it("knows a zone by its old name and by its spelling in another case, and says the one used", async () => {
     const person = await seedPerson("zone-links");
     await keptDaysAgo(person, 1, 1);
