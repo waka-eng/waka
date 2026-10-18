@@ -5,7 +5,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApiError, createInspiration, fetchInspiration, fetchInspirationSaveRequest, type ApiInspiration } from '../src/lib/api';
-import { useAuthoredSave, type AuthoredSaveInput } from '../src/lib/use-authored-save';
+import { ANSWER_SETTLE_MS, useAuthoredSave, type AuthoredSaveInput } from '../src/lib/use-authored-save';
 
 vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(),
   createInspiration: vi.fn(), fetchInspiration: vi.fn(), fetchInspirationSaveRequest: vi.fn(),
@@ -113,19 +113,77 @@ it('asks before saving edited words while an earlier save is not known, and neve
   expect(last[0]).toEqual(edited.input); expect(last[1]?.requestId).not.toBe(id);
 });
 
-it('releases only on a definitive answer: a 5xx on record and then nothing found', async () => {
-  vi.mocked(createInspiration).mockRejectedValue(new ApiError({ status: 503, message: 'Unavailable' }));
+/* ROUND TWO OF REVIEW: only the APP's own rolled-back 500 is an answer, and
+   even then "not found" is believed only once the request has had time to be
+   gone. A gateway's 503 stays not-known forever. */
+const appFailure = () => new ApiError({ status: 500, message: 'Could not save', code: 'save_failed', fromApp: true });
+it('releases only on the app\'s own 500, and only once the settle time has passed', async () => {
+  vi.mocked(createInspiration).mockRejectedValue(appFailure());
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
+  expect(latest.phase).toBe('uncertain');
   expect(JSON.parse(localStorage.getItem(records()[0]!)!).answered).toBe(true);
+  // Too soon: the rolled-back request might still be visible as in flight.
+  await remount();
+  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
+  await act(async () => { vi.setSystemTime(Date.now() + ANSWER_SETTLE_MS); });
   await remount();
   expect(latest.phase).toBe('unsent'); expect(records()).toHaveLength(0); expect(resolved).not.toHaveBeenCalled();
 });
 
-it('releases on a refusal of the POST itself', async () => {
+it('never treats a gateway 503, or a bodyless 500, as an answer', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 503, message: 'Bad gateway' }))
+    .mockRejectedValue(new ApiError({ status: 500, message: 'Internal Server Error' }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  expect(JSON.parse(localStorage.getItem(records()[0]!)!).answered).toBeUndefined();
+  await act(async () => { vi.setSystemTime(Date.now() + ANSWER_SETTLE_MS * 3); });
+  await remount();
+  await remount();
+  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
+});
+
+it('treats save_request_conflict as "a save under this id exists", never a release', async () => {
   vi.mocked(createInspiration).mockRejectedValue(new ApiError({ status: 409, code: 'save_request_conflict', message: 'Used' }));
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
+});
+
+it('releases on a refusal of the POST itself', async () => {
+  vi.mocked(createInspiration).mockRejectedValue(new ApiError({ status: 422, message: 'Refused', fromApp: true }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
   expect(latest.phase).toBe('unsent'); expect(records()).toHaveLength(0);
+});
+
+it('sends an answered-and-missing save again in the SAME press, under the same id', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(appFailure()).mockResolvedValue(source);
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const id = latest.pending!.requestId;
+  await act(async () => { expect(latest.start(input)).toBe(true); });
+  expect(createInspiration).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(createInspiration).mock.calls[1]![1]?.requestId).toBe(id);
+  expect(resolved).toHaveBeenCalledOnce();
+});
+
+it('retries the same words with the CURRENT draft revision, so the composer can settle', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
+  await act(async () => root.render(<Probe />));
+  await act(async () => { latest.start({ ...input, draft: { id: 'draft-1', revision: 1 } }); });
+  const id = latest.pending!.requestId;
+  await act(async () => { expect(latest.start({ ...input, draft: { id: 'draft-1', revision: 4 } })).toBe(true); });
+  expect(vi.mocked(createInspiration).mock.calls[1]![1]?.requestId).toBe(id);
+  expect(resolved.mock.calls[0]![0].draft).toEqual({ id: 'draft-1', revision: 4 });
+});
+
+it('lets a caller discard the earlier save explicitly and start from what is on screen now', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const id = latest.pending!.requestId;
+  await act(async () => { latest.start({ ...input, input: { ...input.input, text: 'Edited once' } }); });
+  expect(latest.phase).toBe('diverged');
+  const now: AuthoredSaveInput = { ...input, input: { ...input.input, text: 'Edited twice, at the press' } };
+  await act(async () => { expect(latest.discardHeld()).toBe(true); });
+  await act(async () => { expect(latest.start(now)).toBe(true); });
+  const last = vi.mocked(createInspiration).mock.calls.at(-1)!;
+  expect(last[0].text).toBe('Edited twice, at the press'); expect(last[1]?.requestId).not.toBe(id);
 });
 
 it('never releases while another tab may still be committing the same save', async () => {

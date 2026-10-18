@@ -1,7 +1,10 @@
 import type { useAuthoredSave } from '../lib/use-authored-save';
 import { t, type SupportedLocale } from '../lib/i18n';
 
-export function AuthoredSaveNotice({ save, locale }: { save: ReturnType<typeof useAuthoredSave>; locale: SupportedLocale }) {
+/** `onResave` rebuilds the save from what is on screen at the press — so
+    "Save as new" keeps the words as they are NOW, not as they were when the
+    question first appeared (review). Without it, the stashed words are used. */
+export function AuthoredSaveNotice({ save, locale, onResave }: { save: ReturnType<typeof useAuthoredSave>; locale: SupportedLocale; onResave?: () => void }) {
   if (save.phase === 'idle') return null;
   const message = save.phase === 'checking' ? 'worldSaveChecking' : save.phase === 'saving' ? 'worldKeeping'
     : save.phase === 'removed' ? 'worldSaveRemoved' : save.phase === 'invalid' ? 'worldSaveInvalid'
@@ -17,7 +20,7 @@ export function AuthoredSaveNotice({ save, locale }: { save: ReturnType<typeof u
       /* THE PERSON CHOOSES whether edited words become a second inspiration
          while the first may already have landed; nothing decides it for them. */
       : save.phase === 'diverged' && !save.busy ? <>
-        <button type="button" onClick={() => { save.saveAsNew(); }}>{t(locale, 'worldSaveAsNew')}</button>
+        <button type="button" onClick={() => { if (!onResave) { save.saveAsNew(); return; } if (save.discardHeld()) onResave(); }}>{t(locale, 'worldSaveAsNew')}</button>
         <button type="button" onClick={() => { void save.keepEarlier(); }}>{t(locale, 'worldSaveCheckEarlier')}</button>
       </>
       : save.pending && !save.busy ? <button type="button" onClick={(event) => {

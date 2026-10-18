@@ -492,6 +492,6 @@ export function InspirationComposer(props: {
 
         KEPT: "only once there is something to keep", which the bar also
         obeys through `composerHasWords`. */}
-    <AuthoredSaveNotice save={props.save} locale={props.locale} />
+    <AuthoredSaveNotice save={props.save} locale={props.locale} onResave={props.onSubmit} />
   </DialogSurface>;
 }
