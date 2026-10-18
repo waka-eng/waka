@@ -117,7 +117,7 @@ describe('source material and its numbered processing request', () => {
     const f = await fixture();
     await expect(t.db.transaction(async (tx) => {
       await tx.execute(sql`UPDATE inspirations SET text = 'Uncommitted edit' WHERE id = ${f.inspirationId}::uuid`);
-      const result = await requestSignalDerivation({ ...f, reason: 'edited', changedSource: 'inspiration' }, tx as never);
+      const result = await requestSignalDerivation({ ...f, reason: 'edited' }, tx as never);
       expect(result.receipt.materialRevision).toBe('2');
       throw new Error('Save failed');
     })).rejects.toThrow('Save failed');
@@ -128,10 +128,10 @@ describe('source material and its numbered processing request', () => {
 
   it('does not inherit completion when unchanged material is requested again', async () => {
     const f = await fixture();
-    const first = await t.db.transaction((tx) => enqueueDeriveSignals(f.profileId, f.inspirationId, 'created', undefined, tx as never));
+    const first = await t.db.transaction((tx) => enqueueDeriveSignals(f.profileId, f.inspirationId, 'created', tx as never));
     await t.sql`UPDATE inspiration_processing SET derived_at = now(), completed_at = now(),
       result = '{"kind":"top_of_mind","topOfMindId":null,"version":0,"outcome":"empty"}'::jsonb WHERE id = ${first.receipt.id}`;
-    const next = await t.db.transaction((tx) => enqueueDeriveSignals(f.profileId, f.inspirationId, 'edited', undefined, tx as never));
+    const next = await t.db.transaction((tx) => enqueueDeriveSignals(f.profileId, f.inspirationId, 'edited', tx as never));
     expect(next.receipt.id).not.toBe(first.receipt.id);
     expect(next.receipt.materialRevision).toBe(first.receipt.materialRevision);
     expect((await t.sql`SELECT derived_at, completed_at, result FROM inspiration_processing WHERE id = ${next.receipt.id}`)[0])
@@ -156,13 +156,10 @@ describe('source material and its numbered processing request', () => {
      Both were also the only callers of the `enqueueDerive` seam on
      `createGroupForProfile`. */
 
-  it('refuses a foreign destination and rolls back the just-enqueued job', async () => {
-    const f = await fixture(), other = await fixture();
-    await expect(t.db.transaction((tx) => enqueueDeriveSignals(f.profileId, f.inspirationId, 'created', other.profileId, tx as never)))
-      .rejects.toThrow(/authorized material/);
-    expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
-    expect(await t.sql`SELECT id FROM inspiration_processing`).toHaveLength(0);
-  });
+  /* "refuses a foreign destination and rolls back the just-enqueued job" was
+     deleted with the room engine (2026-10-17): `enqueueDeriveSignals` no
+     longer takes a destination, so no caller can name a profile other than
+     the source's own. */
 
   /* ── TWO MORE ROOM CASES, DELETED ─────────────────────────────────────
      Founder: "방 없애". "does not give a legacy agent membership permission
@@ -192,40 +189,37 @@ describe('source material and its numbered processing request', () => {
      which is the correct and much simpler behaviour.
 
      CORRECTION (2026-10-15): the savepoint-and-rollback machinery did NOT
-     come out. The nested transaction and its `InspirationProcessingUnavailableError`
-     swallow are still in `lib/inspiration-derivation-requests.ts`, because
-     the room branch they guard is still there for any profile holding a
-     seat. What this case lost is its second independently-failing
-     destination, which no door can create any more — not the machinery. */
+     come out then. It did on 2026-10-17, with the room branch it guarded:
+     `requestSignalDerivation` now has one destination, the person. */
 
-  it('does not give a legacy agent membership permission to contribute room material', async () => {
-    /* RESTORED 2026-10-15. This gates a LIVE predicate over data that really
-       exists: six agent-seated `group_members` rows reached the dev database,
-       `docs/data-model.md` rule 5 says membership is between people, and the
-       only thing keeping an agent's material out of a room's ground is the
-       `owner.type = 'human'` join in `authorizedDestination`. The routes are
-       gone; the seats and the code that walks them are not.
-
-       Seated with direct SQL rather than `createGroupForProfile`, which went
-       with the room routes. Writing the rows at the table is also the more
-       honest fixture here — it reproduces the legacy data exactly as it sits
-       in the database, instead of through a door that no longer exists. */
-    const f = await fixture();
-    const [group] = await t.sql`INSERT INTO groups(name, join_code, created_by_profile_id)
-      VALUES ('Legacy seat', ${'legacy-' + Math.random().toString(36).slice(2, 10)}, ${f.profileId}) RETURNING id`;
-    await t.sql`INSERT INTO group_members(group_id, profile_id) VALUES (${group.id}, ${f.profileId})`;
-    await t.sql`UPDATE profiles SET type = 'agent' WHERE id = ${f.profileId}`;
-    await t.sql`UPDATE inspirations SET visibility = 'public' WHERE id = ${f.inspirationId}`;
-    const result = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created', changedSource: 'inspiration' }, tx as never));
-    expect(result.groupJobIds).toEqual([]);
-    expect(await t.sql`SELECT profile_id FROM inspiration_processing`).toEqual([{ profile_id: f.profileId }]);
-    expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(1);
+  it('a legacy room seat, human or agent, no longer fans a save out to any room', async () => {
+    /* REWRITTEN 2026-10-17 when the room engine retired. This gated the
+       `owner.type = 'human'` predicate that kept six agent-seated
+       `group_members` rows (still in the dev database) from contributing room
+       material. The fan-out itself is gone now: `requestSignalDerivation`
+       enqueues the personal pass and never reads a seat. The seats are kept
+       as data, so the case keeps seating both kinds and proving neither
+       produces a second job or a room's processing receipt. */
+    for (const type of ['human', 'agent'] as const) {
+      const f = await fixture();
+      const [group] = await t.sql`INSERT INTO groups(name, join_code, created_by_profile_id)
+        VALUES ('Legacy seat', ${'legacy-' + Math.random().toString(36).slice(2, 10)}, ${f.profileId}) RETURNING id`;
+      await t.sql`INSERT INTO profiles (account_id, type, name, group_id) VALUES (NULL, 'group', 'Legacy room', ${group.id})`;
+      await t.sql`INSERT INTO group_members(group_id, profile_id) VALUES (${group.id}, ${f.profileId})`;
+      await t.sql`UPDATE profiles SET type = ${type} WHERE id = ${f.profileId}`;
+      await t.sql`UPDATE inspirations SET visibility = 'public' WHERE id = ${f.inspirationId}`;
+      await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created' }, tx as never));
+      expect(await t.sql`SELECT profile_id FROM inspiration_processing WHERE inspiration_id = ${f.inspirationId}`)
+        .toEqual([{ profile_id: f.profileId }]);
+      expect(await t.sql`SELECT payload FROM background_jobs WHERE payload->>'inspirationId' = ${f.inspirationId}`)
+        .toEqual([{ payload: { inspirationId: f.inspirationId, reason: 'created' } }]);
+    }
   });
 
   it('deleting a reflected source removes its revision and processing metadata without orphaning copies', async () => {
     const f = await fixture();
     await t.sql`INSERT INTO reflections(profile_id, inspiration_id, question, answer) VALUES (${f.profileId}, ${f.inspirationId}, 'Why?', 'An answer')`;
-    await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created', changedSource: 'inspiration' }, tx as never));
+    await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created' }, tx as never));
     await t.sql`DELETE FROM inspirations WHERE id = ${f.inspirationId}`;
     expect(await t.sql`SELECT inspiration_id FROM inspiration_revisions`).toHaveLength(0);
     expect(await t.sql`SELECT id FROM inspiration_processing`).toHaveLength(0);
@@ -233,7 +227,7 @@ describe('source material and its numbered processing request', () => {
 
   it('a source deletion can cancel its job while a concurrent enqueue waits for the parent', async () => {
     const f = await fixture();
-    const first = await t.db.transaction((tx) => enqueueDeriveSignals(f.profileId, f.inspirationId, 'created', undefined, tx as never));
+    const first = await t.db.transaction((tx) => enqueueDeriveSignals(f.profileId, f.inspirationId, 'created', tx as never));
     const [{ pid }] = await t.sql`SELECT pg_backend_pid() AS pid`;
     const other = postgres(process.env.DB_CONNECTION_URL!, { max: 1, prepare: false, connection: { search_path: t.schemaName } });
     let release!: () => void;
@@ -247,7 +241,7 @@ describe('source material and its numbered processing request', () => {
       await tx`DELETE FROM inspirations WHERE id = ${f.inspirationId}`;
     });
     const held = await holding;
-    const enqueue = t.db.transaction((tx) => enqueueDeriveSignals(f.profileId, f.inspirationId, 'edited', undefined, tx as never))
+    const enqueue = t.db.transaction((tx) => enqueueDeriveSignals(f.profileId, f.inspirationId, 'edited', tx as never))
       .then(() => ({ ok: true }), (error: unknown) => ({ ok: false, error }));
     try {
       let waited = false;
@@ -265,7 +259,7 @@ describe('source material and its numbered processing request', () => {
 
   it('binds a saved source to its material revision and exact derivation request', async () => {
     const f = await fixture();
-    const result = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created', changedSource: 'inspiration' }, tx as never));
+    const result = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created' }, tx as never));
     expect(result).toMatchObject({ receipt: { ...f, materialRevision: '1', requestVersion: '1' } });
   });
 
@@ -281,9 +275,9 @@ describe('source material and its numbered processing request', () => {
 
   it('distinguishes successive material revisions even when the queue reuses one job', async () => {
     const f = await fixture();
-    const first = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created', changedSource: 'inspiration' }, tx as never));
+    const first = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'created' }, tx as never));
     await t.sql`UPDATE inspirations SET text = 'New source' WHERE id = ${f.inspirationId}`;
-    const second = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'edited', changedSource: 'inspiration' }, tx as never));
+    const second = await t.db.transaction((tx) => requestSignalDerivation({ ...f, reason: 'edited' }, tx as never));
     expect(second).toMatchObject({ jobId: first.jobId, receipt: { ...f, materialRevision: '2', requestVersion: '2' } });
   });
 });

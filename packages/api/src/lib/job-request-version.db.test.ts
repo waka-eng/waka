@@ -151,7 +151,7 @@ describe('numbered background requests', () => {
   it('rolls a request version back with its surrounding source transaction', async () => {
     const first = await request();
     await expect(t.db.transaction(async (tx) => {
-      const queued = await enqueueDeriveSignals(profileId, inspirationId, 'edited', undefined, tx as never);
+      const queued = await enqueueDeriveSignals(profileId, inspirationId, 'edited', tx as never);
       expect(queued).toMatchObject({ requestVersion: '2' });
       throw new Error('Save rolled back');
     })).rejects.toThrow('Save rolled back');

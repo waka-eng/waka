@@ -54,18 +54,12 @@ import {
   GeminiEmbeddingHttpClient,
 } from "./inspiration-embeddings.js";
 import { normalizeSupportedLocale } from "./locales.js";
-import {
-  assertGroupInputCurrent,
-  loadGroupInputMembership,
-  GROUP_INPUT_POLICY,
-  GroupInputUnavailableError,
-} from "./group-inputs.js";
 import { assertMaterialCurrent, loadInspirationMaterial, relatedMaterialIdentity, resolveMaterialQuote } from "./inspiration-material.js";
-import { reviewSignalSupport } from "./signal-support-review.js";
+import { reviewSignalSupport, SupportSourceUnavailableError } from "./signal-support-review.js";
 import { applySignalSupportReview } from "./signal-support-apply.js";
 import { bindInspirationReading, finishInspirationDerivation, isInspirationDerivationRecorded, readInspirationRevision,
   type ClaimedDerivationRequest, type DerivationProcessingInput } from "./inspiration-processing.js";
-import { enqueueGroupTopOfMindRefresh, enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "./queue.js";
+import { enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "./queue.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
@@ -114,15 +108,9 @@ export interface DeriveSignalsInput {
   inspirationId: string;
   /** "created" on capture, "edited" when a change re-derives the capture. */
   reason: "created" | "edited";
-  /**
-   * WHERE THE SIGNALS LAND (2026-08-24). Absent, on the inspiration's own
-   * profile — every personal pass, unchanged. Set, on a ROOM'S MIND: the
-   * same extraction over the same capture, but matched against the ROOM's
-   * existing statements, minted under the room's profile, and cited with
-   * the keeper as the evidence owner. One capture, several passes, several
-   * spaces — which is the founder's x+y+z, made literal.
-   */
-  deriveIntoProfileId?: string;
+  /* Signals land on the inspiration's own profile, always. The room pass
+     (`deriveIntoProfileId`, landing on a room's mind) retired with the room
+     engine on 2026-10-17; the worker settles any queued one unrun. */
   /** Internal support job: review existing claims without discovering new ones. */
   supportOnly?: boolean;
 }
@@ -137,7 +125,7 @@ export interface SignalDerivationDependencies {
 }
 
 export interface SignalDerivationResult {
-  status: "derived" | "missing_inspiration" | "no_candidates" | "not_public" | "not_authorized";
+  status: "derived" | "missing_inspiration" | "no_candidates";
   inspirationId: string;
   profileId: string | null;
   candidateCount: number;
@@ -185,70 +173,28 @@ export async function deriveSignalsForInspiration(
   }
 
   /* THE DERIVING PROFILE IS WHERE SIGNALS LAND — the inspiration's own
-     owner for a personal pass, a room's mind for a room pass. Everything
-     downstream of extraction keys off it: the existing-statement scan, the
-     match targets, the advisory lock, the mint. The one deliberate
-     exception is the capture's own layer-1 embedding, which stays with the
-     memory's owner wherever the pass is landing. */
-  const profileId = input.deriveIntoProfileId ?? inspirationRow.profileId;
-  const isGroup = input.deriveIntoProfileId !== undefined;
+     owner. Everything downstream of extraction keys off it: the
+     existing-statement scan, the match targets, the advisory lock, the mint. */
+  const profileId = inspirationRow.profileId;
   let supportReview: SignalDerivationResult["supportReview"];
   let reviewedMaterialHash: string | null = null;
   const emptyResult = (status: SignalDerivationResult["status"]): SignalDerivationResult => ({
     status, inspirationId: inspirationRow.id, profileId, candidateCount: 0,
     matchedSignalIds: [], mintedSignalIds: [], promotedSignalIds: [], supportReview,
   });
-  const membership = isGroup ? await loadGroupInputMembership(db, inspirationRow.profileId, profileId) : null;
-  if (isGroup && !membership) return emptyResult("not_authorized");
-
-  /**
-   * A ROOM PASS RE-READS THE SWITCH IT WAS ENQUEUED ON.
-   *
-   * The fan-out reads `visibility` when it enqueues, and then the job waits
-   * in a queue — behind a backlog, a deferral, a retry. In that gap the
-   * keeper can turn the memory private, and without this check the room
-   * would read it anyway: the enqueue-time check would have been a promise
-   * about a value that had already changed. A memory going private is the
-   * one thing that must be true at the moment of reading, not at the moment
-   * of asking, so it is read here, against the row the pass is about to use.
-   *
-   * Personal passes are untouched: your own memory is yours to distil at any
-   * visibility, and `deriveIntoProfileId` is exactly the flag for "this pass
-   * is landing somewhere other than the keeper's own stack".
-   */
-  if (input.deriveIntoProfileId && inspirationRow.visibility !== "public") {
-    return {
-      status: "not_public",
-      inspirationId: input.inspirationId,
-      profileId,
-      candidateCount: 0,
-      matchedSignalIds: [],
-      mintedSignalIds: [],
-      promotedSignalIds: [],
-    };
-  }
-
   const processingInput = (materialRevision: string | undefined): DerivationProcessingInput => {
     if (!materialRevision || !deps.processingRequest) throw new Error("Source processing requires a material revision and claimed request");
     return { profileId, ownerProfileId: inspirationRow.profileId, inspirationId: inspirationRow.id,
       materialRevision, request: deps.processingRequest };
   };
-  const requestReading = async (tx: WakaTx) => {
-    if (!isGroup) return enqueueTopOfMindRefresh(profileId, "signals_changed", tx);
-    const [destination] = await tx.select({ groupId: profiles.groupId }).from(profiles).where(eq(profiles.id, profileId)).limit(1);
-    if (!destination?.groupId) throw new Error("Derivation destination no longer names a group");
-    return enqueueGroupTopOfMindRefresh(inspirationRow.profileId, destination.groupId, "signals_changed", tx);
-  };
+  const requestReading = (tx: WakaTx) => enqueueTopOfMindRefresh(profileId, "signals_changed", tx);
   if (deps.processingRequest) {
-    const revision = await readInspirationRevision(db, inspirationRow.profileId, inspirationRow.id, isGroup ? "public" : "personal");
+    const revision = await readInspirationRevision(db, inspirationRow.profileId, inspirationRow.id, "personal");
     if (revision && await isInspirationDerivationRecorded(db, processingInput(revision.toString()))) {
-      const material = await loadInspirationMaterial(db, inspirationRow.profileId, inspirationRow.id, isGroup ? "public" : "personal");
+      const material = await loadInspirationMaterial(db, inspirationRow.profileId, inspirationRow.id, "personal");
       if (!material || material.identity.revision !== revision.toString()) throw new Error("Source material changed before processing recovery");
       await db.transaction(async (tx) => {
         await acquireSignalDerivationLock(tx, profileId);
-        if (isGroup && membership) await assertGroupInputCurrent(tx, { mindProfileId: profileId, membershipId: membership.id,
-          inspiration: material.inspiration, attachments: material.attachmentRows.filter((row) => row.status === "ready" && row.text !== null)
-            .map(({ id, kind, text, hostname, name }) => ({ id, kind, text, hostname, name })), related: [] });
         await assertMaterialCurrent(tx, material, []);
         await deps.beforeCommit?.(tx);
         await finishInspirationDerivation(tx, processingInput(revision.toString()), { complete: true, requestReading: () => requestReading(tx) });
@@ -258,10 +204,17 @@ export async function deriveSignalsForInspiration(
     }
   }
   const provider = deps.modelProvider ?? (await getDefaultModelProvider());
-  if (deps.beforeCommit) await (await import('./signal-support-batches.js')).ensureSupportBatchCoverage(db, {
-    ownerProfileId: inspirationRow.profileId, inspirationId: inspirationRow.id,
-    deriveIntoProfileId: input.deriveIntoProfileId, provider, beforeCommit: deps.beforeCommit,
-  });
+  // Planning large-source coverage reads the source too; a source deleted
+  // mid-run is the same ordinary outcome as below, not a retryable fault.
+  try {
+    if (deps.beforeCommit) await (await import('./signal-support-batches.js')).ensureSupportBatchCoverage(db, {
+      ownerProfileId: inspirationRow.profileId, inspirationId: inspirationRow.id,
+      provider, beforeCommit: deps.beforeCommit,
+    });
+  } catch (error) {
+    if (error instanceof SupportSourceUnavailableError) return emptyResult(error.status);
+    throw error;
+  }
   const embeddingClient = deps.embeddingClient ?? new GeminiEmbeddingHttpClient();
 
   // Existing support is its own question, before bounded discovery. Applying
@@ -269,7 +222,7 @@ export async function deriveSignalsForInspiration(
   // A later extraction failure cannot lose the committed correction.
   try {
     const review = await reviewSignalSupport(db, { ownerProfileId: inspirationRow.profileId,
-      inspirationId: inspirationRow.id, deriveIntoProfileId: input.deriveIntoProfileId,
+      inspirationId: inspirationRow.id,
       provider, maxCalls: 1, reuseCurrentAssessments: true });
     if (review.status !== "current") throw new Error("Source material changed during support assessment");
     reviewedMaterialHash = review.material.hash;
@@ -279,24 +232,19 @@ export async function deriveSignalsForInspiration(
       restored: applied?.restored.length ?? 0, unresolved: review.items.filter((item) => item.verdict === "unresolved").length,
       retryable: review.items.some((item) => item.issue !== undefined) };
   } catch (error) {
-    if (error instanceof GroupInputUnavailableError) return emptyResult(error.status);
+    if (error instanceof SupportSourceUnavailableError) return emptyResult(error.status);
     throw error;
   }
-  const material = await loadInspirationMaterial(db, inspirationRow.profileId, inspirationRow.id, isGroup ? "public" : "personal");
+  const material = await loadInspirationMaterial(db, inspirationRow.profileId, inspirationRow.id, "personal");
   if (!material) return emptyResult("missing_inspiration");
   if (material.identity.hash !== reviewedMaterialHash) throw new Error("Source material changed after support assessment");
   const inspiration = material.inspiration;
-  if (isGroup && inspiration.visibility !== "public") return emptyResult("not_public");
   const reflectionRows = material.reflectionRows;
   const attachmentRows = material.attachmentRows.filter((row) => row.status === "ready" && row.text !== null)
     .map(({ id, kind, text, hostname, name }) => ({ id, kind, text, hostname, name }));
   if (input.supportOnly) {
     await db.transaction(async (tx) => {
       await acquireSignalDerivationLock(tx, profileId);
-      if (isGroup && membership) await assertGroupInputCurrent(tx, {
-        mindProfileId: profileId, membershipId: membership.id, inspiration,
-        attachments: attachmentRows, related: [],
-      });
       await assertMaterialCurrent(tx, material, []);
       await deps.beforeCommit?.(tx);
     });
@@ -305,7 +253,7 @@ export async function deriveSignalsForInspiration(
   }
   const [profileRows, existingStatements, existingCategories] = await Promise.all([
     db
-      .select({ preferredLocale: profiles.preferredLocale, groupId: profiles.groupId })
+      .select({ preferredLocale: profiles.preferredLocale })
       .from(profiles)
       .where(eq(profiles.id, profileId))
       .limit(1),
@@ -315,7 +263,6 @@ export async function deriveSignalsForInspiration(
       .where(
         and(
           eq(signals.profileId, profileId),
-          ...(isGroup ? [eq(signals.inputPolicy, GROUP_INPUT_POLICY)] : []),
           inArray(signals.status, ["emerging", "active"]),
         ),
       )
@@ -325,8 +272,8 @@ export async function deriveSignalsForInspiration(
        Ordered by how much each holds, because the cap bites: shown the
        busiest first, the model reuses the shelf a capture most likely
        belongs on, and a long tail of one-offs cannot crowd out the
-       categories that actually organise the archive. Read from the KEEPER's
-       own captures — a room's shelves are not the person's.
+       categories that actually organise the archive. Read from the
+       keeper's own captures.
 
        Without this the row of tabs is useless: asked cold, a model names
        each capture with a fresh phrase, and fifty saves become fifty
@@ -351,11 +298,9 @@ export async function deriveSignalsForInspiration(
     Same model-call count as before; the vector was never optional.
   */
   const inspirationEmbedding = await ensureInspirationEmbedding({
-    /* Both scope-specific vectors belong to the memory's OWNER. A room
-       never reuses a personal vector, which can encode private answers. */
     profileId: inspiration.profileId,
     inspirationId: inspiration.id,
-    inputScope: isGroup ? "public" : "personal",
+    inputScope: "personal",
     db,
     client: embeddingClient,
     beforeCommit: deps.beforeCommit,
@@ -363,20 +308,14 @@ export async function deriveSignalsForInspiration(
   if (inspirationEmbedding.status === "stale_source") {
     throw new Error("Source material changed during embedding");
   }
-  if (isGroup && inspirationEmbedding.status === "not_public") return emptyResult("not_public");
   if (inspirationEmbedding.status === "missing_inspiration") return emptyResult("missing_inspiration");
   const relatedInspirations = inspirationEmbedding.embedding
     ? await findRelatedInspirations(db, {
-        /* recurrence is retrieved over the KEEPER's earlier captures on every
-           pass — on a room pass the mind holds no captures to scan, and the
-           person recurring is the person, wherever the pattern lands */
+        /* recurrence is retrieved over the keeper's earlier captures */
         profileId: inspiration.profileId,
         inspirationId: inspiration.id,
         embedding: inspirationEmbedding.embedding.embedding,
         model: inspirationEmbedding.embedding.model,
-        /* a room may cite only what its members chose to make public: a
-           private earlier capture must never become a room's evidence */
-        publicOnly: input.deriveIntoProfileId !== undefined,
       })
     : [];
 
@@ -438,29 +377,20 @@ export async function deriveSignalsForInspiration(
     .filter((candidate) => candidate.statement.length > 0);
 
   const validateSources = async (tx: WakaTx) => {
-    if (isGroup && membership) await assertGroupInputCurrent(tx, {
-      mindProfileId: profileId, membershipId: membership.id, inspiration,
-      attachments: attachmentRows, related: relatedInspirations,
-    });
     await assertMaterialCurrent(tx, material, relatedInspirations);
     await deps.beforeCommit?.(tx);
   };
   const canComplete = !supportReview?.retryable && !material.attachmentRows.some((row) => row.status !== "ready" && row.status !== "unavailable");
 
   if (statements.length === 0) {
-    try {
-      await db.transaction(async (tx) => {
-        await acquireSignalDerivationLock(tx, profileId); await validateSources(tx);
-        if (deps.processingRequest) await finishInspirationDerivation(tx, processingInput(material.identity.revision), {
-          complete: canComplete, requestReading: () => requestReading(tx),
-        });
+    await db.transaction(async (tx) => {
+      await acquireSignalDerivationLock(tx, profileId); await validateSources(tx);
+      if (deps.processingRequest) await finishInspirationDerivation(tx, processingInput(material.identity.revision), {
+        complete: canComplete, requestReading: () => requestReading(tx),
       });
-      await wakeCommittedBackgroundJobs();
-      return emptyResult("no_candidates");
-    } catch (error) {
-      if (error instanceof GroupInputUnavailableError) return emptyResult(error.status);
-      throw error;
-    }
+    });
+    await wakeCommittedBackgroundJobs();
+    return emptyResult("no_candidates");
   }
 
   const embedded: ResolvedCandidate[] = [];
@@ -474,17 +404,10 @@ export async function deriveSignalsForInspiration(
     if (!duplicate) embedded.push({ ...candidate, embedding });
   }
 
-  let outcome;
-  try {
-    outcome = await db.transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx) => {
       await acquireSignalDerivationLock(tx, profileId);
       /**
        * THE SHELF THE CAPTURE GOES ON.
-       *
-       * Written against the KEEPER's row, not the profile being derived
-       * into: on a room pass the capture still belongs to the person who
-       * kept it, and a room's reading does not get to re-file someone's
-       * archive.
        *
        * Only ever written when the reading named one. A pass that returns
        * null leaves whatever was there — a capture that was placed once and
@@ -500,8 +423,6 @@ export async function deriveSignalsForInspiration(
       }
       const applied = await applyCandidates(tx, {
         profileId,
-        inputPolicy: isGroup ? GROUP_INPUT_POLICY : undefined,
-        /* A room's evidence still belongs to the capture's owner. */
         evidenceOwnerProfileId: inspiration.profileId,
         inspirationId: inspiration.id,
         candidates: embedded,
@@ -521,10 +442,6 @@ export async function deriveSignalsForInspiration(
       });
       return applied;
     });
-  } catch (error) {
-    if (error instanceof GroupInputUnavailableError) return emptyResult(error.status);
-    throw error;
-  }
 
   await wakeCommittedBackgroundJobs();
   return {
@@ -551,8 +468,6 @@ async function findRelatedInspirations(
     inspirationId: string;
     embedding: number[];
     model: string;
-    /** a ROOM pass may only be shown captures their owner made public */
-    publicOnly?: boolean;
   },
 ): Promise<RelatedInspirationContext[]> {
   const rows = await db
@@ -568,8 +483,7 @@ async function findRelatedInspirations(
       and(
         eq(inspirationEmbeddings.profileId, input.profileId),
         eq(inspirationEmbeddings.model, input.model),
-        eq(inspirationEmbeddings.inputScope, input.publicOnly ? "public" : "personal"),
-        ...(input.publicOnly ? [eq(inspirations.visibility, "public" as const)] : []),
+        eq(inspirationEmbeddings.inputScope, "personal"),
       ),
     )
     .orderBy(desc(inspirations.createdAt))

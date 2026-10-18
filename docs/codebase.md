@@ -336,8 +336,7 @@ unlike the CSS layers above, which have to move all at once.
   result was memories stacked at the origin.
 - **A rule nobody can execute is a rule nobody has checked.** Route tests that
   inject mocks prove the route calls a function, not that the function is
-  right. Extract the rule (`carriesMajority`, `mayAnswerSignal`) so a test can
-  run it.
+  right. Extract the rule into a pure function so a test can run it.
 
 ## The newcomer test — run it before trusting the plan
 

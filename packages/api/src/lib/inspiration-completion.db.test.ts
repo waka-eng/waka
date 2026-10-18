@@ -156,14 +156,13 @@ describe('saved material reaches an actual reading', () => {
      Keeping these three with the rooms taken out would have meant one
      profile publishing to itself and asserting the stamping worked — true,
      already covered, and silent about the only thing these tests were for.
-     CORRECTION (2026-10-15). An earlier version of this note claimed
+     CORRECTION (2026-10-15), THEN SETTLED (2026-10-17). On 10-15 both
      `enqueueGroupTopOfMindRefresh` and the `visibility = 'public'` fan-in
-     "are both being removed from the pipeline". NEITHER WAS. Both are still
-     in `lib/inspiration-derivation-requests.ts` and still run for any profile
-     that holds a `group_members` row. What is gone is the way to acquire such
-     a row, not the code that acts on one. These cases are dropped because no
-     door can create the state they exercise — not because the pipeline lost
-     the branch. */
+     were still live for any profile holding a `group_members` row. With the
+     room engine's retirement both are now gone from the pipeline: the
+     function is deleted, `requestSignalDerivation` enqueues the personal pass
+     only, and any room job already queued settles unrun
+     (`retired-group-jobs.db.test.ts`). */
 
   it('does not complete either source revision after a source edit races with synthesis', async () => {
     const f = await fixture(); await runNext();
