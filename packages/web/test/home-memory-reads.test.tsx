@@ -83,7 +83,7 @@ vi.mock("../src/lib/api", async (original) => ({
   /* the server row, as of WHEN THE READ WAS ASKED, stamped then */
   fetchInspiration: (id: string) => {
     const snapshot = { id, profileId: VIEWER_ID, text: S.store.get(id) ?? "", kind: "note", category: null, source: "app", visibility: "private",
-      createdAt: new Date(Date.UTC(2026, 9, 1)).toISOString(), updatedAt: new Date(Date.now() - 60_000).toISOString(), attachments: [], reflections: [] };
+      createdAt: new Date(Date.UTC(2026, 7, 16, 12) - (FACTS.inspirations.find((item) => item.id === id)?.daysAgo ?? 0) * 86_400_000).toISOString(), updatedAt: new Date(Date.now() - 60_000).toISOString(), attachments: [], reflections: [] };
     if (!S.holdFetch) return Promise.resolve(snapshot);
     return new Promise((done) => { S.heldFetch = () => done(snapshot); });
   },
@@ -333,28 +333,30 @@ const archiveSave = async () => {
   await world.step(4);
 };
 
-it("the archive's re-read after an upload cannot put words older than a later save back", { timeout: 30_000 }, async () => {
-  const NEWER = "something I kept, 2 — saved after the upload's re-read went out.";
-  await openByAddress("own-3");
-  await stepOn(); // own-2 now read into the world's cache
-  await wait(100);
-  await act(async () => { go("/inspirations/own-3"); });
-  await world.step(12);
-  const page = await openInArchive("/inspirations/own-3", "something I kept, 2");
-  /* attach a file: the archive then re-reads the note — held, so it lands late */
-  S.holdFetch = true;
+/* AN UPLOAD IN THE ARCHIVE, THEN A SAVE: the world re-reads the note after
+   the upload (its attachments changed without its words, so only the save
+   generation can order the reads), and that re-read — answering with the
+   words from before the save — lands last. It must be dropped. */
+it("the re-read after an upload cannot put words older than a later save back", { timeout: 30_000 }, async () => {
+  const NEWER = "something I kept, 4 — saved after the upload's re-read went out.";
+  await openByAddress("own-5");
+  S.hold = "hold";
+  const page = await openInArchive("/inspirations/own-5", "something I kept, 4", async () => {
+    await act(async () => S.held.at(-1)!.resolve());
+  });
+  const readsBefore = S.held.length;
   const input = [...document.querySelectorAll<HTMLInputElement>('nav.waka-dock input[type="file"]')].find((node) => node.accept.includes("application/pdf"))!;
   Object.defineProperty(input, "files", { configurable: true, value: [new File(["%PDF-1.7"], "notes.pdf", { type: "application/pdf" })] });
   await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
-  for (let turn = 0; turn < 20 && !S.heldFetch; turn += 1) { await world.step(2); await wait(10); }
-  expect(S.heldFetch, "the archive did not re-read after the upload").not.toBeNull();
-  /* then the words are saved */
+  for (let turn = 0; turn < 20 && S.held.length === readsBefore; turn += 1) { await world.step(2); await wait(10); }
+  expect(S.held.length, "the world did not re-read after the upload").toBe(readsBefore + 1);
+  const reRead = S.held.at(-1)!;
   await setText(page, NEWER);
   await archiveSave();
-  /* and only now does the re-read — with the words from before — land */
-  await act(async () => S.heldFetch!());
+  S.hold = null;
+  await act(async () => reRead.resolve()); // the words from before the save
   await world.step(4);
-  await act(async () => { go("/inspirations/own-3"); });
+  await act(async () => { go("/inspirations/own-5"); });
   await world.step(12);
   await wait(100);
   await stepOn();
@@ -363,6 +365,7 @@ it("the archive's re-read after an upload cannot put words older than a later sa
   await pressWords();
   expect(editBox()?.value, "the late re-read was older than the save and was dropped").toBe(NEWER);
 });
+
 
 it("a note brought back from the deleted shelf comes back to the field", { timeout: 30_000 }, async () => {
   await openByAddress("own-2");

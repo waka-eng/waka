@@ -158,10 +158,23 @@ export function NoteTools(props: {
      squeezed to ~15px on a 320px phone and "Not now" — a link inside the
      ellipsizing line — was clipped away (review, 2026-10-17). "Not now" is
      a real dock item with the 44px floor, outside the status line. */
+  /* THE CLOCK THAT STOPS A RECORDING — one control, used in the row and,
+     while a recording runs, kept beside an armed delete too, so the way to
+     stop the microphone never leaves the bar (review, 2026-10-17). */
+  const stopClock = props.recording.phase !== "idle" ? (
+    <button type="button" className="waka-dock-tool waka-dock-tool--wide"
+      aria-label={props.stopLabel}
+      disabled={props.recording.phase === "finishing"}
+      onClick={() => void props.recording.stop()}>
+      {Math.floor(props.recording.seconds / 60)}:
+      {String(props.recording.seconds % 60).padStart(2, "0")}
+    </button>
+  ) : null;
   if (props.erasePending && props.eraseQuestion) {
     return createPortal(
       <>
         <span className="waka-dock-state" role="status">{props.eraseQuestion}</span>
+        {stopClock}
         <button ref={confirm} type="button" className="waka-dock-tool waka-dock-tool--erase"
           aria-label={props.eraseConfirmLabel ?? props.eraseLabel}
           disabled={props.saving}
@@ -222,13 +235,7 @@ export function NoteTools(props: {
           /* THE CLOCK IS THE STOP, as it is on the notepad: a red dot
              cannot say how long you have been talking, and two controls
              for one act is one too many in a slot this size. */
-          <button type="button" className="waka-dock-tool waka-dock-tool--wide"
-            aria-label={props.stopLabel}
-            disabled={props.recording.phase === "finishing"}
-            onClick={() => void props.recording.stop()}>
-            {Math.floor(props.recording.seconds / 60)}:
-            {String(props.recording.seconds % 60).padStart(2, "0")}
-          </button>
+          stopClock
         )
       ) : null}
       {/* ═══ THE PHOTO BECAME ＋, HERE AS ON THE NOTEPAD (2026-10-16) ═════

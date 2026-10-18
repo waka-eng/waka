@@ -69,7 +69,7 @@ import { ShareSheet, inspirationShareTarget, type ShareTarget } from "./ShareShe
    the invariant that a total is never smaller than what arrived. Reaching
    past it to the HTTP layer would have been a second way to read one thing,
    with its own pagination and its own idea of what the archive holds. */
-import { loadInspiration, loadInspirations, type Inspiration } from "../lib/data";
+import { loadInspiration, loadInspirations, type Inspiration, type InspirationDetail } from "../lib/data";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { inspectInspirationPhoto } from "../lib/inspiration-photo";
 import { inspectAttachmentFile } from "../lib/api/file-accept";
@@ -93,7 +93,7 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onSaved, onErased, onRestored, ownArchive = true, shareName = "" }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onSaved, onErased, onRestored, readFull, onAttached, ownArchive = true, shareName = "" }: {
   locale: SupportedLocale;
   /** A note's words were stored, with the server's row. The world behind
       this page caches what it has read of each note, and a later edit there
@@ -104,6 +104,16 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   onRestored?: (row: ApiInspiration) => void;
   /** A note was deleted (its server send, after Undo's moment). */
   onErased?: (id: string) => void;
+  /** THE WORLD'S OWN READ OF ONE NOTE, when the archive sits over it. The
+      world stamps every read against the saves it has seen
+      (`lib/detail-reads.ts`), so a read racing a save made on Home's card
+      answers with the saved words, never the ones from before it. Absent,
+      the archive reads for itself. Resolves null when the read failed. */
+  readFull?: (id: string) => Promise<InspirationDetail | null>;
+  /** An attachment landed on a note: the world marks older reads of it
+      stale and reads it afresh (its attachments changed without its words,
+      so `updatedAt` cannot tell the two reads apart). */
+  onAttached?: (id: string) => void;
   /** Whether this is the person's own archive. The deleted shelf is theirs
       alone, so it is not read on an agent's archive; deleting there still
       works, and the request names the agent's profile. */
@@ -267,6 +277,16 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const [forgetting, setForgetting] = useState<string | null>(null);
   const [shelfFailed, setShelfFailed] = useState(false);
   const [undoable, setUndoable] = useState<Inspiration | null>(null);
+  /* ═══ THE WORLD'S CALLBACKS, READ THROUGH A REF ════════════════════════
+     Home passes these inline, so they are new functions on every Home
+     render. Named in the deps of `commitErase`, they rebuilt `flushErase` on
+     each one, and the unmount-cleanup effect keyed on `flushErase` ran its
+     cleanup — which FLUSHES the pending delete — killing the six-second
+     Undo on any re-render behind the archive (review, 2026-10-17). Read
+     through a ref, the callbacks are always the latest and never a
+     dependency. */
+  const tellHome = useRef({ onSaved, onErased, onRestored, readFull, onAttached });
+  tellHome.current = { onSaved, onErased, onRestored, readFull, onAttached };
   /* WHERE FOCUS GOES WHEN A DELETE TAKES THE NOTE AWAY. The press that
      deleted it (the bar's trash, or the ⋯ menu's row) unmounts with the
      note, and focus fell to the page; the Undo line is the next thing a
@@ -359,7 +379,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     /* On an agent's archive the delete names the agent's profile; the
        request outlives the tab when it is sent as the page goes. */
     void deleteInspiration(pending.row.id, { ...(profileId ? { profile: profileId } : {}), ...(leaving ? { keepalive: true } : {}) })
-      .then(() => { onErased?.(pending.row.id); return loadShelf(); })
+      .then(() => { tellHome.current.onErased?.(pending.row.id); return loadShelf(); })
       .catch(() => {
         if (!mounted.current) return;
         setRows((all) => all.some((row) => row.id === pending.row.id) ? all
@@ -367,7 +387,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
         setTotal((count) => count === null ? count : count + 1);
         setEraseFailed(true);
       });
-  }, [loadShelf, ownArchive, profileId, onErased]);
+  }, [loadShelf, ownArchive, profileId]);
 
   const flushErase = useCallback((leaving = false) => {
     const pending = pendingErase.current;
@@ -381,7 +401,11 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   /* Leaving the page is leaving the undo: commit what was pending — when the
      surface closes, and when the tab itself goes (a refresh inside the six
      seconds used to bring the note back). */
-  useEffect(() => () => flushErase(), [flushErase]);
+  /* Flushed on the archive's REAL unmount only — the latest `flushErase`,
+     through a ref, from an effect that never re-runs. */
+  const flushNow = useRef(flushErase);
+  flushNow.current = flushErase;
+  useEffect(() => () => flushNow.current(), []);
   useEffect(() => {
     const leave = () => flushErase(true);
     window.addEventListener("pagehide", leave);
@@ -424,12 +448,12 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       void load();
       /* back in the world behind, too — the mirror of `onErased` */
       void fetchInspiration(item.id, profileId ? { profile: profileId } : {})
-        .then((row) => { onRestored?.(row); })
+        .then((row) => { tellHome.current.onRestored?.(row); })
         .catch(() => undefined);
     } catch {
       if (mounted.current) setShelfFailed(true);
     }
-  }, [load, profileId, onRestored]);
+  }, [load, profileId]);
 
   const forget = useCallback(async (item: ApiDeletedInspiration) => {
     if (forgetting !== item.id) { setForgetting(item.id); return; }
@@ -491,7 +515,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     setSaveFailed(false);
     try {
       const made = await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
-      if (made) onSaved?.(made);
+      if (made) tellHome.current.onSaved?.(made);
       if (!mounted.current) return;
       /* The list holds what the page loaded, so it has to agree without a
          refetch — otherwise going back reveals the old first line. */
@@ -502,7 +526,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     } finally {
       if (mounted.current) setSaving(false);
     }
-  }, [draft, open, saving, stored, profileId, onSaved]);
+  }, [draft, open, saving, stored, profileId]);
 
   /**
    * ═══ AND NOW THERE IS A SAVE TO PRESS, WITH THE NET STILL UNDER IT ═════
@@ -577,7 +601,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     setSaveFailed(false);
     try {
       const made = await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
-      if (made) onSaved?.(made);
+      if (made) tellHome.current.onSaved?.(made);
       if (!mounted.current) return;
       /* Both copies, for the reason `leaveNote` gives about the list and the
          reason `attach` gives about the snapshot: the grid behind must not
@@ -592,7 +616,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     } finally {
       if (mounted.current) setSaving(false);
     }
-  }, [draft, open, saving, stored, profileId, onSaved]);
+  }, [draft, open, saving, stored, profileId]);
 
   /* READ ONE NOTE IN FULL. A newer read (another note, or Try again) aborts
      the older, and a reply for a note no longer open is dropped by id — so a
@@ -602,7 +626,10 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     const controller = new AbortController();
     reading.current = controller;
     setStored({ id, text: null, failed: false });
-    loadInspiration(id, profileId ?? undefined, controller.signal)
+    const read = tellHome.current.readFull;
+    (read
+      ? read(id).then((detail) => { if (!detail) throw new Error("read failed"); return detail; })
+      : loadInspiration(id, profileId ?? undefined, controller.signal))
       .then((detail) => {
         if (!mounted.current || controller.signal.aborted) return;
         setStored((held) => (held && held.id === id ? { id, text: detail.text, failed: false } : held));
@@ -726,11 +753,12 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
          copy of this note has one attachment fewer, and an edit there would
          be judged against it (the empty-words rule counts attachments).
          Best effort — the attachment is stored either way. */
-      void fetchInspiration(note.id, profileId ? { profile: profileId } : {})
+      if (tellHome.current.onAttached) tellHome.current.onAttached(note.id);
+      else void fetchInspiration(note.id, profileId ? { profile: profileId } : {})
         /* A READ, NOT A WRITE: the world behind accepts it only if no save
            newer than it has landed (it compares the server's `updatedAt`),
            and it does not count as a save itself. */
-        .then((row) => { onSaved?.(row, "read"); })
+        .then((row) => { tellHome.current.onSaved?.(row, "read"); })
         .catch(() => undefined);
       /* The open note is a snapshot, so it is re-pointed at the row that
          now carries the attachment — otherwise the upload lands, the list
@@ -743,7 +771,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     } finally {
       if (mounted.current) setAttaching(false);
     }
-  }, [load, open, profileId, onSaved]);
+  }, [load, open, profileId]);
   /* The same recorder the notepad uses, handed a different destination —
      and naming the door it comes through, so `attach` does not try to read
      a sound file as a photograph. */

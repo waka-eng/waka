@@ -130,6 +130,11 @@ export interface EditingDeps {
       (and seeds the next edit from) at them, so a second edit cannot start
       from the first one's before. */
   readonly onMemoryKept?: (id: string, text: string, made?: ApiInspiration) => void;
+  /** A memory write is about to go out. The page marks every read of it
+      already in flight as older than this write (`lib/detail-reads.ts`), so
+      none of them can seed another door's editor with the words from before
+      it. */
+  readonly onMemoryWriting?: (id: string) => void;
   /** How many attachments the memory being edited holds, for the one rule on
       empty words both doors share (`lib/note-words.ts`): a memory may be
       left wordless only beside an attachment. Absent means none. */
@@ -302,23 +307,34 @@ export function useEditing(deps: EditingDeps): Editing {
          returned `done()` alone, so the `saved` beat played over the old
          words and the next edit began from them (review, 2026-10-17). */
       if (held.kind === "memory") {
-        d.setInspirations((prev) =>
+        /* The page that knows the freshness rules writes the list and the
+           cache when it is listening (`onMemoryKept`); only a page that is
+           not gets the bare preview update. */
+        if (d.onMemoryKept) d.onMemoryKept(held.id, text);
+        else d.setInspirations((prev) =>
           prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
         );
-        d.onMemoryKept?.(held.id, text);
       }
       return done();
     }
     if (held.kind === "memory") {
       const profile = d.memoryProfile?.();
+      d.onMemoryWriting?.(held.id);
       updateInspiration(held.id, { text }, profile ? { profile } : {})
         .then((made) => {
           if (made) d.onInspirationSaved?.(made);
-          d.setInspirations((prev) =>
-            prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
-          );
-          d.details.current.delete(held.id);
-          d.onMemoryKept?.(held.id, text, made ?? undefined);
+          /* FRESHNESS IS THE PAGE'S VERDICT (review, 2026-10-17). With a
+             listener, the page decides — a row older than one it has already
+             accepted from the archive changes nothing — and writes the list
+             and the cache itself; this act no longer overwrites them first.
+             Without one, the old local update stands. */
+          if (d.onMemoryKept) d.onMemoryKept(held.id, text, made ?? undefined);
+          else {
+            d.setInspirations((prev) =>
+              prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
+            );
+            d.details.current.delete(held.id);
+          }
           /* THE CARD STAYS OPEN. This deselected the memory on success, which
              closed the whole card in the same breath the `saved` beat was
              trying to hold it — so the founder's ruling ("just keep it

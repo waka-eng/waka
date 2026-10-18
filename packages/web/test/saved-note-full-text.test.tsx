@@ -107,15 +107,23 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function openSave(row: Record<string, unknown>, text: string, whose: { profileId?: string; ownArchive?: boolean } = {}): Promise<void> {
-  state.row = row;
-  state.text = text;
+type World = { profileId?: string; ownArchive?: boolean; readFull?: (id: string) => Promise<never>; onAttached?: (id: string) => void };
+/** The archive as Home renders it: every callback a NEW inline function on
+    every render, exactly as Home passes them. */
+async function renderArchive(whose: World = {}): Promise<void> {
   await act(async () => root.render(
     <SavesOverlay locale="en-US" title="Your Inspirations" onClose={vi.fn()}
       profileId={whose.profileId} ownArchive={whose.ownArchive}
       onSaved={(made) => { state.saved.push({ id: made.id, text: made.text }); }}
+      onErased={() => undefined}
+      readFull={whose.readFull} onAttached={whose.onAttached}
       onNoteOpen={(close) => { closer = close; }} />,
   ));
+}
+async function openSave(row: Record<string, unknown>, text: string, whose: World = {}): Promise<void> {
+  state.row = row;
+  state.text = text;
+  await renderArchive(whose);
   for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) {
     await act(async () => { await Promise.resolve(); });
   }
@@ -339,4 +347,47 @@ it("does not carry one note's upload failure onto the next note opened", async (
   await act(async () => host.querySelector<HTMLButtonElement>(".waka-list-row")!.click());
   await answer(true);
   expect(bar(), "and not on the next note opened").toBe("");
+});
+
+/* HOME RE-RENDERS BEHIND THE ARCHIVE ALL THE TIME, and its callbacks are new
+   functions each time. They once rebuilt the delete's flush, whose cleanup
+   ran — and FLUSHED the pending delete — on every one, so the six-second
+   Undo was gone the moment anything behind the archive moved. */
+it("keeps a delete undoable while the world behind re-renders", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    await openSave(longRow, LONG);
+    await answer(true);
+    await act(async () => slot.querySelector<HTMLButtonElement>(".waka-dock-tool--erase")!.click());
+    for (let turn = 0; turn < 3; turn += 1) await renderArchive();
+    await act(async () => { vi.advanceTimersByTime(1_000); });
+    expect(state.profiles.filter((item) => item.act === "delete"), "no delete sent while Undo still stands").toEqual([]);
+    const undo = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Undo");
+    expect(undo, "Undo is still offered").toBeTruthy();
+    await act(async () => undo!.click());
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    expect(state.profiles.filter((item) => item.act === "delete"), "and Undo meant it: nothing was ever sent").toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("opens a note through the world's stamped read when the world offers one", async () => {
+  const SAVED_ON_THE_CARD = `${LONG} (saved on the card a moment ago)`;
+  await openSave(longRow, LONG, { readFull: async (id) => ({ ...longRow, id, text: SAVED_ON_THE_CARD, reflections: [] }) as never });
+  for (let turn = 0; turn < 5 && page().readOnly; turn += 1) await act(async () => { await Promise.resolve(); });
+  expect(page().value).toBe(SAVED_ON_THE_CARD);
+  expect(state.reads, "the archive did not read for itself").toHaveLength(0);
+});
+
+it("tells the world an attachment landed, so it re-reads through its own stamps", async () => {
+  const attached: string[] = [];
+  await openSave(longRow, LONG, { onAttached: (id) => { attached.push(id); } });
+  await answer(true);
+  const input = [...slot.querySelectorAll<HTMLInputElement>('input[type="file"]')].find((node) => node.accept.includes("application/pdf"))!;
+  Object.defineProperty(input, "files", { configurable: true, value: [new File(["%PDF-1.7"], "notes.pdf", { type: "application/pdf" })] });
+  await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
+  for (let turn = 0; turn < 10 && attached.length === 0; turn += 1) await act(async () => { await Promise.resolve(); });
+  expect(attached).toEqual(["long-1"]);
+  expect(state.saved, "and does not hand it a row of its own").toEqual([]);
 });

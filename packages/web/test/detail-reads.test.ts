@@ -58,6 +58,36 @@ describe("a note's detail read", () => {
     expect(s.details.get("n1")?.text).toBe("after the save");
   });
 
+  /* A WRITE IN FLIGHT: the card marks its write as it goes out and again
+     when it lands. A read that started between the two read the words from
+     before the write, and is dropped for what the write left. */
+  it("started while a write was in flight, is dropped when the write lands", async () => {
+    const s = state(), f = heldFetch();
+    markSaved(s, "n1"); // the write goes out
+    const p = readDetail(s, "n1", f.fetch); // a read races it
+    markSaved(s, "n1"); // the write lands…
+    s.details.set("n1", row("written")); // …and leaves its words
+    f.asked[0]!(row("from before the write"));
+    expect((await p)?.text).toBe("written");
+  });
+
+  /* AN ATTACHMENT CHANGES A NOTE WITHOUT CHANGING ITS `updatedAt`, so two
+     reads either side of an upload carry the same stamp. The upload marks
+     the note (Home's `attachedInspiration`), and the read from before it —
+     fewer attachments — cannot replace the one from after. */
+  it("started before an attachment landed, cannot replace the read made after it at the same stamp", async () => {
+    const s = state(), f = heldFetch();
+    const before = readDetail(s, "n1", f.fetch);
+    markSaved(s, "n1"); // the upload landed
+    const after = readDetail(s, "n1", f.fetch);
+    const withFile = { ...row("words", 1_000), attachments: [{ id: "a1", type: "file", label: "notes.pdf" }] } as unknown as InspirationDetail;
+    f.asked[1]!(withFile);
+    expect((await after)?.attachments).toHaveLength(1);
+    f.asked[0]!(row("words", 1_000)); // same stamp, no attachment, lands last
+    expect((await before)?.attachments, "the older read answers with what the newer one cached").toHaveLength(1);
+    expect(s.details.get("n1")?.attachments).toHaveLength(1);
+  });
+
   it("answering with a row older than one already accepted, is dropped", async () => {
     const s = state(), f = heldFetch();
     s.stamps.set("n1", 5_000);

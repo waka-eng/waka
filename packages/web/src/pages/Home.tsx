@@ -100,6 +100,7 @@ import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest
 import { inspirationPreview } from '../lib/inspiration-preview';
 import { wordsCanStand } from '../lib/note-words';
 import { markSaved, readDetail, type DetailReadState } from '../lib/detail-reads';
+import { verdictOnSavedWords } from '../lib/edit-conflict';
 import { candidateSaveRequestId } from '../lib/harvest';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
 import { inspectInspirationPhoto, PHOTO_ACCEPT } from '../lib/inspiration-photo';
@@ -4433,10 +4434,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        (it is in flight while this runs). */
     const held = editingNowRef.current?.open;
     const holdsThis = held?.kind === 'memory' && (held.id === id || (panelNowRef.current?.id === held.id && shown?.id === id));
-    if (held && holdsThis && !held.saving && !held.saved && detail && detail.text !== held.text) {
-      const openedWith = shown?.text ?? '';
-      if (held.text.trim() === openedWith.trim()) editingNowRef.current?.begin('memory', held.id, detail.text);
-      else setEditConflict({ id: held.id, theirs: detail.text });
+    if (held && holdsThis && detail) {
+      /* the rule, and why each case is what it is: `lib/edit-conflict.ts` */
+      const verdict = verdictOnSavedWords({ how, openedWith: shown?.text ?? '', draft: held.text, saved: detail.text, busy: held.saving || held.saved });
+      if (verdict === 'rebase') editingNowRef.current?.begin('memory', held.id, detail.text);
+      else if (verdict === 'ask') setEditConflict({ id: held.id, theirs: detail.text });
     }
     setInspirations((prev) => prev
       ? prev.map((c) => (c.id === id ? { ...c, preview: inspirationPreview(whole?.text ?? text, c.attachments) } : c))
@@ -4448,6 +4450,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     }
   }, []);
 
+  /* AN ATTACHMENT LANDED ON A NOTE IN THE ARCHIVE. Its words did not change,
+     so `updatedAt` cannot order the reads around it; the generation can.
+     Every read of it already out is marked older, and a fresh one — made
+     after the upload — is what the cache, the card and an address-opened
+     memory take. */
+  const attachedInspiration = (id: string) => {
+    markSaved(detailReadState(), id);
+    void loadDetailRef.current(id).then((detail) => {
+      if (!detail) return;
+      setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? { ...p, detail, partial: false, pending: false } : p));
+      setDetachedInspiration((held) => (held && held.detail?.id === id ? { ...held, detail } : held));
+    });
+  };
+  const attachedInspirationRef = useRef(attachedInspiration);
+  attachedInspirationRef.current = attachedInspiration;
+
   /* A note brought back from the deleted shelf comes back to the field —
      the mirror of `onErased` (review, 2026-10-17). */
   const restoredInspiration = (made: ApiInspiration) => {
@@ -4456,7 +4474,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     sourceListMutationRef.current += 1;
     markSaved(detailReadState(), made.id, made.updatedAt);
     detailsRef.current.set(made.id, detail);
-    if (!known) birthInspiration(made.id, detail.preview, Date.parse(made.createdAt), made.id);
+    if (!known) birthInspiration(made.id, detail.preview, Date.parse(made.createdAt), made.id, true);
     setInspirations((previous) => previous?.some((item) => item.id === made.id)
       ? previous.map((item) => (item.id === made.id ? detail : item))
       : [...(previous ?? []), detail]);
@@ -5254,13 +5272,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
   const sourceListMutationRef = useRef(0);
   const attachmentRequestsRef = useRef(new Set<string>());
-  const birthInspiration = (id: string, text: string, atMs: number, serverId?: string) => {
+  /* `keepClock`: a note that is not NEW (one restored from the deleted
+     shelf) joins the field at its own old date without moving the dial's
+     `now` back to it (review, 2026-10-17). */
+  const birthInspiration = (id: string, text: string, atMs: number, serverId?: string, keepClock = false) => {
     const seed: BornSeed = { id, ...(serverId ? { sigId: serverId } : {}), capturedMs: atMs, updatedMs: atMs,
       textPreview: text, kind: "note", quote: null, reflectionCount: 0,
       cited: false, roots: 0, promotion: 0, onPoster: false, underPrinciple: false, terms: [] };
     bornRef.current = [...bornRef.current, seed]; simApiRef.current?.born(seed);
     if (serverId) bornIdsRef.current.add(serverId);
-    setClockMs(atMs);
+    if (!keepClock) setClockMs(atMs);
   };
   inspirationSaveHandlers.current = {
     onResolved: async (intent, result, initiated) => {
@@ -6927,6 +6948,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        (review, 2026-10-17). The cache gets the same words for the same
        reason: reopening this memory must not read them back stale. */
     onMemoryKept: rememberSavedInspiration,
+    /* a card write going out: every read of this note already in flight is
+       now older than it (`lib/detail-reads.ts`) */
+    onMemoryWriting: (id) => markSaved(detailReadState(), id),
     /* The one empty-words rule (`lib/note-words.ts`) needs to know what the
        memory holds besides its words. */
     memoryAttachmentCount: (id) => {
@@ -11720,6 +11744,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            so the memory card never edits from words that are not stored. */
         onSaved={(made, how) => rememberSavedInspiration(made.id, made.text, made, how)}
         onRestored={(made) => restoredInspirationRef.current(made)}
+        /* the archive reads through the world's stamped reads, so a read
+           racing a card save cannot seed its editor with older words */
+        readFull={(id) => loadDetailRef.current(id)}
+        onAttached={(id) => attachedInspirationRef.current(id)}
         onErased={(id) => {
           /* Gone from the field and the cache like a delete made on the card
              itself — and the card closes only if it is showing this note. */

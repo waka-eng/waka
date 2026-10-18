@@ -47,6 +47,16 @@ it("keeps an earlier save failure beside the loading line", async () => {
   expect(await bar({ reading: "Opening…", failed: "That didn’t save." })).toEqual(["Opening…", "That didn’t save."]);
 });
 
+it("keeps Stop in the bar while a delete is armed during a recording", async () => {
+  await bar({
+    recording: { ...idle, phase: "recording", seconds: 7 } as never,
+    erasePending: true, eraseQuestion: "Delete this for good?", eraseConfirmLabel: "Delete it anyway",
+    cancelEraseLabel: "Not now", onCancelErase: vi.fn(), stopLabel: "Stop recording",
+  });
+  expect(slot.querySelector('[aria-label="Stop recording"]')?.textContent, "the way to stop the microphone stayed").toBe("0:07");
+  expect(slot.querySelector('[aria-label="Delete it anyway"]')).not.toBeNull();
+});
+
 it("keeps a recording error beside a failed read, and Try again and Delete stay", async () => {
   const lines = await bar({ readFailed: "Didn’t open.", recording: { ...idle, error: "The microphone stopped." } as never });
   expect(lines).toEqual(["Didn’t open.", "The microphone stopped."]);

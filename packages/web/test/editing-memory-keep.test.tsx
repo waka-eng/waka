@@ -30,6 +30,7 @@ vi.mock("../src/lib/api", async (original) => ({
   ...await original<typeof import("../src/lib/api")>(),
   updateInspiration: async (id: string, input: { text: string }, options: { profile?: string } = {}) => {
     W.calls.push({ id, text: input.text, ...(options.profile ? { profile: options.profile } : {}) });
+    order.push("write");
     return { id, text: input.text, attachments: [], reflections: [] };
   },
 }));
@@ -37,6 +38,8 @@ vi.mock("../src/lib/api", async (original) => ({
 let host: HTMLDivElement, root: Root, edit: Editing;
 const kept: Array<{ id: string; text: string }> = [];
 const previews: string[] = [];
+/** the page's callbacks and the write, in the order they happened */
+const order: string[] = [];
 
 function Host(props: { offline: boolean; attachments: number; profile?: string }) {
   const [, setInspirations] = useState<null | Array<{ id: string; preview: string }>>([{ id: "m1", preview: "old words" }]);
@@ -50,7 +53,8 @@ function Host(props: { offline: boolean; attachments: number; profile?: string }
       return next;
     })) as EditingDeps["setInspirations"],
     setSignals: vi.fn(), setNotes: vi.fn(), setTopOfMind: vi.fn(), setAdopted: vi.fn(), setSelectedId: vi.fn(),
-    onMemoryKept: (id, text) => { kept.push({ id, text }); },
+    onMemoryKept: (id, text) => { kept.push({ id, text }); order.push("kept"); },
+    onMemoryWriting: (id) => { order.push(`writing ${id}`); },
     memoryAttachmentCount: () => props.attachments,
     memoryProfile: () => props.profile,
   } as EditingDeps);
@@ -59,7 +63,7 @@ function Host(props: { offline: boolean; attachments: number; profile?: string }
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  W.calls.length = 0; kept.length = 0; previews.length = 0;
+  W.calls.length = 0; kept.length = 0; previews.length = 0; order.length = 0;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -94,5 +98,17 @@ it("tells the card about a fixture keep, so its words and the next edit are the 
   await keepWords({ offline: true }, "kept offline");
   expect(W.calls, "a fixture world asks no server").toEqual([]);
   expect(kept).toEqual([{ id: "m1", text: "kept offline" }]);
-  expect(previews.at(-1)).toBe("kept offline");
+  /* the page that listens writes the list itself — see the next case */
+  expect(previews).toEqual([]);
+});
+
+/* THE PAGE'S FRESHNESS VERDICT DECIDES (review, 2026-10-17). A card write
+   older than an archive write the page already accepted must change
+   nothing — so with a listener, the act no longer writes the list's preview
+   or drops the cache before asking; and it says a write is going out first,
+   so reads already in flight are marked older than it. */
+it("leaves the list and the cache to the page, and announces the write before it goes", async () => {
+  await keepWords({}, "new words");
+  expect(order).toEqual(["writing m1", "write", "kept"]);
+  expect(previews, "no preview written behind the page's back").toEqual([]);
 });
