@@ -588,8 +588,11 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         it was, on a product whose other screens have one bar and two corner
         buttons. The corners are the navigation here as everywhere. */}
     <section className="chat-main" aria-label={say('worldConversationTitle')}>
-      {error?<div className="chat-notice" role="alert">{error} {(unsent&&!draft?.pending)||draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void save()}>{say('worldConversationRetry')}</button>
-        :!draft?.pending?<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldRoomHistoryRetry')}</button>:null}
+      {error?<div className="chat-notice" role="alert">{error} {(unsent&&!draft?.pending)||(draft?.pending&&(!id||conversation))?<button type="button" disabled={busy||loading} onClick={()=>void save()}>{say('worldConversationRetry')}</button>
+        /* A pending message on a conversation that could not be read cannot be
+           re-sent (`save` needs the conversation), so the act offered is the
+           re-read that brings it back (review): Retry only where it works. */
+        :<button type="button" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldRoomHistoryRetry')}</button>}
         {/* THE WAY OUT SITS BESIDE THE FAILURE. When a conversation cannot be
             opened there is no box to type in, so starting a fresh one is the
             only move left — and it used to be a button in a column down the

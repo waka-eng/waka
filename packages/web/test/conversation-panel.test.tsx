@@ -162,6 +162,21 @@ it('reconciles a lost save response with a read, without resending',async()=>{
   expect(host.querySelector('textarea')!.value).toBe('Keep my exact thought');expect(host.textContent).toContain('Couldn’t confirm this message.');
   await click('Check saved messages');expect(saveConversationMessage).toHaveBeenCalledTimes(1);expect(stored.messages).toHaveLength(1);expect(host.querySelector('textarea')!.value).toBe('');
 });
+/* Review: with a pending message and a conversation that could not be read,
+   "Retry" was offered and did nothing (sending needs the conversation). */
+it('offers the re-read, not a dead Retry, when a pending message sits on an unread conversation',async()=>{
+  vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Response lost'));
+  await mount();await type('A thought in flight');await click('Send');
+  await act(async()=>root.unmount());root=createRoot(host);
+  vi.mocked(fetchConversation).mockRejectedValue(new Error('Unavailable'));
+  await mount();
+  const acts=[...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent);
+  expect(acts).not.toContain('Retry this message');
+  expect(acts).toContain('Try again');
+  vi.mocked(fetchConversation).mockImplementation(async()=>structuredClone(stored));
+  await click('Try again');
+  expect(host.querySelector('.chat-notice')).toBeNull();
+});
 it('restores unsent words after reopening and forks edits instead of overwriting the previous writer',async()=>{
   /* THE DRAFT PICKER WENT; THE FORKING DID NOT. Two tabs still keep two
      drafts rather than one tab overwriting the other's sentence — what
