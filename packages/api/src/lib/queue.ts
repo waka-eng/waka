@@ -146,6 +146,7 @@ import {
   profiles,
   inspirations,
   generationRevisions,
+  signalEvidence,
   attachments,
   reviewSessions,
 } from "../db/index.js";
@@ -292,7 +293,7 @@ export interface BackgroundJobStore {
   /** Whose work is next, without taking it. Null when nothing is runnable. */
   headOfQueue(now: Date,overdueBefore?:Date): Promise<RunnableJobHead | null>;
   /** Take the next runnable job and mark it started. */
-  claimNext(now: Date,overdueBefore?:Date): Promise<BackgroundJob | null>;
+  claimNext(now: Date,overdueBefore?:Date): Promise<ClaimedBackgroundJob | null>;
   /** What this account has already started since `since`. */
   usageForAccount(accountId: string, since: Date): Promise<AccountModelUsage>;
   /** Push this account's due, unstarted work out to `until`. Returns rows moved. */
@@ -823,8 +824,6 @@ export async function drainBackgroundJobs(
     deferred: 0,
   };
 
-  if (store === postgresBackgroundJobStore) await settleRetiredGroupBacklogOnce();
-
   let deferrals = 0;
   let processed = 0;
   while (processed < limit) {
@@ -939,8 +938,21 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
     // that order. Lock every revision this stage may write before its claim;
     // a busy human transaction wins instead of becoming a deadlock victim.
     const owners = new Set([job.profileId]);
-    // Only the tenant's own revision now: enrichment once also locked the
-    // room minds citing the source, whose evidence retired with rooms.
+    /* KEPT UNTIL THE ROOM DATA IS DROPPED. Enrichment changes a source that
+       room minds' evidence may still cite, and migration 0038's trigger
+       still advances those minds' generation revisions when it does. A
+       member's own public save takes the same rows in the same sorted
+       order; locking only the tenant here would invert that order and make
+       the save a deadlock victim. So every citing destination is locked up
+       front, sorted, NOWAIT — exactly as before the room engine retired. */
+    if (job.type === "enrich_attachment") {
+      const inspirationId = readString(job.payload, "inspirationId");
+      if (inspirationId) {
+        const destinations = await tx.select({ profileId: signalEvidence.profileId }).from(signalEvidence)
+          .where(and(eq(signalEvidence.ownerProfileId, job.profileId), eq(signalEvidence.inspirationId, inspirationId)));
+        for (const row of destinations) owners.add(row.profileId);
+      }
+    }
     await tx.select({ id: generationRevisions.profileId }).from(generationRevisions)
       .where(inArray(generationRevisions.profileId, [...owners])).orderBy(asc(generationRevisions.profileId))
       .for("update", { noWait: true });
@@ -952,7 +964,14 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
   if (!owned) throw new Error("Background job ownership changed before commit");
 }
 
-export async function processBackgroundJob(job: BackgroundJob): Promise<BackgroundJobResult | void> {
+/** A claimed row, carrying what the claim learned about its tenant. */
+export type ClaimedBackgroundJob = BackgroundJob & {
+  /** True when the tenant is a room's mind (retired room work). Absent on rows
+   * not produced by the claim, which then rely on the payload checks alone. */
+  tenantIsGroup?: boolean;
+};
+
+export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<BackgroundJobResult | void> {
   if(job.type==='refresh_top_of_mind'&&readingWakeContext.getStore())rememberReadingWake({id:job.id,profileId:job.profileId,requestVersion:job.requestVersion.toString()});
   const claimed=coerceNullableDate(job.lockedAt)?.getTime();
   if(claimed!==undefined)recordPerformanceStage('queue_wait',job.type,claimed-Math.max(coerceDate(job.runAfter).getTime(),coerceDate(job.createdAt).getTime()));
@@ -1210,74 +1229,32 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
  * still sitting in dev and prod `background_jobs`, and a worker meeting one
  * must neither run it nor throw: running it would keep regenerating rooms
  * nobody can see, and throwing would burn three attempts and leave a `failed`
- * row for every room.
+ * row for every room. So each is marked done with no work.
  *
- * So the backlog is settled IN BULK, once per worker process, before its
- * first drain (`settleRetiredGroupBacklog`): one UPDATE marks every pending
- * (or stale-leased) room-shaped row succeeded with a `last_error` note
- * saying why. No per-job read sits on the hot path. A running row with a
- * live lease is left to its worker; the in-handler guard below catches it,
- * and any row the sweep missed, wherever no extra query is needed.
- *
- * The enum value `refresh_group_top_of_mind` stays — removing it is an
- * `ALTER TYPE` migration, and the data-dropping phase has not been decided.
- * Room-shaped means one of the shapes only the room engine wrote:
+ * The guard cannot be escaped: the CLAIM itself returns `tenantIsGroup` (a
+ * scalar subquery on the tenant's profile in the same UPDATE ... RETURNING,
+ * no extra round trip), so every claimed job owned by a room's mind is
+ * settled before dispatch, whatever its type and whenever it was enqueued.
+ * The rest are shapes readable from the row itself:
  *   - any `refresh_group_top_of_mind`;
  *   - derive/review/assess work landing on a room's mind — the legacy
  *     `deriveIntoProfileId` field (`retired-group-work.ts`, the same rule the
  *     support-state SQL uses);
- *   - principles requested for a profile other than the job's tenant (a
- *     mind's, billed to a member), compared as UUIDs (case-insensitive);
- *   - any job whose tenant is a room's mind (sweep only: it needs the
- *     tenant's profile type, which the claimed row does not carry).
+ *   - principles requested for another profile (a mind's, billed to a
+ *     member): only a non-blank STRING `profileId` that differs from the
+ *     tenant, compared case-insensitively. Anything else names no one, and
+ *     the handler runs for the tenant — the same rule it applies.
+ * The enum value `refresh_group_top_of_mind` stays — removing it is an
+ * `ALTER TYPE` migration, and the data-dropping phase has not been decided.
  * Personal and agent jobs never carry these shapes, so they run unchanged.
  */
-export const RETIRED_GROUP_JOB_NOTE = "retired: room engine (2026-10-17); settled without running";
-
-export async function settleRetiredGroupBacklog(
-  database: Pick<ReturnType<typeof getDb>, "execute"> = getDb(),
-  now = new Date(),
-): Promise<number> {
-  const rows = await database.execute(sql`
-    UPDATE background_jobs j SET status = 'succeeded'::background_job_status, locked_at = NULL,
-      rerun_requested = false, last_error = ${RETIRED_GROUP_JOB_NOTE}, updated_at = now()
-    WHERE (j.status = 'pending'::background_job_status OR (j.status = 'running'::background_job_status
-        AND j.locked_at < ${now.toISOString()}::timestamptz - (${STALE_LOCK_SECONDS} || ' seconds')::interval))
-      AND (j.type::text = 'refresh_group_top_of_mind'
-        OR (j.type::text IN ('derive_signals', 'review_signal_support', 'assess_signal_support')
-          AND NOT ${withoutLegacyGroupDestination(sql`j.payload`)})
-        OR (j.type::text = 'refresh_principles'
-          AND lower(coalesce(j.payload->>'profileId', j.profile_id::text)) <> lower(j.profile_id::text))
-        OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = j.profile_id AND p.type::text = 'group'))
-    RETURNING j.id`);
-  const settled = (rows as unknown as Array<{ id: string }>).length;
-  if (settled) console.info("[background-jobs] settled retired room backlog", { settled });
-  return settled;
-}
-
-let retiredGroupBacklogSettled = false;
-async function settleRetiredGroupBacklogOnce(): Promise<void> {
-  if (retiredGroupBacklogSettled) return;
-  try {
-    await settleRetiredGroupBacklog();
-    retiredGroupBacklogSettled = true;
-  } catch (error) {
-    // Never block the queue on the sweep; the in-handler guard still holds,
-    // and the next drain tries again.
-    console.warn("[background-jobs] retired room backlog sweep failed", { error: sanitizeRetiredSweepError(error) });
-  }
-}
-
-function sanitizeRetiredSweepError(error: unknown): string {
-  return error instanceof Error ? error.name : "unknown";
-}
-
-/** No query: only shapes readable from the claimed row itself. */
-function retiredGroupJob(job: BackgroundJob): boolean {
+function retiredGroupJob(job: ClaimedBackgroundJob): boolean {
+  if (job.tenantIsGroup === true) return true;
   if ((job.type === "derive_signals" || job.type === "review_signal_support" || job.type === "assess_signal_support") &&
     hasLegacyGroupDestination(job.payload)) return true;
-  return job.type === "refresh_principles" &&
-    (readString(job.payload, "profileId") ?? job.profileId).toLowerCase() !== job.profileId.toLowerCase();
+  if (job.type !== "refresh_principles") return false;
+  const named = readString(job.payload, "profileId");
+  return named !== null && named.toLowerCase() !== job.profileId.toLowerCase();
 }
 
 function settleRetiredGroupJob(job: BackgroundJob): void {
@@ -1579,7 +1556,7 @@ async function deferAccountBacklogForBudget(
  * `locked_at`. It is the meter the per-account budget reads, and a meter that
  * a successful job erases measures nothing.
  */
-async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Promise<BackgroundJob | null> {
+async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Promise<ClaimedBackgroundJob | null> {
   const nowIso = now.toISOString();
   const rows = await getDb().execute(sql<BackgroundJob>`
     UPDATE background_jobs AS job
@@ -1625,10 +1602,13 @@ async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Pro
       job.last_error AS "lastError",
       job.idempotency_key AS "idempotencyKey",
       job.created_at AS "createdAt",
-      job.updated_at AS "updatedAt"
+      job.updated_at AS "updatedAt",
+      -- Retired room work is recognised at claim time (see retiredGroupJob).
+      COALESCE((SELECT tenant.type::text = 'group' FROM profiles tenant
+        WHERE tenant.id = job.profile_id), false) AS "tenantIsGroup"
   `);
 
-  const result = rows as unknown as BackgroundJob[];
+  const result = rows as unknown as ClaimedBackgroundJob[];
   const job = result[0];
   return job ? { ...job, requestVersion: BigInt(job.requestVersion), completedVersion: BigInt(job.completedVersion) } : null;
 }

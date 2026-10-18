@@ -18,6 +18,9 @@ const reportSchema = z.object({
   reviewId: uuid, policy: z.literal(SIGNAL_SUPPORT_REVIEW_POLICY), status: z.literal("current"),
   profileId: uuid, ownerProfileId: uuid, inspirationId: uuid,
   claimsHash: hash, calls: z.number().int().min(0).max(10),
+  // Reports written before rooms retired carry these two; accepted and
+  // ignored as their personal values only. A membership is room work.
+  membershipId: z.null().optional(), restrictedClaimCount: z.literal(0).optional(),
   signalIds: z.array(uuid).min(1).max(SUPPORT_REVIEW_BATCH_SIZE).optional(),
   material: z.object({ scope: z.enum(["personal", "public"]),
     revision: z.string().regex(/^[1-9]\d*$/).optional(),

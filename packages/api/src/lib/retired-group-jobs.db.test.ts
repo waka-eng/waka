@@ -9,11 +9,11 @@ import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.
    ALTER TYPE is a migration).
 
    Every handler a room-shaped row could otherwise reach is replaced by a
-   recorder, so both directions are observed as behaviour: a room row ends
-   succeeded — by the bulk sweep (with its `last_error` note) or by the
-   in-handler guard (claimed, settled, no note) — and reaches no handler; a
-   personal or agent row of the same type reaches its handler and is never
-   touched by either. */
+   recorder, so both directions are observed as behaviour: a room row is
+   claimed, settled succeeded on its first attempt with no error, and reaches
+   no handler; a personal or agent row of the same type reaches its handler.
+   Rows are inserted after the worker module loaded and drained like any
+   other, so nothing here depends on a startup pass. */
 const reached = vi.hoisted(() => [] as Array<{ handler: string; profileId?: string; inspirationId?: string }>);
 vi.mock("./principle-generation.js", async (original) => ({
   ...(await original<typeof import("./principle-generation.js")>()),
@@ -36,6 +36,9 @@ vi.mock("./signal-derivation.js", async (original) => ({
     return { status: "no_candidates", inspirationId: input.inspirationId, profileId: null, candidateCount: 0,
       matchedSignalIds: [], mintedSignalIds: [], promotedSignalIds: [] };
   }),
+  reembedSignal: vi.fn(async (input: { profileId: string }) => {
+    reached.push({ handler: "reembed_signal", profileId: input.profileId });
+  }),
 }));
 vi.mock("./signal-support-batches.js", async (original) => ({
   ...(await original<typeof import("./signal-support-batches.js")>()),
@@ -48,7 +51,7 @@ vi.mock("./signal-support-batches.js", async (original) => ({
 }));
 
 import { sql } from "drizzle-orm";
-import { RETIRED_GROUP_JOB_NOTE, runBackgroundJobWorker, settleRetiredGroupBacklog } from "./queue.js";
+import { runBackgroundJobWorker } from "./queue.js";
 import { hasLegacyGroupDestination, withoutLegacyGroupDestination } from "./retired-group-work.js";
 
 let t: TestDatabase;
@@ -59,11 +62,6 @@ beforeAll(async () => {
   const url = new URL(process.env.DB_CONNECTION_URL!);
   url.searchParams.set("options", `-c search_path=${t.schemaName}`);
   process.env.DB_CONNECTION_URL = url.toString();
-  // The worker sweeps the backlog once per process, before its first drain.
-  // Spend that once here, on an empty queue, so each case below chooses its
-  // path explicitly: the sweep by calling it, the guard by draining.
-  await t.truncateAll();
-  await runBackgroundJobWorker({ limit: 1 });
 });
 beforeEach(async () => {
   await t.truncateAll();
@@ -98,8 +96,10 @@ const assessPayload = (inspirationId: string, signalId: string, extra: Record<st
   statements: [{ id: signalId, revision: "1", hash: HASH }], ...extra,
 });
 
-it("the backlog sweep settles every queued room-shaped job, reaching no handler", async () => {
+it("settles every claimed room-shaped job unrun, reaching no handler", async () => {
   const legacy = await legacyGroup();
+  // a queue that has already drained once: the guard is per claim, not per process
+  await drain();
   const ids = [
     await enqueue(legacy.memberId, "refresh_group_top_of_mind", { groupId: legacy.groupId, reason: "shares_changed" }),
     await enqueue(legacy.memberId, "derive_signals", { inspirationId: legacy.sourceId, reason: "created", deriveIntoProfileId: legacy.mindId }),
@@ -107,36 +107,13 @@ it("the backlog sweep settles every queued room-shaped job, reaching no handler"
     await enqueue(legacy.memberId, "assess_signal_support",
       assessPayload(legacy.sourceId, legacy.signalId, { deriveIntoProfileId: legacy.mindId, membershipId: legacy.groupId })),
     await enqueue(legacy.memberId, "refresh_principles", { profileId: legacy.mindId }),
-    // any job whose tenant is the mind, whatever its type
-    await enqueue(legacy.mindId, "refresh_principles", { profileId: legacy.mindId }),
-    await enqueue(legacy.mindId, "tend_signal_garden", {}),
-    await enqueue(legacy.mindId, "refresh_top_of_mind", { reason: "signals_changed" }),
-  ];
-
-  // a live lease is its worker's; a stale one is the sweep's
-  const live = await enqueue(legacy.mindId, "tend_signal_garden", {});
-  await t.sql`UPDATE background_jobs SET status = 'running', locked_at = now() WHERE id = ${live}`;
-  const stale = await enqueue(legacy.mindId, "tend_signal_garden", {});
-  await t.sql`UPDATE background_jobs SET status = 'running', locked_at = now() - interval '1 day' WHERE id = ${stale}`;
-
-  expect(await settleRetiredGroupBacklog(t.db as never)).toBe(ids.length + 1);
-
-  const rows = await t.sql`SELECT id, status::text, last_error FROM background_jobs`;
-  for (const row of rows.filter((row) => row.id !== live)) {
-    expect(row).toMatchObject({ status: "succeeded", last_error: RETIRED_GROUP_JOB_NOTE });
-  }
-  expect(rows.find((row) => row.id === live)).toMatchObject({ status: "running", last_error: null });
-  expect(await drain()).toMatchObject({ claimed: 0 });
-  expect(reached).toEqual([]);
-});
-
-it("the in-handler guard settles room rows the sweep has not seen, with no query and no handler", async () => {
-  const legacy = await legacyGroup();
-  const ids = [
-    await enqueue(legacy.memberId, "refresh_group_top_of_mind", { groupId: legacy.groupId, reason: "manual" }),
-    await enqueue(legacy.memberId, "derive_signals", { inspirationId: legacy.sourceId, reason: "edited", deriveIntoProfileId: legacy.mindId }),
     // a mind's id in another case still names another profile
     await enqueue(legacy.memberId, "refresh_principles", { profileId: legacy.mindId.toUpperCase() }),
+    // any job whose TENANT is the mind, whatever its type — known from the claim
+    await enqueue(legacy.mindId, "refresh_principles", { profileId: legacy.mindId }),
+    await enqueue(legacy.mindId, "tend_signal_garden", {}),
+    await enqueue(legacy.mindId, "reembed_signal", { signalId: legacy.signalId }),
+    await enqueue(legacy.mindId, "refresh_top_of_mind", { reason: "signals_changed" }),
   ];
 
   expect(await drain()).toMatchObject({ claimed: ids.length, succeeded: ids.length, failed: 0, retried: 0 });
@@ -144,6 +121,7 @@ it("the in-handler guard settles room rows the sweep has not seen, with no query
     expect(row).toMatchObject({ status: "succeeded", attempts: 1, last_error: null });
   }
   expect(reached).toEqual([]);
+  expect(await t.sql`SELECT id FROM top_of_minds`).toHaveLength(0);
 });
 
 it("never settles a personal or agent job of the same types as room work", async () => {
@@ -163,6 +141,7 @@ it("never settles a personal or agent job of the same types as room work", async
   for (const owner of owners) {
     await enqueue(owner.profileId, "refresh_principles", { profileId: owner.profileId });
     await enqueue(owner.profileId, "tend_signal_garden", {});
+    await enqueue(owner.profileId, "reembed_signal", { signalId: owner.signalId });
     await enqueue(owner.profileId, "derive_signals", { inspirationId: owner.sourceId, reason: "created", deriveIntoProfileId: "  " });
     await enqueue(owner.profileId, "review_signal_support", { inspirationId: owner.sourceId });
     // well-formed, including the legacy `membershipId: null` older rows carry
@@ -170,19 +149,21 @@ it("never settles a personal or agent job of the same types as room work", async
     expected.push(
       { handler: "refresh_principles", profileId: owner.profileId },
       { handler: "tend_signal_garden", profileId: owner.profileId },
+      { handler: "reembed_signal", profileId: owner.profileId },
       { handler: "derive_signals", inspirationId: owner.sourceId },
       { handler: "review_signal_support", inspirationId: owner.sourceId },
       { handler: "assess_signal_support", profileId: owner.profileId, inspirationId: owner.sourceId },
     );
   }
 
-  // the member's own principles, named in upper case, are still their own
+  // The member's own principles named in upper case are still their own; the
+  // agent's names no one (a non-string), so they run for the tenant.
   await t.sql`UPDATE background_jobs SET payload = jsonb_build_object('profileId', upper(profile_id::text))
     WHERE type = 'refresh_principles' AND profile_id = ${legacy.memberId}`;
-  expect(await settleRetiredGroupBacklog(t.db as never)).toBe(0);
+  await t.sql`UPDATE background_jobs SET payload = '{"profileId": 7}'::jsonb
+    WHERE type = 'refresh_principles' AND profile_id = ${agent.id}`;
   await drain();
 
-  expect(await t.sql`SELECT id FROM background_jobs WHERE last_error = ${RETIRED_GROUP_JOB_NOTE}`).toHaveLength(0);
   const key = (row: (typeof reached)[number]) => JSON.stringify([row.handler, row.profileId ?? null, row.inspirationId ?? null]);
   expect(reached.map(key).sort()).toEqual(expected.map(key).sort());
 });

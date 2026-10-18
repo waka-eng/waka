@@ -211,6 +211,17 @@ describe("applying explicit support decisions", () => {
     expect(await t.sql`SELECT * FROM signal_evidence WHERE signal_id = ${f.signalId}`).toEqual(before);
   });
 
+  it("applies a report written before rooms retired, but never one that names a membership", async () => {
+    /* Report files saved before 2026-10-17 carry `membershipId: null` and
+       `restrictedClaimCount: 0`. They still apply; a membership is room
+       work and is refused by the schema. */
+    const f = await fixture();
+    const legacy = { ...(await review(f, "unresolved")), membershipId: null, restrictedClaimCount: 0 };
+    await expect(applySignalSupportReview(t.db as never, legacy)).resolves.toMatchObject({ alreadyApplied: false });
+    const room = { ...(await review(f, "unresolved")), membershipId: f.signalId, restrictedClaimCount: 0 };
+    await expect(applySignalSupportReview(t.db as never, room)).rejects.toThrow();
+  });
+
   it.each([true, false])("bounded discovery cannot undo explicit withdrawal (locked=%s)", async (locked) => {
     const f = await fixture();
     if (!locked) await t.sql`UPDATE signals SET locked_at = NULL WHERE id = ${f.signalId}`;
