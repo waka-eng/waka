@@ -63,7 +63,12 @@ export const RESEND_BACKOFF_MS = [5_000, 15_000, 60_000, 300_000] as const;
 /** The server refused THIS request for good. Not "busy" (409), not "who are
     you" (401/403), not "too slow" (408) or "too many" (429). */
 function refused(error: unknown): error is ApiError {
-  return error instanceof ApiError && error.status >= 400 && error.status < 500 && ![401, 403, 408, 409, 429].includes(error.status);
+  if (!(error instanceof ApiError)) return false;
+  /* 409 is "busy" (`save_in_progress`) unless it says the id was already used
+     for DIFFERENT content (`save_request_conflict`): that request can never
+     land as written, so it is refused and its input offered back. */
+  if (error.status === 409) return error.code === 'save_request_conflict';
+  return error.status >= 400 && error.status < 500 && ![401, 403, 408, 429].includes(error.status);
 }
 
 // A corruption checksum, NOT an authorization signature. The server owns
@@ -126,12 +131,12 @@ export function useAuthoredSave(options: {
   const phaseRef = useRef<Phase>('idle');
   const setPhase = (next: Phase) => { phaseRef.current = next; setPhaseState(next); };
   const [busy, setBusy] = useState(false);
-  const working = useRef(false), again = useRef(false), mounted = useRef(false), epoch = useRef(0);
+  // `again`: a pump asked for while one runs (and whether any such ask was a press).
+  const working = useRef(false), again = useRef(false), againPressed = useRef(false), mounted = useRef(false), epoch = useRef(0);
   const abort = useRef<AbortController | null>(null);
   const failures = useRef(0), backoff = useRef(0);
-  // Edited words waiting on "Save as new"; and the flag that lets one start() go beside the pending save.
+  // Edited words waiting on "Save as new".
   const diverged = useRef<AuthoredSaveInput | null>(null);
-  const alongside = useRef(false);
 
   const show = (intent: AuthoredSaveIntent | null) => { pendingRef.current = intent; setPending(intent); };
 
@@ -157,6 +162,10 @@ export function useAuthoredSave(options: {
       ]);
       if (!owns()) return 'unknown';
       if (!created?.id || created.profileId !== intent.profileId) throw new Error('Unexpected saved inspiration');
+      /* The journal as it stands NOW: a press during this POST may have moved
+         it to the current draft revision (same words, same id), and the
+         composer settles against that one. */
+      try { const latest = localStorage.getItem(key + intent.requestId); if (latest) intent = validIntent(key + intent.requestId, key, at.scope, at.operation, latest); } catch { /* keep the one sent */ }
       const after = await live.current.onResolved(intent, { inspiration: created, reflection: null, processing: created.processing,
         recovered: created.saveRequest?.replayed === true }, pressed);
       if (!owns()) return 'unknown';
@@ -185,7 +194,7 @@ export function useAuthoredSave(options: {
   const pump = useCallback(async (pressed = false) => {
     const at = live.current;
     if (!mounted.current || !at.prefix || !at.scope || at.enabled === false || (document.hidden && !pressed)) return;
-    if (working.current) { again.current = true; return; }
+    if (working.current) { again.current = true; againPressed.current ||= pressed; return; }
     window.clearTimeout(backoff.current);
     working.current = true; setBusy(true);
     const sequence = epoch.current;
@@ -228,12 +237,12 @@ export function useAuthoredSave(options: {
       failures.current += 1;
       backoff.current = window.setTimeout(() => { void pump(); }, wait);
     } else failures.current = 0;
-    if (again.current) { again.current = false; void pump(); }
+    if (again.current) { const wasPressed = againPressed.current; again.current = false; againPressed.current = false; void pump(wasPressed); }
   }, [send]);
 
   useEffect(() => {
     mounted.current = true; epoch.current += 1; abort.current?.abort(); working.current = false; again.current = false;
-    window.clearTimeout(backoff.current); failures.current = 0; diverged.current = null; alongside.current = false;
+    window.clearTimeout(backoff.current); failures.current = 0; diverged.current = null; againPressed.current = false;
     show(null); setBusy(false); setPhase('idle'); void pump();
     const wake = () => { void pump(); };
     const onStorage = (event: StorageEvent) => { if (!event.key || event.key.startsWith(prefix ?? '\0')) void pump(); };
@@ -244,18 +253,25 @@ export function useAuthoredSave(options: {
     };
   }, [prefix, options.enabled, pump]);
 
-  const start = useCallback((input: AuthoredSaveInput): boolean => {
+  /** `besides`: "Save as new" — for this one call, the words are saved beside
+      any pending save instead of being compared with it. Nothing persists. */
+  const start = useCallback((input: AuthoredSaveInput, options?: { besides?: boolean }): boolean => {
     const at = live.current;
     if (!mounted.current || at.enabled === false) return false;
     if (!at.scope || !at.prefix) { setPhase('storage_error'); return false; }
     if (input.operation !== at.operation) return false;
-    const besides = alongside.current; alongside.current = false;
+    const besides = options?.besides === true;
     let found;
     try { found = readIntents(at.prefix, at.scope, at.operation); } catch { setPhase('storage_error'); return false; }
     if (found.invalid) { setPhase('invalid'); return false; }
-    const held = [...found.intents].reverse().find((item) => !item.rejected);
-    if (held && !besides) {
-      if (working.current) return false;
+    const sum = wordsSum(input);
+    /* "Save as new" on words a pending save already carries is that save's
+       retry, not a second journal (review): the same id, once. */
+    const held = besides ? [...found.intents].reverse().find((item) => !item.rejected && wordsSum(item) === sum)
+      : [...found.intents].reverse().find((item) => !item.rejected);
+    if (held) {
+      // A press during a background re-send is queued, not dropped: `pump`
+      // folds it into the running pass and runs again (as a press) after it.
       if (wordsSum(input) !== wordsSum(held)) {
         // Edited words while a save is pending: ask, never decide.
         diverged.current = JSON.parse(JSON.stringify(input)) as AuthoredSaveInput;
@@ -289,11 +305,9 @@ export function useAuthoredSave(options: {
   const saveAsNew = () => {
     const next = diverged.current;
     if (!next) return false;
-    diverged.current = null; alongside.current = true;
-    return start(next);
+    diverged.current = null;
+    return start(next, { besides: true });
   };
-  /** The same, for a caller that rebuilds the save from what is on screen at the press. */
-  const prepareNew = () => { diverged.current = null; alongside.current = true; return true; };
   const keepEarlier = () => { diverged.current = null; setPhase('uncertain'); return pump(true); };
 
   /** The refused save's whole input goes back to the person; its journal goes. */
@@ -323,9 +337,10 @@ export function useAuthoredSave(options: {
   };
   // Stable, so a caller can dismiss from an effect without re-running it each render.
   const dismiss = useCallback(() => { if (!pendingRef.current) setPhase('idle'); }, []);
-  /** Save may be pressed while a save is pending and not in flight: it re-sends or asks. */
-  const canResave = Boolean(pending && !busy && !pending.rejected && (phase === 'uncertain' || phase === 'diverged'));
+  /** Save may be pressed while a save is pending, even mid-send: the same words
+      are queued as its retry (same id), edited words ask. */
+  const canResave = Boolean(pending && !pending.rejected && phase !== 'storage_error' && phase !== 'invalid');
 
-  return { pending, phase, busy, canResave, saveAsNew, prepareNew, keepEarlier, start, retry: () => pump(true),
+  return { pending, phase, busy, canResave, saveAsNew, keepEarlier, start, retry: () => pump(true),
     check: () => pump(), editRejected, resetInvalid, dismiss };
 }

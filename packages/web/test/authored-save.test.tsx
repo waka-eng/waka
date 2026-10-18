@@ -200,3 +200,47 @@ it('does not submit corrupt pending data; an explicit reset retains uninterprete
   const backup = Object.keys(localStorage).find((item) => item.includes(':unrecoveredSave:'))!;
   expect(localStorage.getItem(backup)).toContain('Damaged payload');
 });
+
+/* REVIEW ROUND 5 — small and in the same design. */
+it('"Save as new" is an argument of one call: an early return leaves nothing behind', async () => {
+  vi.mocked(createInspiration).mockRejectedValue(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const edited: AuthoredSaveInput = { ...input, input: { ...input.input, text: 'Edited' } };
+  const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Full'); });
+  try { await act(async () => { expect(latest.start(edited, { besides: true })).toBe(false); }); } finally { write.mockRestore(); }
+  // The next ordinary press is compared with the pending save, not saved beside it.
+  await act(async () => { expect(latest.start(edited)).toBe(false); });
+  expect(latest.phase).toBe('diverged'); expect(records()).toHaveLength(1);
+});
+
+it('"Save as new" on the words the pending save already carries is its retry, not a second journal', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => { expect(latest.start(input, { besides: true })).toBe(true); });
+  expect(new Set(vi.mocked(createInspiration).mock.calls.map((call) => call[1]?.requestId)).size).toBe(1);
+  expect(records()).toHaveLength(0);
+});
+
+it('treats save_request_conflict as a refusal and offers the input back', async () => {
+  vi.mocked(createInspiration).mockRejectedValue(new ApiError({ status: 409, code: 'save_request_conflict', message: 'Used for other words' }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  expect(latest.phase).toBe('rejected');
+  await act(async () => { latest.editRejected(); });
+  expect(rejected.mock.calls[0]![0].input).toEqual(input.input); expect(records()).toHaveLength(0);
+});
+
+it('a Save press during a background re-send is queued, and the queued pass counts as a press', async () => {
+  // A journal from an earlier visit; this load re-sends it in the background.
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  let fail!: (reason: unknown) => void;
+  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; })).mockResolvedValue(source);
+  await remount();                                            // background pass, in flight
+  expect(latest.busy).toBe(true);
+  await act(async () => { expect(latest.start(input)).toBe(true); }); // pressed meanwhile: queued, not dropped
+  await act(async () => { fail(new Error('Lost response')); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  expect(resolved).toHaveBeenCalledOnce();
+  expect(resolved.mock.calls[0]![2], 'the queued pass lost its press').toBe(true);
+  expect(records()).toHaveLength(0);
+});

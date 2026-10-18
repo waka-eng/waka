@@ -255,6 +255,8 @@ export function InspirationComposer(props: {
      looking for the control that honours it. The way out of this page is
      the dock, which `way-out.test.ts` is the gate for. */
   onClose: () => void; onSubmit: () => void;
+  /** "Save as new" from the notice: saves the words on screen beside a pending save. */
+  onSaveAsNew?: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
   /** True when the draft changed in another tab — the one state the "keep as
       a separate draft" button answers. A flag, not a match on the error's
@@ -507,6 +509,6 @@ export function InspirationComposer(props: {
 
         KEPT: "only once there is something to keep", which the bar also
         obeys through `composerHasWords`. */}
-    <AuthoredSaveNotice save={props.save} locale={props.locale} onResave={props.onSubmit} />
+    <AuthoredSaveNotice save={props.save} locale={props.locale} onResave={props.onSaveAsNew} />
   </DialogSurface>;
 }

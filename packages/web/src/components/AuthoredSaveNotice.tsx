@@ -22,7 +22,7 @@ export function AuthoredSaveNotice({ save, locale, onResave }: {
       /* THE PERSON CHOOSES whether edited words become a second inspiration.
          The earlier save is kept and still sent either way. */
       : save.phase === 'diverged' && !save.busy ? <>
-        <button type="button" onClick={() => { if (!onResave) { save.saveAsNew(); return; } if (save.prepareNew()) onResave(); }}>{t(locale, 'worldSaveAsNew')}</button>
+        <button type="button" onClick={() => { if (onResave) onResave(); else save.saveAsNew(); }}>{t(locale, 'worldSaveAsNew')}</button>
         <button type="button" onClick={() => { void save.keepEarlier(); }}>{t(locale, 'worldSaveCheckEarlier')}</button>
       </>
       : save.pending && !save.busy ? <button type="button" onClick={(event) => {
