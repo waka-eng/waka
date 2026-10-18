@@ -4,7 +4,6 @@ import { sql } from 'drizzle-orm';
 import type { getDb } from './db.js';
 import type { AssessSignalSupportPayload } from '../db/index.js';
 import { BackgroundJobHeldError } from './background-job-hold.js';
-import { GROUP_INPUT_POLICY, assertGroupInputCurrent } from './group-inputs.js';
 import { hashEmbeddingInput } from './inspiration-embeddings.js';
 import { assertMaterialCurrent, loadInspirationMaterial } from './inspiration-material.js';
 import { acquireSignalDerivationLock } from './signal-match-or-mint.js';
@@ -16,13 +15,13 @@ type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 export async function ensureSupportBatchCoverage(db: Database, input: {
-  ownerProfileId: string; inspirationId: string; deriveIntoProfileId?: string;
+  ownerProfileId: string; inspirationId: string;
   provider: Pick<ModelProvider, 'assessSignalSupport'>;
   beforeCommit: (tx: Transaction) => Promise<void>;
 }) {
-  const destination = input.deriveIntoProfileId ?? input.ownerProfileId;
-  const claims = (await loadSupportClaims(db, destination, input.ownerProfileId, input.inspirationId))
-    .filter((claim) => !input.deriveIntoProfileId || claim.inputPolicy === GROUP_INPUT_POLICY);
+  // Personal coverage only: room destinations retired with the room engine.
+  const destination = input.ownerProfileId;
+  const claims = await loadSupportClaims(db, destination, destination, input.inspirationId);
   if (claims.length <= SUPPORT_REVIEW_BATCH_SIZE) return;
   const report = await reviewSignalSupport(db, { ...input, maxCalls: 0, reuseCurrentAssessments: true });
   if (report.status !== 'current') throw new Error('Support inputs changed before planning');
@@ -36,11 +35,6 @@ export async function ensureSupportBatchCoverage(db: Database, input: {
       throw new Error('Support material changed before planning');
     }
     await assertMaterialCurrent(tx, material, []);
-    if (input.deriveIntoProfileId && report.membershipId) await assertGroupInputCurrent(tx, {
-      mindProfileId: destination, membershipId: report.membershipId, inspiration: material.inspiration,
-      attachments: material.attachmentRows.filter((row) => row.status === 'ready' && row.text !== null)
-        .map(({ id, kind, text, hostname, name }) => ({ id, kind, text, hostname, name })), related: [],
-    });
     const current = await loadSupportClaims(tx, destination, input.ownerProfileId, input.inspirationId);
     if (claims.some((claim) => !current.some((row) => row.signalId === claim.signalId && row.statementRevision === claim.statementRevision))) {
       throw new Error('Support statements changed before planning');
@@ -50,13 +44,11 @@ export async function ensureSupportBatchCoverage(db: Database, input: {
       const batch = claims.slice(start, start + SUPPORT_REVIEW_BATCH_SIZE);
       if (!batch.some((claim) => pending.has(claim.signalId))) continue;
       const payload: AssessSignalSupportPayload = {
-        inspirationId: input.inspirationId, ...(input.deriveIntoProfileId ? { deriveIntoProfileId: input.deriveIntoProfileId } : {}),
+        inspirationId: input.inspirationId,
         signalIds: batch.map((claim) => claim.signalId), materialRevision: report.material.revision!, materialHash: report.material.hash,
-        membershipId: report.membershipId,
         statements: batch.map((claim) => ({ id: claim.signalId, revision: claim.statementRevision, hash: hashEmbeddingInput(claim.statement) })),
       };
-      const key = `assess_signal_support:${hashEmbeddingInput(JSON.stringify({ policy: SIGNAL_SUPPORT_REVIEW_POLICY,
-        owner: input.ownerProfileId, destination, ...payload }))}`;
+      const key = supportBatchKey(input.ownerProfileId, payload);
       const [job] = await tx.execute<{ status: string }>(sql`SELECT status::text FROM background_jobs
         WHERE idempotency_key = ${key} AND profile_id = ${input.ownerProfileId}::uuid`);
       if (job?.status === 'failed') { failed = true; continue; }
@@ -67,18 +59,29 @@ export async function ensureSupportBatchCoverage(db: Database, input: {
   throw new BackgroundJobHeldError(new Date(Date.now() + 5_000), 'Support coverage is being checked');
 }
 
+/**
+ * HASH INPUT PINNED (support-batch-key.test.ts holds it to a value computed
+ * on origin/dev before rooms retired). Keys were hashed over
+ * {policy, owner, destination, ...payload} with `membershipId: null` between
+ * materialHash and statements; destination was the owner for every personal
+ * batch. Reproducing that exact JSON keeps existing keys, so a failed batch is
+ * still found and a finished one is not bought again.
+ */
+export function supportBatchKey(ownerProfileId: string, payload: AssessSignalSupportPayload): string {
+  const { inspirationId, signalIds, materialRevision, materialHash, statements } = payload;
+  return `assess_signal_support:${hashEmbeddingInput(JSON.stringify({ policy: SIGNAL_SUPPORT_REVIEW_POLICY,
+    owner: ownerProfileId, destination: ownerProfileId, inspirationId, signalIds, materialRevision, materialHash,
+    membershipId: null, statements }))}`;
+}
+
 export async function supportBatchInputsCurrent(db: Database, ownerProfileId: string, payload: AssessSignalSupportPayload) {
-  const destination = payload.deriveIntoProfileId ?? ownerProfileId;
-  const claims = await loadSupportClaims(db, destination, ownerProfileId, payload.inspirationId);
+  const claims = await loadSupportClaims(db, ownerProfileId, ownerProfileId, payload.inspirationId);
   if (payload.signalIds.some((id) => !claims.some((claim) => claim.signalId === id))) return false;
-  if (payload.deriveIntoProfileId && payload.signalIds.some((id) =>
-    claims.some((claim) => claim.signalId === id && claim.inputPolicy !== GROUP_INPUT_POLICY))) return false;
   const report = await reviewSignalSupport(db, { ownerProfileId, inspirationId: payload.inspirationId,
-    deriveIntoProfileId: payload.deriveIntoProfileId, maxCalls: 0, signalIds: payload.signalIds,
+    maxCalls: 0, signalIds: payload.signalIds,
     provider: { assessSignalSupport: async () => { throw new Error('Input verification makes no model call'); } },
   });
-  if (report.status !== 'current' || report.material.revision !== payload.materialRevision || report.material.hash !== payload.materialHash ||
-    report.membershipId !== payload.membershipId) return false;
+  if (report.status !== 'current' || report.material.revision !== payload.materialRevision || report.material.hash !== payload.materialHash) return false;
   return payload.statements.length === payload.signalIds.length && payload.statements.every((statement) =>
     claims.some((claim) => claim.signalId === statement.id && claim.statementRevision === statement.revision && hashEmbeddingInput(claim.statement) === statement.hash));
 }

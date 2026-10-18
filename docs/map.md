@@ -221,22 +221,31 @@ This is what actually happens, in file order. Every hop below was read.
     a save seems to have produced no signal, that is the first thing to check
     before suspecting the pipeline.
 
-**Rooms are gone from the product, not yet from the engine.** Rooms were
-removed on 2026-10-12 and the last room route (`/api/groups`) was unmounted
-on 2026-10-15; with them went the signal-share route, the group field route
-and every web surface for rooms, so nothing a person can reach shows a room.
-The API's room engine still runs and is pending a decision:
-`refresh_group_top_of_mind` is still enqueued (`lib/queue.ts`) from
-feedback, inspiration editing, signal-support apply and principle status,
-among other callers, and still handled there through `lib/group-inputs.ts`
-and `lib/group-output.ts` over the group tables and `signal_shares`.
+**Rooms are gone from the product and from the engine; their data is kept.**
+Rooms were removed on 2026-10-12 and the last room route (`/api/groups`) was
+unmounted on 2026-10-15; with them went the signal-share route, the group
+field route and every web surface for rooms. The room engine was retired on
+2026-10-17 (phase 1, no migration): the room top-of-mind pass, room
+derivation into a mind, room principles and room support review are deleted
+along with `lib/group-inputs.ts` and `lib/group-output.ts`, and nothing
+enqueues room work. Already-queued room jobs (`refresh_group_top_of_mind`,
+derive/review/assess work carrying `deriveIntoProfileId`, a mind's
+principles or garden pass) are settled unrun by `retiredGroupJob` in
+`lib/queue.ts`. The group tables, `signal_shares`, room minds' signals and
+their stored artifacts stay in the database untouched, as does the
+`refresh_group_top_of_mind` enum value, pending a decision to drop them;
+`lib/account-erasure.ts` still sweeps a person's room rows on erasure.
+One consequence is accepted until then (`docs/known-issues.md`): deleting or
+privatising a memory no longer refreshes room top-of-mind rows derived from
+it. They are unreadable — nothing serves a room — but account erasure
+keeps a room's record by design, so they persist until the drop is decided.
 
 ---
 
 ## 3. The six files to read first
 
-In this order. The first three are 2,524 lines together; the first five are
-5,889. The sixth is read in two pieces and never linearly.
+In this order. The first three are 2,513 lines together; the first five are
+5,877. The sixth is read in two pieces and never linearly.
 
 1. **`packages/api/src/index.ts`** (153 lines) — every route mount on one page,
    in layer order, each with a sentence saying what it is for. Read it and you
@@ -247,10 +256,11 @@ In this order. The first three are 2,524 lines together; the first five are
    `signal_shares` is per-signal, per-group (so sharing is a layer-2 act). The
    two tables beside it, `schema-inspirations.ts` and `schema-top-of-mind.ts`,
    read in ten minutes once this one has landed.
-3. **`packages/api/src/lib/queue.ts`** (1,845 lines — skim the header and
+3. **`packages/api/src/lib/queue.ts`** (1,834 lines — skim the header and
    `processBackgroundJob`) — the header explains why Postgres is the queue, and
    the thirteen job types (`backgroundJobTypeValues` in
-   `db/schema-background-jobs.ts`) *are* the generation pipeline. The dispatch function is
+   `db/schema-background-jobs.ts`; `refresh_group_top_of_mind` among them is
+   retired and settles unrun) *are* the generation pipeline. The dispatch function is
    the shortest place in the repo where you can watch layer 1 become layer 2
    become layer 3.
 4. **`packages/web/src/lib/api/`** — the only place the browser does HTTP, and
@@ -263,7 +273,7 @@ In this order. The first three are 2,524 lines together; the first five are
    for *where a layer is drawn* and may not be type or function names.
 6. **`packages/web/src/pages/Home.tsx`** (11,827 lines) — read the file header
    and the `SimApi` interface, which now lives beside the loop in
-   `packages/web/src/canvas/simulation.ts` (~line 687), then stop. The header is the
+   `packages/web/src/canvas/simulation.ts` (~line 682), then stop. The header is the
    product's design brief; `SimApi` is the boundary between React and the
    canvas, which React calls into and the canvas never calls back through. Do
    not attempt this file linearly; open it with a symbol in hand.

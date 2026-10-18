@@ -235,13 +235,15 @@ describe("contested pairs are held, and only the owner settles them", () => {
     expect(pair!.resolved_by).toBe("dismissal");
   });
 
-  it("another member's verdict on a shared statement arbitrates nothing — owner only", async () => {
+  it("a co-member cannot answer a shared or room-grown statement, so arbitrates nothing", async () => {
     const profileId = await seedProfile();
     const neighbour = await seedProfile();
     const { first } = await mintOpposedPair(profileId);
 
-    // The neighbour may answer the shared statement; standing to answer is
-    // not standing to arbitrate the owner's disputes.
+    /* Room standing to answer retired with the room engine (2026-10-17).
+       The legacy rows that used to grant it are seated exactly as they sit
+       in the database — a share into a room both are in, and a statement
+       the room's mind grew — and neither lets the neighbour file anything. */
     const [group] = await t.sql`
       INSERT INTO groups (name, join_code, created_by_profile_id)
       VALUES (${"a room"}, ${`code-${seq}`}, ${profileId}) RETURNING id`;
@@ -252,13 +254,21 @@ describe("contested pairs are held, and only the owner settles them", () => {
       INSERT INTO signal_shares (profile_id, signal_id, group_id)
       VALUES (${profileId}, ${first}, ${group.id})`;
 
-    const answered = await createFeedbackForProfile(t.db as never, {
-      profileId: neighbour,
-      targetType: "signal",
-      targetId: first,
-      value: "true",
-    });
-    expect(answered, "the neighbour's answer itself lands").not.toBeNull();
+    const [mind] = await t.sql`
+      INSERT INTO profiles (account_id, type, name, group_id) VALUES (NULL, 'group', 'a room', ${group.id}) RETURNING id`;
+    const [grown] = await t.sql`
+      INSERT INTO signals (profile_id, statement) VALUES (${mind.id}, 'A statement the room grew') RETURNING id`;
+
+    for (const targetId of [first, grown.id as string]) {
+      const answered = await createFeedbackForProfile(t.db as never, {
+        profileId: neighbour,
+        targetType: "signal",
+        targetId,
+        value: "true",
+      });
+      expect(answered, "a co-member's answer is refused").toBeNull();
+    }
+    expect(await t.sql`SELECT id FROM feedback WHERE profile_id = ${neighbour}`).toHaveLength(0);
     expect(
       (await pairRows(profileId))[0]!.resolved_at,
       "someone else's verdict must not settle the owner's pair",

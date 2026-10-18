@@ -8,9 +8,18 @@ import { signalEvidence, signals, signalSupportReviews } from "../db/index.js";
 import { getDb } from "./db.js";
 import { hashEmbeddingInput } from "./inspiration-embeddings.js";
 import { loadInspirationMaterial, type InspirationMaterial } from "./inspiration-material.js";
-import { GROUP_INPUT_POLICY, GroupInputUnavailableError, loadGroupInputMembership } from "./group-inputs.js";
 import type { ModelProvider, SignalSupportAssessmentInput } from "./model-provider.js";
 import { evidenceSupportCurrent } from './signal-support-state.js';
+
+/** The assessed source is gone. An ordinary outcome, not a retryable fault.
+ * (Was `GroupInputUnavailableError` from the retired room input contract,
+ * whose other two statuses only a room pass could produce.) */
+export class SupportSourceUnavailableError extends Error {
+  readonly status = "missing_inspiration" as const;
+  constructor() {
+    super("Support source unavailable: missing_inspiration");
+  }
+}
 
 export const SIGNAL_SUPPORT_REVIEW_POLICY = "signal-support-review-v1";
 export const SUPPORT_REVIEW_BATCH_SIZE = 12;
@@ -118,7 +127,6 @@ export async function assessExistingClaims(input: {
 export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
   ownerProfileId: string;
   inspirationId: string;
-  deriveIntoProfileId?: string;
   provider: Pick<ModelProvider, "assessSignalSupport">;
   maxCalls: number;
   /** Worker retries reuse checks only for identical material and words.
@@ -127,30 +135,24 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
   /** Explicit batch scope; absence means exhaustive source coverage. */
   signalIds?: string[];
   /** Queue batches must assess the version they were scheduled for. */
-  expectedInputs?: { materialRevision: string; materialHash: string; membershipId: string | null;
+  expectedInputs?: { materialRevision: string; materialHash: string;
     statements: Array<{ id: string; revision: string; hash: string }> };
 }) {
-  const destination = input.deriveIntoProfileId ?? input.ownerProfileId;
-  const isGroup = input.deriveIntoProfileId !== undefined;
-  const membership = isGroup ? await loadGroupInputMembership(db, input.ownerProfileId, destination) : null;
-  if (isGroup && !membership) throw new GroupInputUnavailableError("not_authorized");
-  const loadMaterial = () => loadInspirationMaterial(db, input.ownerProfileId, input.inspirationId, isGroup ? "public" : "personal");
+  // Support lands on the source's own profile: the room destination (a
+  // mind, public material only, membership-gated) retired with the engine.
+  const loadMaterial = () => loadInspirationMaterial(db, input.ownerProfileId, input.inspirationId, "personal");
   const material = await loadMaterial();
-  if (!material) throw new GroupInputUnavailableError("missing_inspiration");
-  if (isGroup && material.inspiration.visibility !== "public") throw new GroupInputUnavailableError("not_public");
-  const loadClaims = () => loadSupportClaims(db, destination, input.ownerProfileId, input.inspirationId);
+  if (!material) throw new SupportSourceUnavailableError();
+  const loadClaims = () => loadSupportClaims(db, input.ownerProfileId, input.ownerProfileId, input.inspirationId);
   const loadedClaims = await loadClaims();
   const selected = input.signalIds ? new Set(input.signalIds) : null;
   if (selected && (selected.size !== input.signalIds!.length || selected.size === 0 || selected.size > SUPPORT_REVIEW_BATCH_SIZE ||
     input.signalIds!.some((id) => !loadedClaims.some((claim) => claim.signalId === id)))) throw new Error('Invalid support batch scope');
-  const allClaims = selected ? loadedClaims.filter((claim) => selected.has(claim.signalId)) : loadedClaims;
-  // Old room text itself can contain private material. Never feed it to a
-  // new public assessment merely because its remaining inspirations are public.
-  const claims = allClaims.filter((row) => !isGroup || row.inputPolicy === GROUP_INPUT_POLICY);
+  const claims = selected ? loadedClaims.filter((claim) => selected.has(claim.signalId)) : loadedClaims;
   if (input.expectedInputs) {
     const expected = input.expectedInputs;
     if (expected.materialRevision !== material.identity.revision || expected.materialHash !== material.identity.hash ||
-      expected.membershipId !== (membership?.id ?? null) || expected.statements.length !== claims.length ||
+      expected.statements.length !== claims.length ||
       expected.statements.some((statement) => !claims.some((claim) => claim.signalId === statement.id &&
         claim.statementRevision === statement.revision && hashEmbeddingInput(claim.statement) === statement.hash))) {
       throw new Error('Support batch inputs changed before assessment');
@@ -162,7 +164,7 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
     material: signalSupportReviews.material, verdict: signalSupportReviews.verdict,
     policy: signalSupportReviews.policy,
     sourceIds: signalSupportReviews.sourceIds, issue: signalSupportReviews.issue,
-  }).from(signalSupportReviews).where(and(eq(signalSupportReviews.profileId, destination),
+  }).from(signalSupportReviews).where(and(eq(signalSupportReviews.profileId, input.ownerProfileId),
     eq(signalSupportReviews.ownerProfileId, input.ownerProfileId), eq(signalSupportReviews.inspirationId, input.inspirationId)))
     .orderBy(asc(signalSupportReviews.signalId), desc(signalSupportReviews.createdAt), desc(signalSupportReviews.reviewId)) : [];
   const reused = new Map<string, SignalSupportReviewItem>();
@@ -180,23 +182,19 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
     provider: input.provider, maxCalls: input.maxCalls });
   const currentMaterial = await loadMaterial();
   const currentClaims = (await loadClaims()).filter((claim) => !selected || selected.has(claim.signalId));
-  const currentMembership = isGroup ? await loadGroupInputMembership(db, input.ownerProfileId, destination) : null;
   const current = currentMaterial?.identity.hash === material.identity.hash &&
     currentMaterial?.identity.revision === material.identity.revision &&
-    JSON.stringify(allClaims) === JSON.stringify(currentClaims) &&
-    (!isGroup || currentMembership?.id === membership?.id);
+    JSON.stringify(claims) === JSON.stringify(currentClaims);
   return {
     reviewId: randomUUID(),
     policy: SIGNAL_SUPPORT_REVIEW_POLICY,
     status: current ? "current" as const : "stale" as const,
-    profileId: destination,
+    profileId: input.ownerProfileId,
     ownerProfileId: input.ownerProfileId,
-    membershipId: membership?.id ?? null,
     inspirationId: input.inspirationId,
-    claimsHash: supportClaimsHash(allClaims),
+    claimsHash: supportClaimsHash(claims),
     ...(input.signalIds ? { signalIds: input.signalIds } : {}),
     material: material.identity,
-    restrictedClaimCount: allClaims.length - claims.length,
     calls: assessed.calls,
     items: claims.map((claim) => reused.get(claim.signalId) ?? assessed.items.find((item) => item.signalId === claim.signalId)!)
       .map((item): SignalSupportReviewItem => current ? item : {

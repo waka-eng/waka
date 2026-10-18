@@ -169,7 +169,7 @@ describe("principles across personal profiles", () => {
   it('allows one explicit/scheduled pass after a policy change, while GET remains read-only and new requests deduplicate',async()=>{
     const profileId=await person();await material(profileId,[profileId]);
     const current=await loadPrincipleMaterial(t.db as never,profileId);
-    const oldKey=createHash('sha256').update(JSON.stringify({policy:'principles-v3',groupId:current.groupId,locale:current.preferredLocale,
+    const oldKey=createHash('sha256').update(JSON.stringify({policy:'principles-v3',groupId:null,locale:current.preferredLocale,
       signals:current.activeSignals.map(row=>({id:row.id,statement:row.statement,evidence:current.evidence.get(row.id)?.evidenceAt.map(at=>at.toISOString()).sort(),supportKey:current.evidence.get(row.id)?.supportKey,versions:current.evidence.get(row.id)?.tomVersionIds.slice().sort()})).sort((a,b)=>a.id.localeCompare(b.id))})).digest('hex');
     expect(principleMaterialKey(current)).not.toBe(oldKey);
     await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,idempotency_key) VALUES(${profileId},'refresh_principles',${JSON.stringify({profileId})}::jsonb,'succeeded',${`refresh_principles:${profileId}:${oldKey}`})`;

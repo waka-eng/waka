@@ -264,7 +264,7 @@ export function registerCaptureRoutes(
           : [];
 
         const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: inserted.id,
-          reason: "created", changedSource: "inspiration" }, tx);
+          reason: "created" }, tx);
         const saved={inspirationId:inserted.id,reflectionId:null,processing:processing.receipt};
         return {...saved,response:origin?await readSavedInspiration(tx,target.profileId,saved):{inspiration:{...serializeInspirationDetail(inserted,{attachments:insertedAttachments.map(serializeAttachment),reflections:insertedReflections}),conversationOrigin:null},processing:processing.receipt}};
       }, (tx, saved) => readSavedInspiration(tx, target.profileId, saved));
