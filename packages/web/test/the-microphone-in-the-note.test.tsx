@@ -29,9 +29,9 @@
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): `lib/data` supplies the three layers,
  * so the world's archive arrives as a fixture rather than over HTTP.
- * `lib/api` supplies the group reads and `fetchInspirationSaveRequest`, which
- * is this suite's instrument for "did a save start": it is the FIRST network
- * act of an authored save, before any decision about creating or recovering,
+ * `lib/api` supplies the group reads and `createInspiration`, which
+ * is this suite's instrument for "did a save start": it is the ONLY network
+ * act of an authored save (a save is re-sent under its own id, never looked up),
  * so one call means a save began and none means the press was refused. It is
  * also what makes a refusal observable without asserting the absence of
  * something further down a chain that this harness cannot complete anyway.
@@ -52,7 +52,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, VIEWER_ID, type MountedWorld } from './helpers/render-home';
-import { fetchInspirationSaveRequest } from '../src/lib/api';
+import { createInspiration } from '../src/lib/api';
 
 const FACTS = vi.hoisted(() => ({
   inspirations: [{ id: 'kept', text: 'an older thought', daysAgo: 3 }],
@@ -68,7 +68,7 @@ vi.mock('../src/lib/data', async original => ({
 vi.mock('../src/lib/api', async original => ({
   ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),
   fetchPrinciples: vi.fn(async () => []),
-  fetchInspirationSaveRequest: vi.fn(),
+  createInspiration: vi.fn(async () => new Promise(() => {})),
 }));
 vi.mock('../src/lib/auth-context', async original => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
@@ -112,7 +112,7 @@ beforeEach(() => {
   (globalThis as { indexedDB?: IDBFactory }).indexedDB = new IDBFactory();
   (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition = FakeEngine;
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  vi.mocked(fetchInspirationSaveRequest).mockReset();
+  vi.mocked(createInspiration).mockClear();
 });
 afterEach(() => {
   world?.unmount(); vi.useRealTimers();
@@ -129,7 +129,7 @@ const field = () => world.container.querySelector<HTMLTextAreaElement>('textarea
 const mic = () => world.container.querySelector<HTMLButtonElement>('.waka-dock-tool')!;
 const engine = () => FakeEngine.all[FakeEngine.all.length - 1]!;
 /** Whether an authored save began — one network act, before any decision. */
-const savesStarted = () => vi.mocked(fetchInspirationSaveRequest).mock.calls.length;
+const savesStarted = () => vi.mocked(createInspiration).mock.calls.length;
 
 /** The notepad, reached the way a person reaches it: the bar's Inspiration,
     which since 2026-10-15 makes a new note in one press (the plus is gone). */

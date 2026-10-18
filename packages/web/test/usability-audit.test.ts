@@ -78,7 +78,7 @@ describe("the recording clock is never read out every second (review of #11)", (
   }
 });
 
-describe("Home keeps a save's why until it lands, and lets 'unsent' go (review round 2)", () => {
+describe("Home keeps a save's why until it lands, and attaches it once", () => {
   /* The world-level path needs a photo moment with the notepad closed, which
      the jsdom world cannot stage; the wiring is read instead. */
   const home = () => readFileSync(resolve(STYLES, "..", "pages/Home.tsx"), "utf8");
@@ -92,9 +92,6 @@ describe("Home keeps a save's why until it lands, and lets 'unsent' go (review r
   });
   it("a confirmed save's why is cleared even when the composer moved on, so it is never attached twice (round 3)", () => {
     expect(home()).toMatch(/if \(!preserveNewer \|\| \(savedWhy && savedWhy === momentWhyRef\.current\.trim\(\)\)\) setMomentWhy\(''\)/);
-  });
-  it("an 'unsent' notice is dismissed once the composer holds nothing", () => {
-    expect(home()).toMatch(/inspirationSave\.phase === 'unsent' && !inspirationSave\.unsent\?\.displaced && !draft\.trim\(\) && !inputMedia\.length\) saveDismiss\(\)/);
   });
 });
 

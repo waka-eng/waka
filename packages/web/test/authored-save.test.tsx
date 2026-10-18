@@ -1,344 +1,190 @@
 // @vitest-environment jsdom
 /** WHAT THIS MOCKS, AND WHY: `lib/api` transport and timers only. The real
- * hook and localStorage prove immutable intent, resumption and account guards. */
+ * hook and localStorage prove immutable intent, resumption and account
+ * guards. Where a case is about duplicates, `createInspiration` is a small
+ * stand-in for the server's own rule — idempotent on the request id, 409
+ * `save_in_progress` for a concurrent POST of the same id — so "one
+ * inspiration" is counted rather than assumed. */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { ApiError, createInspiration, fetchInspiration, fetchInspirationSaveRequest, type ApiInspiration } from '../src/lib/api';
-import { ANSWER_SETTLE_MS, POST_WINDOW_MS, useAuthoredSave, type AuthoredSaveInput } from '../src/lib/use-authored-save';
+import { ApiError, createInspiration, type ApiInspiration } from '../src/lib/api';
+import { RESEND_BACKOFF_MS, useAuthoredSave, type AuthoredSaveInput } from '../src/lib/use-authored-save';
 
-vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(),
-  createInspiration: vi.fn(), fetchInspiration: vi.fn(), fetchInspirationSaveRequest: vi.fn(),
-}));
+vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), createInspiration: vi.fn() }));
 const scope = { accountId: 'account-A', profileId: 'profile-A' };
 const source: ApiInspiration = { id: 'source-A', profileId: scope.profileId, text: 'One thought', kind: 'note', source: 'app',
   createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z', attachments: [], reflections: [] };
 const input: AuthoredSaveInput = { operation: 'inspiration', input: { text: source.text, visibility: 'private' } };
-const resolved = vi.fn(), removed = vi.fn();
+const resolved = vi.fn(), removed = vi.fn(), rejected = vi.fn();
 let host: HTMLDivElement, root: Root, latest: ReturnType<typeof useAuthoredSave>;
 const records = () => Object.keys(localStorage).filter((key) => key.includes(':pendingSave:'));
-const missing = () => new ApiError({ status: 404, code: 'save_not_found', message: 'No committed save found' });
-function Probe({ owner = scope, operation = 'inspiration' as const }) {
-  latest = useAuthoredSave({ scope: owner, operation,
-    onResolved: resolved, onRemoved: removed });
+function Probe({ owner = scope }) {
+  latest = useAuthoredSave({ scope: owner, operation: 'inspiration', onResolved: resolved, onRemoved: removed, onEditRejected: rejected });
   return <span>{latest.phase}</span>;
 }
+const remount = async () => { await act(async () => root.unmount()); root = createRoot(host); await act(async () => root.render(<Probe />)); };
+
+/** The server's own rule, small: one row per request id. */
+function idempotentServer() {
+  const rows = new Map<string, ApiInspiration>(), inFlight = new Set<string>();
+  let hold: Promise<void> | null = null;
+  vi.mocked(createInspiration).mockImplementation(async (payload, options) => {
+    const id = options!.requestId!;
+    const row = rows.get(id);
+    if (row) return { ...row, saveRequest: { requestId: id, replayed: true } };
+    if (inFlight.has(id)) throw new ApiError({ status: 409, code: 'save_in_progress', message: 'In progress' });
+    inFlight.add(id);
+    if (hold) await hold;
+    const made = { ...source, id: `row-${rows.size + 1}`, text: payload.text };
+    rows.set(id, made); inFlight.delete(id);
+    return { ...made, saveRequest: { requestId: id, replayed: false } };
+  });
+  return { rows, holdNext: (until: Promise<void>) => { hold = until; }, release: () => { hold = null; } };
+}
+
 beforeEach(() => {
   vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
   Object.defineProperty(document, 'hidden', { configurable: true, value: false });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
-  vi.mocked(fetchInspirationSaveRequest).mockRejectedValue(missing());
   vi.mocked(createInspiration).mockResolvedValue(source);
-  vi.mocked(fetchInspiration).mockResolvedValue(source);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); });
 
-it('durably owns the input before the first network check, then settles once', async () => {
-  vi.mocked(fetchInspirationSaveRequest).mockImplementation(async () => {
+it('durably owns the input before the first send, then settles once', async () => {
+  vi.mocked(createInspiration).mockImplementation(async () => {
     expect(records()).toHaveLength(1);
     expect(JSON.parse(localStorage.getItem(records()[0]!)!)).toMatchObject({ ...scope, input: input.input });
-    throw missing();
+    return source;
   });
   await act(async () => root.render(<Probe />));
-  await act(async () => { expect(latest.start(input)).toBe(true); expect(latest.start(input)).toBe(false); });
+  await act(async () => { expect(latest.start(input)).toBe(true); });
   expect(createInspiration).toHaveBeenCalledOnce();
   expect(vi.mocked(createInspiration).mock.calls[0]?.[1]).toMatchObject({ profile: scope.profileId, requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
-  expect(resolved).toHaveBeenCalledOnce(); expect(records()).toHaveLength(0);
-});
-
-it('reuses immutable words, visibility and identity after a lost response', async () => {
-  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
-  await act(async () => root.render(<Probe />));
-  const mutable = structuredClone(input);
-  await act(async () => { latest.start(mutable); });
-  const first = vi.mocked(createInspiration).mock.calls[0]!;
-  mutable.input.text = 'Later draft'; mutable.input.visibility = 'public';
-  expect(records()).toHaveLength(1);
-  await act(async () => { expect(latest.start(mutable)).toBe(false); await latest.retry(); });
-  const second = vi.mocked(createInspiration).mock.calls[1]!;
-  expect(second[0]).toEqual(first[0]);
-  expect(second[1]?.requestId).toBe(first[1]?.requestId);
-  expect(resolved).toHaveBeenCalledOnce();
-});
-
-/* ═══ RELEASE ONLY ON THE SERVER'S WORD (review of the f2afcbe2 fix) ═══════
-   Missing on remount earns ONE unprompted re-send under the same id. What the
-   re-send says decides the rest: a definitive refusal lets go; anything that
-   might still commit keeps the journal and the id, across reloads. */
-const conflict = () => new ApiError({ status: 409, code: 'save_in_progress', message: 'In progress' });
-const remount = async () => { await act(async () => root.unmount()); root = createRoot(host); await act(async () => root.render(<Probe />)); };
-
-it('resends a missing save once under its own identity on remount, and lands it', async () => {
-  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  expect(latest.phase).toBe('uncertain');
-  const first = vi.mocked(createInspiration).mock.calls[0]![1]?.requestId;
-  await act(async () => { vi.setSystemTime(Date.now() + POST_WINDOW_MS); });
-  await remount();
-  expect(createInspiration).toHaveBeenCalledTimes(2);
-  expect(vi.mocked(createInspiration).mock.calls[1]![1]?.requestId).toBe(first);
   expect(resolved).toHaveBeenCalledOnce(); expect(records()).toHaveLength(0); expect(latest.phase).toBe('idle');
 });
 
-it('keeps the journal and id when the re-send times out — and a late commit is read, never duplicated, after reload', async () => {
-  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'))
-    .mockImplementationOnce(() => new Promise(() => {}));
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  const id = latest.pending!.requestId;
-  await act(async () => { vi.setSystemTime(Date.now() + POST_WINDOW_MS); });
-  await remount();
-  await act(async () => vi.advanceTimersByTimeAsync(15_000));
-  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1); expect(latest.pending?.requestId).toBe(id);
-  // The timed-out POST committed after all. The next load reads it.
-  vi.mocked(fetchInspirationSaveRequest).mockResolvedValue({ requestId: id, operation: 'inspiration', inspirationId: source.id, reflectionId: null,
-    processing: { id: 'receipt', profileId: scope.profileId, inspirationId: source.id, materialRevision: '1', jobId: 'job', requestVersion: '1' }, createdAt: source.createdAt });
-  await remount();
-  expect(createInspiration).toHaveBeenCalledTimes(2); expect(resolved).toHaveBeenCalledOnce(); expect(records()).toHaveLength(0);
+it('sends nothing when the journal cannot be kept', async () => {
+  await act(async () => root.render(<Probe />));
+  const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage unavailable'); });
+  try {
+    await act(async () => { expect(latest.start(input)).toBe(false); });
+    expect(latest.phase).toBe('storage_error'); expect(createInspiration).not.toHaveBeenCalled();
+  } finally { write.mockRestore(); }
 });
 
-it('asks before saving edited words while an earlier save is not known, and never sends a second copy on its own', async () => {
-  vi.mocked(createInspiration).mockRejectedValue(new Error('Lost response'));
+it('re-sends the same id and the same body after a lost response, and never decides it did not land', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockRejectedValueOnce(new ApiError({ status: 503, message: 'Gateway' }))
+    .mockResolvedValue(source);
+  await act(async () => root.render(<Probe />));
+  const mutable = structuredClone(input);
+  await act(async () => { latest.start(mutable); });
+  mutable.input.text = 'Later draft';
+  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
+  await remount();
+  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
+  await act(async () => { await latest.retry(); });
+  const calls = vi.mocked(createInspiration).mock.calls;
+  expect(calls).toHaveLength(3);
+  expect(new Set(calls.map((call) => call[1]?.requestId)).size).toBe(1);
+  for (const call of calls) expect(call[0]).toEqual(input.input);
+  expect(resolved).toHaveBeenCalledOnce(); expect(records()).toHaveLength(0);
+});
+
+it('a POST that timed out but committed is replayed on reload: one inspiration', async () => {
+  const server = idempotentServer();
+  let finish!: () => void;
+  server.holdNext(new Promise((resolve) => { finish = resolve; }));
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  const id = latest.pending!.requestId;
+  await act(async () => vi.advanceTimersByTimeAsync(15_000));
+  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
+  server.release(); await act(async () => { finish(); });   // the timed-out POST commits after all
+  await remount();                                            // reload: same id, same body
+  expect(server.rows.size).toBe(1); expect(records()).toHaveLength(0);
+  expect(resolved).toHaveBeenCalledOnce(); expect(resolved.mock.calls[0]![1].recovered).toBe(true);
+});
+
+it('two tabs re-sending the same id make one inspiration', async () => {
+  const server = idempotentServer();
+  let finish!: () => void;
+  server.holdNext(new Promise((resolve) => { finish = resolve; }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const hostB = document.createElement('div'); document.body.append(hostB); const rootB = createRoot(hostB);
+  let tabB!: ReturnType<typeof useAuthoredSave>;
+  function ProbeB() { tabB = useAuthoredSave({ scope, operation: 'inspiration', onResolved: resolved, onRemoved: removed }); return null; }
+  await act(async () => rootB.render(<ProbeB />));            // tab B sends the same id: "in progress"
+  expect(tabB.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
+  server.release(); await act(async () => { finish(); });    // tab A's POST lands
+  await act(async () => vi.advanceTimersByTimeAsync(RESEND_BACKOFF_MS[0]));
+  await act(async () => { await tabB.retry(); });
+  expect(server.rows.size).toBe(1); expect(records()).toHaveLength(0);
+  await act(async () => rootB.unmount()); hostB.remove();
+});
+
+it('asks before saving edited words while a save is pending; "Save as new" makes each land once', async () => {
+  const server = idempotentServer();
+  let finish!: () => void;
+  server.holdNext(new Promise((resolve) => { finish = resolve; }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => vi.advanceTimersByTimeAsync(15_000)); // the first is not confirmed
   const edited: AuthoredSaveInput = { ...input, input: { ...input.input, text: 'One thought, edited' } };
   await act(async () => { expect(latest.start(edited)).toBe(false); });
-  expect(latest.phase).toBe('diverged'); expect(createInspiration).toHaveBeenCalledOnce(); expect(records()).toHaveLength(1);
-  // The same words retry the same id.
-  await act(async () => { expect(latest.start(input)).toBe(true); });
-  expect(vi.mocked(createInspiration).mock.calls[1]![1]?.requestId).toBe(id);
-  // Only the explicit choice makes a new identity.
-  vi.mocked(createInspiration).mockResolvedValue(source);
-  await act(async () => { latest.start(edited); });
-  await act(async () => { latest.saveAsNew(); });
-  const last = vi.mocked(createInspiration).mock.calls.at(-1)!;
-  expect(last[0]).toEqual(edited.input); expect(last[1]?.requestId).not.toBe(id);
+  expect(latest.phase).toBe('diverged'); expect(records()).toHaveLength(1);
+  server.release(); await act(async () => { finish(); });
+  await act(async () => { expect(latest.saveAsNew()).toBe(true); });
+  await act(async () => { await latest.retry(); });
+  expect([...server.rows.values()].map((row) => row.text).sort()).toEqual(['One thought', 'One thought, edited']);
+  expect(records()).toHaveLength(0);
+  // Each id once: nothing more than the two rows, however often it is sent.
+  await act(async () => { await latest.retry(); });
+  expect(server.rows.size).toBe(2);
 });
 
-/* ROUND TWO OF REVIEW: only the APP's own rolled-back 500 is an answer, and
-   even then "not found" is believed only once the request has had time to be
-   gone. A gateway's 503 stays not-known forever. */
-const appFailure = () => new ApiError({ status: 500, message: 'Could not save', code: 'save_failed', fromApp: true });
-it('releases only on the app\'s own 500, and only once the settle time has passed', async () => {
-  vi.mocked(createInspiration).mockRejectedValue(appFailure());
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  expect(latest.phase).toBe('uncertain');
-  expect(JSON.parse(localStorage.getItem(records()[0]!)!).answered).toBe(true);
-  // Too soon: the rolled-back request might still be visible as in flight.
-  await remount();
-  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
-  await act(async () => { vi.setSystemTime(Date.now() + POST_WINDOW_MS); });
-  await remount();
-  expect(latest.phase).toBe('unsent'); expect(records()).toHaveLength(0); expect(resolved).not.toHaveBeenCalled();
-});
-
-it('never treats a gateway 503, or a bodyless 500, as an answer', async () => {
-  vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 503, message: 'Bad gateway' }))
-    .mockRejectedValue(new ApiError({ status: 500, message: 'Internal Server Error' }));
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  expect(JSON.parse(localStorage.getItem(records()[0]!)!).answered).toBeUndefined();
-  await act(async () => { vi.setSystemTime(Date.now() + ANSWER_SETTLE_MS * 3); });
-  await remount();
-  await remount();
-  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
-});
-
-it('treats save_request_conflict as "a save under this id exists", never a release', async () => {
-  vi.mocked(createInspiration).mockRejectedValue(new ApiError({ status: 409, code: 'save_request_conflict', message: 'Used' }));
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
-});
-
-it('releases on a refusal of the POST itself', async () => {
-  vi.mocked(createInspiration).mockRejectedValue(new ApiError({ status: 422, message: 'Refused', fromApp: true }));
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  expect(latest.phase).toBe('unsent'); expect(records()).toHaveLength(0);
-});
-
-it('sends an answered-and-missing save again in the SAME press, under the same id', async () => {
-  vi.mocked(createInspiration).mockRejectedValueOnce(appFailure()).mockResolvedValue(source);
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  const id = latest.pending!.requestId;
-  await act(async () => { expect(latest.start(input)).toBe(true); });
-  expect(createInspiration).toHaveBeenCalledTimes(2);
-  expect(vi.mocked(createInspiration).mock.calls[1]![1]?.requestId).toBe(id);
-  expect(resolved).toHaveBeenCalledOnce();
-});
-
-it('retries the same words with the CURRENT draft revision, so the composer can settle', async () => {
+it('re-sends the same words with the CURRENT draft revision, so the composer can settle', async () => {
   vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
   await act(async () => root.render(<Probe />));
   await act(async () => { latest.start({ ...input, draft: { id: 'draft-1', revision: 1 } }); });
-  const id = latest.pending!.requestId;
+  const id = vi.mocked(createInspiration).mock.calls[0]![1]?.requestId;
   await act(async () => { expect(latest.start({ ...input, draft: { id: 'draft-1', revision: 4 } })).toBe(true); });
   expect(vi.mocked(createInspiration).mock.calls[1]![1]?.requestId).toBe(id);
   expect(resolved.mock.calls[0]![0].draft).toEqual({ id: 'draft-1', revision: 4 });
 });
 
-/* ROUND THREE OF REVIEW. "Save as new" never drops the earlier save; every
-   POST first clears an old "answered" and marks itself in flight on the
-   journal; no tab releases while a POST may still be committing. */
-it('saves as new from what is on screen now, keeping the earlier save and still reconciling it', async () => {
-  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  const id = latest.pending!.requestId;
-  await act(async () => { latest.start({ ...input, input: { ...input.input, text: 'Edited once' } }); });
-  expect(latest.phase).toBe('diverged');
-  const now: AuthoredSaveInput = { ...input, input: { ...input.input, text: 'Edited twice, at the press' } };
-  await act(async () => { expect(latest.prepareNew()).toBe(true); });
-  // The earlier journal is still on disk while the new save goes.
-  vi.mocked(createInspiration).mockImplementationOnce(async (payload) => { expect(records()).toHaveLength(2); return { ...source, text: payload.text }; });
-  await act(async () => { expect(latest.start(now)).toBe(true); });
-  const fresh = vi.mocked(createInspiration).mock.calls.at(-1)!;
-  expect(fresh[0].text).toBe('Edited twice, at the press'); expect(fresh[1]?.requestId).not.toBe(id);
-  // The earlier one is still there, and its words are offered back if it is
-  // definitively found not to have landed.
+it('on a validation refusal, offers the whole input back and lets go only then', async () => {
+  const why: AuthoredSaveInput = { ...input, input: { ...input.input, reflections: [{ question: 'Why?', answer: 'The light' }] } };
+  vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 400, message: 'Invalid', fieldErrors: { text: ['Inspiration text is too long'] } }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(why); });
+  expect(latest.phase).toBe('rejected'); expect(latest.pending?.validationMessage).toBe('Inspiration text is too long');
   expect(records()).toHaveLength(1);
-  expect(JSON.parse(localStorage.getItem(records()[0]!)!).requestId).toBe(id);
-});
-
-it('offers the words of an earlier save back when it is found not to have landed after "Save as new"', async () => {
-  vi.mocked(createInspiration).mockRejectedValueOnce(appFailure()).mockResolvedValue(source);
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  await act(async () => { latest.start({ ...input, input: { ...input.input, text: 'New words' } }); });
-  await act(async () => { latest.prepareNew(); });
-  await act(async () => { latest.start({ ...input, input: { ...input.input, text: 'New words' } }); });
-  await act(async () => { vi.setSystemTime(Date.now() + POST_WINDOW_MS); });
-  await act(async () => { latest.check(); });
-  expect(latest.phase).toBe('unsent'); expect(latest.unsent?.displaced).toBe(true);
-  expect(latest.unsent?.input.text).toBe(source.text); expect(records()).toHaveLength(0);
-});
-
-it('forgets the edited words it was asking about once the earlier save resolves', async () => {
-  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  const requestId = latest.pending!.requestId;
-  await act(async () => { latest.start({ ...input, input: { ...input.input, text: 'Edited' } }); });
-  expect(latest.phase).toBe('diverged');
-  vi.mocked(fetchInspirationSaveRequest).mockResolvedValue({ requestId, operation: 'inspiration', inspirationId: source.id, reflectionId: null,
-    processing: { id: 'receipt', profileId: scope.profileId, inspirationId: source.id, materialRevision: '1', jobId: 'job', requestVersion: '1' }, createdAt: source.createdAt });
-  await act(async () => { await latest.keepEarlier(); });
-  expect(resolved).toHaveBeenCalledOnce();
-  await act(async () => { expect(latest.saveAsNew()).toBe(false); });
-  expect(createInspiration).toHaveBeenCalledOnce();
-});
-
-it('clears an old "answered" before sending again, so a later miss cannot release the newer POST', async () => {
-  vi.mocked(createInspiration).mockRejectedValueOnce(appFailure()).mockImplementationOnce(() => new Promise(() => {}));
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  await act(async () => { latest.start(input); }); // the same words: sent again, and still running
-  const journal = JSON.parse(localStorage.getItem(records()[0]!)!);
-  expect(journal.answered).toBeUndefined(); expect(journal.inFlightUntil).toBeGreaterThan(Date.now());
-  await act(async () => { vi.setSystemTime(Date.now() + ANSWER_SETTLE_MS); });
-  await remount();
-  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
-});
-
-it('never releases while another tab may still be committing the same save', async () => {
-  // Tab A's POST is still running; tab B finds the journal marked in flight.
-  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise(() => {})).mockRejectedValue(conflict());
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  const tabA = latest;
-  const hostB = document.createElement('div'); document.body.append(hostB); const rootB = createRoot(hostB);
-  let tabB!: ReturnType<typeof useAuthoredSave>;
-  function ProbeB() { tabB = useAuthoredSave({ scope, operation: 'inspiration', onResolved: resolved, onRemoved: removed }); return null; }
-  await act(async () => rootB.render(<ProbeB />));
-  // Inside the window B sends nothing and keeps everything.
-  expect(createInspiration).toHaveBeenCalledOnce();
-  expect(tabB.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
-  // After it, B's one re-send meets "in progress": still kept, still not released.
-  await act(async () => { vi.setSystemTime(Date.now() + POST_WINDOW_MS); });
-  await act(async () => { tabB.check(); });
-  await act(async () => { tabB.check(); });
-  expect(tabB.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
-  expect(tabA.pending?.requestId).toBe(tabB.pending?.requestId);
-  await act(async () => rootB.unmount()); hostB.remove();
-});
-
-it('recovers a committed save by reading its current item, without another POST', async () => {
-  vi.mocked(createInspiration).mockRejectedValue(new Error('Lost response'));
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  const requestId = latest.pending!.requestId;
-  vi.mocked(fetchInspirationSaveRequest).mockResolvedValue({ requestId, operation: 'inspiration', inspirationId: source.id, reflectionId: null,
-    processing: { id: 'receipt', profileId: scope.profileId, inspirationId: source.id, materialRevision: '1', jobId: 'job', requestVersion: '1' }, createdAt: source.createdAt });
-  await act(async () => root.unmount()); root = createRoot(host);
-  await act(async () => root.render(<Probe />));
-  expect(fetchInspiration).toHaveBeenCalledWith(source.id, { profile: scope.profileId }, expect.any(AbortSignal));
-  expect(createInspiration).toHaveBeenCalledOnce(); expect(resolved).toHaveBeenCalledOnce();
-  expect(resolved.mock.calls[0]?.[2]).toBe(false);
+  await act(async () => { latest.editRejected(); });
+  expect(rejected).toHaveBeenCalledOnce(); expect(rejected.mock.calls[0]![0].input).toEqual(why.input);
   expect(records()).toHaveLength(0);
 });
 
-it('cannot send before durable storage succeeds', async () => {
-  await act(async () => root.render(<Probe />));
-  const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage unavailable'); });
-  try {
-    await act(async () => { expect(latest.start(input)).toBe(false); });
-    expect(latest.phase).toBe('storage_error'); expect(createInspiration).not.toHaveBeenCalled(); expect(fetchInspirationSaveRequest).not.toHaveBeenCalled();
-  } finally { write.mockRestore(); }
-});
-
-it('retains the journal if matching-draft cleanup fails after a successful save', async () => {
-  resolved.mockImplementation(() => { throw new Error('Could not clear matching draft'); });
+it('keeps the journal if matching-draft cleanup fails after a landed save, and replays it', async () => {
+  resolved.mockImplementationOnce(() => { throw new Error('Could not clear matching draft'); });
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
   expect(records()).toHaveLength(1); expect(latest.phase).toBe('uncertain');
-  resolved.mockImplementation(() => {});
   await act(async () => { await latest.retry(); });
-  expect(createInspiration).toHaveBeenCalledOnce(); expect(records()).toHaveLength(0);
+  expect(new Set(vi.mocked(createInspiration).mock.calls.map((call) => call[1]?.requestId)).size).toBe(1);
+  expect(records()).toHaveLength(0);
 });
 
-it('stops at a bounded timeout and ignores a later response from the old account', async () => {
+it('ignores a late response for an account that has since changed', async () => {
   let finish!: (value: ApiInspiration) => void;
   vi.mocked(createInspiration).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  await act(async () => vi.advanceTimersByTimeAsync(15_000));
-  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
   await act(async () => root.render(<Probe owner={{ accountId: 'account-B', profileId: 'profile-B' }} />));
   await act(async () => finish(source));
   expect(latest.pending).toBeNull(); expect(resolved).not.toHaveBeenCalled(); expect(records()).toHaveLength(1);
 });
 
-it('does not resend into an older server that cannot honor save identities', async () => {
-  vi.mocked(fetchInspirationSaveRequest).mockRejectedValue(new ApiError({ status: 404, message: 'Not Found' }));
+it('removes a save whose item was deleted, without recreating its words', async () => {
+  vi.mocked(createInspiration).mockRejectedValue(new ApiError({ status: 410, code: 'saved_item_removed', message: 'Removed' }));
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  expect(latest.phase).toBe('unsupported'); expect(createInspiration).not.toHaveBeenCalled(); expect(records()).toHaveLength(1);
-});
-
-it('removes a deleted intent without recreating its words', async () => {
-  vi.mocked(createInspiration).mockRejectedValue(new Error('Lost response'));
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  vi.mocked(fetchInspirationSaveRequest).mockRejectedValue(new ApiError({ status: 410, code: 'saved_item_removed', message: 'Removed' }));
-  await act(async () => { await latest.retry(); });
-  expect(removed).toHaveBeenCalledOnce(); expect(resolved).not.toHaveBeenCalled(); expect(createInspiration).toHaveBeenCalledOnce();
+  expect(removed).toHaveBeenCalledOnce(); expect(resolved).not.toHaveBeenCalled();
   expect(records()).toHaveLength(0); expect(latest.phase).toBe('removed');
-});
-
-/* THE REFLECTION SUITE IS GONE, WITH THE OPERATION IT EXERCISED
-   (2026-10-10). It asserted that a journalled answer POSTed exactly the words
-   given and that the resolution carried the CURRENT answers — including one
-   written on another device while this save was in flight. `useAuthoredSave`
-   has one operation now; `components/ReflectionFlow.tsx`, its only caller,
-   is folded into the claim queue's correction field.
-   WHAT PROTECTED THE SAME INVARIANT IS STILL HERE, on the inspiration path:
-   the suites above assert that the POST carries the immutable intent's own
-   words, that a lost response is observed with a GET rather than re-POSTed,
-   and that resolution reads the server's current row rather than the one this
-   device remembers. Those were always the properties under test; the
-   reflection operation was a second shape of the same protocol. */
-
-it('allows editing only after a confirmed validation rejection, never after an ambiguous response', async () => {
-  vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 400, message: 'Invalid inspiration', fieldErrors: { text: ['Inspiration text is too long'] } }));
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  const original = latest.pending!.requestId;
-  expect(latest.phase).toBe('rejected'); expect(latest.pending?.validationMessage).toBe('Inspiration text is too long');
-  await act(async () => { latest.editRejected(); });
-  expect(records()).toHaveLength(0);
-  vi.mocked(createInspiration).mockRejectedValue(new Error('Ambiguous response'));
-  await act(async () => { latest.start(input); });
-  expect(latest.pending?.requestId).not.toBe(original);
-  const pending = latest.pending!.requestId;
-  await act(async () => { latest.editRejected(); });
-  expect(latest.pending?.requestId).toBe(pending); expect(records()).toHaveLength(1);
 });
 
 it('does not submit corrupt pending data; an explicit reset retains uninterpreted recovery bytes', async () => {
@@ -347,22 +193,10 @@ it('does not submit corrupt pending data; an explicit reset retains uninterprete
   const key = records()[0]!, value = JSON.parse(localStorage.getItem(key)!);
   value.input.text = 'Damaged payload';
   localStorage.setItem(key, JSON.stringify(value));
-  await act(async () => root.unmount()); root = createRoot(host);
-  await act(async () => root.render(<Probe />));
+  await remount();
   expect(latest.phase).toBe('invalid'); expect(createInspiration).toHaveBeenCalledOnce();
   await act(async () => { latest.resetInvalid(); });
   expect(records()).toHaveLength(0);
   const backup = Object.keys(localStorage).find((item) => item.includes(':unrecoveredSave:'))!;
   expect(localStorage.getItem(backup)).toContain('Damaged payload');
-});
-
-it('ignores an old timed-out response after a same-account retry has settled', async () => {
-  let first!: (value: ApiInspiration) => void;
-  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise((resolve) => { first = resolve; })).mockResolvedValue(source);
-  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  await act(async () => vi.advanceTimersByTimeAsync(15_000));
-  await act(async () => { await latest.retry(); });
-  await act(async () => first({ ...source, id: 'an-old-response' }));
-  expect(resolved).toHaveBeenCalledOnce(); expect(resolved.mock.calls[0]?.[1].inspiration.id).toBe(source.id);
-  expect(records()).toHaveLength(0);
 });

@@ -56,10 +56,6 @@ export class ApiError extends Error {
   /** A chat send refused as `attachment_not_ready` names the attachment ids
       the server no longer has staged, so the composer can drop just those. */
   readonly missingAttachmentIds?: string[];
-  /** The failure came from this app (a JSON body with our `error` field),
-      not from a gateway, a proxy or a crashed process in front of it. A
-      save treats only the app's own 500 as an answer about its write. */
-  readonly fromApp?: boolean;
 
   constructor(input: {
     status: number;
@@ -67,7 +63,6 @@ export class ApiError extends Error {
     fieldErrors?: ApiFieldErrors;
     code?: string;
     missingAttachmentIds?: string[];
-    fromApp?: boolean;
   }) {
     super(input.message);
     this.name = "ApiError";
@@ -75,7 +70,6 @@ export class ApiError extends Error {
     this.fieldErrors = input.fieldErrors;
     this.code = input.code;
     if (input.missingAttachmentIds) this.missingAttachmentIds = input.missingAttachmentIds;
-    if (input.fromApp) this.fromApp = true;
   }
 }
 
@@ -259,7 +253,6 @@ export async function writeJson<T>(
       fieldErrors: errorBody.details,
       code: typeof errorBody.code === 'string' ? errorBody.code : undefined,
       ...(missingAttachmentIds ? { missingAttachmentIds } : {}),
-      fromApp: typeof errorBody.error === 'string',
     });
   }
 
