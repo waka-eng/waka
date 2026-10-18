@@ -517,6 +517,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
   overflow: visible;
   text-align: center;
   font-variant-numeric: tabular-nums;
+  /* A status line, not a control (review): presses fall through it. Its one
+     control — the recorder's Cancel — takes them back below. */
+  pointer-events: none;
+}
+.waka-dock-state--live button {
   pointer-events: auto;
 }
 
@@ -717,6 +722,16 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
   width: max(100%, 44px);
   height: max(100%, 44px);
   transform: translate(-50%, -50%);
+}
+/* THE PHOTO'S × GROWS OUTWARD, NOT INTO THE PHOTO (review). It sits in the
+   tile's top-right corner, so a centred 44px box covered part of the picture
+   — a press meant to open the photo removed it. Anchored at the ×'s own
+   bottom-left, the box reaches up and right, past the tile's corner. */
+.jar-tile-x::after {
+  left: 0;
+  top: auto;
+  bottom: 0;
+  transform: none;
 }
 
 /* THE SLOT INSPIRATION STANDS IN. While a note is being written (or a saved

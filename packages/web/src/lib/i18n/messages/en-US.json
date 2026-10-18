@@ -173,7 +173,7 @@
   "worldComposerPlayFile": "Play {name}",
   "worldComposerRecord": "Record",
   "worldComposerRecordAgain": "Record again",
-  "worldComposerRecordingFor": "Recording · {seconds}s",
+  "worldComposerRecordingFor": "Recording · {clock}",
   "worldComposerRecordingNow": "Recording",
   "worldComposerRemoveFile": "Remove {name}",
   "worldComposerRetryFile": "Try uploading {name} again",

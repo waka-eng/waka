@@ -182,6 +182,7 @@ import { offlineHome, type OfflineHome } from "../lib/fixture/offline-home";
 import {
   agoWords,
   asSentence,
+  clockWords,
   dateStamp,
   dateWords,
   dialMonth,
@@ -8900,7 +8901,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                        region it was read out every second. "Recording" is
                        announced once, by a region that mounts empty. */
                     <span className="waka-composer-recording">
-                      <span aria-hidden="true">{formatMessage(locale, 'worldComposerRecordingFor', { seconds: recording.seconds })}</span>
+                      <span aria-hidden="true">{formatMessage(locale, 'worldComposerRecordingFor', { clock: clockWords(recording.seconds) })}</span>
                       <LiveWord text={say('worldComposerRecordingNow')} />
                     </span>
                   ) : null}
@@ -11476,7 +11477,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         only while the mouth is open — never both regions at once. */}
                     <LiveWord text={composerState || (recording.phase !== 'idle' && mouthOpen ? say('worldComposerRecordingNow') : '')} />
                     {recording.phase !== 'idle' ? <>
-                      <span aria-hidden="true">{Math.floor(recording.seconds / 60)}:{String(recording.seconds % 60).padStart(2, '0')}</span>
+                      <span aria-hidden="true">{clockWords(recording.seconds)}</span>
                       <button type="button" className="waka-dock-undo" disabled={recording.phase === 'finishing'}
                         onClick={() => void recording.cancel()}>{say('worldComposerCancelRecording')}</button>
                     </> : null}

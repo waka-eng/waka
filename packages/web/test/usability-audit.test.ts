@@ -13,6 +13,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
+import { clockWords } from "../src/lib/words";
 
 const STYLES = resolve(dirname(fileURLToPath(import.meta.url)), "../src/styles");
 const sheet = (name: string) => readFileSync(resolve(STYLES, name), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
@@ -61,13 +62,18 @@ describe("no share sheet has the bar painted over its footer (#9)", () => {
 });
 
 describe("the recording clock is never read out every second (review of #11)", () => {
+  it("is one m:ss shape everywhere", () => {
+    expect([clockWords(0), clockWords(7), clockWords(65.9), clockWords(600), clockWords(-3)]).toEqual(["0:00", "0:07", "1:05", "10:00", "0:00"]);
+  });
   /* jsdom cannot run a MediaRecorder in the world, so the markup is read:
      every place the per-second clock is printed is `aria-hidden`, and no live
      region wraps it. */
   for (const file of ["pages/Home.tsx", "components/NoteTools.tsx"]) {
     it(file, () => {
       const source = readFileSync(resolve(STYLES, "..", file), "utf8");
-      const clocks = [...source.matchAll(/<span([^>]*)>\{Math\.floor\((?:props\.)?recording\.seconds \/ 60\)\}/g)];
+      // One shared m:ss formatter (`clockWords`), never a hand-rolled one (review).
+      expect(source).not.toMatch(/recording\.seconds % 60/);
+      const clocks = [...source.matchAll(/<span([^>]*)>\{clockWords\((?:props\.)?recording\.seconds\)\}/g)];
       expect(clocks.length).toBeGreaterThan(0);
       for (const [, attributes] of clocks) {
         expect(attributes).toContain('aria-hidden="true"');
@@ -89,7 +95,20 @@ describe("the recording clock is never read out every second (review of #11)", (
   }
 });
 
+describe("the live caption is a status line, not a control (review)", () => {
+  it("lets presses fall through, except its own button", () => {
+    const css = sheet("claims.css");
+    const caption = rules(css, (s) => s === ".waka-dock-state.waka-dock-state--live").map(([, b]) => b).join("\n");
+    expect(caption).toMatch(/pointer-events:\s*none/);
+    expect(rules(css, (s) => s === ".waka-dock-state--live button").map(([, b]) => b).join("\n")).toMatch(/pointer-events:\s*auto/);
+  });
+});
+
 describe("every small control takes a 44px press (#18)", () => {
+  it("the photo's \u00d7 grows its hit box outward, never into the photo", () => {
+    const own = rules(sheet("claims.css"), (s) => s === ".jar-tile-x::after").map(([, b]) => b).join("\n");
+    expect(own).toMatch(/left:\s*0/); expect(own).toMatch(/bottom:\s*0/); expect(own).toMatch(/transform:\s*none/);
+  });
   it("each named control carries a hit box at least 44 on each side", () => {
     const css = sheet("claims.css");
     for (const control of [".waka-dock-undo", ".jar-tile-x", ".waka-drawer-items button", ".chat-with-choice", ".chat-send", ".jar-harvest-skip", ".waka-held-open"]) {

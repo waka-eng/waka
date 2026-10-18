@@ -173,7 +173,7 @@
   "worldComposerPlayFile": "{name} 재생",
   "worldComposerRecord": "녹음",
   "worldComposerRecordAgain": "다시 녹음",
-  "worldComposerRecordingFor": "녹음 중 · {seconds}초",
+  "worldComposerRecordingFor": "녹음 중 · {clock}",
   "worldComposerRecordingNow": "녹음 중",
   "worldComposerRemoveFile": "{name} 지우기",
   "worldComposerRetryFile": "{name} 업로드 다시 시도",
