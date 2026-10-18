@@ -187,19 +187,6 @@ import {
 const DEFAULT_MAX_ATTEMPTS = 3;
 const MAX_ERROR_LENGTH = 1_000;
 export const STALE_LOCK_SECONDS = 15 * 60;
-/**
- * A principles job still pending or processing this long after its last
- * change has stalled, and an explicit retry re-enqueues it rather than
- * waiting out the fifteen-minute stale lock. Resetting `locked_at`/`attempts`
- * fences the old claim, whose commit checks both.
- *
- * ONE THRESHOLD WITH THE PAGE. `PrincipleRead` (web) calls a read stalled
- * only after `PRINCIPLES_SERVER_STALL_MS` (this, mirrored) plus a margin, so
- * by the time it offers Try again on a stall, this side agrees the job is
- * stalled and the retry actually resets it. `principle-stall-threshold.test.ts`
- * holds the two numbers together.
- */
-export const PRINCIPLES_STALL_SECONDS = 4 * 60;
 
 let drainScheduled = false;
 let drainTimer: ReturnType<typeof setTimeout> | null = null;
@@ -214,8 +201,6 @@ export interface EnqueueResult {
    * already coming rather than implying it started a new one.
    */
   created: boolean;
-  /** True when an existing failed or stalled job was reset by an explicit retry. */
-  restarted?: boolean;
 }
 
 export interface DrainBackgroundJobsOptions {
@@ -463,12 +448,10 @@ export async function enqueueRefreshPrinciples(
       request_version = background_jobs.request_version + 1,
       profile_id = EXCLUDED.profile_id,
       run_after = now(), last_error = NULL, updated_at = now()
-    WHERE ${retry} AND (background_jobs.status = 'failed'
-      OR (background_jobs.status IN ('pending', 'running')
-        AND background_jobs.updated_at < now() - (${PRINCIPLES_STALL_SECONDS} || ' seconds')::interval))
-    RETURNING id, request_version::text AS "requestVersion", (xmax <> 0) AS restarted
+    WHERE background_jobs.status = 'failed' AND ${retry}
+    RETURNING id, request_version::text AS "requestVersion"
   `);
-  const [changed] = rows as unknown as Array<{ id: string; requestVersion: string; restarted: boolean }>;
+  const [changed] = rows as unknown as Array<{ id: string; requestVersion: string }>;
   const [existing] = changed ? [changed] : await db.select({ id: backgroundJobs.id, requestVersion: backgroundJobs.requestVersion })
     .from(backgroundJobs).where(eq(backgroundJobs.idempotencyKey, key)).limit(1);
   if (!existing) throw new Error("Failed to enqueue principles");
@@ -477,8 +460,7 @@ export async function enqueueRefreshPrinciples(
     if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
     else await wakeBackgroundWorker();
   }
-  return { jobId: existing.id, requestVersion: existing.requestVersion.toString(), created: Boolean(changed),
-    restarted: Boolean(changed?.restarted) };
+  return { jobId: existing.id, requestVersion: existing.requestVersion.toString(), created: Boolean(changed) };
 }
 
 /**
