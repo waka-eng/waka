@@ -6552,9 +6552,17 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          settling between this teardown and the next build — or after the
          page itself unmounted — read a dead loop's rest and wall. */
       if (simApiRef.current === api) simApiRef.current = null;
-      /* and the press it was holding goes with it, capture and all — the
-         next build starts with no press (see `Carry`) */
-      if (gesture.ownerId !== null) releaseOwner(gesture.ownerId);
+      /* AND THE PRESS IT WAS HOLDING IS SETTLED, NOT JUST FORGOTTEN. The next
+         build starts with no press (see `Carry`), so whatever that press owed
+         the layout is paid here, BEFORE the camera is carried: a drag, or a
+         press that interrupted an aim, leaves the camera between sections,
+         and only the release puts it back on one. `dropPress` aims it at the
+         nearest section and lets the capture go, so the carried camera is
+         already on its way home and the rebuilt world never rests between
+         two places. (Its `wake()` asks for a frame this teardown cancels
+         just below.) */
+      if (gesture.down) dropPress();
+      else if (gesture.ownerId !== null) releaseOwner(gesture.ownerId);
       clock.running = false;
       cancelAnimationFrame(clock.raf);
       ro.disconnect();
