@@ -420,7 +420,7 @@ describe("principles across personal profiles", () => {
      own reasons must not raise it, and principles succeeding must not hide
      a reading that failed. */
   const failedReading = (profileId: string, minutesAgo: number) => t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,created_at,updated_at)
-    VALUES(${profileId},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed','OpenRouter 402',
+    VALUES(${profileId},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed','Error: OpenRouter synthesis failed: HTTP 402 Payment Required',
       now()-make_interval(mins => ${minutesAgo}),now()-make_interval(mins => ${minutesAgo}))`;
   const principlesJob = (profileId: string, status: string) => t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,updated_at)
     VALUES(${profileId},'refresh_principles',${JSON.stringify({ profileId })}::jsonb,${status}::background_job_status,now())`;
@@ -448,6 +448,17 @@ describe("principles across personal profiles", () => {
     await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,updated_at)
       VALUES(${other},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed','Error: synthesis returned no entries',now())`;
     expect((await loadPrincipleStatus(t.db as never, other)).readingPaused, 'an ordinary failure said the provider paused').toBe(false);
+    /* a bare 402 that is not the provider's status marker is not a refusal */
+    for (const lastError of ['Error: Unexpected token at position 402', 'Error: synthesis timed out after 402ms', 'Error: job 402 failed']) {
+      const near = await person();
+      await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,updated_at)
+        VALUES(${near},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed',${lastError},now())`;
+      expect((await loadPrincipleStatus(t.db as never, near)).readingPaused, `"${lastError}" read as a provider refusal`).toBe(false);
+    }
+    const coded = await person();
+    await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,updated_at)
+      VALUES(${coded},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed','Error: Gemini synthesis failed: HTTP 429 Too Many Requests providerCode=insufficient_quota',now())`;
+    expect((await loadPrincipleStatus(t.db as never, coded)).readingPaused, 'the provider credit code was not read as a refusal').toBe(true);
     const stale = await person();
     await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,updated_at)
       VALUES(${stale},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed','Error: OpenRouter synthesis failed: HTTP 402 Payment Required',now()-interval '25 hours')`;
@@ -487,6 +498,8 @@ describe("principles across personal profiles", () => {
     };
     await failedReading(profileId, 1);
     expect((await app('agent').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(403);
+    expect((await app('agent').request('/principles/refresh', { method: 'POST' })).status, 'an agent lost its own plain refresh').toBe(202);
+    await t.sql`UPDATE background_jobs SET status='failed' WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`;
     expect((await app('human').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(202);
     await t.sql`UPDATE background_jobs SET status='failed' WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`;
     const again = await app('human').request('/principles/refresh?retry=1', { method: 'POST' });

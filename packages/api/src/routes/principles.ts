@@ -320,10 +320,12 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     return result?c.json(result):c.json({error:'Principle not found'},404);
   });
 
-  /* A PERSON'S ACT, NOT AN AGENT'S. Restarting a failed reading spends model
-     calls on the account, which is a decision `humanSessionsOnly` already
-     reserves for the person elsewhere. */
-  routes.post("/refresh", humanSessionsOnly, async (c) => {
+  /* A RETRY IS A PERSON'S ACT, NOT AN AGENT'S. Restarting a failed reading
+     (`?retry=1`) spends model calls on the account, which is a decision
+     `humanSessionsOnly` already reserves for the person elsewhere. A plain
+     refresh keeps dev's access: an agent may still start its own missing
+     principles work. */
+  routes.post("/refresh", async (c, next) => c.req.query("retry") === "1" ? humanSessionsOnly(c, next) : next(), async (c) => {
     // Generation may only be requested for the session's own profile.
     const profileId = c.get("session").profile.id;
     const status = await requestPrincipleRefresh(getDatabase(), profileId, c.req.query("retry") === "1");
