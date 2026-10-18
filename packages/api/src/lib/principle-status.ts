@@ -1,5 +1,5 @@
 import {principleMaterialKey} from './principle-material-key.js';
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { backgroundJobs } from "../db/index.js";
 import { getDb } from "./db.js";
 import { loadPrincipleMaterial } from "./principle-generation.js";
@@ -31,22 +31,32 @@ type Db = Database | Transaction;
  * retries its own derivation (`/inspirations/:id/processing`).
  */
 async function latestReadingJob(db: Db, profileId: string) {
-  const [latest] = await db.select({ status: backgroundJobs.status, updatedAt: backgroundJobs.updatedAt, payload: backgroundJobs.payload }).from(backgroundJobs)
+  const [latest] = await db.select({ status: backgroundJobs.status }).from(backgroundJobs)
     .where(and(eq(backgroundJobs.profileId, profileId), eq(backgroundJobs.type, "refresh_top_of_mind")))
     .orderBy(desc(backgroundJobs.updatedAt)).limit(1);
   return latest ?? null;
 }
 
-/** How soon a failed reading may be retried again: a retry that fails at
-    once (no credit) must not become a button that bills a request per press.
-    Measured from when the job FAILED (`updatedAt`), not when it was first
-    enqueued — a job that ran its retries for ten minutes failed just now.
-    It throttles the reading job only: failed or stalled principles behind
-    the same Try again are still restarted inside it. And it counts only a
-    PERSON'S retry — a job the retry path enqueued carries `retry: true` in
-    its payload. A reading that failed on its own (an automatic run) never
-    starts a cooldown: the first Retry after it always goes through. */
+/** How soon a person may retry again: a retry that fails at once (no credit
+    is a 402) must not become a button that bills a request per press.
+    Measured from the CREATION of the most recent reading job a retry
+    enqueued (`payload.retry`), whatever became of it — so a 402 loop is
+    throttled whether that job failed, is still pending, or is running. An
+    automatic failure enqueues nothing marked, so it never starts a cooldown:
+    the first Retry after it always goes through. Inside the cooldown a retry
+    re-queues neither the reading nor pending signal support (both spend
+    model calls); failed principles behind the same Try again are still
+    restarted. */
 export const READING_RETRY_COOLDOWN_MS = 3 * 60_000;
+
+/** When the latest retry-enqueued reading job was created, if any. */
+async function latestRetryAt(db: Db, profileId: string): Promise<Date | null> {
+  const [row] = await db.select({ createdAt: backgroundJobs.createdAt }).from(backgroundJobs)
+    .where(and(eq(backgroundJobs.profileId, profileId), eq(backgroundJobs.type, "refresh_top_of_mind"),
+      sql`${backgroundJobs.payload}->>'retry' = 'true'`))
+    .orderBy(desc(backgroundJobs.createdAt)).limit(1);
+  return row?.createdAt ?? null;
+}
 
 /** A retry asked for inside the cooldown. The route answers 429 with when. */
 export class ReadingRetryThrottled extends Error {
@@ -74,18 +84,20 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
 export async function requestPrincipleRefresh(db: Db, profileId: string, retry = false, now = new Date()) {
   let throttledSeconds = 0;
   if (retry) {
-    const reading = await latestReadingJob(db, profileId);
-    if (reading?.status === "failed" && (reading.payload as { retry?: unknown } | null)?.retry === true) {
-      const wait = reading.updatedAt.getTime() + READING_RETRY_COOLDOWN_MS - now.getTime();
-      if (wait > 0) throttledSeconds = Math.ceil(wait / 1000);
-    }
+    /* THE COOLDOWN IS CHECKED BEFORE ANYTHING IS ENQUEUED, on every path a
+       person's retry can take. */
+    const last = await latestRetryAt(db, profileId);
+    const wait = last ? last.getTime() + READING_RETRY_COOLDOWN_MS - now.getTime() : 0;
+    if (wait > 0) throttledSeconds = Math.ceil(wait / 1000);
   }
   let restarted = false;
   await db.transaction(async (tx) => {
-    const sources = await recoverPendingSignalSupport(tx, profileId);
+    /* Re-queuing pending signal support spends model calls too, so a
+       throttled retry skips it; a plain refresh behaves as before. */
+    const sources = throttledSeconds ? [] : await recoverPendingSignalSupport(tx, profileId);
     if (sources.length) {
       restarted = true;
-      await enqueueTopOfMindRefresh(profileId, 'manual', tx);
+      await enqueueTopOfMindRefresh(profileId, 'manual', tx, { retry });
     }
     /* A RETRY ALSO RESTARTS A READING THAT FAILED. Before, it re-enqueued
        principles and pending support only, so "Try again" under a paused
@@ -93,7 +105,10 @@ export async function requestPrincipleRefresh(db: Db, profileId: string, retry =
        explicit retry, and only when the latest reading job did fail — a
        plain refresh still never buys a synthesis nobody asked for. */
     if (retry && !sources.length && !throttledSeconds) {
-      if ((await latestReadingJob(tx, profileId))?.status === "failed") await enqueueTopOfMindRefresh(profileId, 'manual', tx, { retry: true });
+      if ((await latestReadingJob(tx, profileId))?.status === "failed") {
+        restarted = true;
+        await enqueueTopOfMindRefresh(profileId, 'manual', tx, { retry: true });
+      }
     }
     if (await enqueueEligiblePrinciples(tx, profileId, retry, tx)) restarted = true;
   });

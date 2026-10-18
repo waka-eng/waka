@@ -469,11 +469,11 @@ describe("principles across personal profiles", () => {
     expect(await early.json()).toMatchObject({ code: 'reading_retry_throttled' });
     expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`).toHaveLength(1);
     expect((await app('agent').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(403);
-    /* the cooldown runs from when the job FAILED: enqueued long ago but
-       failed just now is still inside it */
-    await t.sql`UPDATE background_jobs SET created_at=now()-interval '30 minutes' WHERE profile_id=${profileId}`;
+    /* the cooldown runs from when the retry's job was CREATED, whatever its
+       status: a retry still pending or running throttles a second press */
+    await t.sql`UPDATE background_jobs SET status='pending', updated_at=now()-interval '30 minutes' WHERE profile_id=${profileId}`;
     expect((await app('human').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(429);
-    await t.sql`UPDATE background_jobs SET updated_at=now()-interval '10 minutes' WHERE profile_id=${profileId}`;
+    await t.sql`UPDATE background_jobs SET status='failed', created_at=now()-interval '10 minutes' WHERE profile_id=${profileId}`;
     expect((await app('human').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(202);
   });
 
@@ -510,24 +510,22 @@ describe("principles across personal profiles", () => {
       'the throttled reading ran again').toHaveLength(1);
   });
 
-  it('re-enqueues a stalled principles job on an explicit retry, and leaves a fresh one alone', async () => {
+  /* NO STALL RESET. A retry restarts only a FAILED principles job; a pending
+     (or held) or running one, however old, is the worker's — the stale-lock
+     reclaim recovers a dead claim, and a retry must not fence a live one. */
+  it('never resets a pending or running principles job on retry, however long it has waited', async () => {
     const profileId = await person();
     await material(profileId, [profileId]);
     await requestPrincipleRefresh(t.db as never, profileId);
     const jobs = () => t.sql`SELECT status, locked_at, request_version::text AS v FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_principles'`;
-    await t.sql`UPDATE background_jobs SET status='running', locked_at=now(), attempts=1, updated_at=now() WHERE profile_id=${profileId} AND type='refresh_principles'`;
-    const [fresh] = await jobs();
-    await requestPrincipleRefresh(t.db as never, profileId, true);
-    expect((await jobs())[0]!.v, 'a job still running was reset').toBe(fresh!.v);
-    /* past the shared stall threshold, as the page sees it when it offers Try again */
-    await t.sql`UPDATE background_jobs SET updated_at=now()-interval '4 minutes 30 seconds', locked_at=now()-interval '4 minutes 30 seconds' WHERE profile_id=${profileId} AND type='refresh_principles'`;
-    await requestPrincipleRefresh(t.db as never, profileId, true);
-    const [after] = await jobs();
-    expect(after!.status).toBe('pending');
-    expect(after!.locked_at).toBeNull();
-    /* a plain refresh never resets one */
-    await t.sql`UPDATE background_jobs SET status='running', updated_at=now()-interval '10 minutes' WHERE profile_id=${profileId} AND type='refresh_principles'`;
-    await requestPrincipleRefresh(t.db as never, profileId);
-    expect((await jobs())[0]!.status).toBe('running');
+    for (const status of ['running', 'pending']) {
+      await t.sql`UPDATE background_jobs SET status=${status}::background_job_status, locked_at=CASE WHEN ${status}='running' THEN now()-interval '10 minutes' END,
+        attempts=1, updated_at=now()-interval '10 minutes' WHERE profile_id=${profileId} AND type='refresh_principles'`;
+      const [before] = await jobs();
+      await requestPrincipleRefresh(t.db as never, profileId, true);
+      const [after] = await jobs();
+      expect(after!.v, `a ${status} job was reset by a retry`).toBe(before!.v);
+      expect(after!.status).toBe(status);
+    }
   });
 });

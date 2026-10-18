@@ -164,6 +164,26 @@ describe('pending support is not current proof', () => {
     expect(await t.sql`SELECT id FROM inspirations`).toHaveLength(1);
   });
 
+  /* The cooldown guards every model-spending path a retry can take: inside
+     it, a retry re-queues neither the failed support check nor a reading. */
+  it('a retry inside the cooldown does not re-queue a failed support check, and the one it starts is marked a retry', async () => {
+    const f = await fixture(true);
+    await t.sql`UPDATE inspirations SET text = 'A changed source' WHERE id = ${f.sourceId}`;
+    await enqueueTopOfMindRefresh(f.profileId, 'manual');
+    await t.sql`UPDATE background_jobs SET status = 'failed' WHERE type::text = 'review_signal_support'`;
+    await t.sql`UPDATE background_jobs SET status = 'failed' WHERE type::text = 'refresh_top_of_mind'`;
+    await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,created_at,updated_at)
+      VALUES(${f.profileId},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual', retry: true })}::jsonb,'failed',now()-interval '1 minute',now()-interval '1 minute')`;
+    await expect(requestPrincipleRefresh(t.db as never, f.profileId, true)).rejects.toMatchObject({ retryAfterSeconds: expect.any(Number) });
+    expect((await t.sql`SELECT status FROM background_jobs WHERE type::text = 'review_signal_support'`)[0]!.status,
+      'a throttled retry re-billed the support check').toBe('failed');
+    await t.sql`UPDATE background_jobs SET created_at = now() - interval '10 minutes' WHERE payload->>'retry' = 'true'`;
+    await requestPrincipleRefresh(t.db as never, f.profileId, true);
+    expect((await t.sql`SELECT status FROM background_jobs WHERE type::text = 'review_signal_support'`)[0]!.status).toBe('pending');
+    const marked = await t.sql`SELECT id FROM background_jobs WHERE type::text = 'refresh_top_of_mind' AND payload->>'retry' = 'true' AND created_at > now() - interval '1 minute'`;
+    expect(marked, 'the reading a retry started was not marked, so it starts no cooldown').toHaveLength(1);
+  });
+
   it('editing an entry keeps the new words without attributing the previous body’s citations', async () => {
     const f = await fixture(true);
     await updateLiveEntry(t.db as never, { profileId: f.profileId, entryId: f.entryId,
