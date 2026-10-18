@@ -5507,7 +5507,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       dropPress();
     };
     /* the capture went without our releasing it: the pointer is gone */
-    const onLostCapture = (e: PointerEvent) => {
+    const onPointerTaken = (e: PointerEvent) => {
       if (!gesture.down || e.pointerId !== gesture.ownerId) return;
       dropPress();
       wake();
@@ -5657,7 +5657,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
     window.addEventListener("blur", onBlur);
-    root.addEventListener("lostpointercapture", onLostCapture);
+    root.addEventListener("lostpointercapture", onPointerTaken);
     root.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKey);
     document.addEventListener("visibilitychange", onVis);
@@ -6554,7 +6554,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
       window.removeEventListener("blur", onBlur);
-      root.removeEventListener("lostpointercapture", onLostCapture);
+      root.removeEventListener("lostpointercapture", onPointerTaken);
       root.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("visibilitychange", onVis);
