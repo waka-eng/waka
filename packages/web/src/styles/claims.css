@@ -1182,6 +1182,14 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
   background: transparent;
 }
 
+/* WHILE AN iOS KEYBOARD IS UP, `ConversationPanel` pins the page to the
+   visual viewport (inline `top`/`height`) and marks it. The dock is under the
+   keyboard then, so the room reserved for it would only push the composer
+   back under the keyboard's edge. */
+.waka-page[data-keyboard] {
+  padding-bottom: calc(var(--sp-8) + env(safe-area-inset-bottom));
+}
+
 /**
  * ═══ THE SHEET DISSOLVES ════════════════════════════════════════════════
  *

@@ -203,7 +203,25 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const [toolsHost,setToolsHost]=useState<HTMLElement|null>(null);
   useEffect(()=>{if(toolsSlot)setToolsHost(document.getElementById(toolsSlot));});
   useEffect(()=>{const media=window.matchMedia?.('(max-width:760px)');if(!media)return;const change=()=>setMobile(media.matches);media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
-  useLayoutEffect(()=>{const viewport=window.visualViewport,node=root.current;if(!viewport||!node)return;const update=()=>{if(!Number.isFinite(viewport.height)||viewport.height<=0||!Number.isFinite(viewport.offsetTop))return;node.style.setProperty('--chat-height',`${viewport.height}px`);node.style.setProperty('--chat-top',`${viewport.offsetTop}px`);if(nearBottom.current&&body.current)body.current.scrollTop=body.current.scrollHeight;};update();viewport.addEventListener('resize',update);viewport.addEventListener('scroll',update);return()=>{viewport.removeEventListener('resize',update);viewport.removeEventListener('scroll',update);};},[]);
+  /* ═══ THE PAGE FOLLOWS THE KEYBOARD ON iOS (audit f2afcbe2, mob) ══════════
+     The two variables below place a STANDALONE `.chat-page` in the visual
+     viewport. Inside the world it is not standalone: `.waka-over--talk
+     .chat-page` is `position: static` (home.css) and the fixed box is the
+     enclosing `.waka-page`, sized to the LAYOUT viewport — which iOS does
+     not shrink for its keyboard. So the composer sat under the keyboard.
+     While a keyboard is up (the visual viewport is a keyboard's height
+     shorter than the layout one) the page itself is pinned to the visual
+     viewport, and `data-keyboard` drops the dock's reserve, since the dock
+     is under the keyboard too. Android resizes the layout viewport with its
+     keyboard and desktop has none, so for both the difference is ~0 and
+     nothing is written. */
+  useLayoutEffect(()=>{const viewport=window.visualViewport,node=root.current;if(!viewport||!node)return;
+    const page=node.parentElement?.closest<HTMLElement>('.waka-page')??null;
+    const release=()=>{if(!page)return;page.style.removeProperty('top');page.style.removeProperty('height');page.style.removeProperty('bottom');delete page.dataset.keyboard;};
+    const update=()=>{if(!Number.isFinite(viewport.height)||viewport.height<=0||!Number.isFinite(viewport.offsetTop))return;node.style.setProperty('--chat-height',`${viewport.height}px`);node.style.setProperty('--chat-top',`${viewport.offsetTop}px`);
+      if(page){if(window.innerHeight-viewport.height>120){page.style.top=`${viewport.offsetTop}px`;page.style.height=`${viewport.height}px`;page.style.bottom='auto';page.dataset.keyboard='1';}else release();}
+      if(nearBottom.current&&body.current)body.current.scrollTop=body.current.scrollHeight;};
+    update();viewport.addEventListener('resize',update);viewport.addEventListener('scroll',update);return()=>{viewport.removeEventListener('resize',update);viewport.removeEventListener('scroll',update);release();};},[]);
   /* THE TEXTAREA SIZES ITSELF, AND ONLY ONE THING DECIDES HOW. Four
      mechanisms used to fight over this element: a CSS `min-height`, a CSS
      `max-height`, `field-sizing: content`, and a `Math.max(52, Math.min(

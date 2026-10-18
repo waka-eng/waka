@@ -278,6 +278,21 @@ it('keeps the full-page composer within the visible keyboard viewport',async()=>
   expect(transcript.scrollTop).toBe(1200);
   viewport.height=0;await act(async()=>viewport.dispatchEvent(new Event('resize')));expect(page.style.getPropertyValue('--chat-height')).toBe('340px');
 });
+/* Audit f2afcbe2 (mob, iphone-ioskb-chat): inside the world the chat is
+   static in a fixed `.waka-page` sized to the LAYOUT viewport, which iOS does
+   not shrink for its keyboard — so the variables above moved nothing and the
+   composer sat under the keyboard. The page itself follows the keyboard. */
+it('pins the enclosing page to the visual viewport while an iOS keyboard is up, and lets go after',async()=>{
+  const viewport=Object.assign(new EventTarget(),{height:window.innerHeight,offsetTop:0});vi.stubGlobal('visualViewport',viewport);
+  const page=document.createElement('div');page.className='waka-page';host.append(page);const inner=createRoot(page);
+  await act(async()=>inner.render(<ConversationPanel scope={scope} id={id} locale="en-US" onChoose={choose}/>));
+  expect(page.style.height).toBe('');expect(page.dataset.keyboard).toBeUndefined();
+  viewport.height=window.innerHeight-300;viewport.offsetTop=120;await act(async()=>viewport.dispatchEvent(new Event('resize')));
+  expect(page.style.height).toBe(`${window.innerHeight-300}px`);expect(page.style.top).toBe('120px');expect(page.dataset.keyboard).toBe('1');
+  viewport.height=window.innerHeight;viewport.offsetTop=0;await act(async()=>viewport.dispatchEvent(new Event('resize')));
+  expect(page.style.height).toBe('');expect(page.dataset.keyboard).toBeUndefined();
+  await act(async()=>inner.unmount());
+});
 /* ── TWO TOMBSTONES: DELETING A CONVERSATION, AND READING ITS MEMORY ────────
    `requires confirmation for deletion and removes only this conversation’s
    drafts` guarded "Delete conversation", which lived in a `···` menu on this
