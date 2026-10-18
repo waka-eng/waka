@@ -126,3 +126,16 @@ it("keeps a rename's failure showing when a language write then succeeds", async
   locales[0]!.resolve(); await flush();
   expect(hook.failed, "the language's success hid the unresolved rename").toBe(true);
 });
+
+it("writes back a name that already landed when typed again while a newer rename is queued", async () => {
+  /* Bob lands and the session re-applies it as the account's name while
+     Carol is still queued. Typing Bob again must write Bob, or Carol lands
+     last and the account ends on a name the person typed away from. */
+  await type("Bob");
+  await type("Carol");
+  names[0]!.resolve("Bob"); await flush();
+  input = { ...input, accountName: "Bob" }; await render();
+  await type("Bob");
+  names[1]!.resolve("Carol"); await flush();
+  expect(names.map(row => row.args[0])).toEqual(["Bob", "Carol", "Bob"]);
+});

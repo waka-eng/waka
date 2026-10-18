@@ -62,7 +62,7 @@ export function useSettingsWrites(input: SettingsWritesInput) {
   const live = useRef(input);
   live.current = input;
   const chain = useRef<Promise<void>>(Promise.resolve());
-  const nameToken = useRef(0), localeToken = useRef(0), localePending = useRef(0);
+  const nameToken = useRef(0), localeToken = useRef(0), localePending = useRef(0), namePending = useRef(0);
   const lastSent = useRef<string | null>(null);
   const confirmedRef = useRef<string | null>(null);
   const wantedLocale = useRef(input.locale);
@@ -75,6 +75,11 @@ export function useSettingsWrites(input: SettingsWritesInput) {
   /* The account's name moved (this write re-applied, or another tab): it is
      the truth again, and nothing remembered here outranks it. */
   useEffect(() => {
+    /* NOT while a rename is still out: an OLDER rename landing re-applies the
+       account's name while a newer one is queued, and forgetting the newer
+       one here would make typing the older name back look like "no change" —
+       and the queued rename would then land over it. */
+    if (namePending.current > 0) return;
     lastSent.current = null;
     confirmedRef.current = null;
     setConfirmed(null);
@@ -99,25 +104,32 @@ export function useSettingsWrites(input: SettingsWritesInput) {
       timer.current = null;
       const mine = ++nameToken.current;
       lastSent.current = trimmed;
+      namePending.current += 1;
       setNameBusy(true);
       void enqueue(() => live.current.updateName(trimmed, wantedLocale.current))
         .then(
           (serverName) => {
-            const landed = serverName ?? trimmed;
-            if (lastSent.current === trimmed) lastSent.current = null;
-            confirmedRef.current = landed;
+            /* Only the NEWEST rename's landing settles what was sent; an older
+               one landing while a newer is queued changes nothing here. */
             if (mine !== nameToken.current) return;
+            const landed = serverName ?? trimmed;
+            lastSent.current = null;
+            confirmedRef.current = landed;
             setConfirmed(landed);
             /* Hand the field back ONLY if it still holds what was sent:
                whatever was typed while the write was out stays. */
             setTyped(current => (current === value ? null : current));
           },
           () => {
-            if (lastSent.current === trimmed) lastSent.current = null;
-            if (mine === nameToken.current) setNameFailed(true);
+            if (mine !== nameToken.current) return;
+            lastSent.current = null;
+            setNameFailed(true);
           },
         )
-        .finally(() => { if (mine === nameToken.current) setNameBusy(false); });
+        .finally(() => {
+          namePending.current -= 1;
+          if (mine === nameToken.current) setNameBusy(false);
+        });
     }, live.current.settleMs);
   }, [enqueue]);
 
